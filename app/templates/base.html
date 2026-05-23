@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}NeoApps{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+</head>
+<body>
+    <div class="shell">
+        <header class="topbar">
+            <a class="brand" href="{{ url_for('neomotherbrain.dashboard') }}">
+                <span class="brand-mark"></span>
+                <span>
+                    <strong>NeoApps</strong>
+                    <small>Rockford Air Hub</small>
+                </span>
+            </a>
+            <nav class="nav">
+                <a href="{{ url_for('neomotherbrain.dashboard') }}">MotherBrain</a>
+                <a href="{{ url_for('neonodes.index') }}">NeoNodes</a>
+                <a href="{{ url_for('auth.login') }}">Login</a>
+            </nav>
+        </header>
+
+        <main class="content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</body>
+</html>

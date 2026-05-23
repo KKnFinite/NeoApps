@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}NeoMotherBrain | NeoApps{% endblock %}
+
+{% block content %}
+<section class="dashboard-hero">
+    <div>
+        <p class="eyebrow">Central Command</p>
+        <h1>NeoMotherBrain</h1>
+        <p class="hero-copy">
+            A unified operating layer for Rockford Air Hub tools, ready to coordinate NeoNodes as each module comes online.
+        </p>
+    </div>
+    <div class="status-grid" aria-label="Platform status">
+        <div class="status-card">
+            <span>Platform</span>
+            <strong>Online</strong>
+        </div>
+        <div class="status-card">
+            <span>Database</span>
+            <strong>SQLite Local</strong>
+        </div>
+        <div class="status-card">
+            <span>NeoNodes</span>
+            <strong>Standing By</strong>
+        </div>
+    </div>
+</section>
+
+<section class="node-strip">
+    <article>
+        <span class="node-light"></span>
+        <h2>Auth</h2>
+        <p>Login and access-control foundation.</p>
+    </article>
+    <article>
+        <span class="node-light"></span>
+        <h2>NeoMotherBrain</h2>
+        <p>Central dashboard and shared platform shell.</p>
+    </article>
+    <article>
+        <span class="node-light"></span>
+        <h2>NeoNodes</h2>
+        <p>Operational modules will plug in here.</p>
+    </article>
+</section>
+{% endblock %}
