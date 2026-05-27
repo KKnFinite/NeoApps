@@ -5,6 +5,7 @@ from flask_login import login_user, logout_user
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.auth import bp
+from app.auth.decorators import role_required
 from app.extensions import db
 from app.models import User
 
@@ -44,3 +45,10 @@ def logout():
     logout_user()
     flash("You have been logged out.", "info")
     return redirect(url_for("auth.login"))
+
+
+@bp.route("/admin/users")
+@role_required("grandmaster", "master")
+def users():
+    users = User.query.order_by(User.username.asc()).all()
+    return render_template("auth/users.html", users=users)

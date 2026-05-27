@@ -202,6 +202,42 @@ h2 {
     max-width: 720px;
 }
 
+.section-heading {
+    margin-bottom: 22px;
+}
+
+.section-heading h1 {
+    margin-bottom: 0;
+    font-size: clamp(2rem, 6vw, 3.6rem);
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+.data-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+    padding: 14px 12px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+}
+
+.data-table th {
+    color: var(--steel);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+}
+
+.data-table td {
+    color: #d8dde2;
+}
+
 .flash-stack {
     display: grid;
     gap: 10px;
