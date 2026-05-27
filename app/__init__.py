@@ -2,6 +2,12 @@ from pathlib import Path
 
 from flask import Flask
 
+from app.auth.permissions import (
+    can_enter_data,
+    can_make_decisions,
+    can_manage_system,
+    can_manage_users,
+)
 from app.config import Config
 from app.extensions import db, login_manager
 
@@ -16,8 +22,20 @@ def create_app(config_class=Config):
     login_manager.init_app(app)
 
     register_blueprints(app)
+    register_template_helpers(app)
 
     return app
+
+
+def register_template_helpers(app):
+    @app.context_processor
+    def permission_helpers():
+        return {
+            "can_enter_data": can_enter_data,
+            "can_make_decisions": can_make_decisions,
+            "can_manage_users": can_manage_users,
+            "can_manage_system": can_manage_system,
+        }
 
 
 def register_blueprints(app):
