@@ -12,7 +12,7 @@ def role_required(*roles):
             if current_user.role in roles:
                 return view_func(*args, **kwargs)
 
-            flash("Access denied. Your account does not have permission to view that area.", "error")
+            flash("Access denied.", "error")
             return redirect(url_for("neomotherbrain.dashboard"))
 
         return wrapped_view
@@ -23,7 +23,7 @@ def role_required(*roles):
 def mfa_required(view_func):
     @wraps(view_func)
     def wrapped_view(*args, **kwargs):
-        # TODO: Enforce MFA verification here after MFA enrollment and challenge flows are built.
+        # TODO: Add final MFA enforcement after MFA enrollment and challenge flows are built.
         return view_func(*args, **kwargs)
 
     return wrapped_view
