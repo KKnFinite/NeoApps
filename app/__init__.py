@@ -25,6 +25,6 @@ def register_blueprints(app):
     from app.neomotherbrain import bp as neomotherbrain_bp
     from app.neonodes import bp as neonodes_bp
 
-    app.register_blueprint(auth_bp, url_prefix="/auth")
+    app.register_blueprint(auth_bp)
     app.register_blueprint(neomotherbrain_bp)
     app.register_blueprint(neonodes_bp, url_prefix="/nodes")
