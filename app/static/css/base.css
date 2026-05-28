@@ -181,6 +181,7 @@ a {
     --node-color: var(--red);
     --node-rgb: 255, 47, 47;
     --node-art: none;
+    --node-logo: none;
     position: relative;
     isolation: isolate;
     overflow: hidden;
@@ -217,7 +218,8 @@ a {
     z-index: -2;
     background:
         linear-gradient(90deg, rgba(5, 5, 6, 0.92), rgba(5, 5, 6, 0.55)),
-        var(--node-art) center right 12% / auto 145% no-repeat;
+        var(--node-art) center right 12% / auto 145% no-repeat,
+        var(--node-logo) center / 86% auto no-repeat;
     opacity: 0.34;
     filter: saturate(1.12) contrast(1.08);
 }
@@ -237,6 +239,22 @@ a {
     position: relative;
     padding: 0.08em 0.18em;
     color: var(--text);
+}
+
+.neoapp-rail a.has-node-logo::before {
+    background:
+        linear-gradient(90deg, rgba(5, 5, 6, 0.78), rgba(5, 5, 6, 0.48)),
+        var(--node-logo) center / 86% auto no-repeat;
+    opacity: 0.92;
+}
+
+.neoapp-rail a.has-node-logo span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
 }
 
 .neoapp-rail-left a {
@@ -282,7 +300,7 @@ a {
 .neoapp-sektor {
     --node-color: #ff2f2f;
     --node-rgb: 255, 47, 47;
-    --node-art: url("https://mortalkombat.fandom.com/wiki/Special:Redirect/file/Sektor_render_mk2011.png");
+    --node-logo: url("../images/neosektor_logo1.png");
 }
 
 .neoapp-rain {
