@@ -178,41 +178,117 @@ a {
 }
 
 .neoapp-rail a {
+    --node-color: var(--red);
+    --node-rgb: 255, 47, 47;
+    --node-art: none;
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
     display: grid;
     place-items: center;
     min-height: clamp(58px, 9vh, 92px);
     padding: 0 16px;
-    border: 1px solid rgba(201, 208, 214, 0.2);
+    border: 1px solid rgba(var(--node-rgb), 0.4);
     border-radius: 6px;
-    color: var(--steel);
+    color: var(--text);
     background:
-        linear-gradient(135deg, rgba(238, 246, 255, 0.1), transparent 26%),
+        linear-gradient(90deg, rgba(var(--node-rgb), 0.2), transparent 22%, transparent 78%, rgba(var(--node-rgb), 0.16)),
+        linear-gradient(135deg, rgba(238, 246, 255, 0.1), transparent 28%),
         linear-gradient(180deg, rgba(22, 25, 31, 0.94), rgba(6, 7, 10, 0.94));
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.08),
         0 14px 38px rgba(0, 0, 0, 0.26),
-        0 0 18px rgba(255, 47, 47, 0.08);
-    font-size: 0.86rem;
+        0 0 18px rgba(var(--node-rgb), 0.16);
+    font-size: clamp(1.05rem, 1.8vw, 1.45rem);
     font-weight: 900;
     letter-spacing: 0.08em;
     text-align: center;
-    text-transform: uppercase;
+    text-transform: none;
+    text-shadow:
+        0 0 10px rgba(var(--node-rgb), 0.9),
+        0 0 24px rgba(var(--node-rgb), 0.52),
+        0 2px 0 rgba(0, 0, 0, 0.84);
+}
+
+.neoapp-rail a::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    background:
+        linear-gradient(90deg, rgba(5, 5, 6, 0.92), rgba(5, 5, 6, 0.55)),
+        var(--node-art) center right 12% / auto 145% no-repeat;
+    opacity: 0.34;
+    filter: saturate(1.12) contrast(1.08);
+}
+
+.neoapp-rail a::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+        radial-gradient(circle at 50% 50%, rgba(var(--node-rgb), 0.24), transparent 38%),
+        linear-gradient(90deg, rgba(var(--node-rgb), 0.22), transparent 18%, transparent 82%, rgba(var(--node-rgb), 0.18));
+    opacity: 0.8;
+}
+
+.neoapp-rail a span {
+    position: relative;
+    padding: 0.08em 0.18em;
+    color: var(--text);
 }
 
 .neoapp-rail-left a {
-    border-left-color: rgba(255, 47, 47, 0.58);
+    border-left-color: rgba(var(--node-rgb), 0.82);
 }
 
 .neoapp-rail-right a {
-    border-right-color: rgba(255, 47, 47, 0.58);
+    border-right-color: rgba(var(--node-rgb), 0.82);
 }
 
 .neoapp-rail a:hover {
-    border-color: rgba(255, 47, 47, 0.62);
+    border-color: rgba(var(--node-rgb), 0.74);
     color: var(--text);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.12),
-        0 0 28px rgba(255, 47, 47, 0.18);
+        0 0 32px rgba(var(--node-rgb), 0.3);
+}
+
+.neoapp-scorpion {
+    --node-color: #ffc247;
+    --node-rgb: 255, 194, 71;
+    --node-art: url("https://commons.wikimedia.org/wiki/Special:Redirect/file/Scorpion_MK11.png");
+}
+
+.neoapp-reptile {
+    --node-color: #5dff75;
+    --node-rgb: 93, 255, 117;
+    --node-art: url("https://mortalkombat.fandom.com/wiki/Special:Redirect/file/Reptile_render_mk2011.png");
+}
+
+.neoapp-ermac {
+    --node-color: #ff304a;
+    --node-rgb: 255, 48, 74;
+    --node-art: url("https://mortalkombat.fandom.com/wiki/Special:Redirect/file/Ermac_render_mk2011.png");
+}
+
+.neoapp-subzero {
+    --node-color: #4cbcff;
+    --node-rgb: 76, 188, 255;
+    --node-art: url("https://commons.wikimedia.org/wiki/Special:Redirect/file/Sub-Zero_Mortal_Kombat_X.png");
+}
+
+.neoapp-sektor {
+    --node-color: #ff2f2f;
+    --node-rgb: 255, 47, 47;
+    --node-art: url("https://mortalkombat.fandom.com/wiki/Special:Redirect/file/Sektor_render_mk2011.png");
+}
+
+.neoapp-rain {
+    --node-color: #b05cff;
+    --node-rgb: 176, 92, 255;
+    --node-art: url("https://mortalkombat.fandom.com/wiki/Special:Redirect/file/Rain_render_mk2011.png");
 }
 
 .command-access-panel {
