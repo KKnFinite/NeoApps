@@ -10,24 +10,11 @@
     <div class="shell">
         <header class="topbar">
             <a class="brand" href="{{ url_for('neomotherbrain.dashboard') }}">
-                <span class="brand-mark"></span>
                 <span>
                     <strong>NeoApps</strong>
                     <small>Rockford Air Hub</small>
                 </span>
             </a>
-            <nav class="nav">
-                <a href="{{ url_for('neomotherbrain.dashboard') }}">MotherBrain</a>
-                <a href="{{ url_for('neonodes.index') }}">NeoNodes</a>
-                {% if current_user.is_authenticated %}
-                {% if current_user.role in ["grandmaster", "master"] %}
-                <a href="{{ url_for('auth.users') }}">Users</a>
-                {% endif %}
-                <a href="{{ url_for('auth.logout') }}">Logout</a>
-                {% else %}
-                <a href="{{ url_for('auth.login') }}">Login</a>
-                {% endif %}
-            </nav>
         </header>
 
         <main class="content">

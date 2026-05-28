@@ -3,48 +3,67 @@
 {% block title %}NeoMotherBrain | NeoApps{% endblock %}
 
 {% block content %}
-<section class="dashboard-hero">
-    <div>
-        <div class="motherbrain-sigil dashboard-sigil" aria-hidden="true">
-            <span></span>
+<section class="motherbrain-command" aria-label="NeoMotherBrain command center">
+    <aside class="neoapp-rail neoapp-rail-left" aria-label="Left NeoApps">
+        <a href="#" aria-disabled="true">NeoScorpion</a>
+        <a href="#" aria-disabled="true">NeoReptile</a>
+        <a href="#" aria-disabled="true">NeoErmac</a>
+    </aside>
+
+    <section class="motherbrain-core">
+        <div class="motherbrain-core-image">
+            <img src="{{ url_for('static', filename='images/motherbrain_logo1.png') }}" alt="NeoMotherBrain" />
         </div>
-        <p class="eyebrow">Central Command</p>
-        <h1>NeoMotherBrain</h1>
-        <p class="hero-copy">
-            A unified operating layer for Rockford Air Hub tools, ready to coordinate NeoNodes as each module comes online.
-        </p>
-    </div>
-    <div class="status-grid" aria-label="Platform status">
-        <div class="status-card">
-            <span>Platform</span>
-            <strong>Online</strong>
+
+        <div class="command-access-panel">
+            {% if current_user.is_authenticated %}
+            <strong>{{ current_user.role|replace("_", " ")|title }}</strong>
+            {% else %}
+            <strong>Login to Unlock</strong>
+            {% endif %}
         </div>
-        <div class="status-card">
-            <span>Database</span>
-            <strong>SQLite Local</strong>
-        </div>
-        <div class="status-card">
-            <span>NeoNodes</span>
-            <strong>Standing By</strong>
-        </div>
-    </div>
+    </section>
+
+    <aside class="neoapp-rail neoapp-rail-right" aria-label="Right NeoApps">
+        <a href="#" aria-disabled="true">NeoSub-Zero</a>
+        <a href="#" aria-disabled="true">NeoSektor</a>
+        <a href="#" aria-disabled="true">NeoRain</a>
+    </aside>
 </section>
 
-<section class="node-strip">
-    <article>
+{% if current_user.is_authenticated %}
+<section class="command-card-grid" aria-label="Role controls">
+    {% if can_enter_data(current_user) %}
+    <article class="command-card">
         <span class="node-light"></span>
-        <h2>Auth</h2>
-        <p>Login and access-control foundation.</p>
+        <h2>Data Entry</h2>
+        <p>Operator data channels are available for your role.</p>
     </article>
-    <article>
+    {% endif %}
+
+    {% if can_make_decisions(current_user) %}
+    <article class="command-card">
         <span class="node-light"></span>
-        <h2>NeoMotherBrain</h2>
-        <p>Central dashboard and shared platform shell.</p>
+        <h2>Decision Layer</h2>
+        <p>Simulator and command decision controls are enabled.</p>
     </article>
-    <article>
+    {% endif %}
+
+    {% if can_manage_users(current_user) %}
+    <a class="command-card command-card-link" href="{{ url_for('auth.users') }}">
         <span class="node-light"></span>
-        <h2>NeoNodes</h2>
-        <p>Operational modules will plug in here.</p>
+        <h2>User Control</h2>
+        <p>Manage NeoApps users and operational access.</p>
+    </a>
+    {% endif %}
+
+    {% if can_manage_system(current_user) %}
+    <article class="command-card">
+        <span class="node-light"></span>
+        <h2>System Core</h2>
+        <p>Grandmaster system management permissions are active.</p>
     </article>
+    {% endif %}
 </section>
+{% endif %}
 {% endblock %}
