@@ -243,9 +243,9 @@ a {
 
 .neoapp-rail a.has-node-logo::before {
     background:
-        linear-gradient(90deg, rgba(5, 5, 6, 0.78), rgba(5, 5, 6, 0.48)),
+        linear-gradient(90deg, rgba(5, 5, 6, 0.44), rgba(5, 5, 6, 0.18)),
         var(--node-logo) center / 86% auto no-repeat;
-    opacity: 0.92;
+    opacity: 1;
 }
 
 .neoapp-rail a.has-node-logo span {
@@ -300,7 +300,7 @@ a {
 .neoapp-sektor {
     --node-color: #ff2f2f;
     --node-rgb: 255, 47, 47;
-    --node-logo: url("../images/neosektor_logo1.png");
+    --node-logo: url("/static/images/neosektor_logo1.png");
 }
 
 .neoapp-rain {
