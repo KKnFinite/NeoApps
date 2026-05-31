@@ -1,0 +1,65 @@
+from datetime import datetime
+
+from app.extensions import db
+
+
+class SortDateFlightSchedule(db.Model):
+    __tablename__ = "sort_date_flight_schedules"
+    __table_args__ = (
+        db.CheckConstraint(
+            "mission_type IN ('arrival', 'departure')",
+            name="ck_sort_date_flight_schedules_mission_type",
+        ),
+        db.CheckConstraint(
+            "fuel_status IN ('waiting', 'received', 'assigned', 'complete')",
+            name="ck_sort_date_flight_schedules_fuel_status",
+        ),
+        db.CheckConstraint(
+            "departure_status IN ('loading', 'last_uld_enroute', 'ramp_load_complete', "
+            "'crew_load_complete', 'blocked_out')",
+            name="ck_sort_date_flight_schedules_departure_status",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    sort_date = db.Column(db.Date, nullable=False, index=True)
+    gateway_code = db.Column(db.String(8), nullable=False, index=True)
+    sort_name = db.Column(db.String(32), nullable=False, index=True)
+    mission_type = db.Column(db.String(16), nullable=False, index=True)
+    master_flight_schedule_id = db.Column(
+        db.Integer,
+        db.ForeignKey("master_flight_schedules.id"),
+        nullable=True,
+        index=True,
+    )
+    flight_number = db.Column(db.String(32), nullable=False)
+    origin = db.Column(db.String(8), nullable=False)
+    destination = db.Column(db.String(8), nullable=False)
+    timezone = db.Column(db.String(64), nullable=False, default="America/Chicago")
+    planned_datetime_local = db.Column(db.DateTime, nullable=False)
+    planned_datetime_utc = db.Column(db.DateTime, nullable=False, index=True)
+    planned_source = db.Column(db.String(32), nullable=False, default="unknown")
+    eta_datetime_utc = db.Column(db.DateTime, nullable=True)
+    eta_source = db.Column(db.String(32), nullable=False, default="unknown")
+    actual_block_in_datetime_utc = db.Column(db.DateTime, nullable=True)
+    actual_block_in_source = db.Column(db.String(32), nullable=False, default="unknown")
+    actual_block_out_datetime_utc = db.Column(db.DateTime, nullable=True)
+    actual_block_out_source = db.Column(db.String(32), nullable=False, default="unknown")
+    tail_number = db.Column(db.String(32), nullable=True)
+    tail_source = db.Column(db.String(32), nullable=False, default="unknown")
+    tail_updated_at = db.Column(db.DateTime, nullable=True)
+    planned_fuel_load = db.Column(db.Integer, nullable=True)
+    planned_fuel_updated_at = db.Column(db.DateTime, nullable=True)
+    fuel_status = db.Column(db.String(32), nullable=True)
+    fuel_completed_at_utc = db.Column(db.DateTime, nullable=True)
+    departure_status = db.Column(db.String(32), nullable=True)
+    last_uld_enroute_at_utc = db.Column(db.DateTime, nullable=True)
+    ramp_load_completed_at_utc = db.Column(db.DateTime, nullable=True)
+    crew_load_completed_at_utc = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )

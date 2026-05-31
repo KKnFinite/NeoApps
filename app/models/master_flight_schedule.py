@@ -3,19 +3,19 @@ from datetime import datetime
 from app.extensions import db
 
 
-class MasterScheduleFlight(db.Model):
-    __tablename__ = "master_schedule_flights"
+class MasterFlightSchedule(db.Model):
+    __tablename__ = "master_flight_schedules"
     __table_args__ = (
         db.CheckConstraint(
-            "schedule_type IN ('inbound', 'outbound')",
-            name="ck_master_schedule_flights_schedule_type",
+            "mission_type IN ('arrival', 'departure')",
+            name="ck_master_flight_schedules_mission_type",
         ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
     gateway_code = db.Column(db.String(8), nullable=False, index=True)
     sort_name = db.Column(db.String(32), nullable=False, index=True)
-    schedule_type = db.Column(db.String(16), nullable=False, index=True)
+    mission_type = db.Column(db.String(16), nullable=False, index=True)
     flight_number = db.Column(db.String(32), nullable=False)
     origin = db.Column(db.String(8), nullable=False)
     destination = db.Column(db.String(8), nullable=False)
