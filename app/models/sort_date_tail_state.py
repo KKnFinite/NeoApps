@@ -37,3 +37,7 @@ class SortDateTailState(db.Model):
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
     )
+
+    @property
+    def deice_complete(self):
+        return bool(self.pretreat_status or self.deice_status == "cleared")

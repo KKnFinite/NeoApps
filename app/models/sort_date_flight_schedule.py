@@ -15,10 +15,6 @@ class SortDateFlightSchedule(db.Model):
             name="ck_sort_date_flight_schedules_mission_source",
         ),
         db.CheckConstraint(
-            "mix_pull_count IS NULL OR mix_pull_count BETWEEN 1 AND 4",
-            name="ck_sort_date_flight_schedules_mix_pull_count",
-        ),
-        db.CheckConstraint(
             "pull_time_source IS NULL OR pull_time_source IN ('master', 'manual')",
             name="ck_sort_date_flight_schedules_pull_time_source",
         ),
@@ -58,14 +54,14 @@ class SortDateFlightSchedule(db.Model):
     actual_block_in_source = db.Column(db.String(32), nullable=False, default="unknown")
     actual_block_out_datetime_utc = db.Column(db.DateTime, nullable=True)
     actual_block_out_source = db.Column(db.String(32), nullable=False, default="unknown")
-    tail_number = db.Column(db.String(32), nullable=True)
+    assigned_tail_number = db.Column(db.String(32), nullable=True)
     tail_source = db.Column(db.String(32), nullable=False, default="unknown")
     tail_updated_at = db.Column(db.DateTime, nullable=True)
     planned_fuel_load = db.Column(db.Integer, nullable=True)
     planned_fuel_updated_at = db.Column(db.DateTime, nullable=True)
     pure_pull_time_local = db.Column(db.Time, nullable=True)
+    first_mix_pull_time_local = db.Column(db.Time, nullable=True)
     final_mix_pull_time_local = db.Column(db.Time, nullable=True)
-    mix_pull_count = db.Column(db.Integer, nullable=True)
     pull_time_source = db.Column(db.String(32), nullable=True)
     fuel_status = db.Column(db.String(32), nullable=True)
     fuel_completed_at_utc = db.Column(db.DateTime, nullable=True)

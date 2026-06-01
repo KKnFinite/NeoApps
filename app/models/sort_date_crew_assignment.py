@@ -32,3 +32,6 @@ class SortDateCrewAssignment(db.Model):
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
     )
+
+    crew = db.relationship("Crew")
+    flight_schedule = db.relationship("SortDateFlightSchedule")
