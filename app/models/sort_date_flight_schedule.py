@@ -11,6 +11,18 @@ class SortDateFlightSchedule(db.Model):
             name="ck_sort_date_flight_schedules_mission_type",
         ),
         db.CheckConstraint(
+            "mission_source IN ('master', 'api', 'manual')",
+            name="ck_sort_date_flight_schedules_mission_source",
+        ),
+        db.CheckConstraint(
+            "mix_pull_count IS NULL OR mix_pull_count BETWEEN 1 AND 4",
+            name="ck_sort_date_flight_schedules_mix_pull_count",
+        ),
+        db.CheckConstraint(
+            "pull_time_source IS NULL OR pull_time_source IN ('master', 'manual')",
+            name="ck_sort_date_flight_schedules_pull_time_source",
+        ),
+        db.CheckConstraint(
             "fuel_status IN ('waiting', 'received', 'assigned', 'complete')",
             name="ck_sort_date_flight_schedules_fuel_status",
         ),
@@ -26,6 +38,7 @@ class SortDateFlightSchedule(db.Model):
     gateway_code = db.Column(db.String(8), nullable=False, index=True)
     sort_name = db.Column(db.String(32), nullable=False, index=True)
     mission_type = db.Column(db.String(16), nullable=False, index=True)
+    mission_source = db.Column(db.String(32), nullable=False, default="master")
     master_flight_schedule_id = db.Column(
         db.Integer,
         db.ForeignKey("master_flight_schedules.id"),
@@ -50,6 +63,10 @@ class SortDateFlightSchedule(db.Model):
     tail_updated_at = db.Column(db.DateTime, nullable=True)
     planned_fuel_load = db.Column(db.Integer, nullable=True)
     planned_fuel_updated_at = db.Column(db.DateTime, nullable=True)
+    pure_pull_time_local = db.Column(db.Time, nullable=True)
+    final_mix_pull_time_local = db.Column(db.Time, nullable=True)
+    mix_pull_count = db.Column(db.Integer, nullable=True)
+    pull_time_source = db.Column(db.String(32), nullable=True)
     fuel_status = db.Column(db.String(32), nullable=True)
     fuel_completed_at_utc = db.Column(db.DateTime, nullable=True)
     departure_status = db.Column(db.String(32), nullable=True)

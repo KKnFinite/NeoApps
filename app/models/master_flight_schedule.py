@@ -10,6 +10,10 @@ class MasterFlightSchedule(db.Model):
             "mission_type IN ('arrival', 'departure')",
             name="ck_master_flight_schedules_mission_type",
         ),
+        db.CheckConstraint(
+            "mix_pull_count IS NULL OR mix_pull_count BETWEEN 1 AND 4",
+            name="ck_master_flight_schedules_mix_pull_count",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -23,6 +27,9 @@ class MasterFlightSchedule(db.Model):
     planned_time_local = db.Column(db.Time, nullable=False)
     timezone = db.Column(db.String(64), nullable=False, default="America/Chicago")
     preferred_parking = db.Column(db.String(64), nullable=True)
+    pure_pull_time_local = db.Column(db.Time, nullable=True)
+    final_mix_pull_time_local = db.Column(db.Time, nullable=True)
+    mix_pull_count = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
