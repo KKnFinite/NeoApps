@@ -14,9 +14,9 @@ class SortDateCrewAssignment(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
-    sort_date_flight_schedule_id = db.Column(
+    sort_date_mission_id = db.Column(
         db.Integer,
-        db.ForeignKey("sort_date_flight_schedules.id"),
+        db.ForeignKey("sort_date_missions.id"),
         nullable=False,
         index=True,
     )
@@ -34,4 +34,4 @@ class SortDateCrewAssignment(db.Model):
     )
 
     crew = db.relationship("Crew")
-    flight_schedule = db.relationship("SortDateFlightSchedule")
+    sort_date_mission = db.relationship("SortDateMission")

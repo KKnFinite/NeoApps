@@ -3,29 +3,29 @@ from datetime import datetime
 from app.extensions import db
 
 
-class SortDateFlightSchedule(db.Model):
-    __tablename__ = "sort_date_flight_schedules"
+class SortDateMission(db.Model):
+    __tablename__ = "sort_date_missions"
     __table_args__ = (
         db.CheckConstraint(
             "mission_type IN ('arrival', 'departure')",
-            name="ck_sort_date_flight_schedules_mission_type",
+            name="ck_sort_date_missions_mission_type",
         ),
         db.CheckConstraint(
             "mission_source IN ('master', 'api', 'manual')",
-            name="ck_sort_date_flight_schedules_mission_source",
+            name="ck_sort_date_missions_mission_source",
         ),
         db.CheckConstraint(
             "pull_time_source IS NULL OR pull_time_source IN ('master', 'manual')",
-            name="ck_sort_date_flight_schedules_pull_time_source",
+            name="ck_sort_date_missions_pull_time_source",
         ),
         db.CheckConstraint(
             "fuel_status IN ('waiting', 'received', 'assigned', 'complete')",
-            name="ck_sort_date_flight_schedules_fuel_status",
+            name="ck_sort_date_missions_fuel_status",
         ),
         db.CheckConstraint(
             "departure_status IN ('loading', 'last_uld_enroute', 'ramp_load_complete', "
             "'crew_load_complete', 'blocked_out')",
-            name="ck_sort_date_flight_schedules_departure_status",
+            name="ck_sort_date_missions_departure_status",
         ),
     )
 
