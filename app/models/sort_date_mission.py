@@ -33,6 +33,12 @@ class SortDateMission(db.Model):
     sort_date = db.Column(db.Date, nullable=False, index=True)
     gateway_code = db.Column(db.String(8), nullable=False, index=True)
     sort_name = db.Column(db.String(32), nullable=False, index=True)
+    sort_date_operation_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sort_date_operations.id"),
+        nullable=False,
+        index=True,
+    )
     mission_type = db.Column(db.String(16), nullable=False, index=True)
     mission_source = db.Column(db.String(32), nullable=False, default="master")
     master_flight_schedule_id = db.Column(
@@ -76,3 +82,5 @@ class SortDateMission(db.Model):
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
     )
+
+    sort_date_operation = db.relationship("SortDateOperation", back_populates="missions")

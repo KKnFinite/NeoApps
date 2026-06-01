@@ -7,6 +7,12 @@ from app.services.flight_rules import (
     match_api_flight_number,
     resolve_aircraft_type_for_tail_state,
 )
+from app.services.sort_date_operations import (
+    apply_window_minutes,
+    create_sort_date_operation,
+    mission_display_timing_data,
+    normalize_window_minutes,
+)
 
 __all__ = [
     "crew_sections_for_tail_swap",
@@ -16,4 +22,8 @@ __all__ = [
     "is_mission_crew_covered",
     "match_api_flight_number",
     "resolve_aircraft_type_for_tail_state",
+    "apply_window_minutes",
+    "create_sort_date_operation",
+    "mission_display_timing_data",
+    "normalize_window_minutes",
 ]
