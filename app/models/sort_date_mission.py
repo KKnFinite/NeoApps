@@ -84,3 +84,7 @@ class SortDateMission(db.Model):
     )
 
     sort_date_operation = db.relationship("SortDateOperation", back_populates="missions")
+    crew_assignments = db.relationship(
+        "SortDateCrewAssignment",
+        back_populates="sort_date_mission",
+    )

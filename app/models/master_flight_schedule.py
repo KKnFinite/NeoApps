@@ -19,6 +19,7 @@ class MasterFlightSchedule(db.Model):
     flight_number = db.Column(db.String(32), nullable=False)
     origin = db.Column(db.String(8), nullable=False)
     destination = db.Column(db.String(8), nullable=False)
+    active = db.Column(db.Boolean, nullable=False, default=True)
     active_days = db.Column(db.String(128), nullable=False)
     planned_time_local = db.Column(db.Time, nullable=False)
     timezone = db.Column(db.String(64), nullable=False, default="America/Chicago")
