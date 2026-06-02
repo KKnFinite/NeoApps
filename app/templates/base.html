@@ -15,6 +15,16 @@
                     <small>Rockford Air Hub</small>
                 </span>
             </a>
+            <nav class="nav" aria-label="Primary">
+                {% if current_user.is_authenticated %}
+                <a href="{{ url_for('neomotherbrain.motherbrain') }}">NeoMotherBrain</a>
+                <a href="{{ url_for('neomotherbrain.operations') }}">Nightly Operations</a>
+                <a href="{{ url_for('neomotherbrain.master_schedule') }}">Master Schedule</a>
+                <a href="{{ url_for('auth.logout') }}">Logout</a>
+                {% else %}
+                <a href="{{ url_for('auth.login') }}">Login</a>
+                {% endif %}
+            </nav>
         </header>
 
         <main class="content">
