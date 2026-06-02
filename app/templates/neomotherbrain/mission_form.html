@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}{{ "Edit" if mode == "edit" else "Add" }} Mission | NeoApps{% endblock %}
+
+{% block content %}
+<section class="panel compact-panel">
+    <div class="section-heading">
+        <p class="eyebrow">SortDateMission</p>
+        <h1>{{ "Edit" if mode == "edit" else "Add" }} Mission</h1>
+    </div>
+
+    <form class="operation-form" method="post">
+        <label>
+            <span>Mission Type</span>
+            <select name="mission_type" required>
+                <option value="arrival" {% if form.mission_type == "arrival" %}selected{% endif %}>arrival</option>
+                <option value="departure" {% if form.mission_type == "departure" %}selected{% endif %}>departure</option>
+            </select>
+        </label>
+        <label>
+            <span>Flight Number</span>
+            <input type="text" name="flight_number" value="{{ form.flight_number }}" maxlength="32" required>
+        </label>
+        <label>
+            <span>Origin</span>
+            <input type="text" name="origin" value="{{ form.origin }}" maxlength="8" required>
+        </label>
+        <label>
+            <span>Destination</span>
+            <input type="text" name="destination" value="{{ form.destination }}" maxlength="8" required>
+        </label>
+        <label>
+            <span>Assigned Tail Number</span>
+            <input type="text" name="assigned_tail_number" value="{{ form.assigned_tail_number }}" maxlength="32">
+        </label>
+        <label>
+            <span>Planned Time Local</span>
+            <input type="time" name="planned_time_local" value="{{ form.planned_time_local }}" required>
+        </label>
+        <label>
+            <span>Timezone</span>
+            <input type="text" name="timezone" value="{{ form.timezone }}" maxlength="64" required>
+        </label>
+        <label>
+            <span>ETA UTC</span>
+            <input type="datetime-local" name="eta_datetime_utc" value="{{ form.eta_datetime_utc }}">
+        </label>
+        <label>
+            <span>Actual Block In UTC</span>
+            <input type="datetime-local" name="actual_block_in_datetime_utc" value="{{ form.actual_block_in_datetime_utc }}">
+        </label>
+        <label>
+            <span>Actual Block Out UTC</span>
+            <input type="datetime-local" name="actual_block_out_datetime_utc" value="{{ form.actual_block_out_datetime_utc }}">
+        </label>
+        <label>
+            <span>Planned Fuel Load</span>
+            <input type="number" name="planned_fuel_load" value="{{ form.planned_fuel_load }}" min="0" step="1">
+        </label>
+        <label>
+            <span>Fuel Status</span>
+            <select name="fuel_status">
+                {% for status in fuel_statuses %}
+                <option value="{{ status }}" {% if form.fuel_status == status %}selected{% endif %}>{{ status or "-" }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>
+            <span>Departure Status</span>
+            <select name="departure_status">
+                {% for status in departure_statuses %}
+                <option value="{{ status }}" {% if form.departure_status == status %}selected{% endif %}>{{ status or "-" }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>
+            <span>Pure Pull Time Local</span>
+            <input type="time" name="pure_pull_time_local" value="{{ form.pure_pull_time_local }}">
+        </label>
+        <label>
+            <span>First Mix Pull Time Local</span>
+            <input type="time" name="first_mix_pull_time_local" value="{{ form.first_mix_pull_time_local }}">
+        </label>
+        <label>
+            <span>Final Mix Pull Time Local</span>
+            <input type="time" name="final_mix_pull_time_local" value="{{ form.final_mix_pull_time_local }}">
+        </label>
+
+        <div class="action-row">
+            <button class="action-button" type="submit">{{ "Save" if mode == "edit" else "Create" }}</button>
+            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">Back to Operation</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

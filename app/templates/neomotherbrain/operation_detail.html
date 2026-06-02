@@ -52,9 +52,48 @@
     </form>
 
     <div class="action-row">
+        <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">Add Mission</a>
         <a class="action-button" href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">Arrival Board</a>
         <a class="action-button" href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">Departure Board</a>
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operations') }}">Back to Operations</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operations') }}">Nightly Operations</a>
+    </div>
+
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Flight</th>
+                    <th>Origin</th>
+                    <th>Destination</th>
+                    <th>Tail</th>
+                    <th>Planned Local</th>
+                    <th>Source</th>
+                    <th>Links</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mission in missions %}
+                <tr>
+                    <td>{{ mission.mission_type }}</td>
+                    <td>{{ mission.flight_number }}</td>
+                    <td>{{ mission.origin }}</td>
+                    <td>{{ mission.destination }}</td>
+                    <td>{{ mission.assigned_tail_number or "-" }}</td>
+                    <td>{{ mission.planned_datetime_local.strftime("%H:%M") if mission.planned_datetime_local else "-" }}</td>
+                    <td>{{ mission.mission_source }}</td>
+                    <td class="table-actions">
+                        <a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=mission.id) }}">View</a>
+                        <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">Edit</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8">No missions found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </section>
 {% endblock %}

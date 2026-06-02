@@ -4,10 +4,22 @@ from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.extensions import db
-from app.models import MasterFlightSchedule, SortDateMission, SortDateOperation
+from app.models import (
+    MasterFlightSchedule,
+    SortDateCrewAssignment,
+    SortDateMission,
+    SortDateOperation,
+    SortDateTailState,
+)
 from app.neomotherbrain import bp
-from app.services.flight_rules import is_mission_crew_covered
+from app.services.flight_rules import (
+    crew_sections_for_tail_swap,
+    default_required_crew_sections,
+    derive_aircraft_type_from_tail_number,
+    is_mission_crew_covered,
+)
 from app.services.sort_date_operations import (
+    ensure_tail_state_for_mission,
     generate_sort_date_operation_from_master,
     mission_display_timing_data,
     normalize_window_minutes,
@@ -24,6 +36,15 @@ ACTIVE_DAY_OPTIONS = (
 )
 
 MISSION_TYPES = {"arrival", "departure"}
+FUEL_STATUSES = ("", "waiting", "received", "assigned", "complete")
+DEPARTURE_STATUSES = (
+    "",
+    "loading",
+    "last_uld_enroute",
+    "ramp_load_complete",
+    "crew_load_complete",
+    "blocked_out",
+)
 
 
 @bp.route("/")
@@ -231,12 +252,14 @@ def operation_detail(operation_id):
     operation = _operation_or_404(operation_id)
     arrival_count = _mission_count(operation, "arrival")
     departure_count = _mission_count(operation, "departure")
+    missions = _all_missions_for_operation(operation)
     return render_template(
         "neomotherbrain/operation_detail.html",
         operation=operation,
         arrival_count=arrival_count,
         departure_count=departure_count,
         mission_count=arrival_count + departure_count,
+        missions=missions,
     )
 
 
@@ -284,8 +307,124 @@ def update_operation_window(operation_id):
     return redirect(url_for("neomotherbrain.operation_detail", operation_id=operation.id))
 
 
+@bp.route("/motherbrain/operations/<int:operation_id>/missions/new", methods=["GET", "POST"])
+@login_required
+def new_mission(operation_id):
+    operation = _operation_or_404(operation_id)
+    form = _mission_form_from_request(operation)
+
+    if request.method == "POST":
+        mission = SortDateMission(sort_date_operation=operation)
+        try:
+            _apply_mission_form(mission, operation, form)
+            _raise_for_duplicate_operation_flight_number(operation, mission)
+        except ValueError as error:
+            db.session.rollback()
+            flash(str(error), "error")
+            return _render_mission_form(operation, form, "new"), 400
+
+        db.session.add(mission)
+        db.session.flush()
+        _sync_tail_state_and_crew_slots(mission)
+        db.session.commit()
+        flash("Manual mission created.", "info")
+        return redirect(
+            url_for(
+                "neomotherbrain.mission_detail",
+                operation_id=operation.id,
+                mission_id=mission.id,
+            )
+        )
+
+    return _render_mission_form(operation, form, "new")
+
+
+@bp.route("/motherbrain/operations/<int:operation_id>/missions/<int:mission_id>")
+@login_required
+def mission_detail(operation_id, mission_id):
+    operation = _operation_or_404(operation_id)
+    mission = _mission_or_404(operation, mission_id)
+    return render_template(
+        "neomotherbrain/mission_detail.html",
+        operation=operation,
+        mission=mission,
+        timing=mission_display_timing_data(mission, operation),
+        crew_covered=is_mission_crew_covered(mission.crew_assignments),
+    )
+
+
+@bp.route(
+    "/motherbrain/operations/<int:operation_id>/missions/<int:mission_id>/edit",
+    methods=["GET", "POST"],
+)
+@login_required
+def edit_mission(operation_id, mission_id):
+    operation = _operation_or_404(operation_id)
+    mission = _mission_or_404(operation, mission_id)
+    form = (
+        _mission_form_from_request(operation)
+        if request.method == "POST"
+        else _mission_form_from_model(mission)
+    )
+
+    if request.method == "POST":
+        old_tail_number = mission.assigned_tail_number
+        old_aircraft_type = _aircraft_type_for_tail(
+            operation,
+            old_tail_number,
+        )
+        try:
+            _apply_mission_form(mission, operation, form)
+            _raise_for_duplicate_operation_flight_number(operation, mission)
+        except ValueError as error:
+            db.session.rollback()
+            flash(str(error), "error")
+            return _render_mission_form(operation, form, "edit", mission), 400
+
+        db.session.flush()
+        _sync_tail_state_and_crew_slots(
+            mission,
+            old_tail_number=old_tail_number,
+            old_aircraft_type=old_aircraft_type,
+        )
+        db.session.commit()
+        flash("Mission updated.", "info")
+        return redirect(
+            url_for(
+                "neomotherbrain.mission_detail",
+                operation_id=operation.id,
+                mission_id=mission.id,
+            )
+        )
+
+    return _render_mission_form(operation, form, "edit", mission)
+
+
+@bp.route(
+    "/motherbrain/operations/<int:operation_id>/missions/<int:mission_id>/delete",
+    methods=["POST"],
+)
+@login_required
+def delete_mission(operation_id, mission_id):
+    operation = _operation_or_404(operation_id)
+    mission = _mission_or_404(operation, mission_id)
+
+    SortDateCrewAssignment.query.filter_by(sort_date_mission_id=mission.id).delete()
+    db.session.delete(mission)
+    db.session.commit()
+    flash("Mission deleted.", "info")
+    return redirect(url_for("neomotherbrain.operation_detail", operation_id=operation.id))
+
+
 def _operation_or_404(operation_id):
     return SortDateOperation.query.get_or_404(operation_id)
+
+
+def _mission_or_404(operation, mission_id):
+    return SortDateMission.query.filter_by(
+        id=mission_id,
+        sort_date_operation_id=operation.id,
+    ).first_or_404()
 
 
 def _master_schedule_or_404(master_id):
@@ -441,6 +580,307 @@ def _parse_optional_time(value, label):
 
 def _format_time(value):
     return value.strftime("%H:%M") if value else ""
+
+
+def _render_mission_form(operation, form, mode, mission=None):
+    return render_template(
+        "neomotherbrain/mission_form.html",
+        departure_statuses=DEPARTURE_STATUSES,
+        form=form,
+        fuel_statuses=FUEL_STATUSES,
+        mission=mission,
+        mode=mode,
+        operation=operation,
+    )
+
+
+def _mission_form_from_request(operation):
+    return {
+        "mission_type": request.form.get("mission_type", "departure"),
+        "flight_number": request.form.get("flight_number", ""),
+        "origin": request.form.get("origin", ""),
+        "destination": request.form.get("destination", ""),
+        "assigned_tail_number": request.form.get("assigned_tail_number", ""),
+        "planned_time_local": request.form.get("planned_time_local", ""),
+        "timezone": request.form.get("timezone", "America/Chicago"),
+        "eta_datetime_utc": request.form.get("eta_datetime_utc", ""),
+        "actual_block_in_datetime_utc": request.form.get("actual_block_in_datetime_utc", ""),
+        "actual_block_out_datetime_utc": request.form.get("actual_block_out_datetime_utc", ""),
+        "planned_fuel_load": request.form.get("planned_fuel_load", ""),
+        "fuel_status": request.form.get("fuel_status", ""),
+        "departure_status": request.form.get("departure_status", ""),
+        "pure_pull_time_local": request.form.get("pure_pull_time_local", ""),
+        "first_mix_pull_time_local": request.form.get("first_mix_pull_time_local", ""),
+        "final_mix_pull_time_local": request.form.get("final_mix_pull_time_local", ""),
+    }
+
+
+def _mission_form_from_model(mission):
+    return {
+        "mission_type": mission.mission_type,
+        "flight_number": mission.flight_number,
+        "origin": mission.origin,
+        "destination": mission.destination,
+        "assigned_tail_number": mission.assigned_tail_number or "",
+        "planned_time_local": _format_time(
+            mission.planned_datetime_local.time()
+            if mission.planned_datetime_local
+            else None
+        ),
+        "timezone": mission.timezone,
+        "eta_datetime_utc": _format_datetime_local(mission.eta_datetime_utc),
+        "actual_block_in_datetime_utc": _format_datetime_local(
+            mission.actual_block_in_datetime_utc
+        ),
+        "actual_block_out_datetime_utc": _format_datetime_local(
+            mission.actual_block_out_datetime_utc
+        ),
+        "planned_fuel_load": "" if mission.planned_fuel_load is None else str(mission.planned_fuel_load),
+        "fuel_status": mission.fuel_status or "",
+        "departure_status": mission.departure_status or "",
+        "pure_pull_time_local": _format_time(mission.pure_pull_time_local),
+        "first_mix_pull_time_local": _format_time(mission.first_mix_pull_time_local),
+        "final_mix_pull_time_local": _format_time(mission.final_mix_pull_time_local),
+    }
+
+
+def _apply_mission_form(mission, operation, form):
+    mission_type = form["mission_type"].strip().lower()
+    flight_number = form["flight_number"].strip()
+    origin = form["origin"].strip().upper()
+    destination = form["destination"].strip().upper()
+    timezone = form["timezone"].strip() or "America/Chicago"
+    assigned_tail_number = form["assigned_tail_number"].strip().upper() or None
+
+    if mission_type not in MISSION_TYPES:
+        raise ValueError("Mission type must be arrival or departure.")
+
+    if not all((flight_number, origin, destination)):
+        raise ValueError("Flight number, origin, and destination are required.")
+
+    planned_time_local = _parse_time(form["planned_time_local"], "Planned time")
+    planned_datetime_local = datetime.combine(operation.sort_date, planned_time_local)
+
+    mission.sort_date_operation = operation
+    mission.sort_date = operation.sort_date
+    mission.gateway_code = operation.gateway_code
+    mission.sort_name = operation.sort_name
+    mission.mission_type = mission_type
+    mission.mission_source = "manual"
+    mission.master_flight_schedule_id = None
+    mission.flight_number = flight_number
+    mission.origin = origin
+    mission.destination = destination
+    mission.timezone = timezone
+    mission.planned_datetime_local = planned_datetime_local
+    mission.planned_datetime_utc = _planned_datetime_utc_for_mission(
+        planned_datetime_local,
+        timezone,
+    )
+    mission.planned_source = "manual"
+    mission.assigned_tail_number = assigned_tail_number
+    mission.tail_source = "manual" if assigned_tail_number else "unknown"
+    mission.tail_updated_at = datetime.utcnow() if assigned_tail_number else None
+    mission.eta_datetime_utc = _parse_optional_datetime(
+        form["eta_datetime_utc"],
+        "ETA UTC",
+    )
+    mission.eta_source = "manual" if mission.eta_datetime_utc else "unknown"
+    mission.actual_block_in_datetime_utc = _parse_optional_datetime(
+        form["actual_block_in_datetime_utc"],
+        "Actual block in UTC",
+    )
+    mission.actual_block_in_source = (
+        "manual" if mission.actual_block_in_datetime_utc else "unknown"
+    )
+    mission.actual_block_out_datetime_utc = _parse_optional_datetime(
+        form["actual_block_out_datetime_utc"],
+        "Actual block out UTC",
+    )
+    mission.actual_block_out_source = (
+        "manual" if mission.actual_block_out_datetime_utc else "unknown"
+    )
+    mission.planned_fuel_load = _parse_optional_int(
+        form["planned_fuel_load"],
+        "Planned fuel load",
+    )
+    mission.fuel_status = _choice_or_none(form["fuel_status"], FUEL_STATUSES, "Fuel status")
+
+    if mission_type == "arrival":
+        mission.pure_pull_time_local = None
+        mission.first_mix_pull_time_local = None
+        mission.final_mix_pull_time_local = None
+        mission.pull_time_source = None
+        mission.departure_status = None
+        return
+
+    mission.departure_status = _choice_or_none(
+        form["departure_status"],
+        DEPARTURE_STATUSES,
+        "Departure status",
+    )
+    mission.pure_pull_time_local = _parse_optional_time(
+        form["pure_pull_time_local"],
+        "Pure pull time",
+    )
+    mission.first_mix_pull_time_local = _parse_optional_time(
+        form["first_mix_pull_time_local"],
+        "First mix pull time",
+    )
+    mission.final_mix_pull_time_local = _parse_optional_time(
+        form["final_mix_pull_time_local"],
+        "Final mix pull time",
+    )
+    if any(
+        (
+            mission.pure_pull_time_local,
+            mission.first_mix_pull_time_local,
+            mission.final_mix_pull_time_local,
+        )
+    ):
+        mission.pull_time_source = "manual"
+    else:
+        mission.pull_time_source = None
+
+
+def _raise_for_duplicate_operation_flight_number(operation, mission):
+    with db.session.no_autoflush:
+        duplicate_query = SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id,
+            flight_number=mission.flight_number,
+        )
+
+        if mission.id:
+            duplicate_query = duplicate_query.filter(SortDateMission.id != mission.id)
+
+        if duplicate_query.first():
+            raise ValueError("A mission with this flight number already exists in this operation.")
+
+
+def _sync_tail_state_and_crew_slots(
+    mission,
+    old_tail_number=None,
+    old_aircraft_type="unknown",
+):
+    tail_state = ensure_tail_state_for_mission(mission)
+    new_aircraft_type = _aircraft_type_from_tail_state_or_number(
+        tail_state,
+        mission.assigned_tail_number,
+    )
+
+    current_assignments = list(mission.crew_assignments)
+    current_sections = tuple(assignment.aircraft_section for assignment in current_assignments)
+    required_sections = tuple(default_required_crew_sections(new_aircraft_type))
+
+    if old_tail_number is not None and old_tail_number != mission.assigned_tail_number:
+        keep_sections = set(
+            crew_sections_for_tail_swap(
+                current_sections,
+                old_aircraft_type,
+                new_aircraft_type,
+            )["keep"]
+        )
+    else:
+        keep_sections = set(current_sections)
+
+    for assignment in current_assignments:
+        if (
+            assignment.aircraft_section not in required_sections
+            or assignment.aircraft_section not in keep_sections
+        ):
+            db.session.delete(assignment)
+
+    db.session.flush()
+    existing_sections = {
+        assignment.aircraft_section
+        for assignment in SortDateCrewAssignment.query.filter_by(
+            sort_date_mission_id=mission.id
+        ).all()
+    }
+    for section in required_sections:
+        if section in existing_sections:
+            continue
+        db.session.add(
+            SortDateCrewAssignment(
+                sort_date_mission_id=mission.id,
+                aircraft_section=section,
+                required=True,
+            )
+        )
+
+
+def _aircraft_type_for_tail(operation, tail_number):
+    if not tail_number:
+        return "unknown"
+
+    tail_state = SortDateTailState.query.filter_by(
+        sort_date=operation.sort_date,
+        gateway_code=operation.gateway_code,
+        sort_name=operation.sort_name,
+        tail_number=tail_number,
+    ).first()
+    return _aircraft_type_from_tail_state_or_number(tail_state, tail_number)
+
+
+def _aircraft_type_from_tail_state_or_number(tail_state, tail_number):
+    if tail_state:
+        if tail_state.aircraft_type_source == "manual":
+            return tail_state.aircraft_type or "unknown"
+        if tail_state.aircraft_type:
+            return tail_state.aircraft_type
+
+    return derive_aircraft_type_from_tail_number(tail_number)
+
+
+def _choice_or_none(value, allowed_values, label):
+    value = (value or "").strip()
+    if not value:
+        return None
+    if value not in allowed_values:
+        raise ValueError(f"{label} is invalid.")
+    return value
+
+
+def _parse_optional_int(value, label):
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        raise ValueError(f"{label} must be a whole number.") from None
+
+
+def _parse_optional_datetime(value, label):
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise ValueError(f"{label} must use YYYY-MM-DDTHH:MM format.") from None
+
+
+def _format_datetime_local(value):
+    return value.strftime("%Y-%m-%dT%H:%M") if value else ""
+
+
+def _planned_datetime_utc_for_mission(planned_datetime_local, timezone):
+    from app.services.sort_date_operations import _planned_datetime_utc
+
+    return _planned_datetime_utc(planned_datetime_local, timezone)
+
+
+def _all_missions_for_operation(operation):
+    return (
+        SortDateMission.query.filter_by(sort_date_operation_id=operation.id)
+        .order_by(
+            SortDateMission.mission_type.asc(),
+            SortDateMission.planned_datetime_utc.asc(),
+            SortDateMission.flight_number.asc(),
+        )
+        .all()
+    )
 
 
 def _missions_for_operation(operation, mission_type):

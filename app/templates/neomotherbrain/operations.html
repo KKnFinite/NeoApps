@@ -6,12 +6,13 @@
 <section class="panel">
     <div class="section-heading">
         <p class="eyebrow">NeoMotherBrain</p>
-        <h1>SortDateOperations</h1>
+        <h1>Nightly Operations</h1>
     </div>
 
     <div class="action-row">
         <a class="action-button" href="{{ url_for('neomotherbrain.new_operation') }}">Generate New Nightly Operation</a>
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}">MotherBrain Home</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}">NeoMotherBrain</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">Master Schedule</a>
     </div>
 
     <div class="table-wrap">
@@ -44,7 +45,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7">No SortDateOperations found.</td>
+                    <td colspan="7">No nightly operations found.</td>
                 </tr>
                 {% endfor %}
             </tbody>

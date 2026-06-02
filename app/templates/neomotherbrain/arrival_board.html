@@ -10,6 +10,7 @@
     </div>
 
     <div class="action-row">
+        <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">Add Mission</a>
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">Operation Overview</a>
         <a class="action-button" href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">Departure Board</a>
     </div>
@@ -27,6 +28,7 @@
                     <th>Actual In UTC</th>
                     <th>Fuel</th>
                     <th>Crew</th>
+                    <th>Links</th>
                 </tr>
             </thead>
             <tbody>
@@ -42,10 +44,14 @@
                     <td>{{ mission.actual_block_in_datetime_utc.strftime("%H:%M") if mission.actual_block_in_datetime_utc else "-" }}</td>
                     <td>{{ mission.fuel_status or "-" }}</td>
                     <td>{{ "Covered" if row.crew_covered else "Open" }}</td>
+                    <td class="table-actions">
+                        <a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=mission.id) }}">View</a>
+                        <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">Edit</a>
+                    </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="9">No arrival missions found.</td>
+                    <td colspan="10">No arrival missions found.</td>
                 </tr>
                 {% endfor %}
             </tbody>

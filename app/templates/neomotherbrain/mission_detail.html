@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}{{ mission.flight_number }} | Mission{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <div class="section-heading">
+        <p class="eyebrow">SortDateMission</p>
+        <h1>{{ mission.flight_number }}</h1>
+    </div>
+
+    <div class="action-row">
+        <a class="action-button" href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">Edit Mission</a>
+        <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.delete_mission', operation_id=operation.id, mission_id=mission.id) }}">
+            <button class="action-button" type="submit">Delete Mission</button>
+        </form>
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">Back to Operation</a>
+    </div>
+
+    <dl class="detail-list">
+        <div>
+            <dt>Mission Type</dt>
+            <dd>{{ mission.mission_type }}</dd>
+        </div>
+        <div>
+            <dt>Mission Source</dt>
+            <dd>{{ mission.mission_source }}</dd>
+        </div>
+        <div>
+            <dt>Origin</dt>
+            <dd>{{ mission.origin }}</dd>
+        </div>
+        <div>
+            <dt>Destination</dt>
+            <dd>{{ mission.destination }}</dd>
+        </div>
+        <div>
+            <dt>Assigned Tail</dt>
+            <dd>{{ mission.assigned_tail_number or "-" }}</dd>
+        </div>
+        <div>
+            <dt>Planned Local</dt>
+            <dd>{{ mission.planned_datetime_local.strftime("%H:%M") if mission.planned_datetime_local else "-" }}</dd>
+        </div>
+        <div>
+            <dt>ETA UTC</dt>
+            <dd>{{ mission.eta_datetime_utc.strftime("%Y-%m-%d %H:%M") if mission.eta_datetime_utc else "-" }}</dd>
+        </div>
+        <div>
+            <dt>Actual Block In UTC</dt>
+            <dd>{{ mission.actual_block_in_datetime_utc.strftime("%Y-%m-%d %H:%M") if mission.actual_block_in_datetime_utc else "-" }}</dd>
+        </div>
+        <div>
+            <dt>Actual Block Out UTC</dt>
+            <dd>{{ mission.actual_block_out_datetime_utc.strftime("%Y-%m-%d %H:%M") if mission.actual_block_out_datetime_utc else "-" }}</dd>
+        </div>
+        <div>
+            <dt>Fuel Status</dt>
+            <dd>{{ mission.fuel_status or "-" }}</dd>
+        </div>
+        <div>
+            <dt>Departure Status</dt>
+            <dd>{{ mission.departure_status or "-" }}</dd>
+        </div>
+        <div>
+            <dt>Pure Pull</dt>
+            <dd>{{ mission.pure_pull_time_local.strftime("%H:%M") if mission.pure_pull_time_local else "-" }}</dd>
+        </div>
+        <div>
+            <dt>First Mix Pull</dt>
+            <dd>{{ mission.first_mix_pull_time_local.strftime("%H:%M") if mission.first_mix_pull_time_local else "-" }}</dd>
+        </div>
+        <div>
+            <dt>Final Mix Pull</dt>
+            <dd>{{ mission.final_mix_pull_time_local.strftime("%H:%M") if mission.final_mix_pull_time_local else "-" }}</dd>
+        </div>
+        <div>
+            <dt>Pull Time Source</dt>
+            <dd>{{ mission.pull_time_source or "-" }}</dd>
+        </div>
+        <div>
+            <dt>Crew Coverage</dt>
+            <dd>{{ "Covered" if crew_covered else "Open" }}</dd>
+        </div>
+    </dl>
+</section>
+{% endblock %}

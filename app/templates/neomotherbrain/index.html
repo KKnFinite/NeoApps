@@ -6,18 +6,18 @@
 <section class="panel">
     <div class="section-heading">
         <p class="eyebrow">NeoMotherBrain</p>
-        <h1>Operations Core</h1>
+        <h1>NeoMotherBrain</h1>
     </div>
 
     <div class="action-row">
-        <a class="action-button" href="{{ url_for('neomotherbrain.new_operation') }}">Generate New Nightly Operation</a>
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operations') }}">Existing SortDateOperations</a>
+        <a class="action-button" href="{{ url_for('neomotherbrain.operations') }}">Nightly Operations</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.new_operation') }}">Generate Nightly Operation</a>
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">Master Schedule</a>
     </div>
 
     <div class="metric-grid">
         <article class="metric-tile">
-            <span>SortDateOperations</span>
+            <span>Nightly Operations</span>
             <strong>{{ operation_count }}</strong>
         </article>
         <article class="metric-tile">
