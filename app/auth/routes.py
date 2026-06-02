@@ -2,6 +2,7 @@ from datetime import datetime
 
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import login_user, logout_user
+from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.auth import bp
@@ -15,7 +16,9 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        user = User.query.filter_by(username=username).first()
+        user = None
+        if username:
+            user = User.query.filter(func.lower(User.username) == username.lower()).first()
 
         if not user or not user.check_password(password):
             flash("Invalid username or password.", "error")
@@ -35,7 +38,7 @@ def login():
             flash("Login failed. Please try again.", "error")
             return render_template("auth/login.html"), 500
 
-        return redirect(url_for("neomotherbrain.dashboard"))
+        return redirect(url_for("neomotherbrain.motherbrain"))
 
     return render_template("auth/login.html")
 

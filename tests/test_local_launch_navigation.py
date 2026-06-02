@@ -54,6 +54,18 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
 
+    def test_seeded_kessler_login_is_case_insensitive_and_enters_motherbrain(self):
+        seed_dev_grandmaster(self.app)
+
+        response = self.client.post(
+            "/login",
+            data={"username": " kessler ", "password": "1313"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/motherbrain")
+
     def test_seeded_kessler_grandmaster_accesses_motherbrain_routes(self):
         seed_dev_grandmaster(self.app)
         operation = SortDateOperation(
