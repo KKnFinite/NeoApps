@@ -241,20 +241,28 @@ a {
     color: var(--text);
 }
 
+.neoapp-node-logo {
+    position: relative;
+    display: block;
+    width: min(88%, 260px);
+    max-height: 68px;
+    object-fit: contain;
+    filter:
+        drop-shadow(0 10px 18px rgba(0, 0, 0, 0.7))
+        drop-shadow(0 0 16px rgba(255, 47, 47, 0.28));
+}
+
 .neoapp-rail a.has-node-logo::before {
     background:
-        linear-gradient(90deg, rgba(5, 5, 6, 0.44), rgba(5, 5, 6, 0.18)),
-        var(--node-logo) center / 86% auto no-repeat;
+        radial-gradient(circle at 50% 50%, rgba(var(--node-rgb), 0.22), transparent 44%),
+        linear-gradient(90deg, rgba(5, 5, 6, 0.62), rgba(5, 5, 6, 0.2));
     opacity: 1;
 }
 
 .neoapp-rail a.has-node-logo span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    opacity: 0.82;
 }
 
 .neoapp-rail-left a {
@@ -300,7 +308,6 @@ a {
 .neoapp-sektor {
     --node-color: #ff2f2f;
     --node-rgb: 255, 47, 47;
-    --node-logo: url("/static/images/neosektor_logo1.png");
 }
 
 .neoapp-rain {
@@ -322,6 +329,57 @@ a {
     box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32), 0 0 24px rgba(255, 47, 47, 0.1);
     text-align: center;
     text-transform: uppercase;
+}
+
+.command-login-form {
+    display: grid;
+    justify-items: center;
+    gap: 12px;
+    width: min(100%, 420px);
+}
+
+.command-login-fields {
+    display: grid;
+    gap: 7px;
+    width: 100%;
+}
+
+.command-login-fields label {
+    color: var(--steel);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.command-login-fields input {
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid rgba(235, 241, 246, 0.22);
+    border-radius: 4px;
+    background: rgba(3, 4, 6, 0.78);
+    color: var(--text);
+    font: inherit;
+    padding: 10px 12px;
+    outline: none;
+}
+
+.command-login-fields input:focus {
+    border-color: rgba(255, 47, 47, 0.78);
+    box-shadow: 0 0 0 3px rgba(255, 47, 47, 0.12);
+}
+
+.command-enter-button {
+    min-height: 60px;
+    cursor: pointer;
+    font: inherit;
+}
+
+.command-enter-button:hover {
+    border-color: rgba(255, 47, 47, 0.78);
+    box-shadow:
+        0 18px 48px rgba(0, 0, 0, 0.34),
+        0 0 28px rgba(255, 47, 47, 0.24);
 }
 
 .command-access-panel span {

@@ -15,18 +15,33 @@
             <img src="{{ url_for('static', filename='images/motherbrain_logo1.png') }}" alt="NeoMotherBrain" />
         </div>
 
+        {% if current_user.is_authenticated %}
         <div class="command-access-panel">
-            {% if current_user.is_authenticated %}
             <strong>{{ current_user.role|replace("_", " ")|title }}</strong>
-            {% else %}
-            <strong>Enter</strong>
-            {% endif %}
         </div>
+        {% else %}
+        <form class="command-login-form" method="post" action="{{ url_for('auth.login') }}">
+            <div class="command-login-fields">
+                <label for="dashboard-username">Username</label>
+                <input id="dashboard-username" name="username" type="text" autocomplete="username" required autofocus>
+
+                <label for="dashboard-password">Password</label>
+                <input id="dashboard-password" name="password" type="password" autocomplete="current-password" required>
+            </div>
+
+            <button class="command-access-panel command-enter-button" type="submit">
+                <strong>ENTER</strong>
+            </button>
+        </form>
+        {% endif %}
     </section>
 
     <aside class="neoapp-rail neoapp-rail-right" aria-label="Right NeoApps">
         <a class="neoapp-node neoapp-subzero" href="#" aria-disabled="true" aria-label="NeoSub-Zero"><span>NeoSub-Zero</span></a>
-        <a class="neoapp-node neoapp-sektor has-node-logo" href="#" aria-disabled="true" aria-label="NeoSektor"><span>NeoSektor</span></a>
+        <a class="neoapp-node neoapp-sektor has-node-logo" href="https://neosektor.onrender.com/" target="_blank" rel="noopener" aria-label="Open NeoSektor">
+            <img class="neoapp-node-logo" src="{{ url_for('static', filename='images/neosektor_logo1.png') }}" alt="NeoSektor logo">
+            <span>NeoSektor</span>
+        </a>
         <a class="neoapp-node neoapp-rain" href="#" aria-disabled="true" aria-label="NeoRain"><span>NeoRain</span></a>
     </aside>
 </section>

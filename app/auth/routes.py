@@ -22,11 +22,11 @@ def login():
 
         if not user or not user.check_password(password):
             flash("Invalid username or password.", "error")
-            return render_template("auth/login.html"), 401
+            return render_template("neomotherbrain/dashboard.html"), 401
 
         if not user.is_active:
             flash("This account is inactive.", "error")
-            return render_template("auth/login.html"), 403
+            return render_template("neomotherbrain/dashboard.html"), 403
 
         login_user(user)
         user.last_login = datetime.utcnow()
@@ -36,11 +36,11 @@ def login():
         except SQLAlchemyError:
             db.session.rollback()
             flash("Login failed. Please try again.", "error")
-            return render_template("auth/login.html"), 500
+            return render_template("neomotherbrain/dashboard.html"), 500
 
         return redirect(url_for("neomotherbrain.motherbrain"))
 
-    return render_template("auth/login.html")
+    return render_template("neomotherbrain/dashboard.html")
 
 
 @bp.route("/logout")

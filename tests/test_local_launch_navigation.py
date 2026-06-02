@@ -42,17 +42,34 @@ class LocalLaunchNavigationTest(unittest.TestCase):
     def test_root_app_py_is_intentionally_absent(self):
         self.assertFalse(Path("app.py").exists())
 
-    def test_public_home_exposes_login_path(self):
+    def test_public_home_uses_enter_login_form_without_separate_login_button(self):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"/login", response.data)
-        self.assertIn(b"Login", response.data)
+        self.assertIn(b'<form class="command-login-form" method="post" action="/login">', response.data)
+        self.assertIn(b'name="username"', response.data)
+        self.assertIn(b'name="password"', response.data)
+        self.assertIn(b'<button class="command-access-panel command-enter-button" type="submit">', response.data)
+        self.assertIn(b"ENTER", response.data)
+        self.assertNotIn(b">Login<", response.data)
+        self.assertNotIn(b"Authorize Access", response.data)
+
+    def test_public_home_renders_neosektor_external_tile_with_static_logo(self):
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'href="https://neosektor.onrender.com/"', response.data)
+        self.assertIn(b'target="_blank"', response.data)
+        self.assertIn(b'rel="noopener"', response.data)
+        self.assertIn(b'src="/static/images/neosektor_logo1.png"', response.data)
+        self.assertIn(b"NeoSektor", response.data)
 
     def test_login_route_is_reachable(self):
         response = self.client.get("/login")
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b'<form class="command-login-form" method="post" action="/login">', response.data)
+        self.assertIn(b"ENTER", response.data)
 
     def test_seeded_kessler_login_is_case_insensitive_and_enters_motherbrain(self):
         seed_dev_grandmaster(self.app)
