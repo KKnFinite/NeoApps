@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Operations | NeoApps{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <div class="section-heading">
+        <p class="eyebrow">NeoMotherBrain</p>
+        <h1>SortDateOperations</h1>
+    </div>
+
+    <div class="action-row">
+        <a class="action-button" href="{{ url_for('neomotherbrain.new_operation') }}">Generate New Nightly Operation</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}">MotherBrain Home</a>
+    </div>
+
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Sort Date</th>
+                    <th>Gateway</th>
+                    <th>Sort</th>
+                    <th>Window</th>
+                    <th>Generated</th>
+                    <th>Missions</th>
+                    <th>Links</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for operation in operations %}
+                <tr>
+                    <td>{{ operation.sort_date }}</td>
+                    <td>{{ operation.gateway_code }}</td>
+                    <td>{{ operation.sort_name }}</td>
+                    <td>{{ operation.window_minutes }} min</td>
+                    <td>{{ operation.generated_at_utc.strftime("%Y-%m-%d %H:%M") if operation.generated_at_utc else "-" }} UTC</td>
+                    <td>{{ operation.missions|length }}</td>
+                    <td class="table-actions">
+                        <a href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">Overview</a>
+                        <a href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">Arrivals</a>
+                        <a href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">Departures</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7">No SortDateOperations found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

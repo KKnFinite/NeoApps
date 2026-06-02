@@ -482,10 +482,137 @@ h2 {
     overflow-x: auto;
 }
 
+.action-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 18px 0 24px;
+}
+
+.action-button,
+.operation-form button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 10px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.34);
+    border-radius: 4px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 47, 47, 0.18)),
+        #16171b;
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.action-button:hover,
+.operation-form button:hover {
+    border-color: rgba(255, 47, 47, 0.76);
+    box-shadow: 0 0 22px rgba(255, 47, 47, 0.18);
+}
+
+.action-button-secondary {
+    border-color: rgba(201, 208, 214, 0.2);
+    background:
+        linear-gradient(135deg, rgba(238, 246, 255, 0.08), transparent 30%),
+        rgba(9, 10, 14, 0.82);
+}
+
+.metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin: 20px 0;
+}
+
+.metric-tile {
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: rgba(5, 5, 6, 0.42);
+}
+
+.metric-tile span,
+.detail-list dt,
+.operation-form label span {
+    display: block;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.metric-tile strong {
+    display: block;
+    margin-top: 6px;
+    color: var(--steel);
+    font-size: 1.55rem;
+}
+
+.operation-form {
+    display: grid;
+    gap: 14px;
+}
+
+.operation-form label {
+    display: grid;
+    gap: 7px;
+}
+
+.operation-form input {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid rgba(235, 241, 246, 0.22);
+    border-radius: 4px;
+    background: rgba(3, 4, 6, 0.72);
+    color: var(--text);
+    font: inherit;
+    padding: 10px 12px;
+    outline: none;
+}
+
+.operation-form input:focus {
+    border-color: rgba(255, 47, 47, 0.78);
+    box-shadow: 0 0 0 3px rgba(255, 47, 47, 0.12);
+}
+
+.inline-operation-form {
+    grid-template-columns: minmax(180px, 260px) auto;
+    align-items: end;
+    margin: 20px 0 10px;
+}
+
+.detail-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin: 18px 0;
+}
+
+.detail-list div {
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: rgba(5, 5, 6, 0.32);
+}
+
+.detail-list dd {
+    margin: 6px 0 0;
+    color: #d8dde2;
+}
+
 .data-table {
     width: 100%;
     min-width: 760px;
     border-collapse: collapse;
+}
+
+.wide-data-table {
+    min-width: 1400px;
 }
 
 .data-table th,
@@ -503,6 +630,22 @@ h2 {
 
 .data-table td {
     color: #d8dde2;
+}
+
+.table-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.table-actions a {
+    color: var(--steel);
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.table-actions a:hover {
+    color: var(--red);
 }
 
 .flash-stack {

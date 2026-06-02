@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Generate Operation | NeoApps{% endblock %}
+
+{% block content %}
+<section class="panel compact-panel">
+    <div class="section-heading">
+        <p class="eyebrow">NeoMotherBrain</p>
+        <h1>Generate Operation</h1>
+    </div>
+
+    <form class="operation-form" method="post">
+        <label>
+            <span>Sort Date</span>
+            <input type="date" name="sort_date" value="{{ form.sort_date }}" required>
+        </label>
+        <label>
+            <span>Gateway Code</span>
+            <input type="text" name="gateway_code" value="{{ form.gateway_code }}" maxlength="8" required>
+        </label>
+        <label>
+            <span>Sort Name</span>
+            <input type="text" name="sort_name" value="{{ form.sort_name }}" maxlength="32" required>
+        </label>
+
+        <div class="action-row">
+            <button class="action-button" type="submit">Generate</button>
+            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operations') }}">Back to Operations</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

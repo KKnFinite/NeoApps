@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Departure Board | NeoApps{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <div class="section-heading">
+        <p class="eyebrow">Departure Board</p>
+        <h1>{{ operation.gateway_code }} {{ operation.sort_name|title }} {{ operation.sort_date }}</h1>
+    </div>
+
+    <div class="action-row">
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">Operation Overview</a>
+        <a class="action-button" href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">Arrival Board</a>
+    </div>
+
+    <div class="table-wrap">
+        <table class="data-table wide-data-table">
+            <thead>
+                <tr>
+                    <th>Flight</th>
+                    <th>Origin</th>
+                    <th>Destination</th>
+                    <th>Tail</th>
+                    <th>Base Planned</th>
+                    <th>Adjusted Planned</th>
+                    <th>Base Pure</th>
+                    <th>Adjusted Pure</th>
+                    <th>Base First Mix</th>
+                    <th>Adjusted First Mix</th>
+                    <th>Base Final Mix</th>
+                    <th>Adjusted Final Mix</th>
+                    <th>Fuel</th>
+                    <th>Status</th>
+                    <th>Crew</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                {% set mission = row.mission %}
+                {% set timing = row.timing %}
+                <tr>
+                    <td>{{ mission.flight_number }}</td>
+                    <td>{{ mission.origin }}</td>
+                    <td>{{ mission.destination }}</td>
+                    <td>{{ mission.assigned_tail_number or "-" }}</td>
+                    <td>{{ timing.base_planned_departure_time.strftime("%H:%M") if timing.base_planned_departure_time else "-" }}</td>
+                    <td>{{ timing.adjusted_planned_departure_time.strftime("%H:%M") if timing.adjusted_planned_departure_time else "-" }}</td>
+                    <td>{{ timing.base_pure_pull_time.strftime("%H:%M") if timing.base_pure_pull_time else "-" }}</td>
+                    <td>{{ timing.adjusted_pure_pull_time.strftime("%H:%M") if timing.adjusted_pure_pull_time else "-" }}</td>
+                    <td>{{ timing.base_first_mix_pull_time.strftime("%H:%M") if timing.base_first_mix_pull_time else "-" }}</td>
+                    <td>{{ timing.adjusted_first_mix_pull_time.strftime("%H:%M") if timing.adjusted_first_mix_pull_time else "-" }}</td>
+                    <td>{{ timing.base_final_mix_pull_time.strftime("%H:%M") if timing.base_final_mix_pull_time else "-" }}</td>
+                    <td>{{ timing.adjusted_final_mix_pull_time.strftime("%H:%M") if timing.adjusted_final_mix_pull_time else "-" }}</td>
+                    <td>{{ mission.fuel_status or "-" }}</td>
+                    <td>{{ mission.departure_status or "-" }}</td>
+                    <td>{{ "Covered" if row.crew_covered else "Open" }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="15">No departure missions found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

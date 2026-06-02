@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}MotherBrain | NeoApps{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <div class="section-heading">
+        <p class="eyebrow">NeoMotherBrain</p>
+        <h1>Operations Core</h1>
+    </div>
+
+    <div class="action-row">
+        <a class="action-button" href="{{ url_for('neomotherbrain.new_operation') }}">Generate New Nightly Operation</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operations') }}">Existing SortDateOperations</a>
+    </div>
+
+    <div class="metric-grid">
+        <article class="metric-tile">
+            <span>SortDateOperations</span>
+            <strong>{{ operation_count }}</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Master Schedule Rows</span>
+            <strong>{{ master_schedule_count }}</strong>
+        </article>
+    </div>
+</section>
+{% endblock %}

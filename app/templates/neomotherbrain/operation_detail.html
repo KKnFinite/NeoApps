@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Operation {{ operation.id }} | NeoApps{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <div class="section-heading">
+        <p class="eyebrow">NeoMotherBrain</p>
+        <h1>{{ operation.gateway_code }} {{ operation.sort_name|title }} {{ operation.sort_date }}</h1>
+    </div>
+
+    <div class="metric-grid">
+        <article class="metric-tile">
+            <span>Window</span>
+            <strong>{{ operation.window_minutes }} min</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Total Missions</span>
+            <strong>{{ mission_count }}</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Arrivals</span>
+            <strong>{{ arrival_count }}</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Departures</span>
+            <strong>{{ departure_count }}</strong>
+        </article>
+    </div>
+
+    <dl class="detail-list">
+        <div>
+            <dt>Generated</dt>
+            <dd>{{ operation.generated_at_utc.strftime("%Y-%m-%d %H:%M") if operation.generated_at_utc else "-" }} UTC</dd>
+        </div>
+        <div>
+            <dt>Gateway</dt>
+            <dd>{{ operation.gateway_code }}</dd>
+        </div>
+        <div>
+            <dt>Sort</dt>
+            <dd>{{ operation.sort_name }}</dd>
+        </div>
+    </dl>
+
+    <form class="operation-form inline-operation-form" method="post" action="{{ url_for('neomotherbrain.update_operation_window', operation_id=operation.id) }}">
+        <label>
+            <span>Window Minutes</span>
+            <input type="number" name="window_minutes" value="{{ operation.window_minutes }}" min="0" step="1" required>
+        </label>
+        <button class="action-button" type="submit">Update Window</button>
+    </form>
+
+    <div class="action-row">
+        <a class="action-button" href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">Arrival Board</a>
+        <a class="action-button" href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">Departure Board</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operations') }}">Back to Operations</a>
+    </div>
+</section>
+{% endblock %}

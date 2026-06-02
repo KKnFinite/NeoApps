@@ -33,6 +33,12 @@
 
 {% if current_user.is_authenticated %}
 <section class="command-card-grid" aria-label="Role controls">
+    <a class="command-card command-card-link" href="{{ url_for('neomotherbrain.motherbrain') }}">
+        <span class="node-light"></span>
+        <h2>Operations Core</h2>
+        <p>Generate nightly operations and open Arrival or Departure Boards.</p>
+    </a>
+
     {% if can_enter_data(current_user) %}
     <article class="command-card">
         <span class="node-light"></span>

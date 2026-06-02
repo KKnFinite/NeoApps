@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Arrival Board | NeoApps{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <div class="section-heading">
+        <p class="eyebrow">Arrival Board</p>
+        <h1>{{ operation.gateway_code }} {{ operation.sort_name|title }} {{ operation.sort_date }}</h1>
+    </div>
+
+    <div class="action-row">
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">Operation Overview</a>
+        <a class="action-button" href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">Departure Board</a>
+    </div>
+
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Flight</th>
+                    <th>Origin</th>
+                    <th>Destination</th>
+                    <th>Tail</th>
+                    <th>Planned Local</th>
+                    <th>ETA UTC</th>
+                    <th>Actual In UTC</th>
+                    <th>Fuel</th>
+                    <th>Crew</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                {% set mission = row.mission %}
+                <tr>
+                    <td>{{ mission.flight_number }}</td>
+                    <td>{{ mission.origin }}</td>
+                    <td>{{ mission.destination }}</td>
+                    <td>{{ mission.assigned_tail_number or "-" }}</td>
+                    <td>{{ mission.planned_datetime_local.strftime("%H:%M") if mission.planned_datetime_local else "-" }}</td>
+                    <td>{{ mission.eta_datetime_utc.strftime("%H:%M") if mission.eta_datetime_utc else "-" }}</td>
+                    <td>{{ mission.actual_block_in_datetime_utc.strftime("%H:%M") if mission.actual_block_in_datetime_utc else "-" }}</td>
+                    <td>{{ mission.fuel_status or "-" }}</td>
+                    <td>{{ "Covered" if row.crew_covered else "Open" }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="9">No arrival missions found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
