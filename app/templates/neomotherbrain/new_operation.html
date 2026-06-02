@@ -7,6 +7,7 @@
     <div class="section-heading">
         <p class="eyebrow">NeoMotherBrain</p>
         <h1>Generate Operation</h1>
+        <p class="muted">Uses active MasterFlightSchedule records matching gateway, sort, and active day.</p>
     </div>
 
     <form class="operation-form" method="post">
@@ -26,6 +27,7 @@
         <div class="action-row">
             <button class="action-button" type="submit">Generate</button>
             <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operations') }}">Back to Operations</a>
+            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">Master Schedule</a>
         </div>
     </form>
 </section>

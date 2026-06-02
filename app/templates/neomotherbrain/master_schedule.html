@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Master Schedule | NeoApps{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <div class="section-heading">
+        <p class="eyebrow">NeoMotherBrain</p>
+        <h1>Master Flight Schedule</h1>
+    </div>
+
+    <div class="action-row">
+        <a class="action-button" href="{{ url_for('neomotherbrain.new_master_schedule') }}">Add Master Flight</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}">Operations Core</a>
+    </div>
+
+    <div class="table-wrap">
+        <table class="data-table wide-data-table">
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Gateway</th>
+                    <th>Sort</th>
+                    <th>Mission</th>
+                    <th>Flight</th>
+                    <th>Origin</th>
+                    <th>Destination</th>
+                    <th>Active Days</th>
+                    <th>Planned</th>
+                    <th>Timezone</th>
+                    <th>Parking</th>
+                    <th>Pure Pull</th>
+                    <th>First Mix</th>
+                    <th>Final Mix</th>
+                    <th>Links</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for schedule in schedules %}
+                <tr>
+                    <td>{{ "Active" if schedule.active else "Inactive" }}</td>
+                    <td>{{ schedule.gateway_code }}</td>
+                    <td>{{ schedule.sort_name }}</td>
+                    <td>{{ schedule.mission_type }}</td>
+                    <td>{{ schedule.flight_number }}</td>
+                    <td>{{ schedule.origin }}</td>
+                    <td>{{ schedule.destination }}</td>
+                    <td>{{ schedule.active_days or "-" }}</td>
+                    <td>{{ schedule.planned_time_local.strftime("%H:%M") if schedule.planned_time_local else "-" }}</td>
+                    <td>{{ schedule.timezone }}</td>
+                    <td>{{ schedule.preferred_parking or "-" }}</td>
+                    <td>{{ schedule.pure_pull_time_local.strftime("%H:%M") if schedule.pure_pull_time_local else "-" }}</td>
+                    <td>{{ schedule.first_mix_pull_time_local.strftime("%H:%M") if schedule.first_mix_pull_time_local else "-" }}</td>
+                    <td>{{ schedule.final_mix_pull_time_local.strftime("%H:%M") if schedule.final_mix_pull_time_local else "-" }}</td>
+                    <td class="table-actions">
+                        <a href="{{ url_for('neomotherbrain.master_schedule_detail', master_id=schedule.id) }}">View</a>
+                        <a href="{{ url_for('neomotherbrain.edit_master_schedule', master_id=schedule.id) }}">Edit</a>
+                        <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.toggle_master_schedule_active', master_id=schedule.id) }}">
+                            <button type="submit">{{ "Deactivate" if schedule.active else "Activate" }}</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="15">No master schedule rows found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

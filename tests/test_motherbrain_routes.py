@@ -45,6 +45,179 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Operations Core", response.data)
 
+    def test_master_schedule_requires_login(self):
+        self.client.get("/logout")
+
+        response = self.client.get("/motherbrain/master-schedule")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login", response.location)
+
+    def test_logged_in_user_can_view_master_schedule_list(self):
+        self._add_master(flight_number="DEP001")
+        db.session.commit()
+
+        response = self.client.get("/motherbrain/master-schedule")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Master Flight Schedule", response.data)
+        self.assertIn(b"DEP001", response.data)
+
+    def test_create_departure_master_row_with_pull_times(self):
+        response = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(
+                flight_number="DEP100",
+                pure_pull_time_local="01:20",
+                first_mix_pull_time_local="01:40",
+                final_mix_pull_time_local="01:55",
+                active_days=["monday", "wednesday"],
+            ),
+            follow_redirects=False,
+        )
+
+        master = MasterFlightSchedule.query.filter_by(flight_number="DEP100").first()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(master.mission_type, "departure")
+        self.assertEqual(master.active_days, "monday,wednesday")
+        self.assertEqual(master.pure_pull_time_local, time(1, 20))
+        self.assertEqual(master.first_mix_pull_time_local, time(1, 40))
+        self.assertEqual(master.final_mix_pull_time_local, time(1, 55))
+
+    def test_create_arrival_master_row_clears_pull_times(self):
+        response = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(
+                mission_type="arrival",
+                flight_number="ARR100",
+                origin="SDF",
+                destination="RFD",
+                pure_pull_time_local="01:20",
+                first_mix_pull_time_local="01:40",
+                final_mix_pull_time_local="01:55",
+            ),
+            follow_redirects=False,
+        )
+
+        master = MasterFlightSchedule.query.filter_by(flight_number="ARR100").first()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(master.mission_type, "arrival")
+        self.assertIsNone(master.pure_pull_time_local)
+        self.assertIsNone(master.first_mix_pull_time_local)
+        self.assertIsNone(master.final_mix_pull_time_local)
+
+    def test_edit_arrival_clears_pull_times_after_type_change(self):
+        master = self._add_master(
+            flight_number="DEP200",
+            pure_pull_time_local=time(1, 20),
+            first_mix_pull_time_local=time(1, 40),
+            final_mix_pull_time_local=time(1, 55),
+        )
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/master-schedule/{master.id}/edit",
+            data=self._master_schedule_form_data(
+                mission_type="arrival",
+                flight_number="DEP200",
+                origin="SDF",
+                destination="RFD",
+                pure_pull_time_local="01:20",
+                first_mix_pull_time_local="01:40",
+                final_mix_pull_time_local="01:55",
+            ),
+            follow_redirects=False,
+        )
+
+        updated = db.session.get(MasterFlightSchedule, master.id)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(updated.mission_type, "arrival")
+        self.assertIsNone(updated.pure_pull_time_local)
+        self.assertIsNone(updated.first_mix_pull_time_local)
+        self.assertIsNone(updated.final_mix_pull_time_local)
+
+    def test_duplicate_active_master_row_is_rejected(self):
+        self._add_master(flight_number="DEP300", active=True)
+        db.session.commit()
+
+        response = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(flight_number="DEP300"),
+        )
+
+        active_duplicates = MasterFlightSchedule.query.filter_by(
+            gateway_code="RFD",
+            sort_name="night",
+            mission_type="departure",
+            flight_number="DEP300",
+            active=True,
+        ).count()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(active_duplicates, 1)
+        self.assertIn(b"already exists", response.data)
+
+    def test_inactive_master_row_does_not_generate_operation_mission(self):
+        self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(
+                flight_number="DEP400",
+                active=False,
+            ),
+        )
+
+        response = self.client.post(
+            "/motherbrain/operations/new",
+            data={
+                "sort_date": "2026-06-01",
+                "gateway_code": "RFD",
+                "sort_name": "night",
+            },
+            follow_redirects=False,
+        )
+
+        operation = SortDateOperation.query.first()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(operation.missions), 0)
+
+    def test_active_days_saved_from_form_work_with_generation(self):
+        self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(
+                flight_number="DEP500",
+                active_days=["monday"],
+            ),
+        )
+
+        self.client.post(
+            "/motherbrain/operations/new",
+            data={
+                "sort_date": "2026-06-01",
+                "gateway_code": "RFD",
+                "sort_name": "night",
+            },
+        )
+
+        operation = SortDateOperation.query.first()
+        self.assertEqual(operation.missions[0].flight_number, "DEP500")
+
+    def test_toggle_active_changes_active_state(self):
+        master = self._add_master(flight_number="DEP600", active=True)
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/master-schedule/{master.id}/toggle-active",
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(db.session.get(MasterFlightSchedule, master.id).active)
+
+        self.client.post(
+            f"/motherbrain/master-schedule/{master.id}/toggle-active",
+            follow_redirects=False,
+        )
+        self.assertTrue(db.session.get(MasterFlightSchedule, master.id).active)
+
     def test_operation_generation_route_creates_operation(self):
         self._add_master(flight_number="ARR001", mission_type="arrival")
         self._add_master(flight_number="DEP001", mission_type="departure")
@@ -199,6 +372,29 @@ class MotherBrainRoutesTest(unittest.TestCase):
         master = MasterFlightSchedule(**values)
         db.session.add(master)
         return master
+
+    def _master_schedule_form_data(self, **overrides):
+        values = {
+            "gateway_code": "RFD",
+            "sort_name": "night",
+            "mission_type": "departure",
+            "flight_number": "DEP001",
+            "origin": "RFD",
+            "destination": "SDF",
+            "active_days": ["monday", "tuesday"],
+            "planned_time_local": "02:10",
+            "timezone": "America/Chicago",
+            "preferred_parking": "",
+            "pure_pull_time_local": "",
+            "first_mix_pull_time_local": "",
+            "final_mix_pull_time_local": "",
+            "active": True,
+        }
+        values.update(overrides)
+        active = values.pop("active")
+        if active:
+            values["active"] = "1"
+        return values
 
     def _operation(self, **overrides):
         values = {
