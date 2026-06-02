@@ -1,6 +1,6 @@
-# NeoApps / NeoMotherBrain
+# NeoApps / NeoRFD
 
-NeoApps is the unified Flask platform for Rockford Air Hub operational tools. NeoMotherBrain is the central operations core.
+NeoApps is the unified Flask platform for operational tools. NeoRFD is the current default Rockford Air Hub gateway workspace, and NeoMotherBrain is the operations core module inside NeoRFD.
 
 ## Local Development
 
@@ -24,7 +24,13 @@ Login:
 http://127.0.0.1:5000/login
 ```
 
-NeoMotherBrain:
+NeoRFD landing/login hub:
+
+```text
+http://127.0.0.1:5000/
+```
+
+NeoMotherBrain module:
 
 ```text
 http://127.0.0.1:5000/motherbrain

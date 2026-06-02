@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}NeoMotherBrain | NeoApps{% endblock %}
+{% block title %}{{ default_gateway.name }} | NeoApps{% endblock %}
 
 {% block content %}
-<section class="motherbrain-command" aria-label="NeoMotherBrain command center">
+<section class="motherbrain-command" aria-label="{{ default_gateway.name }} gateway workspace">
     <aside class="neoapp-rail neoapp-rail-left" aria-label="Left NeoApps">
         <a class="neoapp-node neoapp-scorpion" href="#" aria-disabled="true" aria-label="NeoScorpion"><span>NeoScorpion</span></a>
         <a class="neoapp-node neoapp-reptile" href="#" aria-disabled="true" aria-label="NeoReptile"><span>NeoReptile</span></a>
@@ -12,8 +12,9 @@
 
     <section class="motherbrain-core">
         <div class="motherbrain-core-image">
-            <img src="{{ url_for('static', filename='images/motherbrain_logo1.png') }}" alt="NeoMotherBrain" />
+            <img class="gateway-logo" src="{{ url_for('static', filename=default_gateway.logo) }}" alt="{{ default_gateway.name }}" />
         </div>
+        <p class="gateway-context">NeoApps / {{ default_gateway.code }} Gateway Workspace</p>
 
         {% if current_user.is_authenticated %}
         <div class="command-access-panel">

@@ -14,7 +14,9 @@ from app.extensions import db, login_manager
 
 def create_app(config_class=Config):
     app = Flask(__name__, instance_relative_config=True)
-    app.config.from_object(config_class)
+    app.config.from_object(Config)
+    if config_class is not Config:
+        app.config.from_object(config_class)
 
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
 
@@ -35,6 +37,16 @@ def register_template_helpers(app):
             "can_make_decisions": can_make_decisions,
             "can_manage_users": can_manage_users,
             "can_manage_system": can_manage_system,
+        }
+
+    @app.context_processor
+    def gateway_branding():
+        return {
+            "default_gateway": {
+                "code": app.config["DEFAULT_GATEWAY_CODE"],
+                "name": app.config["DEFAULT_GATEWAY_NAME"],
+                "logo": app.config["DEFAULT_GATEWAY_LOGO"],
+            }
         }
 
 

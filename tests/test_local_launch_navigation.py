@@ -42,10 +42,27 @@ class LocalLaunchNavigationTest(unittest.TestCase):
     def test_root_app_py_is_intentionally_absent(self):
         self.assertFalse(Path("app.py").exists())
 
+    def test_default_gateway_branding_config_is_neorfd(self):
+        self.assertEqual(self.app.config["DEFAULT_GATEWAY_CODE"], "RFD")
+        self.assertEqual(self.app.config["DEFAULT_GATEWAY_NAME"], "NeoRFD")
+        self.assertEqual(self.app.config["DEFAULT_GATEWAY_LOGO"], "images/neorfd_logo.png")
+
+    def test_neorfd_logo_asset_exists_with_render_safe_casing(self):
+        logo_path = Path("app/static/images/neorfd_logo.png")
+
+        self.assertTrue(logo_path.is_file())
+        self.assertEqual(logo_path.name, "neorfd_logo.png")
+        self.assertGreater(logo_path.stat().st_size, 0)
+
     def test_public_home_uses_enter_login_form_without_separate_login_button(self):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b"NeoRFD", response.data)
+        self.assertIn(b"NeoApps / RFD Gateway Workspace", response.data)
+        self.assertIn(b'src="/static/images/neorfd_logo.png"', response.data)
+        self.assertNotIn(b"motherbrain_logo1.png", response.data)
+        self.assertNotIn(b"NeoMotherBrain", response.data)
         self.assertIn(b'<form class="command-login-form" method="post" action="/login">', response.data)
         self.assertIn(b'name="username"', response.data)
         self.assertIn(b'name="password"', response.data)
@@ -68,6 +85,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         response = self.client.get("/login")
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b"NeoRFD", response.data)
+        self.assertIn(b'src="/static/images/neorfd_logo.png"', response.data)
         self.assertIn(b'<form class="command-login-form" method="post" action="/login">', response.data)
         self.assertIn(b"ENTER", response.data)
 

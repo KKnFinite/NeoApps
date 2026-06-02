@@ -172,6 +172,21 @@ a {
         drop-shadow(0 0 24px rgba(255, 47, 47, 0.22));
 }
 
+.motherbrain-core-image .gateway-logo {
+    max-height: min(44vh, 420px);
+    object-fit: contain;
+}
+
+.gateway-context {
+    margin: -4px 0 4px;
+    color: var(--steel);
+    font-size: clamp(0.78rem, 1.4vw, 1rem);
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
 .neoapp-rail {
     display: grid;
     gap: 16px;
