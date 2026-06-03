@@ -10,6 +10,8 @@ if str(PROJECT_ROOT) not in sys.path:
 from app import create_app  # noqa: E402
 from app.extensions import db  # noqa: E402
 from app.models import User  # noqa: E402
+from app.services.access_control import backfill_default_gateway_node_roles  # noqa: E402
+from app.services.schema_sync import sync_local_sqlite_schema  # noqa: E402
 
 
 DEV_USERNAME_ENV = "NEOAPPS_DEV_GRANDMASTER_USERNAME"
@@ -28,6 +30,7 @@ def seed_dev_grandmaster(app=None):
         username, password, used_fallback = _resolve_credentials(app)
 
         db.create_all()
+        sync_local_sqlite_schema(app)
 
         user = User.query.filter_by(username=username).first()
         created = user is None
@@ -42,6 +45,9 @@ def seed_dev_grandmaster(app=None):
         user.mfa_secret = None
         user.mfa_verified_at = None
         user.set_password(password)
+        db.session.flush()
+
+        backfill_default_gateway_node_roles(user, role="grandmaster")
 
         db.session.commit()
 

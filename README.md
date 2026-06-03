@@ -2,6 +2,18 @@
 
 NeoApps is the unified Flask platform for operational tools. NeoRFD is the current default Rockford Air Hub gateway workspace, and NeoMotherBrain is the operations core module inside NeoRFD.
 
+## Access Model
+
+NeoApps authentication is global. NeoRFD is the current default gateway, so RFD is selected automatically and no gateway selector is shown yet.
+
+GatewayMembership grants access to a gateway only. Approved gateway members have default `watcher` access to active NeoNodes in that gateway. GatewayNodeRole stores elevated node-specific roles using this ladder:
+
+```text
+watcher < operator < simulator < master < grandmaster
+```
+
+Operational data stays in shared tables and is scoped by the current gateway.
+
 ## Local Development
 
 Run these commands from the project folder:

@@ -1,8 +1,9 @@
 from datetime import date, datetime
 
 from flask import flash, redirect, render_template, request, url_for
-from flask_login import current_user, login_required
+from flask_login import current_user
 
+from app.auth.decorators import gateway_node_required
 from app.extensions import db
 from app.models import (
     MasterFlightSchedule,
@@ -18,6 +19,7 @@ from app.services.flight_rules import (
     derive_aircraft_type_from_tail_number,
     is_mission_crew_covered,
 )
+from app.services.access_control import get_current_gateway
 from app.services.sort_date_operations import (
     ensure_tail_state_for_mission,
     generate_sort_date_operation_from_master,
@@ -53,22 +55,28 @@ def dashboard():
 
 
 @bp.route("/motherbrain")
-@login_required
+@gateway_node_required("motherbrain")
 def motherbrain():
-    operation_count = SortDateOperation.query.count()
-    master_schedule_count = MasterFlightSchedule.query.count()
+    gateway = get_current_gateway()
+    operation_count = SortDateOperation.query.filter_by(gateway_code=gateway.code).count()
+    master_schedule_count = MasterFlightSchedule.query.filter_by(
+        gateway_code=gateway.code
+    ).count()
     return render_template(
         "neomotherbrain/index.html",
+        gateway=gateway,
         operation_count=operation_count,
         master_schedule_count=master_schedule_count,
     )
 
 
 @bp.route("/motherbrain/operations")
-@login_required
+@gateway_node_required("motherbrain")
 def operations():
+    gateway = get_current_gateway()
     operations = (
-        SortDateOperation.query.order_by(
+        SortDateOperation.query.filter_by(gateway_code=gateway.code)
+        .order_by(
             SortDateOperation.sort_date.desc(),
             SortDateOperation.generated_at_utc.desc(),
         )
@@ -78,10 +86,12 @@ def operations():
 
 
 @bp.route("/motherbrain/master-schedule")
-@login_required
+@gateway_node_required("motherbrain")
 def master_schedule():
+    gateway = get_current_gateway()
     schedules = (
-        MasterFlightSchedule.query.order_by(
+        MasterFlightSchedule.query.filter_by(gateway_code=gateway.code)
+        .order_by(
             MasterFlightSchedule.gateway_code.asc(),
             MasterFlightSchedule.sort_name.asc(),
             MasterFlightSchedule.mission_type.asc(),
@@ -96,14 +106,15 @@ def master_schedule():
 
 
 @bp.route("/motherbrain/master-schedule/new", methods=["GET", "POST"])
-@login_required
+@gateway_node_required("motherbrain")
 def new_master_schedule():
-    form = _master_schedule_form_from_request()
+    gateway = get_current_gateway()
+    form = _master_schedule_form_from_request(gateway)
 
     if request.method == "POST":
         master_schedule = MasterFlightSchedule()
         try:
-            _apply_master_schedule_form(master_schedule, form)
+            _apply_master_schedule_form(master_schedule, form, gateway)
             _raise_for_duplicate_active_master_schedule(master_schedule)
         except ValueError as error:
             flash(str(error), "error")
@@ -123,7 +134,7 @@ def new_master_schedule():
 
 
 @bp.route("/motherbrain/master-schedule/<int:master_id>")
-@login_required
+@gateway_node_required("motherbrain")
 def master_schedule_detail(master_id):
     master_schedule = _master_schedule_or_404(master_id)
     return render_template(
@@ -133,18 +144,19 @@ def master_schedule_detail(master_id):
 
 
 @bp.route("/motherbrain/master-schedule/<int:master_id>/edit", methods=["GET", "POST"])
-@login_required
+@gateway_node_required("motherbrain")
 def edit_master_schedule(master_id):
+    gateway = get_current_gateway()
     master_schedule = _master_schedule_or_404(master_id)
     form = (
-        _master_schedule_form_from_request()
+        _master_schedule_form_from_request(gateway)
         if request.method == "POST"
         else _master_schedule_form_from_model(master_schedule)
     )
 
     if request.method == "POST":
         try:
-            _apply_master_schedule_form(master_schedule, form)
+            _apply_master_schedule_form(master_schedule, form, gateway)
             _raise_for_duplicate_active_master_schedule(master_schedule)
         except ValueError as error:
             flash(str(error), "error")
@@ -163,7 +175,7 @@ def edit_master_schedule(master_id):
 
 
 @bp.route("/motherbrain/master-schedule/<int:master_id>/toggle-active", methods=["POST"])
-@login_required
+@gateway_node_required("motherbrain")
 def toggle_master_schedule_active(master_id):
     master_schedule = _master_schedule_or_404(master_id)
     master_schedule.active = not master_schedule.active
@@ -192,11 +204,12 @@ def toggle_master_schedule_active(master_id):
 
 
 @bp.route("/motherbrain/operations/new", methods=["GET", "POST"])
-@login_required
+@gateway_node_required("motherbrain")
 def new_operation():
+    gateway = get_current_gateway()
     form = {
         "sort_date": request.form.get("sort_date", ""),
-        "gateway_code": request.form.get("gateway_code", "RFD"),
+        "gateway_code": gateway.code,
         "sort_name": request.form.get("sort_name", "night"),
     }
 
@@ -207,23 +220,22 @@ def new_operation():
             flash("Enter a valid sort date.", "error")
             return render_template("neomotherbrain/new_operation.html", form=form), 400
 
-        gateway_code = form["gateway_code"].strip().upper()
         sort_name = form["sort_name"].strip().lower()
-        if not gateway_code or not sort_name:
-            flash("Gateway and sort name are required.", "error")
+        if not sort_name:
+            flash("Sort name is required.", "error")
             return render_template("neomotherbrain/new_operation.html", form=form), 400
 
         try:
             operation = generate_sort_date_operation_from_master(
                 sort_date=sort_date,
-                gateway_code=gateway_code,
+                gateway_code=gateway.code,
                 sort_name=sort_name,
                 generated_by_user_id=current_user.id,
             )
         except ValueError as error:
             existing_operation = SortDateOperation.query.filter_by(
                 sort_date=sort_date,
-                gateway_code=gateway_code,
+                gateway_code=gateway.code,
                 sort_name=sort_name,
             ).first()
             if existing_operation:
@@ -247,7 +259,7 @@ def new_operation():
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>")
-@login_required
+@gateway_node_required("motherbrain")
 def operation_detail(operation_id):
     operation = _operation_or_404(operation_id)
     arrival_count = _mission_count(operation, "arrival")
@@ -264,7 +276,7 @@ def operation_detail(operation_id):
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>/arrivals")
-@login_required
+@gateway_node_required("motherbrain")
 def arrival_board(operation_id):
     operation = _operation_or_404(operation_id)
     missions = _missions_for_operation(operation, "arrival")
@@ -277,7 +289,7 @@ def arrival_board(operation_id):
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>/departures")
-@login_required
+@gateway_node_required("motherbrain")
 def departure_board(operation_id):
     operation = _operation_or_404(operation_id)
     missions = _missions_for_operation(operation, "departure")
@@ -290,7 +302,7 @@ def departure_board(operation_id):
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>/window", methods=["POST"])
-@login_required
+@gateway_node_required("motherbrain")
 def update_operation_window(operation_id):
     operation = _operation_or_404(operation_id)
 
@@ -308,7 +320,7 @@ def update_operation_window(operation_id):
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>/missions/new", methods=["GET", "POST"])
-@login_required
+@gateway_node_required("motherbrain")
 def new_mission(operation_id):
     operation = _operation_or_404(operation_id)
     form = _mission_form_from_request(operation)
@@ -340,7 +352,7 @@ def new_mission(operation_id):
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>/missions/<int:mission_id>")
-@login_required
+@gateway_node_required("motherbrain")
 def mission_detail(operation_id, mission_id):
     operation = _operation_or_404(operation_id)
     mission = _mission_or_404(operation, mission_id)
@@ -357,7 +369,7 @@ def mission_detail(operation_id, mission_id):
     "/motherbrain/operations/<int:operation_id>/missions/<int:mission_id>/edit",
     methods=["GET", "POST"],
 )
-@login_required
+@gateway_node_required("motherbrain")
 def edit_mission(operation_id, mission_id):
     operation = _operation_or_404(operation_id)
     mission = _mission_or_404(operation, mission_id)
@@ -404,7 +416,7 @@ def edit_mission(operation_id, mission_id):
     "/motherbrain/operations/<int:operation_id>/missions/<int:mission_id>/delete",
     methods=["POST"],
 )
-@login_required
+@gateway_node_required("motherbrain")
 def delete_mission(operation_id, mission_id):
     operation = _operation_or_404(operation_id)
     mission = _mission_or_404(operation, mission_id)
@@ -417,7 +429,11 @@ def delete_mission(operation_id, mission_id):
 
 
 def _operation_or_404(operation_id):
-    return SortDateOperation.query.get_or_404(operation_id)
+    gateway = get_current_gateway()
+    return SortDateOperation.query.filter_by(
+        id=operation_id,
+        gateway_code=gateway.code,
+    ).first_or_404()
 
 
 def _mission_or_404(operation, mission_id):
@@ -428,7 +444,11 @@ def _mission_or_404(operation, mission_id):
 
 
 def _master_schedule_or_404(master_id):
-    return MasterFlightSchedule.query.get_or_404(master_id)
+    gateway = get_current_gateway()
+    return MasterFlightSchedule.query.filter_by(
+        id=master_id,
+        gateway_code=gateway.code,
+    ).first_or_404()
 
 
 def _render_master_schedule_form(form, mode, master_schedule=None):
@@ -441,10 +461,11 @@ def _render_master_schedule_form(form, mode, master_schedule=None):
     )
 
 
-def _master_schedule_form_from_request():
+def _master_schedule_form_from_request(gateway=None):
     active_default = "1" if request.method != "POST" else "0"
+    gateway_code = gateway.code if gateway else request.form.get("gateway_code", "RFD")
     return {
-        "gateway_code": request.form.get("gateway_code", "RFD"),
+        "gateway_code": gateway_code,
         "sort_name": request.form.get("sort_name", "night"),
         "mission_type": request.form.get("mission_type", "departure"),
         "flight_number": request.form.get("flight_number", ""),
@@ -480,8 +501,8 @@ def _master_schedule_form_from_model(master_schedule):
     }
 
 
-def _apply_master_schedule_form(master_schedule, form):
-    gateway_code = form["gateway_code"].strip().upper()
+def _apply_master_schedule_form(master_schedule, form, gateway=None):
+    gateway_code = gateway.code if gateway else form["gateway_code"].strip().upper()
     sort_name = form["sort_name"].strip().lower()
     mission_type = form["mission_type"].strip().lower()
     flight_number = form["flight_number"].strip()
@@ -498,6 +519,7 @@ def _apply_master_schedule_form(master_schedule, form):
     planned_time_local = _parse_time(form["planned_time_local"], "Planned time")
 
     master_schedule.gateway_code = gateway_code
+    master_schedule.gateway_id = gateway.id if gateway else None
     master_schedule.sort_name = sort_name
     master_schedule.mission_type = mission_type
     master_schedule.flight_number = flight_number

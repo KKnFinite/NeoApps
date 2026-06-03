@@ -1,0 +1,198 @@
+import unittest
+
+from app import create_app
+from app.extensions import db
+from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoNode, User
+from app.models.user import ROLE_LEVELS
+from app.services.access_control import (
+    DEFAULT_NEONODES,
+    backfill_default_gateway_node_roles,
+    ensure_default_gateway_and_nodes,
+    get_current_gateway,
+    get_default_gateway,
+    get_user_gateway_membership,
+    get_user_node_role,
+    request_default_gateway_access_for_user,
+    user_can_access_node,
+    user_has_gateway_access,
+)
+
+
+class AccessControlTest(unittest.TestCase):
+    def setUp(self):
+        TestConfig = type(
+            "TestConfig",
+            (),
+            {
+                "SECRET_KEY": "test",
+                "TESTING": True,
+                "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+                "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+            },
+        )
+        self.app = create_app(TestConfig)
+        self.context = self.app.app_context()
+        self.context.push()
+        db.create_all()
+
+    def tearDown(self):
+        db.session.remove()
+        db.drop_all()
+        self.context.pop()
+
+    def test_role_ladder_order_and_no_legacy_read_only_role(self):
+        self.assertLess(ROLE_LEVELS["watcher"], ROLE_LEVELS["operator"])
+        self.assertLess(ROLE_LEVELS["operator"], ROLE_LEVELS["simulator"])
+        self.assertLess(ROLE_LEVELS["simulator"], ROLE_LEVELS["master"])
+        self.assertLess(ROLE_LEVELS["master"], ROLE_LEVELS["grandmaster"])
+        unsupported_role = "view" + "er"
+        self.assertNotIn(unsupported_role, ROLE_LEVELS)
+
+    def test_gateway_membership_has_no_role_column(self):
+        self.assertNotIn("role", GatewayMembership.__table__.columns)
+
+    def test_default_gateway_and_nodes_are_seeded_for_rfd(self):
+        gateway = ensure_default_gateway_and_nodes()
+        db.session.commit()
+
+        self.assertEqual(gateway.code, "RFD")
+        self.assertEqual(gateway.name, "NeoRFD")
+        self.assertTrue(gateway.is_active)
+        self.assertEqual(get_default_gateway().code, "RFD")
+        self.assertEqual(get_current_gateway().code, "RFD")
+        self.assertEqual(
+            {node.code for node in NeoNode.query.filter_by(is_active=True).all()},
+            {code for code, _name, _sort_order in DEFAULT_NEONODES},
+        )
+
+    def test_approved_gateway_membership_grants_default_watcher_node_access(self):
+        user = self._user("watcher_user")
+        gateway = ensure_default_gateway_and_nodes()
+        db.session.add(
+            GatewayMembership(
+                user_id=user.id,
+                gateway_id=gateway.id,
+                status="approved",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+
+        self.assertTrue(user_has_gateway_access(user, "RFD"))
+        for node_code, _name, _sort_order in DEFAULT_NEONODES:
+            with self.subTest(node_code=node_code):
+                self.assertEqual(get_user_node_role(user, "RFD", node_code), "watcher")
+                self.assertTrue(user_can_access_node(user, "RFD", node_code))
+                self.assertFalse(
+                    user_can_access_node(
+                        user,
+                        "RFD",
+                        node_code,
+                        minimum_role="operator",
+                    )
+                )
+
+    def test_no_gateway_membership_denies_gateway_node_and_data_access(self):
+        user = self._user("no_gateway_user")
+        ensure_default_gateway_and_nodes()
+        db.session.commit()
+
+        self.assertFalse(user_has_gateway_access(user, "RFD"))
+        self.assertIsNone(get_user_gateway_membership(user, "RFD"))
+        self.assertIsNone(get_user_node_role(user, "RFD", "motherbrain"))
+        self.assertFalse(user_can_access_node(user, "RFD", "motherbrain"))
+
+        client = self.app.test_client()
+        client.post(
+            "/login",
+            data={"username": "no_gateway_user", "password": "TestPassword123!"},
+        )
+        response = client.get("/motherbrain", follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/")
+
+    def test_specific_gateway_node_role_overrides_default_watcher_per_node(self):
+        user = self._user("node_role_user")
+        gateway = ensure_default_gateway_and_nodes()
+        membership = GatewayMembership(
+            user_id=user.id,
+            gateway_id=gateway.id,
+            status="approved",
+            is_active=True,
+        )
+        db.session.add(membership)
+        db.session.flush()
+
+        sektor = NeoNode.query.filter_by(code="sektor").first()
+        db.session.add(
+            GatewayNodeRole(
+                gateway_membership_id=membership.id,
+                node_id=sektor.id,
+                role="operator",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+
+        self.assertEqual(get_user_node_role(user, "RFD", "sektor"), "operator")
+        self.assertEqual(get_user_node_role(user, "RFD", "ermac"), "watcher")
+        self.assertTrue(
+            user_can_access_node(user, "RFD", "sektor", minimum_role="operator")
+        )
+        self.assertFalse(
+            user_can_access_node(user, "RFD", "ermac", minimum_role="operator")
+        )
+
+    def test_user_can_have_rfd_access_without_dfw_access(self):
+        user = self._user("rfd_only_user")
+        rfd = ensure_default_gateway_and_nodes()
+        db.session.add(Gateway(code="DFW", name="NeoDFW", is_active=True))
+        db.session.add(
+            GatewayMembership(
+                user_id=user.id,
+                gateway_id=rfd.id,
+                status="approved",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+
+        self.assertTrue(user_has_gateway_access(user, "RFD"))
+        self.assertFalse(user_has_gateway_access(user, "DFW"))
+        self.assertFalse(user_can_access_node(user, "DFW", "motherbrain"))
+
+    def test_new_account_defaults_to_pending_rfd_access_request(self):
+        user = self._user("pending_user")
+
+        membership = request_default_gateway_access_for_user(user)
+        db.session.commit()
+
+        self.assertEqual(membership.gateway.code, "RFD")
+        self.assertEqual(membership.status, "pending")
+        self.assertTrue(membership.is_active)
+        self.assertFalse(user_has_gateway_access(user, "RFD"))
+        self.assertEqual(GatewayNodeRole.query.count(), 0)
+
+    def test_backfill_grants_admin_approved_rfd_roles_only(self):
+        user = self._user("admin_user")
+        db.session.add(Gateway(code="DFW", name="NeoDFW", is_active=True))
+        db.session.flush()
+
+        membership = backfill_default_gateway_node_roles(user, role="grandmaster")
+        db.session.commit()
+
+        self.assertEqual(membership.gateway.code, "RFD")
+        self.assertEqual(membership.status, "approved")
+        self.assertTrue(user_can_access_node(user, "RFD", "motherbrain", "grandmaster"))
+        self.assertFalse(user_has_gateway_access(user, "DFW"))
+
+    def _user(self, username):
+        user = User(username=username, role="watcher")
+        user.set_password("TestPassword123!")
+        db.session.add(user)
+        db.session.flush()
+        return user
+
+
+if __name__ == "__main__":
+    unittest.main()

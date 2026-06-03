@@ -15,6 +15,7 @@ class SortDateOperation(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
+    gateway_id = db.Column(db.Integer, db.ForeignKey("gateways.id"), nullable=True, index=True)
     sort_date = db.Column(db.Date, nullable=False, index=True)
     gateway_code = db.Column(db.String(8), nullable=False, index=True)
     sort_name = db.Column(db.String(32), nullable=False, index=True)
@@ -32,6 +33,7 @@ class SortDateOperation(db.Model):
     )
 
     missions = db.relationship("SortDateMission", back_populates="sort_date_operation")
+    gateway = db.relationship("Gateway")
     generated_by_user = db.relationship("User")
 
     def __init__(self, **kwargs):

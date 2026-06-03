@@ -2,8 +2,11 @@ import json
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from flask import has_app_context
+
 from app.extensions import db
 from app.models import (
+    Gateway,
     MasterFlightSchedule,
     SortDateCrewAssignment,
     SortDateMission,
@@ -23,11 +26,15 @@ def create_sort_date_operation(
     window_minutes=0,
     generated_by_user_id=None,
 ):
+    gateway_code = str(gateway_code).strip().upper()
+    window_minutes = normalize_window_minutes(window_minutes)
+    gateway = Gateway.query.filter_by(code=gateway_code).first() if has_app_context() else None
     return SortDateOperation(
         sort_date=sort_date,
+        gateway_id=gateway.id if gateway else None,
         gateway_code=gateway_code,
         sort_name=sort_name,
-        window_minutes=normalize_window_minutes(window_minutes),
+        window_minutes=window_minutes,
         generated_by_user_id=generated_by_user_id,
     )
 
@@ -38,6 +45,8 @@ def generate_sort_date_operation_from_master(
     sort_name,
     generated_by_user_id=None,
 ):
+    gateway_code = str(gateway_code).strip().upper()
+    sort_name = str(sort_name).strip().lower()
     existing_operation = SortDateOperation.query.filter_by(
         sort_date=sort_date,
         gateway_code=gateway_code,

@@ -1,3 +1,15 @@
+from app.services.access_control import (
+    DEFAULT_NEONODES,
+    backfill_default_gateway_node_roles,
+    ensure_default_gateway_and_nodes,
+    get_current_gateway,
+    get_default_gateway,
+    get_user_gateway_membership,
+    get_user_node_role,
+    request_default_gateway_access_for_user,
+    user_can_access_node,
+    user_has_gateway_access,
+)
 from app.services.flight_rules import (
     crew_sections_for_tail_swap,
     default_required_crew_sections,
@@ -17,8 +29,19 @@ from app.services.sort_date_operations import (
     normalize_window_minutes,
     parse_active_days,
 )
+from app.services.schema_sync import sync_local_sqlite_schema
 
 __all__ = [
+    "DEFAULT_NEONODES",
+    "backfill_default_gateway_node_roles",
+    "ensure_default_gateway_and_nodes",
+    "get_current_gateway",
+    "get_default_gateway",
+    "get_user_gateway_membership",
+    "get_user_node_role",
+    "request_default_gateway_access_for_user",
+    "user_can_access_node",
+    "user_has_gateway_access",
     "crew_sections_for_tail_swap",
     "default_required_crew_sections",
     "derive_aircraft_type_from_tail_number",
@@ -34,4 +57,5 @@ __all__ = [
     "mission_display_timing_data",
     "normalize_window_minutes",
     "parse_active_days",
+    "sync_local_sqlite_schema",
 ]

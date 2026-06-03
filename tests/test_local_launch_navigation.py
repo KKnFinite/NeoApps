@@ -45,13 +45,13 @@ class LocalLaunchNavigationTest(unittest.TestCase):
     def test_default_gateway_branding_config_is_neorfd(self):
         self.assertEqual(self.app.config["DEFAULT_GATEWAY_CODE"], "RFD")
         self.assertEqual(self.app.config["DEFAULT_GATEWAY_NAME"], "NeoRFD")
-        self.assertEqual(self.app.config["DEFAULT_GATEWAY_LOGO"], "images/neorfd_logo.png")
+        self.assertEqual(self.app.config["DEFAULT_GATEWAY_LOGO"], "images/neorfd_logo1.png")
 
     def test_neorfd_logo_asset_exists_with_render_safe_casing(self):
-        logo_path = Path("app/static/images/neorfd_logo.png")
+        logo_path = Path("app/static/images/neorfd_logo1.png")
 
         self.assertTrue(logo_path.is_file())
-        self.assertEqual(logo_path.name, "neorfd_logo.png")
+        self.assertEqual(logo_path.name, "neorfd_logo1.png")
         self.assertGreater(logo_path.stat().st_size, 0)
 
     def test_public_home_uses_enter_login_form_without_separate_login_button(self):
@@ -60,7 +60,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoRFD", response.data)
         self.assertIn(b"NeoApps / RFD Gateway Workspace", response.data)
-        self.assertIn(b'src="/static/images/neorfd_logo.png"', response.data)
+        self.assertIn(b'src="/static/images/neorfd_logo1.png"', response.data)
         self.assertNotIn(b"motherbrain_logo1.png", response.data)
         self.assertNotIn(b"NeoMotherBrain", response.data)
         self.assertIn(b'<form class="command-login-form" method="post" action="/login">', response.data)
@@ -86,7 +86,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoRFD", response.data)
-        self.assertIn(b'src="/static/images/neorfd_logo.png"', response.data)
+        self.assertIn(b'src="/static/images/neorfd_logo1.png"', response.data)
         self.assertIn(b'<form class="command-login-form" method="post" action="/login">', response.data)
         self.assertIn(b"ENTER", response.data)
 

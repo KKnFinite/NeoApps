@@ -15,10 +15,7 @@
             <span>Active</span>
         </label>
 
-        <label>
-            <span>Gateway Code</span>
-            <input type="text" name="gateway_code" value="{{ form.gateway_code }}" maxlength="8" required>
-        </label>
+        <input type="hidden" name="gateway_code" value="{{ form.gateway_code }}">
         <label>
             <span>Sort Name</span>
             <input type="text" name="sort_name" value="{{ form.sort_name }}" maxlength="32" required>

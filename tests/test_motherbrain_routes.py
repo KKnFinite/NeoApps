@@ -11,6 +11,7 @@ from app.models import (
     SortDateTailState,
     User,
 )
+from app.services.access_control import backfill_default_gateway_node_roles
 
 
 class MotherBrainRoutesTest(unittest.TestCase):
@@ -33,6 +34,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         user = User(username="Kessler", role="grandmaster")
         user.set_password("TestPassword123!")
         db.session.add(user)
+        db.session.flush()
+        backfill_default_gateway_node_roles(user, role="grandmaster")
         db.session.commit()
 
         self.client = self.app.test_client()

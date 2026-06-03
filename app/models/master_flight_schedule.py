@@ -13,6 +13,7 @@ class MasterFlightSchedule(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
+    gateway_id = db.Column(db.Integer, db.ForeignKey("gateways.id"), nullable=True, index=True)
     gateway_code = db.Column(db.String(8), nullable=False, index=True)
     sort_name = db.Column(db.String(32), nullable=False, index=True)
     mission_type = db.Column(db.String(16), nullable=False, index=True)
@@ -34,3 +35,5 @@ class MasterFlightSchedule(db.Model):
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
     )
+
+    gateway = db.relationship("Gateway")

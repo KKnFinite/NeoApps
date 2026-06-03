@@ -5,7 +5,8 @@ from unittest.mock import patch
 
 from app import create_app
 from app.extensions import db
-from app.models import SortDateOperation, User
+from app.models import GatewayMembership, GatewayNodeRole, NeoNode, SortDateOperation, User
+from app.services.access_control import user_can_access_node
 from scripts.seed_dev_user import (
     LOCAL_SQLITE_FALLBACK_PASSWORD,
     seed_dev_grandmaster,
@@ -48,6 +49,7 @@ class SeedDevUserTest(unittest.TestCase):
         self.assertTrue(user.is_active)
         self.assertFalse(user.mfa_required)
         self.assertTrue(user.check_password("SeedPassword123!"))
+        self.assertTrue(user_can_access_node(user, "RFD", "motherbrain", "grandmaster"))
 
     def test_seed_updates_existing_user_password_role_and_active_state(self):
         db.create_all()
@@ -68,6 +70,7 @@ class SeedDevUserTest(unittest.TestCase):
         self.assertEqual(updated.role, "grandmaster")
         self.assertTrue(updated.is_active)
         self.assertTrue(updated.check_password("NewPassword123!"))
+        self.assertTrue(user_can_access_node(updated, "RFD", "motherbrain", "grandmaster"))
 
     def test_seed_uses_local_sqlite_fallback_when_env_password_missing(self):
         with patch.dict(os.environ, {}, clear=True):
@@ -76,6 +79,25 @@ class SeedDevUserTest(unittest.TestCase):
         user = User.query.filter_by(username="Kessler").first()
         self.assertTrue(result["used_fallback_password"])
         self.assertTrue(user.check_password(LOCAL_SQLITE_FALLBACK_PASSWORD))
+
+    def test_seed_backfills_approved_rfd_membership_and_node_roles(self):
+        with patch.dict(os.environ, {}, clear=True):
+            seed_dev_grandmaster(self.app)
+
+        user = User.query.filter_by(username="Kessler").first()
+        membership = GatewayMembership.query.filter_by(user_id=user.id).first()
+
+        self.assertEqual(membership.gateway.code, "RFD")
+        self.assertEqual(membership.status, "approved")
+        self.assertTrue(membership.is_active)
+        self.assertEqual(
+            GatewayNodeRole.query.filter_by(
+                gateway_membership_id=membership.id,
+                role="grandmaster",
+                is_active=True,
+            ).count(),
+            NeoNode.query.filter_by(is_active=True).count(),
+        )
 
     def test_seeded_grandmaster_can_access_motherbrain_pages(self):
         with patch.dict(

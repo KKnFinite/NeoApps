@@ -15,7 +15,7 @@ class Config:
     DEFAULT_GATEWAY_NAME = os.getenv("DEFAULT_GATEWAY_NAME", "NeoRFD")
     DEFAULT_GATEWAY_LOGO = os.getenv(
         "DEFAULT_GATEWAY_LOGO",
-        "images/neorfd_logo.png",
+        "images/neorfd_logo1.png",
     )
     SQLALCHEMY_DATABASE_URI = os.getenv(
         "DATABASE_URL",
