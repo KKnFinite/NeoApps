@@ -109,7 +109,7 @@ class AccessControlTest(unittest.TestCase):
         )
         response = client.get("/motherbrain", follow_redirects=False)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.location, "/")
+        self.assertEqual(response.location, "/access-pending")
 
     def test_specific_gateway_node_role_overrides_default_watcher_per_node(self):
         user = self._user("node_role_user")

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ default_gateway.name }} | NeoApps{% endblock %}
+{% block title %}{{ default_gateway.name }} | NeoGateway{% endblock %}
 
 {% block content %}
 <section class="motherbrain-command" aria-label="{{ default_gateway.name }} gateway workspace">
@@ -14,12 +14,20 @@
         <div class="motherbrain-core-image">
             <img class="gateway-logo" src="{{ url_for('static', filename=default_gateway.logo) }}" alt="{{ default_gateway.name }}" />
         </div>
-        <p class="gateway-context">NeoApps / {{ default_gateway.code }} Gateway Workspace</p>
+        <p class="platform-brand">NeoGateway</p>
+        <p class="gateway-context">{{ default_gateway.name }} / {{ default_gateway.code }} Gateway Workspace</p>
+        <p class="powered-by">Powered by NeoApps</p>
 
         {% if current_user.is_authenticated %}
-        <div class="command-access-panel">
-            <strong>{{ current_user.role|replace("_", " ")|title }}</strong>
-        </div>
+            {% if user_has_gateway_access(current_user, default_gateway.code) %}
+            <div class="command-access-panel">
+                <strong>AUTHORIZED</strong>
+            </div>
+            {% else %}
+            <a class="command-access-panel command-enter-button" href="{{ url_for('auth.access_pending') }}">
+                <strong>REVIEW</strong>
+            </a>
+            {% endif %}
         {% else %}
         <form class="command-login-form" method="post" action="{{ url_for('auth.login') }}">
             <div class="command-login-fields">
@@ -33,6 +41,10 @@
             <button class="command-access-panel command-enter-button" type="submit">
                 <strong>ENTER</strong>
             </button>
+            <div class="command-link-row">
+                <a href="{{ url_for('auth.create_account') }}">Create Account</a>
+                <a href="{{ url_for('auth.forgot_password') }}">Forgot Password</a>
+            </div>
         </form>
         {% endif %}
     </section>
@@ -41,13 +53,12 @@
         <a class="neoapp-node neoapp-subzero" href="#" aria-disabled="true" aria-label="NeoSub-Zero"><span>NeoSub-Zero</span></a>
         <a class="neoapp-node neoapp-sektor has-node-logo" href="https://neosektor.onrender.com/" target="_blank" rel="noopener" aria-label="Open NeoSektor">
             <img class="neoapp-node-logo" src="{{ url_for('static', filename='images/neosektor_logo1.png') }}" alt="NeoSektor logo">
-            <span>NeoSektor</span>
         </a>
         <a class="neoapp-node neoapp-rain" href="#" aria-disabled="true" aria-label="NeoRain"><span>NeoRain</span></a>
     </aside>
 </section>
 
-{% if current_user.is_authenticated %}
+{% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) %}
 <section class="command-card-grid" aria-label="Role controls">
     <a class="command-card command-card-link" href="{{ url_for('neomotherbrain.motherbrain') }}">
         <span class="node-light"></span>

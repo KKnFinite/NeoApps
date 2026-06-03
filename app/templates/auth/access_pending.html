@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Access Review | NeoGateway{% endblock %}
+
+{% block content %}
+<section class="panel compact-panel">
+    <div class="section-heading">
+        <p class="eyebrow">Gateway Review</p>
+        <h1>Access Under Review</h1>
+    </div>
+    <p class="hero-copy">
+        Your {{ gateway.name }} access request is under review. Operational data and NeoNode dashboards remain unavailable until approval is complete.
+    </p>
+    {% if membership and not current_user.email_verified_at %}
+    <p class="muted">Email not verified yet.</p>
+    {% endif %}
+    <div class="action-row">
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.logout') }}">Logout</a>
+    </div>
+</section>
+{% endblock %}

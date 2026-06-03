@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 
@@ -40,6 +41,11 @@ def seed_dev_grandmaster(app=None):
 
         user.role = "grandmaster"
         user.is_active = True
+        user.email = user.email or "kessler@local.neoapps"
+        user.full_name = user.full_name or "Kessler"
+        user.email_verified_at = user.email_verified_at or datetime.utcnow()
+        user.password_reset_required = False
+        user.password_changed_at = user.password_changed_at or datetime.utcnow()
         user.mfa_required = False
         user.mfa_enabled = False
         user.mfa_secret = None

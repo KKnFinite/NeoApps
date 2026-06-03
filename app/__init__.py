@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, redirect, request, url_for
+from flask_login import current_user
 
 from app.auth.permissions import (
     can_enter_data,
@@ -10,6 +11,7 @@ from app.auth.permissions import (
 )
 from app.config import Config
 from app.extensions import db, login_manager
+from app.services.access_control import user_can_access_node, user_has_gateway_access
 
 
 def create_app(config_class=Config):
@@ -25,6 +27,7 @@ def create_app(config_class=Config):
 
     register_blueprints(app)
     register_template_helpers(app)
+    register_request_guards(app)
 
     return app
 
@@ -37,6 +40,8 @@ def register_template_helpers(app):
             "can_make_decisions": can_make_decisions,
             "can_manage_users": can_manage_users,
             "can_manage_system": can_manage_system,
+            "user_has_gateway_access": user_has_gateway_access,
+            "user_can_access_node": user_can_access_node,
         }
 
     @app.context_processor
@@ -48,6 +53,26 @@ def register_template_helpers(app):
                 "logo": app.config["DEFAULT_GATEWAY_LOGO"],
             }
         }
+
+
+def register_request_guards(app):
+    @app.before_request
+    def force_required_password_change():
+        if not current_user.is_authenticated:
+            return None
+
+        if not getattr(current_user, "password_reset_required", False):
+            return None
+
+        allowed_endpoints = {
+            "auth.change_password",
+            "auth.logout",
+            "static",
+        }
+        if request.endpoint in allowed_endpoints:
+            return None
+
+        return redirect(url_for("auth.change_password"))
 
 
 def register_blueprints(app):

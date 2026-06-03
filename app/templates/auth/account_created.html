@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Account Created | NeoGateway{% endblock %}
+
+{% block content %}
+<section class="panel compact-panel">
+    <div class="section-heading">
+        <p class="eyebrow">Account Request Sent</p>
+        <h1>Verify Your Email</h1>
+    </div>
+    <p class="hero-copy">
+        Your NeoGateway account request was created. Verify your email address, then wait for access approval before entering {{ default_gateway.name }} operational screens.
+    </p>
+    <div class="action-row">
+        <a class="action-button" href="{{ url_for('auth.login') }}">Return to Login</a>
+    </div>
+</section>
+{% endblock %}

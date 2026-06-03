@@ -17,6 +17,17 @@ class Config:
         "DEFAULT_GATEWAY_LOGO",
         "images/neorfd_logo1.png",
     )
+    BREVO_API_KEY = os.getenv("BREVO_API_KEY")
+    MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "NeoGateway")
+    MAIL_FROM_EMAIL = os.getenv(
+        "MAIL_FROM_EMAIL",
+        "no-reply@neogateway.khriskessler.com",
+    )
+    APP_BASE_URL = os.getenv("APP_BASE_URL", "http://127.0.0.1:5000")
+    EMAIL_VERIFICATION_TOKEN_HOURS = int(
+        os.getenv("EMAIL_VERIFICATION_TOKEN_HOURS", "24")
+    )
+    PASSWORD_RESET_TOKEN_HOURS = int(os.getenv("PASSWORD_RESET_TOKEN_HOURS", "1"))
     SQLALCHEMY_DATABASE_URI = os.getenv(
         "DATABASE_URL",
         f"sqlite:///{BASE_DIR / 'instance' / 'neoapps.sqlite'}",

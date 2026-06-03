@@ -11,15 +11,23 @@
         <header class="topbar">
             <a class="brand" href="{{ url_for('neomotherbrain.dashboard') }}">
                 <span>
-                    <strong>NeoApps</strong>
-                    <small>Rockford Air Hub</small>
+                    <strong>NeoGateway</strong>
+                    <small>Powered by NeoApps</small>
                 </span>
             </a>
             <nav class="nav" aria-label="Primary">
                 {% if current_user.is_authenticated %}
-                <a href="{{ url_for('neomotherbrain.motherbrain') }}">NeoMotherBrain</a>
-                <a href="{{ url_for('neomotherbrain.operations') }}">Nightly Operations</a>
-                <a href="{{ url_for('neomotherbrain.master_schedule') }}">Master Schedule</a>
+                    {% if user_has_gateway_access(current_user, default_gateway.code) %}
+                    <a href="{{ url_for('neomotherbrain.motherbrain') }}">NeoMotherBrain</a>
+                    <a href="{{ url_for('neomotherbrain.operations') }}">Nightly Operations</a>
+                    <a href="{{ url_for('neomotherbrain.master_schedule') }}">Master Schedule</a>
+                        {% if can_manage_users(current_user) %}
+                        <a href="{{ url_for('auth.access_requests') }}">Access Requests</a>
+                        <a href="{{ url_for('auth.users') }}">Users</a>
+                        {% endif %}
+                    {% else %}
+                    <a href="{{ url_for('auth.access_pending') }}">Access Review</a>
+                    {% endif %}
                 <a href="{{ url_for('auth.logout') }}">Logout</a>
                 {% endif %}
             </nav>

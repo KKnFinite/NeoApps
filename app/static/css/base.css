@@ -187,6 +187,25 @@ a {
     text-transform: uppercase;
 }
 
+.platform-brand {
+    margin: -2px 0 0;
+    color: var(--text);
+    font-size: clamp(1rem, 2vw, 1.35rem);
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-shadow: 0 0 16px rgba(255, 47, 47, 0.28);
+}
+
+.powered-by {
+    margin: -10px 0 4px;
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
 .neoapp-rail {
     display: grid;
     gap: 16px;
@@ -395,6 +414,35 @@ a {
     box-shadow:
         0 18px 48px rgba(0, 0, 0, 0.34),
         0 0 28px rgba(255, 47, 47, 0.24);
+}
+
+.command-link-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+}
+
+.command-link-row a {
+    min-height: 36px;
+    padding: 9px 12px;
+    border: 1px solid rgba(201, 208, 214, 0.22);
+    border-radius: 4px;
+    background:
+        linear-gradient(135deg, rgba(238, 246, 255, 0.08), transparent 30%),
+        rgba(8, 9, 12, 0.82);
+    color: var(--steel);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.command-link-row a:hover {
+    border-color: rgba(255, 47, 47, 0.72);
+    color: var(--text);
+    box-shadow: 0 0 20px rgba(255, 47, 47, 0.18);
 }
 
 .command-access-panel span {
@@ -637,7 +685,8 @@ h2 {
 }
 
 .operation-form input,
-.operation-form select {
+.operation-form select,
+.operation-form textarea {
     width: 100%;
     min-height: 44px;
     border: 1px solid rgba(235, 241, 246, 0.22);
@@ -649,8 +698,14 @@ h2 {
     outline: none;
 }
 
+.operation-form textarea {
+    min-height: 110px;
+    resize: vertical;
+}
+
 .operation-form input:focus,
-.operation-form select:focus {
+.operation-form select:focus,
+.operation-form textarea:focus {
     border-color: rgba(255, 47, 47, 0.78);
     box-shadow: 0 0 0 3px rgba(255, 47, 47, 0.12);
 }
@@ -755,7 +810,21 @@ h2 {
 
 .inline-button-form {
     display: inline-flex;
+    align-items: center;
+    gap: 8px;
     margin: 0;
+}
+
+.compact-action-input {
+    width: 150px;
+    min-height: 32px;
+    border: 1px solid rgba(235, 241, 246, 0.18);
+    border-radius: 4px;
+    background: rgba(3, 4, 6, 0.72);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.78rem;
+    padding: 7px 9px;
 }
 
 .table-actions .inline-button-form button {

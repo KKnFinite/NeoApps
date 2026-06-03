@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Access Requests | NeoGateway{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <div class="section-heading">
+        <p class="eyebrow">{{ gateway.name }}</p>
+        <h1>Pending Access Requests</h1>
+    </div>
+
+    <div class="table-wrap">
+        <table class="data-table wide-data-table">
+            <thead>
+                <tr>
+                    <th>Full Name</th>
+                    <th>Employee ID</th>
+                    <th>Supervisor</th>
+                    <th>Email</th>
+                    <th>Verified</th>
+                    <th>Work Area</th>
+                    <th>Reason</th>
+                    <th>Gateway</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for membership in memberships %}
+                <tr>
+                    <td>{{ membership.user.full_name or membership.user.username }}</td>
+                    <td>{{ membership.user.employee_id or "" }}</td>
+                    <td>{{ membership.user.supervisor_name or "" }}</td>
+                    <td>{{ membership.user.email or "" }}</td>
+                    <td>{{ "Yes" if membership.user.email_verified_at else "Email not verified yet" }}</td>
+                    <td>{{ membership.user.work_area or "" }}</td>
+                    <td>{{ membership.user.access_reason or "" }}</td>
+                    <td>{{ membership.gateway.code }}</td>
+                    <td>{{ membership.created_at.strftime("%Y-%m-%d %H:%M") if membership.created_at else "" }}</td>
+                    <td>
+                        <div class="table-actions">
+                            <form class="inline-button-form" method="post" action="{{ url_for('auth.approve_access_request', membership_id=membership.id) }}">
+                                <input class="compact-action-input" name="approval_notes" placeholder="Approval notes">
+                                <button type="submit">Approve</button>
+                            </form>
+                            <form class="inline-button-form" method="post" action="{{ url_for('auth.deny_access_request', membership_id=membership.id) }}">
+                                <input class="compact-action-input" name="denial_notes" placeholder="Denial notes">
+                                <button type="submit">Deny</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="10">No pending requests.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

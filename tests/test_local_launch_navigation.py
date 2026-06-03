@@ -59,7 +59,9 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoRFD", response.data)
-        self.assertIn(b"NeoApps / RFD Gateway Workspace", response.data)
+        self.assertIn(b"NeoGateway", response.data)
+        self.assertIn(b"Powered by NeoApps", response.data)
+        self.assertIn(b"NeoRFD / RFD Gateway Workspace", response.data)
         self.assertIn(b'src="/static/images/neorfd_logo1.png"', response.data)
         self.assertNotIn(b"motherbrain_logo1.png", response.data)
         self.assertNotIn(b"NeoMotherBrain", response.data)
@@ -68,6 +70,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(b'name="password"', response.data)
         self.assertIn(b'<button class="command-access-panel command-enter-button" type="submit">', response.data)
         self.assertIn(b"ENTER", response.data)
+        self.assertIn(b'href="/create-account"', response.data)
+        self.assertIn(b'href="/forgot-password"', response.data)
         self.assertNotIn(b">Login<", response.data)
         self.assertNotIn(b"Authorize Access", response.data)
 
@@ -79,7 +83,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(b'target="_blank"', response.data)
         self.assertIn(b'rel="noopener"', response.data)
         self.assertIn(b'src="/static/images/neosektor_logo1.png"', response.data)
-        self.assertIn(b"NeoSektor", response.data)
+        self.assertNotIn(b">NeoSektor</span>", response.data)
 
     def test_login_route_is_reachable(self):
         response = self.client.get("/login")

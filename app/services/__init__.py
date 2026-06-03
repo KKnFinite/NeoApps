@@ -30,6 +30,20 @@ from app.services.sort_date_operations import (
     parse_active_days,
 )
 from app.services.schema_sync import sync_local_sqlite_schema
+from app.services.email_service import (
+    send_access_approved,
+    send_email_verification,
+    send_password_reset,
+)
+from app.services.user_tokens import (
+    EMAIL_VERIFICATION,
+    PASSWORD_RESET,
+    create_user_token,
+    get_token_record,
+    get_valid_token_record,
+    hash_user_token,
+    mark_token_used,
+)
 
 __all__ = [
     "DEFAULT_NEONODES",
@@ -58,4 +72,14 @@ __all__ = [
     "normalize_window_minutes",
     "parse_active_days",
     "sync_local_sqlite_schema",
+    "send_access_approved",
+    "send_email_verification",
+    "send_password_reset",
+    "EMAIL_VERIFICATION",
+    "PASSWORD_RESET",
+    "create_user_token",
+    "get_token_record",
+    "get_valid_token_record",
+    "hash_user_token",
+    "mark_token_used",
 ]

@@ -7,6 +7,7 @@ from app.services.access_control import (
     get_current_gateway,
     get_user_node_role,
     user_can_access_node,
+    user_has_gateway_access,
 )
 
 
@@ -19,6 +20,9 @@ def role_required(*roles):
             node_role = get_user_node_role(current_user, gateway.code, "motherbrain")
             if node_role in roles:
                 return view_func(*args, **kwargs)
+
+            if not user_has_gateway_access(current_user, gateway.code):
+                return redirect(url_for("auth.access_pending"))
 
             flash("Access denied.", "error")
             return redirect(url_for("neomotherbrain.dashboard"))
@@ -41,6 +45,9 @@ def gateway_node_required(node_code, minimum_role="watcher"):
                 minimum_role=minimum_role,
             ):
                 return view_func(*args, **kwargs)
+
+            if not user_has_gateway_access(current_user, gateway.code):
+                return redirect(url_for("auth.access_pending"))
 
             flash("Access denied.", "error")
             return redirect(url_for("neomotherbrain.dashboard"))

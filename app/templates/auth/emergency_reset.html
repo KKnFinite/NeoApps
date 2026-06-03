@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Emergency Reset | NeoGateway{% endblock %}
+
+{% block content %}
+<section class="panel compact-panel">
+    <div class="section-heading">
+        <p class="eyebrow">Grandmaster Only</p>
+        <h1>Emergency Password Reset</h1>
+        <p class="muted">{{ target_user.username }}</p>
+    </div>
+    <form class="operation-form" method="post">
+        <label>
+            <span>Reason</span>
+            <textarea name="reason" required></textarea>
+        </label>
+        <label>
+            <span>Temporary Password</span>
+            <input name="password" type="password" autocomplete="new-password" required>
+        </label>
+        <label>
+            <span>Confirm Temporary Password</span>
+            <input name="confirm_password" type="password" autocomplete="new-password" required>
+        </label>
+        <button type="submit">Set Temporary Password</button>
+    </form>
+</section>
+{% endblock %}

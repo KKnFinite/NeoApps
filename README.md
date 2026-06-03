@@ -1,6 +1,6 @@
-# NeoApps / NeoRFD
+# NeoGateway / NeoApps / NeoRFD
 
-NeoApps is the unified Flask platform for operational tools. NeoRFD is the current default Rockford Air Hub gateway workspace, and NeoMotherBrain is the operations core module inside NeoRFD.
+NeoGateway is the public platform brand. NeoApps is the technical Flask framework powering the operational tools. NeoRFD is the current default Rockford Air Hub gateway workspace, and NeoMotherBrain is the operations core module inside NeoRFD.
 
 ## Access Model
 
@@ -13,6 +13,21 @@ watcher < operator < simulator < master < grandmaster
 ```
 
 Operational data stays in shared tables and is scoped by the current gateway.
+
+New public account requests create a global NeoApps user and a pending RFD GatewayMembership. Email verification is required before a Master or Grandmaster can approve access. Approved gateway members receive default `watcher` access to active NeoNodes unless a GatewayNodeRole grants a higher node-specific role.
+
+## Email Configuration
+
+Transactional email uses Brevo and reads configuration only from environment variables:
+
+```text
+BREVO_API_KEY
+MAIL_FROM_NAME
+MAIL_FROM_EMAIL
+APP_BASE_URL
+```
+
+Local development and tests safely no-op email sending when required mail configuration is missing.
 
 ## Local Development
 
@@ -30,7 +45,7 @@ Do not use `app.py`; this project uses the `app/` package for the Flask app fact
 
 ## Local URLs
 
-Login:
+Login / landing hub:
 
 ```text
 http://127.0.0.1:5000/login

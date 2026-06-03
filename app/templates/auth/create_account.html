@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Create Account | NeoGateway{% endblock %}
+
+{% block content %}
+<section class="panel compact-panel">
+    <div class="section-heading">
+        <p class="eyebrow">NeoGateway Access</p>
+        <h1>Create Account</h1>
+        <p class="muted">New accounts request access to {{ default_gateway.name }} for review.</p>
+    </div>
+
+    <form class="operation-form" method="post">
+        <label>
+            <span>Full Name</span>
+            <input name="full_name" value="{{ form.full_name }}" required>
+        </label>
+        <label>
+            <span>Employee ID</span>
+            <input name="employee_id" value="{{ form.employee_id }}" required>
+        </label>
+        <label>
+            <span>Supervisor / Manager</span>
+            <input name="supervisor_name" value="{{ form.supervisor_name }}" required>
+        </label>
+        <label>
+            <span>Email</span>
+            <input name="email" type="email" value="{{ form.email }}" autocomplete="email" required>
+        </label>
+        <label>
+            <span>Work Area</span>
+            <input name="work_area" value="{{ form.work_area }}" required>
+        </label>
+        <label>
+            <span>Reason For Access</span>
+            <textarea name="access_reason" required>{{ form.access_reason }}</textarea>
+        </label>
+        <label>
+            <span>Username</span>
+            <input name="username" value="{{ form.username }}" autocomplete="username" placeholder="Use email if blank">
+        </label>
+        <label>
+            <span>Password</span>
+            <input name="password" type="password" autocomplete="new-password" required>
+        </label>
+        <label>
+            <span>Confirm Password</span>
+            <input name="confirm_password" type="password" autocomplete="new-password" required>
+        </label>
+        <button type="submit">Request Access</button>
+    </form>
+
+    <div class="action-row">
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.login') }}">Back to Login</a>
+    </div>
+</section>
+{% endblock %}
