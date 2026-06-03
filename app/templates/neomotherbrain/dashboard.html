@@ -15,7 +15,6 @@
             <img class="gateway-logo" src="{{ url_for('static', filename=default_gateway.logo) }}" alt="{{ default_gateway.name }}" />
         </div>
         <p class="platform-brand">NeoGateway</p>
-        <p class="gateway-context">{{ default_gateway.name }} / {{ default_gateway.code }} Gateway Workspace</p>
         <p class="powered-by">Powered by NeoApps</p>
 
         {% if current_user.is_authenticated %}
