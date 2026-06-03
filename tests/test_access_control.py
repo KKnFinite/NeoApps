@@ -111,6 +111,117 @@ class AccessControlTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.location, "/access-pending")
 
+    def test_approved_rfd_login_redirects_to_rfd_hub(self):
+        user, _membership = self._approved_user("approved_hub_user")
+        db.session.commit()
+        client = self.app.test_client()
+
+        response = client.post(
+            "/login",
+            data={"username": user.username, "password": "TestPassword123!"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/rfd")
+
+    def test_blocked_users_cannot_access_rfd_or_sektor_launcher(self):
+        gateway = ensure_default_gateway_and_nodes()
+        pending = self._user("pending_hub_user")
+        denied = self._user("denied_hub_user")
+        no_membership = self._user("no_membership_hub_user")
+        db.session.add(
+            GatewayMembership(
+                user_id=pending.id,
+                gateway_id=gateway.id,
+                status="pending",
+                is_active=True,
+            )
+        )
+        db.session.add(
+            GatewayMembership(
+                user_id=denied.id,
+                gateway_id=gateway.id,
+                status="denied",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+
+        for user in (pending, denied, no_membership):
+            client = self.app.test_client()
+            client.post(
+                "/login",
+                data={"username": user.username, "password": "TestPassword123!"},
+                follow_redirects=False,
+            )
+
+            for path in ("/rfd", "/rfd/sektor"):
+                with self.subTest(username=user.username, path=path):
+                    response = client.get(path, follow_redirects=False)
+                    self.assertEqual(response.status_code, 302)
+                    self.assertEqual(response.location, "/access-pending")
+
+    def test_watcher_can_see_rfd_hub_but_cannot_enter_motherbrain(self):
+        self._approved_user("watcher_hub_user")
+        db.session.commit()
+        client = self.app.test_client()
+        client.post(
+            "/login",
+            data={"username": "watcher_hub_user", "password": "TestPassword123!"},
+        )
+
+        hub = client.get("/rfd")
+        motherbrain = client.get("/motherbrain", follow_redirects=False)
+
+        self.assertEqual(hub.status_code, 200)
+        self.assertIn(b"NeoRFD Command Hub", hub.data)
+        self.assertIn(b"NeoMotherBrain", hub.data)
+        self.assertIn(b"NeoSektor", hub.data)
+        self.assertEqual(motherbrain.status_code, 302)
+        self.assertEqual(motherbrain.location, "/rfd")
+
+    def test_simulator_or_higher_can_enter_motherbrain(self):
+        user, membership = self._approved_user("simulator_motherbrain_user")
+        motherbrain = NeoNode.query.filter_by(code="motherbrain").first()
+        db.session.add(
+            GatewayNodeRole(
+                gateway_membership_id=membership.id,
+                node_id=motherbrain.id,
+                role="simulator",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+        client = self.app.test_client()
+        client.post(
+            "/login",
+            data={"username": user.username, "password": "TestPassword123!"},
+        )
+
+        response = client.get("/motherbrain")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"NeoMotherBrain", response.data)
+
+    def test_approved_rfd_user_can_launch_neosektor(self):
+        self._approved_user("sektor_launcher_user")
+        db.session.commit()
+        client = self.app.test_client()
+        client.post(
+            "/login",
+            data={"username": "sektor_launcher_user", "password": "TestPassword123!"},
+        )
+
+        hub = client.get("/rfd")
+        launch = client.get("/rfd/sektor", follow_redirects=False)
+
+        self.assertEqual(hub.status_code, 200)
+        self.assertIn(b"NeoSektor", hub.data)
+        self.assertIn(b'href="/rfd/sektor"', hub.data)
+        self.assertEqual(launch.status_code, 302)
+        self.assertEqual(launch.location, "https://neosektor.onrender.com/")
+
     def test_specific_gateway_node_role_overrides_default_watcher_per_node(self):
         user = self._user("node_role_user")
         gateway = ensure_default_gateway_and_nodes()
@@ -192,6 +303,19 @@ class AccessControlTest(unittest.TestCase):
         db.session.add(user)
         db.session.flush()
         return user
+
+    def _approved_user(self, username):
+        user = self._user(username)
+        gateway = ensure_default_gateway_and_nodes()
+        membership = GatewayMembership(
+            user_id=user.id,
+            gateway_id=gateway.id,
+            status="approved",
+            is_active=True,
+        )
+        db.session.add(membership)
+        db.session.flush()
+        return user, membership
 
 
 if __name__ == "__main__":

@@ -72,7 +72,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
             with self.subTest(path=path):
                 response = self.client.get(path, follow_redirects=False)
                 self.assertEqual(response.status_code, 302)
-                self.assertEqual(response.location, "/")
+                self.assertEqual(response.location, "/rfd")
 
     def test_pending_users_appear_on_pending_requests_screen(self):
         grandmaster = self._admin("pending_grandmaster", "grandmaster")
@@ -293,7 +293,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
 
         updated = db.session.get(User, target.id)
         self.assertEqual(master_response.status_code, 302)
-        self.assertEqual(master_response.location, "/")
+        self.assertEqual(master_response.location, "/rfd")
         self.assertEqual(grandmaster_response.status_code, 302)
         self.assertTrue(updated.password_reset_required is False)
         self.assertTrue(updated.check_password("PermanentPassword123!"))
@@ -309,7 +309,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         db.session.commit()
         self._login(master.username)
 
-        response = self.client.get("/")
+        response = self.client.get("/rfd")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Access Requests", response.data)
@@ -328,7 +328,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         users_response = self.client.get("/admin/users")
 
         self.assertEqual(login_response.status_code, 302)
-        self.assertEqual(login_response.location, "/motherbrain")
+        self.assertEqual(login_response.location, "/rfd")
         self.assertEqual(users_response.status_code, 200)
         self.assertIn(b"User Management", users_response.data)
 

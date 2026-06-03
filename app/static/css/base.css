@@ -127,6 +127,11 @@ a {
     min-height: min(720px, calc(100svh - 150px));
 }
 
+.public-command {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+}
+
 .motherbrain-core {
     display: grid;
     justify-items: center;
@@ -488,9 +493,35 @@ a {
     line-height: 1.5;
 }
 
+.command-card-disabled {
+    opacity: 0.72;
+}
+
 .command-card-link:hover {
     border-color: rgba(255, 47, 47, 0.62);
     box-shadow: 0 0 28px rgba(255, 47, 47, 0.16);
+}
+
+.rfd-command-hub {
+    margin-bottom: 34px;
+}
+
+.rfd-command-hub .motherbrain-core-image {
+    width: min(100%, 620px);
+}
+
+.rfd-node-card {
+    justify-items: start;
+}
+
+.rfd-node-logo {
+    display: block;
+    width: min(100%, 260px);
+    max-height: 90px;
+    object-fit: contain;
+    filter:
+        drop-shadow(0 12px 22px rgba(0, 0, 0, 0.72))
+        drop-shadow(0 0 18px rgba(255, 47, 47, 0.3));
 }
 
 .eyebrow {

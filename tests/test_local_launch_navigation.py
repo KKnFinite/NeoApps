@@ -76,15 +76,14 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertNotIn(b">Login<", response.data)
         self.assertNotIn(b"Authorize Access", response.data)
 
-    def test_public_home_renders_neosektor_external_tile_with_static_logo(self):
+    def test_public_home_does_not_render_node_tiles_or_links(self):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'href="https://neosektor.onrender.com/"', response.data)
-        self.assertIn(b'target="_blank"', response.data)
-        self.assertIn(b'rel="noopener"', response.data)
-        self.assertIn(b'src="/static/images/neosektor_logo1.png"', response.data)
-        self.assertNotIn(b">NeoSektor</span>", response.data)
+        self.assertNotIn(b"NeoSektor", response.data)
+        self.assertNotIn(b"NeoMotherBrain", response.data)
+        self.assertNotIn(b'href="https://neosektor.onrender.com/"', response.data)
+        self.assertNotIn(b'src="/static/images/neosektor_logo1.png"', response.data)
 
     def test_login_route_is_reachable(self):
         response = self.client.get("/login")
@@ -95,7 +94,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(b'<form class="command-login-form" method="post" action="/login">', response.data)
         self.assertIn(b"ENTER", response.data)
 
-    def test_seeded_kessler_login_is_case_insensitive_and_enters_motherbrain(self):
+    def test_seeded_kessler_login_is_case_insensitive_and_enters_rfd_hub(self):
         seed_dev_grandmaster(self.app)
 
         response = self.client.post(
@@ -105,7 +104,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.location, "/motherbrain")
+        self.assertEqual(response.location, "/rfd")
 
     def test_seeded_kessler_grandmaster_accesses_motherbrain_routes(self):
         seed_dev_grandmaster(self.app)
@@ -138,8 +137,9 @@ class LocalLaunchNavigationTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
 
-        dashboard_response = self.client.get("/")
-        self.assertIn(b"NeoMotherBrain", dashboard_response.data)
+        hub_response = self.client.get("/rfd")
+        self.assertIn(b"NeoMotherBrain", hub_response.data)
+        self.assertIn(b"NeoSektor", hub_response.data)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 from datetime import date, datetime
 
 from flask import flash, redirect, render_template, request, url_for
-from flask_login import current_user
+from flask_login import current_user, login_required
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
@@ -19,7 +19,12 @@ from app.services.flight_rules import (
     derive_aircraft_type_from_tail_number,
     is_mission_crew_covered,
 )
-from app.services.access_control import get_current_gateway
+from app.services.access_control import (
+    get_current_gateway,
+    get_user_node_role,
+    user_can_access_node,
+    user_has_gateway_access,
+)
 from app.services.sort_date_operations import (
     ensure_tail_state_for_mission,
     generate_sort_date_operation_from_master,
@@ -51,7 +56,34 @@ DEPARTURE_STATUSES = (
 
 @bp.route("/")
 def dashboard():
-    return render_template("neomotherbrain/dashboard.html")
+    return render_template("auth/login.html")
+
+
+@bp.route("/rfd")
+@login_required
+def rfd_hub():
+    gateway = get_current_gateway()
+    if not user_has_gateway_access(current_user, gateway.code):
+        return redirect(url_for("auth.access_pending"))
+
+    return render_template(
+        "neomotherbrain/rfd_hub.html",
+        gateway=gateway,
+        motherbrain_role=get_user_node_role(current_user, gateway.code, "motherbrain"),
+        can_enter_motherbrain=user_can_access_node(
+            current_user,
+            gateway.code,
+            "motherbrain",
+            minimum_role="simulator",
+        ),
+        can_launch_sektor=user_can_access_node(current_user, gateway.code, "sektor"),
+    )
+
+
+@bp.route("/rfd/sektor")
+@gateway_node_required("sektor")
+def sektor_launch():
+    return redirect("https://neosektor.onrender.com/")
 
 
 @bp.route("/motherbrain")

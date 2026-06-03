@@ -38,11 +38,11 @@ def login():
 
         if not user or not user.check_password(password):
             flash("Invalid username or password.", "error")
-            return render_template("neomotherbrain/dashboard.html"), 401
+            return render_template("auth/login.html"), 401
 
         if not user.is_active:
             flash("This account is inactive.", "error")
-            return render_template("neomotherbrain/dashboard.html"), 403
+            return render_template("auth/login.html"), 403
 
         login_user(user)
         user.last_login = datetime.utcnow()
@@ -52,7 +52,7 @@ def login():
         except SQLAlchemyError:
             db.session.rollback()
             flash("Login failed. Please try again.", "error")
-            return render_template("neomotherbrain/dashboard.html"), 500
+            return render_template("auth/login.html"), 500
 
         if user.password_reset_required:
             return redirect(url_for("auth.change_password"))
@@ -61,9 +61,9 @@ def login():
         if not user_has_gateway_access(user, gateway.code):
             return redirect(url_for("auth.access_pending"))
 
-        return redirect(url_for("neomotherbrain.motherbrain"))
+        return redirect(url_for("neomotherbrain.rfd_hub"))
 
-    return render_template("neomotherbrain/dashboard.html")
+    return render_template("auth/login.html")
 
 
 @bp.route("/logout")
@@ -186,7 +186,7 @@ def change_password():
         current_user.password_reset_required = False
         db.session.commit()
         flash("Password changed.", "info")
-        return redirect(url_for("neomotherbrain.motherbrain"))
+        return redirect(url_for("neomotherbrain.rfd_hub"))
 
     return render_template("auth/change_password.html")
 

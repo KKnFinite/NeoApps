@@ -320,7 +320,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(forced_access.location, "/change-password")
         self.assertEqual(changed.status_code, 302)
 
-    def test_landing_ui_account_links_and_neosektor_image_only(self):
+    def test_landing_ui_account_links_and_no_public_node_links(self):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
@@ -328,9 +328,9 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertIn(b'<button class="command-access-panel command-enter-button" type="submit">', response.data)
         self.assertIn(b'href="/create-account"', response.data)
         self.assertIn(b'href="/forgot-password"', response.data)
-        self.assertIn(b'href="https://neosektor.onrender.com/"', response.data)
-        self.assertIn(b'src="/static/images/neosektor_logo1.png"', response.data)
-        self.assertNotIn(b">NeoSektor</span>", response.data)
+        self.assertNotIn(b"NeoSektor", response.data)
+        self.assertNotIn(b"NeoMotherBrain", response.data)
+        self.assertNotIn(b'href="https://neosektor.onrender.com/"', response.data)
 
     def _account_form(self, **overrides):
         values = {

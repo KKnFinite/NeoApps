@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}{{ gateway.name }} Command Hub | NeoGateway{% endblock %}
+
+{% block content %}
+<section class="motherbrain-core rfd-command-hub" aria-label="{{ gateway.name }} command hub">
+    <div class="motherbrain-core-image">
+        <img class="gateway-logo" src="{{ url_for('static', filename=default_gateway.logo) }}" alt="{{ gateway.name }}" />
+    </div>
+    <p class="gateway-context">{{ gateway.name }} Command Hub</p>
+    <p class="platform-brand">NeoGateway</p>
+    <p class="powered-by">Powered by NeoApps</p>
+</section>
+
+<section class="command-card-grid" aria-label="{{ gateway.name }} NeoNodes">
+    {% if can_enter_motherbrain %}
+    <a class="command-card command-card-link" href="{{ url_for('neomotherbrain.motherbrain') }}">
+        <span class="node-light"></span>
+        <h2>NeoMotherBrain</h2>
+        <p>Nightly operations, master schedule data, access controls, and board management.</p>
+    </a>
+    {% else %}
+    <article class="command-card command-card-disabled" aria-disabled="true">
+        <span class="node-light"></span>
+        <h2>NeoMotherBrain</h2>
+        <p>Simulator access or higher is required until watcher-safe MotherBrain views exist.</p>
+    </article>
+    {% endif %}
+
+    {% if can_launch_sektor %}
+    <a class="command-card command-card-link rfd-node-card" href="{{ url_for('neomotherbrain.sektor_launch') }}">
+        <span class="node-light"></span>
+        <img class="rfd-node-logo" src="{{ url_for('static', filename='images/neosektor_logo1.png') }}" alt="NeoSektor logo">
+        <p>Launch the protected NeoSektor workspace.</p>
+    </a>
+    {% endif %}
+</section>
+{% endblock %}

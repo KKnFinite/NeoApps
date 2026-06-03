@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% set public_landing = true %}
+
+{% block title %}NeoGateway | {{ default_gateway.name }}{% endblock %}
+
+{% block content %}
+<section class="motherbrain-command public-command" aria-label="NeoGateway login">
+    <section class="motherbrain-core">
+        <div class="motherbrain-core-image">
+            <img class="gateway-logo" src="{{ url_for('static', filename=default_gateway.logo) }}" alt="{{ default_gateway.name }}" />
+        </div>
+        <p class="gateway-context">{{ default_gateway.name }}</p>
+        <p class="platform-brand">NeoGateway</p>
+        <p class="powered-by">Powered by NeoApps</p>
+
+        <form class="command-login-form" method="post" action="{{ url_for('auth.login') }}">
+            <div class="command-login-fields">
+                <label for="dashboard-username">Username</label>
+                <input id="dashboard-username" name="username" type="text" autocomplete="username" required autofocus>
+
+                <label for="dashboard-password">Password</label>
+                <input id="dashboard-password" name="password" type="password" autocomplete="current-password" required>
+            </div>
+
+            <button class="command-access-panel command-enter-button" type="submit">
+                <strong>ENTER</strong>
+            </button>
+            <div class="command-link-row">
+                <a href="{{ url_for('auth.create_account') }}">Create Account</a>
+                <a href="{{ url_for('auth.forgot_password') }}">Forgot Password</a>
+            </div>
+        </form>
+    </section>
+</section>
+{% endblock %}
