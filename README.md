@@ -29,6 +29,30 @@ APP_BASE_URL
 
 Local development and tests safely no-op email sending when required mail configuration is missing.
 
+## Database Configuration
+
+Local development uses SQLite when `DATABASE_URL` is not set. Render/production should set `DATABASE_URL` to the Neon Postgres connection string.
+
+Do not commit `DATABASE_URL` or database credentials.
+
+## Production Bootstrap
+
+After deploying with a fresh Neon database, run the safe idempotent bootstrap:
+
+```powershell
+python scripts\bootstrap_database.py
+```
+
+Set these environment variables in Render before running it:
+
+```text
+BOOTSTRAP_ADMIN_USERNAME
+BOOTSTRAP_ADMIN_EMAIL
+BOOTSTRAP_ADMIN_PASSWORD
+```
+
+The bootstrap creates tables, ensures the RFD gateway and active NeoNodes exist, marks the bootstrap admin email verified, grants approved RFD access, and grants Grandmaster node access. Running it more than once updates missing required seed data without creating duplicates.
+
 ## Local Development
 
 Run these commands from the project folder:

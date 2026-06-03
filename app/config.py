@@ -8,6 +8,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 
+def resolve_database_uri():
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        return database_url
+
+    return f"sqlite:///{BASE_DIR / 'instance' / 'neoapps.sqlite'}"
+
+
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-change-me")
     DEBUG = os.getenv("FLASK_DEBUG", "0").lower() in {"1", "true", "yes", "on"}
@@ -28,8 +36,5 @@ class Config:
         os.getenv("EMAIL_VERIFICATION_TOKEN_HOURS", "24")
     )
     PASSWORD_RESET_TOKEN_HOURS = int(os.getenv("PASSWORD_RESET_TOKEN_HOURS", "1"))
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "DATABASE_URL",
-        f"sqlite:///{BASE_DIR / 'instance' / 'neoapps.sqlite'}",
-    )
+    SQLALCHEMY_DATABASE_URI = resolve_database_uri()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
