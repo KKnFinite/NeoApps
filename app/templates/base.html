@@ -23,7 +23,9 @@
                     <a href="{{ url_for('neomotherbrain.master_schedule') }}">Master Schedule</a>
                         {% if can_manage_users(current_user) %}
                         <a href="{{ url_for('auth.access_requests') }}">Access Requests</a>
-                        <a href="{{ url_for('auth.users') }}">Users</a>
+                        {% endif %}
+                        {% if can_manage_system(current_user) %}
+                        <a href="{{ url_for('auth.users') }}">User Management</a>
                         {% endif %}
                     {% else %}
                     <a href="{{ url_for('auth.access_pending') }}">Access Review</a>

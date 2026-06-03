@@ -1,50 +1,76 @@
 {% extends "base.html" %}
 
-{% block title %}Users | NeoApps{% endblock %}
+{% block title %}User Management | NeoGateway{% endblock %}
 
 {% block content %}
 <section class="panel users-panel">
     <div class="section-heading">
-        <p class="eyebrow">Access Control</p>
-        <h1>Users</h1>
+        <p class="eyebrow">Grandmaster User Management</p>
+        <h1>User Management</h1>
+        <p class="muted">{{ gateway.name }} access, node roles, and recovery controls.</p>
+    </div>
+
+    <div class="metric-grid">
+        <a class="metric-tile metric-link" href="{{ url_for('auth.pending_users') }}">
+            <span>Pending Access Requests</span>
+            <strong>{{ summary.pending }}</strong>
+        </a>
+        <div class="metric-tile">
+            <span>Approved Users</span>
+            <strong>{{ summary.approved }}</strong>
+        </div>
+        <div class="metric-tile">
+            <span>Denied Users</span>
+            <strong>{{ summary.denied }}</strong>
+        </div>
+        <div class="metric-tile">
+            <span>Password Change Required</span>
+            <strong>{{ summary.password_reset_required }}</strong>
+        </div>
+        <div class="metric-tile">
+            <span>Unverified Email</span>
+            <strong>{{ summary.unverified_email }}</strong>
+        </div>
     </div>
 
     <div class="action-row">
-        <a class="action-button" href="{{ url_for('auth.access_requests') }}">Pending Access Requests</a>
+        <a class="action-button" href="{{ url_for('auth.pending_users') }}">Pending Requests</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}">Back to NeoMotherBrain</a>
     </div>
 
     <div class="table-wrap">
         <table class="data-table wide-data-table">
             <thead>
                 <tr>
+                    <th>Name</th>
                     <th>Username</th>
                     <th>Email</th>
-                    <th>Verified</th>
-                    <th>Role</th>
-                    <th>Active</th>
-                    <th>Password Reset</th>
-                    <th>MFA Required</th>
-                    <th>MFA Enabled</th>
+                    <th>Employee ID</th>
+                    <th>Work Area</th>
+                    <th>Email Verified</th>
+                    <th>RFD Status</th>
+                    <th>Node Roles</th>
                     <th>Last Login</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
-                {% for user in users %}
+                {% for row in rows %}
                 <tr>
-                    <td>{{ user.username }}</td>
-                    <td>{{ user.email or "" }}</td>
-                    <td>{{ "Yes" if user.email_verified_at else "No" }}</td>
-                    <td>{{ user.role }}</td>
-                    <td>{{ "Yes" if user.is_active else "No" }}</td>
-                    <td>{{ "Required" if user.password_reset_required else "No" }}</td>
-                    <td>{{ "Yes" if user.mfa_required else "No" }}</td>
-                    <td>{{ "Yes" if user.mfa_enabled else "No" }}</td>
-                    <td>{{ user.last_login.strftime("%Y-%m-%d %H:%M") if user.last_login else "Never" }}</td>
+                    <td>{{ row.user.full_name or "" }}</td>
+                    <td>{{ row.user.username }}</td>
+                    <td>{{ row.user.email or "" }}</td>
+                    <td>{{ row.user.employee_id or "" }}</td>
+                    <td>{{ row.user.work_area or "" }}</td>
+                    <td>{{ "Yes" if row.user.email_verified_at else "No" }}</td>
+                    <td>{{ row.membership_status }}</td>
+                    <td>{{ row.important_roles }}</td>
+                    <td>{{ row.user.last_login.strftime("%Y-%m-%d %H:%M") if row.user.last_login else "Never" }}</td>
                     <td>
-                        {% if can_manage_system(current_user) and user.id != current_user.id %}
-                        <a href="{{ url_for('auth.emergency_reset_user_password', user_id=user.id) }}">Emergency Reset</a>
-                        {% endif %}
+                        <div class="table-actions">
+                            <a href="{{ url_for('auth.user_detail', user_id=row.user.id) }}">View</a>
+                            <a href="{{ url_for('auth.user_roles', user_id=row.user.id) }}">Manage</a>
+                        </div>
                     </td>
                 </tr>
                 {% else %}

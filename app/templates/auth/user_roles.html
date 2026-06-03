@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Node Roles | User Management{% endblock %}
+
+{% block content %}
+<section class="panel compact-panel">
+    <div class="section-heading">
+        <p class="eyebrow">RFD Node Roles</p>
+        <h1>{{ target_user.full_name or target_user.username }}</h1>
+        <p class="muted">Approved {{ gateway.name }} membership gives watcher access by default.</p>
+    </div>
+
+    <form class="operation-form" method="post">
+        {% for row in node_rows %}
+        <label>
+            <span>{{ row.node.name }}</span>
+            <select name="node_{{ row.node.id }}">
+                {% for role in role_choices %}
+                <option value="{{ role }}" {% if row.effective_role == role %}selected{% endif %}>{{ role }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        {% endfor %}
+        <button type="submit">Save Node Roles</button>
+    </form>
+
+    <div class="action-row">
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.user_detail', user_id=target_user.id) }}">Back to User</a>
+    </div>
+</section>
+{% endblock %}

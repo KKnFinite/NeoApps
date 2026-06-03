@@ -75,6 +75,12 @@ Master Schedule:
 http://127.0.0.1:5000/motherbrain/master-schedule
 ```
 
+Grandmaster User Management:
+
+```text
+http://127.0.0.1:5000/admin/users
+```
+
 ## Local Dev Login
 
 The local development seed script creates or updates a Grandmaster account:

@@ -8,11 +8,26 @@
         <p class="eyebrow">Gateway Review</p>
         <h1>Access Under Review</h1>
     </div>
+    {% if not current_user.email_verified_at %}
     <p class="hero-copy">
-        Your {{ gateway.name }} access request is under review. Operational data and NeoNode dashboards remain unavailable until approval is complete.
+        Verify your email address first. Operational data and NeoNode dashboards stay locked until email verification and access review are complete.
     </p>
-    {% if membership and not current_user.email_verified_at %}
-    <p class="muted">Email not verified yet.</p>
+    {% elif membership and membership.status == "pending" %}
+    <p class="hero-copy">
+        Your {{ gateway.name }} access request is pending review. Operational data and NeoNode dashboards remain unavailable until approval is complete.
+    </p>
+    {% elif membership and membership.status == "denied" %}
+    <p class="hero-copy">
+        Your access request is pending review or requires manager follow-up.
+    </p>
+    {% elif not membership %}
+    <p class="hero-copy">
+        No {{ gateway.name }} access request is active for this account yet. Contact a supervisor or Grandmaster for access review.
+    </p>
+    {% else %}
+    <p class="hero-copy">
+        Your access request is pending review or requires manager follow-up.
+    </p>
     {% endif %}
     <div class="action-row">
         <a class="action-button action-button-secondary" href="{{ url_for('auth.logout') }}">Logout</a>

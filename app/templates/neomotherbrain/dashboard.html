@@ -83,19 +83,19 @@
     {% endif %}
 
     {% if can_manage_users(current_user) %}
-    <a class="command-card command-card-link" href="{{ url_for('auth.users') }}">
+    <a class="command-card command-card-link" href="{{ url_for('auth.access_requests') }}">
         <span class="node-light"></span>
-        <h2>User Control</h2>
-        <p>Manage NeoApps users and operational access.</p>
+        <h2>Access Requests</h2>
+        <p>Review pending gateway access requests.</p>
     </a>
     {% endif %}
 
     {% if can_manage_system(current_user) %}
-    <article class="command-card">
+    <a class="command-card command-card-link" href="{{ url_for('auth.users') }}">
         <span class="node-light"></span>
-        <h2>System Core</h2>
-        <p>Grandmaster system management permissions are active.</p>
-    </article>
+        <h2>User Management</h2>
+        <p>Grandmaster controls for users, gateway access, node roles, and recovery.</p>
+    </a>
     {% endif %}
 </section>
 {% endif %}
