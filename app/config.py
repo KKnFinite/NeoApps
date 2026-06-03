@@ -8,6 +8,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 
+def env_flag(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def resolve_database_uri():
     database_url = os.getenv("DATABASE_URL")
     if database_url:
@@ -38,3 +46,4 @@ class Config:
     PASSWORD_RESET_TOKEN_HOURS = int(os.getenv("PASSWORD_RESET_TOKEN_HOURS", "1"))
     SQLALCHEMY_DATABASE_URI = resolve_database_uri()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    AUTO_BOOTSTRAP_DATABASE = env_flag("AUTO_BOOTSTRAP_DATABASE")

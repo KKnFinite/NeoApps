@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from flask import Flask, redirect, request, url_for
@@ -14,7 +15,7 @@ from app.extensions import db, login_manager
 from app.services.access_control import user_can_access_node, user_has_gateway_access
 
 
-def create_app(config_class=Config):
+def create_app(config_class=Config, auto_bootstrap=True):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(Config)
     if config_class is not Config:
@@ -25,11 +26,29 @@ def create_app(config_class=Config):
     db.init_app(app)
     login_manager.init_app(app)
 
+    if auto_bootstrap:
+        maybe_auto_bootstrap_database(app)
     register_blueprints(app)
     register_template_helpers(app)
     register_request_guards(app)
 
     return app
+
+
+def maybe_auto_bootstrap_database(app):
+    if not app.config.get("AUTO_BOOTSTRAP_DATABASE"):
+        return False
+
+    if not os.getenv("DATABASE_URL"):
+        app.logger.info("Bootstrap skipped")
+        return False
+
+    app.logger.info("Auto bootstrap enabled")
+    from app.services.database_bootstrap import bootstrap_database
+
+    bootstrap_database(app)
+    app.logger.info("Bootstrap completed")
+    return True
 
 
 def register_template_helpers(app):

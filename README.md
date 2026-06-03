@@ -53,6 +53,18 @@ BOOTSTRAP_ADMIN_PASSWORD
 
 The bootstrap creates tables, ensures the RFD gateway and active NeoNodes exist, marks the bootstrap admin email verified, grants approved RFD access, and grants Grandmaster node access. Running it more than once updates missing required seed data without creating duplicates.
 
+## Render Free Bootstrap
+
+Render Free does not provide shell access. To bootstrap Neon during normal app startup, set:
+
+```text
+AUTO_BOOTSTRAP_DATABASE=true
+```
+
+When `AUTO_BOOTSTRAP_DATABASE` is enabled and `DATABASE_URL` is present, app startup runs the same idempotent bootstrap used by `scripts\bootstrap_database.py`. It can stay enabled because it will not create duplicate gateways, nodes, memberships, or node roles.
+
+The bootstrap admin password is only applied when the bootstrap admin user is created for the first time. Later startup runs preserve the existing admin password while repairing missing gateway access or node roles. You can turn `AUTO_BOOTSTRAP_DATABASE` off after the first cloud bootstrap if desired.
+
 ## Local Development
 
 Run these commands from the project folder:
