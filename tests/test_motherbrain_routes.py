@@ -51,9 +51,18 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_logged_in_user_can_access_motherbrain_home(self):
         response = self.client.get("/motherbrain")
+        html = response.data.decode()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoMotherBrain", response.data)
+        self.assertIn(b'src="/static/images/motherbrain_logo1.png"', response.data)
+        self.assertIn(b'aria-label="NeoMotherBrain menu"', response.data)
+        self.assertLess(
+            html.index("motherbrain-logo-stage"),
+            html.index('aria-label="NeoMotherBrain menu"'),
+        )
+        self.assertNotIn(b'class="metric-grid"', response.data)
+        self.assertNotIn(b"Master Schedule Rows", response.data)
 
     def test_kessler_grandmaster_can_access_motherbrain_pages(self):
         operation = self._operation()

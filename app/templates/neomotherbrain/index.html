@@ -3,13 +3,12 @@
 {% block title %}MotherBrain | NeoApps{% endblock %}
 
 {% block content %}
-<section class="panel">
-    <div class="section-heading">
-        <p class="eyebrow">NeoMotherBrain</p>
-        <h1>NeoMotherBrain</h1>
+<section class="panel motherbrain-landing">
+    <div class="motherbrain-logo-stage">
+        <img src="{{ url_for('static', filename='images/motherbrain_logo1.png') }}" alt="NeoMotherBrain" />
     </div>
 
-    <div class="action-row">
+    <nav class="action-row motherbrain-menu" aria-label="NeoMotherBrain menu">
         <a class="action-button" href="{{ url_for('neomotherbrain.operations') }}">Nightly Operations</a>
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.new_operation') }}">Generate Nightly Operation</a>
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">Master Schedule</a>
@@ -19,17 +18,6 @@
         {% if can_manage_system(current_user) %}
         <a class="action-button action-button-secondary" href="{{ url_for('auth.users') }}">User Management</a>
         {% endif %}
-    </div>
-
-    <div class="metric-grid">
-        <article class="metric-tile">
-            <span>Nightly Operations</span>
-            <strong>{{ operation_count }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>Master Schedule Rows</span>
-            <strong>{{ master_schedule_count }}</strong>
-        </article>
-    </div>
+    </nav>
 </section>
 {% endblock %}

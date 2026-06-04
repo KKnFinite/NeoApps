@@ -922,6 +922,33 @@ h2 {
     padding: 24px;
 }
 
+.motherbrain-landing {
+    display: grid;
+    justify-items: center;
+    gap: 22px;
+}
+
+.motherbrain-logo-stage {
+    display: grid;
+    place-items: center;
+    width: min(100%, 760px);
+}
+
+.motherbrain-logo-stage img {
+    display: block;
+    width: min(100%, 680px);
+    height: auto;
+    object-fit: contain;
+    filter:
+        drop-shadow(0 20px 34px rgba(0, 0, 0, 0.72))
+        drop-shadow(0 0 28px rgba(255, 47, 47, 0.32));
+}
+
+.motherbrain-menu {
+    justify-content: center;
+    margin: 0;
+}
+
 .node-strip p {
     margin-bottom: 0;
     color: var(--muted);
