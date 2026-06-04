@@ -40,7 +40,7 @@
             <dd>{{ mission.assigned_tail_number or "-" }}</dd>
         </div>
         <div>
-            <dt>Planned Local</dt>
+            <dt>{{ "STA" if mission.mission_type == "arrival" else "STD" }}</dt>
             <dd>{{ mission.planned_datetime_local.strftime("%H:%M") if mission.planned_datetime_local else "-" }}</dd>
         </div>
         <div>

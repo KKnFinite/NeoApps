@@ -48,7 +48,7 @@
             <dd>{{ master_schedule.active_days or "-" }}</dd>
         </div>
         <div>
-            <dt>Planned Local</dt>
+            <dt>{{ "STA" if master_schedule.mission_type == "arrival" else "STD" }}</dt>
             <dd>{{ master_schedule.planned_time_local.strftime("%H:%M") if master_schedule.planned_time_local else "-" }}</dd>
         </div>
         <div>

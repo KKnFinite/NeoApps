@@ -2,9 +2,21 @@
 {% from "neomotherbrain/_time_inputs.html" import military_time_input %}
 
 {% set is_bulk_edit = mode == "bulk_edit" %}
-{% set page_title = "Edit Master Flights" if is_bulk_edit else ("Edit Master Flight" if mode == "edit" else "Add Master Flights") %}
+{% set is_single_entry = not is_bulk_edit %}
+{% set page_title = "Edit Master Flights" if is_bulk_edit else ("Edit Master Flight" if mode == "edit" else "Add Master Flight") %}
 
 {% block title %}{{ page_title }} | NeoApps{% endblock %}
+
+{% macro active_days_field(row, prefix="row_") %}
+<div class="day-chip-grid">
+    {% for day_value, day_label in active_day_options %}
+    <label>
+        <input type="checkbox" name="{{ prefix }}{{ row.index }}_active_days" value="{{ day_value }}" {% if day_value in row.active_days %}checked{% endif %}>
+        <span>{{ day_label[:3] }}</span>
+    </label>
+    {% endfor %}
+</div>
+{% endmacro %}
 
 {% macro schedule_row(row) %}
 <tr class="master-schedule-form-row">
@@ -39,32 +51,73 @@
     <td>
         <input class="airport-code-input" type="text" name="row_{{ row.index }}_destination" value="{{ row.destination }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
     </td>
-    <td>
-        <div class="day-chip-grid">
-            {% for day_value, day_label in active_day_options %}
-            <label>
-                <input type="checkbox" name="row_{{ row.index }}_active_days" value="{{ day_value }}" {% if day_value in row.active_days %}checked{% endif %}>
-                <span>{{ day_label[:3] }}</span>
-            </label>
-            {% endfor %}
-        </div>
-    </td>
-    <td>
-        {{ military_time_input("row_" ~ row.index ~ "_planned_time_local", row.planned_time_local) }}
-    </td>
-    <td>
-        {{ military_time_input("row_" ~ row.index ~ "_pure_pull_time_local", row.pure_pull_time_local) }}
-    </td>
-    <td>
-        {{ military_time_input("row_" ~ row.index ~ "_first_mix_pull_time_local", row.first_mix_pull_time_local) }}
-    </td>
-    <td>
-        {{ military_time_input("row_" ~ row.index ~ "_final_mix_pull_time_local", row.final_mix_pull_time_local) }}
-    </td>
+    <td>{{ active_days_field(row) }}</td>
+    <td>{{ military_time_input("row_" ~ row.index ~ "_planned_time_local", row.planned_time_local) }}</td>
+    <td>{{ military_time_input("row_" ~ row.index ~ "_pure_pull_time_local", row.pure_pull_time_local) }}</td>
+    <td>{{ military_time_input("row_" ~ row.index ~ "_first_mix_pull_time_local", row.first_mix_pull_time_local) }}</td>
+    <td>{{ military_time_input("row_" ~ row.index ~ "_final_mix_pull_time_local", row.final_mix_pull_time_local) }}</td>
     <td>
         <button class="table-row-button" type="button" data-remove-schedule-row>Remove</button>
     </td>
 </tr>
+{% endmacro %}
+
+{% macro single_entry_form(row) %}
+<div class="master-mode-tabs" role="tablist" aria-label="Mission type">
+    <button class="master-mode-tab" type="button" role="tab" data-master-mode="arrival" aria-selected="{{ 'true' if row.mission_type == 'arrival' else 'false' }}">Arrival</button>
+    <button class="master-mode-tab" type="button" role="tab" data-master-mode="departure" aria-selected="{{ 'true' if row.mission_type == 'departure' else 'false' }}">Departure</button>
+</div>
+
+<input type="hidden" name="row_indexes" value="{{ row.index }}">
+<input type="hidden" name="row_{{ row.index }}_id" value="{{ row.id }}">
+<input type="hidden" name="row_{{ row.index }}_mission_type" value="{{ row.mission_type }}" data-master-mission-type>
+<label class="compact-check master-active-check">
+    <input type="checkbox" name="row_{{ row.index }}_active" value="1" {% if row.active %}checked{% endif %}>
+    <span>Active</span>
+</label>
+
+<div class="master-schedule-entry-grid">
+    <label>
+        <span>Sort</span>
+        <select name="row_{{ row.index }}_sort_name">
+            {% for sort_value, sort_label in sort_name_options %}
+            <option value="{{ sort_value }}" {% if row.sort_name == sort_value %}selected{% endif %}>{{ sort_label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label class="master-active-days-field">
+        <span>Active Days</span>
+        {{ active_days_field(row) }}
+    </label>
+    <label>
+        <span>Flight Number</span>
+        <input type="text" name="row_{{ row.index }}_flight_number" value="{{ row.flight_number }}" maxlength="8" autocomplete="off">
+    </label>
+    <label>
+        <span>Origin</span>
+        <input class="airport-code-input" type="text" name="row_{{ row.index }}_origin" value="{{ row.origin }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
+    </label>
+    <label>
+        <span>Destination</span>
+        <input class="airport-code-input" type="text" name="row_{{ row.index }}_destination" value="{{ row.destination }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
+    </label>
+    <label>
+        <span data-master-scheduled-label>{{ "STA" if row.mission_type == "arrival" else "STD" }}</span>
+        {{ military_time_input("row_" ~ row.index ~ "_planned_time_local", row.planned_time_local) }}
+    </label>
+    <label data-departure-only>
+        <span>Pure Pull</span>
+        {{ military_time_input("row_" ~ row.index ~ "_pure_pull_time_local", row.pure_pull_time_local) }}
+    </label>
+    <label data-departure-only>
+        <span>First Mix Pull</span>
+        {{ military_time_input("row_" ~ row.index ~ "_first_mix_pull_time_local", row.first_mix_pull_time_local) }}
+    </label>
+    <label data-departure-only>
+        <span>Final Mix Pull</span>
+        {{ military_time_input("row_" ~ row.index ~ "_final_mix_pull_time_local", row.final_mix_pull_time_local) }}
+    </label>
+</div>
 {% endmacro %}
 
 {% block content %}
@@ -73,14 +126,19 @@
     <div class="section-heading">
         <p class="eyebrow">Master Schedule</p>
         <h1>{{ page_title }}</h1>
-        {% if mode == "new" %}
-        <p class="muted">Add multiple recurring schedule rows, then save them together.</p>
-        {% elif is_bulk_edit %}
+        {% if is_bulk_edit %}
         <p class="muted">Edit multiple recurring schedule rows and save all changes at once.</p>
         {% endif %}
     </div>
 
-    <form class="master-schedule-bulk-form" method="post" data-next-row-index="{{ rows|length }}">
+    <form class="{{ 'master-schedule-single-form' if is_single_entry else 'master-schedule-bulk-form' }}" method="post" data-next-row-index="{{ rows|length }}">
+        {% if is_single_entry %}
+        {{ single_entry_form(rows[0]) }}
+        <div class="action-row">
+            <button class="action-button" type="submit" data-master-save-button>{{ "Save Arrival" if rows[0].mission_type == "arrival" else "Save Departure" }}</button>
+            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">Back to Master Schedule</a>
+        </div>
+        {% else %}
         <div class="table-wrap">
             <table class="data-table schedule-form-table">
                 <thead>
@@ -92,7 +150,7 @@
                         <th>Origin</th>
                         <th>Destination</th>
                         <th>Active Days</th>
-                        <th>Planned</th>
+                        <th>STA/STD</th>
                         <th>Pure Pull</th>
                         <th>First Mix</th>
                         <th>Final Mix</th>
@@ -116,20 +174,12 @@
             <button class="action-button" type="submit">Save Rows</button>
             <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">Back to Master Schedule</a>
         </div>
+        {% endif %}
     </form>
 </section>
 
 <script>
 (() => {
-    const form = document.querySelector("[data-next-row-index]");
-    const tbody = document.querySelector("[data-master-schedule-rows]");
-    const template = document.getElementById("master-schedule-row-template");
-    const addButton = document.querySelector("[data-add-schedule-row]");
-
-    if (!form || !tbody || !template || !addButton) {
-        return;
-    }
-
     const uppercaseAirportCodes = (root) => {
         root.querySelectorAll(".airport-code-input").forEach((input) => {
             input.addEventListener("input", () => {
@@ -138,7 +188,45 @@
         });
     };
 
+    const updateMasterMode = (mode) => {
+        const missionTypeInput = document.querySelector("[data-master-mission-type]");
+        const scheduledLabel = document.querySelector("[data-master-scheduled-label]");
+        const saveButton = document.querySelector("[data-master-save-button]");
+        if (!missionTypeInput || !scheduledLabel || !saveButton) {
+            return;
+        }
+
+        missionTypeInput.value = mode;
+        scheduledLabel.textContent = mode === "arrival" ? "STA" : "STD";
+        saveButton.textContent = mode === "arrival" ? "Save Arrival" : "Save Departure";
+        document.querySelectorAll("[data-master-mode]").forEach((button) => {
+            button.setAttribute("aria-selected", button.dataset.masterMode === mode ? "true" : "false");
+        });
+        document.querySelectorAll("[data-departure-only]").forEach((field) => {
+            field.hidden = mode === "arrival";
+            field.querySelectorAll("input").forEach((input) => {
+                if (mode === "arrival") {
+                    input.value = "";
+                }
+            });
+        });
+    };
+
     uppercaseAirportCodes(document);
+    document.querySelectorAll("[data-master-mode]").forEach((button) => {
+        button.addEventListener("click", () => updateMasterMode(button.dataset.masterMode));
+        if (button.getAttribute("aria-selected") === "true") {
+            updateMasterMode(button.dataset.masterMode);
+        }
+    });
+
+    const form = document.querySelector("[data-next-row-index]");
+    const tbody = document.querySelector("[data-master-schedule-rows]");
+    const template = document.getElementById("master-schedule-row-template");
+    const addButton = document.querySelector("[data-add-schedule-row]");
+    if (!form || !tbody || !template || !addButton) {
+        return;
+    }
 
     addButton.addEventListener("click", () => {
         const index = Number.parseInt(form.dataset.nextRowIndex || "0", 10);

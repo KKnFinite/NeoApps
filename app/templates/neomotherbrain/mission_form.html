@@ -14,7 +14,7 @@
     <form class="operation-form" method="post">
         <label>
             <span>Mission Type</span>
-            <select name="mission_type" required>
+            <select name="mission_type" required data-mission-type-select>
                 <option value="arrival" {% if form.mission_type == "arrival" %}selected{% endif %}>Arrival</option>
                 <option value="departure" {% if form.mission_type == "departure" %}selected{% endif %}>Departure</option>
             </select>
@@ -36,7 +36,7 @@
             <input type="text" name="assigned_tail_number" value="{{ form.assigned_tail_number }}" maxlength="32">
         </label>
         <label>
-            <span>Planned Time Local</span>
+            <span data-mission-scheduled-label>{{ "STA" if form.mission_type == "arrival" else "STD" }}</span>
             {{ military_time_input("planned_time_local", form.planned_time_local, True) }}
         </label>
         <label>
@@ -75,16 +75,16 @@
                 {% endfor %}
             </select>
         </label>
-        <label>
-            <span>Pure Pull Time Local</span>
+        <label data-mission-departure-only>
+            <span>Pure Pull</span>
             {{ military_time_input("pure_pull_time_local", form.pure_pull_time_local) }}
         </label>
-        <label>
-            <span>First Mix Pull Time Local</span>
+        <label data-mission-departure-only>
+            <span>First Mix Pull</span>
             {{ military_time_input("first_mix_pull_time_local", form.first_mix_pull_time_local) }}
         </label>
-        <label>
-            <span>Final Mix Pull Time Local</span>
+        <label data-mission-departure-only>
+            <span>Final Mix Pull</span>
             {{ military_time_input("final_mix_pull_time_local", form.final_mix_pull_time_local) }}
         </label>
 
@@ -94,5 +94,30 @@
         </div>
     </form>
 </section>
+<script>
+(() => {
+    const missionType = document.querySelector("[data-mission-type-select]");
+    const scheduledLabel = document.querySelector("[data-mission-scheduled-label]");
+    if (!missionType || !scheduledLabel) {
+        return;
+    }
+
+    const updateMissionMode = () => {
+        const isArrival = missionType.value === "arrival";
+        scheduledLabel.textContent = isArrival ? "STA" : "STD";
+        document.querySelectorAll("[data-mission-departure-only]").forEach((field) => {
+            field.hidden = isArrival;
+            if (isArrival) {
+                field.querySelectorAll("input").forEach((input) => {
+                    input.value = "";
+                });
+            }
+        });
+    };
+
+    missionType.addEventListener("change", updateMissionMode);
+    updateMissionMode();
+})();
+</script>
 {% include "neomotherbrain/_military_time_script.html" %}
 {% endblock %}

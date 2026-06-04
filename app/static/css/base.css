@@ -1204,6 +1204,101 @@ h2 {
     gap: 18px;
 }
 
+.master-schedule-single-form {
+    display: grid;
+    gap: 20px;
+}
+
+.master-mode-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.master-mode-tab {
+    min-height: 64px;
+    border: 1px solid rgba(216, 32, 42, 0.72);
+    border-radius: 4px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 28%),
+        linear-gradient(180deg, #202329 0%, #111318 100%);
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 900;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.14),
+        0 0 18px rgba(216, 32, 42, 0.18);
+}
+
+.master-mode-tab[aria-selected="true"] {
+    border-color: #ff3b46;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 24%),
+        linear-gradient(180deg, #ff3b46 0%, #d8202a 44%, #7a0f16 100%);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        0 0 28px rgba(255, 59, 70, 0.28);
+}
+
+.master-mode-tab:hover,
+.master-mode-tab:focus-visible {
+    border-color: #ff3b46;
+    outline: none;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.16),
+        0 0 26px rgba(255, 59, 70, 0.28);
+}
+
+.master-active-check {
+    justify-self: start;
+}
+
+.master-schedule-entry-grid {
+    display: grid;
+    grid-template-columns: minmax(150px, 0.65fr) minmax(260px, 1.5fr) repeat(4, minmax(120px, 1fr));
+    gap: 14px;
+    align-items: end;
+}
+
+.master-schedule-entry-grid label {
+    display: grid;
+    gap: 7px;
+}
+
+.master-schedule-entry-grid label span {
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.master-active-days-field {
+    grid-column: span 2;
+}
+
+.master-schedule-entry-grid input,
+.master-schedule-entry-grid select {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid rgba(235, 241, 246, 0.22);
+    border-radius: 4px;
+    background: rgba(3, 4, 6, 0.72);
+    color: var(--text);
+    font: inherit;
+    padding: 10px 12px;
+    outline: none;
+}
+
+.master-schedule-entry-grid input:focus,
+.master-schedule-entry-grid select:focus {
+    border-color: rgba(255, 59, 70, 0.78);
+    box-shadow: 0 0 0 3px rgba(216, 32, 42, 0.12);
+}
+
 .schedule-form-table {
     min-width: 1720px;
 }
@@ -1847,6 +1942,28 @@ h2 {
 
     .command-card-grid {
         grid-template-columns: 1fr;
+    }
+
+    .master-schedule-panel {
+        padding: 16px;
+    }
+
+    .master-mode-tabs,
+    .master-schedule-entry-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .master-mode-tab {
+        min-height: 58px;
+    }
+
+    .master-active-days-field {
+        grid-column: auto;
+    }
+
+    .day-chip-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        min-width: 0;
     }
 }
 
