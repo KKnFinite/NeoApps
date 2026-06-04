@@ -75,7 +75,7 @@
             <tbody>
                 {% for mission in missions %}
                 <tr>
-                    <td>{{ mission.mission_type }}</td>
+                    <td>{{ mission.mission_type|title }}</td>
                     <td>{{ mission.flight_number }}</td>
                     <td>{{ mission.origin }}</td>
                     <td>{{ mission.destination }}</td>

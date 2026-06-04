@@ -28,7 +28,6 @@
                     <th>Active Days</th>
                     <th>Planned</th>
                     <th>Timezone</th>
-                    <th>Parking</th>
                     <th>Pure Pull</th>
                     <th>First Mix</th>
                     <th>Final Mix</th>
@@ -40,15 +39,14 @@
                 <tr>
                     <td>{{ "Active" if schedule.active else "Inactive" }}</td>
                     <td>{{ schedule.gateway_code }}</td>
-                    <td>{{ schedule.sort_name }}</td>
-                    <td>{{ schedule.mission_type }}</td>
+                    <td>{{ schedule.sort_name|title }}</td>
+                    <td>{{ schedule.mission_type|title }}</td>
                     <td>{{ schedule.flight_number }}</td>
                     <td>{{ schedule.origin }}</td>
                     <td>{{ schedule.destination }}</td>
                     <td>{{ schedule.active_days or "-" }}</td>
                     <td>{{ schedule.planned_time_local.strftime("%H:%M") if schedule.planned_time_local else "-" }}</td>
                     <td>{{ schedule.timezone }}</td>
-                    <td>{{ schedule.preferred_parking or "-" }}</td>
                     <td>{{ schedule.pure_pull_time_local.strftime("%H:%M") if schedule.pure_pull_time_local else "-" }}</td>
                     <td>{{ schedule.first_mix_pull_time_local.strftime("%H:%M") if schedule.first_mix_pull_time_local else "-" }}</td>
                     <td>{{ schedule.final_mix_pull_time_local.strftime("%H:%M") if schedule.final_mix_pull_time_local else "-" }}</td>
@@ -62,7 +60,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="15">No master schedule rows found.</td>
+                    <td colspan="14">No master schedule rows found.</td>
                 </tr>
                 {% endfor %}
             </tbody>

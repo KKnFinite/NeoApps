@@ -117,6 +117,125 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Master Flight Schedule", response.data)
         self.assertIn(b"DEP001", response.data)
+        self.assertIn(b"<td>Night</td>", response.data)
+        self.assertIn(b"<td>Departure</td>", response.data)
+        self.assertNotIn(b"<td>night</td>", response.data)
+        self.assertNotIn(b"<td>departure</td>", response.data)
+
+    def test_master_schedule_form_uses_limited_sort_dropdown_and_capitalized_missions(self):
+        response = self.client.get("/motherbrain/master-schedule/new")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'<select name="sort_name" required>', response.data)
+        self.assertNotIn(b'name="sort_name" value=', response.data)
+        for value, label in (
+            (b"night", b"Night"),
+            (b"twilight", b"Twilight"),
+            (b"day", b"Day"),
+            (b"sunrise", b"Sunrise"),
+        ):
+            self.assertIn(b'<option value="' + value + b'"', response.data)
+            self.assertIn(b">" + label + b"</option>", response.data)
+        self.assertIn(b">Arrival</option>", response.data)
+        self.assertIn(b">Departure</option>", response.data)
+        self.assertNotIn(b">arrival</option>", response.data)
+        self.assertNotIn(b">departure</option>", response.data)
+
+    def test_master_schedule_rejects_unknown_sort_name(self):
+        response = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(sort_name="midnight"),
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"Sort name must be Night, Twilight, Day, or Sunrise.", response.data)
+        self.assertIsNone(MasterFlightSchedule.query.filter_by(sort_name="midnight").first())
+
+    def test_master_schedule_rejects_flight_number_over_8_characters(self):
+        response = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(flight_number="FLIGHT999"),
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"Flight number must be 8 characters or fewer.", response.data)
+        self.assertIsNone(MasterFlightSchedule.query.filter_by(flight_number="FLIGHT999").first())
+
+    def test_master_schedule_origin_destination_are_three_letters_and_save_uppercase(self):
+        invalid = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(origin="RF1"),
+        )
+        valid = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(
+                flight_number="UP123",
+                origin="rfd",
+                destination="sdf",
+            ),
+            follow_redirects=False,
+        )
+
+        master = MasterFlightSchedule.query.filter_by(flight_number="UP123").first()
+        self.assertEqual(invalid.status_code, 400)
+        self.assertIn(b"Origin must be exactly 3 letters.", invalid.data)
+        self.assertEqual(valid.status_code, 302)
+        self.assertEqual(master.origin, "RFD")
+        self.assertEqual(master.destination, "SDF")
+
+    def test_master_schedule_time_fields_use_24_hour_format_and_save(self):
+        response = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(
+                flight_number="TIME01",
+                planned_time_local="23:45",
+                pure_pull_time_local="20:10",
+            ),
+            follow_redirects=False,
+        )
+        form_response = self.client.get("/motherbrain/master-schedule/new")
+
+        master = MasterFlightSchedule.query.filter_by(flight_number="TIME01").first()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(master.planned_time_local, time(23, 45))
+        self.assertEqual(master.pure_pull_time_local, time(20, 10))
+        self.assertIn(b'type="time" name="planned_time_local"', form_response.data)
+        self.assertIn(b'type="time" name="pure_pull_time_local"', form_response.data)
+
+    def test_master_schedule_timezone_is_not_selectable_and_uses_gateway_timezone(self):
+        response = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(
+                flight_number="TZ001",
+                timezone="America/New_York",
+            ),
+            follow_redirects=False,
+        )
+        form_response = self.client.get("/motherbrain/master-schedule/new")
+
+        master = MasterFlightSchedule.query.filter_by(flight_number="TZ001").first()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(master.timezone, "America/Chicago")
+        self.assertNotIn(b'name="timezone"', form_response.data)
+
+    def test_preferred_parking_is_not_shown_in_master_schedule_ui(self):
+        master = self._add_master(flight_number="PARK01", preferred_parking="A1")
+        db.session.commit()
+
+        form_response = self.client.get(f"/motherbrain/master-schedule/{master.id}/edit")
+        list_response = self.client.get("/motherbrain/master-schedule")
+        detail_response = self.client.get(f"/motherbrain/master-schedule/{master.id}")
+
+        for label, response in (
+            ("form", form_response),
+            ("list", list_response),
+            ("detail", detail_response),
+        ):
+            with self.subTest(page=label):
+                self.assertEqual(response.status_code, 200)
+                self.assertNotIn(b"Preferred Parking", response.data)
+                self.assertNotIn(b"Parking", response.data)
+                self.assertNotIn(b"A1", response.data)
 
     def test_create_departure_master_row_with_pull_times(self):
         response = self.client.post(
@@ -135,6 +254,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(master.mission_type, "departure")
         self.assertEqual(master.active_days, "monday,wednesday")
+        self.assertEqual(master.timezone, "America/Chicago")
         self.assertEqual(master.pure_pull_time_local, time(1, 20))
         self.assertEqual(master.first_mix_pull_time_local, time(1, 40))
         self.assertEqual(master.final_mix_pull_time_local, time(1, 55))

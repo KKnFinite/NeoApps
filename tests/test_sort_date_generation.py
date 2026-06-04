@@ -188,6 +188,24 @@ class SortDateGenerationTest(unittest.TestCase):
         self.assertEqual(tail_state.aircraft_type_source, "derived")
         self.assertEqual(tail_state.parking_position, "A1")
 
+    def test_master_generation_does_not_copy_preferred_parking_to_tail_state(self):
+        master = self._add_master(
+            flight_number="5X777",
+            preferred_parking="A1",
+        )
+        master.assigned_tail_number = "N123UP"
+        db.session.commit()
+
+        generate_sort_date_operation_from_master(
+            sort_date=date(2026, 6, 1),
+            gateway_code="RFD",
+            sort_name="night",
+        )
+
+        tail_state = SortDateTailState.query.filter_by(tail_number="N123UP").first()
+        self.assertIsNotNone(tail_state)
+        self.assertIsNone(tail_state.parking_position)
+
     def test_manual_tail_state_aircraft_type_is_not_overwritten(self):
         mission = self._mission(assigned_tail_number="N123UP")
         manual_tail_state = SortDateTailState(

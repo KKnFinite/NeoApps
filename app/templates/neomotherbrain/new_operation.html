@@ -18,7 +18,11 @@
         <input type="hidden" name="gateway_code" value="{{ form.gateway_code }}">
         <label>
             <span>Sort Name</span>
-            <input type="text" name="sort_name" value="{{ form.sort_name }}" maxlength="32" required>
+            <select name="sort_name" required>
+                {% for sort_value, sort_label in sort_name_options %}
+                <option value="{{ sort_value }}" {% if form.sort_name == sort_value %}selected{% endif %}>{{ sort_label }}</option>
+                {% endfor %}
+            </select>
         </label>
 
         <div class="action-row">

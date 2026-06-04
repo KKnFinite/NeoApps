@@ -28,11 +28,11 @@
         </div>
         <div>
             <dt>Sort</dt>
-            <dd>{{ master_schedule.sort_name }}</dd>
+            <dd>{{ master_schedule.sort_name|title }}</dd>
         </div>
         <div>
             <dt>Mission Type</dt>
-            <dd>{{ master_schedule.mission_type }}</dd>
+            <dd>{{ master_schedule.mission_type|title }}</dd>
         </div>
         <div>
             <dt>Origin</dt>
@@ -53,10 +53,6 @@
         <div>
             <dt>Timezone</dt>
             <dd>{{ master_schedule.timezone }}</dd>
-        </div>
-        <div>
-            <dt>Preferred Parking</dt>
-            <dd>{{ master_schedule.preferred_parking or "-" }}</dd>
         </div>
         <div>
             <dt>Pure Pull</dt>

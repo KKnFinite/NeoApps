@@ -18,26 +18,31 @@
         <input type="hidden" name="gateway_code" value="{{ form.gateway_code }}">
         <label>
             <span>Sort Name</span>
-            <input type="text" name="sort_name" value="{{ form.sort_name }}" maxlength="32" required>
+            <select name="sort_name" required>
+                {% for sort_value, sort_label in sort_name_options %}
+                <option value="{{ sort_value }}" {% if form.sort_name == sort_value %}selected{% endif %}>{{ sort_label }}</option>
+                {% endfor %}
+            </select>
         </label>
         <label>
             <span>Mission Type</span>
             <select name="mission_type" required>
-                <option value="arrival" {% if form.mission_type == "arrival" %}selected{% endif %}>arrival</option>
-                <option value="departure" {% if form.mission_type == "departure" %}selected{% endif %}>departure</option>
+                {% for mission_value, mission_label in mission_type_options %}
+                <option value="{{ mission_value }}" {% if form.mission_type == mission_value %}selected{% endif %}>{{ mission_label }}</option>
+                {% endfor %}
             </select>
         </label>
         <label>
             <span>Flight Number</span>
-            <input type="text" name="flight_number" value="{{ form.flight_number }}" maxlength="32" required>
+            <input type="text" name="flight_number" value="{{ form.flight_number }}" maxlength="8" required>
         </label>
         <label>
             <span>Origin</span>
-            <input type="text" name="origin" value="{{ form.origin }}" maxlength="8" required>
+            <input type="text" name="origin" value="{{ form.origin }}" maxlength="3" pattern="[A-Za-z]{3}" required>
         </label>
         <label>
             <span>Destination</span>
-            <input type="text" name="destination" value="{{ form.destination }}" maxlength="8" required>
+            <input type="text" name="destination" value="{{ form.destination }}" maxlength="3" pattern="[A-Za-z]{3}" required>
         </label>
 
         <fieldset class="checkbox-grid">
@@ -53,14 +58,6 @@
         <label>
             <span>Planned Time Local</span>
             <input type="time" name="planned_time_local" value="{{ form.planned_time_local }}" required>
-        </label>
-        <label>
-            <span>Timezone</span>
-            <input type="text" name="timezone" value="{{ form.timezone }}" maxlength="64" required>
-        </label>
-        <label>
-            <span>Preferred Parking</span>
-            <input type="text" name="preferred_parking" value="{{ form.preferred_parking }}" maxlength="64">
         </label>
         <label>
             <span>Pure Pull Time Local</span>

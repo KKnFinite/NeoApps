@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from flask import flash, redirect, render_template, request, url_for
+from flask import current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.auth.decorators import gateway_node_required
@@ -42,6 +42,17 @@ ACTIVE_DAY_OPTIONS = (
     ("sunday", "Sunday"),
 )
 
+SORT_NAME_OPTIONS = (
+    ("night", "Night"),
+    ("twilight", "Twilight"),
+    ("day", "Day"),
+    ("sunrise", "Sunrise"),
+)
+SORT_NAMES = {value for value, _label in SORT_NAME_OPTIONS}
+MISSION_TYPE_OPTIONS = (
+    ("arrival", "Arrival"),
+    ("departure", "Departure"),
+)
 MISSION_TYPES = {"arrival", "departure"}
 FUEL_STATUSES = ("", "waiting", "received", "assigned", "complete")
 DEPARTURE_STATUSES = (
@@ -250,12 +261,12 @@ def new_operation():
             sort_date = date.fromisoformat(form["sort_date"])
         except ValueError:
             flash("Enter a valid sort date.", "error")
-            return render_template("neomotherbrain/new_operation.html", form=form), 400
+            return _render_new_operation_form(form), 400
 
         sort_name = form["sort_name"].strip().lower()
-        if not sort_name:
-            flash("Sort name is required.", "error")
-            return render_template("neomotherbrain/new_operation.html", form=form), 400
+        if sort_name not in SORT_NAMES:
+            flash("Sort name must be Night, Twilight, Day, or Sunrise.", "error")
+            return _render_new_operation_form(form), 400
 
         try:
             operation = generate_sort_date_operation_from_master(
@@ -280,14 +291,14 @@ def new_operation():
                 )
 
             flash(str(error), "error")
-            return render_template("neomotherbrain/new_operation.html", form=form), 400
+            return _render_new_operation_form(form), 400
 
         flash("Nightly operation generated.", "info")
         return redirect(
             url_for("neomotherbrain.operation_detail", operation_id=operation.id)
         )
 
-    return render_template("neomotherbrain/new_operation.html", form=form)
+    return _render_new_operation_form(form)
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>")
@@ -468,6 +479,14 @@ def _operation_or_404(operation_id):
     ).first_or_404()
 
 
+def _render_new_operation_form(form):
+    return render_template(
+        "neomotherbrain/new_operation.html",
+        form=form,
+        sort_name_options=SORT_NAME_OPTIONS,
+    )
+
+
 def _mission_or_404(operation, mission_id):
     return SortDateMission.query.filter_by(
         id=mission_id,
@@ -490,6 +509,8 @@ def _render_master_schedule_form(form, mode, master_schedule=None):
         form=form,
         master_schedule=master_schedule,
         mode=mode,
+        mission_type_options=MISSION_TYPE_OPTIONS,
+        sort_name_options=SORT_NAME_OPTIONS,
     )
 
 
@@ -505,8 +526,7 @@ def _master_schedule_form_from_request(gateway=None):
         "destination": request.form.get("destination", ""),
         "active_days": set(request.form.getlist("active_days")),
         "planned_time_local": request.form.get("planned_time_local", ""),
-        "timezone": request.form.get("timezone", "America/Chicago"),
-        "preferred_parking": request.form.get("preferred_parking", ""),
+        "timezone": _gateway_timezone(gateway),
         "pure_pull_time_local": request.form.get("pure_pull_time_local", ""),
         "first_mix_pull_time_local": request.form.get("first_mix_pull_time_local", ""),
         "final_mix_pull_time_local": request.form.get("final_mix_pull_time_local", ""),
@@ -525,7 +545,6 @@ def _master_schedule_form_from_model(master_schedule):
         "active_days": _active_days_set(master_schedule.active_days),
         "planned_time_local": _format_time(master_schedule.planned_time_local),
         "timezone": master_schedule.timezone,
-        "preferred_parking": master_schedule.preferred_parking or "",
         "pure_pull_time_local": _format_time(master_schedule.pure_pull_time_local),
         "first_mix_pull_time_local": _format_time(master_schedule.first_mix_pull_time_local),
         "final_mix_pull_time_local": _format_time(master_schedule.final_mix_pull_time_local),
@@ -537,11 +556,13 @@ def _apply_master_schedule_form(master_schedule, form, gateway=None):
     gateway_code = gateway.code if gateway else form["gateway_code"].strip().upper()
     sort_name = form["sort_name"].strip().lower()
     mission_type = form["mission_type"].strip().lower()
-    flight_number = form["flight_number"].strip()
-    origin = form["origin"].strip().upper()
-    destination = form["destination"].strip().upper()
-    timezone = form["timezone"].strip() or "America/Chicago"
+    flight_number = _normalize_flight_number(form["flight_number"])
+    origin = _normalize_airport_code(form["origin"], "Origin")
+    destination = _normalize_airport_code(form["destination"], "Destination")
+    timezone = _gateway_timezone(gateway)
 
+    if sort_name not in SORT_NAMES:
+        raise ValueError("Sort name must be Night, Twilight, Day, or Sunrise.")
     if mission_type not in MISSION_TYPES:
         raise ValueError("Mission type must be arrival or departure.")
 
@@ -560,7 +581,6 @@ def _apply_master_schedule_form(master_schedule, form, gateway=None):
     master_schedule.active_days = _active_days_value(form["active_days"])
     master_schedule.planned_time_local = planned_time_local
     master_schedule.timezone = timezone
-    master_schedule.preferred_parking = form["preferred_parking"].strip() or None
     master_schedule.active = bool(form["active"])
 
     if mission_type == "arrival":
@@ -634,6 +654,26 @@ def _parse_optional_time(value, label):
 
 def _format_time(value):
     return value.strftime("%H:%M") if value else ""
+
+
+def _gateway_timezone(gateway=None):
+    return current_app.config.get("DEFAULT_GATEWAY_TIMEZONE", "America/Chicago")
+
+
+def _normalize_flight_number(value):
+    flight_number = (value or "").strip()
+    if not flight_number:
+        raise ValueError("Flight number is required.")
+    if len(flight_number) > 8:
+        raise ValueError("Flight number must be 8 characters or fewer.")
+    return flight_number
+
+
+def _normalize_airport_code(value, label):
+    code = (value or "").strip().upper()
+    if len(code) != 3 or not code.isalpha():
+        raise ValueError(f"{label} must be exactly 3 letters.")
+    return code
 
 
 def _render_mission_form(operation, form, mode, mission=None):

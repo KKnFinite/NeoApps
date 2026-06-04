@@ -86,10 +86,7 @@ def generate_sort_date_operation_from_master(
         db.session.add(mission)
         db.session.flush()
 
-        tail_state = ensure_tail_state_for_mission(
-            mission,
-            parking_position=master_row.preferred_parking,
-        )
+        tail_state = ensure_tail_state_for_mission(mission)
         aircraft_type = tail_state.aircraft_type if tail_state else "unknown"
         create_default_crew_assignments_for_mission(mission, aircraft_type)
 
