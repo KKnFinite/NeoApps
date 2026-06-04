@@ -10,9 +10,6 @@
         <div class="motherbrain-core-image">
             <img class="gateway-logo" src="{{ url_for('static', filename=default_gateway.logo) }}" alt="{{ default_gateway.name }}" />
         </div>
-        <p class="gateway-context">{{ default_gateway.name }}</p>
-        <p class="platform-brand">NeoGateway</p>
-        <p class="powered-by">Powered by NeoApps</p>
 
         <form class="command-login-form" method="post" action="{{ url_for('auth.login') }}">
             <div class="command-login-fields">

@@ -54,6 +54,14 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertEqual(logo_path.name, "neorfd_logo1.png")
         self.assertGreater(logo_path.stat().st_size, 0)
 
+    def test_base_css_uses_cyber_topbar_without_vertical_grid_background(self):
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertIn(".user-chip", css)
+        self.assertIn(".topbar::after", css)
+        self.assertNotIn("42px 42px", css)
+        self.assertNotIn("linear-gradient(90deg, rgba(201, 208, 214, 0.035) 1px", css)
+
     def test_public_home_uses_enter_login_form_without_separate_login_button(self):
         response = self.client.get("/")
 
@@ -61,6 +69,9 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(b"NeoRFD", response.data)
         self.assertIn(b"NeoGateway", response.data)
         self.assertIn(b"Powered by NeoApps", response.data)
+        self.assertNotIn(b'class="gateway-context"', response.data)
+        self.assertNotIn(b'class="platform-brand"', response.data)
+        self.assertNotIn(b'class="powered-by"', response.data)
         self.assertNotIn(b"NeoRFD / RFD Gateway Workspace", response.data)
         self.assertNotIn(b"Gateway Workspace</p>", response.data)
         self.assertIn(b'src="/static/images/neorfd_logo1.png"', response.data)

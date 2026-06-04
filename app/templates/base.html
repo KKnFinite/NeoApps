@@ -11,12 +11,25 @@
         <header class="topbar">
             <a class="brand" href="{% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}{{ url_for('neomotherbrain.rfd_hub') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}">
                 <span>
-                    <strong>NeoGateway</strong>
-                    <small>Powered by NeoApps</small>
+                    <strong>
+                        {% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}
+                        NeoGateway - {{ default_gateway.name }}
+                        {% else %}
+                        NeoGateway
+                        {% endif %}
+                    </strong>
+                    <small>{% if current_user.is_authenticated and not public_landing|default(false) %}Gateway Command Layer{% else %}Powered by NeoApps{% endif %}</small>
                 </span>
             </a>
-            <nav class="nav" aria-label="Primary">
+            <div class="topbar-actions">
                 {% if current_user.is_authenticated and not public_landing|default(false) %}
+                <div class="user-chip" aria-label="Logged in user">
+                    <span>Logged in</span>
+                    <strong>{{ current_user.username }}</strong>
+                </div>
+                {% endif %}
+                <nav class="nav" aria-label="Primary">
+                    {% if current_user.is_authenticated and not public_landing|default(false) %}
                     {% if user_has_gateway_access(current_user, default_gateway.code) %}
                     <a href="{{ url_for('neomotherbrain.rfd_hub') }}">NeoRFD</a>
                         {% if user_can_access_node(current_user, default_gateway.code, "motherbrain", "simulator") %}
@@ -37,8 +50,9 @@
                     <a href="{{ url_for('auth.access_pending') }}">Access Review</a>
                     {% endif %}
                 <a href="{{ url_for('auth.logout') }}">Logout</a>
-                {% endif %}
-            </nav>
+                    {% endif %}
+                </nav>
+            </div>
         </header>
 
         <main class="content">

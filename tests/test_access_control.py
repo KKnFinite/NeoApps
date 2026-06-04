@@ -176,8 +176,13 @@ class AccessControlTest(unittest.TestCase):
 
         self.assertEqual(hub.status_code, 200)
         self.assertIn(b"NeoRFD Command Hub", hub.data)
+        self.assertIn(b"NeoGateway - NeoRFD", hub.data)
+        self.assertIn(b"watcher_hub_user", hub.data)
         self.assertIn(b"NeoMotherBrain", hub.data)
         self.assertIn(b"NeoSektor", hub.data)
+        self.assertNotIn(b'class="gateway-context"', hub.data)
+        self.assertNotIn(b'class="platform-brand"', hub.data)
+        self.assertNotIn(b'class="powered-by"', hub.data)
         self.assertEqual(motherbrain.status_code, 302)
         self.assertEqual(motherbrain.location, "/rfd")
 
