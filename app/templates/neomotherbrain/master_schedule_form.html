@@ -105,15 +105,15 @@
         <span data-master-scheduled-label>{{ "STA" if row.mission_type == "arrival" else "STD" }}</span>
         {{ military_time_select("row_" ~ row.index ~ "_planned_time_local", row.planned_time_local, True) }}
     </label>
-    <label data-departure-only>
+    <label data-departure-only {% if row.mission_type == "arrival" %}hidden{% endif %}>
         <span>Pure Pull</span>
         {{ military_time_select("row_" ~ row.index ~ "_pure_pull_time_local", row.pure_pull_time_local) }}
     </label>
-    <label data-departure-only>
+    <label data-departure-only {% if row.mission_type == "arrival" %}hidden{% endif %}>
         <span>First Mix Pull</span>
         {{ military_time_select("row_" ~ row.index ~ "_first_mix_pull_time_local", row.first_mix_pull_time_local) }}
     </label>
-    <label data-departure-only>
+    <label data-departure-only {% if row.mission_type == "arrival" %}hidden{% endif %}>
         <span>Final Mix Pull</span>
         {{ military_time_select("row_" ~ row.index ~ "_final_mix_pull_time_local", row.final_mix_pull_time_local) }}
     </label>

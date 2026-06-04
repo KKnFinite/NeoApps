@@ -142,8 +142,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         response = self.client.get("/motherbrain/master-schedule/new")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'<form class="master-schedule-bulk-form"', response.data)
-        self.assertIn(b"Add Another Row", response.data)
+        self.assertIn(b'<form class="master-schedule-single-form"', response.data)
+        self.assertIn(b'data-master-mode="arrival"', response.data)
+        self.assertIn(b'data-master-mode="departure"', response.data)
         self.assertIn(b'<select name="row_0_sort_name">', response.data)
         self.assertNotIn(b'name="sort_name" value=', response.data)
         for value, label in (
@@ -154,10 +155,42 @@ class MotherBrainRoutesTest(unittest.TestCase):
         ):
             self.assertIn(b'<option value="' + value + b'"', response.data)
             self.assertIn(b">" + label + b"</option>", response.data)
-        self.assertIn(b">Arrival</option>", response.data)
-        self.assertIn(b">Departure</option>", response.data)
+        self.assertIn(b">Arrival</button>", response.data)
+        self.assertIn(b">Departure</button>", response.data)
         self.assertNotIn(b">arrival</option>", response.data)
         self.assertNotIn(b">departure</option>", response.data)
+
+    def test_master_schedule_arrival_mode_hides_pull_time_fields(self):
+        master = self._add_master(
+            mission_type="arrival",
+            flight_number="ARRMODE",
+            origin="SDF",
+            destination="RFD",
+        )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/master-schedule/{master.id}/edit")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-master-mode="arrival" aria-selected="true"', html)
+        self.assertIn(">STA</span>", html)
+        self.assertIn(b"Save Arrival", response.data)
+        self.assertEqual(html.count("<label data-departure-only hidden"), 3)
+
+    def test_master_schedule_departure_mode_shows_pull_time_fields(self):
+        response = self.client.get("/motherbrain/master-schedule/new")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-master-mode="departure" aria-selected="true"', html)
+        self.assertIn(">STD</span>", html)
+        self.assertIn(b"Save Departure", response.data)
+        self.assertEqual(html.count("<label data-departure-only >"), 3)
+        self.assertNotIn("data-departure-only hidden", html)
+        self.assertIn(b"Pure Pull", response.data)
+        self.assertIn(b"First Mix Pull", response.data)
+        self.assertIn(b"Final Mix Pull", response.data)
 
     def test_bulk_create_master_schedule_rows(self):
         response = self.client.post(
