@@ -13,6 +13,12 @@
         <a class="action-button" href="{{ url_for('neomotherbrain.operations') }}">Nightly Operations</a>
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.new_operation') }}">Generate Nightly Operation</a>
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">Master Schedule</a>
+        {% if can_manage_users(current_user) %}
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.access_requests') }}">Access Requests</a>
+        {% endif %}
+        {% if can_manage_system(current_user) %}
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.users') }}">User Management</a>
+        {% endif %}
     </div>
 
     <div class="metric-grid">

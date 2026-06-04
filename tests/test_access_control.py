@@ -175,11 +175,49 @@ class AccessControlTest(unittest.TestCase):
         motherbrain = client.get("/motherbrain", follow_redirects=False)
 
         self.assertEqual(hub.status_code, 200)
+        hub_html = hub.data.decode()
+        left_column = hub_html.split('rfd-node-column-left"', 1)[1].split("</div>", 1)[0]
+        right_column = hub_html.split('rfd-node-column-right"', 1)[1].split("</div>", 1)[0]
         self.assertIn(b"NeoRFD Command Hub", hub.data)
         self.assertIn(b"NeoGateway - NeoRFD", hub.data)
         self.assertIn(b"watcher_hub_user", hub.data)
+        self.assertIn(b'src="/static/images/neorfd_logo1.png"', hub.data)
         self.assertIn(b"NeoMotherBrain", hub.data)
         self.assertIn(b"NeoSektor", hub.data)
+        for node_name in (
+            b"NeoScorpion",
+            b"NeoReptile",
+            b"NeoErmac",
+            b"NeoSubZero",
+            b"NeoRain",
+        ):
+            self.assertIn(node_name, hub.data)
+        self.assertNotIn(b"Placeholder", hub.data)
+        self.assertNotIn(b"Launch", hub.data)
+        self.assertLess(hub_html.index('aria-label="NeoMotherBrain"'), hub_html.index('class="rfd-node-grid"'))
+        self.assertLess(hub_html.index('rfd-node-column-left"'), hub_html.index('rfd-hub-logo"'))
+        self.assertLess(hub_html.index('rfd-hub-logo"'), hub_html.index('rfd-node-column-right"'))
+        left_order = (
+            "NeoSektor",
+            "NeoReptile",
+            "NeoRain",
+        )
+        right_order = (
+            "NeoErmac",
+            "NeoSubZero",
+            "NeoScorpion",
+        )
+        left_positions = [left_column.index(f'aria-label="{node}"') for node in left_order]
+        right_positions = [right_column.index(f'aria-label="{node}"') for node in right_order]
+        self.assertEqual(left_positions, sorted(left_positions))
+        self.assertEqual(right_positions, sorted(right_positions))
+        self.assertIn(b'href="/logout"', hub.data)
+        self.assertNotIn(b'href="/motherbrain/operations"', hub.data)
+        self.assertNotIn(b'href="/motherbrain/master-schedule"', hub.data)
+        self.assertNotIn(b"Nightly Operations", hub.data)
+        self.assertNotIn(b"Master Schedule", hub.data)
+        self.assertNotIn(b"Access Requests", hub.data)
+        self.assertNotIn(b"User Management", hub.data)
         self.assertNotIn(b'class="gateway-context"', hub.data)
         self.assertNotIn(b'class="platform-brand"', hub.data)
         self.assertNotIn(b'class="powered-by"', hub.data)

@@ -30,26 +30,7 @@
                 {% endif %}
                 <nav class="nav" aria-label="Primary">
                     {% if current_user.is_authenticated and not public_landing|default(false) %}
-                    {% if user_has_gateway_access(current_user, default_gateway.code) %}
-                    <a href="{{ url_for('neomotherbrain.rfd_hub') }}">NeoRFD</a>
-                        {% if user_can_access_node(current_user, default_gateway.code, "motherbrain", "simulator") %}
-                        <a href="{{ url_for('neomotherbrain.motherbrain') }}">NeoMotherBrain</a>
-                        <a href="{{ url_for('neomotherbrain.operations') }}">Nightly Operations</a>
-                        <a href="{{ url_for('neomotherbrain.master_schedule') }}">Master Schedule</a>
-                        {% endif %}
-                        {% if user_can_access_node(current_user, default_gateway.code, "sektor") %}
-                        <a href="{{ url_for('neomotherbrain.sektor_launch') }}">NeoSektor</a>
-                        {% endif %}
-                        {% if can_manage_users(current_user) %}
-                        <a href="{{ url_for('auth.access_requests') }}">Access Requests</a>
-                        {% endif %}
-                        {% if can_manage_system(current_user) %}
-                        <a href="{{ url_for('auth.users') }}">User Management</a>
-                        {% endif %}
-                    {% else %}
-                    <a href="{{ url_for('auth.access_pending') }}">Access Review</a>
-                    {% endif %}
-                <a href="{{ url_for('auth.logout') }}">Logout</a>
+                    <a href="{{ url_for('auth.logout') }}">Logout</a>
                     {% endif %}
                 </nav>
             </div>

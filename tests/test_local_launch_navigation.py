@@ -59,8 +59,18 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
         self.assertIn(".user-chip", css)
         self.assertIn(".topbar::after", css)
+        self.assertIn("../images/neobutton1_small.png", css)
+        self.assertIn(".rfd-node-prefix", css)
+        self.assertIn(".rfd-node-suffix", css)
         self.assertNotIn("42px 42px", css)
         self.assertNotIn("linear-gradient(90deg, rgba(201, 208, 214, 0.035) 1px", css)
+
+    def test_neonode_button_asset_exists_with_render_safe_casing(self):
+        button_path = Path("app/static/images/neobutton1_small.png")
+
+        self.assertTrue(button_path.is_file())
+        self.assertEqual(button_path.name, "neobutton1_small.png")
+        self.assertGreater(button_path.stat().st_size, 0)
 
     def test_public_home_uses_enter_login_form_without_separate_login_button(self):
         response = self.client.get("/")
@@ -149,8 +159,53 @@ class LocalLaunchNavigationTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
 
         hub_response = self.client.get("/rfd")
+        nav_html = hub_response.data.decode().split('<nav class="nav"', 1)[1].split("</nav>", 1)[0]
+        hub_html = hub_response.data.decode()
+        left_column = hub_html.split('rfd-node-column-left"', 1)[1].split("</div>", 1)[0]
+        right_column = hub_html.split('rfd-node-column-right"', 1)[1].split("</div>", 1)[0]
+        self.assertIn(b'src="/static/images/neorfd_logo1.png"', hub_response.data)
         self.assertIn(b"NeoMotherBrain", hub_response.data)
         self.assertIn(b"NeoSektor", hub_response.data)
+        for node_name in (
+            b"NeoScorpion",
+            b"NeoReptile",
+            b"NeoErmac",
+            b"NeoSubZero",
+            b"NeoRain",
+        ):
+            self.assertIn(node_name, hub_response.data)
+        self.assertNotIn(b"Placeholder", hub_response.data)
+        self.assertNotIn(b"Launch", hub_response.data)
+        self.assertLess(hub_html.index('aria-label="NeoMotherBrain"'), hub_html.index('class="rfd-node-grid"'))
+        self.assertLess(hub_html.index('rfd-node-column-left"'), hub_html.index('rfd-hub-logo"'))
+        self.assertLess(hub_html.index('rfd-hub-logo"'), hub_html.index('rfd-node-column-right"'))
+        left_order = (
+            "NeoSektor",
+            "NeoReptile",
+            "NeoRain",
+        )
+        right_order = (
+            "NeoErmac",
+            "NeoSubZero",
+            "NeoScorpion",
+        )
+        left_positions = [left_column.index(f'aria-label="{node}"') for node in left_order]
+        right_positions = [right_column.index(f'aria-label="{node}"') for node in right_order]
+        self.assertEqual(left_positions, sorted(left_positions))
+        self.assertEqual(right_positions, sorted(right_positions))
+        self.assertIn(b'href="/logout"', hub_response.data)
+        self.assertIn("Logout", nav_html)
+        self.assertNotIn("NeoRFD", nav_html)
+        self.assertNotIn("NeoMotherBrain", nav_html)
+        self.assertNotIn("NeoSektor", nav_html)
+        self.assertNotIn("Nightly Operations", nav_html)
+        self.assertNotIn("Master Schedule", nav_html)
+        self.assertNotIn("Access Requests", nav_html)
+        self.assertNotIn("User Management", nav_html)
+        self.assertNotIn(b"Nightly Operations", hub_response.data)
+        self.assertNotIn(b"Master Schedule", hub_response.data)
+        self.assertNotIn(b"Access Requests", hub_response.data)
+        self.assertNotIn(b"User Management", hub_response.data)
 
 
 if __name__ == "__main__":

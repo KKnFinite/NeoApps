@@ -604,21 +604,232 @@ a {
 }
 
 .rfd-command-hub {
-    margin-bottom: 34px;
+    margin-bottom: 0;
+}
+
+.rfd-command-layout {
+    justify-items: center;
+    align-items: center;
+    grid-template-columns: minmax(0, 1fr);
+    gap: clamp(16px, 3vw, 36px);
+    min-height: min(720px, calc(100svh - 180px));
+}
+
+.rfd-node-menu {
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: clamp(16px, 2.8vw, 30px);
+    width: min(100%, 1080px);
+    min-width: 0;
+}
+
+.rfd-node-grid {
+    display: grid;
+    align-items: center;
+    grid-template-columns: minmax(230px, 1fr) minmax(210px, 0.82fr) minmax(230px, 1fr);
+    gap: clamp(14px, 2.4vw, 34px);
+    width: min(100%, 1080px);
+}
+
+.rfd-node-column {
+    display: grid;
+    align-content: center;
+    gap: clamp(12px, 1.9vw, 22px);
+    min-width: 0;
+}
+
+.rfd-hub-logo {
+    display: grid;
+    place-items: center;
+    min-width: 0;
+}
+
+.rfd-hub-logo .gateway-logo {
+    display: block;
+    width: min(100%, 300px);
+    max-height: min(42vh, 360px);
+    object-fit: contain;
+    filter:
+        drop-shadow(0 18px 32px rgba(0, 0, 0, 0.72))
+        drop-shadow(0 0 28px rgba(255, 47, 47, 0.3));
 }
 
 .rfd-command-hub .motherbrain-core-image {
     width: min(100%, 620px);
 }
 
-.rfd-node-card {
-    justify-items: start;
+.rfd-node-tile {
+    --node-rgb: 255, 47, 47;
+    --node-color: #ff4b2f;
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    max-width: 370px;
+    aspect-ratio: 216 / 72;
+    padding: 0 34px;
+    border: 0;
+    border-radius: 0;
+    color: var(--text);
+    background: url("../images/neobutton1_small.png") center / 100% 100% no-repeat;
+    filter:
+        drop-shadow(0 12px 16px rgba(0, 0, 0, 0.42))
+        drop-shadow(0 0 13px rgba(var(--node-rgb), 0.12));
+    text-align: center;
+    text-decoration: none;
+    transition:
+        filter 160ms ease,
+        transform 160ms ease,
+        box-shadow 160ms ease;
+}
+
+.rfd-node-column .rfd-node-tile {
+    max-width: none;
+}
+
+.rfd-node-tile::before,
+.rfd-node-tile::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.rfd-node-tile::before {
+    z-index: -1;
+    inset: 14% 8%;
+    background:
+        radial-gradient(circle at 50% 50%, rgba(var(--node-rgb), 0.36), transparent 58%),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.1), transparent 20% 80%, rgba(var(--node-rgb), 0.12));
+    filter: blur(16px);
+    opacity: 0;
+    transition: opacity 160ms ease, filter 160ms ease;
+}
+
+.rfd-node-tile::after {
+    z-index: 0;
+    inset: 18% 11%;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 34%, rgba(var(--node-rgb), 0.08)),
+        radial-gradient(circle at 50% 84%, rgba(var(--node-rgb), 0.16), transparent 46%);
+    border-radius: 4px;
+    opacity: 0.52;
+    transition: opacity 160ms ease;
+}
+
+.rfd-node-name {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    line-height: 1;
+    font-size: clamp(1rem, 2.05vw, 1.42rem);
+    font-weight: 900;
+    letter-spacing: 0;
+    white-space: nowrap;
+}
+
+.rfd-node-prefix {
+    color: #f8fbff;
+    text-shadow:
+        0 0 10px rgba(255, 255, 255, 0.28),
+        0 2px 0 rgba(0, 0, 0, 0.9);
+}
+
+.rfd-node-suffix {
+    color: var(--node-color);
+    text-shadow:
+        0 0 10px rgba(var(--node-rgb), 0.54),
+        0 2px 0 rgba(0, 0, 0, 0.9);
+    transition: text-shadow 160ms ease, color 160ms ease;
+}
+
+.rfd-node-tile:hover {
+    filter:
+        brightness(1.12)
+        saturate(1.08)
+        drop-shadow(0 14px 18px rgba(0, 0, 0, 0.48))
+        drop-shadow(0 0 20px rgba(var(--node-rgb), 0.28))
+        drop-shadow(0 0 38px rgba(255, 47, 47, 0.12));
+    transform: translateY(-2px);
+}
+
+.rfd-node-tile:hover::before {
+    filter: blur(18px);
+    opacity: 0.42;
+}
+
+.rfd-node-tile:hover::after {
+    opacity: 0.72;
+}
+
+.rfd-node-tile:hover .rfd-node-prefix {
+    text-shadow:
+        0 0 14px rgba(255, 255, 255, 0.46),
+        0 0 22px rgba(255, 255, 255, 0.18),
+        0 2px 0 rgba(0, 0, 0, 0.9);
+}
+
+.rfd-node-tile:hover .rfd-node-suffix {
+    text-shadow:
+        0 0 14px rgba(var(--node-rgb), 0.78),
+        0 0 26px rgba(var(--node-rgb), 0.42),
+        0 2px 0 rgba(0, 0, 0, 0.9);
+}
+
+.rfd-node-disabled {
+    opacity: 0.8;
+    cursor: default;
+    filter: saturate(0.78);
+}
+
+.rfd-node-motherbrain {
+    --node-rgb: 255, 91, 42;
+    --node-color: #ff642f;
+}
+
+.rfd-motherbrain-launch {
+    width: min(100%, 420px);
+}
+
+.rfd-node-sektor {
+    --node-rgb: 255, 63, 32;
+    --node-color: #ff452a;
+}
+
+.rfd-node-scorpion {
+    --node-rgb: 255, 202, 48;
+    --node-color: #ffca30;
+}
+
+.rfd-node-reptile {
+    --node-rgb: 82, 225, 104;
+    --node-color: #52e168;
+}
+
+.rfd-node-ermac {
+    --node-rgb: 212, 24, 48;
+    --node-color: #d41830;
+}
+
+.rfd-node-subzero {
+    --node-rgb: 113, 218, 255;
+    --node-color: #71daff;
+}
+
+.rfd-node-rain {
+    --node-rgb: 179, 102, 255;
+    --node-color: #b366ff;
 }
 
 .rfd-node-logo {
     display: block;
-    width: min(100%, 260px);
-    max-height: 90px;
+    width: min(100%, 280px);
+    max-height: 82px;
     object-fit: contain;
     filter:
         drop-shadow(0 12px 22px rgba(0, 0, 0, 0.72))
@@ -1167,6 +1378,25 @@ h2 {
     .motherbrain-command {
         gap: 20px;
         min-height: 0;
+    }
+
+    .rfd-command-layout {
+        grid-template-columns: 1fr;
+        justify-items: center;
+    }
+
+    .rfd-node-menu,
+    .rfd-node-grid {
+        width: 100%;
+    }
+
+    .rfd-node-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .rfd-node-tile {
+        max-width: 420px;
+        margin-inline: auto;
     }
 
     .neoapp-rail {

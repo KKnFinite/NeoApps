@@ -1,35 +1,59 @@
 {% extends "base.html" %}
 
+{% macro node_label(name) -%}
+<span class="rfd-node-name"><span class="rfd-node-prefix">Neo</span><span class="rfd-node-suffix">{{ name }}</span></span>
+{%- endmacro %}
+
 {% block title %}{{ gateway.name }} Command Hub | NeoGateway{% endblock %}
 
 {% block content %}
-<section class="motherbrain-core rfd-command-hub" aria-label="{{ gateway.name }} command hub">
-    <div class="motherbrain-core-image">
-        <img class="gateway-logo" src="{{ url_for('static', filename=default_gateway.logo) }}" alt="{{ gateway.name }}" />
-    </div>
-</section>
+<section class="motherbrain-command rfd-command-layout" aria-label="{{ gateway.name }} command hub">
+    <section class="rfd-node-menu" aria-label="{{ gateway.name }} NeoNode launcher">
+        {% if can_enter_motherbrain %}
+        <a class="rfd-node-tile rfd-node-motherbrain rfd-motherbrain-launch" href="{{ url_for('neomotherbrain.motherbrain') }}" aria-label="NeoMotherBrain">
+            {{ node_label("MotherBrain") }}
+        </a>
+        {% else %}
+        <article class="rfd-node-tile rfd-node-disabled rfd-node-motherbrain rfd-motherbrain-launch" aria-disabled="true" aria-label="NeoMotherBrain">
+            {{ node_label("MotherBrain") }}
+        </article>
+        {% endif %}
 
-<section class="command-card-grid" aria-label="{{ gateway.name }} NeoNodes">
-    {% if can_enter_motherbrain %}
-    <a class="command-card command-card-link" href="{{ url_for('neomotherbrain.motherbrain') }}">
-        <span class="node-light"></span>
-        <h2>NeoMotherBrain</h2>
-        <p>Nightly operations, master schedule data, access controls, and board management.</p>
-    </a>
-    {% else %}
-    <article class="command-card command-card-disabled" aria-disabled="true">
-        <span class="node-light"></span>
-        <h2>NeoMotherBrain</h2>
-        <p>Simulator access or higher is required until watcher-safe MotherBrain views exist.</p>
-    </article>
-    {% endif %}
+        <div class="rfd-node-grid" aria-label="{{ gateway.name }} NeoNodes">
+            <div class="rfd-node-column rfd-node-column-left" aria-label="{{ gateway.name }} left NeoNodes">
+                {% if can_launch_sektor %}
+                <a class="rfd-node-tile rfd-node-sektor" href="{{ url_for('neomotherbrain.sektor_launch') }}" aria-label="NeoSektor">
+                    {{ node_label("Sektor") }}
+                </a>
+                {% else %}
+                <article class="rfd-node-tile rfd-node-disabled rfd-node-sektor" aria-disabled="true" aria-label="NeoSektor">
+                    {{ node_label("Sektor") }}
+                </article>
+                {% endif %}
+                <article class="rfd-node-tile rfd-node-placeholder rfd-node-reptile" aria-disabled="true" aria-label="NeoReptile">
+                    {{ node_label("Reptile") }}
+                </article>
+                <article class="rfd-node-tile rfd-node-placeholder rfd-node-rain" aria-disabled="true" aria-label="NeoRain">
+                    {{ node_label("Rain") }}
+                </article>
+            </div>
 
-    {% if can_launch_sektor %}
-    <a class="command-card command-card-link rfd-node-card" href="{{ url_for('neomotherbrain.sektor_launch') }}">
-        <span class="node-light"></span>
-        <img class="rfd-node-logo" src="{{ url_for('static', filename='images/neosektor_logo1.png') }}" alt="NeoSektor logo">
-        <p>Launch the protected NeoSektor workspace.</p>
-    </a>
-    {% endif %}
+            <div class="rfd-hub-logo" aria-label="{{ gateway.name }} logo">
+                <img class="gateway-logo" src="{{ url_for('static', filename=default_gateway.logo) }}" alt="{{ gateway.name }}" />
+            </div>
+
+            <div class="rfd-node-column rfd-node-column-right" aria-label="{{ gateway.name }} right NeoNodes">
+                <article class="rfd-node-tile rfd-node-placeholder rfd-node-ermac" aria-disabled="true" aria-label="NeoErmac">
+                    {{ node_label("Ermac") }}
+                </article>
+                <article class="rfd-node-tile rfd-node-placeholder rfd-node-subzero" aria-disabled="true" aria-label="NeoSubZero">
+                    {{ node_label("SubZero") }}
+                </article>
+                <article class="rfd-node-tile rfd-node-placeholder rfd-node-scorpion" aria-disabled="true" aria-label="NeoScorpion">
+                    {{ node_label("Scorpion") }}
+                </article>
+            </div>
+        </div>
+    </section>
 </section>
 {% endblock %}

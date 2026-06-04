@@ -304,17 +304,24 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertEqual(blocked.location, "/change-password")
         self.assertEqual(change_response.status_code, 302)
 
-    def test_grandmaster_only_links_do_not_appear_for_master(self):
+    def test_system_links_live_in_motherbrain_not_rfd_hub(self):
         master = self._admin("link_master", "master")
         db.session.commit()
         self._login(master.username)
 
-        response = self.client.get("/rfd")
+        rfd_response = self.client.get("/rfd")
+        motherbrain_response = self.client.get("/motherbrain")
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Access Requests", response.data)
-        self.assertNotIn(b"User Management", response.data)
-        self.assertNotIn(b'href="/admin/users"', response.data)
+        self.assertEqual(rfd_response.status_code, 200)
+        self.assertNotIn(b"Access Requests", rfd_response.data)
+        self.assertNotIn(b"User Management", rfd_response.data)
+        self.assertNotIn(b"Nightly Operations", rfd_response.data)
+        self.assertNotIn(b"Master Schedule", rfd_response.data)
+        self.assertNotIn(b'href="/admin/users"', rfd_response.data)
+        self.assertEqual(motherbrain_response.status_code, 200)
+        self.assertIn(b"Access Requests", motherbrain_response.data)
+        self.assertNotIn(b"User Management", motherbrain_response.data)
+        self.assertNotIn(b'href="/admin/users"', motherbrain_response.data)
 
     def test_kessler_style_grandmaster_login_reaches_user_management(self):
         kessler = self._admin("Kessler", "grandmaster")
