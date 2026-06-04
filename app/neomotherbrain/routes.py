@@ -1,4 +1,5 @@
 from datetime import date, datetime
+import re
 
 from flask import current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -868,10 +869,13 @@ def _active_days_set(active_days):
 
 
 def _parse_time(value, label):
+    value = (value or "").strip()
+    if not re.fullmatch(r"([01][0-9]|2[0-3]):[0-5][0-9]", value):
+        raise ValueError(f"{label} must use HH:MM military format.")
     try:
         return datetime.strptime(value, "%H:%M").time()
     except (TypeError, ValueError):
-        raise ValueError(f"{label} must use HH:MM format.") from None
+        raise ValueError(f"{label} must use HH:MM military format.") from None
 
 
 def _parse_optional_time(value, label):
@@ -1179,10 +1183,12 @@ def _parse_optional_datetime(value, label):
     value = (value or "").strip()
     if not value:
         return None
+    if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2} ([01][0-9]|2[0-3]):[0-5][0-9]", value):
+        raise ValueError(f"{label} must use YYYY-MM-DD HH:MM military format.")
     try:
-        return datetime.fromisoformat(value)
+        return datetime.strptime(value, "%Y-%m-%d %H:%M")
     except ValueError:
-        raise ValueError(f"{label} must use YYYY-MM-DDTHH:MM format.") from None
+        raise ValueError(f"{label} must use YYYY-MM-DD HH:MM military format.") from None
 
 
 def _format_datetime_local(value):

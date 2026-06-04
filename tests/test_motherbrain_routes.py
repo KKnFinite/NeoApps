@@ -293,8 +293,23 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(master.planned_time_local, time(23, 45))
         self.assertEqual(master.pure_pull_time_local, time(20, 10))
-        self.assertIn(b'type="time" name="row_0_planned_time_local"', form_response.data)
-        self.assertIn(b'type="time" name="row_0_pure_pull_time_local"', form_response.data)
+        self.assertIn(b'class="military-time-input"', form_response.data)
+        self.assertIn(b'type="text" name="row_0_planned_time_local"', form_response.data)
+        self.assertIn(b'placeholder="HH:MM"', form_response.data)
+        self.assertNotIn(b'type="time"', form_response.data)
+
+    def test_master_schedule_rejects_non_military_time(self):
+        response = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(
+                flight_number="BADTIME",
+                planned_time_local="9:30",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"Planned time must use HH:MM military format.", response.data)
+        self.assertIsNone(MasterFlightSchedule.query.filter_by(flight_number="BADTIME").first())
 
     def test_master_schedule_timezone_is_not_selectable_and_uses_gateway_timezone(self):
         response = self.client.post(

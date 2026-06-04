@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "neomotherbrain/_time_inputs.html" import military_time_input %}
 
 {% set is_bulk_edit = mode == "bulk_edit" %}
 {% set page_title = "Edit Master Flights" if is_bulk_edit else ("Edit Master Flight" if mode == "edit" else "Add Master Flights") %}
@@ -49,16 +50,16 @@
         </div>
     </td>
     <td>
-        <input type="time" name="row_{{ row.index }}_planned_time_local" value="{{ row.planned_time_local }}">
+        {{ military_time_input("row_" ~ row.index ~ "_planned_time_local", row.planned_time_local) }}
     </td>
     <td>
-        <input type="time" name="row_{{ row.index }}_pure_pull_time_local" value="{{ row.pure_pull_time_local }}">
+        {{ military_time_input("row_" ~ row.index ~ "_pure_pull_time_local", row.pure_pull_time_local) }}
     </td>
     <td>
-        <input type="time" name="row_{{ row.index }}_first_mix_pull_time_local" value="{{ row.first_mix_pull_time_local }}">
+        {{ military_time_input("row_" ~ row.index ~ "_first_mix_pull_time_local", row.first_mix_pull_time_local) }}
     </td>
     <td>
-        <input type="time" name="row_{{ row.index }}_final_mix_pull_time_local" value="{{ row.final_mix_pull_time_local }}">
+        {{ military_time_input("row_" ~ row.index ~ "_final_mix_pull_time_local", row.final_mix_pull_time_local) }}
     </td>
     <td>
         <button class="table-row-button" type="button" data-remove-schedule-row>Remove</button>
@@ -158,7 +159,7 @@
 
         const row = button.closest("tr");
         if (tbody.querySelectorAll("tr").length === 1) {
-            row.querySelectorAll("input[type='text'], input[type='time']").forEach((input) => {
+            row.querySelectorAll("input[type='text']").forEach((input) => {
                 input.value = "";
             });
             row.querySelectorAll("input[type='checkbox']").forEach((input) => {
@@ -173,4 +174,5 @@
     });
 })();
 </script>
+{% include "neomotherbrain/_military_time_script.html" %}
 {% endblock %}
