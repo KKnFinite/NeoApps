@@ -44,15 +44,15 @@
         </label>
         <label>
             <span>ETA UTC</span>
-            <input type="datetime-local" name="eta_datetime_utc" value="{{ form.eta_datetime_utc }}">
+            <input type="text" name="eta_datetime_utc" value="{{ form.eta_datetime_utc }}" placeholder="YYYY-MM-DD HH:MM" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}">
         </label>
         <label>
             <span>Actual Block In UTC</span>
-            <input type="datetime-local" name="actual_block_in_datetime_utc" value="{{ form.actual_block_in_datetime_utc }}">
+            <input type="text" name="actual_block_in_datetime_utc" value="{{ form.actual_block_in_datetime_utc }}" placeholder="YYYY-MM-DD HH:MM" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}">
         </label>
         <label>
             <span>Actual Block Out UTC</span>
-            <input type="datetime-local" name="actual_block_out_datetime_utc" value="{{ form.actual_block_out_datetime_utc }}">
+            <input type="text" name="actual_block_out_datetime_utc" value="{{ form.actual_block_out_datetime_utc }}" placeholder="YYYY-MM-DD HH:MM" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}">
         </label>
         <label>
             <span>Planned Fuel Load</span>

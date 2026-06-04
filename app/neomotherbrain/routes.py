@@ -1186,7 +1186,7 @@ def _parse_optional_datetime(value, label):
 
 
 def _format_datetime_local(value):
-    return value.strftime("%Y-%m-%dT%H:%M") if value else ""
+    return value.strftime("%Y-%m-%d %H:%M") if value else ""
 
 
 def _planned_datetime_utc_for_mission(planned_datetime_local, timezone):
