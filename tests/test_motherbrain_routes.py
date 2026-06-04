@@ -155,10 +155,25 @@ class MotherBrainRoutesTest(unittest.TestCase):
         ):
             self.assertIn(b'<option value="' + value + b'"', response.data)
             self.assertIn(b">" + label + b"</option>", response.data)
-        self.assertIn(b">Arrival</button>", response.data)
-        self.assertIn(b">Departure</button>", response.data)
+        self.assertIn(b">Arrival</a>", response.data)
+        self.assertIn(b">Departure</a>", response.data)
         self.assertNotIn(b">arrival</option>", response.data)
         self.assertNotIn(b">departure</option>", response.data)
+
+    def test_add_master_schedule_arrival_mode_does_not_render_pull_time_fields(self):
+        response = self.client.get("/motherbrain/master-schedule/new?mission_type=arrival")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-master-mode="arrival" aria-selected="true"', html)
+        self.assertIn(">STA</span>", html)
+        self.assertIn(b"Save Arrival", response.data)
+        self.assertNotIn(b"Pure Pull", response.data)
+        self.assertNotIn(b"First Mix Pull", response.data)
+        self.assertNotIn(b"Final Mix Pull", response.data)
+        self.assertNotIn(b"pure_pull_time_local_hour", response.data)
+        self.assertNotIn(b"first_mix_pull_time_local_hour", response.data)
+        self.assertNotIn(b"final_mix_pull_time_local_hour", response.data)
 
     def test_master_schedule_arrival_mode_hides_pull_time_fields(self):
         master = self._add_master(
@@ -176,7 +191,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn('data-master-mode="arrival" aria-selected="true"', html)
         self.assertIn(">STA</span>", html)
         self.assertIn(b"Save Arrival", response.data)
-        self.assertEqual(html.count("<label data-departure-only hidden"), 3)
+        self.assertNotIn(b"Pure Pull", response.data)
+        self.assertNotIn(b"First Mix Pull", response.data)
+        self.assertNotIn(b"Final Mix Pull", response.data)
+        self.assertNotIn(b"pure_pull_time_local_hour", response.data)
+        self.assertNotIn(b"first_mix_pull_time_local_hour", response.data)
+        self.assertNotIn(b"final_mix_pull_time_local_hour", response.data)
 
     def test_master_schedule_departure_mode_shows_pull_time_fields(self):
         response = self.client.get("/motherbrain/master-schedule/new")
@@ -186,7 +206,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn('data-master-mode="departure" aria-selected="true"', html)
         self.assertIn(">STD</span>", html)
         self.assertIn(b"Save Departure", response.data)
-        self.assertEqual(html.count("<label data-departure-only >"), 3)
+        self.assertEqual(html.count('class="master-pull-field" data-departure-only'), 3)
         self.assertNotIn("data-departure-only hidden", html)
         self.assertIn(b"Pure Pull", response.data)
         self.assertIn(b"First Mix Pull", response.data)
@@ -593,6 +613,42 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(mission.final_mix_pull_time_local, time(1, 55))
         self.assertEqual(mission.pull_time_source, "manual")
         self.assertEqual(mission.departure_status, "loading")
+
+    def test_arrival_mission_form_does_not_render_pull_time_fields(self):
+        operation = self._operation()
+        db.session.add(operation)
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="ARRFORM",
+            origin="SDF",
+            destination="RFD",
+        )
+        db.session.add(mission)
+        db.session.commit()
+
+        response = self.client.get(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/edit"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"Pure Pull", response.data)
+        self.assertNotIn(b"First Mix Pull", response.data)
+        self.assertNotIn(b"Final Mix Pull", response.data)
+        self.assertNotIn(b"pure_pull_time_local_hour", response.data)
+
+    def test_departure_mission_form_renders_pull_time_fields(self):
+        operation = self._operation()
+        db.session.add(operation)
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/missions/new")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Pure Pull", response.data)
+        self.assertIn(b"First Mix Pull", response.data)
+        self.assertIn(b"Final Mix Pull", response.data)
+        self.assertIn(b"pure_pull_time_local_hour", response.data)
 
     def test_duplicate_mission_flight_number_is_rejected_inside_operation(self):
         operation = self._operation()

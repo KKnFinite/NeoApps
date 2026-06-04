@@ -159,7 +159,11 @@ def new_master_schedule():
         flash(f"{len(created_schedules)} master flight schedule row(s) created.", "info")
         return redirect(url_for("neomotherbrain.master_schedule"))
 
-    form = _master_schedule_form_from_request(gateway)
+    form = (
+        _master_schedule_form_from_request(gateway)
+        if request.method == "POST"
+        else _master_schedule_form_for_get(gateway)
+    )
 
     if request.method == "POST":
         master_schedule = MasterFlightSchedule()
@@ -269,7 +273,7 @@ def edit_master_schedule(master_id):
     form = (
         _master_schedule_form_from_request(gateway)
         if request.method == "POST"
-        else _master_schedule_form_from_model(master_schedule)
+        else _master_schedule_form_for_get(gateway, master_schedule)
     )
 
     if request.method == "POST":
@@ -644,6 +648,22 @@ def _master_schedule_form_from_request(gateway=None, prefix="", source=None):
         ),
         "active": source.get(f"{prefix}active", active_default) == "1",
     }
+
+
+def _master_schedule_form_for_get(gateway=None, master_schedule=None):
+    form = (
+        _master_schedule_form_from_model(master_schedule)
+        if master_schedule
+        else _blank_master_schedule_form(gateway)
+    )
+    requested_mission_type = request.args.get("mission_type", "").strip().lower()
+    if requested_mission_type in MISSION_TYPES:
+        form["mission_type"] = requested_mission_type
+    if form["mission_type"] == "arrival":
+        form["pure_pull_time_local"] = ""
+        form["first_mix_pull_time_local"] = ""
+        form["final_mix_pull_time_local"] = ""
+    return form
 
 
 def _master_schedule_form_from_model(master_schedule):

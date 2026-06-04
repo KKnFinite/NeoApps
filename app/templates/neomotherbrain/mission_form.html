@@ -75,6 +75,7 @@
                 {% endfor %}
             </select>
         </label>
+        {% if form.mission_type == "departure" %}
         <label data-mission-departure-only>
             <span>Pure Pull</span>
             {{ military_time_select("pure_pull_time_local", form.pure_pull_time_local) }}
@@ -87,6 +88,7 @@
             <span>Final Mix Pull</span>
             {{ military_time_select("final_mix_pull_time_local", form.final_mix_pull_time_local) }}
         </label>
+        {% endif %}
 
         <div class="action-row">
             <button class="action-button" type="submit">{{ "Save" if mode == "edit" else "Create" }}</button>
