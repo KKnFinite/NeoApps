@@ -1,7 +1,33 @@
-{% macro military_time_input(name, value="", required=False) %}
-<input class="military-time-input" type="text" name="{{ name }}" value="{{ value }}" inputmode="numeric" placeholder="HH:MM" maxlength="5" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" autocomplete="off" {% if required %}required{% endif %}>
+{% macro military_time_select(name, value="", required=False) %}
+{% set raw_value = value or "" %}
+{% set has_value = raw_value|length == 5 and raw_value[2] == ":" %}
+{% set selected_hour = raw_value[:2] if has_value else "" %}
+{% set selected_minute = raw_value[3:] if has_value else "" %}
+<div class="military-time-select" aria-label="{{ name|replace('_', ' ') }}">
+    <select name="{{ name }}_hour" aria-label="Hour" {% if required %}required{% endif %}>
+        <option value="" {% if not selected_hour %}selected{% endif %}>HH</option>
+        {% for hour in range(24) %}
+        {% set option = "%02d"|format(hour) %}
+        <option value="{{ option }}" {% if option == selected_hour %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+    </select>
+    <span class="military-time-separator">:</span>
+    <select name="{{ name }}_minute" aria-label="Minute" {% if required %}required{% endif %}>
+        <option value="" {% if not selected_minute %}selected{% endif %}>MM</option>
+        {% for minute in range(60) %}
+        {% set option = "%02d"|format(minute) %}
+        <option value="{{ option }}" {% if option == selected_minute %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+    </select>
+</div>
 {% endmacro %}
 
 {% macro military_datetime_input(name, value="") %}
-<input class="military-datetime-input" type="text" name="{{ name }}" value="{{ value }}" inputmode="numeric" placeholder="YYYY-MM-DD HH:MM" maxlength="16" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2} ([01][0-9]|2[0-3]):[0-5][0-9]" autocomplete="off">
+{% set raw_value = value or "" %}
+{% set date_value = raw_value[:10] if raw_value|length >= 10 else "" %}
+{% set time_value = raw_value[11:16] if raw_value|length >= 16 else "" %}
+<div class="military-datetime-control">
+    <input class="military-date-input" type="date" name="{{ name }}_date" value="{{ date_value }}" autocomplete="off">
+    {{ military_time_select(name, time_value) }}
+</div>
 {% endmacro %}

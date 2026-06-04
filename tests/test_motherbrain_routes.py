@@ -293,9 +293,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(master.planned_time_local, time(23, 45))
         self.assertEqual(master.pure_pull_time_local, time(20, 10))
-        self.assertIn(b'class="military-time-input"', form_response.data)
-        self.assertIn(b'type="text" name="row_0_planned_time_local"', form_response.data)
-        self.assertIn(b'placeholder="HH:MM"', form_response.data)
+        self.assertIn(b'class="military-time-select"', form_response.data)
+        self.assertIn(b'name="row_0_planned_time_local_hour"', form_response.data)
+        self.assertIn(b'name="row_0_planned_time_local_minute"', form_response.data)
         self.assertNotIn(b'type="time"', form_response.data)
 
     def test_master_schedule_rejects_non_military_time(self):

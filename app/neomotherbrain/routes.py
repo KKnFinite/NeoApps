@@ -625,11 +625,23 @@ def _master_schedule_form_from_request(gateway=None, prefix="", source=None):
         "origin": source.get(f"{prefix}origin", ""),
         "destination": source.get(f"{prefix}destination", ""),
         "active_days": set(source.getlist(f"{prefix}active_days")),
-        "planned_time_local": source.get(f"{prefix}planned_time_local", ""),
+        "planned_time_local": _time_value_from_form(
+            source,
+            f"{prefix}planned_time_local",
+        ),
         "timezone": _gateway_timezone(gateway),
-        "pure_pull_time_local": source.get(f"{prefix}pure_pull_time_local", ""),
-        "first_mix_pull_time_local": source.get(f"{prefix}first_mix_pull_time_local", ""),
-        "final_mix_pull_time_local": source.get(f"{prefix}final_mix_pull_time_local", ""),
+        "pure_pull_time_local": _time_value_from_form(
+            source,
+            f"{prefix}pure_pull_time_local",
+        ),
+        "first_mix_pull_time_local": _time_value_from_form(
+            source,
+            f"{prefix}first_mix_pull_time_local",
+        ),
+        "final_mix_pull_time_local": _time_value_from_form(
+            source,
+            f"{prefix}final_mix_pull_time_local",
+        ),
         "active": source.get(f"{prefix}active", active_default) == "1",
     }
 
@@ -886,6 +898,33 @@ def _parse_optional_time(value, label):
     return _parse_time(value, label)
 
 
+def _time_value_from_form(source, name):
+    direct_value = (source.get(name, "") or "").strip()
+    if direct_value:
+        return direct_value
+
+    hour = (source.get(f"{name}_hour", "") or "").strip()
+    minute = (source.get(f"{name}_minute", "") or "").strip()
+    if not hour and not minute:
+        return ""
+
+    return f"{hour}:{minute}"
+
+
+def _datetime_value_from_form(source, name):
+    direct_value = (source.get(name, "") or "").strip()
+    if direct_value:
+        return direct_value
+
+    date_value = (source.get(f"{name}_date", "") or "").strip()
+    time_value = _time_value_from_form(source, name)
+    if not date_value and not time_value:
+        return ""
+    if date_value and time_value:
+        return f"{date_value} {time_value}"
+    return f"{date_value} {time_value}".strip()
+
+
 def _format_time(value):
     return value.strftime("%H:%M") if value else ""
 
@@ -929,17 +968,32 @@ def _mission_form_from_request(operation):
         "origin": request.form.get("origin", ""),
         "destination": request.form.get("destination", ""),
         "assigned_tail_number": request.form.get("assigned_tail_number", ""),
-        "planned_time_local": request.form.get("planned_time_local", ""),
+        "planned_time_local": _time_value_from_form(request.form, "planned_time_local"),
         "timezone": request.form.get("timezone", "America/Chicago"),
-        "eta_datetime_utc": request.form.get("eta_datetime_utc", ""),
-        "actual_block_in_datetime_utc": request.form.get("actual_block_in_datetime_utc", ""),
-        "actual_block_out_datetime_utc": request.form.get("actual_block_out_datetime_utc", ""),
+        "eta_datetime_utc": _datetime_value_from_form(request.form, "eta_datetime_utc"),
+        "actual_block_in_datetime_utc": _datetime_value_from_form(
+            request.form,
+            "actual_block_in_datetime_utc",
+        ),
+        "actual_block_out_datetime_utc": _datetime_value_from_form(
+            request.form,
+            "actual_block_out_datetime_utc",
+        ),
         "planned_fuel_load": request.form.get("planned_fuel_load", ""),
         "fuel_status": request.form.get("fuel_status", ""),
         "departure_status": request.form.get("departure_status", ""),
-        "pure_pull_time_local": request.form.get("pure_pull_time_local", ""),
-        "first_mix_pull_time_local": request.form.get("first_mix_pull_time_local", ""),
-        "final_mix_pull_time_local": request.form.get("final_mix_pull_time_local", ""),
+        "pure_pull_time_local": _time_value_from_form(
+            request.form,
+            "pure_pull_time_local",
+        ),
+        "first_mix_pull_time_local": _time_value_from_form(
+            request.form,
+            "first_mix_pull_time_local",
+        ),
+        "final_mix_pull_time_local": _time_value_from_form(
+            request.form,
+            "final_mix_pull_time_local",
+        ),
     }
 
 

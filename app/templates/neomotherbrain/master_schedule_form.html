@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "neomotherbrain/_time_inputs.html" import military_time_input %}
+{% from "neomotherbrain/_time_inputs.html" import military_time_select %}
 
 {% set is_bulk_edit = mode == "bulk_edit" %}
 {% set is_single_entry = not is_bulk_edit %}
@@ -52,10 +52,10 @@
         <input class="airport-code-input" type="text" name="row_{{ row.index }}_destination" value="{{ row.destination }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
     </td>
     <td>{{ active_days_field(row) }}</td>
-    <td>{{ military_time_input("row_" ~ row.index ~ "_planned_time_local", row.planned_time_local) }}</td>
-    <td>{{ military_time_input("row_" ~ row.index ~ "_pure_pull_time_local", row.pure_pull_time_local) }}</td>
-    <td>{{ military_time_input("row_" ~ row.index ~ "_first_mix_pull_time_local", row.first_mix_pull_time_local) }}</td>
-    <td>{{ military_time_input("row_" ~ row.index ~ "_final_mix_pull_time_local", row.final_mix_pull_time_local) }}</td>
+    <td>{{ military_time_select("row_" ~ row.index ~ "_planned_time_local", row.planned_time_local) }}</td>
+    <td>{{ military_time_select("row_" ~ row.index ~ "_pure_pull_time_local", row.pure_pull_time_local) }}</td>
+    <td>{{ military_time_select("row_" ~ row.index ~ "_first_mix_pull_time_local", row.first_mix_pull_time_local) }}</td>
+    <td>{{ military_time_select("row_" ~ row.index ~ "_final_mix_pull_time_local", row.final_mix_pull_time_local) }}</td>
     <td>
         <button class="table-row-button" type="button" data-remove-schedule-row>Remove</button>
     </td>
@@ -103,19 +103,19 @@
     </label>
     <label>
         <span data-master-scheduled-label>{{ "STA" if row.mission_type == "arrival" else "STD" }}</span>
-        {{ military_time_input("row_" ~ row.index ~ "_planned_time_local", row.planned_time_local) }}
+        {{ military_time_select("row_" ~ row.index ~ "_planned_time_local", row.planned_time_local, True) }}
     </label>
     <label data-departure-only>
         <span>Pure Pull</span>
-        {{ military_time_input("row_" ~ row.index ~ "_pure_pull_time_local", row.pure_pull_time_local) }}
+        {{ military_time_select("row_" ~ row.index ~ "_pure_pull_time_local", row.pure_pull_time_local) }}
     </label>
     <label data-departure-only>
         <span>First Mix Pull</span>
-        {{ military_time_input("row_" ~ row.index ~ "_first_mix_pull_time_local", row.first_mix_pull_time_local) }}
+        {{ military_time_select("row_" ~ row.index ~ "_first_mix_pull_time_local", row.first_mix_pull_time_local) }}
     </label>
     <label data-departure-only>
         <span>Final Mix Pull</span>
-        {{ military_time_input("row_" ~ row.index ~ "_final_mix_pull_time_local", row.final_mix_pull_time_local) }}
+        {{ military_time_select("row_" ~ row.index ~ "_final_mix_pull_time_local", row.final_mix_pull_time_local) }}
     </label>
 </div>
 {% endmacro %}
@@ -204,7 +204,7 @@
         });
         document.querySelectorAll("[data-departure-only]").forEach((field) => {
             field.hidden = mode === "arrival";
-            field.querySelectorAll("input").forEach((input) => {
+            field.querySelectorAll("select").forEach((input) => {
                 if (mode === "arrival") {
                     input.value = "";
                 }
@@ -250,6 +250,9 @@
             row.querySelectorAll("input[type='text']").forEach((input) => {
                 input.value = "";
             });
+            row.querySelectorAll(".military-time-select select").forEach((select) => {
+                select.value = "";
+            });
             row.querySelectorAll("input[type='checkbox']").forEach((input) => {
                 input.checked = input.name.endsWith("_active");
             });
@@ -262,5 +265,4 @@
     });
 })();
 </script>
-{% include "neomotherbrain/_military_time_script.html" %}
 {% endblock %}
