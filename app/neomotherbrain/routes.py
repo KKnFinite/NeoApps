@@ -63,6 +63,7 @@ DEPARTURE_STATUSES = (
     "crew_load_complete",
     "blocked_out",
 )
+MASTER_SCHEDULE_BLANK_ROW_INDEX = "__index__"
 
 
 @bp.route("/")
@@ -132,16 +133,7 @@ def operations():
 @gateway_node_required("motherbrain")
 def master_schedule():
     gateway = get_current_gateway()
-    schedules = (
-        MasterFlightSchedule.query.filter_by(gateway_code=gateway.code)
-        .order_by(
-            MasterFlightSchedule.gateway_code.asc(),
-            MasterFlightSchedule.sort_name.asc(),
-            MasterFlightSchedule.mission_type.asc(),
-            MasterFlightSchedule.flight_number.asc(),
-        )
-        .all()
-    )
+    schedules = _master_schedules_for_gateway(gateway)
     return render_template(
         "neomotherbrain/master_schedule.html",
         schedules=schedules,
@@ -152,6 +144,20 @@ def master_schedule():
 @gateway_node_required("motherbrain")
 def new_master_schedule():
     gateway = get_current_gateway()
+    if request.method == "POST" and request.form.getlist("row_indexes"):
+        rows = _master_schedule_bulk_rows_from_request(gateway)
+        try:
+            created_schedules = _create_master_schedules_from_bulk_rows(rows, gateway)
+        except ValueError as error:
+            db.session.rollback()
+            flash(str(error), "error")
+            return _render_master_schedule_form(rows=rows, mode="new"), 400
+
+        db.session.add_all(created_schedules)
+        db.session.commit()
+        flash(f"{len(created_schedules)} master flight schedule row(s) created.", "info")
+        return redirect(url_for("neomotherbrain.master_schedule"))
+
     form = _master_schedule_form_from_request(gateway)
 
     if request.method == "POST":
@@ -173,7 +179,50 @@ def new_master_schedule():
             )
         )
 
-    return _render_master_schedule_form(form, "new")
+    return _render_master_schedule_form(
+        rows=[_master_schedule_row_from_form(form, 0)],
+        mode="new",
+    )
+
+
+@bp.route("/motherbrain/master-schedule/bulk-edit", methods=["GET", "POST"])
+@gateway_node_required("motherbrain")
+def bulk_edit_master_schedule():
+    gateway = get_current_gateway()
+    schedules = _master_schedules_for_gateway(gateway)
+
+    if request.method == "POST":
+        rows = _master_schedule_bulk_rows_from_request(gateway)
+        try:
+            updated_count, created_count = _apply_master_schedule_bulk_edit(
+                rows,
+                schedules,
+                gateway,
+            )
+        except ValueError as error:
+            db.session.rollback()
+            flash(str(error), "error")
+            return _render_master_schedule_form(rows=rows, mode="bulk_edit"), 400
+
+        db.session.commit()
+        flash(
+            f"Master schedule saved: {updated_count} updated, {created_count} created.",
+            "info",
+        )
+        return redirect(url_for("neomotherbrain.master_schedule"))
+
+    rows = [
+        _master_schedule_row_from_form(
+            _master_schedule_form_from_model(schedule),
+            index,
+            schedule.id,
+        )
+        for index, schedule in enumerate(schedules)
+    ]
+    if not rows:
+        rows = [_master_schedule_row_from_form(_blank_master_schedule_form(gateway), 0)]
+
+    return _render_master_schedule_form(rows=rows, mode="bulk_edit")
 
 
 @bp.route("/motherbrain/master-schedule/<int:master_id>")
@@ -191,6 +240,31 @@ def master_schedule_detail(master_id):
 def edit_master_schedule(master_id):
     gateway = get_current_gateway()
     master_schedule = _master_schedule_or_404(master_id)
+    if request.method == "POST" and request.form.getlist("row_indexes"):
+        rows = _master_schedule_bulk_rows_from_request(gateway)
+        row = _first_master_schedule_row(rows)
+        row["id"] = str(master_schedule.id)
+        try:
+            _apply_master_schedule_form(master_schedule, row, gateway)
+            _raise_for_duplicate_active_master_schedule(master_schedule)
+        except ValueError as error:
+            db.session.rollback()
+            flash(str(error), "error")
+            return _render_master_schedule_form(
+                rows=rows,
+                mode="edit",
+                master_schedule=master_schedule,
+            ), 400
+
+        db.session.commit()
+        flash("Master flight schedule updated.", "info")
+        return redirect(
+            url_for(
+                "neomotherbrain.master_schedule_detail",
+                master_id=master_schedule.id,
+            )
+        )
+
     form = (
         _master_schedule_form_from_request(gateway)
         if request.method == "POST"
@@ -214,7 +288,11 @@ def edit_master_schedule(master_id):
             )
         )
 
-    return _render_master_schedule_form(form, "edit", master_schedule)
+    return _render_master_schedule_form(
+        rows=[_master_schedule_row_from_form(form, 0, master_schedule.id)],
+        mode="edit",
+        master_schedule=master_schedule,
+    )
 
 
 @bp.route("/motherbrain/master-schedule/<int:master_id>/toggle-active", methods=["POST"])
@@ -502,35 +580,56 @@ def _master_schedule_or_404(master_id):
     ).first_or_404()
 
 
-def _render_master_schedule_form(form, mode, master_schedule=None):
+def _master_schedules_for_gateway(gateway):
+    return (
+        MasterFlightSchedule.query.filter_by(gateway_code=gateway.code)
+        .order_by(
+            MasterFlightSchedule.gateway_code.asc(),
+            MasterFlightSchedule.sort_name.asc(),
+            MasterFlightSchedule.mission_type.asc(),
+            MasterFlightSchedule.flight_number.asc(),
+        )
+        .all()
+    )
+
+
+def _render_master_schedule_form(form=None, mode="new", master_schedule=None, rows=None):
+    if rows is None:
+        rows = [_master_schedule_row_from_form(form, 0, master_schedule.id if master_schedule else None)]
+
     return render_template(
         "neomotherbrain/master_schedule_form.html",
         active_day_options=ACTIVE_DAY_OPTIONS,
-        form=form,
+        blank_row=_master_schedule_row_from_form(
+            _blank_master_schedule_form(get_current_gateway()),
+            MASTER_SCHEDULE_BLANK_ROW_INDEX,
+        ),
         master_schedule=master_schedule,
         mode=mode,
         mission_type_options=MISSION_TYPE_OPTIONS,
+        rows=rows,
         sort_name_options=SORT_NAME_OPTIONS,
     )
 
 
-def _master_schedule_form_from_request(gateway=None):
+def _master_schedule_form_from_request(gateway=None, prefix="", source=None):
+    source = source or request.form
     active_default = "1" if request.method != "POST" else "0"
-    gateway_code = gateway.code if gateway else request.form.get("gateway_code", "RFD")
+    gateway_code = gateway.code if gateway else source.get(f"{prefix}gateway_code", "RFD")
     return {
         "gateway_code": gateway_code,
-        "sort_name": request.form.get("sort_name", "night"),
-        "mission_type": request.form.get("mission_type", "departure"),
-        "flight_number": request.form.get("flight_number", ""),
-        "origin": request.form.get("origin", ""),
-        "destination": request.form.get("destination", ""),
-        "active_days": set(request.form.getlist("active_days")),
-        "planned_time_local": request.form.get("planned_time_local", ""),
+        "sort_name": source.get(f"{prefix}sort_name", "night"),
+        "mission_type": source.get(f"{prefix}mission_type", "departure"),
+        "flight_number": source.get(f"{prefix}flight_number", ""),
+        "origin": source.get(f"{prefix}origin", ""),
+        "destination": source.get(f"{prefix}destination", ""),
+        "active_days": set(source.getlist(f"{prefix}active_days")),
+        "planned_time_local": source.get(f"{prefix}planned_time_local", ""),
         "timezone": _gateway_timezone(gateway),
-        "pure_pull_time_local": request.form.get("pure_pull_time_local", ""),
-        "first_mix_pull_time_local": request.form.get("first_mix_pull_time_local", ""),
-        "final_mix_pull_time_local": request.form.get("final_mix_pull_time_local", ""),
-        "active": request.form.get("active", active_default) == "1",
+        "pure_pull_time_local": source.get(f"{prefix}pure_pull_time_local", ""),
+        "first_mix_pull_time_local": source.get(f"{prefix}first_mix_pull_time_local", ""),
+        "final_mix_pull_time_local": source.get(f"{prefix}final_mix_pull_time_local", ""),
+        "active": source.get(f"{prefix}active", active_default) == "1",
     }
 
 
@@ -550,6 +649,118 @@ def _master_schedule_form_from_model(master_schedule):
         "final_mix_pull_time_local": _format_time(master_schedule.final_mix_pull_time_local),
         "active": master_schedule.active,
     }
+
+
+def _blank_master_schedule_form(gateway=None):
+    gateway_code = gateway.code if gateway else "RFD"
+    return {
+        "gateway_code": gateway_code,
+        "sort_name": "night",
+        "mission_type": "departure",
+        "flight_number": "",
+        "origin": "",
+        "destination": "",
+        "active_days": set(),
+        "planned_time_local": "",
+        "timezone": _gateway_timezone(gateway),
+        "pure_pull_time_local": "",
+        "first_mix_pull_time_local": "",
+        "final_mix_pull_time_local": "",
+        "active": True,
+    }
+
+
+def _master_schedule_row_from_form(form, index, schedule_id=None):
+    row = dict(form or {})
+    row["index"] = str(index)
+    row["id"] = "" if schedule_id is None else str(schedule_id)
+    row["active_days"] = set(row.get("active_days") or ())
+    return row
+
+
+def _master_schedule_bulk_rows_from_request(gateway):
+    rows = []
+    for index in request.form.getlist("row_indexes"):
+        prefix = f"row_{index}_"
+        row = _master_schedule_form_from_request(gateway, prefix=prefix)
+        row["index"] = index
+        row["id"] = request.form.get(f"{prefix}id", "").strip()
+        rows.append(row)
+    return rows
+
+
+def _first_master_schedule_row(rows):
+    for row in rows:
+        if _master_schedule_row_has_data(row) or row.get("id"):
+            return row
+    raise ValueError("Add at least one master schedule row.")
+
+
+def _master_schedule_row_has_data(row):
+    return any(
+        (
+            (row.get("flight_number") or "").strip(),
+            (row.get("origin") or "").strip(),
+            (row.get("destination") or "").strip(),
+            (row.get("planned_time_local") or "").strip(),
+            (row.get("pure_pull_time_local") or "").strip(),
+            (row.get("first_mix_pull_time_local") or "").strip(),
+            (row.get("final_mix_pull_time_local") or "").strip(),
+            row.get("active_days"),
+        )
+    )
+
+
+def _create_master_schedules_from_bulk_rows(rows, gateway):
+    schedules = []
+    for row in rows:
+        if not _master_schedule_row_has_data(row):
+            continue
+
+        schedule = MasterFlightSchedule()
+        _apply_master_schedule_form(schedule, row, gateway)
+        schedules.append(schedule)
+
+    if not schedules:
+        raise ValueError("Add at least one master schedule row.")
+
+    _raise_for_duplicate_active_master_schedule_rows(schedules)
+    for schedule in schedules:
+        _raise_for_duplicate_active_master_schedule(schedule)
+    return schedules
+
+
+def _apply_master_schedule_bulk_edit(rows, schedules, gateway):
+    schedules_by_id = {str(schedule.id): schedule for schedule in schedules}
+    processed_schedules = []
+    created_schedules = []
+
+    for row in rows:
+        schedule_id = row.get("id", "").strip()
+        if not schedule_id and not _master_schedule_row_has_data(row):
+            continue
+
+        if schedule_id:
+            schedule = schedules_by_id.get(schedule_id)
+            if not schedule:
+                raise ValueError("Master schedule row was not found.")
+        else:
+            schedule = MasterFlightSchedule()
+            created_schedules.append(schedule)
+
+        _apply_master_schedule_form(schedule, row, gateway)
+        processed_schedules.append(schedule)
+
+    if not processed_schedules:
+        raise ValueError("Add at least one master schedule row.")
+
+    _raise_for_duplicate_active_master_schedule_rows(processed_schedules)
+    for schedule in processed_schedules:
+        _raise_for_duplicate_active_master_schedule(schedule)
+
+    db.session.add_all(created_schedules)
+    updated_count = len(processed_schedules) - len(created_schedules)
+    return updated_count, len(created_schedules)
 
 
 def _apply_master_schedule_form(master_schedule, form, gateway=None):
@@ -623,6 +834,25 @@ def _raise_for_duplicate_active_master_schedule(master_schedule):
             "An active master schedule row already exists for this "
             "gateway, sort, mission type, and flight number."
         )
+
+
+def _raise_for_duplicate_active_master_schedule_rows(schedules):
+    seen = {}
+    for schedule in schedules:
+        if not schedule.active:
+            continue
+
+        key = (
+            schedule.gateway_code,
+            schedule.sort_name,
+            schedule.mission_type,
+            schedule.flight_number,
+        )
+        if key in seen:
+            raise ValueError(
+                "Duplicate active master schedule rows are not allowed in the same save."
+            )
+        seen[key] = schedule.id
 
 
 def _active_days_value(active_days):

@@ -7,9 +7,11 @@
     {% if verified %}
     <div class="section-heading">
         <p class="eyebrow">Email Verified</p>
-        <h1>Verification Complete</h1>
+        <h1>{{ "Already Verified" if already_verified else "Verification Complete" }}</h1>
     </div>
-    <p class="hero-copy">Your email is verified. Access approval is still required before operational screens are available.</p>
+    <p class="hero-copy">
+        Your email is verified. Access approval is still required before operational screens are available.
+    </p>
     {% else %}
     <div class="section-heading">
         <p class="eyebrow">Verification Failed</p>

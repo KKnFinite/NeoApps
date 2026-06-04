@@ -247,7 +247,7 @@ class AccessControlTest(unittest.TestCase):
         response = client.get("/motherbrain")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"NeoMotherBrain", response.data)
+        self.assertIn(b'src="/static/images/motherbrain_logo1.png"', response.data)
 
     def test_approved_rfd_user_can_launch_neosektor(self):
         self._approved_user("sektor_launcher_user")

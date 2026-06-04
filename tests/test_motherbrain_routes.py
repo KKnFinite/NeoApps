@@ -54,14 +54,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
         html = response.data.decode()
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"NeoMotherBrain", response.data)
         self.assertIn(b'src="/static/images/motherbrain_logo1.png"', response.data)
-        self.assertIn(b'aria-label="NeoMotherBrain menu"', response.data)
+        self.assertIn(b'aria-label="MotherBrain menu"', response.data)
         self.assertNotIn(b'class="panel motherbrain-landing"', response.data)
         self.assertNotIn(b"action-button-secondary", response.data)
+        self.assertNotIn(b">NeoMotherBrain<", response.data)
         self.assertLess(
-            html.index("motherbrain-logo-stage"),
-            html.index('aria-label="NeoMotherBrain menu"'),
+            html.index("motherbrain-screen-logo"),
+            html.index('aria-label="MotherBrain menu"'),
         )
         self.assertNotIn(b'class="metric-grid"', response.data)
         self.assertNotIn(b"Master Schedule Rows", response.data)
@@ -83,6 +83,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "/motherbrain/operations/new",
             "/motherbrain/master-schedule",
             "/motherbrain/master-schedule/new",
+            "/motherbrain/master-schedule/bulk-edit",
             f"/motherbrain/operations/{operation.id}",
             f"/motherbrain/operations/{operation.id}/arrivals",
             f"/motherbrain/operations/{operation.id}/departures",
@@ -93,7 +94,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         for path in get_paths:
             with self.subTest(path=path):
-                self.assertEqual(self.client.get(path).status_code, 200)
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b'src="/static/images/motherbrain_logo1.png"', response.data)
+                self.assertNotIn(b">NeoMotherBrain<", response.data)
+                self.assertNotIn(b"<p class=\"eyebrow\">NeoMotherBrain</p>", response.data)
 
         response = self.client.post(
             f"/motherbrain/operations/{operation.id}/window",
@@ -137,7 +142,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         response = self.client.get("/motherbrain/master-schedule/new")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'<select name="sort_name" required>', response.data)
+        self.assertIn(b'<form class="master-schedule-bulk-form"', response.data)
+        self.assertIn(b"Add Another Row", response.data)
+        self.assertIn(b'<select name="row_0_sort_name">', response.data)
         self.assertNotIn(b'name="sort_name" value=', response.data)
         for value, label in (
             (b"night", b"Night"),
@@ -151,6 +158,82 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b">Departure</option>", response.data)
         self.assertNotIn(b">arrival</option>", response.data)
         self.assertNotIn(b">departure</option>", response.data)
+
+    def test_bulk_create_master_schedule_rows(self):
+        response = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._bulk_master_schedule_form_data(
+                {
+                    "flight_number": "BULK001",
+                    "origin": "rfd",
+                    "destination": "sdf",
+                    "planned_time_local": "01:10",
+                    "pure_pull_time_local": "00:40",
+                },
+                {
+                    "mission_type": "arrival",
+                    "flight_number": "BULK002",
+                    "origin": "sdf",
+                    "destination": "rfd",
+                    "planned_time_local": "03:20",
+                    "pure_pull_time_local": "01:10",
+                },
+            ),
+            follow_redirects=False,
+        )
+
+        departure = MasterFlightSchedule.query.filter_by(flight_number="BULK001").first()
+        arrival = MasterFlightSchedule.query.filter_by(flight_number="BULK002").first()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/motherbrain/master-schedule")
+        self.assertEqual(departure.origin, "RFD")
+        self.assertEqual(departure.destination, "SDF")
+        self.assertEqual(departure.pure_pull_time_local, time(0, 40))
+        self.assertEqual(arrival.mission_type, "arrival")
+        self.assertIsNone(arrival.pure_pull_time_local)
+
+    def test_bulk_edit_master_schedule_rows(self):
+        first = self._add_master(flight_number="EDITA1", active=True)
+        second = self._add_master(
+            flight_number="EDITA2",
+            mission_type="arrival",
+            origin="SDF",
+            destination="RFD",
+            active=True,
+        )
+        db.session.commit()
+
+        response = self.client.post(
+            "/motherbrain/master-schedule/bulk-edit",
+            data=self._bulk_master_schedule_form_data(
+                {
+                    "id": str(first.id),
+                    "flight_number": "EDITA1",
+                    "origin": "RFD",
+                    "destination": "ONT",
+                    "planned_time_local": "04:15",
+                    "active_days": ["monday", "friday"],
+                },
+                {
+                    "id": str(second.id),
+                    "mission_type": "departure",
+                    "flight_number": "EDITA2",
+                    "origin": "RFD",
+                    "destination": "SDF",
+                    "planned_time_local": "05:20",
+                    "first_mix_pull_time_local": "04:45",
+                },
+            ),
+            follow_redirects=False,
+        )
+
+        updated_first = db.session.get(MasterFlightSchedule, first.id)
+        updated_second = db.session.get(MasterFlightSchedule, second.id)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(updated_first.destination, "ONT")
+        self.assertEqual(updated_first.active_days, "monday,friday")
+        self.assertEqual(updated_second.mission_type, "departure")
+        self.assertEqual(updated_second.first_mix_pull_time_local, time(4, 45))
 
     def test_master_schedule_rejects_unknown_sort_name(self):
         response = self.client.post(
@@ -210,8 +293,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(master.planned_time_local, time(23, 45))
         self.assertEqual(master.pure_pull_time_local, time(20, 10))
-        self.assertIn(b'type="time" name="planned_time_local"', form_response.data)
-        self.assertIn(b'type="time" name="pure_pull_time_local"', form_response.data)
+        self.assertIn(b'type="time" name="row_0_planned_time_local"', form_response.data)
+        self.assertIn(b'type="time" name="row_0_pure_pull_time_local"', form_response.data)
 
     def test_master_schedule_timezone_is_not_selectable_and_uses_gateway_timezone(self):
         response = self.client.post(
@@ -844,6 +927,26 @@ class MotherBrainRoutesTest(unittest.TestCase):
         if active:
             values["active"] = "1"
         return values
+
+    def _bulk_master_schedule_form_data(self, *rows):
+        data = {"row_indexes": [str(index) for index in range(len(rows))]}
+        for index, overrides in enumerate(rows):
+            values = self._master_schedule_form_data(**overrides)
+            row_id = overrides.get("id", "")
+            active_days = values.pop("active_days", [])
+            active = values.pop("active", None)
+            values.pop("gateway_code", None)
+            values.pop("timezone", None)
+            values.pop("preferred_parking", None)
+
+            prefix = f"row_{index}_"
+            data[f"{prefix}id"] = row_id
+            for key, value in values.items():
+                data[f"{prefix}{key}"] = value
+            data[f"{prefix}active_days"] = active_days
+            if active:
+                data[f"{prefix}active"] = "1"
+        return data
 
     def _mission_form_data(self, **overrides):
         values = {

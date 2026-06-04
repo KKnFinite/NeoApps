@@ -928,13 +928,18 @@ h2 {
     gap: 22px;
 }
 
-.motherbrain-logo-stage {
+.motherbrain-screen-logo {
     display: grid;
     place-items: center;
     width: min(100%, 760px);
+    margin: 0 auto 22px;
 }
 
-.motherbrain-logo-stage img {
+.motherbrain-landing .motherbrain-screen-logo {
+    margin-bottom: 0;
+}
+
+.motherbrain-screen-logo img {
     display: block;
     width: min(100%, 680px);
     height: auto;
@@ -1092,6 +1097,110 @@ h2 {
 .operation-form textarea:focus {
     border-color: rgba(255, 47, 47, 0.78);
     box-shadow: 0 0 0 3px rgba(255, 47, 47, 0.12);
+}
+
+.master-schedule-panel {
+    padding: 22px;
+}
+
+.master-schedule-bulk-form {
+    display: grid;
+    gap: 18px;
+}
+
+.schedule-form-table {
+    min-width: 1720px;
+}
+
+.schedule-form-table th,
+.schedule-form-table td {
+    padding: 10px 8px;
+    vertical-align: top;
+}
+
+.schedule-form-table input,
+.schedule-form-table select {
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid rgba(235, 241, 246, 0.2);
+    border-radius: 4px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 47, 47, 0.04)),
+        rgba(3, 4, 6, 0.86);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.78rem;
+    padding: 8px 9px;
+    outline: none;
+}
+
+.schedule-form-table input:focus,
+.schedule-form-table select:focus {
+    border-color: rgba(255, 47, 47, 0.78);
+    box-shadow: 0 0 0 3px rgba(255, 47, 47, 0.12);
+}
+
+.compact-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: #d8dde2;
+    font-size: 0.74rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.compact-check input {
+    width: 16px;
+    min-height: 16px;
+    accent-color: var(--red);
+}
+
+.day-chip-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+    min-width: 190px;
+}
+
+.day-chip-grid label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 28px;
+    border: 1px solid rgba(235, 241, 246, 0.14);
+    border-radius: 4px;
+    background: rgba(3, 4, 6, 0.58);
+    color: #d8dde2;
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.day-chip-grid input {
+    width: 12px;
+    min-height: 12px;
+    accent-color: var(--red);
+}
+
+.table-row-button {
+    min-height: 34px;
+    border: 1px solid rgba(235, 241, 246, 0.22);
+    border-radius: 4px;
+    background: rgba(3, 4, 6, 0.78);
+    color: var(--steel);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.table-row-button:hover {
+    border-color: rgba(255, 47, 47, 0.68);
+    color: var(--text);
+    box-shadow: 0 0 18px rgba(255, 47, 47, 0.14);
 }
 
 .checkbox-line {

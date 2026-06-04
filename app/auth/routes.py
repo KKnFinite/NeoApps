@@ -20,6 +20,7 @@ from app.services.user_tokens import (
     EMAIL_VERIFICATION,
     PASSWORD_RESET,
     create_user_token,
+    get_token_record,
     get_valid_token_record,
     mark_token_used,
 )
@@ -100,6 +101,22 @@ def create_account():
 
 @bp.route("/verify-email/<token>")
 def verify_email(token):
+    token_record = get_token_record(token, EMAIL_VERIFICATION)
+    if not token_record:
+        return render_template("auth/verify_email.html", verified=False), 400
+    if token_record.user.email_verified_at and (
+        token_record.is_used or token_record.is_expired()
+    ):
+        return render_template(
+            "auth/verify_email.html",
+            already_verified=True,
+            verified=True,
+        )
+    if token_record.is_used:
+        return render_template("auth/verify_email.html", verified=False), 400
+    if token_record.is_expired():
+        return render_template("auth/verify_email.html", verified=False), 400
+
     token_record = get_valid_token_record(token, EMAIL_VERIFICATION)
     if not token_record:
         return render_template("auth/verify_email.html", verified=False), 400
@@ -108,7 +125,7 @@ def verify_email(token):
     mark_token_used(token_record)
     db.session.commit()
 
-    return render_template("auth/verify_email.html", verified=True)
+    return render_template("auth/verify_email.html", already_verified=False, verified=True)
 
 
 @bp.route("/access-pending")

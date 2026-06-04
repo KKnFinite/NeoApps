@@ -4,11 +4,9 @@
 
 {% block content %}
 <section class="motherbrain-landing">
-    <div class="motherbrain-logo-stage">
-        <img src="{{ url_for('static', filename='images/motherbrain_logo1.png') }}" alt="NeoMotherBrain" />
-    </div>
+    {% include "neomotherbrain/_motherbrain_logo.html" %}
 
-    <nav class="action-row motherbrain-menu" aria-label="NeoMotherBrain menu">
+    <nav class="action-row motherbrain-menu" aria-label="MotherBrain menu">
         <a class="action-button" href="{{ url_for('neomotherbrain.operations') }}">Nightly Operations</a>
         <a class="action-button" href="{{ url_for('neomotherbrain.new_operation') }}">Generate Nightly Operation</a>
         <a class="action-button" href="{{ url_for('neomotherbrain.master_schedule') }}">Master Schedule</a>

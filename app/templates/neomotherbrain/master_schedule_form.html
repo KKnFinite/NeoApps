@@ -1,81 +1,176 @@
 {% extends "base.html" %}
 
-{% block title %}{{ "Edit" if mode == "edit" else "Add" }} Master Flight | NeoApps{% endblock %}
+{% set is_bulk_edit = mode == "bulk_edit" %}
+{% set page_title = "Edit Master Flights" if is_bulk_edit else ("Edit Master Flight" if mode == "edit" else "Add Master Flights") %}
 
-{% block content %}
-<section class="panel compact-panel">
-    <div class="section-heading">
-        <p class="eyebrow">Master Schedule</p>
-        <h1>{{ "Edit" if mode == "edit" else "Add" }} Master Flight</h1>
-    </div>
+{% block title %}{{ page_title }} | NeoApps{% endblock %}
 
-    <form class="operation-form" method="post">
-        <label class="checkbox-line">
-            <input type="checkbox" name="active" value="1" {% if form.active %}checked{% endif %}>
+{% macro schedule_row(row) %}
+<tr class="master-schedule-form-row">
+    <td>
+        <input type="hidden" name="row_indexes" value="{{ row.index }}">
+        <input type="hidden" name="row_{{ row.index }}_id" value="{{ row.id }}">
+        <label class="compact-check">
+            <input type="checkbox" name="row_{{ row.index }}_active" value="1" {% if row.active %}checked{% endif %}>
             <span>Active</span>
         </label>
-
-        <input type="hidden" name="gateway_code" value="{{ form.gateway_code }}">
-        <label>
-            <span>Sort Name</span>
-            <select name="sort_name" required>
-                {% for sort_value, sort_label in sort_name_options %}
-                <option value="{{ sort_value }}" {% if form.sort_name == sort_value %}selected{% endif %}>{{ sort_label }}</option>
-                {% endfor %}
-            </select>
-        </label>
-        <label>
-            <span>Mission Type</span>
-            <select name="mission_type" required>
-                {% for mission_value, mission_label in mission_type_options %}
-                <option value="{{ mission_value }}" {% if form.mission_type == mission_value %}selected{% endif %}>{{ mission_label }}</option>
-                {% endfor %}
-            </select>
-        </label>
-        <label>
-            <span>Flight Number</span>
-            <input type="text" name="flight_number" value="{{ form.flight_number }}" maxlength="8" required>
-        </label>
-        <label>
-            <span>Origin</span>
-            <input type="text" name="origin" value="{{ form.origin }}" maxlength="3" pattern="[A-Za-z]{3}" required>
-        </label>
-        <label>
-            <span>Destination</span>
-            <input type="text" name="destination" value="{{ form.destination }}" maxlength="3" pattern="[A-Za-z]{3}" required>
-        </label>
-
-        <fieldset class="checkbox-grid">
-            <legend>Active Days</legend>
+    </td>
+    <td>
+        <select name="row_{{ row.index }}_sort_name">
+            {% for sort_value, sort_label in sort_name_options %}
+            <option value="{{ sort_value }}" {% if row.sort_name == sort_value %}selected{% endif %}>{{ sort_label }}</option>
+            {% endfor %}
+        </select>
+    </td>
+    <td>
+        <select name="row_{{ row.index }}_mission_type">
+            {% for mission_value, mission_label in mission_type_options %}
+            <option value="{{ mission_value }}" {% if row.mission_type == mission_value %}selected{% endif %}>{{ mission_label }}</option>
+            {% endfor %}
+        </select>
+    </td>
+    <td>
+        <input type="text" name="row_{{ row.index }}_flight_number" value="{{ row.flight_number }}" maxlength="8" autocomplete="off">
+    </td>
+    <td>
+        <input class="airport-code-input" type="text" name="row_{{ row.index }}_origin" value="{{ row.origin }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
+    </td>
+    <td>
+        <input class="airport-code-input" type="text" name="row_{{ row.index }}_destination" value="{{ row.destination }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
+    </td>
+    <td>
+        <div class="day-chip-grid">
             {% for day_value, day_label in active_day_options %}
             <label>
-                <input type="checkbox" name="active_days" value="{{ day_value }}" {% if day_value in form.active_days %}checked{% endif %}>
-                <span>{{ day_label }}</span>
+                <input type="checkbox" name="row_{{ row.index }}_active_days" value="{{ day_value }}" {% if day_value in row.active_days %}checked{% endif %}>
+                <span>{{ day_label[:3] }}</span>
             </label>
             {% endfor %}
-        </fieldset>
+        </div>
+    </td>
+    <td>
+        <input type="time" name="row_{{ row.index }}_planned_time_local" value="{{ row.planned_time_local }}">
+    </td>
+    <td>
+        <input type="time" name="row_{{ row.index }}_pure_pull_time_local" value="{{ row.pure_pull_time_local }}">
+    </td>
+    <td>
+        <input type="time" name="row_{{ row.index }}_first_mix_pull_time_local" value="{{ row.first_mix_pull_time_local }}">
+    </td>
+    <td>
+        <input type="time" name="row_{{ row.index }}_final_mix_pull_time_local" value="{{ row.final_mix_pull_time_local }}">
+    </td>
+    <td>
+        <button class="table-row-button" type="button" data-remove-schedule-row>Remove</button>
+    </td>
+</tr>
+{% endmacro %}
 
-        <label>
-            <span>Planned Time Local</span>
-            <input type="time" name="planned_time_local" value="{{ form.planned_time_local }}" required>
-        </label>
-        <label>
-            <span>Pure Pull Time Local</span>
-            <input type="time" name="pure_pull_time_local" value="{{ form.pure_pull_time_local }}">
-        </label>
-        <label>
-            <span>First Mix Pull Time Local</span>
-            <input type="time" name="first_mix_pull_time_local" value="{{ form.first_mix_pull_time_local }}">
-        </label>
-        <label>
-            <span>Final Mix Pull Time Local</span>
-            <input type="time" name="final_mix_pull_time_local" value="{{ form.final_mix_pull_time_local }}">
-        </label>
+{% block content %}
+{% include "neomotherbrain/_motherbrain_logo.html" %}
+<section class="panel master-schedule-panel">
+    <div class="section-heading">
+        <p class="eyebrow">Master Schedule</p>
+        <h1>{{ page_title }}</h1>
+        {% if mode == "new" %}
+        <p class="muted">Add multiple recurring schedule rows, then save them together.</p>
+        {% elif is_bulk_edit %}
+        <p class="muted">Edit multiple recurring schedule rows and save all changes at once.</p>
+        {% endif %}
+    </div>
+
+    <form class="master-schedule-bulk-form" method="post" data-next-row-index="{{ rows|length }}">
+        <div class="table-wrap">
+            <table class="data-table schedule-form-table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Sort</th>
+                        <th>Mission</th>
+                        <th>Flight</th>
+                        <th>Origin</th>
+                        <th>Destination</th>
+                        <th>Active Days</th>
+                        <th>Planned</th>
+                        <th>Pure Pull</th>
+                        <th>First Mix</th>
+                        <th>Final Mix</th>
+                        <th>Row</th>
+                    </tr>
+                </thead>
+                <tbody data-master-schedule-rows>
+                    {% for row in rows %}
+                    {{ schedule_row(row) }}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <template id="master-schedule-row-template">
+            {{ schedule_row(blank_row) }}
+        </template>
 
         <div class="action-row">
-            <button class="action-button" type="submit">{{ "Save" if mode == "edit" else "Create" }}</button>
+            <button class="action-button" type="button" data-add-schedule-row>Add Another Row</button>
+            <button class="action-button" type="submit">Save Rows</button>
             <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">Back to Master Schedule</a>
         </div>
     </form>
 </section>
+
+<script>
+(() => {
+    const form = document.querySelector("[data-next-row-index]");
+    const tbody = document.querySelector("[data-master-schedule-rows]");
+    const template = document.getElementById("master-schedule-row-template");
+    const addButton = document.querySelector("[data-add-schedule-row]");
+
+    if (!form || !tbody || !template || !addButton) {
+        return;
+    }
+
+    const uppercaseAirportCodes = (root) => {
+        root.querySelectorAll(".airport-code-input").forEach((input) => {
+            input.addEventListener("input", () => {
+                input.value = input.value.toUpperCase();
+            });
+        });
+    };
+
+    uppercaseAirportCodes(document);
+
+    addButton.addEventListener("click", () => {
+        const index = Number.parseInt(form.dataset.nextRowIndex || "0", 10);
+        form.dataset.nextRowIndex = String(index + 1);
+        const html = template.innerHTML.replaceAll("__index__", String(index));
+        const fragment = document.createElement("tbody");
+        fragment.innerHTML = html.trim();
+        const row = fragment.firstElementChild;
+        tbody.appendChild(row);
+        uppercaseAirportCodes(row);
+    });
+
+    tbody.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-remove-schedule-row]");
+        if (!button) {
+            return;
+        }
+
+        const row = button.closest("tr");
+        if (tbody.querySelectorAll("tr").length === 1) {
+            row.querySelectorAll("input[type='text'], input[type='time']").forEach((input) => {
+                input.value = "";
+            });
+            row.querySelectorAll("input[type='checkbox']").forEach((input) => {
+                input.checked = input.name.endsWith("_active");
+            });
+            row.querySelector("select[name$='_sort_name']").value = "night";
+            row.querySelector("select[name$='_mission_type']").value = "departure";
+            return;
+        }
+
+        row.remove();
+    });
+})();
+</script>
 {% endblock %}

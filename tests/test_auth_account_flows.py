@@ -103,7 +103,8 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIsNotNone(db.session.get(User, user.id).email_verified_at)
         self.assertIsNotNone(db.session.get(UserToken, token_record.id).used_at)
-        self.assertEqual(second_response.status_code, 400)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertIn(b"Already Verified", second_response.data)
 
     def test_expired_email_verification_token_is_rejected(self):
         user = self._user("expiredverify", email="expiredverify@example.com")
@@ -115,6 +116,18 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIsNone(db.session.get(User, user.id).email_verified_at)
+
+    def test_expired_verification_token_for_already_verified_user_is_friendly(self):
+        user = self._user("oldverify", email="oldverify@example.com")
+        user.email_verified_at = datetime.utcnow()
+        raw_token, token_record = create_user_token(user, EMAIL_VERIFICATION)
+        token_record.expires_at = datetime.utcnow() - timedelta(minutes=1)
+        db.session.commit()
+
+        response = self.client.get(f"/verify-email/{raw_token}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Already Verified", response.data)
 
     def test_master_and_grandmaster_approve_only_after_email_verified(self):
         master = self._admin("master_admin", "master")
