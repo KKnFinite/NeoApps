@@ -62,26 +62,23 @@
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Type</th>
                     <th>Flight</th>
-                    <th>Origin</th>
-                    <th>Destination</th>
                     <th>Tail</th>
-                    <th>STA/STD</th>
-                    <th>Source</th>
+                    <th>Origin/Destination</th>
+                    <th>Parking</th>
+                    <th>ETA/ETD</th>
                     <th>Links</th>
                 </tr>
             </thead>
             <tbody>
-                {% for mission in missions %}
+                {% for row in rows %}
+                {% set mission = row.mission %}
                 <tr>
-                    <td>{{ mission.mission_type|title }}</td>
                     <td>{{ mission.flight_number }}</td>
-                    <td>{{ mission.origin }}</td>
-                    <td>{{ mission.destination }}</td>
                     <td>{{ mission.assigned_tail_number or "-" }}</td>
-                    <td>{{ mission.planned_datetime_local.strftime("%H:%M") if mission.planned_datetime_local else "-" }}</td>
-                    <td>{{ mission.mission_source }}</td>
+                    <td>{{ mission.origin if mission.mission_type == "arrival" else mission.destination }}</td>
+                    <td>{{ row.parking_position or "-" }}</td>
+                    <td>{{ row.display_time.strftime("%H:%M") if row.display_time else "-" }}</td>
                     <td class="table-actions">
                         <a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=mission.id) }}">View</a>
                         <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">Edit</a>
@@ -89,7 +86,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8">No missions found.</td>
+                    <td colspan="6">No missions found.</td>
                 </tr>
                 {% endfor %}
             </tbody>

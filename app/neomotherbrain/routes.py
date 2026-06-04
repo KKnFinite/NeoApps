@@ -390,14 +390,14 @@ def operation_detail(operation_id):
     operation = _operation_or_404(operation_id)
     arrival_count = _mission_count(operation, "arrival")
     departure_count = _mission_count(operation, "departure")
-    missions = _all_missions_for_operation(operation)
+    rows = [_mission_list_row(mission, operation) for mission in _all_missions_for_operation(operation)]
     return render_template(
         "neomotherbrain/operation_detail.html",
         operation=operation,
         arrival_count=arrival_count,
         departure_count=departure_count,
         mission_count=arrival_count + departure_count,
-        missions=missions,
+        rows=rows,
     )
 
 
@@ -1335,15 +1335,49 @@ def _mission_count(operation, mission_type):
 
 
 def _arrival_row(mission):
+    tail_state = _tail_state_for_mission(mission)
     return {
         "mission": mission,
+        "parking_position": tail_state.parking_position if tail_state else None,
+        "eta_time": mission.eta_datetime_utc or mission.planned_datetime_local,
         "crew_covered": is_mission_crew_covered(mission.crew_assignments),
     }
 
 
 def _departure_row(mission, operation):
+    tail_state = _tail_state_for_mission(mission)
     return {
         "mission": mission,
         "timing": mission_display_timing_data(mission, operation),
+        "parking_position": tail_state.parking_position if tail_state else None,
         "crew_covered": is_mission_crew_covered(mission.crew_assignments),
     }
+
+
+def _mission_list_row(mission, operation):
+    tail_state = _tail_state_for_mission(mission)
+    timing = mission_display_timing_data(mission, operation)
+    if mission.mission_type == "arrival":
+        display_time = mission.eta_datetime_utc or mission.planned_datetime_local
+    else:
+        display_time = timing.get("adjusted_planned_departure_time")
+
+    return {
+        "mission": mission,
+        "timing": timing,
+        "parking_position": tail_state.parking_position if tail_state else None,
+        "display_time": display_time,
+    }
+
+
+def _tail_state_for_mission(mission):
+    tail_number = (mission.assigned_tail_number or "").strip().upper()
+    if not tail_number:
+        return None
+
+    return SortDateTailState.query.filter_by(
+        sort_date=mission.sort_date,
+        gateway_code=mission.gateway_code,
+        sort_name=mission.sort_name,
+        tail_number=tail_number,
+    ).first()

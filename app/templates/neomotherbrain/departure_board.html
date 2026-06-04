@@ -17,24 +17,14 @@
     </div>
 
     <div class="table-wrap">
-        <table class="data-table wide-data-table">
+        <table class="data-table">
             <thead>
                 <tr>
                     <th>Flight</th>
-                    <th>Origin</th>
-                    <th>Destination</th>
                     <th>Tail</th>
-                    <th>Base STD</th>
-                    <th>Adjusted STD</th>
-                    <th>Base Pure</th>
-                    <th>Adjusted Pure</th>
-                    <th>Base First Mix</th>
-                    <th>Adjusted First Mix</th>
-                    <th>Base Final Mix</th>
-                    <th>Adjusted Final Mix</th>
-                    <th>Fuel</th>
-                    <th>Status</th>
-                    <th>Crew</th>
+                    <th>Destination</th>
+                    <th>Parking</th>
+                    <th>ETD</th>
                     <th>Links</th>
                 </tr>
             </thead>
@@ -44,20 +34,10 @@
                 {% set timing = row.timing %}
                 <tr>
                     <td>{{ mission.flight_number }}</td>
-                    <td>{{ mission.origin }}</td>
-                    <td>{{ mission.destination }}</td>
                     <td>{{ mission.assigned_tail_number or "-" }}</td>
-                    <td>{{ timing.base_planned_departure_time.strftime("%H:%M") if timing.base_planned_departure_time else "-" }}</td>
+                    <td>{{ mission.destination }}</td>
+                    <td>{{ row.parking_position or "-" }}</td>
                     <td>{{ timing.adjusted_planned_departure_time.strftime("%H:%M") if timing.adjusted_planned_departure_time else "-" }}</td>
-                    <td>{{ timing.base_pure_pull_time.strftime("%H:%M") if timing.base_pure_pull_time else "-" }}</td>
-                    <td>{{ timing.adjusted_pure_pull_time.strftime("%H:%M") if timing.adjusted_pure_pull_time else "-" }}</td>
-                    <td>{{ timing.base_first_mix_pull_time.strftime("%H:%M") if timing.base_first_mix_pull_time else "-" }}</td>
-                    <td>{{ timing.adjusted_first_mix_pull_time.strftime("%H:%M") if timing.adjusted_first_mix_pull_time else "-" }}</td>
-                    <td>{{ timing.base_final_mix_pull_time.strftime("%H:%M") if timing.base_final_mix_pull_time else "-" }}</td>
-                    <td>{{ timing.adjusted_final_mix_pull_time.strftime("%H:%M") if timing.adjusted_final_mix_pull_time else "-" }}</td>
-                    <td>{{ mission.fuel_status or "-" }}</td>
-                    <td>{{ mission.departure_status or "-" }}</td>
-                    <td>{{ "Covered" if row.crew_covered else "Open" }}</td>
                     <td class="table-actions">
                         <a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=mission.id) }}">View</a>
                         <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">Edit</a>
@@ -65,7 +45,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="16">No departure missions found.</td>
+                    <td colspan="6">No departure missions found.</td>
                 </tr>
                 {% endfor %}
             </tbody>

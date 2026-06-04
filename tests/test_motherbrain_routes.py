@@ -214,8 +214,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Master Flight Schedule", response.data)
         self.assertIn(b"DEP001", response.data)
-        self.assertIn(b"<td>Night</td>", response.data)
         self.assertIn(b"<td>Departure</td>", response.data)
+        self.assertIn(b"<td>SDF</td>", response.data)
+        self.assertIn(b"<td>02:10</td>", response.data)
+        self.assertNotIn(b"<th>Sort</th>", response.data)
+        self.assertNotIn(b"<th>Active Days</th>", response.data)
         self.assertNotIn(b"<td>night</td>", response.data)
         self.assertNotIn(b"<td>departure</td>", response.data)
 
@@ -296,13 +299,19 @@ class MotherBrainRoutesTest(unittest.TestCase):
     def test_rfd_master_schedule_airport_defaults_use_current_gateway(self):
         arrival = self.client.get("/motherbrain/master-schedule/new?mission_type=arrival")
         departure = self.client.get("/motherbrain/master-schedule/new?mission_type=departure")
+        arrival_html = arrival.data.decode()
+        departure_html = departure.data.decode()
 
         self.assertEqual(arrival.status_code, 200)
-        self.assertIn(b'name="row_0_destination" value="RFD"', arrival.data)
-        self.assertIn(b'name="row_0_origin" value=""', arrival.data)
+        self.assertIn('name="row_0_destination"', arrival_html)
+        self.assertIn('value="RFD"', arrival_html)
+        self.assertIn('readonly aria-readonly="true"', arrival_html)
+        self.assertIn('name="row_0_origin"', arrival_html)
         self.assertEqual(departure.status_code, 200)
-        self.assertIn(b'name="row_0_origin" value="RFD"', departure.data)
-        self.assertIn(b'name="row_0_destination" value=""', departure.data)
+        self.assertIn('name="row_0_origin"', departure_html)
+        self.assertIn('value="RFD"', departure_html)
+        self.assertIn('readonly aria-readonly="true"', departure_html)
+        self.assertIn('name="row_0_destination"', departure_html)
 
     def test_master_schedule_create_defaults_home_airport_from_current_gateway(self):
         arrival = self.client.post(
@@ -433,7 +442,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
     def test_master_schedule_origin_destination_are_three_letters_and_save_uppercase(self):
         invalid = self.client.post(
             "/motherbrain/master-schedule/new",
-            data=self._master_schedule_form_data(origin="RF1"),
+            data=self._master_schedule_form_data(destination="SD1"),
         )
         valid = self.client.post(
             "/motherbrain/master-schedule/new",
@@ -447,7 +456,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         master = MasterFlightSchedule.query.filter_by(flight_number="UP123").first()
         self.assertEqual(invalid.status_code, 400)
-        self.assertIn(b"Origin must be exactly 3 letters.", invalid.data)
+        self.assertIn(b"Destination must be exactly 3 letters.", invalid.data)
         self.assertEqual(valid.status_code, 302)
         self.assertEqual(master.origin, "RFD")
         self.assertEqual(master.destination, "SDF")
@@ -904,9 +913,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         response = self.client.get(f"/motherbrain/operations/{operation.id}/departures")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"02:10", response.data)
         self.assertIn(b"02:30", response.data)
-        self.assertIn(b"02:15", response.data)
+        self.assertNotIn(b"02:10", response.data)
+        self.assertNotIn(b"02:15", response.data)
 
     def test_delete_mission_removes_mission_and_crew_assignments(self):
         operation = self._operation()
@@ -1147,11 +1156,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         response = self.client.get(f"/motherbrain/operations/{operation.id}/departures")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"02:10", response.data)
         self.assertIn(b"02:30", response.data)
-        self.assertIn(b"01:20", response.data)
-        self.assertIn(b"01:40", response.data)
-        self.assertIn(b"02:15", response.data)
+        self.assertNotIn(b"02:10", response.data)
+        self.assertNotIn(b"01:20", response.data)
+        self.assertNotIn(b"01:40", response.data)
+        self.assertNotIn(b"02:15", response.data)
 
     def test_window_update_rejects_negative_values(self):
         operation = self._operation()
