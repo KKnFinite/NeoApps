@@ -599,6 +599,7 @@ def _master_schedules_for_gateway(gateway):
 
 
 def _render_master_schedule_form(form=None, mode="new", master_schedule=None, rows=None):
+    gateway = get_current_gateway()
     if rows is None:
         rows = [_master_schedule_row_from_form(form, 0, master_schedule.id if master_schedule else None)]
 
@@ -606,9 +607,10 @@ def _render_master_schedule_form(form=None, mode="new", master_schedule=None, ro
         "neomotherbrain/master_schedule_form.html",
         active_day_options=ACTIVE_DAY_OPTIONS,
         blank_row=_master_schedule_row_from_form(
-            _blank_master_schedule_form(get_current_gateway()),
+            _blank_master_schedule_form(gateway),
             MASTER_SCHEDULE_BLANK_ROW_INDEX,
         ),
+        gateway=gateway,
         master_schedule=master_schedule,
         mode=mode,
         mission_type_options=MISSION_TYPE_OPTIONS,
@@ -723,15 +725,11 @@ def _apply_gateway_airport_defaults(form, gateway=None, previous_mission_type=No
     if mission_type == "arrival":
         if previous_mission_type == "departure" and form.get("origin") == gateway_code:
             form["origin"] = form.get("destination", "")
-        form["destination"] = form.get("destination") or gateway_code
-        if form["destination"] != gateway_code and previous_mission_type == "departure":
-            form["destination"] = gateway_code
+        form["destination"] = gateway_code
     elif mission_type == "departure":
         if previous_mission_type == "arrival" and form.get("destination") == gateway_code:
             form["destination"] = form.get("origin", "")
-        form["origin"] = form.get("origin") or gateway_code
-        if form["origin"] != gateway_code and previous_mission_type == "arrival":
-            form["origin"] = gateway_code
+        form["origin"] = gateway_code
 
 
 def _master_schedule_row_from_form(form, index, schedule_id=None):

@@ -18,6 +18,20 @@
 </div>
 {% endmacro %}
 
+{% macro airport_input(row, field_name, label=None) %}
+{% set is_locked_gateway_airport = (field_name == "origin" and row.mission_type == "departure") or (field_name == "destination" and row.mission_type == "arrival") %}
+<input
+    class="airport-code-input{% if is_locked_gateway_airport %} gateway-airport-input{% endif %}"
+    type="text"
+    name="row_{{ row.index }}_{{ field_name }}"
+    value="{{ row.get(field_name, '') }}"
+    maxlength="3"
+    pattern="[A-Za-z]{3}"
+    autocomplete="off"
+    {% if is_locked_gateway_airport %}readonly aria-readonly="true" title="{{ label or field_name|title }} is fixed to the current gateway"{% endif %}
+>
+{% endmacro %}
+
 {% macro schedule_row(row) %}
 <tr class="master-schedule-form-row">
     <td>
@@ -46,10 +60,10 @@
         <input type="text" name="row_{{ row.index }}_flight_number" value="{{ row.flight_number }}" maxlength="8" autocomplete="off">
     </td>
     <td>
-        <input class="airport-code-input" type="text" name="row_{{ row.index }}_origin" value="{{ row.origin }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
+        {{ airport_input(row, "origin", "Origin") }}
     </td>
     <td>
-        <input class="airport-code-input" type="text" name="row_{{ row.index }}_destination" value="{{ row.destination }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
+        {{ airport_input(row, "destination", "Destination") }}
     </td>
     <td>{{ active_days_field(row) }}</td>
     <td>{{ military_time_select("row_" ~ row.index ~ "_planned_time_local", row.planned_time_local) }}</td>
@@ -102,11 +116,11 @@
     </label>
     <label class="master-field-airport">
         <span>Origin</span>
-        <input class="airport-code-input" type="text" name="row_{{ row.index }}_origin" value="{{ row.origin }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
+        {{ airport_input(row, "origin", "Origin") }}
     </label>
     <label class="master-field-airport">
         <span>Destination</span>
-        <input class="airport-code-input" type="text" name="row_{{ row.index }}_destination" value="{{ row.destination }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
+        {{ airport_input(row, "destination", "Destination") }}
     </label>
     <label class="master-time-field">
         <span data-master-scheduled-label>{{ "STA" if row.mission_type == "arrival" else "STD" }}</span>
@@ -140,7 +154,7 @@
         {% endif %}
     </div>
 
-    <form class="{{ 'master-schedule-single-form' if is_single_entry else 'master-schedule-bulk-form' }}" method="post" data-next-row-index="{{ rows|length }}">
+    <form class="{{ 'master-schedule-single-form' if is_single_entry else 'master-schedule-bulk-form' }}" method="post" data-next-row-index="{{ rows|length }}" data-current-gateway-code="{{ gateway.code }}">
         {% if is_single_entry %}
         {{ single_entry_form(rows[0]) }}
         <div class="action-row">
@@ -207,6 +221,57 @@
         return;
     }
 
+    const gatewayCode = (form.dataset.currentGatewayCode || "RFD").toUpperCase();
+
+    const setGatewayAirportLock = (input, locked, label) => {
+        input.readOnly = locked;
+        input.classList.toggle("gateway-airport-input", locked);
+        if (locked) {
+            input.title = `${label} is fixed to the current gateway`;
+            input.setAttribute("aria-readonly", "true");
+        } else {
+            input.removeAttribute("title");
+            input.removeAttribute("aria-readonly");
+        }
+    };
+
+    const applyGatewayAirportLocks = (row, previousMissionType = null) => {
+        const missionSelect = row.querySelector("select[name$='_mission_type']");
+        const missionType = missionSelect ? missionSelect.value : "";
+        const origin = row.querySelector("input[name$='_origin']");
+        const destination = row.querySelector("input[name$='_destination']");
+        if (!missionType || !origin || !destination) {
+            return;
+        }
+
+        const originValue = origin.value.toUpperCase();
+        const destinationValue = destination.value.toUpperCase();
+
+        if (missionType === "arrival") {
+            if (previousMissionType === "departure" && originValue === gatewayCode) {
+                origin.value = destinationValue === gatewayCode ? "" : destination.value.toUpperCase();
+            }
+            destination.value = gatewayCode;
+            setGatewayAirportLock(origin, false, "Origin");
+            setGatewayAirportLock(destination, true, "Destination");
+        } else if (missionType === "departure") {
+            if (previousMissionType === "arrival" && destinationValue === gatewayCode) {
+                destination.value = originValue === gatewayCode ? "" : origin.value.toUpperCase();
+            }
+            origin.value = gatewayCode;
+            setGatewayAirportLock(origin, true, "Origin");
+            setGatewayAirportLock(destination, false, "Destination");
+        }
+    };
+
+    tbody.querySelectorAll(".master-schedule-form-row").forEach((row) => {
+        const missionSelect = row.querySelector("select[name$='_mission_type']");
+        if (missionSelect) {
+            row.dataset.previousMissionType = missionSelect.value;
+        }
+        applyGatewayAirportLocks(row);
+    });
+
     addButton.addEventListener("click", () => {
         const index = Number.parseInt(form.dataset.nextRowIndex || "0", 10);
         form.dataset.nextRowIndex = String(index + 1);
@@ -216,6 +281,23 @@
         const row = fragment.firstElementChild;
         tbody.appendChild(row);
         uppercaseAirportCodes(row);
+        const missionSelect = row.querySelector("select[name$='_mission_type']");
+        if (missionSelect) {
+            row.dataset.previousMissionType = missionSelect.value;
+        }
+        applyGatewayAirportLocks(row);
+    });
+
+    tbody.addEventListener("change", (event) => {
+        const missionSelect = event.target.closest("select[name$='_mission_type']");
+        if (!missionSelect) {
+            return;
+        }
+
+        const row = missionSelect.closest("tr");
+        const previousMissionType = row.dataset.previousMissionType || null;
+        applyGatewayAirportLocks(row, previousMissionType);
+        row.dataset.previousMissionType = missionSelect.value;
     });
 
     tbody.addEventListener("click", (event) => {
@@ -237,6 +319,8 @@
             });
             row.querySelector("select[name$='_sort_name']").value = "night";
             row.querySelector("select[name$='_mission_type']").value = "departure";
+            row.dataset.previousMissionType = "departure";
+            applyGatewayAirportLocks(row);
             return;
         }
 

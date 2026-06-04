@@ -1354,6 +1354,19 @@ h2 {
     box-shadow: 0 0 0 3px rgba(216, 32, 42, 0.12);
 }
 
+.master-schedule-entry-grid input[readonly],
+.schedule-form-table input[readonly] {
+    border-color: rgba(255, 59, 70, 0.38);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(216, 32, 42, 0.1)),
+        rgba(17, 19, 24, 0.92);
+    color: rgba(238, 246, 255, 0.78);
+    cursor: not-allowed;
+    box-shadow:
+        inset 0 0 16px rgba(216, 32, 42, 0.08),
+        0 0 12px rgba(216, 32, 42, 0.08);
+}
+
 .master-schedule-entry-grid .military-time-select select {
     width: 64px;
     min-width: 64px;
@@ -1909,6 +1922,18 @@ h2 {
         width: min(100%, 420px);
     }
 
+    .blueprint-neomotherbrain .action-row {
+        align-items: stretch;
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .blueprint-neomotherbrain .action-row .action-button,
+    .blueprint-neomotherbrain .action-row .inline-button-form,
+    .blueprint-neomotherbrain .action-row .inline-button-form .action-button {
+        width: 100%;
+    }
+
     .motherbrain-menu .action-button {
         width: 100%;
     }
@@ -2051,6 +2076,109 @@ h2 {
 
     .military-datetime-control {
         grid-template-columns: 1fr;
+    }
+
+    .blueprint-neomotherbrain .master-schedule-bulk-form .table-wrap {
+        overflow: visible;
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table,
+    .blueprint-neomotherbrain .schedule-form-table tbody,
+    .blueprint-neomotherbrain .schedule-form-table tr,
+    .blueprint-neomotherbrain .schedule-form-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table {
+        min-width: 0;
+        border-spacing: 0;
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table thead {
+        display: none;
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table tr {
+        margin-bottom: 16px;
+        padding: 14px;
+        border: 1px solid rgba(216, 32, 42, 0.34);
+        border-radius: 6px;
+        background:
+            linear-gradient(180deg, rgba(255, 59, 70, 0.08), rgba(17, 19, 24, 0.92)),
+            rgba(3, 4, 6, 0.76);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            0 0 18px rgba(216, 32, 42, 0.12);
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table td {
+        padding: 8px 0;
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table td::before {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 0.68rem;
+        font-weight: 900;
+        text-transform: uppercase;
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table td:nth-child(1)::before {
+        content: "Status";
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table td:nth-child(2)::before {
+        content: "Sort";
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table td:nth-child(3)::before {
+        content: "Mission";
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table td:nth-child(4)::before {
+        content: "Flight";
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table td:nth-child(5)::before {
+        content: "Origin";
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table td:nth-child(6)::before {
+        content: "Destination";
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table td:nth-child(7)::before {
+        content: "Active Days";
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table td:nth-child(8)::before {
+        content: "STA/STD";
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table td:nth-child(9)::before {
+        content: "Pure Pull";
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table td:nth-child(10)::before {
+        content: "First Mix";
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table td:nth-child(11)::before {
+        content: "Final Mix";
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table td:nth-child(12)::before {
+        content: "Row";
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table .day-chip-grid {
+        width: 100%;
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table .table-row-button {
+        width: 100%;
     }
 }
 
