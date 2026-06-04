@@ -57,6 +57,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"NeoMotherBrain", response.data)
         self.assertIn(b'src="/static/images/motherbrain_logo1.png"', response.data)
         self.assertIn(b'aria-label="NeoMotherBrain menu"', response.data)
+        self.assertNotIn(b'class="panel motherbrain-landing"', response.data)
+        self.assertNotIn(b"action-button-secondary", response.data)
         self.assertLess(
             html.index("motherbrain-logo-stage"),
             html.index('aria-label="NeoMotherBrain menu"'),

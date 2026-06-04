@@ -1432,6 +1432,16 @@ h2 {
         min-height: 0;
     }
 
+    .motherbrain-menu {
+        align-items: stretch;
+        flex-direction: column;
+        width: min(100%, 420px);
+    }
+
+    .motherbrain-menu .action-button {
+        width: 100%;
+    }
+
     .rfd-command-layout {
         grid-template-columns: 1fr;
         justify-items: center;

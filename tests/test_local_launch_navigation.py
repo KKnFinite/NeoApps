@@ -72,6 +72,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(".rfd-node-subzero {\n        order: 6;", css)
         self.assertIn(".rfd-node-rain {\n        order: 7;", css)
         self.assertIn(".rfd-node-scorpion {\n        order: 8;", css)
+        self.assertIn(".motherbrain-menu {\n        align-items: stretch;\n        flex-direction: column;", css)
         self.assertNotIn("42px 42px", css)
         self.assertNotIn("linear-gradient(90deg, rgba(201, 208, 214, 0.035) 1px", css)
 
