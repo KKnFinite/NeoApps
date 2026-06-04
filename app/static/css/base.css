@@ -620,16 +620,20 @@ a {
     align-content: center;
     justify-items: center;
     gap: clamp(16px, 2.8vw, 30px);
-    width: min(100%, 1080px);
+    width: min(100%, 1440px);
     min-width: 0;
 }
 
 .rfd-node-grid {
     display: grid;
     align-items: center;
-    grid-template-columns: minmax(230px, 1fr) minmax(210px, 0.82fr) minmax(230px, 1fr);
-    gap: clamp(14px, 2.4vw, 34px);
-    width: min(100%, 1080px);
+    justify-content: center;
+    grid-template-columns:
+        minmax(300px, 360px)
+        minmax(500px, 580px)
+        minmax(300px, 360px);
+    gap: clamp(28px, 3.5vw, 56px);
+    width: min(100%, 1440px);
 }
 
 .rfd-node-column {
@@ -642,17 +646,18 @@ a {
 .rfd-hub-logo {
     display: grid;
     place-items: center;
-    min-width: 0;
+    min-width: 500px;
 }
 
 .rfd-hub-logo .gateway-logo {
     display: block;
-    width: min(100%, 300px);
-    max-height: min(42vh, 360px);
+    width: clamp(460px, 34vw, 560px);
+    max-width: none;
+    max-height: min(52vh, 520px);
     object-fit: contain;
     filter:
         drop-shadow(0 18px 32px rgba(0, 0, 0, 0.72))
-        drop-shadow(0 0 28px rgba(255, 47, 47, 0.3));
+        drop-shadow(0 0 34px rgba(255, 47, 47, 0.42));
 }
 
 .rfd-command-hub .motherbrain-core-image {
