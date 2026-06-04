@@ -4,6 +4,8 @@ import unittest
 from app import create_app
 from app.extensions import db
 from app.models import (
+    Gateway,
+    GatewayMembership,
     MasterFlightSchedule,
     SortDateCrewAssignment,
     SortDateMission,
@@ -36,6 +38,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.session.add(user)
         db.session.flush()
         backfill_default_gateway_node_roles(user, role="grandmaster")
+        self.rfd_gateway = Gateway.query.filter_by(code="RFD").first()
         db.session.commit()
 
         self.client = self.app.test_client()
@@ -124,6 +127,84 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 302)
                 self.assertIn("/login", response.location)
 
+    def test_user_without_rfd_access_cannot_enter_motherbrain(self):
+        dfw_gateway = self._gateway("DFW", "NeoDFW")
+        user = User(username="dfw_only", role="grandmaster")
+        user.set_password("TestPassword123!")
+        db.session.add(user)
+        db.session.flush()
+        db.session.add(
+            GatewayMembership(
+                user_id=user.id,
+                gateway_id=dfw_gateway.id,
+                status="approved",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+
+        client = self.app.test_client()
+        client.post(
+            "/login",
+            data={"username": "dfw_only", "password": "TestPassword123!"},
+        )
+        response = client.get("/motherbrain", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/access-pending")
+
+    def test_motherbrain_routes_do_not_leak_other_gateway_records(self):
+        dfw_gateway = self._gateway("DFW", "NeoDFW")
+        rfd_master = self._add_master(flight_number="RFD001", gateway_id=self.rfd_gateway.id)
+        dfw_master = self._add_master(
+            flight_number="DFW001",
+            gateway_id=dfw_gateway.id,
+            gateway_code="DFW",
+            origin="DFW",
+            destination="ONT",
+        )
+        rfd_operation = self._operation(gateway_id=self.rfd_gateway.id, gateway_code="RFD")
+        dfw_operation = self._operation(gateway_id=dfw_gateway.id, gateway_code="DFW")
+        db.session.add_all((rfd_operation, dfw_operation))
+        db.session.flush()
+        dfw_mission = self._mission(
+            dfw_operation,
+            "departure",
+            "DFWDEP",
+            gateway_code="DFW",
+            origin="DFW",
+            destination="ONT",
+        )
+        db.session.add(dfw_mission)
+        db.session.commit()
+
+        master_list = self.client.get("/motherbrain/master-schedule")
+        operations_list = self.client.get("/motherbrain/operations")
+        dfw_master_detail = self.client.get(f"/motherbrain/master-schedule/{dfw_master.id}")
+        dfw_master_edit = self.client.get(f"/motherbrain/master-schedule/{dfw_master.id}/edit")
+        dfw_operation_detail = self.client.get(f"/motherbrain/operations/{dfw_operation.id}")
+        dfw_arrivals = self.client.get(f"/motherbrain/operations/{dfw_operation.id}/arrivals")
+        dfw_departures = self.client.get(f"/motherbrain/operations/{dfw_operation.id}/departures")
+        dfw_mission_detail = self.client.get(
+            f"/motherbrain/operations/{dfw_operation.id}/missions/{dfw_mission.id}"
+        )
+
+        self.assertEqual(master_list.status_code, 200)
+        self.assertIn(rfd_master.flight_number.encode(), master_list.data)
+        self.assertNotIn(b"DFW001", master_list.data)
+        self.assertEqual(operations_list.status_code, 200)
+        self.assertIn(str(rfd_operation.sort_date).encode(), operations_list.data)
+        self.assertNotIn(b"DFW", operations_list.data)
+        for response in (
+            dfw_master_detail,
+            dfw_master_edit,
+            dfw_operation_detail,
+            dfw_arrivals,
+            dfw_departures,
+            dfw_mission_detail,
+        ):
+            self.assertEqual(response.status_code, 404)
+
     def test_logged_in_user_can_view_master_schedule_list(self):
         self._add_master(flight_number="DEP001")
         db.session.commit()
@@ -211,6 +292,47 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Pure Pull", response.data)
         self.assertIn(b"First Mix Pull", response.data)
         self.assertIn(b"Final Mix Pull", response.data)
+
+    def test_rfd_master_schedule_airport_defaults_use_current_gateway(self):
+        arrival = self.client.get("/motherbrain/master-schedule/new?mission_type=arrival")
+        departure = self.client.get("/motherbrain/master-schedule/new?mission_type=departure")
+
+        self.assertEqual(arrival.status_code, 200)
+        self.assertIn(b'name="row_0_destination" value="RFD"', arrival.data)
+        self.assertIn(b'name="row_0_origin" value=""', arrival.data)
+        self.assertEqual(departure.status_code, 200)
+        self.assertIn(b'name="row_0_origin" value="RFD"', departure.data)
+        self.assertIn(b'name="row_0_destination" value=""', departure.data)
+
+    def test_master_schedule_create_defaults_home_airport_from_current_gateway(self):
+        arrival = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(
+                mission_type="arrival",
+                flight_number="ARRDEF",
+                origin="SDF",
+                destination="",
+            ),
+            follow_redirects=False,
+        )
+        departure = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(
+                flight_number="DEPDEF",
+                origin="",
+                destination="SDF",
+            ),
+            follow_redirects=False,
+        )
+
+        arrival_master = MasterFlightSchedule.query.filter_by(flight_number="ARRDEF").first()
+        departure_master = MasterFlightSchedule.query.filter_by(flight_number="DEPDEF").first()
+        self.assertEqual(arrival.status_code, 302)
+        self.assertEqual(departure.status_code, 302)
+        self.assertEqual(arrival_master.destination, "RFD")
+        self.assertEqual(departure_master.origin, "RFD")
+        self.assertEqual(arrival_master.gateway_id, self.rfd_gateway.id)
+        self.assertEqual(departure_master.gateway_id, self.rfd_gateway.id)
 
     def test_bulk_create_master_schedule_rows(self):
         response = self.client.post(
@@ -537,6 +659,35 @@ class MotherBrainRoutesTest(unittest.TestCase):
         operation = SortDateOperation.query.first()
         self.assertEqual(operation.missions[0].flight_number, "DEP500")
 
+    def test_operation_generation_uses_only_current_gateway_master_schedules(self):
+        dfw_gateway = self._gateway("DFW", "NeoDFW")
+        self._add_master(flight_number="RFDGEN", gateway_id=self.rfd_gateway.id)
+        self._add_master(
+            flight_number="DFWGEN",
+            gateway_id=dfw_gateway.id,
+            gateway_code="DFW",
+            origin="DFW",
+            destination="ONT",
+        )
+        db.session.commit()
+
+        response = self.client.post(
+            "/motherbrain/operations/new",
+            data={
+                "sort_date": "2026-06-01",
+                "gateway_code": "DFW",
+                "sort_name": "night",
+            },
+            follow_redirects=False,
+        )
+
+        operation = SortDateOperation.query.filter_by(gateway_code="RFD").first()
+        self.assertEqual(response.status_code, 302)
+        self.assertIsNotNone(operation)
+        self.assertEqual(operation.gateway_id, self.rfd_gateway.id)
+        self.assertEqual([mission.flight_number for mission in operation.missions], ["RFDGEN"])
+        self.assertEqual(SortDateOperation.query.filter_by(gateway_code="DFW").count(), 0)
+
     def test_toggle_active_changes_active_state(self):
         master = self._add_master(flight_number="DEP600", active=True)
         db.session.commit()
@@ -815,6 +966,54 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(tail_state.aircraft_type, "A330")
         self.assertEqual(tail_state.aircraft_type_source, "manual")
 
+    def test_tail_state_lookup_is_scoped_by_gateway(self):
+        dfw_gateway = self._gateway("DFW", "NeoDFW")
+        rfd_operation = self._operation(gateway_id=self.rfd_gateway.id, gateway_code="RFD")
+        dfw_operation = self._operation(gateway_id=dfw_gateway.id, gateway_code="DFW")
+        db.session.add_all((rfd_operation, dfw_operation))
+        db.session.flush()
+        db.session.add(
+            SortDateTailState(
+                sort_date=dfw_operation.sort_date,
+                gateway_code="DFW",
+                sort_name=dfw_operation.sort_name,
+                tail_number="N123UP",
+                aircraft_type="A330",
+                aircraft_type_source="manual",
+            )
+        )
+        rfd_mission = self._mission(
+            rfd_operation,
+            "departure",
+            "RFDTAL",
+            assigned_tail_number="N123UP",
+        )
+        db.session.add(rfd_mission)
+        db.session.flush()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{rfd_operation.id}/missions/{rfd_mission.id}/edit",
+            data=self._mission_form_data(
+                flight_number="RFDTAL",
+                assigned_tail_number="N123UP",
+            ),
+            follow_redirects=False,
+        )
+
+        rfd_tail = SortDateTailState.query.filter_by(
+            gateway_code="RFD",
+            tail_number="N123UP",
+        ).first()
+        dfw_tail = SortDateTailState.query.filter_by(
+            gateway_code="DFW",
+            tail_number="N123UP",
+        ).first()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(rfd_tail.aircraft_type, "A300")
+        self.assertEqual(rfd_tail.aircraft_type_source, "derived")
+        self.assertEqual(dfw_tail.aircraft_type, "A330")
+        self.assertEqual(dfw_tail.aircraft_type_source, "manual")
+
     def test_tail_swap_rebuilds_crew_slots_using_existing_rules(self):
         operation = self._operation()
         db.session.add(operation)
@@ -1008,6 +1207,16 @@ class MotherBrainRoutesTest(unittest.TestCase):
         master = MasterFlightSchedule(**values)
         db.session.add(master)
         return master
+
+    def _gateway(self, code, name):
+        gateway = Gateway.query.filter_by(code=code).first()
+        if gateway:
+            return gateway
+
+        gateway = Gateway(code=code, name=name, is_active=True)
+        db.session.add(gateway)
+        db.session.flush()
+        return gateway
 
     def _master_schedule_form_data(self, **overrides):
         values = {

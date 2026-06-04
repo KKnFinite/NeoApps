@@ -683,7 +683,7 @@ a {
     border: 0;
     border-radius: 0;
     color: var(--text);
-    background: url("../images/neobutton1_small.png") center / 100% 100% no-repeat;
+    background: url("../images/neobutton1_medium.png") center / 100% 100% no-repeat;
     filter:
         drop-shadow(0 12px 16px rgba(0, 0, 0, 0.42))
         drop-shadow(0 0 13px rgba(var(--node-rgb), 0.12));
@@ -1320,6 +1320,9 @@ h2 {
 
 .master-active-days-field {
     grid-column: span 2;
+    justify-self: start;
+    width: max-content;
+    max-width: 100%;
 }
 
 .master-time-field,
@@ -1418,32 +1421,34 @@ h2 {
 
 .day-chip-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(92px, 1fr));
-    gap: 7px;
-    min-width: 198px;
+    grid-template-columns: repeat(2, 82px);
+    gap: 6px;
+    width: max-content;
+    max-width: 100%;
+    min-width: 0;
 }
 
 .day-chip-grid label {
     display: inline-flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 7px;
-    min-height: 34px;
+    gap: 6px;
+    min-height: 30px;
     width: 100%;
-    padding: 7px 9px;
+    padding: 6px 8px;
     border: 1px solid rgba(235, 241, 246, 0.14);
     border-radius: 4px;
     background: rgba(3, 4, 6, 0.58);
     color: #d8dde2;
-    font-size: 0.68rem;
+    font-size: 0.64rem;
     font-weight: 800;
     text-transform: uppercase;
 }
 
 .day-chip-grid input {
     flex: 0 0 auto;
-    width: 14px;
-    min-height: 14px;
+    width: 13px;
+    min-height: 13px;
     accent-color: var(--red);
 }
 
@@ -2031,10 +2036,12 @@ h2 {
 
     .master-active-days-field {
         grid-column: auto;
+        width: 100%;
     }
 
     .day-chip-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
         min-width: 0;
     }
 

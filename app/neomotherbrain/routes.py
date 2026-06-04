@@ -621,7 +621,7 @@ def _master_schedule_form_from_request(gateway=None, prefix="", source=None):
     source = source or request.form
     active_default = "1" if request.method != "POST" else "0"
     gateway_code = gateway.code if gateway else source.get(f"{prefix}gateway_code", "RFD")
-    return {
+    form = {
         "gateway_code": gateway_code,
         "sort_name": source.get(f"{prefix}sort_name", "night"),
         "mission_type": source.get(f"{prefix}mission_type", "departure"),
@@ -648,6 +648,8 @@ def _master_schedule_form_from_request(gateway=None, prefix="", source=None):
         ),
         "active": source.get(f"{prefix}active", active_default) == "1",
     }
+    _apply_gateway_airport_defaults(form, gateway)
+    return form
 
 
 def _master_schedule_form_for_get(gateway=None, master_schedule=None):
@@ -658,7 +660,15 @@ def _master_schedule_form_for_get(gateway=None, master_schedule=None):
     )
     requested_mission_type = request.args.get("mission_type", "").strip().lower()
     if requested_mission_type in MISSION_TYPES:
+        previous_mission_type = form["mission_type"]
         form["mission_type"] = requested_mission_type
+        _apply_gateway_airport_defaults(
+            form,
+            gateway,
+            previous_mission_type=previous_mission_type,
+        )
+    else:
+        _apply_gateway_airport_defaults(form, gateway)
     if form["mission_type"] == "arrival":
         form["pure_pull_time_local"] = ""
         form["first_mix_pull_time_local"] = ""
@@ -686,7 +696,7 @@ def _master_schedule_form_from_model(master_schedule):
 
 def _blank_master_schedule_form(gateway=None):
     gateway_code = gateway.code if gateway else "RFD"
-    return {
+    form = {
         "gateway_code": gateway_code,
         "sort_name": "night",
         "mission_type": "departure",
@@ -701,6 +711,27 @@ def _blank_master_schedule_form(gateway=None):
         "final_mix_pull_time_local": "",
         "active": True,
     }
+    _apply_gateway_airport_defaults(form, gateway)
+    return form
+
+
+def _apply_gateway_airport_defaults(form, gateway=None, previous_mission_type=None):
+    gateway_code = gateway.code if gateway else form.get("gateway_code", "RFD")
+    gateway_code = (gateway_code or "RFD").strip().upper()
+    mission_type = (form.get("mission_type") or "").strip().lower()
+
+    if mission_type == "arrival":
+        if previous_mission_type == "departure" and form.get("origin") == gateway_code:
+            form["origin"] = form.get("destination", "")
+        form["destination"] = form.get("destination") or gateway_code
+        if form["destination"] != gateway_code and previous_mission_type == "departure":
+            form["destination"] = gateway_code
+    elif mission_type == "departure":
+        if previous_mission_type == "arrival" and form.get("destination") == gateway_code:
+            form["destination"] = form.get("origin", "")
+        form["origin"] = form.get("origin") or gateway_code
+        if form["origin"] != gateway_code and previous_mission_type == "arrival":
+            form["origin"] = gateway_code
 
 
 def _master_schedule_row_from_form(form, index, schedule_id=None):
