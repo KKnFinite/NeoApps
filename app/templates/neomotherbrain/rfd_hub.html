@@ -9,6 +9,10 @@
 {% block content %}
 <section class="motherbrain-command rfd-command-layout" aria-label="{{ gateway.name }} command hub">
     <section class="rfd-node-menu" aria-label="{{ gateway.name }} NeoNode launcher">
+        <div class="rfd-mobile-logo" aria-label="{{ gateway.name }} logo">
+            <img class="gateway-logo" src="{{ url_for('static', filename=default_gateway.logo) }}" alt="{{ gateway.name }}" />
+        </div>
+
         {% if can_enter_motherbrain %}
         <a class="rfd-node-tile rfd-node-motherbrain rfd-motherbrain-launch" href="{{ url_for('neomotherbrain.motherbrain') }}" aria-label="NeoMotherBrain">
             {{ node_label("MotherBrain") }}

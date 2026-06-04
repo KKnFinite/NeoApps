@@ -182,6 +182,7 @@ class AccessControlTest(unittest.TestCase):
         self.assertIn(b"NeoGateway - NeoRFD", hub.data)
         self.assertIn(b"watcher_hub_user", hub.data)
         self.assertIn(b'src="/static/images/neorfd_logo1.png"', hub.data)
+        self.assertIn(b'class="rfd-mobile-logo"', hub.data)
         self.assertIn(b"NeoMotherBrain", hub.data)
         self.assertIn(b"NeoSektor", hub.data)
         for node_name in (
@@ -194,6 +195,7 @@ class AccessControlTest(unittest.TestCase):
             self.assertIn(node_name, hub.data)
         self.assertNotIn(b"Placeholder", hub.data)
         self.assertNotIn(b"Launch", hub.data)
+        self.assertNotIn(b"Gateway Command Layer", hub.data)
         self.assertLess(hub_html.index('aria-label="NeoMotherBrain"'), hub_html.index('class="rfd-node-grid"'))
         self.assertLess(hub_html.index('rfd-node-column-left"'), hub_html.index('rfd-hub-logo"'))
         self.assertLess(hub_html.index('rfd-hub-logo"'), hub_html.index('rfd-node-column-right"'))

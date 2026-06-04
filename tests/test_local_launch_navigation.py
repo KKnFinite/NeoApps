@@ -62,6 +62,16 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("../images/neobutton1_small.png", css)
         self.assertIn(".rfd-node-prefix", css)
         self.assertIn(".rfd-node-suffix", css)
+        self.assertIn(".rfd-mobile-logo", css)
+        self.assertIn("width: min(100% - 20px, 1440px);", css)
+        self.assertIn(".rfd-hub-logo {\n        display: none;", css)
+        self.assertIn(".rfd-motherbrain-launch {\n        order: 2;", css)
+        self.assertIn(".rfd-node-sektor {\n        order: 3;", css)
+        self.assertIn(".rfd-node-ermac {\n        order: 4;", css)
+        self.assertIn(".rfd-node-reptile {\n        order: 5;", css)
+        self.assertIn(".rfd-node-subzero {\n        order: 6;", css)
+        self.assertIn(".rfd-node-rain {\n        order: 7;", css)
+        self.assertIn(".rfd-node-scorpion {\n        order: 8;", css)
         self.assertNotIn("42px 42px", css)
         self.assertNotIn("linear-gradient(90deg, rgba(201, 208, 214, 0.035) 1px", css)
 
@@ -79,6 +89,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(b"NeoRFD", response.data)
         self.assertIn(b"NeoGateway", response.data)
         self.assertIn(b"Powered by NeoApps", response.data)
+        self.assertNotIn(b"Gateway Command Layer", response.data)
         self.assertNotIn(b'class="gateway-context"', response.data)
         self.assertNotIn(b'class="platform-brand"', response.data)
         self.assertNotIn(b'class="powered-by"', response.data)
@@ -112,6 +123,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoRFD", response.data)
         self.assertIn(b'src="/static/images/neorfd_logo1.png"', response.data)
+        self.assertNotIn(b"Gateway Command Layer", response.data)
         self.assertIn(b'<form class="command-login-form" method="post" action="/login">', response.data)
         self.assertIn(b"ENTER", response.data)
 
@@ -164,6 +176,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         left_column = hub_html.split('rfd-node-column-left"', 1)[1].split("</div>", 1)[0]
         right_column = hub_html.split('rfd-node-column-right"', 1)[1].split("</div>", 1)[0]
         self.assertIn(b'src="/static/images/neorfd_logo1.png"', hub_response.data)
+        self.assertIn(b'class="rfd-mobile-logo"', hub_response.data)
         self.assertIn(b"NeoMotherBrain", hub_response.data)
         self.assertIn(b"NeoSektor", hub_response.data)
         for node_name in (
@@ -176,6 +189,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             self.assertIn(node_name, hub_response.data)
         self.assertNotIn(b"Placeholder", hub_response.data)
         self.assertNotIn(b"Launch", hub_response.data)
+        self.assertNotIn(b"Gateway Command Layer", hub_response.data)
         self.assertLess(hub_html.index('aria-label="NeoMotherBrain"'), hub_html.index('class="rfd-node-grid"'))
         self.assertLess(hub_html.index('rfd-node-column-left"'), hub_html.index('rfd-hub-logo"'))
         self.assertLess(hub_html.index('rfd-hub-logo"'), hub_html.index('rfd-node-column-right"'))

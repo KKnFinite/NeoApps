@@ -18,7 +18,9 @@
                         NeoGateway
                         {% endif %}
                     </strong>
-                    <small>{% if current_user.is_authenticated and not public_landing|default(false) %}Gateway Command Layer{% else %}Powered by NeoApps{% endif %}</small>
+                    {% if not (current_user.is_authenticated and not public_landing|default(false)) %}
+                    <small>Powered by NeoApps</small>
+                    {% endif %}
                 </span>
             </a>
             <div class="topbar-actions">
