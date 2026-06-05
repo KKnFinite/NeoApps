@@ -192,9 +192,13 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertEqual(detail_response.status_code, 200)
         self.assertIn(b"Gateway Membership", response.data)
         self.assertIn(b"NeoNode Roles", response.data)
+        self.assertIn(b"user-edit-form", response.data)
+        self.assertIn(b"centered-checkbox-line", response.data)
+        self.assertIn(b"user-edit-role-field", response.data)
         self.assertIn(b'name="membership_status"', response.data)
         self.assertIn(b'name="membership_is_active"', response.data)
         self.assertIn(b"NeoMotherBrain", response.data)
+        self.assertIn(b'<select name="node_', response.data)
         self.assertIn(b"2026-01-15 06:00", detail_response.data)
 
     def test_unverified_pending_user_cannot_be_approved(self):

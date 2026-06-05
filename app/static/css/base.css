@@ -1282,6 +1282,70 @@ h2 {
     box-shadow: 0 0 0 3px rgba(255, 47, 47, 0.12);
 }
 
+.user-edit-form {
+    gap: 18px;
+    width: min(100%, 760px);
+}
+
+.user-edit-section {
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    width: min(100%, 680px);
+}
+
+.user-edit-section h2 {
+    margin-bottom: 2px;
+    text-align: center;
+}
+
+.user-edit-form label {
+    gap: 3px;
+    justify-items: center;
+}
+
+.user-edit-form label span {
+    line-height: 1.1;
+}
+
+.user-edit-form input,
+.user-edit-form select,
+.user-edit-form textarea {
+    max-width: 620px;
+}
+
+.user-edit-form textarea {
+    min-height: 92px;
+}
+
+.user-edit-form .centered-checkbox-line {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    justify-self: center;
+    width: auto;
+    min-height: 44px;
+    gap: 10px;
+    padding: 8px 12px;
+    text-align: left;
+}
+
+.user-edit-form .centered-checkbox-line input {
+    flex: 0 0 auto;
+    width: 18px;
+    min-height: 18px;
+    margin: 0;
+}
+
+.user-edit-form .centered-checkbox-line span {
+    line-height: 1.2;
+    text-align: left;
+}
+
+.user-edit-role-field select {
+    cursor: pointer;
+}
+
 .military-time-select {
     display: grid;
     grid-template-columns: 64px auto 64px;

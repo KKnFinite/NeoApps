@@ -9,8 +9,8 @@
         <p class="muted">{{ target_user.employee_id or target_user.email or "" }}</p>
     </div>
 
-    <form class="operation-form" method="post">
-        <section class="panel-subsection">
+    <form class="operation-form user-edit-form" method="post">
+        <section class="panel-subsection user-edit-section">
             <h2>Identity</h2>
             <label>
                 <span>First Name</span>
@@ -42,7 +42,7 @@
             </label>
         </section>
 
-        <section class="panel-subsection">
+        <section class="panel-subsection user-edit-section">
             <h2>{{ gateway.name }} Gateway Membership</h2>
             <label>
                 <span>Status</span>
@@ -52,7 +52,7 @@
                     {% endfor %}
                 </select>
             </label>
-            <label class="checkbox-line">
+            <label class="checkbox-line centered-checkbox-line">
                 <input type="checkbox" name="membership_is_active" value="1" {% if not membership or membership.is_active %}checked{% endif %}>
                 <span>Gateway membership active</span>
             </label>
@@ -69,11 +69,11 @@
             {% endif %}
         </section>
 
-        <section class="panel-subsection">
+        <section class="panel-subsection user-edit-section">
             <h2>{{ gateway.code }} NeoNode Roles</h2>
             {% if membership and membership.status == "approved" and membership.is_active %}
                 {% for row in node_rows %}
-                <label>
+                <label class="user-edit-role-field">
                     <span>{{ row.node.name }}</span>
                     <select name="node_{{ row.node.id }}">
                         {% for role in row.role_choices %}
