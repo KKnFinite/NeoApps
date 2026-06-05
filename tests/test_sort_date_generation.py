@@ -14,6 +14,7 @@ from app.services.sort_date_operations import (
     ensure_tail_state_for_mission,
     generate_sort_date_operation_from_master,
     parse_active_days,
+    sync_sort_operation_with_master,
 )
 
 
@@ -251,6 +252,89 @@ class SortDateGenerationTest(unittest.TestCase):
         self.assertTrue(all(assignment.assigned_at_utc is None for assignment in assignments))
         self.assertTrue(all(assignment.marked_not_required_at_utc is None for assignment in assignments))
 
+    def test_sync_adds_new_matching_master_row_to_existing_operation(self):
+        operation = self._operation()
+        db.session.add(operation)
+        self._add_master(flight_number="5X777", active_days="monday")
+        db.session.commit()
+
+        result = sync_sort_operation_with_master(operation)
+        db.session.commit()
+
+        mission = SortDateMission.query.filter_by(flight_number="5X777").one()
+        self.assertEqual(len(result["added"]), 1)
+        self.assertEqual(mission.sort_date_operation_id, operation.id)
+        self.assertEqual(mission.mission_source, "master")
+        self.assertIsNotNone(mission.master_flight_schedule_id)
+
+    def test_sync_updates_linked_mission_from_newer_master_template(self):
+        master = self._add_master(
+            flight_number="5X123",
+            destination="SDF",
+            pure_pull_time_local=time(1, 20),
+        )
+        db.session.commit()
+        operation = generate_sort_date_operation_from_master(
+            sort_date=date(2026, 6, 1),
+            gateway_code="RFD",
+            sort_name="night",
+        )
+        operation.generated_at_utc = datetime(2026, 1, 1, 0, 0)
+        mission = operation.missions[0]
+        master.destination = "ONT"
+        master.planned_time_local = time(3, 15)
+        master.first_mix_pull_time_local = time(2, 45)
+        master.final_mix_pull_time_local = time(3, 0)
+        master.updated_at = datetime(2026, 1, 2, 0, 0)
+        db.session.commit()
+
+        result = sync_sort_operation_with_master(operation)
+        db.session.commit()
+
+        self.assertEqual(len(result["updated"]), 1)
+        self.assertEqual(mission.destination, "ONT")
+        self.assertEqual(mission.planned_datetime_local, datetime(2026, 6, 1, 3, 15))
+        self.assertEqual(mission.first_mix_pull_time_local, time(2, 45))
+        self.assertEqual(mission.final_mix_pull_time_local, time(3, 0))
+        self.assertEqual(mission.pull_time_source, "master")
+
+    def test_sync_does_not_duplicate_or_overwrite_manual_special_flights(self):
+        operation = self._operation()
+        manual_mission = self._mission(
+            sort_date_operation=operation,
+            mission_source="manual",
+            master_flight_schedule_id=None,
+            flight_number="5X999",
+            destination="MANUAL",
+        )
+        db.session.add(operation)
+        db.session.add(manual_mission)
+        self._add_master(flight_number="5X999", destination="SDF")
+        db.session.commit()
+
+        result = sync_sort_operation_with_master(operation)
+        db.session.commit()
+
+        missions = SortDateMission.query.filter_by(flight_number="5X999").all()
+        self.assertEqual(len(missions), 1)
+        self.assertEqual(missions[0].mission_source, "manual")
+        self.assertEqual(missions[0].destination, "MANUAL")
+        self.assertEqual(len(result["skipped"]), 1)
+
+    def test_sync_is_gateway_sort_and_date_scoped(self):
+        operation = self._operation(gateway_code="DFW", sort_name="night")
+        db.session.add(operation)
+        self._add_master(flight_number="RFDONLY", gateway_code="RFD", sort_name="night")
+        self._add_master(flight_number="TWILIGHT", gateway_code="DFW", sort_name="twilight")
+        self._add_master(flight_number="SUNDAY", gateway_code="DFW", sort_name="night", active_days="sunday")
+        db.session.commit()
+
+        result = sync_sort_operation_with_master(operation)
+        db.session.commit()
+
+        self.assertEqual(result["added"], [])
+        self.assertEqual(SortDateMission.query.count(), 0)
+
     def _add_master(self, **overrides):
         values = {
             "gateway_code": "RFD",
@@ -267,6 +351,15 @@ class SortDateGenerationTest(unittest.TestCase):
         master = MasterFlightSchedule(**values)
         db.session.add(master)
         return master
+
+    def _operation(self, **overrides):
+        values = {
+            "sort_date": date(2026, 6, 1),
+            "gateway_code": "RFD",
+            "sort_name": "night",
+        }
+        values.update(overrides)
+        return SortDateOperation(**values)
 
     def _mission(self, **overrides):
         operation = SortDateOperation(

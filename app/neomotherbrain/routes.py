@@ -31,6 +31,7 @@ from app.services.sort_date_operations import (
     generate_sort_date_operation_from_master,
     mission_display_timing_data,
     normalize_window_minutes,
+    sync_sort_operation_with_master,
 )
 from app.services.gateway_matrix import (
     DAY_OPTIONS as MATRIX_DAY_OPTIONS,
@@ -155,6 +156,13 @@ def manage_sort():
     generation_result = _auto_generate_today_sorts(gateway)
     sort_date = generation_result["sort_date"]
     operations = operations_for_gateway_date(gateway, sort_date)
+    sync_results = [_sync_operation_with_master(operation) for operation in operations]
+    if any(
+        result["added"] or result["updated"]
+        for result in sync_results
+    ):
+        db.session.commit()
+        operations = operations_for_gateway_date(gateway, sort_date)
     selected_sort_name = request.args.get("sort", "").strip().lower()
     selected_operation = next(
         (
@@ -468,6 +476,10 @@ def new_operation():
 @gateway_node_required("motherbrain")
 def operation_detail(operation_id):
     operation = _operation_or_404(operation_id)
+    sync_result = _sync_operation_with_master(operation)
+    if sync_result["added"] or sync_result["updated"]:
+        db.session.commit()
+        operation = _operation_or_404(operation_id)
     arrival_count = _mission_count(operation, "arrival")
     departure_count = _mission_count(operation, "departure")
     rows = [_mission_list_row(mission, operation) for mission in _all_missions_for_operation(operation)]
@@ -657,6 +669,19 @@ def _auto_generate_today_sorts(gateway):
     )
     for error in result["errors"]:
         current_app.logger.warning("Gateway Matrix generation skipped: %s", error)
+    return result
+
+
+def _sync_operation_with_master(operation):
+    result = sync_sort_operation_with_master(operation)
+    for master_row in result["skipped"]:
+        current_app.logger.warning(
+            "Master schedule sync skipped duplicate flight %s for %s %s %s",
+            master_row.flight_number,
+            operation.gateway_code,
+            operation.sort_date,
+            operation.sort_name,
+        )
     return result
 
 

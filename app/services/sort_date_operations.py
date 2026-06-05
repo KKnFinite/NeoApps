@@ -94,6 +94,73 @@ def generate_sort_date_operation_from_master(
     return operation
 
 
+def sync_sort_operation_with_master(operation):
+    gateway_code = str(operation.gateway_code).strip().upper()
+    sort_name = str(operation.sort_name).strip().lower()
+    master_rows = (
+        MasterFlightSchedule.query.filter_by(
+            gateway_code=gateway_code,
+            sort_name=sort_name,
+            active=True,
+        )
+        .order_by(MasterFlightSchedule.flight_number.asc())
+        .all()
+    )
+    matching_master_rows = [
+        master_row
+        for master_row in master_rows
+        if master_schedule_runs_on_date(master_row, operation.sort_date)
+    ]
+    existing_missions = SortDateMission.query.filter_by(
+        sort_date_operation_id=operation.id
+    ).all()
+    missions_by_master_id = {
+        mission.master_flight_schedule_id: mission
+        for mission in existing_missions
+        if mission.master_flight_schedule_id
+    }
+    existing_flight_numbers = {mission.flight_number for mission in existing_missions}
+    added = []
+    updated = []
+    skipped = []
+
+    for master_row in matching_master_rows:
+        linked_mission = missions_by_master_id.get(master_row.id)
+        if linked_mission:
+            if _master_updated_after_operation_generation(master_row, operation):
+                other_flight_numbers = {
+                    mission.flight_number
+                    for mission in existing_missions
+                    if mission.id != linked_mission.id
+                }
+                if master_row.flight_number in other_flight_numbers:
+                    skipped.append(master_row)
+                    continue
+                if _apply_master_template_to_mission(linked_mission, master_row, operation):
+                    updated.append(linked_mission)
+            continue
+
+        if master_row.flight_number in existing_flight_numbers:
+            skipped.append(master_row)
+            continue
+
+        mission = _build_mission_from_master(operation, master_row, operation.sort_date)
+        db.session.add(mission)
+        db.session.flush()
+
+        tail_state = ensure_tail_state_for_mission(mission)
+        aircraft_type = tail_state.aircraft_type if tail_state else "unknown"
+        create_default_crew_assignments_for_mission(mission, aircraft_type)
+        existing_flight_numbers.add(mission.flight_number)
+        added.append(mission)
+
+    return {
+        "added": added,
+        "updated": updated,
+        "skipped": skipped,
+    }
+
+
 def master_schedule_runs_on_date(master_schedule, sort_date):
     return sort_date.strftime("%A").lower() in parse_active_days(master_schedule.active_days)
 
@@ -281,6 +348,85 @@ def _build_mission_from_master(operation, master_row, sort_date):
             mission.pull_time_source = "master"
 
     return mission
+
+
+def _apply_master_template_to_mission(mission, master_row, operation):
+    before = _master_template_snapshot(mission)
+    planned_datetime_local = _planned_datetime_local(
+        operation.sort_date,
+        master_row.planned_time_local,
+    )
+    planned_datetime_utc = _planned_datetime_utc(
+        planned_datetime_local,
+        master_row.timezone,
+    )
+
+    mission.sort_date = operation.sort_date
+    mission.gateway_code = master_row.gateway_code
+    mission.sort_name = master_row.sort_name
+    mission.mission_type = master_row.mission_type
+    mission.mission_source = "master"
+    mission.master_flight_schedule_id = master_row.id
+    mission.flight_number = master_row.flight_number
+    mission.origin = master_row.origin
+    mission.destination = master_row.destination
+    mission.timezone = master_row.timezone
+    mission.planned_datetime_local = planned_datetime_local
+    mission.planned_datetime_utc = planned_datetime_utc
+    mission.planned_source = "master"
+
+    if master_row.mission_type == "arrival":
+        mission.pure_pull_time_local = None
+        mission.first_mix_pull_time_local = None
+        mission.final_mix_pull_time_local = None
+        mission.pull_time_source = None
+    else:
+        mission.pure_pull_time_local = master_row.pure_pull_time_local
+        mission.first_mix_pull_time_local = master_row.first_mix_pull_time_local
+        mission.final_mix_pull_time_local = master_row.final_mix_pull_time_local
+        mission.pull_time_source = (
+            "master"
+            if any(
+                (
+                    mission.pure_pull_time_local,
+                    mission.first_mix_pull_time_local,
+                    mission.final_mix_pull_time_local,
+                )
+            )
+            else None
+        )
+
+    return _master_template_snapshot(mission) != before
+
+
+def _master_template_snapshot(mission):
+    return (
+        mission.sort_date,
+        mission.gateway_code,
+        mission.sort_name,
+        mission.mission_type,
+        mission.mission_source,
+        mission.master_flight_schedule_id,
+        mission.flight_number,
+        mission.origin,
+        mission.destination,
+        mission.timezone,
+        mission.planned_datetime_local,
+        mission.planned_datetime_utc,
+        mission.planned_source,
+        mission.pure_pull_time_local,
+        mission.first_mix_pull_time_local,
+        mission.final_mix_pull_time_local,
+        mission.pull_time_source,
+    )
+
+
+def _master_updated_after_operation_generation(master_row, operation):
+    if not master_row.updated_at:
+        return False
+    if not operation.generated_at_utc:
+        return True
+    return master_row.updated_at > operation.generated_at_utc
 
 
 def _planned_datetime_local(sort_date, planned_time_local):

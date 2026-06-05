@@ -177,6 +177,60 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Night", first_response.data)
         self.assertIn(b"Add Special Flight", first_response.data)
 
+    def test_manage_sort_syncs_new_master_rows_into_existing_operation(self):
+        sort_date = current_gateway_local_date(self.rfd_gateway)
+        day = sort_date.strftime("%A").lower()
+        operation = self._operation(sort_date=sort_date)
+        db.session.add(operation)
+        master = self._add_master(
+            flight_number="SYNCIN",
+            active_days=day,
+        )
+        db.session.commit()
+
+        response = self.client.get("/motherbrain/manage-sort")
+
+        mission = SortDateMission.query.filter_by(flight_number="SYNCIN").one()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mission.sort_date_operation_id, operation.id)
+        self.assertEqual(mission.master_flight_schedule_id, master.id)
+        self.assertEqual(mission.mission_source, "master")
+
+    def test_operation_detail_syncs_newer_master_template_fields(self):
+        master = self._add_master(
+            flight_number="SYNCUP",
+            active_days="monday",
+            destination="SDF",
+        )
+        db.session.flush()
+        operation = self._operation(
+            sort_date=date(2026, 6, 1),
+            generated_at_utc=datetime(2026, 1, 1, 0, 0),
+        )
+        db.session.add(operation)
+        db.session.flush()
+        mission = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="SYNCUP",
+            mission_source="master",
+            master_flight_schedule_id=master.id,
+            destination="OLD",
+        )
+        db.session.add(mission)
+        db.session.flush()
+        master.destination = "ONT"
+        master.planned_time_local = time(3, 20)
+        master.updated_at = datetime(2026, 1, 2, 0, 0)
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}")
+
+        updated_mission = db.session.get(SortDateMission, mission.id)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(updated_mission.destination, "ONT")
+        self.assertEqual(updated_mission.planned_datetime_local, datetime(2026, 6, 1, 3, 20))
+
     def test_manage_sort_empty_state_is_simple_centered_message(self):
         response = self.client.get("/motherbrain/manage-sort")
 

@@ -28,6 +28,7 @@ from app.services.sort_date_operations import (
     mission_display_timing_data,
     normalize_window_minutes,
     parse_active_days,
+    sync_sort_operation_with_master,
 )
 from app.services.schema_sync import sync_local_sqlite_schema
 from app.services.email_service import (
@@ -71,6 +72,7 @@ __all__ = [
     "mission_display_timing_data",
     "normalize_window_minutes",
     "parse_active_days",
+    "sync_sort_operation_with_master",
     "sync_local_sqlite_schema",
     "send_access_approved",
     "send_email_verification",

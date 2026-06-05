@@ -55,7 +55,7 @@
         <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">Add Mission</a>
         <a class="action-button" href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">Arrival Board</a>
         <a class="action-button" href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">Departure Board</a>
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operations') }}">Nightly Operations</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.manage_sort', sort=operation.sort_name) }}">Back to Manage Sort</a>
     </div>
 
     <div class="table-wrap">
