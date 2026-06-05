@@ -1365,10 +1365,6 @@ select::-ms-expand {
     text-align: left;
 }
 
-.user-edit-role-field select {
-    cursor: pointer;
-}
-
 .user-role-page .section-heading {
     text-align: center;
 }
@@ -1376,21 +1372,46 @@ select::-ms-expand {
 .user-role-form {
     width: min(100%, 620px);
     gap: 12px;
+    justify-items: center;
 }
 
 .user-role-field {
+    width: min(100%, 300px);
     gap: 3px;
     justify-items: center;
     text-align: center;
 }
 
-.user-role-field span {
+.user-edit-roles-section {
+    justify-items: center;
     text-align: center;
 }
 
+.user-edit-role-field {
+    width: min(100%, 300px);
+}
+
+.user-edit-role-field select,
 .user-role-field select {
-    width: min(100%, 420px);
+    justify-self: center;
+    width: min(100%, 240px);
+    max-width: 240px;
+    padding-left: 38px;
+    padding-right: 38px;
     cursor: pointer;
+    text-align: center;
+    text-align-last: center;
+}
+
+.user-edit-role-field select option,
+.user-role-field select option {
+    text-align: center;
+}
+
+.user-edit-role-field span,
+.user-role-field span {
+    width: 100%;
+    text-align: center;
 }
 
 .military-time-select {

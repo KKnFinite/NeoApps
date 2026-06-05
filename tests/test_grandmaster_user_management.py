@@ -198,6 +198,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertIn(b"NeoNode Roles", response.data)
         self.assertIn(b"user-edit-form", response.data)
         self.assertIn(b"centered-checkbox-line", response.data)
+        self.assertIn(b"user-edit-roles-section", response.data)
         self.assertIn(b"user-edit-role-field", response.data)
         self.assertIn(b'name="membership_status"', response.data)
         self.assertIn(b'name="membership_is_active"', response.data)

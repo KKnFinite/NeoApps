@@ -69,7 +69,7 @@
             {% endif %}
         </section>
 
-        <section class="panel-subsection user-edit-section">
+        <section class="panel-subsection user-edit-section user-edit-roles-section">
             <h2>{{ gateway.code }} NeoNode Roles</h2>
             {% if membership and membership.status == "approved" and membership.is_active %}
                 {% for row in node_rows %}
