@@ -314,6 +314,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
             self.assertEqual(response.status_code, 404)
 
     def test_logged_in_user_can_view_master_schedule_list(self):
+        self._add_master(
+            flight_number="ARR001",
+            mission_type="arrival",
+            origin="SDF",
+            destination="RFD",
+        )
         self._add_master(flight_number="DEP001")
         db.session.commit()
 
@@ -321,10 +327,22 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Master Flight Schedule", response.data)
+        self.assertIn(b"Arrivals", response.data)
+        self.assertIn(b"Departures", response.data)
+        self.assertIn(b"Add Master Flights", response.data)
+        self.assertIn(b"Edit Multiple Rows", response.data)
+        self.assertIn(b"<th>Origin</th>", response.data)
+        self.assertIn(b"<th>Destination</th>", response.data)
+        self.assertIn(b"<th>ETA</th>", response.data)
+        self.assertIn(b"<th>ETD</th>", response.data)
+        self.assertIn(b"ARR001", response.data)
         self.assertIn(b"DEP001", response.data)
-        self.assertIn(b"<td>Departure</td>", response.data)
-        self.assertIn(b"<td>SDF</td>", response.data)
-        self.assertIn(b"<td>02:10</td>", response.data)
+        self.assertIn(b"SDF", response.data)
+        self.assertIn(b"02:10", response.data)
+        self.assertIn(b">Edit</a>", response.data)
+        self.assertIn(b">Delete</button>", response.data)
+        self.assertNotIn(b"<th>Mission</th>", response.data)
+        self.assertNotIn(b"Origin/Destination", response.data)
         self.assertNotIn(b"<th>Sort</th>", response.data)
         self.assertNotIn(b"<th>Active Days</th>", response.data)
         self.assertNotIn(b"<td>night</td>", response.data)
@@ -619,7 +637,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(master.timezone, "America/Chicago")
         self.assertNotIn(b'name="timezone"', form_response.data)
 
-    def test_preferred_parking_is_not_shown_in_master_schedule_ui(self):
+    def test_master_schedule_list_shows_parking_when_applicable(self):
         master = self._add_master(flight_number="PARK01", preferred_parking="A1")
         db.session.commit()
 
@@ -627,16 +645,42 @@ class MotherBrainRoutesTest(unittest.TestCase):
         list_response = self.client.get("/motherbrain/master-schedule")
         detail_response = self.client.get(f"/motherbrain/master-schedule/{master.id}")
 
-        for label, response in (
-            ("form", form_response),
-            ("list", list_response),
-            ("detail", detail_response),
-        ):
+        self.assertEqual(list_response.status_code, 200)
+        self.assertIn(b"Parking", list_response.data)
+        self.assertIn(b"A1", list_response.data)
+
+        for label, response in (("form", form_response), ("detail", detail_response)):
             with self.subTest(page=label):
                 self.assertEqual(response.status_code, 200)
                 self.assertNotIn(b"Preferred Parking", response.data)
                 self.assertNotIn(b"Parking", response.data)
                 self.assertNotIn(b"A1", response.data)
+
+    def test_delete_master_schedule_removes_row_and_preserves_generated_mission(self):
+        master = self._add_master(flight_number="DELMS")
+        operation = self._operation()
+        db.session.add(operation)
+        db.session.flush()
+        mission = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="DELMS",
+            master_flight_schedule_id=master.id,
+        )
+        db.session.add(mission)
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/master-schedule/{master.id}/delete",
+            follow_redirects=False,
+        )
+
+        updated_mission = db.session.get(SortDateMission, mission.id)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/motherbrain/master-schedule")
+        self.assertIsNone(db.session.get(MasterFlightSchedule, master.id))
+        self.assertIsNotNone(updated_mission)
+        self.assertIsNone(updated_mission.master_flight_schedule_id)
 
     def test_create_departure_master_row_with_pull_times(self):
         response = self.client.post(

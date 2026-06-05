@@ -1470,6 +1470,33 @@ h2 {
     gap: 18px;
 }
 
+.master-schedule-sections {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    align-items: start;
+}
+
+.master-schedule-section {
+    min-width: 0;
+}
+
+.master-schedule-subheading {
+    margin-bottom: 10px;
+}
+
+.master-schedule-subheading h2 {
+    margin: 0;
+    color: var(--steel);
+    font-size: 0.95rem;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+.master-flight-table {
+    min-width: 620px;
+}
+
 .gateway-matrix-heading-block {
     text-align: center;
 }
@@ -2125,6 +2152,71 @@ h2 {
 
     .master-schedule-panel {
         padding: 16px;
+    }
+
+    .master-schedule-sections {
+        grid-template-columns: 1fr;
+    }
+
+    .blueprint-neomotherbrain .master-flight-table,
+    .blueprint-neomotherbrain .master-flight-table tbody,
+    .blueprint-neomotherbrain .master-flight-table tr,
+    .blueprint-neomotherbrain .master-flight-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .blueprint-neomotherbrain .master-flight-table {
+        min-width: 0;
+    }
+
+    .blueprint-neomotherbrain .master-flight-table thead {
+        display: none;
+    }
+
+    .blueprint-neomotherbrain .master-flight-table tr {
+        margin-bottom: 14px;
+        padding: 12px;
+        border: 1px solid rgba(216, 32, 42, 0.28);
+        border-radius: 6px;
+        background:
+            linear-gradient(180deg, rgba(255, 59, 70, 0.06), rgba(17, 19, 24, 0.9)),
+            rgba(3, 4, 6, 0.72);
+    }
+
+    .blueprint-neomotherbrain .master-flight-table td {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 8px 0;
+        border-bottom-color: rgba(235, 241, 246, 0.1);
+        text-align: right;
+    }
+
+    .blueprint-neomotherbrain .master-flight-table td::before {
+        content: attr(data-label);
+        flex: 0 0 auto;
+        color: var(--muted);
+        font-size: 0.68rem;
+        font-weight: 900;
+        text-align: left;
+        text-transform: uppercase;
+    }
+
+    .blueprint-neomotherbrain .master-flight-table td.table-actions {
+        justify-content: flex-start;
+        padding-top: 12px;
+        text-align: left;
+    }
+
+    .blueprint-neomotherbrain .master-flight-table td.table-actions::before {
+        display: none;
+    }
+
+    .blueprint-neomotherbrain .master-flight-table .table-actions a,
+    .blueprint-neomotherbrain .master-flight-table .table-actions .inline-button-form,
+    .blueprint-neomotherbrain .master-flight-table .table-actions .inline-button-form button {
+        flex: 1 1 0;
     }
 
     .master-mode-tabs,

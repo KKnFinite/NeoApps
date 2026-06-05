@@ -2,9 +2,53 @@
 
 {% block title %}Master Schedule | NeoApps{% endblock %}
 
+{% macro schedule_table(title, schedules, mission_type) %}
+<section class="master-schedule-section">
+    <div class="section-heading master-schedule-subheading">
+        <h2>{{ title }}</h2>
+    </div>
+
+    <div class="table-wrap">
+        <table class="data-table master-flight-table">
+            <thead>
+                <tr>
+                    <th>Flight</th>
+                    <th>Tail</th>
+                    <th>{{ "Origin" if mission_type == "arrival" else "Destination" }}</th>
+                    <th>Parking</th>
+                    <th>{{ "ETA" if mission_type == "arrival" else "ETD" }}</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for schedule in schedules %}
+                <tr>
+                    <td data-label="Flight">{{ schedule.flight_number }}</td>
+                    <td data-label="Tail">{{ schedule.assigned_tail_number|default("-", true) }}</td>
+                    <td data-label="{{ 'Origin' if mission_type == 'arrival' else 'Destination' }}">{{ schedule.origin if mission_type == "arrival" else schedule.destination }}</td>
+                    <td data-label="Parking">{{ schedule.preferred_parking or "-" }}</td>
+                    <td data-label="{{ 'ETA' if mission_type == 'arrival' else 'ETD' }}">{{ schedule.planned_time_local.strftime("%H:%M") if schedule.planned_time_local else "-" }}</td>
+                    <td data-label="Actions" class="table-actions">
+                        <a href="{{ url_for('neomotherbrain.edit_master_schedule', master_id=schedule.id) }}">Edit</a>
+                        <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}">
+                            <button type="submit">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6">No {{ title|lower }} master flights found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endmacro %}
+
 {% block content %}
 {% include "neomotherbrain/_motherbrain_logo.html" %}
-<section class="panel">
+<section class="panel master-schedule-panel">
     <div class="section-heading">
         <h1>Master Flight Schedule</h1>
     </div>
@@ -15,39 +59,9 @@
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}">MotherBrain Home</a>
     </div>
 
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Flight</th>
-                    <th>Mission</th>
-                    <th>Origin/Destination</th>
-                    <th>ETA/ETD</th>
-                    <th>Links</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for schedule in schedules %}
-                <tr>
-                    <td>{{ schedule.flight_number }}</td>
-                    <td>{{ schedule.mission_type|title }}</td>
-                    <td>{{ schedule.origin if schedule.mission_type == "arrival" else schedule.destination }}</td>
-                    <td>{{ schedule.planned_time_local.strftime("%H:%M") if schedule.planned_time_local else "-" }}</td>
-                    <td class="table-actions">
-                        <a href="{{ url_for('neomotherbrain.master_schedule_detail', master_id=schedule.id) }}">View</a>
-                        <a href="{{ url_for('neomotherbrain.edit_master_schedule', master_id=schedule.id) }}">Edit</a>
-                        <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.toggle_master_schedule_active', master_id=schedule.id) }}">
-                            <button type="submit">{{ "Deactivate" if schedule.active else "Activate" }}</button>
-                        </form>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="5">No master schedule rows found.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div class="master-schedule-sections">
+        {{ schedule_table("Arrivals", arrival_schedules, "arrival") }}
+        {{ schedule_table("Departures", departure_schedules, "departure") }}
     </div>
 </section>
 {% endblock %}

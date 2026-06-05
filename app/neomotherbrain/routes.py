@@ -198,7 +198,12 @@ def master_schedule():
     schedules = _master_schedules_for_gateway(gateway)
     return render_template(
         "neomotherbrain/master_schedule.html",
-        schedules=schedules,
+        arrival_schedules=[
+            schedule for schedule in schedules if schedule.mission_type == "arrival"
+        ],
+        departure_schedules=[
+            schedule for schedule in schedules if schedule.mission_type == "departure"
+        ],
     )
 
 
@@ -388,6 +393,20 @@ def toggle_master_schedule_active(master_id):
             master_id=master_schedule.id,
         )
     )
+
+
+@bp.route("/motherbrain/master-schedule/<int:master_id>/delete", methods=["POST"])
+@gateway_node_required("motherbrain")
+def delete_master_schedule(master_id):
+    master_schedule = _master_schedule_or_404(master_id)
+    SortDateMission.query.filter_by(master_flight_schedule_id=master_schedule.id).update(
+        {"master_flight_schedule_id": None},
+        synchronize_session=False,
+    )
+    db.session.delete(master_schedule)
+    db.session.commit()
+    flash("Master flight schedule row deleted.", "info")
+    return redirect(url_for("neomotherbrain.master_schedule"))
 
 
 @bp.route("/motherbrain/operations/new", methods=["GET", "POST"])
