@@ -57,6 +57,9 @@ class LocalLaunchNavigationTest(unittest.TestCase):
     def test_base_css_uses_cyber_topbar_without_vertical_grid_background(self):
         css = Path("app/static/css/base.css").read_text()
 
+        self.assertIn(".centered-command-page", css)
+        self.assertIn(".centered-command-page .operation-form", css)
+        self.assertIn(".centered-command-page .user-search-form", css)
         self.assertIn(".user-chip", css)
         self.assertIn(".topbar::after", css)
         self.assertIn("../images/neobutton1_medium.png", css)

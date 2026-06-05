@@ -79,6 +79,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         html = response.data.decode()
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn("centered-command-page", html)
         self.assertIn("gateway-matrix-heading-block", html)
         self.assertIn("Set active sorts for RFD", html)
         self.assertLess(
@@ -327,6 +328,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Master Flight Schedule", response.data)
+        self.assertIn(b"centered-command-page", response.data)
         self.assertIn(b"Arrivals", response.data)
         self.assertIn(b"Departures", response.data)
         self.assertIn(b"Add Master Flights", response.data)

@@ -89,6 +89,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Pending User", response.data)
         self.assertIn(b"pending@example.com", response.data)
+        self.assertIn(b"centered-command-page", response.data)
         self.assertIn(b"pending-users-table", response.data)
         self.assertIn(b'data-label="Name"', response.data)
         self.assertNotIn(b"Grandmaster User Management", response.data)
@@ -104,6 +105,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Pending Requests", response.data)
         self.assertIn(b"Edit Users", response.data)
+        self.assertIn(b"centered-command-page", response.data)
         self.assertIn(b'href="/admin/users/pending"', response.data)
         self.assertIn(b'href="/admin/users/edit-users"', response.data)
         self.assertNotIn(b"Grandmaster User Management", response.data)
@@ -132,6 +134,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         email_response = self.client.get("/admin/users/edit-users?q=alpha@example.com")
 
         self.assertEqual(default_response.status_code, 200)
+        self.assertIn(b"centered-command-page", default_response.data)
         self.assertIn(b"Enter a search term to find a user.", default_response.data)
         self.assertNotIn(b"Alpha User", default_response.data)
         self.assertEqual(legacy_response.status_code, 302)
