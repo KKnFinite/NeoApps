@@ -27,6 +27,8 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
     email = db.Column(db.String(255), unique=True, nullable=True, index=True)
+    first_name = db.Column(db.String(80), nullable=True)
+    last_name = db.Column(db.String(80), nullable=True)
     full_name = db.Column(db.String(160), nullable=True)
     employee_id = db.Column(db.String(80), unique=True, nullable=True, index=True)
     supervisor_name = db.Column(db.String(160), nullable=True)
@@ -63,6 +65,13 @@ class User(UserMixin, db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+    @property
+    def display_name(self):
+        name = " ".join(
+            part for part in (self.first_name, self.last_name) if part
+        ).strip()
+        return name or self.full_name or self.email or self.username
 
     @property
     def role_level(self):

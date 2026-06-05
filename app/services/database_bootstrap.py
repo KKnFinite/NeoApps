@@ -7,7 +7,7 @@ from app.services.access_control import (
     backfill_default_gateway_node_roles,
     ensure_default_gateway_and_nodes,
 )
-from app.services.schema_sync import sync_local_sqlite_schema
+from app.services.schema_sync import sync_database_schema
 
 
 BOOTSTRAP_USERNAME_ENV = "BOOTSTRAP_ADMIN_USERNAME"
@@ -29,12 +29,14 @@ def bootstrap_database(app=None):
         username, email, password, used_fallback = _resolve_bootstrap_credentials(app)
 
         db.create_all()
-        sync_local_sqlite_schema(app)
+        sync_database_schema(app)
         ensure_default_gateway_and_nodes()
 
         user, created_user = _find_or_create_bootstrap_user(username, email)
         user.username = username
         user.email = email
+        user.first_name = user.first_name or username
+        user.last_name = user.last_name or ""
         user.full_name = user.full_name or username
         user.employee_id = user.employee_id or "BOOTSTRAP"
         user.supervisor_name = user.supervisor_name or "System Bootstrap"

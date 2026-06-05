@@ -44,7 +44,9 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         paths = (
             "/admin/users",
             "/admin/users/pending",
+            "/admin/users/manage-roles",
             f"/admin/users/{target.id}",
+            f"/admin/users/{target.id}/edit",
             f"/admin/users/{target.id}/roles",
             f"/admin/users/{target.id}/emergency-password-reset",
         )
@@ -63,7 +65,9 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         paths = (
             "/admin/users",
             "/admin/users/pending",
+            "/admin/users/manage-roles",
             f"/admin/users/{target.id}",
+            f"/admin/users/{target.id}/edit",
             f"/admin/users/{target.id}/roles",
             f"/admin/users/{target.id}/emergency-password-reset",
         )
@@ -83,8 +87,74 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         response = self.client.get("/admin/users/pending")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"pending_user", response.data)
+        self.assertIn(b"Pending User", response.data)
         self.assertIn(b"pending@example.com", response.data)
+        self.assertNotIn(b"<th>Username</th>", response.data)
+
+    def test_user_management_main_only_shows_pending_and_manage_roles_options(self):
+        grandmaster = self._admin("menu_grandmaster", "grandmaster")
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        response = self.client.get("/admin/users")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Pending Requests", response.data)
+        self.assertIn(b"Manage Roles", response.data)
+        self.assertIn(b'href="/admin/users/pending"', response.data)
+        self.assertIn(b'href="/admin/users/manage-roles"', response.data)
+        self.assertNotIn(b"Pending Access Requests", response.data)
+        self.assertNotIn(b"Approved Users", response.data)
+        self.assertNotIn(b"Denied Users", response.data)
+        self.assertNotIn(b"Password Change Required", response.data)
+        self.assertNotIn(b"Unverified Email", response.data)
+        self.assertNotIn(b"<table", response.data)
+
+    def test_manage_roles_searches_by_name_employee_id_and_email(self):
+        grandmaster = self._admin("search_grandmaster", "grandmaster")
+        self._approved_user("alpha_user", "alpha@example.com")
+        self._approved_user("beta_user", "beta@example.com")
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        name_response = self.client.get("/admin/users/manage-roles?q=Alpha")
+        employee_response = self.client.get("/admin/users/manage-roles?q=EMP-beta_user")
+        email_response = self.client.get("/admin/users/manage-roles?q=alpha@example.com")
+
+        self.assertEqual(name_response.status_code, 200)
+        self.assertIn(b"Alpha User", name_response.data)
+        self.assertNotIn(b"Beta User", name_response.data)
+        self.assertIn(b"Beta User", employee_response.data)
+        self.assertNotIn(b"Alpha User", employee_response.data)
+        self.assertIn(b"Alpha User", email_response.data)
+
+    def test_grandmaster_can_edit_user_split_name_email_and_employee_id(self):
+        grandmaster = self._admin("edit_grandmaster", "grandmaster")
+        target, _membership = self._approved_user("split_user", "split@example.com")
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        response = self.client.post(
+            f"/admin/users/{target.id}/edit",
+            data={
+                "first_name": "Split",
+                "last_name": "Person",
+                "employee_id": "E-SPLIT",
+                "email": "split.person@example.com",
+                "supervisor_name": "Lead Person",
+                "work_area": "Sort",
+                "access_reason": "Role cleanup.",
+            },
+            follow_redirects=False,
+        )
+
+        updated = db.session.get(User, target.id)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(updated.first_name, "Split")
+        self.assertEqual(updated.last_name, "Person")
+        self.assertEqual(updated.full_name, "Split Person")
+        self.assertEqual(updated.employee_id, "E-SPLIT")
+        self.assertEqual(updated.email, "split.person@example.com")
 
     def test_unverified_pending_user_cannot_be_approved(self):
         grandmaster = self._admin("unverified_grandmaster", "grandmaster")
@@ -333,11 +403,14 @@ class GrandmasterUserManagementTest(unittest.TestCase):
             follow_redirects=False,
         )
         users_response = self.client.get("/admin/users")
+        roles_response = self.client.get("/admin/users/manage-roles")
 
         self.assertEqual(login_response.status_code, 302)
         self.assertEqual(login_response.location, "/rfd")
         self.assertEqual(users_response.status_code, 200)
         self.assertIn(b"User Management", users_response.data)
+        self.assertEqual(roles_response.status_code, 200)
+        self.assertIn(b"Manage Roles", roles_response.data)
 
     def test_pending_denied_and_no_membership_users_go_to_access_pending(self):
         gateway = ensure_default_gateway_and_nodes()
@@ -376,6 +449,8 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         user = User(
             username=username,
             email=email,
+            first_name=username.replace("_", " ").title().split()[0],
+            last_name=" ".join(username.replace("_", " ").title().split()[1:]) or "User",
             full_name=username.replace("_", " ").title(),
             employee_id=f"EMP-{username}",
             supervisor_name="Supervisor",

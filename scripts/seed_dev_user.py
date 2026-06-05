@@ -12,7 +12,7 @@ from app import create_app  # noqa: E402
 from app.extensions import db  # noqa: E402
 from app.models import User  # noqa: E402
 from app.services.access_control import backfill_default_gateway_node_roles  # noqa: E402
-from app.services.schema_sync import sync_local_sqlite_schema  # noqa: E402
+from app.services.schema_sync import sync_database_schema  # noqa: E402
 
 
 DEV_USERNAME_ENV = "NEOAPPS_DEV_GRANDMASTER_USERNAME"
@@ -31,7 +31,7 @@ def seed_dev_grandmaster(app=None):
         username, password, used_fallback = _resolve_credentials(app)
 
         db.create_all()
-        sync_local_sqlite_schema(app)
+        sync_database_schema(app)
 
         user = User.query.filter_by(username=username).first()
         created = user is None
@@ -42,6 +42,8 @@ def seed_dev_grandmaster(app=None):
         user.role = "grandmaster"
         user.is_active = True
         user.email = user.email or "kessler@local.neoapps"
+        user.first_name = user.first_name or username
+        user.last_name = user.last_name or ""
         user.full_name = user.full_name or "Kessler"
         user.email_verified_at = user.email_verified_at or datetime.utcnow()
         user.password_reset_required = False

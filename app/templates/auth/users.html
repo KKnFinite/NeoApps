@@ -7,79 +7,22 @@
     <div class="section-heading">
         <p class="eyebrow">Grandmaster User Management</p>
         <h1>User Management</h1>
-        <p class="muted">{{ gateway.name }} access, node roles, and recovery controls.</p>
+        <p class="muted">{{ gateway.name }} access requests and NeoNode role controls.</p>
     </div>
 
-    <div class="metric-grid">
-        <a class="metric-tile metric-link" href="{{ url_for('auth.pending_users') }}">
-            <span>Pending Access Requests</span>
-            <strong>{{ summary.pending }}</strong>
+    <div class="command-card-grid user-management-choice-grid">
+        <a class="action-button user-management-choice" href="{{ url_for('auth.pending_users') }}">
+            <span>Pending Requests</span>
+            <small>Approve or deny new {{ gateway.code }} access requests.</small>
         </a>
-        <div class="metric-tile">
-            <span>Approved Users</span>
-            <strong>{{ summary.approved }}</strong>
-        </div>
-        <div class="metric-tile">
-            <span>Denied Users</span>
-            <strong>{{ summary.denied }}</strong>
-        </div>
-        <div class="metric-tile">
-            <span>Password Change Required</span>
-            <strong>{{ summary.password_reset_required }}</strong>
-        </div>
-        <div class="metric-tile">
-            <span>Unverified Email</span>
-            <strong>{{ summary.unverified_email }}</strong>
-        </div>
+        <a class="action-button user-management-choice" href="{{ url_for('auth.manage_roles') }}">
+            <span>Manage Roles</span>
+            <small>Search approved users and edit gateway/node roles.</small>
+        </a>
     </div>
 
     <div class="action-row">
-        <a class="action-button" href="{{ url_for('auth.pending_users') }}">Pending Requests</a>
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}">Back to MotherBrain Home</a>
-    </div>
-
-    <div class="table-wrap">
-        <table class="data-table wide-data-table">
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Username</th>
-                    <th>Email</th>
-                    <th>Employee ID</th>
-                    <th>Work Area</th>
-                    <th>Email Verified</th>
-                    <th>RFD Status</th>
-                    <th>Node Roles</th>
-                    <th>Last Login</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in rows %}
-                <tr>
-                    <td>{{ row.user.full_name or "" }}</td>
-                    <td>{{ row.user.username }}</td>
-                    <td>{{ row.user.email or "" }}</td>
-                    <td>{{ row.user.employee_id or "" }}</td>
-                    <td>{{ row.user.work_area or "" }}</td>
-                    <td>{{ "Yes" if row.user.email_verified_at else "No" }}</td>
-                    <td>{{ row.membership_status }}</td>
-                    <td>{{ row.important_roles }}</td>
-                    <td>{{ row.user.last_login.strftime("%Y-%m-%d %H:%M") if row.user.last_login else "Never" }}</td>
-                    <td>
-                        <div class="table-actions">
-                            <a href="{{ url_for('auth.user_detail', user_id=row.user.id) }}">View</a>
-                            <a href="{{ url_for('auth.user_roles', user_id=row.user.id) }}">Manage</a>
-                        </div>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="10">No users found.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
     </div>
 </section>
 {% endblock %}

@@ -12,8 +12,12 @@
 
     <form class="operation-form" method="post">
         <label>
-            <span>Full Name</span>
-            <input name="full_name" value="{{ form.full_name }}" required>
+            <span>First Name</span>
+            <input name="first_name" value="{{ form.first_name }}" autocomplete="given-name" required>
+        </label>
+        <label>
+            <span>Last Name</span>
+            <input name="last_name" value="{{ form.last_name }}" autocomplete="family-name" required>
         </label>
         <label>
             <span>Employee ID</span>
@@ -34,10 +38,6 @@
         <label>
             <span>Reason For Access</span>
             <textarea name="access_reason" required>{{ form.access_reason }}</textarea>
-        </label>
-        <label>
-            <span>Username</span>
-            <input name="username" value="{{ form.username }}" autocomplete="username" placeholder="Use email if blank">
         </label>
         <label>
             <span>Password</span>

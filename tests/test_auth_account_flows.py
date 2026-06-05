@@ -48,15 +48,19 @@ class AuthAccountFlowsTest(unittest.TestCase):
         ) as send_verification:
             response = self.client.post(
                 "/create-account",
-                data=self._account_form(username="newuser", email="NewUser@Example.com"),
+                data=self._account_form(email="NewUser@Example.com"),
             )
 
-        user = User.query.filter_by(username="newuser").first()
+        user = User.query.filter_by(email="newuser@example.com").first()
         membership = GatewayMembership.query.filter_by(user_id=user.id).first()
         token = UserToken.query.filter_by(user_id=user.id, token_type=EMAIL_VERIFICATION).first()
         raw_token = send_verification.call_args.args[1]
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(user.first_name, "New")
+        self.assertEqual(user.last_name, "User")
+        self.assertEqual(user.full_name, "New User")
+        self.assertEqual(user.username, "newuser@example.com")
         self.assertEqual(user.email, "newuser@example.com")
         self.assertTrue(user.check_password("AccountPass123!"))
         self.assertEqual(membership.gateway.code, "RFD")
@@ -345,15 +349,54 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertNotIn(b"NeoMotherBrain", response.data)
         self.assertNotIn(b'href="https://neosektor.onrender.com/"', response.data)
 
+    def test_create_account_form_collects_split_name_and_not_username(self):
+        response = self.client.get("/create-account")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'name="first_name"', response.data)
+        self.assertIn(b'name="last_name"', response.data)
+        self.assertIn(b'name="employee_id"', response.data)
+        self.assertIn(b'name="email"', response.data)
+        self.assertNotIn(b'name="full_name"', response.data)
+        self.assertNotIn(b'name="username"', response.data)
+
+    def test_login_accepts_email_or_employee_id(self):
+        user = self._user("loginchoice", email="loginchoice@example.com", verified=True)
+        gateway = ensure_default_gateway_and_nodes()
+        db.session.add(
+            GatewayMembership(
+                user_id=user.id,
+                gateway_id=gateway.id,
+                status="approved",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+
+        email_login = self.client.post(
+            "/login",
+            data={"username": "loginchoice@example.com", "password": "Password123!"},
+            follow_redirects=False,
+        )
+        self.client.get("/logout")
+        employee_login = self.client.post(
+            "/login",
+            data={"username": "EMP-loginchoice", "password": "Password123!"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(email_login.location, "/rfd")
+        self.assertEqual(employee_login.location, "/rfd")
+
     def _account_form(self, **overrides):
         values = {
-            "full_name": "New User",
+            "first_name": "New",
+            "last_name": "User",
             "employee_id": "E12345",
             "supervisor_name": "Boss Person",
             "email": "new@example.com",
             "work_area": "Ramp",
             "access_reason": "Need operational visibility.",
-            "username": "",
             "password": "AccountPass123!",
             "confirm_password": "AccountPass123!",
         }
@@ -364,6 +407,8 @@ class AuthAccountFlowsTest(unittest.TestCase):
         user = User(
             username=username,
             email=email or f"{username}@example.com",
+            first_name=username.title(),
+            last_name="User",
             full_name=username.title(),
             employee_id=f"EMP-{username}",
             role="watcher",

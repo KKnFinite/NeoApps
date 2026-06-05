@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Edit User | User Management{% endblock %}
+
+{% block content %}
+<section class="panel compact-panel">
+    <div class="section-heading">
+        <p class="eyebrow">User Profile</p>
+        <h1>Edit User</h1>
+        <p class="muted">{{ target_user.display_name }}</p>
+    </div>
+
+    <form class="operation-form" method="post">
+        <label>
+            <span>First Name</span>
+            <input name="first_name" value="{{ form.first_name }}" autocomplete="given-name" required>
+        </label>
+        <label>
+            <span>Last Name</span>
+            <input name="last_name" value="{{ form.last_name }}" autocomplete="family-name" required>
+        </label>
+        <label>
+            <span>Employee ID</span>
+            <input name="employee_id" value="{{ form.employee_id }}" required>
+        </label>
+        <label>
+            <span>Email</span>
+            <input name="email" type="email" value="{{ form.email }}" autocomplete="email" required>
+        </label>
+        <label>
+            <span>Supervisor / Manager</span>
+            <input name="supervisor_name" value="{{ form.supervisor_name }}">
+        </label>
+        <label>
+            <span>Work Area</span>
+            <input name="work_area" value="{{ form.work_area }}">
+        </label>
+        <label>
+            <span>Reason For Access</span>
+            <textarea name="access_reason">{{ form.access_reason }}</textarea>
+        </label>
+        <button type="submit">Save User</button>
+    </form>
+
+    <div class="action-row">
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.user_detail', user_id=target_user.id) }}">Back to User</a>
+    </div>
+</section>
+{% endblock %}

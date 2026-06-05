@@ -12,7 +12,7 @@ def send_email_verification(user, token):
     verification_url = _absolute_url(f"/verify-email/{token}")
     return _send_transactional_email(
         to_email=user.email,
-        to_name=user.full_name or user.username,
+        to_name=user.display_name,
         subject="Verify your NeoGateway account",
         html_content=(
             "<p>Welcome to NeoGateway.</p>"
@@ -30,7 +30,7 @@ def send_email_verification(user, token):
 def send_access_approved(user, gateway):
     return _send_transactional_email(
         to_email=user.email,
-        to_name=user.full_name or user.username,
+        to_name=user.display_name,
         subject=f"{gateway.name} access approved",
         html_content=(
             f"<p>Your access to {gateway.name} has been approved.</p>"
@@ -47,7 +47,7 @@ def send_password_reset(user, token):
     reset_url = _absolute_url(f"/reset-password/{token}")
     return _send_transactional_email(
         to_email=user.email,
-        to_name=user.full_name or user.username,
+        to_name=user.display_name,
         subject="Reset your NeoGateway password",
         html_content=(
             "<p>A NeoGateway password reset was requested.</p>"

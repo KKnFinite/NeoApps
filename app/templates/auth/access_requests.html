@@ -13,7 +13,7 @@
         <table class="data-table wide-data-table">
             <thead>
                 <tr>
-                    <th>Full Name</th>
+                    <th>Name</th>
                     <th>Employee ID</th>
                     <th>Supervisor</th>
                     <th>Email</th>
@@ -28,7 +28,7 @@
             <tbody>
                 {% for membership in memberships %}
                 <tr>
-                    <td>{{ membership.user.full_name or membership.user.username }}</td>
+                    <td>{{ membership.user.display_name }}</td>
                     <td>{{ membership.user.employee_id or "" }}</td>
                     <td>{{ membership.user.supervisor_name or "" }}</td>
                     <td>{{ membership.user.email or "" }}</td>

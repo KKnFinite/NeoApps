@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Roles | NeoGateway{% endblock %}
+
+{% block content %}
+<section class="panel users-panel">
+    <div class="section-heading">
+        <p class="eyebrow">Grandmaster User Management</p>
+        <h1>Manage Roles</h1>
+        <p class="muted">Search users, open a profile, and edit {{ gateway.name }} NeoNode roles.</p>
+    </div>
+
+    <form class="operation-form user-search-form" method="get">
+        <label>
+            <span>Search</span>
+            <input name="q" value="{{ search }}" placeholder="Name, employee ID, or email" autocomplete="off">
+        </label>
+        <button type="submit">Search</button>
+        {% if search %}
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.manage_roles') }}">Clear</a>
+        {% endif %}
+    </form>
+
+    <div class="table-wrap">
+        <table class="data-table wide-data-table user-role-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Employee ID</th>
+                    <th>Email</th>
+                    <th>Work Area</th>
+                    <th>Email Verified</th>
+                    <th>{{ gateway.code }} Status</th>
+                    <th>Node Roles</th>
+                    <th>Last Login</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td data-label="Name">{{ row.user.display_name }}</td>
+                    <td data-label="Employee ID">{{ row.user.employee_id or "" }}</td>
+                    <td data-label="Email">{{ row.user.email or "" }}</td>
+                    <td data-label="Work Area">{{ row.user.work_area or "" }}</td>
+                    <td data-label="Email Verified">{{ "Yes" if row.user.email_verified_at else "No" }}</td>
+                    <td data-label="{{ gateway.code }} Status">{{ row.membership_status }}</td>
+                    <td data-label="Node Roles">{{ row.important_roles }}</td>
+                    <td data-label="Last Login">{{ row.user.last_login.strftime("%Y-%m-%d %H:%M") if row.user.last_login else "Never" }}</td>
+                    <td data-label="Actions">
+                        <div class="table-actions">
+                            <a href="{{ url_for('auth.user_detail', user_id=row.user.id) }}">Open</a>
+                            <a href="{{ url_for('auth.user_roles', user_id=row.user.id) }}">Roles</a>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="9">No users found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="action-row">
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.users') }}">Back to User Management</a>
+    </div>
+</section>
+{% endblock %}

@@ -571,6 +571,34 @@ a {
     margin-top: 24px;
 }
 
+.user-management-choice-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 18px 0;
+}
+
+.user-management-choice {
+    display: grid;
+    gap: 8px;
+    min-height: 112px;
+    align-content: center;
+    text-align: left;
+}
+
+.user-management-choice span {
+    color: var(--text);
+    font-size: 1.02rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.user-management-choice small {
+    color: var(--muted);
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.45;
+    text-transform: none;
+}
+
 .command-card {
     min-height: 150px;
     padding: 20px;
@@ -1162,6 +1190,12 @@ h2 {
 .operation-form {
     display: grid;
     gap: 14px;
+}
+
+.user-search-form {
+    grid-template-columns: minmax(240px, 1fr) auto auto;
+    align-items: end;
+    margin-bottom: 18px;
 }
 
 .operation-form label {
@@ -2148,6 +2182,69 @@ h2 {
 
     .command-card-grid {
         grid-template-columns: 1fr;
+    }
+
+    .user-search-form {
+        grid-template-columns: 1fr;
+    }
+
+    .user-management-choice {
+        min-height: 96px;
+        text-align: center;
+    }
+
+    .blueprint-auth .user-role-table,
+    .blueprint-auth .user-role-table tbody,
+    .blueprint-auth .user-role-table tr,
+    .blueprint-auth .user-role-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .blueprint-auth .user-role-table {
+        min-width: 0;
+    }
+
+    .blueprint-auth .user-role-table thead {
+        display: none;
+    }
+
+    .blueprint-auth .user-role-table tr {
+        margin-bottom: 14px;
+        padding: 12px;
+        border: 1px solid rgba(216, 32, 42, 0.28);
+        border-radius: 6px;
+        background:
+            linear-gradient(180deg, rgba(255, 59, 70, 0.06), rgba(17, 19, 24, 0.9)),
+            rgba(3, 4, 6, 0.72);
+    }
+
+    .blueprint-auth .user-role-table td {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 8px 0;
+        border-bottom-color: rgba(235, 241, 246, 0.1);
+        text-align: right;
+    }
+
+    .blueprint-auth .user-role-table td::before {
+        content: attr(data-label);
+        flex: 0 0 auto;
+        color: var(--muted);
+        font-size: 0.68rem;
+        font-weight: 900;
+        text-align: left;
+        text-transform: uppercase;
+    }
+
+    .blueprint-auth .user-role-table td .table-actions {
+        justify-content: flex-start;
+        width: 100%;
+    }
+
+    .blueprint-auth .user-role-table td .table-actions a {
+        flex: 1 1 0;
     }
 
     .master-schedule-panel {

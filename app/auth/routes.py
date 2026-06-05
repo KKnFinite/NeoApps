@@ -38,7 +38,7 @@ def login():
         user = _find_user_by_login(username) if username else None
 
         if not user or not user.check_password(password):
-            flash("Invalid username or password.", "error")
+            flash("Invalid login or password.", "error")
             return render_template("auth/login.html"), 401
 
         if not user.is_active:
@@ -212,19 +212,42 @@ def change_password():
 @gateway_node_required("motherbrain", minimum_role="grandmaster")
 def users():
     gateway = get_current_gateway()
-    users = User.query.order_by(User.full_name.asc(), User.username.asc()).all()
+    return render_template("auth/users.html", gateway=gateway)
+
+
+@bp.route("/admin/users/manage-roles")
+@gateway_node_required("motherbrain", minimum_role="grandmaster")
+def manage_roles():
+    gateway = get_current_gateway()
+    search = request.args.get("q", "").strip()
+    query = User.query
+    if search:
+        pattern = f"%{search.lower()}%"
+        query = query.filter(
+            func.lower(User.first_name).like(pattern)
+            | func.lower(User.last_name).like(pattern)
+            | func.lower(User.full_name).like(pattern)
+            | func.lower(User.employee_id).like(pattern)
+            | func.lower(User.email).like(pattern)
+        )
+
+    users = query.order_by(
+        User.last_name.asc(),
+        User.first_name.asc(),
+        User.full_name.asc(),
+        User.email.asc(),
+    ).all()
     memberships_by_user_id = _gateway_memberships_by_user_id(gateway)
     node_roles_by_user_id = _node_roles_by_user_id(gateway)
     rows = [
         _user_management_row(user, memberships_by_user_id, node_roles_by_user_id)
         for user in users
     ]
-    summary = _user_management_summary(gateway)
     return render_template(
-        "auth/users.html",
+        "auth/manage_roles.html",
         gateway=gateway,
         rows=rows,
-        summary=summary,
+        search=search,
     )
 
 
@@ -252,6 +275,35 @@ def user_detail(user_id):
         gateway=gateway,
         membership=membership,
         node_rows=node_rows,
+        target_user=target_user,
+    )
+
+
+@bp.route("/admin/users/<int:user_id>/edit", methods=["GET", "POST"])
+@gateway_node_required("motherbrain", minimum_role="grandmaster")
+def edit_user(user_id):
+    target_user = User.query.get_or_404(user_id)
+    form = _user_edit_form_from_request(target_user)
+
+    if request.method == "POST":
+        try:
+            _apply_user_edit_form(target_user, form)
+        except ValueError as error:
+            db.session.rollback()
+            flash(str(error), "error")
+            return render_template(
+                "auth/user_edit.html",
+                form=form,
+                target_user=target_user,
+            ), 400
+
+        db.session.commit()
+        flash("User profile updated.", "info")
+        return redirect(url_for("auth.user_detail", user_id=target_user.id))
+
+    return render_template(
+        "auth/user_edit.html",
+        form=form,
         target_user=target_user,
     )
 
@@ -416,43 +468,47 @@ def emergency_reset_user_password(user_id):
 
 def _account_form_from_request():
     return {
-        "full_name": request.form.get("full_name", ""),
+        "first_name": request.form.get("first_name", ""),
+        "last_name": request.form.get("last_name", ""),
         "employee_id": request.form.get("employee_id", ""),
         "supervisor_name": request.form.get("supervisor_name", ""),
         "email": request.form.get("email", ""),
         "work_area": request.form.get("work_area", ""),
         "access_reason": request.form.get("access_reason", ""),
-        "username": request.form.get("username", ""),
     }
 
 
 def _build_user_from_account_form(form):
     email = _normalize_email(form["email"])
-    username = (form["username"].strip() or email).strip()
+    username = email
+    first_name = form["first_name"].strip()
+    last_name = form["last_name"].strip()
     employee_id = form["employee_id"].strip()
     password = request.form.get("password", "")
     confirm_password = request.form.get("confirm_password", "")
 
     required_values = {
-        "Full name": form["full_name"].strip(),
+        "First name": first_name,
+        "Last name": last_name,
         "Employee ID": employee_id,
         "Supervisor / manager name": form["supervisor_name"].strip(),
         "Email": email,
         "Work area": form["work_area"].strip(),
         "Reason for access": form["access_reason"].strip(),
-        "Username": username,
     }
     missing = [label for label, value in required_values.items() if not value]
     if missing:
         raise ValueError(f"{', '.join(missing)} required.")
 
     _validate_password_pair(password, confirm_password)
-    _raise_for_duplicate_identity(username, email, employee_id)
+    _raise_for_duplicate_identity(email, employee_id)
 
     user = User(
         username=username,
         email=email,
-        full_name=form["full_name"].strip(),
+        first_name=first_name,
+        last_name=last_name,
+        full_name=_combined_name(first_name, last_name),
         employee_id=employee_id,
         supervisor_name=form["supervisor_name"].strip(),
         work_area=form["work_area"].strip(),
@@ -467,15 +523,23 @@ def _build_user_from_account_form(form):
     return user
 
 
-def _raise_for_duplicate_identity(username, email, employee_id):
-    if User.query.filter(func.lower(User.username) == username.lower()).first():
-        raise ValueError("That username is already in use.")
-
+def _raise_for_duplicate_identity(email, employee_id, user_id=None):
     if User.query.filter(func.lower(User.email) == email.lower()).first():
-        raise ValueError("That email is already in use.")
+        existing = User.query.filter(func.lower(User.email) == email.lower()).first()
+        if not user_id or existing.id != user_id:
+            raise ValueError("That email is already in use.")
+
+    if User.query.filter(func.lower(User.username) == email.lower()).first():
+        existing = User.query.filter(func.lower(User.username) == email.lower()).first()
+        if not user_id or existing.id != user_id:
+            raise ValueError("That email cannot be used.")
 
     if User.query.filter(func.lower(User.employee_id) == employee_id.lower()).first():
-        raise ValueError("That employee ID is already in use.")
+        existing = User.query.filter(
+            func.lower(User.employee_id) == employee_id.lower()
+        ).first()
+        if not user_id or existing.id != user_id:
+            raise ValueError("That employee ID is already in use.")
 
 
 def _find_user_by_login(login_value):
@@ -483,7 +547,70 @@ def _find_user_by_login(login_value):
     return User.query.filter(
         (func.lower(User.username) == normalized)
         | (func.lower(User.email) == normalized)
+        | (func.lower(User.employee_id) == normalized)
     ).first()
+
+
+def _user_edit_form_from_request(user):
+    if request.method == "POST":
+        return {
+            "first_name": request.form.get("first_name", ""),
+            "last_name": request.form.get("last_name", ""),
+            "employee_id": request.form.get("employee_id", ""),
+            "email": request.form.get("email", ""),
+            "supervisor_name": request.form.get("supervisor_name", ""),
+            "work_area": request.form.get("work_area", ""),
+            "access_reason": request.form.get("access_reason", ""),
+        }
+
+    first_name = user.first_name or ""
+    last_name = user.last_name or ""
+    if not first_name and not last_name and user.full_name:
+        parts = user.full_name.strip().split(None, 1)
+        first_name = parts[0] if parts else ""
+        last_name = parts[1] if len(parts) > 1 else ""
+
+    return {
+        "first_name": first_name,
+        "last_name": last_name,
+        "employee_id": user.employee_id or "",
+        "email": user.email or "",
+        "supervisor_name": user.supervisor_name or "",
+        "work_area": user.work_area or "",
+        "access_reason": user.access_reason or "",
+    }
+
+
+def _apply_user_edit_form(user, form):
+    first_name = form["first_name"].strip()
+    last_name = form["last_name"].strip()
+    email = _normalize_email(form["email"])
+    employee_id = form["employee_id"].strip()
+
+    required_values = {
+        "First name": first_name,
+        "Last name": last_name,
+        "Employee ID": employee_id,
+        "Email": email,
+    }
+    missing = [label for label, value in required_values.items() if not value]
+    if missing:
+        raise ValueError(f"{', '.join(missing)} required.")
+
+    _raise_for_duplicate_identity(email, employee_id, user_id=user.id)
+
+    user.first_name = first_name
+    user.last_name = last_name
+    user.full_name = _combined_name(first_name, last_name)
+    user.email = email
+    user.employee_id = employee_id
+    user.supervisor_name = form["supervisor_name"].strip()
+    user.work_area = form["work_area"].strip()
+    user.access_reason = form["access_reason"].strip()
+
+
+def _combined_name(first_name, last_name):
+    return " ".join(part for part in (first_name, last_name) if part).strip()
 
 
 def _find_user_by_email(email):
