@@ -1058,6 +1058,11 @@ h2 {
     margin-inline: auto;
 }
 
+.centered-empty-message {
+    margin: 24px auto;
+    text-align: center;
+}
+
 .table-wrap {
     overflow-x: auto;
 }

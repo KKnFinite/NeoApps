@@ -75,16 +75,7 @@
         </table>
     </div>
     {% else %}
-    <section class="node-strip">
-        <article>
-            <span class="node-light"></span>
-            <h2>No Active Sorts Today</h2>
-            <p>Enable today’s sorts in Gateway Matrix. Manage Sort will create missing operations automatically after a sort is active.</p>
-            <div class="action-row">
-                <a class="action-button" href="{{ url_for('neomotherbrain.gateway_matrix') }}">Open Gateway Matrix</a>
-            </div>
-        </article>
-    </section>
+    <p class="muted centered-empty-message">No active sorts today.</p>
     {% endif %}
 </section>
 {% endblock %}

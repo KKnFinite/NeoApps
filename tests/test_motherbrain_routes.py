@@ -72,6 +72,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"Master Schedule Rows", response.data)
         self.assertIn(b"Gateway Matrix", response.data)
         self.assertIn(b"Manage Sort", response.data)
+        self.assertNotIn(b"Access Requests", response.data)
         self.assertNotIn(b"Generate Nightly Operation", response.data)
 
     def test_gateway_matrix_displays_dynamic_gateway_and_sort_order(self):
@@ -175,6 +176,16 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Manage Sort", first_response.data)
         self.assertIn(b"Night", first_response.data)
         self.assertIn(b"Add Special Flight", first_response.data)
+
+    def test_manage_sort_empty_state_is_simple_centered_message(self):
+        response = self.client.get("/motherbrain/manage-sort")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"No active sorts today.", response.data)
+        self.assertIn(b"centered-empty-message", response.data)
+        self.assertNotIn(b"No Active Sorts Today", response.data)
+        self.assertNotIn(b"Open Gateway Matrix", response.data)
+        self.assertNotIn(b"Enable today", response.data)
 
     def test_kessler_grandmaster_can_access_motherbrain_pages(self):
         operation = self._operation()

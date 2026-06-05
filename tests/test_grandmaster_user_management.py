@@ -522,7 +522,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertNotIn(b"Master Schedule", rfd_response.data)
         self.assertNotIn(b'href="/admin/users"', rfd_response.data)
         self.assertEqual(motherbrain_response.status_code, 200)
-        self.assertIn(b"Access Requests", motherbrain_response.data)
+        self.assertNotIn(b"Access Requests", motherbrain_response.data)
         self.assertNotIn(b"User Management", motherbrain_response.data)
         self.assertNotIn(b'href="/admin/users"', motherbrain_response.data)
 

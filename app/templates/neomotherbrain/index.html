@@ -10,9 +10,6 @@
         <a class="action-button" href="{{ url_for('neomotherbrain.gateway_matrix') }}">Gateway Matrix</a>
         <a class="action-button" href="{{ url_for('neomotherbrain.manage_sort') }}">Manage Sort</a>
         <a class="action-button" href="{{ url_for('neomotherbrain.master_schedule') }}">Master Schedule</a>
-        {% if can_manage_users(current_user) %}
-        <a class="action-button" href="{{ url_for('auth.access_requests') }}">Access Requests</a>
-        {% endif %}
         {% if can_manage_system(current_user) %}
         <a class="action-button" href="{{ url_for('auth.users') }}">User Management</a>
         {% endif %}
