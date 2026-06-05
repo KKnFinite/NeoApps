@@ -75,11 +75,13 @@
                 {% for row in node_rows %}
                 <label class="user-edit-role-field">
                     <span>{{ row.node.name }}</span>
-                    <select name="node_{{ row.node.id }}">
-                        {% for role in row.role_choices %}
-                        <option value="{{ role }}" {% if row.effective_role == role %}selected{% endif %}>{{ role|role_label }}</option>
-                        {% endfor %}
-                    </select>
+                    <span class="role-select-wrap">
+                        <select name="node_{{ row.node.id }}">
+                            {% for role in row.role_choices %}
+                            <option value="{{ role }}" {% if row.effective_role == role %}selected{% endif %}>{{ role|role_label }}</option>
+                            {% endfor %}
+                        </select>
+                    </span>
                 </label>
                 {% endfor %}
             {% else %}

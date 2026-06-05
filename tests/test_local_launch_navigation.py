@@ -62,6 +62,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(".centered-command-page .user-search-form", css)
         self.assertIn("text-align-last: center;", css)
         self.assertIn(".user-edit-role-field select,", css)
+        self.assertIn(".role-select-wrap::after", css)
+        self.assertIn("border-right: 2px solid #ff3b46;", css)
         self.assertIn("width: min(100%, 240px);", css)
         self.assertIn(".user-chip", css)
         self.assertIn(".topbar::after", css)
