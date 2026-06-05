@@ -35,12 +35,18 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "denial_notes": "TEXT",
         "approval_email_sent_at": "DATETIME",
     },
+    "sort_date_missions": {
+        "arrival_status": "VARCHAR(32)",
+    },
 }
 
 POSTGRES_OPTIONAL_COLUMNS = {
     "users": {
         "first_name": "VARCHAR(80)",
         "last_name": "VARCHAR(80)",
+    },
+    "sort_date_missions": {
+        "arrival_status": "VARCHAR(32)",
     },
 }
 

@@ -145,6 +145,7 @@ class SortDateGenerationTest(unittest.TestCase):
         self.assertIsNone(mission.first_mix_pull_time_local)
         self.assertIsNone(mission.final_mix_pull_time_local)
         self.assertIsNone(mission.pull_time_source)
+        self.assertEqual(mission.arrival_status, "scheduled")
 
     def test_duplicate_operation_generation_is_blocked(self):
         self._add_master(flight_number="5X123")
@@ -182,7 +183,7 @@ class SortDateGenerationTest(unittest.TestCase):
         db.session.add(mission)
         db.session.flush()
 
-        tail_state = ensure_tail_state_for_mission(mission, parking_position="A1")
+        tail_state = ensure_tail_state_for_mission(mission, parking_position="a1")
 
         self.assertEqual(tail_state.tail_number, "N123UP")
         self.assertEqual(tail_state.aircraft_type, "A300")
@@ -216,7 +217,7 @@ class SortDateGenerationTest(unittest.TestCase):
             tail_number="N123UP",
             aircraft_type="A330",
             aircraft_type_source="manual",
-            parking_position="Manual",
+            parking_position="manual",
         )
         db.session.add(mission.sort_date_operation)
         db.session.add(mission)
@@ -227,7 +228,7 @@ class SortDateGenerationTest(unittest.TestCase):
 
         self.assertEqual(tail_state.aircraft_type, "A330")
         self.assertEqual(tail_state.aircraft_type_source, "manual")
-        self.assertEqual(tail_state.parking_position, "Manual")
+        self.assertEqual(tail_state.parking_position, "MANUAL")
 
     def test_default_crew_assignment_slots_are_created(self):
         self._add_master(flight_number="5X123")

@@ -651,8 +651,19 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(invalid.status_code, 400)
         self.assertIn(b"Destination must be exactly 3 letters.", invalid.data)
         self.assertEqual(valid.status_code, 302)
+        self.assertEqual(master.flight_number, "UP123")
         self.assertEqual(master.origin, "RFD")
         self.assertEqual(master.destination, "SDF")
+
+    def test_master_schedule_flight_number_saves_uppercase(self):
+        response = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(flight_number="up789"),
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIsNotNone(MasterFlightSchedule.query.filter_by(flight_number="UP789").first())
 
     def test_master_schedule_time_fields_use_24_hour_format_and_save(self):
         response = self.client.post(
@@ -943,10 +954,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
             f"/motherbrain/operations/{operation.id}/missions/new",
             data=self._mission_form_data(
                 mission_type="arrival",
-                flight_number="ARRMAN",
-                origin="SDF",
-                destination="RFD",
-                assigned_tail_number="N123UP",
+                flight_number="arrman",
+                origin="sdf",
+                destination="rfd",
+                assigned_tail_number="n123up",
+                arrival_status="en_route",
                 pure_pull_time_local="01:20",
                 first_mix_pull_time_local="01:40",
                 final_mix_pull_time_local="01:55",
@@ -959,6 +971,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(mission.mission_source, "manual")
         self.assertEqual(mission.mission_type, "arrival")
+        self.assertEqual(mission.flight_number, "ARRMAN")
+        self.assertEqual(mission.origin, "SDF")
+        self.assertEqual(mission.destination, "RFD")
+        self.assertEqual(mission.assigned_tail_number, "N123UP")
+        self.assertEqual(mission.arrival_status, "en_route")
         self.assertIsNone(mission.pure_pull_time_local)
         self.assertIsNone(mission.first_mix_pull_time_local)
         self.assertIsNone(mission.final_mix_pull_time_local)
@@ -974,7 +991,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         response = self.client.post(
             f"/motherbrain/operations/{operation.id}/missions/new",
             data=self._mission_form_data(
-                flight_number="DEPMAN",
+                flight_number="depman",
+                origin="rfd",
+                destination="sdf",
                 pure_pull_time_local="01:20",
                 first_mix_pull_time_local="01:40",
                 final_mix_pull_time_local="01:55",
@@ -987,6 +1006,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(mission.mission_source, "manual")
         self.assertEqual(mission.mission_type, "departure")
+        self.assertEqual(mission.flight_number, "DEPMAN")
+        self.assertEqual(mission.origin, "RFD")
+        self.assertEqual(mission.destination, "SDF")
         self.assertEqual(mission.pure_pull_time_local, time(1, 20))
         self.assertEqual(mission.first_mix_pull_time_local, time(1, 40))
         self.assertEqual(mission.final_mix_pull_time_local, time(1, 55))
@@ -1090,7 +1112,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
     def test_manual_arrival_appears_on_arrival_board(self):
         operation = self._operation()
         db.session.add(operation)
-        db.session.add(self._mission(operation, "arrival", "ARRBOARD"))
+        db.session.add(self._mission(operation, "arrival", "arrboard", arrival_status="unloaded"))
         db.session.add(self._mission(operation, "departure", "DEPBOARD"))
         db.session.commit()
 
@@ -1098,19 +1120,23 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"ARRBOARD", response.data)
+        self.assertIn(b"Unloaded", response.data)
+        self.assertIn(b">Status<", response.data)
         self.assertNotIn(b"DEPBOARD", response.data)
 
     def test_manual_departure_appears_on_departure_board(self):
         operation = self._operation()
         db.session.add(operation)
         db.session.add(self._mission(operation, "arrival", "ARRBOARD"))
-        db.session.add(self._mission(operation, "departure", "DEPBOARD"))
+        db.session.add(self._mission(operation, "departure", "depboard", departure_status="crew_load_complete"))
         db.session.commit()
 
         response = self.client.get(f"/motherbrain/operations/{operation.id}/departures")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"DEPBOARD", response.data)
+        self.assertIn(b"Crew Load Complete", response.data)
+        self.assertIn(b">Status<", response.data)
         self.assertNotIn(b"ARRBOARD", response.data)
 
     def test_manual_departure_window_adjusted_times_still_display(self):
@@ -1563,7 +1589,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "sort_name": operation.sort_name,
             "mission_type": mission_type,
             "mission_source": "manual",
-            "flight_number": flight_number,
+            "flight_number": flight_number.upper(),
             "origin": "SDF" if mission_type == "arrival" else "RFD",
             "destination": "RFD" if mission_type == "arrival" else "SDF",
             "planned_datetime_local": datetime(2026, 6, 1, 2, 10),

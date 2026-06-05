@@ -23,6 +23,11 @@ class SortDateMission(db.Model):
             name="ck_sort_date_missions_fuel_status",
         ),
         db.CheckConstraint(
+            "arrival_status IS NULL OR arrival_status IN "
+            "('scheduled', 'en_route', 'arrived', 'unloaded')",
+            name="ck_sort_date_missions_arrival_status",
+        ),
+        db.CheckConstraint(
             "departure_status IN ('loading', 'last_uld_enroute', 'ramp_load_complete', "
             "'crew_load_complete', 'blocked_out')",
             name="ck_sort_date_missions_departure_status",
@@ -71,6 +76,7 @@ class SortDateMission(db.Model):
     pull_time_source = db.Column(db.String(32), nullable=True)
     fuel_status = db.Column(db.String(32), nullable=True)
     fuel_completed_at_utc = db.Column(db.DateTime, nullable=True)
+    arrival_status = db.Column(db.String(32), nullable=True)
     departure_status = db.Column(db.String(32), nullable=True)
     last_uld_enroute_at_utc = db.Column(db.DateTime, nullable=True)
     ramp_load_completed_at_utc = db.Column(db.DateTime, nullable=True)

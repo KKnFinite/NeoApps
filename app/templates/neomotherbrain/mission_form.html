@@ -62,15 +62,23 @@
             <span>Fuel Status</span>
             <select name="fuel_status">
                 {% for status in fuel_statuses %}
-                <option value="{{ status }}" {% if form.fuel_status == status %}selected{% endif %}>{{ status or "-" }}</option>
+                <option value="{{ status }}" {% if form.fuel_status == status %}selected{% endif %}>{{ status|status_label }}</option>
                 {% endfor %}
             </select>
         </label>
-        <label>
+        <label data-mission-arrival-only {% if form.mission_type != "arrival" %}hidden{% endif %}>
+            <span>Arrival Status</span>
+            <select name="arrival_status">
+                {% for status in arrival_statuses %}
+                <option value="{{ status }}" {% if form.arrival_status == status %}selected{% endif %}>{{ status|status_label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label data-mission-departure-only {% if form.mission_type != "departure" %}hidden{% endif %}>
             <span>Departure Status</span>
             <select name="departure_status">
                 {% for status in departure_statuses %}
-                <option value="{{ status }}" {% if form.departure_status == status %}selected{% endif %}>{{ status or "-" }}</option>
+                <option value="{{ status }}" {% if form.departure_status == status %}selected{% endif %}>{{ status|status_label }}</option>
                 {% endfor %}
             </select>
         </label>
@@ -109,6 +117,14 @@
         document.querySelectorAll("[data-mission-departure-only]").forEach((field) => {
             field.hidden = isArrival;
             if (isArrival) {
+                field.querySelectorAll("select").forEach((input) => {
+                    input.value = "";
+                });
+            }
+        });
+        document.querySelectorAll("[data-mission-arrival-only]").forEach((field) => {
+            field.hidden = !isArrival;
+            if (!isArrival) {
                 field.querySelectorAll("select").forEach((input) => {
                     input.value = "";
                 });

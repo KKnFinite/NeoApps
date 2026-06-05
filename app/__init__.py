@@ -68,6 +68,11 @@ def register_template_helpers(app):
         normalized = str(value).strip().lower()
         return role_labels.get(normalized, str(value).strip().replace("_", " ").title())
 
+    def format_status_label(value):
+        if not value:
+            return "-"
+        return str(value).strip().replace("_", " ").title()
+
     def format_local_datetime(value, timezone_name=None):
         if not value:
             return ""
@@ -90,6 +95,7 @@ def register_template_helpers(app):
 
     app.jinja_env.filters["local_datetime"] = format_local_datetime
     app.jinja_env.filters["role_label"] = format_role_label
+    app.jinja_env.filters["status_label"] = format_status_label
 
     @app.context_processor
     def permission_helpers():

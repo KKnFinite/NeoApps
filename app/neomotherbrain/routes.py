@@ -3,6 +3,7 @@ import re
 
 from flask import current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from sqlalchemy import func
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
@@ -65,6 +66,13 @@ MISSION_TYPE_OPTIONS = (
 )
 MISSION_TYPES = {"arrival", "departure"}
 FUEL_STATUSES = ("", "waiting", "received", "assigned", "complete")
+ARRIVAL_STATUSES = (
+    "",
+    "scheduled",
+    "en_route",
+    "arrived",
+    "unloaded",
+)
 DEPARTURE_STATUSES = (
     "",
     "loading",
@@ -995,12 +1003,12 @@ def _raise_for_duplicate_active_master_schedule(master_schedule):
     if not master_schedule.active:
         return
 
-    duplicate_query = MasterFlightSchedule.query.filter_by(
-        active=True,
-        gateway_code=master_schedule.gateway_code,
-        sort_name=master_schedule.sort_name,
-        mission_type=master_schedule.mission_type,
-        flight_number=master_schedule.flight_number,
+    duplicate_query = MasterFlightSchedule.query.filter(
+        MasterFlightSchedule.active.is_(True),
+        MasterFlightSchedule.gateway_code == master_schedule.gateway_code,
+        MasterFlightSchedule.sort_name == master_schedule.sort_name,
+        MasterFlightSchedule.mission_type == master_schedule.mission_type,
+        func.upper(MasterFlightSchedule.flight_number) == master_schedule.flight_number.upper(),
     )
 
     if master_schedule.id:
@@ -1023,7 +1031,7 @@ def _raise_for_duplicate_active_master_schedule_rows(schedules):
             schedule.gateway_code,
             schedule.sort_name,
             schedule.mission_type,
-            schedule.flight_number,
+            schedule.flight_number.upper(),
         )
         if key in seen:
             raise ValueError(
@@ -1098,7 +1106,7 @@ def _gateway_timezone(gateway=None):
 
 
 def _normalize_flight_number(value):
-    flight_number = (value or "").strip()
+    flight_number = (value or "").strip().upper()
     if not flight_number:
         raise ValueError("Flight number is required.")
     if len(flight_number) > 8:
@@ -1116,6 +1124,7 @@ def _normalize_airport_code(value, label):
 def _render_mission_form(operation, form, mode, mission=None):
     return render_template(
         "neomotherbrain/mission_form.html",
+        arrival_statuses=ARRIVAL_STATUSES,
         departure_statuses=DEPARTURE_STATUSES,
         form=form,
         fuel_statuses=FUEL_STATUSES,
@@ -1145,6 +1154,7 @@ def _mission_form_from_request(operation):
         ),
         "planned_fuel_load": request.form.get("planned_fuel_load", ""),
         "fuel_status": request.form.get("fuel_status", ""),
+        "arrival_status": request.form.get("arrival_status", ""),
         "departure_status": request.form.get("departure_status", ""),
         "pure_pull_time_local": _time_value_from_form(
             request.form,
@@ -1183,6 +1193,7 @@ def _mission_form_from_model(mission):
         ),
         "planned_fuel_load": "" if mission.planned_fuel_load is None else str(mission.planned_fuel_load),
         "fuel_status": mission.fuel_status or "",
+        "arrival_status": mission.arrival_status or "",
         "departure_status": mission.departure_status or "",
         "pure_pull_time_local": _format_time(mission.pure_pull_time_local),
         "first_mix_pull_time_local": _format_time(mission.first_mix_pull_time_local),
@@ -1192,7 +1203,7 @@ def _mission_form_from_model(mission):
 
 def _apply_mission_form(mission, operation, form):
     mission_type = form["mission_type"].strip().lower()
-    flight_number = form["flight_number"].strip()
+    flight_number = form["flight_number"].strip().upper()
     origin = form["origin"].strip().upper()
     destination = form["destination"].strip().upper()
     timezone = form["timezone"].strip() or "America/Chicago"
@@ -1253,6 +1264,11 @@ def _apply_mission_form(mission, operation, form):
     mission.fuel_status = _choice_or_none(form["fuel_status"], FUEL_STATUSES, "Fuel status")
 
     if mission_type == "arrival":
+        mission.arrival_status = _choice_or_none(
+            form["arrival_status"],
+            ARRIVAL_STATUSES,
+            "Arrival status",
+        ) or "scheduled"
         mission.pure_pull_time_local = None
         mission.first_mix_pull_time_local = None
         mission.final_mix_pull_time_local = None
@@ -1260,6 +1276,7 @@ def _apply_mission_form(mission, operation, form):
         mission.departure_status = None
         return
 
+    mission.arrival_status = None
     mission.departure_status = _choice_or_none(
         form["departure_status"],
         DEPARTURE_STATUSES,
@@ -1291,9 +1308,9 @@ def _apply_mission_form(mission, operation, form):
 
 def _raise_for_duplicate_operation_flight_number(operation, mission):
     with db.session.no_autoflush:
-        duplicate_query = SortDateMission.query.filter_by(
-            sort_date_operation_id=operation.id,
-            flight_number=mission.flight_number,
+        duplicate_query = SortDateMission.query.filter(
+            SortDateMission.sort_date_operation_id == operation.id,
+            func.upper(SortDateMission.flight_number) == mission.flight_number.upper(),
         )
 
         if mission.id:
@@ -1482,6 +1499,11 @@ def _mission_list_row(mission, operation):
         "timing": timing,
         "parking_position": tail_state.parking_position if tail_state else None,
         "display_time": display_time,
+        "status": (
+            mission.arrival_status
+            if mission.mission_type == "arrival"
+            else mission.departure_status
+        ),
     }
 
 

@@ -23,10 +23,10 @@
             <tbody>
                 {% for schedule in schedules %}
                 <tr>
-                    <td data-label="Flight">{{ schedule.flight_number }}</td>
-                    <td data-label="Tail">{{ schedule.assigned_tail_number|default("-", true) }}</td>
-                    <td data-label="{{ 'Origin' if mission_type == 'arrival' else 'Destination' }}">{{ schedule.origin if mission_type == "arrival" else schedule.destination }}</td>
-                    <td data-label="Parking">{{ schedule.preferred_parking or "-" }}</td>
+                    <td data-label="Flight">{{ schedule.flight_number|upper }}</td>
+                    <td data-label="Tail">{{ schedule.assigned_tail_number|upper if schedule.assigned_tail_number is defined and schedule.assigned_tail_number else "-" }}</td>
+                    <td data-label="{{ 'Origin' if mission_type == 'arrival' else 'Destination' }}">{{ (schedule.origin if mission_type == "arrival" else schedule.destination)|upper }}</td>
+                    <td data-label="Parking">{{ schedule.preferred_parking|upper if schedule.preferred_parking else "-" }}</td>
                     <td data-label="{{ 'ETA' if mission_type == 'arrival' else 'ETD' }}">{{ schedule.planned_time_local.strftime("%H:%M") if schedule.planned_time_local else "-" }}</td>
                     <td data-label="Actions" class="table-actions">
                         <a href="{{ url_for('neomotherbrain.edit_master_schedule', master_id=schedule.id) }}">Edit</a>

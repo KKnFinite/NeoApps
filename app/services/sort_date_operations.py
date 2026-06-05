@@ -194,6 +194,7 @@ def ensure_tail_state_for_mission(mission, parking_position=None):
     if not mission.assigned_tail_number:
         return None
 
+    mission.assigned_tail_number = mission.assigned_tail_number.strip().upper()
     tail_state = SortDateTailState.query.filter_by(
         sort_date=mission.sort_date,
         gateway_code=mission.gateway_code,
@@ -219,8 +220,10 @@ def ensure_tail_state_for_mission(mission, parking_position=None):
             tail_state.aircraft_type = aircraft_type
             tail_state.aircraft_type_source = "derived"
 
+    if tail_state.parking_position:
+        tail_state.parking_position = tail_state.parking_position.strip().upper()
     if parking_position and not tail_state.parking_position:
-        tail_state.parking_position = parking_position
+        tail_state.parking_position = parking_position.strip().upper()
 
     db.session.flush()
     return tail_state
@@ -315,6 +318,7 @@ def _build_mission_from_master(operation, master_row, sort_date):
         master_row.timezone,
     )
     assigned_tail_number = getattr(master_row, "assigned_tail_number", None)
+    assigned_tail_number = assigned_tail_number.strip().upper() if assigned_tail_number else None
 
     mission = SortDateMission(
         sort_date_operation=operation,
@@ -324,9 +328,9 @@ def _build_mission_from_master(operation, master_row, sort_date):
         mission_type=master_row.mission_type,
         mission_source="master",
         master_flight_schedule_id=master_row.id,
-        flight_number=master_row.flight_number,
-        origin=master_row.origin,
-        destination=master_row.destination,
+        flight_number=master_row.flight_number.strip().upper(),
+        origin=master_row.origin.strip().upper(),
+        destination=master_row.destination.strip().upper(),
         timezone=master_row.timezone,
         planned_datetime_local=planned_datetime_local,
         planned_datetime_utc=planned_datetime_utc,
@@ -346,6 +350,8 @@ def _build_mission_from_master(operation, master_row, sort_date):
             )
         ):
             mission.pull_time_source = "master"
+    else:
+        mission.arrival_status = "scheduled"
 
     return mission
 
@@ -367,20 +373,22 @@ def _apply_master_template_to_mission(mission, master_row, operation):
     mission.mission_type = master_row.mission_type
     mission.mission_source = "master"
     mission.master_flight_schedule_id = master_row.id
-    mission.flight_number = master_row.flight_number
-    mission.origin = master_row.origin
-    mission.destination = master_row.destination
+    mission.flight_number = master_row.flight_number.strip().upper()
+    mission.origin = master_row.origin.strip().upper()
+    mission.destination = master_row.destination.strip().upper()
     mission.timezone = master_row.timezone
     mission.planned_datetime_local = planned_datetime_local
     mission.planned_datetime_utc = planned_datetime_utc
     mission.planned_source = "master"
 
     if master_row.mission_type == "arrival":
+        mission.arrival_status = mission.arrival_status or "scheduled"
         mission.pure_pull_time_local = None
         mission.first_mix_pull_time_local = None
         mission.final_mix_pull_time_local = None
         mission.pull_time_source = None
     else:
+        mission.arrival_status = None
         mission.pure_pull_time_local = master_row.pure_pull_time_local
         mission.first_mix_pull_time_local = master_row.first_mix_pull_time_local
         mission.final_mix_pull_time_local = master_row.final_mix_pull_time_local
@@ -414,6 +422,7 @@ def _master_template_snapshot(mission):
         mission.planned_datetime_local,
         mission.planned_datetime_utc,
         mission.planned_source,
+        mission.arrival_status,
         mission.pure_pull_time_local,
         mission.first_mix_pull_time_local,
         mission.final_mix_pull_time_local,

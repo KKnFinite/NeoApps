@@ -24,6 +24,7 @@
                     <th>Destination</th>
                     <th>Parking</th>
                     <th>ETD</th>
+                    <th>Status</th>
                     <th>Links</th>
                 </tr>
             </thead>
@@ -32,11 +33,12 @@
                 {% set mission = row.mission %}
                 {% set timing = row.timing %}
                 <tr>
-                    <td>{{ mission.flight_number }}</td>
-                    <td>{{ mission.assigned_tail_number or "-" }}</td>
-                    <td>{{ mission.destination }}</td>
-                    <td>{{ row.parking_position or "-" }}</td>
+                    <td>{{ mission.flight_number|upper }}</td>
+                    <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
+                    <td>{{ mission.destination|upper }}</td>
+                    <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>
                     <td>{{ timing.adjusted_planned_departure_time.strftime("%H:%M") if timing.adjusted_planned_departure_time else "-" }}</td>
+                    <td>{{ mission.departure_status|status_label }}</td>
                     <td class="table-actions">
                         <a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=mission.id) }}">View</a>
                         <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">Edit</a>
@@ -44,7 +46,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6">No departure missions found.</td>
+                    <td colspan="7">No departure missions found.</td>
                 </tr>
                 {% endfor %}
             </tbody>

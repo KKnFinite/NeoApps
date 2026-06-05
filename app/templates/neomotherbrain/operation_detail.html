@@ -67,6 +67,7 @@
                     <th>Origin/Destination</th>
                     <th>Parking</th>
                     <th>ETA/ETD</th>
+                    <th>Status</th>
                     <th>Links</th>
                 </tr>
             </thead>
@@ -74,11 +75,12 @@
                 {% for row in rows %}
                 {% set mission = row.mission %}
                 <tr>
-                    <td>{{ mission.flight_number }}</td>
-                    <td>{{ mission.assigned_tail_number or "-" }}</td>
-                    <td>{{ mission.origin if mission.mission_type == "arrival" else mission.destination }}</td>
-                    <td>{{ row.parking_position or "-" }}</td>
+                    <td>{{ mission.flight_number|upper }}</td>
+                    <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
+                    <td>{{ (mission.origin if mission.mission_type == "arrival" else mission.destination)|upper }}</td>
+                    <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>
                     <td>{{ row.display_time.strftime("%H:%M") if row.display_time else "-" }}</td>
+                    <td>{{ row.status|status_label }}</td>
                     <td class="table-actions">
                         <a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=mission.id) }}">View</a>
                         <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">Edit</a>
@@ -86,7 +88,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6">No missions found.</td>
+                    <td colspan="7">No missions found.</td>
                 </tr>
                 {% endfor %}
             </tbody>

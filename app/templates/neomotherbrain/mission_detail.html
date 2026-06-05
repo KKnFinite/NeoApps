@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}{{ mission.flight_number }} | Mission{% endblock %}
+{% block title %}{{ mission.flight_number|upper }} | Mission{% endblock %}
 
 {% block content %}
 {% include "neomotherbrain/_motherbrain_logo.html" %}
 <section class="panel">
     <div class="section-heading">
-        <h1>{{ mission.flight_number }}</h1>
+        <h1>{{ mission.flight_number|upper }}</h1>
     </div>
 
     <div class="action-row">
@@ -24,19 +24,19 @@
         </div>
         <div>
             <dt>Mission Source</dt>
-            <dd>{{ mission.mission_source }}</dd>
+            <dd>{{ mission.mission_source|status_label }}</dd>
         </div>
         <div>
             <dt>Origin</dt>
-            <dd>{{ mission.origin }}</dd>
+            <dd>{{ mission.origin|upper }}</dd>
         </div>
         <div>
             <dt>Destination</dt>
-            <dd>{{ mission.destination }}</dd>
+            <dd>{{ mission.destination|upper }}</dd>
         </div>
         <div>
             <dt>Assigned Tail</dt>
-            <dd>{{ mission.assigned_tail_number or "-" }}</dd>
+            <dd>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</dd>
         </div>
         <div>
             <dt>{{ "STA" if mission.mission_type == "arrival" else "STD" }}</dt>
@@ -56,11 +56,15 @@
         </div>
         <div>
             <dt>Fuel Status</dt>
-            <dd>{{ mission.fuel_status or "-" }}</dd>
+            <dd>{{ mission.fuel_status|status_label }}</dd>
+        </div>
+        <div>
+            <dt>Arrival Status</dt>
+            <dd>{{ mission.arrival_status|status_label }}</dd>
         </div>
         <div>
             <dt>Departure Status</dt>
-            <dd>{{ mission.departure_status or "-" }}</dd>
+            <dd>{{ mission.departure_status|status_label }}</dd>
         </div>
         <div>
             <dt>Pure Pull</dt>
@@ -76,7 +80,7 @@
         </div>
         <div>
             <dt>Pull Time Source</dt>
-            <dd>{{ mission.pull_time_source or "-" }}</dd>
+            <dd>{{ mission.pull_time_source|status_label }}</dd>
         </div>
         <div>
             <dt>Crew Coverage</dt>

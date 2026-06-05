@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}{{ master_schedule.flight_number }} | Master Schedule{% endblock %}
+{% block title %}{{ master_schedule.flight_number|upper }} | Master Schedule{% endblock %}
 
 {% block content %}
 {% include "neomotherbrain/_motherbrain_logo.html" %}
 <section class="panel">
     <div class="section-heading">
-        <h1>{{ master_schedule.flight_number }}</h1>
+        <h1>{{ master_schedule.flight_number|upper }}</h1>
     </div>
 
     <div class="action-row">
@@ -36,11 +36,11 @@
         </div>
         <div>
             <dt>Origin</dt>
-            <dd>{{ master_schedule.origin }}</dd>
+            <dd>{{ master_schedule.origin|upper }}</dd>
         </div>
         <div>
             <dt>Destination</dt>
-            <dd>{{ master_schedule.destination }}</dd>
+            <dd>{{ master_schedule.destination|upper }}</dd>
         </div>
         <div>
             <dt>Active Days</dt>
