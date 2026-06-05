@@ -1470,6 +1470,10 @@ h2 {
     gap: 18px;
 }
 
+.gateway-matrix-heading-block {
+    text-align: center;
+}
+
 .gateway-matrix-grid {
     display: grid;
     gap: 8px;

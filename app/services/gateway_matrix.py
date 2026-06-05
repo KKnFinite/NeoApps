@@ -19,14 +19,15 @@ DAY_OPTIONS = (
 )
 
 SORT_OPTIONS = (
-    ("twilight", "Twilight"),
-    ("night", "Night"),
     ("sunrise", "Sunrise"),
     ("day", "Day"),
+    ("twilight", "Twilight"),
+    ("night", "Night"),
 )
 
 DAY_VALUES = {value for value, _label in DAY_OPTIONS}
 SORT_VALUES = {value for value, _label in SORT_OPTIONS}
+SORT_ORDER = {value: index for index, (value, _label) in enumerate(SORT_OPTIONS)}
 
 
 def gateway_timezone(gateway=None):
@@ -149,13 +150,16 @@ def ensure_sort_operations_for_gateway_date(
 
 
 def operations_for_gateway_date(gateway, sort_date):
-    return (
+    operations = (
         SortDateOperation.query.filter_by(
             gateway_code=gateway.code,
             sort_date=sort_date,
         )
-        .order_by(SortDateOperation.sort_name.asc())
         .all()
+    )
+    return sorted(
+        operations,
+        key=lambda operation: SORT_ORDER.get(operation.sort_name, len(SORT_ORDER)),
     )
 
 

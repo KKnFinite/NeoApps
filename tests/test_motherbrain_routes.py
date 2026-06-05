@@ -74,6 +74,26 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Manage Sort", response.data)
         self.assertNotIn(b"Generate Nightly Operation", response.data)
 
+    def test_gateway_matrix_displays_dynamic_gateway_and_sort_order(self):
+        response = self.client.get("/motherbrain/gateway-matrix")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("gateway-matrix-heading-block", html)
+        self.assertIn("Set active sorts for RFD", html)
+        self.assertLess(
+            html.index('name="monday_sunrise"'),
+            html.index('name="monday_day"'),
+        )
+        self.assertLess(
+            html.index('name="monday_day"'),
+            html.index('name="monday_twilight"'),
+        )
+        self.assertLess(
+            html.index('name="monday_twilight"'),
+            html.index('name="monday_night"'),
+        )
+
     def test_gateway_matrix_saves_current_gateway_sort_toggles(self):
         response = self.client.post(
             "/motherbrain/gateway-matrix",
@@ -98,6 +118,13 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 ("tuesday", "twilight"),
             },
         )
+        monday_day = GatewaySortMatrix.query.filter_by(
+            gateway_id=self.rfd_gateway.id,
+            day_of_week="monday",
+            sort_name="day",
+        ).one()
+        self.assertEqual(monday_day.gateway_code, "RFD")
+        self.assertTrue(monday_day.is_active)
 
     def test_motherbrain_auto_generates_today_active_matrix_sorts(self):
         sort_date = current_gateway_local_date(self.rfd_gateway)
