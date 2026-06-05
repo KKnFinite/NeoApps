@@ -44,7 +44,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         paths = (
             "/admin/users",
             "/admin/users/pending",
-            "/admin/users/manage-roles",
+            "/admin/users/edit-users",
             f"/admin/users/{target.id}",
             f"/admin/users/{target.id}/edit",
             f"/admin/users/{target.id}/roles",
@@ -65,7 +65,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         paths = (
             "/admin/users",
             "/admin/users/pending",
-            "/admin/users/manage-roles",
+            "/admin/users/edit-users",
             f"/admin/users/{target.id}",
             f"/admin/users/{target.id}/edit",
             f"/admin/users/{target.id}/roles",
@@ -91,7 +91,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertIn(b"pending@example.com", response.data)
         self.assertNotIn(b"<th>Username</th>", response.data)
 
-    def test_user_management_main_only_shows_pending_and_manage_roles_options(self):
+    def test_user_management_main_only_shows_pending_and_edit_users_options(self):
         grandmaster = self._admin("menu_grandmaster", "grandmaster")
         db.session.commit()
         self._login(grandmaster.username)
@@ -100,9 +100,12 @@ class GrandmasterUserManagementTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Pending Requests", response.data)
-        self.assertIn(b"Manage Roles", response.data)
+        self.assertIn(b"Edit Users", response.data)
         self.assertIn(b'href="/admin/users/pending"', response.data)
-        self.assertIn(b'href="/admin/users/manage-roles"', response.data)
+        self.assertIn(b'href="/admin/users/edit-users"', response.data)
+        self.assertNotIn(b"Search approved users", response.data)
+        self.assertNotIn(b"Approve or deny new", response.data)
+        self.assertNotIn(b"Manage Roles", response.data)
         self.assertNotIn(b"Pending Access Requests", response.data)
         self.assertNotIn(b"Approved Users", response.data)
         self.assertNotIn(b"Denied Users", response.data)
@@ -110,20 +113,28 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertNotIn(b"Unverified Email", response.data)
         self.assertNotIn(b"<table", response.data)
 
-    def test_manage_roles_searches_by_name_employee_id_and_email(self):
+    def test_edit_users_requires_search_then_filters_by_name_employee_id_and_email(self):
         grandmaster = self._admin("search_grandmaster", "grandmaster")
         self._approved_user("alpha_user", "alpha@example.com")
         self._approved_user("beta_user", "beta@example.com")
         db.session.commit()
         self._login(grandmaster.username)
 
-        name_response = self.client.get("/admin/users/manage-roles?q=Alpha")
-        employee_response = self.client.get("/admin/users/manage-roles?q=EMP-beta_user")
-        email_response = self.client.get("/admin/users/manage-roles?q=alpha@example.com")
+        default_response = self.client.get("/admin/users/edit-users")
+        legacy_response = self.client.get("/admin/users/manage-roles?q=Alpha", follow_redirects=False)
+        name_response = self.client.get("/admin/users/edit-users?q=Alpha")
+        employee_response = self.client.get("/admin/users/edit-users?q=EMP-beta_user")
+        email_response = self.client.get("/admin/users/edit-users?q=alpha@example.com")
 
+        self.assertEqual(default_response.status_code, 200)
+        self.assertIn(b"Enter a search term to find a user.", default_response.data)
+        self.assertNotIn(b"Alpha User", default_response.data)
+        self.assertEqual(legacy_response.status_code, 302)
+        self.assertIn("/admin/users/edit-users", legacy_response.location)
         self.assertEqual(name_response.status_code, 200)
         self.assertIn(b"Alpha User", name_response.data)
         self.assertNotIn(b"Beta User", name_response.data)
+        self.assertIn(b">Edit</a>", name_response.data)
         self.assertIn(b"Beta User", employee_response.data)
         self.assertNotIn(b"Alpha User", employee_response.data)
         self.assertIn(b"Alpha User", email_response.data)
@@ -155,6 +166,21 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertEqual(updated.full_name, "Split Person")
         self.assertEqual(updated.employee_id, "E-SPLIT")
         self.assertEqual(updated.email, "split.person@example.com")
+
+    def test_edit_user_screen_includes_membership_and_node_roles(self):
+        grandmaster = self._admin("screen_grandmaster", "grandmaster")
+        target, _membership = self._approved_user("screen_user", "screen@example.com")
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        response = self.client.get(f"/admin/users/{target.id}/edit")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Gateway Membership", response.data)
+        self.assertIn(b"NeoNode Roles", response.data)
+        self.assertIn(b'name="membership_status"', response.data)
+        self.assertIn(b'name="membership_is_active"', response.data)
+        self.assertIn(b"NeoMotherBrain", response.data)
 
     def test_unverified_pending_user_cannot_be_approved(self):
         grandmaster = self._admin("unverified_grandmaster", "grandmaster")
@@ -278,6 +304,76 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertIsNone(db.session.get(GatewayNodeRole, role.id))
         self.assertTrue(user_can_access_node(user, "RFD", "sektor", "watcher"))
         self.assertFalse(user_can_access_node(user, "RFD", "sektor", "operator"))
+
+    def test_combined_edit_user_updates_membership_and_node_roles(self):
+        grandmaster = self._admin("combined_grandmaster", "grandmaster")
+        user, membership = self._approved_user("combined_user", "combined@example.com")
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        sektor = NeoNode.query.filter_by(code="sektor").first()
+        form = self._edit_user_form(user, membership)
+        form[f"node_{sektor.id}"] = "master"
+
+        response = self.client.post(
+            f"/admin/users/{user.id}/edit",
+            data=form,
+            follow_redirects=False,
+        )
+
+        role = GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            node_id=sektor.id,
+        ).first()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(role.role, "master")
+
+    def test_non_kessler_grandmaster_cannot_assign_grandmaster_role(self):
+        grandmaster = self._admin("ordinary_grandmaster", "grandmaster")
+        user, membership = self._approved_user("future_grandmaster", "future@example.com")
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        motherbrain = NeoNode.query.filter_by(code="motherbrain").first()
+        form = self._edit_user_form(user, membership)
+        form[f"node_{motherbrain.id}"] = "grandmaster"
+
+        response = self.client.post(
+            f"/admin/users/{user.id}/edit",
+            data=form,
+            follow_redirects=True,
+        )
+
+        role = GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            node_id=motherbrain.id,
+        ).first()
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"You cannot assign a role equal to or higher than your own role.", response.data)
+        self.assertIsNone(role)
+
+    def test_kessler_can_assign_grandmaster_role(self):
+        kessler = self._admin("Kessler", "grandmaster")
+        user, membership = self._approved_user("new_grandmaster", "newgm@example.com")
+        db.session.commit()
+        self._login(kessler.username)
+
+        motherbrain = NeoNode.query.filter_by(code="motherbrain").first()
+        form = self._edit_user_form(user, membership)
+        form[f"node_{motherbrain.id}"] = "grandmaster"
+
+        response = self.client.post(
+            f"/admin/users/{user.id}/edit",
+            data=form,
+            follow_redirects=False,
+        )
+
+        role = GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            node_id=motherbrain.id,
+        ).first()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(role.role, "grandmaster")
 
     def test_node_roles_require_approved_gateway_membership(self):
         grandmaster = self._admin("roles_pending_grandmaster", "grandmaster")
@@ -409,8 +505,8 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertEqual(login_response.location, "/rfd")
         self.assertEqual(users_response.status_code, 200)
         self.assertIn(b"User Management", users_response.data)
-        self.assertEqual(roles_response.status_code, 200)
-        self.assertIn(b"Manage Roles", roles_response.data)
+        self.assertEqual(roles_response.status_code, 302)
+        self.assertIn("/admin/users/edit-users", roles_response.location)
 
     def test_pending_denied_and_no_membership_users_go_to_access_pending(self):
         gateway = ensure_default_gateway_and_nodes()
@@ -444,6 +540,21 @@ class GrandmasterUserManagementTest(unittest.TestCase):
             f"node_{node.id}": "watcher"
             for node in NeoNode.query.filter_by(is_active=True).all()
         }
+
+    def _edit_user_form(self, user, membership):
+        form = {
+            "first_name": user.first_name or "Test",
+            "last_name": user.last_name or "User",
+            "employee_id": user.employee_id,
+            "email": user.email,
+            "supervisor_name": user.supervisor_name or "",
+            "work_area": user.work_area or "",
+            "access_reason": user.access_reason or "",
+            "membership_status": membership.status,
+            "membership_is_active": "1" if membership.is_active else "",
+        }
+        form.update(self._role_form())
+        return form
 
     def _user(self, username, email, verified=False):
         user = User(

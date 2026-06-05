@@ -3,47 +3,99 @@
 {% block title %}Edit User | User Management{% endblock %}
 
 {% block content %}
-<section class="panel compact-panel">
+<section class="panel">
     <div class="section-heading">
-        <p class="eyebrow">User Profile</p>
-        <h1>Edit User</h1>
-        <p class="muted">{{ target_user.display_name }}</p>
+        <p class="eyebrow">Edit User</p>
+        <h1>{{ target_user.display_name }}</h1>
+        <p class="muted">{{ target_user.employee_id or target_user.email or "" }}</p>
     </div>
 
     <form class="operation-form" method="post">
-        <label>
-            <span>First Name</span>
-            <input name="first_name" value="{{ form.first_name }}" autocomplete="given-name" required>
-        </label>
-        <label>
-            <span>Last Name</span>
-            <input name="last_name" value="{{ form.last_name }}" autocomplete="family-name" required>
-        </label>
-        <label>
-            <span>Employee ID</span>
-            <input name="employee_id" value="{{ form.employee_id }}" required>
-        </label>
-        <label>
-            <span>Email</span>
-            <input name="email" type="email" value="{{ form.email }}" autocomplete="email" required>
-        </label>
-        <label>
-            <span>Supervisor / Manager</span>
-            <input name="supervisor_name" value="{{ form.supervisor_name }}">
-        </label>
-        <label>
-            <span>Work Area</span>
-            <input name="work_area" value="{{ form.work_area }}">
-        </label>
-        <label>
-            <span>Reason For Access</span>
-            <textarea name="access_reason">{{ form.access_reason }}</textarea>
-        </label>
+        <section class="panel-subsection">
+            <h2>Identity</h2>
+            <label>
+                <span>First Name</span>
+                <input name="first_name" value="{{ form.first_name }}" autocomplete="given-name" required>
+            </label>
+            <label>
+                <span>Last Name</span>
+                <input name="last_name" value="{{ form.last_name }}" autocomplete="family-name" required>
+            </label>
+            <label>
+                <span>Employee ID</span>
+                <input name="employee_id" value="{{ form.employee_id }}" required>
+            </label>
+            <label>
+                <span>Email</span>
+                <input name="email" type="email" value="{{ form.email }}" autocomplete="email" required>
+            </label>
+            <label>
+                <span>Supervisor / Manager</span>
+                <input name="supervisor_name" value="{{ form.supervisor_name }}">
+            </label>
+            <label>
+                <span>Work Area</span>
+                <input name="work_area" value="{{ form.work_area }}">
+            </label>
+            <label>
+                <span>Reason For Access</span>
+                <textarea name="access_reason">{{ form.access_reason }}</textarea>
+            </label>
+        </section>
+
+        <section class="panel-subsection">
+            <h2>{{ gateway.name }} Gateway Membership</h2>
+            <label>
+                <span>Status</span>
+                <select name="membership_status">
+                    {% for status in ("pending", "approved", "denied") %}
+                    <option value="{{ status }}" {% if membership and membership.status == status %}selected{% endif %}>{{ status|title }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="checkbox-line">
+                <input type="checkbox" name="membership_is_active" value="1" {% if not membership or membership.is_active %}checked{% endif %}>
+                <span>Gateway membership active</span>
+            </label>
+            <label>
+                <span>Approval Notes</span>
+                <input name="approval_notes" value="{{ membership.approval_notes if membership and membership.approval_notes else '' }}">
+            </label>
+            <label>
+                <span>Denial Notes</span>
+                <input name="denial_notes" value="{{ membership.denial_notes if membership and membership.denial_notes else '' }}">
+            </label>
+            {% if not target_user.email_verified_at %}
+            <p class="muted">Email not verified yet. Approval will be blocked until verification is complete.</p>
+            {% endif %}
+        </section>
+
+        <section class="panel-subsection">
+            <h2>{{ gateway.code }} NeoNode Roles</h2>
+            {% if membership and membership.status == "approved" and membership.is_active %}
+                {% for row in node_rows %}
+                <label>
+                    <span>{{ row.node.name }}</span>
+                    <select name="node_{{ row.node.id }}">
+                        {% for role in row.role_choices %}
+                        <option value="{{ role }}" {% if row.effective_role == role %}selected{% endif %}>{{ role }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                {% endfor %}
+            {% else %}
+            <p class="muted">User must have approved active {{ gateway.code }} gateway access before assigning node roles.</p>
+            {% endif %}
+        </section>
+
         <button type="submit">Save User</button>
     </form>
 
     <div class="action-row">
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.user_detail', user_id=target_user.id) }}">Back to User</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.edit_users') }}">Back to Edit Users</a>
+        {% if target_user.id != current_user.id %}
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.emergency_reset_user_password', user_id=target_user.id) }}">Emergency Password Reset</a>
+        {% endif %}
     </div>
 </section>
 {% endblock %}

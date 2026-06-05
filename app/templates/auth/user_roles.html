@@ -15,7 +15,7 @@
         <label>
             <span>{{ row.node.name }}</span>
             <select name="node_{{ row.node.id }}">
-                {% for role in role_choices %}
+                {% for role in row.role_choices %}
                 <option value="{{ role }}" {% if row.effective_role == role %}selected{% endif %}>{{ role }}</option>
                 {% endfor %}
             </select>
@@ -25,8 +25,8 @@
     </form>
 
     <div class="action-row">
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.user_detail', user_id=target_user.id) }}">Back to User</a>
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.manage_roles') }}">Manage Roles</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.edit_user', user_id=target_user.id) }}">Back to Edit User</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.edit_users') }}">Edit Users</a>
     </div>
 </section>
 {% endblock %}

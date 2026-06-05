@@ -7,17 +7,14 @@
     <div class="section-heading">
         <p class="eyebrow">Grandmaster User Management</p>
         <h1>User Management</h1>
-        <p class="muted">{{ gateway.name }} access requests and NeoNode role controls.</p>
     </div>
 
     <div class="command-card-grid user-management-choice-grid">
         <a class="action-button user-management-choice" href="{{ url_for('auth.pending_users') }}">
             <span>Pending Requests</span>
-            <small>Approve or deny new {{ gateway.code }} access requests.</small>
         </a>
-        <a class="action-button user-management-choice" href="{{ url_for('auth.manage_roles') }}">
-            <span>Manage Roles</span>
-            <small>Search approved users and edit gateway/node roles.</small>
+        <a class="action-button user-management-choice" href="{{ url_for('auth.edit_users') }}">
+            <span>Edit Users</span>
         </a>
     </div>
 

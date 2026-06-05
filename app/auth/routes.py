@@ -13,6 +13,7 @@ from app.models.user import ROLE_LEVELS
 from app.services import email_service
 from app.services.access_control import (
     get_current_gateway,
+    get_user_node_role,
     request_default_gateway_access_for_user,
     user_has_gateway_access,
 )
@@ -215,15 +216,15 @@ def users():
     return render_template("auth/users.html", gateway=gateway)
 
 
-@bp.route("/admin/users/manage-roles")
+@bp.route("/admin/users/edit-users")
 @gateway_node_required("motherbrain", minimum_role="grandmaster")
-def manage_roles():
+def edit_users():
     gateway = get_current_gateway()
     search = request.args.get("q", "").strip()
-    query = User.query
+    rows = []
     if search:
         pattern = f"%{search.lower()}%"
-        query = query.filter(
+        query = User.query.filter(
             func.lower(User.first_name).like(pattern)
             | func.lower(User.last_name).like(pattern)
             | func.lower(User.full_name).like(pattern)
@@ -231,24 +232,31 @@ def manage_roles():
             | func.lower(User.email).like(pattern)
         )
 
-    users = query.order_by(
-        User.last_name.asc(),
-        User.first_name.asc(),
-        User.full_name.asc(),
-        User.email.asc(),
-    ).all()
-    memberships_by_user_id = _gateway_memberships_by_user_id(gateway)
-    node_roles_by_user_id = _node_roles_by_user_id(gateway)
-    rows = [
-        _user_management_row(user, memberships_by_user_id, node_roles_by_user_id)
-        for user in users
-    ]
+        users = query.order_by(
+            User.last_name.asc(),
+            User.first_name.asc(),
+            User.full_name.asc(),
+            User.email.asc(),
+        ).limit(50).all()
+        memberships_by_user_id = _gateway_memberships_by_user_id(gateway)
+        node_roles_by_user_id = _node_roles_by_user_id(gateway)
+        rows = [
+            _user_management_row(user, memberships_by_user_id, node_roles_by_user_id)
+            for user in users
+        ]
+
     return render_template(
-        "auth/manage_roles.html",
+        "auth/edit_users.html",
         gateway=gateway,
         rows=rows,
         search=search,
     )
+
+
+@bp.route("/admin/users/manage-roles")
+@gateway_node_required("motherbrain", minimum_role="grandmaster")
+def manage_roles():
+    return redirect(url_for("auth.edit_users", q=request.args.get("q", "")))
 
 
 @bp.route("/admin/users/pending")
@@ -283,29 +291,31 @@ def user_detail(user_id):
 @gateway_node_required("motherbrain", minimum_role="grandmaster")
 def edit_user(user_id):
     target_user = User.query.get_or_404(user_id)
+    gateway = get_current_gateway()
+    membership = _current_gateway_membership_for_user(target_user, gateway)
     form = _user_edit_form_from_request(target_user)
 
     if request.method == "POST":
         try:
             _apply_user_edit_form(target_user, form)
+            membership = _apply_gateway_membership_edit_form(target_user, gateway, membership)
+            if _has_node_role_form_fields():
+                if not _membership_is_approved_active(membership):
+                    raise ValueError(
+                        "User must have approved RFD gateway access before assigning node roles."
+                    )
+                _apply_node_role_form(target_user, membership)
         except ValueError as error:
             db.session.rollback()
             flash(str(error), "error")
-            return render_template(
-                "auth/user_edit.html",
-                form=form,
-                target_user=target_user,
-            ), 400
+            membership = _current_gateway_membership_for_user(target_user, gateway)
+            return _render_user_edit_form(target_user, gateway, membership, form), 400
 
         db.session.commit()
-        flash("User profile updated.", "info")
-        return redirect(url_for("auth.user_detail", user_id=target_user.id))
+        flash("User updated.", "info")
+        return redirect(url_for("auth.edit_user", user_id=target_user.id))
 
-    return render_template(
-        "auth/user_edit.html",
-        form=form,
-        target_user=target_user,
-    )
+    return _render_user_edit_form(target_user, gateway, membership, form)
 
 
 @bp.route("/admin/users/<int:user_id>/roles", methods=["GET", "POST"])
@@ -329,14 +339,13 @@ def user_roles(user_id):
 
         db.session.commit()
         flash("Node roles updated.", "info")
-        return redirect(url_for("auth.user_detail", user_id=target_user.id))
+        return redirect(url_for("auth.edit_user", user_id=target_user.id))
 
     return render_template(
         "auth/user_roles.html",
         gateway=gateway,
         membership=membership,
         node_rows=_node_role_rows(target_user, membership),
-        role_choices=ROLE_CHOICES,
         target_user=target_user,
     )
 
@@ -609,6 +618,70 @@ def _apply_user_edit_form(user, form):
     user.access_reason = form["access_reason"].strip()
 
 
+def _render_user_edit_form(target_user, gateway, membership, form):
+    return render_template(
+        "auth/user_edit.html",
+        form=form,
+        gateway=gateway,
+        membership=membership,
+        node_rows=_node_role_rows(target_user, membership),
+        target_user=target_user,
+    )
+
+
+def _apply_gateway_membership_edit_form(target_user, gateway, membership):
+    if "membership_status" not in request.form:
+        return membership
+
+    status = request.form.get("membership_status", "pending").strip().lower()
+    is_active = request.form.get("membership_is_active") == "1"
+    if status not in {"pending", "approved", "denied"}:
+        raise ValueError("Unsupported gateway membership status.")
+
+    if not membership:
+        membership = GatewayMembership(
+            user_id=target_user.id,
+            gateway_id=gateway.id,
+            status="pending",
+            is_active=True,
+        )
+        db.session.add(membership)
+        db.session.flush()
+
+    if status != "approved" or not is_active:
+        _guard_last_grandmaster_gateway_change(target_user)
+
+    if status == "approved":
+        if membership.status != "approved":
+            _approve_membership(
+                membership,
+                request.form.get("approval_notes", "").strip() or None,
+            )
+        membership.is_active = is_active
+    elif status == "denied":
+        _deny_membership(
+            membership,
+            request.form.get("denial_notes", "").strip() or None,
+        )
+        membership.is_active = is_active
+    else:
+        membership.status = "pending"
+        membership.is_active = is_active
+        membership.approved_by_user_id = None
+        membership.approved_at = None
+        membership.approval_notes = None
+        membership.denied_by_user_id = None
+        membership.denied_at = None
+        membership.denial_notes = None
+        membership.approval_email_sent_at = None
+
+    return membership
+
+
+def _has_node_role_form_fields():
+    return any(key.startswith("node_") for key in request.form)
+
+
 def _combined_name(first_name, last_name):
     return " ".join(part for part in (first_name, last_name) if part).strip()
 
@@ -751,6 +824,7 @@ def _node_role_rows(user, membership):
             "effective_role": existing_roles.get(node.id).role
             if existing_roles.get(node.id)
             else "watcher",
+            "role_choices": _role_choices_for_node(existing_roles.get(node.id)),
         }
         for node in nodes
     ]
@@ -771,7 +845,9 @@ def _apply_node_role_form(target_user, membership):
             raise ValueError("Unsupported node role selected.")
 
         existing_role = existing_roles.get(node.id)
-        if _would_remove_last_self_grandmaster(target_user, node, selected_role, existing_role):
+        _guard_role_assignment_allowed(selected_role, existing_role)
+
+        if _would_remove_last_grandmaster(node, selected_role, existing_role):
             raise ValueError(
                 "Cannot remove or downgrade the last active Grandmaster MotherBrain access."
             )
@@ -796,9 +872,45 @@ def _apply_node_role_form(target_user, membership):
         existing_role.is_active = True
 
 
-def _would_remove_last_self_grandmaster(target_user, node, selected_role, existing_role):
-    if target_user.id != current_user.id:
+def _role_choices_for_node(existing_role):
+    choices = [
+        role
+        for role in ROLE_CHOICES
+        if _current_user_can_assign_role(role)
+    ]
+    existing_effective_role = existing_role.role if existing_role else "watcher"
+    if existing_effective_role not in choices:
+        choices.append(existing_effective_role)
+
+    return sorted(set(choices), key=lambda role: ROLE_LEVELS.get(role, 0))
+
+
+def _guard_role_assignment_allowed(selected_role, existing_role):
+    existing_effective_role = existing_role.role if existing_role else "watcher"
+    if selected_role == existing_effective_role:
+        return
+
+    if not _current_user_can_assign_role(selected_role):
+        raise ValueError("You cannot assign a role equal to or higher than your own role.")
+
+
+def _current_user_can_assign_role(role):
+    if role not in ROLE_LEVELS:
         return False
+
+    if _is_kessler_account(current_user):
+        return ROLE_LEVELS[role] <= ROLE_LEVELS["grandmaster"]
+
+    current_role = get_user_node_role(current_user, get_current_gateway().code, "motherbrain")
+    current_level = ROLE_LEVELS.get(current_role, 0)
+    return ROLE_LEVELS[role] < current_level
+
+
+def _is_kessler_account(user):
+    return (getattr(user, "username", "") or "").strip().lower() == "kessler"
+
+
+def _would_remove_last_grandmaster(node, selected_role, existing_role):
     if node.code != "motherbrain":
         return False
     if selected_role == "grandmaster":
@@ -809,10 +921,32 @@ def _would_remove_last_self_grandmaster(target_user, node, selected_role, existi
 
 
 def _guard_last_grandmaster_gateway_change(target_user):
-    if target_user.id != current_user.id:
+    if not _target_has_active_motherbrain_grandmaster(target_user):
         return
     if _active_motherbrain_grandmaster_count() <= 1:
         raise ValueError("Cannot remove the last active Grandmaster gateway access.")
+
+
+def _target_has_active_motherbrain_grandmaster(target_user):
+    gateway = get_current_gateway()
+    motherbrain = NeoNode.query.filter_by(code="motherbrain", is_active=True).first()
+    if not motherbrain:
+        return False
+
+    return (
+        GatewayNodeRole.query.join(GatewayMembership)
+        .filter(
+            GatewayMembership.user_id == target_user.id,
+            GatewayMembership.gateway_id == gateway.id,
+            GatewayMembership.status == "approved",
+            GatewayMembership.is_active.is_(True),
+            GatewayNodeRole.node_id == motherbrain.id,
+            GatewayNodeRole.role == "grandmaster",
+            GatewayNodeRole.is_active.is_(True),
+        )
+        .first()
+        is not None
+    )
 
 
 def _active_motherbrain_grandmaster_count():

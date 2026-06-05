@@ -1,26 +1,27 @@
 {% extends "base.html" %}
 
-{% block title %}Manage Roles | NeoGateway{% endblock %}
+{% block title %}Edit Users | NeoGateway{% endblock %}
 
 {% block content %}
 <section class="panel users-panel">
     <div class="section-heading">
         <p class="eyebrow">Grandmaster User Management</p>
-        <h1>Manage Roles</h1>
-        <p class="muted">Search users, open a profile, and edit {{ gateway.name }} NeoNode roles.</p>
+        <h1>Edit Users</h1>
+        <p class="muted">Search by name, employee ID, or email to edit a user.</p>
     </div>
 
     <form class="operation-form user-search-form" method="get">
         <label>
             <span>Search</span>
-            <input name="q" value="{{ search }}" placeholder="Name, employee ID, or email" autocomplete="off">
+            <input name="q" value="{{ search }}" placeholder="Name, employee ID, or email" autocomplete="off" autofocus>
         </label>
         <button type="submit">Search</button>
         {% if search %}
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.manage_roles') }}">Clear</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.edit_users') }}">Clear</a>
         {% endif %}
     </form>
 
+    {% if search %}
     <div class="table-wrap">
         <table class="data-table wide-data-table user-role-table">
             <thead>
@@ -49,8 +50,7 @@
                     <td data-label="Last Login">{{ row.user.last_login.strftime("%Y-%m-%d %H:%M") if row.user.last_login else "Never" }}</td>
                     <td data-label="Actions">
                         <div class="table-actions">
-                            <a href="{{ url_for('auth.user_detail', user_id=row.user.id) }}">Open</a>
-                            <a href="{{ url_for('auth.user_roles', user_id=row.user.id) }}">Roles</a>
+                            <a href="{{ url_for('auth.edit_user', user_id=row.user.id) }}">Edit</a>
                         </div>
                     </td>
                 </tr>
@@ -62,6 +62,9 @@
             </tbody>
         </table>
     </div>
+    {% else %}
+    <p class="muted">Enter a search term to find a user.</p>
+    {% endif %}
 
     <div class="action-row">
         <a class="action-button action-button-secondary" href="{{ url_for('auth.users') }}">Back to User Management</a>
