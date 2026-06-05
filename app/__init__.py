@@ -54,6 +54,20 @@ def maybe_auto_bootstrap_database(app):
 
 
 def register_template_helpers(app):
+    role_labels = {
+        "watcher": "Watcher",
+        "operator": "Operator",
+        "simulator": "Simulator",
+        "master": "Master",
+        "grandmaster": "Grandmaster",
+    }
+
+    def format_role_label(value):
+        if not value:
+            return ""
+        normalized = str(value).strip().lower()
+        return role_labels.get(normalized, str(value).strip().replace("_", " ").title())
+
     def format_local_datetime(value, timezone_name=None):
         if not value:
             return ""
@@ -75,6 +89,7 @@ def register_template_helpers(app):
         return utc_value.astimezone(local_timezone).strftime("%Y-%m-%d %H:%M")
 
     app.jinja_env.filters["local_datetime"] = format_local_datetime
+    app.jinja_env.filters["role_label"] = format_role_label
 
     @app.context_processor
     def permission_helpers():

@@ -89,8 +89,8 @@
                     {% for row in node_rows %}
                     <tr>
                         <td>{{ row.node.name }}</td>
-                        <td>{{ row.effective_role }}</td>
-                        <td>{{ row.override.role if row.override else "watcher fallback" }}</td>
+                        <td>{{ row.effective_role|role_label }}</td>
+                        <td>{{ row.override.role|role_label if row.override else "Watcher fallback" }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

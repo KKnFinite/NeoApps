@@ -3,19 +3,19 @@
 {% block title %}Node Roles | User Management{% endblock %}
 
 {% block content %}
-<section class="panel compact-panel centered-command-page">
+<section class="panel compact-panel centered-command-page user-role-page">
     <div class="section-heading">
-        <h1>{{ target_user.display_name }}</h1>
-        <p class="muted">Approved {{ gateway.name }} membership gives watcher access by default.</p>
+        <h1>{{ gateway.code }} NeoNode Roles</h1>
+        <p class="muted">{{ target_user.display_name }} - Approved {{ gateway.name }} membership gives Watcher access by default.</p>
     </div>
 
-    <form class="operation-form" method="post">
+    <form class="operation-form user-role-form" method="post">
         {% for row in node_rows %}
-        <label>
+        <label class="user-role-field">
             <span>{{ row.node.name }}</span>
             <select name="node_{{ row.node.id }}">
                 {% for role in row.role_choices %}
-                <option value="{{ role }}" {% if row.effective_role == role %}selected{% endif %}>{{ role }}</option>
+                <option value="{{ role }}" {% if row.effective_role == role %}selected{% endif %}>{{ role|role_label }}</option>
                 {% endfor %}
             </select>
         </label>

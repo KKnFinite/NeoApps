@@ -29,6 +29,13 @@ from app.services.user_tokens import (
 
 GENERIC_RESET_RESPONSE = "If an account exists for that email, a reset link has been sent."
 ROLE_CHOICES = ("watcher", "operator", "simulator", "master", "grandmaster")
+ROLE_DISPLAY_LABELS = {
+    "watcher": "Watcher",
+    "operator": "Operator",
+    "simulator": "Simulator",
+    "master": "Master",
+    "grandmaster": "Grandmaster",
+}
 
 
 @bp.route("/login", methods=["GET", "POST"])
@@ -793,9 +800,19 @@ def _user_management_summary(gateway):
 
 def _important_node_roles(node_roles):
     if not node_roles:
-        return "watcher fallback"
+        return "Watcher fallback"
 
-    return ", ".join(f"{role.node.name}: {role.role}" for role in node_roles)
+    return ", ".join(f"{role.node.name}: {_role_label(role.role)}" for role in node_roles)
+
+
+def _role_label(role):
+    if not role:
+        return ""
+    normalized = str(role).strip().lower()
+    return ROLE_DISPLAY_LABELS.get(
+        normalized,
+        str(role).strip().replace("_", " ").title(),
+    )
 
 
 def _highest_node_role(node_roles):
