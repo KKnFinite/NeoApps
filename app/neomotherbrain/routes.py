@@ -32,6 +32,14 @@ from app.services.sort_date_operations import (
     mission_display_timing_data,
     normalize_window_minutes,
 )
+from app.services.gateway_matrix import (
+    DAY_OPTIONS as MATRIX_DAY_OPTIONS,
+    SORT_OPTIONS as MATRIX_SORT_OPTIONS,
+    ensure_sort_operations_for_gateway_date,
+    matrix_state_for_gateway,
+    operations_for_gateway_date,
+    save_gateway_matrix,
+)
 
 ACTIVE_DAY_OPTIONS = (
     ("monday", "Monday"),
@@ -103,6 +111,7 @@ def sektor_launch():
 @gateway_node_required("motherbrain")
 def motherbrain():
     gateway = get_current_gateway()
+    _auto_generate_today_sorts(gateway)
     operation_count = SortDateOperation.query.filter_by(gateway_code=gateway.code).count()
     master_schedule_count = MasterFlightSchedule.query.filter_by(
         gateway_code=gateway.code
@@ -112,6 +121,58 @@ def motherbrain():
         gateway=gateway,
         operation_count=operation_count,
         master_schedule_count=master_schedule_count,
+    )
+
+
+@bp.route("/motherbrain/gateway-matrix", methods=["GET", "POST"])
+@gateway_node_required("motherbrain")
+def gateway_matrix():
+    gateway = get_current_gateway()
+    if request.method == "POST":
+        active_cells = []
+        for day, _day_label in MATRIX_DAY_OPTIONS:
+            for sort_name, _sort_label in MATRIX_SORT_OPTIONS:
+                if request.form.get(f"{day}_{sort_name}") == "1":
+                    active_cells.append((day, sort_name))
+
+        save_gateway_matrix(gateway, active_cells)
+        flash("Gateway Matrix updated.", "info")
+        return redirect(url_for("neomotherbrain.gateway_matrix"))
+
+    return render_template(
+        "neomotherbrain/gateway_matrix.html",
+        gateway=gateway,
+        day_options=MATRIX_DAY_OPTIONS,
+        sort_options=MATRIX_SORT_OPTIONS,
+        matrix=matrix_state_for_gateway(gateway),
+    )
+
+
+@bp.route("/motherbrain/manage-sort")
+@gateway_node_required("motherbrain")
+def manage_sort():
+    gateway = get_current_gateway()
+    generation_result = _auto_generate_today_sorts(gateway)
+    sort_date = generation_result["sort_date"]
+    operations = operations_for_gateway_date(gateway, sort_date)
+    selected_sort_name = request.args.get("sort", "").strip().lower()
+    selected_operation = next(
+        (
+            operation
+            for operation in operations
+            if operation.sort_name == selected_sort_name
+        ),
+        operations[0] if operations else None,
+    )
+
+    return render_template(
+        "neomotherbrain/manage_sort.html",
+        gateway=gateway,
+        sort_date=sort_date,
+        operations=operations,
+        selected_operation=selected_operation,
+        created_count=len(generation_result["created"]),
+        errors=generation_result["errors"],
     )
 
 
@@ -568,6 +629,16 @@ def _render_new_operation_form(form):
         form=form,
         sort_name_options=SORT_NAME_OPTIONS,
     )
+
+
+def _auto_generate_today_sorts(gateway):
+    result = ensure_sort_operations_for_gateway_date(
+        gateway,
+        generated_by_user_id=current_user.id,
+    )
+    for error in result["errors"]:
+        current_app.logger.warning("Gateway Matrix generation skipped: %s", error)
+    return result
 
 
 def _mission_or_404(operation, mission_id):

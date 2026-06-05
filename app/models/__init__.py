@@ -2,6 +2,7 @@ from app.models.crew import Crew
 from app.models.gateway import Gateway
 from app.models.gateway_membership import GatewayMembership
 from app.models.gateway_node_role import GatewayNodeRole
+from app.models.gateway_sort_matrix import GatewaySortMatrix
 from app.models.master_flight_schedule import MasterFlightSchedule
 from app.models.neo_node import NeoNode
 from app.models.sort_date_crew_assignment import SortDateCrewAssignment
@@ -17,6 +18,7 @@ __all__ = [
     "Gateway",
     "GatewayMembership",
     "GatewayNodeRole",
+    "GatewaySortMatrix",
     "NeoNode",
     "MasterFlightSchedule",
     "SortDateOperation",

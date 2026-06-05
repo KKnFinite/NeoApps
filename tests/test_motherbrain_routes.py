@@ -6,6 +6,7 @@ from app.extensions import db
 from app.models import (
     Gateway,
     GatewayMembership,
+    GatewaySortMatrix,
     MasterFlightSchedule,
     SortDateCrewAssignment,
     SortDateMission,
@@ -14,6 +15,7 @@ from app.models import (
     User,
 )
 from app.services.access_control import backfill_default_gateway_node_roles
+from app.services.gateway_matrix import current_gateway_local_date
 
 
 class MotherBrainRoutesTest(unittest.TestCase):
@@ -68,6 +70,83 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         self.assertNotIn(b'class="metric-grid"', response.data)
         self.assertNotIn(b"Master Schedule Rows", response.data)
+        self.assertIn(b"Gateway Matrix", response.data)
+        self.assertIn(b"Manage Sort", response.data)
+        self.assertNotIn(b"Generate Nightly Operation", response.data)
+
+    def test_gateway_matrix_saves_current_gateway_sort_toggles(self):
+        response = self.client.post(
+            "/motherbrain/gateway-matrix",
+            data={
+                "monday_night": "1",
+                "monday_day": "1",
+                "tuesday_twilight": "1",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        active_rows = GatewaySortMatrix.query.filter_by(
+            gateway_id=self.rfd_gateway.id,
+            is_active=True,
+        ).all()
+        self.assertEqual(
+            {(row.day_of_week, row.sort_name) for row in active_rows},
+            {
+                ("monday", "night"),
+                ("monday", "day"),
+                ("tuesday", "twilight"),
+            },
+        )
+
+    def test_motherbrain_auto_generates_today_active_matrix_sorts(self):
+        sort_date = current_gateway_local_date(self.rfd_gateway)
+        day = sort_date.strftime("%A").lower()
+        self._add_matrix_cell(day, "night")
+        self._add_master(
+            flight_number="AUTO01",
+            active_days=day,
+            sort_name="night",
+        )
+        db.session.commit()
+
+        response = self.client.get("/motherbrain")
+
+        operation = SortDateOperation.query.filter_by(
+            gateway_code="RFD",
+            sort_date=sort_date,
+            sort_name="night",
+        ).first()
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(operation)
+        self.assertEqual(len(operation.missions), 1)
+        self.assertEqual(operation.missions[0].flight_number, "AUTO01")
+
+    def test_manage_sort_creates_missing_operations_without_duplicates(self):
+        sort_date = current_gateway_local_date(self.rfd_gateway)
+        day = sort_date.strftime("%A").lower()
+        self._add_matrix_cell(day, "night")
+        self._add_master(
+            flight_number="SORT01",
+            active_days=day,
+            sort_name="night",
+        )
+        db.session.commit()
+
+        first_response = self.client.get("/motherbrain/manage-sort")
+        second_response = self.client.get("/motherbrain/manage-sort")
+
+        operations = SortDateOperation.query.filter_by(
+            gateway_code="RFD",
+            sort_date=sort_date,
+            sort_name="night",
+        ).all()
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertEqual(len(operations), 1)
+        self.assertIn(b"Manage Sort", first_response.data)
+        self.assertIn(b"Night", first_response.data)
+        self.assertIn(b"Add Special Flight", first_response.data)
 
     def test_kessler_grandmaster_can_access_motherbrain_pages(self):
         operation = self._operation()
@@ -82,6 +161,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         get_paths = (
             "/motherbrain",
+            "/motherbrain/gateway-matrix",
+            "/motherbrain/manage-sort",
             "/motherbrain/operations",
             "/motherbrain/operations/new",
             "/motherbrain/master-schedule",
@@ -1226,6 +1307,18 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.session.add(gateway)
         db.session.flush()
         return gateway
+
+    def _add_matrix_cell(self, day_of_week, sort_name, gateway=None, is_active=True):
+        gateway = gateway or self.rfd_gateway
+        matrix_cell = GatewaySortMatrix(
+            gateway_id=gateway.id,
+            gateway_code=gateway.code,
+            day_of_week=day_of_week,
+            sort_name=sort_name,
+            is_active=is_active,
+        )
+        db.session.add(matrix_cell)
+        return matrix_cell
 
     def _master_schedule_form_data(self, **overrides):
         values = {

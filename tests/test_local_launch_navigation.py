@@ -59,7 +59,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
         self.assertIn(".user-chip", css)
         self.assertIn(".topbar::after", css)
-        self.assertIn("../images/neobutton1_small.png", css)
+        self.assertIn("../images/neobutton1_medium.png", css)
         self.assertIn(".rfd-node-prefix", css)
         self.assertIn(".rfd-node-suffix", css)
         self.assertIn(".rfd-mobile-logo", css)
@@ -77,10 +77,10 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertNotIn("linear-gradient(90deg, rgba(201, 208, 214, 0.035) 1px", css)
 
     def test_neonode_button_asset_exists_with_render_safe_casing(self):
-        button_path = Path("app/static/images/neobutton1_small.png")
+        button_path = Path("app/static/images/neobutton1_medium.png")
 
         self.assertTrue(button_path.is_file())
-        self.assertEqual(button_path.name, "neobutton1_small.png")
+        self.assertEqual(button_path.name, "neobutton1_medium.png")
         self.assertGreater(button_path.stat().st_size, 0)
 
     def test_public_home_uses_enter_login_form_without_separate_login_button(self):

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Gateway Matrix | NeoApps{% endblock %}
+
+{% block content %}
+{% include "neomotherbrain/_motherbrain_logo.html" %}
+<section class="panel">
+    <div class="section-heading">
+        <h1>Gateway Matrix</h1>
+        <p class="muted">{{ gateway.name }} active sort plan by local day.</p>
+    </div>
+
+    <form method="post" class="gateway-matrix-form">
+        <div class="gateway-matrix-grid" role="table" aria-label="{{ gateway.code }} Gateway Matrix">
+            <div class="gateway-matrix-heading" role="row">
+                <span>Day</span>
+                {% for sort_name, sort_label in sort_options %}
+                <span>{{ sort_label }}</span>
+                {% endfor %}
+            </div>
+
+            {% for day, day_label in day_options %}
+            <div class="gateway-matrix-row" role="row">
+                <strong>{{ day_label }}</strong>
+                {% for sort_name, sort_label in sort_options %}
+                <label class="matrix-toggle">
+                    <input type="checkbox" name="{{ day }}_{{ sort_name }}" value="1" {% if matrix[day][sort_name] %}checked{% endif %}>
+                    <span>{{ sort_label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="action-row">
+            <button class="action-button" type="submit">Save Gateway Matrix</button>
+            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.manage_sort') }}">Manage Sort</a>
+            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}">MotherBrain Home</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

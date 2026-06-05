@@ -12,6 +12,12 @@ class SortDateOperation(db.Model):
             "window_minutes >= 0",
             name="ck_sort_date_operations_window_minutes_nonnegative",
         ),
+        db.UniqueConstraint(
+            "sort_date",
+            "gateway_code",
+            "sort_name",
+            name="uq_sort_date_operations_gateway_date_sort",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
