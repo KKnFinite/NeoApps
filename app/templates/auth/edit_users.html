@@ -33,7 +33,7 @@
                     <th>{{ gateway.code }} Status</th>
                     <th>Node Roles</th>
                     <th>Last Login</th>
-                    <th>Actions</th>
+                    <th aria-label="Edit"></th>
                 </tr>
             </thead>
             <tbody>
@@ -46,8 +46,8 @@
                     <td data-label="Email Verified">{{ "Yes" if row.user.email_verified_at else "No" }}</td>
                     <td data-label="{{ gateway.code }} Status">{{ row.membership_status }}</td>
                     <td data-label="Node Roles">{{ row.important_roles }}</td>
-                    <td data-label="Last Login">{{ row.user.last_login.strftime("%Y-%m-%d %H:%M") if row.user.last_login else "Never" }}</td>
-                    <td data-label="Actions">
+                    <td data-label="Last Login">{{ row.user.last_login|local_datetime if row.user.last_login else "Never" }}</td>
+                    <td class="action-cell" data-label="">
                         <div class="table-actions">
                             <a href="{{ url_for('auth.edit_user', user_id=row.user.id) }}">Edit</a>
                         </div>

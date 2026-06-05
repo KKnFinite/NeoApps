@@ -1,5 +1,7 @@
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import Flask, redirect, request, url_for
 from flask_login import current_user
@@ -52,6 +54,28 @@ def maybe_auto_bootstrap_database(app):
 
 
 def register_template_helpers(app):
+    def format_local_datetime(value, timezone_name=None):
+        if not value:
+            return ""
+
+        timezone_name = timezone_name or app.config.get(
+            "DEFAULT_GATEWAY_TIMEZONE",
+            "America/Chicago",
+        )
+        utc_value = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+        try:
+            local_timezone = ZoneInfo(timezone_name)
+        except ZoneInfoNotFoundError:
+            if timezone_name == "America/Chicago":
+                return _fallback_chicago_datetime(
+                    utc_value.replace(tzinfo=None)
+                ).strftime("%Y-%m-%d %H:%M")
+            return value.strftime("%Y-%m-%d %H:%M")
+
+        return utc_value.astimezone(local_timezone).strftime("%Y-%m-%d %H:%M")
+
+    app.jinja_env.filters["local_datetime"] = format_local_datetime
+
     @app.context_processor
     def permission_helpers():
         return {
@@ -102,3 +126,24 @@ def register_blueprints(app):
     app.register_blueprint(auth_bp)
     app.register_blueprint(neomotherbrain_bp)
     app.register_blueprint(neonodes_bp, url_prefix="/nodes")
+
+
+def _fallback_chicago_datetime(utc_datetime):
+    standard_local = utc_datetime - timedelta(hours=6)
+    if _is_us_central_daylight_time(standard_local):
+        return utc_datetime - timedelta(hours=5)
+    return standard_local
+
+
+def _is_us_central_daylight_time(local_datetime):
+    year = local_datetime.year
+    dst_start = _nth_weekday_of_month(year, 3, 6, 2).replace(hour=2)
+    dst_end = _nth_weekday_of_month(year, 11, 6, 1).replace(hour=2)
+    return dst_start <= local_datetime < dst_end
+
+
+def _nth_weekday_of_month(year, month, weekday, nth):
+    current = datetime(year, month, 1)
+    while current.weekday() != weekday:
+        current += timedelta(days=1)
+    return current + timedelta(days=7 * (nth - 1))

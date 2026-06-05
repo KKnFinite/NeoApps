@@ -567,16 +567,15 @@ a {
 }
 
 .user-management-choice-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     margin: 18px 0;
 }
 
 .user-management-choice {
-    display: grid;
-    gap: 8px;
-    min-height: 112px;
-    align-content: center;
-    justify-items: center;
+    min-height: 42px;
+    min-width: 180px;
     text-align: center;
 }
 
@@ -2183,7 +2182,7 @@ h2 {
     }
 
     .user-management-choice {
-        min-height: 96px;
+        min-height: 42px;
         text-align: center;
     }
 
@@ -2255,6 +2254,11 @@ h2 {
     .blueprint-auth .pending-users-table td[data-label="Actions"] {
         display: block;
         text-align: center;
+    }
+
+    .blueprint-auth .user-role-table td[data-label=""]::before,
+    .blueprint-auth .pending-users-table td[data-label=""]::before {
+        display: none;
     }
 
     .master-schedule-panel {

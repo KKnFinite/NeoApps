@@ -27,7 +27,7 @@
         <div><dt>Email Verified</dt><dd>{{ "Yes" if target_user.email_verified_at else "No" }}</dd></div>
         <div><dt>Created</dt><dd>{{ target_user.created_at.strftime("%Y-%m-%d %H:%M") if target_user.created_at else "" }}</dd></div>
         <div><dt>Password Reset Required</dt><dd>{{ "Yes" if target_user.password_reset_required else "No" }}</dd></div>
-        <div><dt>Last Login</dt><dd>{{ target_user.last_login.strftime("%Y-%m-%d %H:%M") if target_user.last_login else "Never" }}</dd></div>
+        <div><dt>Last Login</dt><dd>{{ target_user.last_login|local_datetime if target_user.last_login else "Never" }}</dd></div>
     </dl>
 
     <section class="panel-subsection">

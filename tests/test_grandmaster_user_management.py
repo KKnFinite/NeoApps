@@ -119,7 +119,8 @@ class GrandmasterUserManagementTest(unittest.TestCase):
 
     def test_edit_users_requires_search_then_filters_by_name_employee_id_and_email(self):
         grandmaster = self._admin("search_grandmaster", "grandmaster")
-        self._approved_user("alpha_user", "alpha@example.com")
+        alpha = self._approved_user("alpha_user", "alpha@example.com")[0]
+        alpha.last_login = datetime(2026, 6, 5, 18, 30)
         self._approved_user("beta_user", "beta@example.com")
         db.session.commit()
         self._login(grandmaster.username)
@@ -139,6 +140,9 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertIn(b"Alpha User", name_response.data)
         self.assertNotIn(b"Beta User", name_response.data)
         self.assertIn(b">Edit</a>", name_response.data)
+        self.assertIn(b"2026-06-05 13:30", name_response.data)
+        self.assertNotIn(b">Actions<", name_response.data)
+        self.assertNotIn(b'data-label="Actions"', name_response.data)
         self.assertIn(b"Beta User", employee_response.data)
         self.assertNotIn(b"Alpha User", employee_response.data)
         self.assertIn(b"Alpha User", email_response.data)
@@ -174,17 +178,21 @@ class GrandmasterUserManagementTest(unittest.TestCase):
     def test_edit_user_screen_includes_membership_and_node_roles(self):
         grandmaster = self._admin("screen_grandmaster", "grandmaster")
         target, _membership = self._approved_user("screen_user", "screen@example.com")
+        target.last_login = datetime(2026, 1, 15, 12, 0)
         db.session.commit()
         self._login(grandmaster.username)
 
         response = self.client.get(f"/admin/users/{target.id}/edit")
+        detail_response = self.client.get(f"/admin/users/{target.id}")
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(detail_response.status_code, 200)
         self.assertIn(b"Gateway Membership", response.data)
         self.assertIn(b"NeoNode Roles", response.data)
         self.assertIn(b'name="membership_status"', response.data)
         self.assertIn(b'name="membership_is_active"', response.data)
         self.assertIn(b"NeoMotherBrain", response.data)
+        self.assertIn(b"2026-01-15 06:00", detail_response.data)
 
     def test_unverified_pending_user_cannot_be_approved(self):
         grandmaster = self._admin("unverified_grandmaster", "grandmaster")
