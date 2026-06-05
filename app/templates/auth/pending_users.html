@@ -5,7 +5,6 @@
 {% block content %}
 <section class="panel">
     <div class="section-heading">
-        <p class="eyebrow">Grandmaster User Management</p>
         <h1>Pending Requests</h1>
         <p class="muted">Review pending {{ gateway.name }} gateway access requests.</p>
     </div>
@@ -15,7 +14,7 @@
     </div>
 
     <div class="table-wrap">
-        <table class="data-table wide-data-table">
+        <table class="data-table wide-data-table pending-users-table">
             <thead>
                 <tr>
                     <th>Name</th>
@@ -32,15 +31,15 @@
             <tbody>
                 {% for membership in memberships %}
                 <tr>
-                    <td>{{ membership.user.display_name }}</td>
-                    <td>{{ membership.user.employee_id or "" }}</td>
-                    <td>{{ membership.user.supervisor_name or "" }}</td>
-                    <td>{{ membership.user.email or "" }}</td>
-                    <td>{{ "Yes" if membership.user.email_verified_at else "Email not verified yet" }}</td>
-                    <td>{{ membership.user.work_area or "" }}</td>
-                    <td>{{ membership.user.access_reason or "" }}</td>
-                    <td>{{ membership.created_at.strftime("%Y-%m-%d %H:%M") if membership.created_at else "" }}</td>
-                    <td>
+                    <td data-label="Name">{{ membership.user.display_name }}</td>
+                    <td data-label="Employee ID">{{ membership.user.employee_id or "" }}</td>
+                    <td data-label="Supervisor">{{ membership.user.supervisor_name or "" }}</td>
+                    <td data-label="Email">{{ membership.user.email or "" }}</td>
+                    <td data-label="Verified">{{ "Yes" if membership.user.email_verified_at else "Email not verified yet" }}</td>
+                    <td data-label="Work Area">{{ membership.user.work_area or "" }}</td>
+                    <td data-label="Reason">{{ membership.user.access_reason or "" }}</td>
+                    <td data-label="Created">{{ membership.created_at.strftime("%Y-%m-%d %H:%M") if membership.created_at else "" }}</td>
+                    <td data-label="Actions">
                         <div class="table-actions">
                             <a href="{{ url_for('auth.user_detail', user_id=membership.user.id) }}">View Details</a>
                             {% if membership.user.email_verified_at %}

@@ -89,6 +89,9 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Pending User", response.data)
         self.assertIn(b"pending@example.com", response.data)
+        self.assertIn(b"pending-users-table", response.data)
+        self.assertIn(b'data-label="Name"', response.data)
+        self.assertNotIn(b"Grandmaster User Management", response.data)
         self.assertNotIn(b"<th>Username</th>", response.data)
 
     def test_user_management_main_only_shows_pending_and_edit_users_options(self):
@@ -103,6 +106,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertIn(b"Edit Users", response.data)
         self.assertIn(b'href="/admin/users/pending"', response.data)
         self.assertIn(b'href="/admin/users/edit-users"', response.data)
+        self.assertNotIn(b"Grandmaster User Management", response.data)
         self.assertNotIn(b"Search approved users", response.data)
         self.assertNotIn(b"Approve or deny new", response.data)
         self.assertNotIn(b"Manage Roles", response.data)

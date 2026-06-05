@@ -241,11 +241,6 @@ a {
     min-width: 0;
 }
 
-.motherbrain-core .eyebrow {
-    margin-bottom: 0;
-    letter-spacing: 0.18em;
-}
-
 .motherbrain-core-image {
     position: relative;
     width: min(100%, 860px);
@@ -581,7 +576,8 @@ a {
     gap: 8px;
     min-height: 112px;
     align-content: center;
-    text-align: left;
+    justify-items: center;
+    text-align: center;
 }
 
 .user-management-choice span {
@@ -873,15 +869,6 @@ a {
         drop-shadow(0 0 18px rgba(255, 47, 47, 0.3));
 }
 
-.eyebrow {
-    margin: 0 0 12px;
-    color: var(--red);
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0;
-    text-transform: uppercase;
-}
-
 h1,
 h2,
 p {
@@ -1018,6 +1005,7 @@ h2 {
 .action-row {
     display: flex;
     flex-wrap: wrap;
+    justify-content: center;
     gap: 10px;
     margin: 18px 0 24px;
 }
@@ -1190,6 +1178,11 @@ h2 {
 .operation-form {
     display: grid;
     gap: 14px;
+}
+
+.operation-form > button,
+.operation-form > .action-button {
+    justify-self: center;
 }
 
 .user-search-form {
@@ -1764,6 +1757,7 @@ h2 {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
+    justify-content: center;
     gap: 10px;
 }
 
@@ -2194,22 +2188,29 @@ h2 {
     }
 
     .blueprint-auth .user-role-table,
+    .blueprint-auth .pending-users-table,
     .blueprint-auth .user-role-table tbody,
+    .blueprint-auth .pending-users-table tbody,
     .blueprint-auth .user-role-table tr,
-    .blueprint-auth .user-role-table td {
+    .blueprint-auth .pending-users-table tr,
+    .blueprint-auth .user-role-table td,
+    .blueprint-auth .pending-users-table td {
         display: block;
         width: 100%;
     }
 
-    .blueprint-auth .user-role-table {
+    .blueprint-auth .user-role-table,
+    .blueprint-auth .pending-users-table {
         min-width: 0;
     }
 
-    .blueprint-auth .user-role-table thead {
+    .blueprint-auth .user-role-table thead,
+    .blueprint-auth .pending-users-table thead {
         display: none;
     }
 
-    .blueprint-auth .user-role-table tr {
+    .blueprint-auth .user-role-table tr,
+    .blueprint-auth .pending-users-table tr {
         margin-bottom: 14px;
         padding: 12px;
         border: 1px solid rgba(216, 32, 42, 0.28);
@@ -2219,7 +2220,8 @@ h2 {
             rgba(3, 4, 6, 0.72);
     }
 
-    .blueprint-auth .user-role-table td {
+    .blueprint-auth .user-role-table td,
+    .blueprint-auth .pending-users-table td {
         display: flex;
         justify-content: space-between;
         gap: 14px;
@@ -2228,7 +2230,8 @@ h2 {
         text-align: right;
     }
 
-    .blueprint-auth .user-role-table td::before {
+    .blueprint-auth .user-role-table td::before,
+    .blueprint-auth .pending-users-table td::before {
         content: attr(data-label);
         flex: 0 0 auto;
         color: var(--muted);
@@ -2238,13 +2241,20 @@ h2 {
         text-transform: uppercase;
     }
 
-    .blueprint-auth .user-role-table td .table-actions {
-        justify-content: flex-start;
+    .blueprint-auth .user-role-table td .table-actions,
+    .blueprint-auth .pending-users-table td .table-actions {
+        justify-content: center;
         width: 100%;
     }
 
-    .blueprint-auth .user-role-table td .table-actions a {
+    .blueprint-auth .user-role-table td .table-actions a,
+    .blueprint-auth .pending-users-table td .table-actions a {
         flex: 1 1 0;
+    }
+
+    .blueprint-auth .pending-users-table td[data-label="Actions"] {
+        display: block;
+        text-align: center;
     }
 
     .master-schedule-panel {

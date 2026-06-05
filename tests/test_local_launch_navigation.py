@@ -100,7 +100,9 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertNotIn(b"motherbrain_logo1.png", response.data)
         self.assertNotIn(b"NeoMotherBrain", response.data)
         self.assertIn(b'<form class="command-login-form" method="post" action="/login">', response.data)
-        self.assertIn(b'name="username"', response.data)
+        self.assertIn(b'<label for="dashboard-email">Email</label>', response.data)
+        self.assertIn(b'name="email"', response.data)
+        self.assertNotIn(b'name="username"', response.data)
         self.assertIn(b'name="password"', response.data)
         self.assertIn(b'<button class="command-access-panel command-enter-button" type="submit">', response.data)
         self.assertIn(b"ENTER", response.data)
@@ -133,7 +135,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
         response = self.client.post(
             "/login",
-            data={"username": " kessler ", "password": "1313"},
+            data={"email": " kessler@local.neoapps ", "password": "1313"},
             follow_redirects=False,
         )
 

@@ -343,8 +343,11 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'src="/static/images/neorfd_logo1.png"', response.data)
         self.assertIn(b'<button class="command-access-panel command-enter-button" type="submit">', response.data)
+        self.assertIn(b'<label for="dashboard-email">Email</label>', response.data)
+        self.assertIn(b'name="email"', response.data)
         self.assertIn(b'href="/create-account"', response.data)
         self.assertIn(b'href="/forgot-password"', response.data)
+        self.assertNotIn(b"Username", response.data)
         self.assertNotIn(b"NeoSektor", response.data)
         self.assertNotIn(b"NeoMotherBrain", response.data)
         self.assertNotIn(b'href="https://neosektor.onrender.com/"', response.data)
@@ -360,7 +363,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertNotIn(b'name="full_name"', response.data)
         self.assertNotIn(b'name="username"', response.data)
 
-    def test_login_accepts_email_or_employee_id(self):
+    def test_login_uses_email_with_legacy_username_fallback(self):
         user = self._user("loginchoice", email="loginchoice@example.com", verified=True)
         gateway = ensure_default_gateway_and_nodes()
         db.session.add(
@@ -375,18 +378,25 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
         email_login = self.client.post(
             "/login",
-            data={"username": "loginchoice@example.com", "password": "Password123!"},
+            data={"email": "loginchoice@example.com", "password": "Password123!"},
+            follow_redirects=False,
+        )
+        self.client.get("/logout")
+        legacy_username_login = self.client.post(
+            "/login",
+            data={"username": "loginchoice", "password": "Password123!"},
             follow_redirects=False,
         )
         self.client.get("/logout")
         employee_login = self.client.post(
             "/login",
-            data={"username": "EMP-loginchoice", "password": "Password123!"},
+            data={"email": "EMP-loginchoice", "password": "Password123!"},
             follow_redirects=False,
         )
 
         self.assertEqual(email_login.location, "/rfd")
-        self.assertEqual(employee_login.location, "/rfd")
+        self.assertEqual(legacy_username_login.location, "/rfd")
+        self.assertEqual(employee_login.status_code, 401)
 
     def _account_form(self, **overrides):
         values = {

@@ -6,7 +6,6 @@
 <section class="panel compact-panel">
     {% if verified %}
     <div class="section-heading">
-        <p class="eyebrow">Email Verified</p>
         <h1>{{ "Already Verified" if already_verified else "Verification Complete" }}</h1>
     </div>
     <p class="hero-copy">
@@ -14,7 +13,6 @@
     </p>
     {% else %}
     <div class="section-heading">
-        <p class="eyebrow">Verification Failed</p>
         <h1>Link Invalid</h1>
     </div>
     <p class="hero-copy">This verification link is invalid, expired, or already used.</p>

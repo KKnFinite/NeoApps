@@ -34,12 +34,14 @@ ROLE_CHOICES = ("watcher", "operator", "simulator", "master", "grandmaster")
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip()
+        legacy_username = request.form.get("username", "").strip()
+        login_identifier = email or legacy_username
         password = request.form.get("password", "")
-        user = _find_user_by_login(username) if username else None
+        user = _find_user_by_login(login_identifier) if login_identifier else None
 
         if not user or not user.check_password(password):
-            flash("Invalid login or password.", "error")
+            flash("Invalid email or password.", "error")
             return render_template("auth/login.html"), 401
 
         if not user.is_active:
@@ -553,11 +555,12 @@ def _raise_for_duplicate_identity(email, employee_id, user_id=None):
 
 def _find_user_by_login(login_value):
     normalized = login_value.strip().lower()
-    return User.query.filter(
-        (func.lower(User.username) == normalized)
-        | (func.lower(User.email) == normalized)
-        | (func.lower(User.employee_id) == normalized)
-    ).first()
+    user = User.query.filter(func.lower(User.email) == normalized).first()
+    if user:
+        return user
+
+    # Legacy fallback only: older local/admin accounts may still know username.
+    return User.query.filter(func.lower(User.username) == normalized).first()
 
 
 def _user_edit_form_from_request(user):
@@ -907,7 +910,12 @@ def _current_user_can_assign_role(role):
 
 
 def _is_kessler_account(user):
-    return (getattr(user, "username", "") or "").strip().lower() == "kessler"
+    identifiers = {
+        (getattr(user, "username", "") or "").strip().lower(),
+        (getattr(user, "email", "") or "").strip().lower(),
+        (getattr(user, "employee_id", "") or "").strip().lower(),
+    }
+    return "kessler" in identifiers or "kessler@local.neoapps" in identifiers
 
 
 def _would_remove_last_grandmaster(node, selected_role, existing_role):
