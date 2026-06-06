@@ -241,14 +241,17 @@ a {
     padding: 54px 0;
 }
 
-.motherbrain-header-brand {
-    gap: 10px;
+.motherbrain-header-logo-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
 }
 
 .motherbrain-header-logo {
     display: block;
-    width: 46px;
-    height: 46px;
+    width: 60px;
+    height: 60px;
     object-fit: contain;
     filter: drop-shadow(0 0 12px rgba(255, 47, 47, 0.28));
 }
@@ -261,29 +264,23 @@ a {
     margin-top: 8px;
     padding: 8px 12px;
     transform: translateX(-50%);
-}
-
-.motherbrain-fixed-header .brand {
-    padding: 0;
-}
-
-.motherbrain-fixed-header .brand strong {
-    font-size: 0.8rem;
-}
-
-.motherbrain-fixed-header .brand small {
-    font-size: 0.56rem;
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    align-items: center;
+    gap: 16px;
 }
 
 .motherbrain-fixed-header .motherbrain-header-logo {
-    width: 40px;
-    height: 40px;
+    width: 58px;
+    height: 58px;
 }
 
 .motherbrain-fixed-header .topbar-actions {
     display: grid;
-    gap: 8px;
+    gap: 9px;
     justify-items: end;
+    width: 100%;
+    min-width: 0;
 }
 
 .motherbrain-fixed-header .user-chip {
@@ -294,20 +291,25 @@ a {
 
 .motherbrain-fixed-header .topbar-user-row {
     width: 100%;
+    justify-content: flex-end;
 }
 
 .motherbrain-fixed-header .nav {
-    gap: 7px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(130px, 1fr));
+    gap: 10px;
+    width: 100%;
 }
 
 .motherbrain-fixed-header .nav a {
     min-height: 32px;
-    padding: 7px 9px;
-    font-size: 0.68rem;
+    padding: 8px 12px;
+    font-size: 0.7rem;
+    text-align: center;
 }
 
 .motherbrain-fixed-header .content {
-    padding-top: 116px;
+    padding-top: 112px;
 }
 
 .dashboard-hero {
@@ -1038,27 +1040,6 @@ h2 {
     display: grid;
     justify-items: center;
     gap: 22px;
-}
-
-.motherbrain-screen-logo {
-    display: grid;
-    place-items: center;
-    width: min(100%, 760px);
-    margin: 0 auto 22px;
-}
-
-.motherbrain-landing .motherbrain-screen-logo {
-    margin-bottom: 0;
-}
-
-.motherbrain-screen-logo img {
-    display: block;
-    width: min(100%, 680px);
-    height: auto;
-    object-fit: contain;
-    filter:
-        drop-shadow(0 20px 34px rgba(0, 0, 0, 0.72))
-        drop-shadow(0 0 28px rgba(255, 47, 47, 0.32));
 }
 
 .motherbrain-menu {
@@ -2404,19 +2385,13 @@ select::-ms-expand {
         margin-top: 0;
         padding: 7px 10px;
         transform: none;
-    }
-
-    .motherbrain-fixed-header .brand strong {
-        font-size: 0.74rem;
-    }
-
-    .motherbrain-fixed-header .brand small {
-        font-size: 0.5rem;
+        grid-template-columns: 64px minmax(0, 1fr);
+        gap: 8px;
     }
 
     .motherbrain-fixed-header .motherbrain-header-logo {
-        width: 32px;
-        height: 32px;
+        width: 50px;
+        height: 50px;
     }
 
     .brand {
@@ -2487,7 +2462,7 @@ select::-ms-expand {
     }
 
     .motherbrain-fixed-header .content {
-        padding-top: 194px;
+        padding-top: 156px;
     }
 
     .node-strip {

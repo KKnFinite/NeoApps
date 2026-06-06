@@ -3,17 +3,9 @@
 {% block title %}Operations | NeoApps{% endblock %}
 
 {% block content %}
-{% include "neomotherbrain/_motherbrain_logo.html" %}
 <section class="panel centered-command-page">
     <div class="section-heading">
         <h1>Nightly Operations</h1>
-    </div>
-
-    <div class="action-row">
-        <a class="action-button" href="{{ url_for('neomotherbrain.manage_sort') }}">Manage Sort</a>
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.gateway_matrix') }}">Gateway Matrix</a>
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}">MotherBrain Home</a>
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">Master Schedule</a>
     </div>
 
     <div class="table-wrap">

@@ -14,12 +14,8 @@
     <div class="shell">
         <header class="topbar">
             {% if uses_motherbrain_header %}
-            <a class="brand motherbrain-header-brand" href="{{ url_for('neomotherbrain.motherbrain') }}" aria-label="NeoMotherBrain home">
-                <img class="motherbrain-header-logo" src="{{ url_for('static', filename='images/motherbrain_logo1.png') }}" alt="">
-                <span>
-                    <strong>NeoMotherBrain</strong>
-                    <small>{{ default_gateway.name }} command</small>
-                </span>
+            <a class="motherbrain-header-logo-link" href="{{ url_for('neomotherbrain.motherbrain') }}" aria-label="MotherBrain home">
+                <img class="motherbrain-header-logo" src="{{ url_for('static', filename='images/motherbrain_logo1.png') }}" alt="MotherBrain logo">
             </a>
             {% else %}
             <a class="brand" href="{% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}{{ url_for('neomotherbrain.rfd_hub') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}">

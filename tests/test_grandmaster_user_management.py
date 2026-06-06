@@ -54,10 +54,18 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         for path in paths:
             with self.subTest(path=path):
                 response = self.client.get(path)
+                html = response.data.decode()
+                header_html = html.split("<header", 1)[1].split("</header>", 1)[0]
+
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(b"motherbrain-fixed-header", response.data)
-                self.assertIn(b'class="brand motherbrain-header-brand"', response.data)
-                self.assertIn(b"NeoMotherBrain", response.data)
+                self.assertIn(b'class="motherbrain-header-logo-link"', response.data)
+                self.assertIn(b'class="motherbrain-header-logo"', response.data)
+                self.assertNotIn("NeoMotherBrain", header_html)
+                self.assertNotIn("NEOMOTHERBRAIN", header_html)
+                self.assertNotIn("NeoRFD command", header_html)
+                self.assertNotIn("NEORFD COMMAND", header_html)
+                self.assertNotIn(b"motherbrain-screen-logo", response.data)
                 self.assertIn(b"Logged in", response.data)
                 self.assertIn(b"Logout", response.data)
                 self.assertIn(b"User Management", response.data)
