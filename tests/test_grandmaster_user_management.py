@@ -55,6 +55,15 @@ class GrandmasterUserManagementTest(unittest.TestCase):
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
+                self.assertIn(b"motherbrain-fixed-header", response.data)
+                self.assertIn(b'class="brand motherbrain-header-brand"', response.data)
+                self.assertIn(b"NeoMotherBrain", response.data)
+                self.assertIn(b"Logged in", response.data)
+                self.assertIn(b"Logout", response.data)
+                self.assertIn(b"User Management", response.data)
+                self.assertIn(b"Gateway Matrix", response.data)
+                self.assertIn(b"Master Schedule", response.data)
+                self.assertIn(b"Manage Sort", response.data)
 
     def test_master_cannot_access_grandmaster_user_management(self):
         master = self._admin("master_admin", "master")

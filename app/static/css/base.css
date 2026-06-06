@@ -141,6 +141,14 @@ a {
     min-width: 0;
 }
 
+.topbar-user-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: 0;
+}
+
 .user-chip {
     display: grid;
     gap: 1px;
@@ -200,7 +208,28 @@ a {
     text-transform: uppercase;
 }
 
-.nav a:hover {
+.logout-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: 7px 10px;
+    border: 1px solid rgba(255, 47, 47, 0.42);
+    border-radius: 4px;
+    color: var(--text);
+    background:
+        linear-gradient(135deg, rgba(255, 47, 47, 0.22), transparent 32%),
+        linear-gradient(180deg, rgba(26, 28, 34, 0.94), rgba(5, 5, 6, 0.9));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 18px rgba(255, 47, 47, 0.12);
+    font-size: 0.68rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.nav a:hover,
+.logout-link:hover {
     border-color: rgba(255, 47, 47, 0.58);
     color: var(--text);
     box-shadow:
@@ -210,6 +239,18 @@ a {
 
 .content {
     padding: 54px 0;
+}
+
+.motherbrain-header-brand {
+    gap: 10px;
+}
+
+.motherbrain-header-logo {
+    display: block;
+    width: 46px;
+    height: 46px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 12px rgba(255, 47, 47, 0.28));
 }
 
 .motherbrain-fixed-header .topbar {
@@ -227,17 +268,32 @@ a {
 }
 
 .motherbrain-fixed-header .brand strong {
-    font-size: 0.82rem;
+    font-size: 0.8rem;
+}
+
+.motherbrain-fixed-header .brand small {
+    font-size: 0.56rem;
+}
+
+.motherbrain-fixed-header .motherbrain-header-logo {
+    width: 40px;
+    height: 40px;
 }
 
 .motherbrain-fixed-header .topbar-actions {
+    display: grid;
     gap: 8px;
+    justify-items: end;
 }
 
 .motherbrain-fixed-header .user-chip {
     min-height: 32px;
     min-width: 104px;
     padding: 5px 9px;
+}
+
+.motherbrain-fixed-header .topbar-user-row {
+    width: 100%;
 }
 
 .motherbrain-fixed-header .nav {
@@ -251,7 +307,7 @@ a {
 }
 
 .motherbrain-fixed-header .content {
-    padding-top: 104px;
+    padding-top: 116px;
 }
 
 .dashboard-hero {
@@ -2354,6 +2410,15 @@ select::-ms-expand {
         font-size: 0.74rem;
     }
 
+    .motherbrain-fixed-header .brand small {
+        font-size: 0.5rem;
+    }
+
+    .motherbrain-fixed-header .motherbrain-header-logo {
+        width: 32px;
+        height: 32px;
+    }
+
     .brand {
         min-width: 0;
     }
@@ -2376,11 +2441,27 @@ select::-ms-expand {
 
     .motherbrain-fixed-header .topbar-actions {
         gap: 7px;
+        justify-items: stretch;
+    }
+
+    .motherbrain-fixed-header .topbar-user-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 6px;
+        width: 100%;
     }
 
     .motherbrain-fixed-header .user-chip {
+        justify-items: start;
         min-height: 28px;
         padding: 4px 8px;
+        text-align: left;
+    }
+
+    .motherbrain-fixed-header .logout-link {
+        min-height: 28px;
+        padding: 6px 8px;
+        font-size: 0.56rem;
     }
 
     .motherbrain-fixed-header .user-chip span {
@@ -2393,7 +2474,7 @@ select::-ms-expand {
 
     .motherbrain-fixed-header .nav {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 6px;
         width: 100%;
     }
@@ -2406,7 +2487,7 @@ select::-ms-expand {
     }
 
     .motherbrain-fixed-header .content {
-        padding-top: 184px;
+        padding-top: 194px;
     }
 
     .node-strip {

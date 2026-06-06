@@ -61,11 +61,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'src="/static/images/motherbrain_logo1.png"', response.data)
         self.assertIn(b'class="blueprint-neomotherbrain motherbrain-fixed-header"', response.data)
+        self.assertIn(b'class="brand motherbrain-header-brand"', response.data)
+        self.assertIn(b"NeoMotherBrain", response.data)
         self.assertIn(b'aria-label="Primary"', response.data)
         self.assertNotIn(b'aria-label="MotherBrain menu"', response.data)
         self.assertNotIn(b'class="panel motherbrain-landing"', response.data)
         self.assertNotIn(b"action-button-secondary", response.data)
-        self.assertNotIn(b">NeoMotherBrain<", response.data)
         self.assertNotIn(b'class="metric-grid"', response.data)
         self.assertNotIn(b"Master Schedule Rows", response.data)
         self.assertIn(b"User Management", response.data)
@@ -93,6 +94,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
+                self.assertIn(b"motherbrain-fixed-header", response.data)
+                self.assertIn(b'class="brand motherbrain-header-brand"', response.data)
+                self.assertIn(b"NeoMotherBrain", response.data)
+                self.assertIn(b"User Management", response.data)
+                self.assertIn(b"Gateway Matrix", response.data)
+                self.assertIn(b"Master Schedule", response.data)
+                self.assertIn(b"Manage Sort", response.data)
+                self.assertIn(b'href="/logout"', response.data)
 
         logout_response = self.client.get("/logout", follow_redirects=False)
         self.assertEqual(logout_response.status_code, 302)
@@ -198,6 +207,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Manage Sort", first_response.data)
         self.assertIn(b"Night", first_response.data)
         self.assertIn(b"Add Special Flight", first_response.data)
+        html = first_response.data.decode()
+        main_html = html.split('<main class="content">', 1)[1].split("</main>", 1)[0]
+        self.assertNotIn('href="/motherbrain/gateway-matrix"', main_html)
+        self.assertNotIn('href="/motherbrain/master-schedule"', main_html)
+        self.assertNotIn('href="/motherbrain"', main_html)
 
     def test_manage_sort_syncs_new_master_rows_into_existing_operation(self):
         sort_date = current_gateway_local_date(self.rfd_gateway)
@@ -296,7 +310,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(b'src="/static/images/motherbrain_logo1.png"', response.data)
-                self.assertNotIn(b">NeoMotherBrain<", response.data)
+                self.assertIn(b"NeoMotherBrain", response.data)
                 self.assertNotIn(b"<p class=\"eyebrow\">NeoMotherBrain</p>", response.data)
 
         response = self.client.post(

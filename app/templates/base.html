@@ -6,10 +6,22 @@
     <title>{% block title %}NeoApps{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css', v=config.STATIC_ASSET_VERSION) }}">
 </head>
-{% set is_motherbrain_page = current_user.is_authenticated and request.blueprint == "neomotherbrain" and request.path.startswith("/motherbrain") and not public_landing|default(false) %}
-<body class="blueprint-{{ request.blueprint or 'public' }}{% if is_motherbrain_page %} motherbrain-fixed-header{% endif %}">
+{% set is_authenticated_app = current_user.is_authenticated and not public_landing|default(false) %}
+{% set is_motherbrain_page = is_authenticated_app and request.blueprint == "neomotherbrain" and request.path.startswith("/motherbrain") %}
+{% set is_user_management_page = is_authenticated_app and request.blueprint == "auth" and request.path.startswith("/admin/users") %}
+{% set uses_motherbrain_header = is_motherbrain_page or is_user_management_page %}
+<body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_motherbrain_header %} motherbrain-fixed-header{% endif %}">
     <div class="shell">
         <header class="topbar">
+            {% if uses_motherbrain_header %}
+            <a class="brand motherbrain-header-brand" href="{{ url_for('neomotherbrain.motherbrain') }}" aria-label="NeoMotherBrain home">
+                <img class="motherbrain-header-logo" src="{{ url_for('static', filename='images/motherbrain_logo1.png') }}" alt="">
+                <span>
+                    <strong>NeoMotherBrain</strong>
+                    <small>{{ default_gateway.name }} command</small>
+                </span>
+            </a>
+            {% else %}
             <a class="brand" href="{% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}{{ url_for('neomotherbrain.rfd_hub') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}">
                 <span>
                     <strong>
@@ -24,26 +36,35 @@
                     {% endif %}
                 </span>
             </a>
+            {% endif %}
             <div class="topbar-actions">
-                {% if current_user.is_authenticated and not public_landing|default(false) %}
-                <div class="user-chip" aria-label="Logged in user">
-                    <span>Logged in</span>
-                    <strong>{{ current_user.display_name }}</strong>
+                {% if is_authenticated_app %}
+                {% if uses_motherbrain_header %}
+                <div class="topbar-user-row">
+                    <div class="user-chip" aria-label="Logged in user">
+                        <span>Logged in</span>
+                        <strong>{{ current_user.display_name }}</strong>
+                    </div>
+                    <a class="logout-link" href="{{ url_for('auth.logout') }}">Logout</a>
                 </div>
-                {% endif %}
-                <nav class="nav" aria-label="Primary">
-                    {% if current_user.is_authenticated and not public_landing|default(false) %}
-                    {% if is_motherbrain_page %}
+                <nav class="nav motherbrain-header-nav" aria-label="Primary">
                     {% if can_manage_system(current_user) %}
                     <a href="{{ url_for('auth.users') }}">User Management</a>
                     {% endif %}
                     <a href="{{ url_for('neomotherbrain.gateway_matrix') }}">Gateway Matrix</a>
                     <a href="{{ url_for('neomotherbrain.master_schedule') }}">Master Schedule</a>
                     <a href="{{ url_for('neomotherbrain.manage_sort') }}">Manage Sort</a>
-                    {% endif %}
-                    <a href="{{ url_for('auth.logout') }}">Logout</a>
-                    {% endif %}
                 </nav>
+                {% else %}
+                <div class="user-chip" aria-label="Logged in user">
+                    <span>Logged in</span>
+                    <strong>{{ current_user.display_name }}</strong>
+                </div>
+                <nav class="nav" aria-label="Primary">
+                    <a href="{{ url_for('auth.logout') }}">Logout</a>
+                </nav>
+                {% endif %}
+                {% endif %}
             </div>
         </header>
 

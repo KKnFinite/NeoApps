@@ -18,12 +18,6 @@
     </div>
     {% endif %}
 
-    <div class="action-row">
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.gateway_matrix') }}">Gateway Matrix</a>
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">Master Schedule</a>
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}">MotherBrain Home</a>
-    </div>
-
     {% if operations %}
     <nav class="sort-selector action-row" aria-label="Select sort">
         {% for operation in operations %}
