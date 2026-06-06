@@ -1723,7 +1723,7 @@ select::-ms-expand {
 
 .master-schedule-sections {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     gap: 18px;
     align-items: start;
 }
@@ -1746,6 +1746,39 @@ select::-ms-expand {
 
 .master-flight-table {
     min-width: 620px;
+}
+
+.master-board-form {
+    display: grid;
+    gap: 14px;
+}
+
+.master-board-table input,
+.master-board-table select {
+    width: 100%;
+    min-width: 0;
+}
+
+.master-board-table .military-time-select {
+    grid-template-columns: 56px auto 56px;
+}
+
+.master-board-table .military-time-select select {
+    width: 56px;
+    min-width: 56px;
+    padding-inline: 4px;
+}
+
+.master-board-add-row td {
+    background: rgba(216, 32, 42, 0.05);
+}
+
+.master-board-actions {
+    justify-content: flex-start;
+}
+
+.master-mobile-action {
+    display: none;
 }
 
 .gateway-matrix-heading-block {
@@ -2561,6 +2594,15 @@ select::-ms-expand {
     .blueprint-neomotherbrain .master-flight-table .table-actions a,
     .blueprint-neomotherbrain .master-flight-table .table-actions .inline-button-form,
     .blueprint-neomotherbrain .master-flight-table .table-actions .inline-button-form button {
+        flex: 1 1 0;
+    }
+
+    .master-mobile-action {
+        display: inline-flex;
+    }
+
+    .blueprint-neomotherbrain .master-flight-table .table-actions .master-mobile-action,
+    .blueprint-neomotherbrain .master-flight-table .table-actions .table-row-button {
         flex: 1 1 0;
     }
 

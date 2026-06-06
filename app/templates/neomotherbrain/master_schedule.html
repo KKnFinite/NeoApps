@@ -1,62 +1,139 @@
 {% extends "base.html" %}
+{% from "neomotherbrain/_time_inputs.html" import military_time_select %}
 
 {% block title %}Master Schedule | NeoApps{% endblock %}
 
-{% macro schedule_table(title, schedules, mission_type) %}
-<section class="master-schedule-section">
+{% macro hidden_active_days(prefix, active_days=None) %}
+{% set selected_days = active_days.split(",") if active_days else [] %}
+{% if selected_days %}
+    {% for day in selected_days %}
+    <input type="hidden" name="{{ prefix }}active_days" value="{{ day }}">
+    {% endfor %}
+{% else %}
+    {% for day_value, _day_label in active_day_options %}
+    <input type="hidden" name="{{ prefix }}active_days" value="{{ day_value }}">
+    {% endfor %}
+{% endif %}
+{% endmacro %}
+
+{% macro row_hidden_fields(prefix, schedule, mission_type) %}
+<input type="hidden" name="row_indexes" value="{{ prefix[4:-1] }}">
+<input type="hidden" name="{{ prefix }}id" value="{{ schedule.id if schedule else '' }}">
+<input type="hidden" name="{{ prefix }}mission_type" value="{{ mission_type }}">
+<input type="hidden" name="{{ prefix }}sort_name" value="{{ schedule.sort_name if schedule else 'night' }}">
+<input type="hidden" name="{{ prefix }}active" value="1">
+{{ hidden_active_days(prefix, schedule.active_days if schedule else none) }}
+{% endmacro %}
+
+{% macro arrival_row(schedule, index, is_new=False) %}
+{% set row_index = "arrival_" ~ index %}
+{% set prefix = "row_" ~ row_index ~ "_" %}
+<tr class="{{ 'master-board-add-row' if is_new else '' }}">
+    <td data-label="Flight">
+        {{ row_hidden_fields(prefix, schedule, "arrival") }}
+        <input type="hidden" name="{{ prefix }}destination" value="{{ gateway.code }}">
+        <input type="text" name="{{ prefix }}flight_number" value="{{ schedule.flight_number if schedule else '' }}" maxlength="8" autocomplete="off">
+    </td>
+    <td data-label="Origin">
+        <input class="airport-code-input" type="text" name="{{ prefix }}origin" value="{{ schedule.origin if schedule else '' }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
+    </td>
+    <td data-label="STA">
+        {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
+    </td>
+    <td data-label="Actions" class="table-actions">
+        {% if schedule %}
+        <a class="master-mobile-action" href="{{ url_for('neomotherbrain.edit_master_schedule', master_id=schedule.id) }}">Edit</a>
+        <button class="table-row-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate>Delete</button>
+        {% else %}
+        <span class="muted">New arrival</span>
+        {% endif %}
+    </td>
+</tr>
+{% endmacro %}
+
+{% macro departure_row(schedule, index, is_new=False) %}
+{% set row_index = "departure_" ~ index %}
+{% set prefix = "row_" ~ row_index ~ "_" %}
+<tr class="{{ 'master-board-add-row' if is_new else '' }}">
+    <td data-label="Flight">
+        {{ row_hidden_fields(prefix, schedule, "departure") }}
+        <input type="hidden" name="{{ prefix }}origin" value="{{ gateway.code }}">
+        <input type="text" name="{{ prefix }}flight_number" value="{{ schedule.flight_number if schedule else '' }}" maxlength="8" autocomplete="off">
+    </td>
+    <td data-label="Destination">
+        <input class="airport-code-input" type="text" name="{{ prefix }}destination" value="{{ schedule.destination if schedule else '' }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
+    </td>
+    <td data-label="Pure Pull">
+        {{ military_time_select(prefix ~ "pure_pull_time_local", schedule.pure_pull_time_local.strftime("%H:%M") if schedule and schedule.pure_pull_time_local else "") }}
+    </td>
+    <td data-label="1st Mix">
+        {{ military_time_select(prefix ~ "first_mix_pull_time_local", schedule.first_mix_pull_time_local.strftime("%H:%M") if schedule and schedule.first_mix_pull_time_local else "") }}
+    </td>
+    <td data-label="Final Mix">
+        {{ military_time_select(prefix ~ "final_mix_pull_time_local", schedule.final_mix_pull_time_local.strftime("%H:%M") if schedule and schedule.final_mix_pull_time_local else "") }}
+    </td>
+    <td data-label="STD">
+        {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
+    </td>
+    <td data-label="Actions" class="table-actions">
+        {% if schedule %}
+        <a class="master-mobile-action" href="{{ url_for('neomotherbrain.edit_master_schedule', master_id=schedule.id) }}">Edit</a>
+        <button class="table-row-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate>Delete</button>
+        {% else %}
+        <span class="muted">New departure</span>
+        {% endif %}
+    </td>
+</tr>
+{% endmacro %}
+
+{% macro board(title, schedules, mission_type) %}
+<section class="master-schedule-section" id="master-{{ mission_type }}s">
     <div class="section-heading master-schedule-subheading">
         <h2>{{ title }}</h2>
+        <a class="master-mobile-action" href="{{ url_for('neomotherbrain.new_master_schedule', mission_type=mission_type) }}">Add {{ mission_type|title }}</a>
     </div>
 
-    <div class="table-wrap">
-        <table class="data-table master-flight-table">
-            <thead>
-                <tr>
+    <form class="master-board-form" method="post">
+        <input type="hidden" name="board_mission_type" value="{{ mission_type }}">
+        <div class="table-wrap">
+            <table class="data-table master-flight-table master-board-table">
+                <thead>
+                    <tr>
+                        {% if mission_type == "arrival" %}
+                        <th>Flight</th>
+                        <th>Origin</th>
+                        <th>STA</th>
+                        {% else %}
+                        <th>Flight</th>
+                        <th>Destination</th>
+                        <th>Pure Pull</th>
+                        <th>1st Mix</th>
+                        <th>Final Mix</th>
+                        <th>STD</th>
+                        {% endif %}
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for schedule in schedules %}
+                        {% if mission_type == "arrival" %}
+                        {{ arrival_row(schedule, loop.index0) }}
+                        {% else %}
+                        {{ departure_row(schedule, loop.index0) }}
+                        {% endif %}
+                    {% endfor %}
                     {% if mission_type == "arrival" %}
-                    <th>Flight</th>
-                    <th>Origin</th>
-                    <th>STA</th>
+                    {{ arrival_row(none, "new", True) }}
                     {% else %}
-                    <th>Flight</th>
-                    <th>Destination</th>
-                    <th>Pure Pull</th>
-                    <th>1st Mix</th>
-                    <th>Final Mix</th>
-                    <th>STD</th>
+                    {{ departure_row(none, "new", True) }}
                     {% endif %}
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for schedule in schedules %}
-                <tr>
-                    {% if mission_type == "arrival" %}
-                    <td data-label="Flight">{{ schedule.flight_number|upper }}</td>
-                    <td data-label="Origin">{{ schedule.origin|upper }}</td>
-                    <td data-label="STA">{{ schedule.planned_time_local.strftime("%H:%M") if schedule.planned_time_local else "-" }}</td>
-                    {% else %}
-                    <td data-label="Flight">{{ schedule.flight_number|upper }}</td>
-                    <td data-label="Destination">{{ schedule.destination|upper }}</td>
-                    <td data-label="Pure Pull">{{ schedule.pure_pull_time_local.strftime("%H:%M") if schedule.pure_pull_time_local else "-" }}</td>
-                    <td data-label="1st Mix">{{ schedule.first_mix_pull_time_local.strftime("%H:%M") if schedule.first_mix_pull_time_local else "-" }}</td>
-                    <td data-label="Final Mix">{{ schedule.final_mix_pull_time_local.strftime("%H:%M") if schedule.final_mix_pull_time_local else "-" }}</td>
-                    <td data-label="STD">{{ schedule.planned_time_local.strftime("%H:%M") if schedule.planned_time_local else "-" }}</td>
-                    {% endif %}
-                    <td data-label="Actions" class="table-actions">
-                        <a href="{{ url_for('neomotherbrain.edit_master_schedule', master_id=schedule.id) }}">Edit</a>
-                        <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}">
-                            <button type="submit">Delete</button>
-                        </form>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="{{ 4 if mission_type == 'arrival' else 7 }}">No {{ title|lower }} master flights found.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+                </tbody>
+            </table>
+        </div>
+        <div class="action-row master-board-actions">
+            <button class="action-button" type="submit">Save {{ title }}</button>
+        </div>
+    </form>
 </section>
 {% endmacro %}
 
@@ -68,13 +145,22 @@
     </div>
 
     <div class="action-row">
-        <a class="action-button" href="{{ url_for('neomotherbrain.new_master_schedule') }}">Add Master Flights</a>
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}">MotherBrain Home</a>
     </div>
 
     <div class="master-schedule-sections">
-        {{ schedule_table("Arrivals", arrival_schedules, "arrival") }}
-        {{ schedule_table("Departures", departure_schedules, "departure") }}
+        {{ board("Master Arrivals", arrival_schedules, "arrival") }}
+        {{ board("Master Departures", departure_schedules, "departure") }}
     </div>
 </section>
+
+<script>
+(() => {
+    document.querySelectorAll(".airport-code-input").forEach((input) => {
+        input.addEventListener("input", () => {
+            input.value = input.value.toUpperCase();
+        });
+    });
+})();
+</script>
 {% endblock %}
