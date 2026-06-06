@@ -60,14 +60,16 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'src="/static/images/motherbrain_logo1.png"', response.data)
-        self.assertIn(b'class="blueprint-neomotherbrain motherbrain-fixed-header"', response.data)
+        self.assertIn(b"blueprint-neomotherbrain", response.data)
+        self.assertIn(b"motherbrain-fixed-header", response.data)
+        self.assertIn(b"motherbrain-home-page", response.data)
         self.assertIn(b'class="motherbrain-header-logo-link"', response.data)
         self.assertIn(b'class="motherbrain-header-logo"', response.data)
+        self.assertIn(b"motherbrain-screen-logo", response.data)
         self.assertNotIn(b"NeoMotherBrain", response.data)
         self.assertNotIn(b"NEOMOTHERBRAIN", response.data)
         self.assertNotIn(b"NeoRFD command", response.data)
         self.assertNotIn(b"NEORFD COMMAND", response.data)
-        self.assertNotIn(b"motherbrain-screen-logo", response.data)
         self.assertIn(b'aria-label="Primary"', response.data)
         self.assertNotIn(b'aria-label="MotherBrain menu"', response.data)
         self.assertNotIn(b'class="panel motherbrain-landing"', response.data)
@@ -321,11 +323,16 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(b'src="/static/images/motherbrain_logo1.png"', response.data)
                 self.assertIn(b'class="motherbrain-header-logo-link"', response.data)
+                if path == "/motherbrain":
+                    self.assertIn(b"motherbrain-home-page", response.data)
+                    self.assertIn(b"motherbrain-screen-logo", response.data)
+                else:
+                    self.assertNotIn(b"motherbrain-home-page", response.data)
+                    self.assertNotIn(b"motherbrain-screen-logo", response.data)
                 self.assertNotIn(b"NeoMotherBrain", response.data)
                 self.assertNotIn(b"NEOMOTHERBRAIN", response.data)
                 self.assertNotIn(b"NeoRFD command", response.data)
                 self.assertNotIn(b"NEORFD COMMAND", response.data)
-                self.assertNotIn(b"motherbrain-screen-logo", response.data)
                 self.assertNotIn(b"<p class=\"eyebrow\">NeoMotherBrain</p>", response.data)
 
         response = self.client.post(

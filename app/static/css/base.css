@@ -262,23 +262,25 @@ a {
     left: 50%;
     width: min(1440px, calc(100% - 32px));
     margin-top: 8px;
-    padding: 8px 12px;
+    padding: 7px 12px;
     transform: translateX(-50%);
     display: grid;
-    grid-template-columns: 92px minmax(0, 1fr);
+    grid-template-columns: 72px minmax(0, 1fr);
     align-items: center;
-    gap: 16px;
+    gap: 12px;
 }
 
 .motherbrain-fixed-header .motherbrain-header-logo {
-    width: 58px;
-    height: 58px;
+    width: 56px;
+    height: 56px;
 }
 
 .motherbrain-fixed-header .topbar-actions {
     display: grid;
-    gap: 9px;
-    justify-items: end;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    justify-items: stretch;
     width: 100%;
     min-width: 0;
 }
@@ -290,13 +292,17 @@ a {
 }
 
 .motherbrain-fixed-header .topbar-user-row {
-    width: 100%;
+    grid-column: 2;
+    grid-row: 1;
+    width: auto;
     justify-content: flex-end;
 }
 
 .motherbrain-fixed-header .nav {
+    grid-column: 1;
+    grid-row: 1;
     display: grid;
-    grid-template-columns: repeat(4, minmax(130px, 1fr));
+    grid-template-columns: repeat(4, minmax(132px, 1fr));
     gap: 10px;
     width: 100%;
 }
@@ -309,7 +315,7 @@ a {
 }
 
 .motherbrain-fixed-header .content {
-    padding-top: 112px;
+    padding-top: 96px;
 }
 
 .dashboard-hero {
@@ -1040,6 +1046,23 @@ h2 {
     display: grid;
     justify-items: center;
     gap: 22px;
+}
+
+.motherbrain-screen-logo {
+    display: grid;
+    place-items: center;
+    width: min(100%, 760px);
+    margin: 0 auto;
+}
+
+.motherbrain-screen-logo img {
+    display: block;
+    width: min(100%, 680px);
+    height: auto;
+    object-fit: contain;
+    filter:
+        drop-shadow(0 20px 34px rgba(0, 0, 0, 0.72))
+        drop-shadow(0 0 28px rgba(255, 47, 47, 0.32));
 }
 
 .motherbrain-menu {
@@ -2383,15 +2406,23 @@ select::-ms-expand {
         left: 0;
         width: 100%;
         margin-top: 0;
-        padding: 7px 10px;
+        padding: 7px 8px;
         transform: none;
-        grid-template-columns: 64px minmax(0, 1fr);
-        gap: 8px;
+        grid-template-columns: 72px minmax(0, 1fr);
+        gap: 4px;
+    }
+
+    .motherbrain-fixed-header.motherbrain-home-page .topbar {
+        grid-template-columns: 1fr;
+    }
+
+    .motherbrain-home-page .motherbrain-header-logo-link {
+        display: none;
     }
 
     .motherbrain-fixed-header .motherbrain-header-logo {
-        width: 50px;
-        height: 50px;
+        width: 66px;
+        height: 66px;
     }
 
     .brand {
@@ -2415,11 +2446,15 @@ select::-ms-expand {
     }
 
     .motherbrain-fixed-header .topbar-actions {
-        gap: 7px;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
         justify-items: stretch;
     }
 
     .motherbrain-fixed-header .topbar-user-row {
+        grid-column: 1;
+        grid-row: 1;
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
         gap: 6px;
@@ -2428,41 +2463,55 @@ select::-ms-expand {
 
     .motherbrain-fixed-header .user-chip {
         justify-items: start;
-        min-height: 28px;
-        padding: 4px 8px;
+        min-height: 31px;
+        padding: 5px 8px;
         text-align: left;
     }
 
     .motherbrain-fixed-header .logout-link {
-        min-height: 28px;
-        padding: 6px 8px;
-        font-size: 0.56rem;
+        min-height: 31px;
+        padding: 7px 9px;
+        font-size: 0.64rem;
     }
 
     .motherbrain-fixed-header .user-chip span {
-        font-size: 0.52rem;
+        font-size: 0.56rem;
     }
 
     .motherbrain-fixed-header .user-chip strong {
-        font-size: 0.72rem;
+        font-size: 0.76rem;
     }
 
     .motherbrain-fixed-header .nav {
+        grid-column: 1;
+        grid-row: 2;
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 6px;
+        gap: 7px;
         width: 100%;
     }
 
     .motherbrain-fixed-header .nav a {
-        min-height: 30px;
-        padding: 7px 5px;
-        font-size: 0.58rem;
+        min-height: 36px;
+        padding: 8px 6px;
+        font-size: 0.68rem;
         text-align: center;
     }
 
     .motherbrain-fixed-header .content {
-        padding-top: 156px;
+        padding-top: 168px;
+    }
+
+    .motherbrain-home-page.motherbrain-fixed-header .content {
+        padding-top: 146px;
+    }
+
+    .motherbrain-screen-logo {
+        margin-top: 6px;
+    }
+
+    .motherbrain-screen-logo img {
+        width: min(100%, 520px);
     }
 
     .node-strip {

@@ -8,9 +8,10 @@
 </head>
 {% set is_authenticated_app = current_user.is_authenticated and not public_landing|default(false) %}
 {% set is_motherbrain_page = is_authenticated_app and request.blueprint == "neomotherbrain" and request.path.startswith("/motherbrain") %}
+{% set is_motherbrain_landing = is_motherbrain_page and request.path == "/motherbrain" %}
 {% set is_user_management_page = is_authenticated_app and request.blueprint == "auth" and request.path.startswith("/admin/users") %}
 {% set uses_motherbrain_header = is_motherbrain_page or is_user_management_page %}
-<body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_motherbrain_header %} motherbrain-fixed-header{% endif %}">
+<body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_motherbrain_header %} motherbrain-fixed-header{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}">
     <div class="shell">
         <header class="topbar">
             {% if uses_motherbrain_header %}
