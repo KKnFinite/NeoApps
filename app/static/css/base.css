@@ -1757,16 +1757,40 @@ select::-ms-expand {
 .master-board-table select {
     width: 100%;
     min-width: 0;
+    border: 1px solid rgba(255, 59, 70, 0.72);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 36%),
+        #090b0f;
+    color: #f2f6fa;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 0 1px rgba(0, 0, 0, 0.36);
+}
+
+.master-board-table input:focus,
+.master-board-table select:focus {
+    border-color: #ff3b46;
+    outline: none;
+    box-shadow:
+        0 0 0 2px rgba(255, 59, 70, 0.24),
+        0 0 18px rgba(216, 32, 42, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .master-board-table .military-time-select {
     grid-template-columns: 56px auto 56px;
+    gap: 5px;
 }
 
 .master-board-table .military-time-select select {
     width: 56px;
     min-width: 56px;
     padding-inline: 4px;
+}
+
+.master-board-table th,
+.master-board-table td {
+    padding-inline: 8px;
 }
 
 .master-board-add-row td {
@@ -2616,25 +2640,24 @@ select::-ms-expand {
 
     .blueprint-neomotherbrain .master-board-table tr.master-arrival-row {
         grid-template-columns:
-            minmax(64px, 1fr)
-            minmax(48px, 0.74fr)
-            minmax(96px, 1.42fr)
-            minmax(40px, auto)
-            minmax(48px, auto);
+            minmax(76px, 1fr)
+            minmax(58px, 0.76fr)
+            minmax(108px, 1.28fr)
+            minmax(52px, auto);
         align-items: end;
     }
 
     .blueprint-neomotherbrain .master-board-table tr.master-departure-row {
         grid-template-columns:
-            minmax(68px, 0.9fr)
-            minmax(58px, 0.78fr)
-            minmax(96px, 1.2fr)
-            minmax(42px, auto);
+            minmax(72px, 0.84fr)
+            minmax(64px, 0.74fr)
+            minmax(92px, 1fr)
+            minmax(52px, auto);
         grid-template-areas:
-            "flight destination etd edit"
+            "flight destination etd etd"
             "pure first second delete";
         align-items: end;
-        row-gap: 8px;
+        row-gap: 9px;
     }
 
     .blueprint-neomotherbrain .master-board-table td.master-board-cell {
@@ -2672,7 +2695,7 @@ select::-ms-expand {
     }
 
     .blueprint-neomotherbrain .master-board-table .military-time-select {
-        grid-template-columns: minmax(36px, 1fr) 5px minmax(36px, 1fr);
+        grid-template-columns: minmax(39px, 1fr) 5px minmax(39px, 1fr);
         gap: 3px;
         width: 100%;
     }
@@ -2712,7 +2735,6 @@ select::-ms-expand {
         grid-area: second;
     }
 
-    .blueprint-neomotherbrain .master-board-table .master-mobile-action,
     .blueprint-neomotherbrain .master-board-table .table-row-button {
         min-height: 34px;
         min-width: 0;
@@ -2722,20 +2744,8 @@ select::-ms-expand {
         text-align: center;
     }
 
-    .blueprint-neomotherbrain .master-board-table .master-mobile-action {
-        justify-content: center;
-    }
-
-    .blueprint-neomotherbrain .master-board-table .master-arrival-row .master-mobile-action {
-        grid-column: 4;
-    }
-
     .blueprint-neomotherbrain .master-board-table .master-arrival-row .table-row-button {
-        grid-column: 5;
-    }
-
-    .blueprint-neomotherbrain .master-board-table .master-departure-row .master-mobile-action {
-        grid-area: edit;
+        grid-column: 4;
     }
 
     .blueprint-neomotherbrain .master-board-table .master-departure-row .table-row-button {

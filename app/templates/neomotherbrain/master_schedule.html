@@ -40,9 +40,8 @@
     <td class="master-board-cell master-cell-sta" data-label="STA">
         {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
     </td>
-    <td data-label="Actions" class="table-actions master-cell-actions">
+    <td data-label="Delete" class="table-actions master-cell-actions">
         {% if schedule %}
-        <a class="master-mobile-action" href="{{ url_for('neomotherbrain.edit_master_schedule', master_id=schedule.id) }}">Edit</a>
         <button class="table-row-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate>Delete</button>
         {% else %}
         <span class="muted">New arrival</span>
@@ -63,6 +62,9 @@
     <td class="master-board-cell master-cell-destination" data-label="Destination">
         <input class="airport-code-input" type="text" name="{{ prefix }}destination" value="{{ schedule.destination if schedule else '' }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
     </td>
+    <td class="master-board-cell master-cell-etd" data-label="ETD/STD">
+        {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
+    </td>
     <td class="master-board-cell master-cell-pure-pull" data-label="Pure Pull">
         {{ military_time_select(prefix ~ "pure_pull_time_local", schedule.pure_pull_time_local.strftime("%H:%M") if schedule and schedule.pure_pull_time_local else "") }}
     </td>
@@ -72,12 +74,8 @@
     <td class="master-board-cell master-cell-second-mix" data-label="2nd Mix">
         {{ military_time_select(prefix ~ "final_mix_pull_time_local", schedule.final_mix_pull_time_local.strftime("%H:%M") if schedule and schedule.final_mix_pull_time_local else "") }}
     </td>
-    <td class="master-board-cell master-cell-etd" data-label="ETD">
-        {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
-    </td>
-    <td data-label="Actions" class="table-actions master-cell-actions">
+    <td data-label="Delete" class="table-actions master-cell-actions">
         {% if schedule %}
-        <a class="master-mobile-action" href="{{ url_for('neomotherbrain.edit_master_schedule', master_id=schedule.id) }}">Edit</a>
         <button class="table-row-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate>Delete</button>
         {% else %}
         <span class="muted">New departure</span>
@@ -106,12 +104,12 @@
                         {% else %}
                         <th>Flight</th>
                         <th>Destination</th>
+                        <th>ETD/STD</th>
                         <th>Pure Pull</th>
                         <th>1st Mix</th>
-                        <th>Final Mix</th>
-                        <th>STD</th>
+                        <th>2nd Mix</th>
                         {% endif %}
-                        <th>Actions</th>
+                        <th>Delete</th>
                     </tr>
                 </thead>
                 <tbody>
