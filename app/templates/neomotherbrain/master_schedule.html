@@ -12,22 +12,36 @@
         <table class="data-table master-flight-table">
             <thead>
                 <tr>
+                    {% if mission_type == "arrival" %}
                     <th>Flight</th>
-                    <th>Tail</th>
-                    <th>{{ "Origin" if mission_type == "arrival" else "Destination" }}</th>
-                    <th>Parking</th>
-                    <th>{{ "ETA" if mission_type == "arrival" else "ETD" }}</th>
+                    <th>Origin</th>
+                    <th>STA</th>
+                    {% else %}
+                    <th>Flight</th>
+                    <th>Destination</th>
+                    <th>Pure Pull</th>
+                    <th>1st Mix</th>
+                    <th>Final Mix</th>
+                    <th>STD</th>
+                    {% endif %}
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for schedule in schedules %}
                 <tr>
+                    {% if mission_type == "arrival" %}
                     <td data-label="Flight">{{ schedule.flight_number|upper }}</td>
-                    <td data-label="Tail">{{ schedule.assigned_tail_number|upper if schedule.assigned_tail_number is defined and schedule.assigned_tail_number else "-" }}</td>
-                    <td data-label="{{ 'Origin' if mission_type == 'arrival' else 'Destination' }}">{{ (schedule.origin if mission_type == "arrival" else schedule.destination)|upper }}</td>
-                    <td data-label="Parking">{{ schedule.preferred_parking|upper if schedule.preferred_parking else "-" }}</td>
-                    <td data-label="{{ 'ETA' if mission_type == 'arrival' else 'ETD' }}">{{ schedule.planned_time_local.strftime("%H:%M") if schedule.planned_time_local else "-" }}</td>
+                    <td data-label="Origin">{{ schedule.origin|upper }}</td>
+                    <td data-label="STA">{{ schedule.planned_time_local.strftime("%H:%M") if schedule.planned_time_local else "-" }}</td>
+                    {% else %}
+                    <td data-label="Flight">{{ schedule.flight_number|upper }}</td>
+                    <td data-label="Destination">{{ schedule.destination|upper }}</td>
+                    <td data-label="Pure Pull">{{ schedule.pure_pull_time_local.strftime("%H:%M") if schedule.pure_pull_time_local else "-" }}</td>
+                    <td data-label="1st Mix">{{ schedule.first_mix_pull_time_local.strftime("%H:%M") if schedule.first_mix_pull_time_local else "-" }}</td>
+                    <td data-label="Final Mix">{{ schedule.final_mix_pull_time_local.strftime("%H:%M") if schedule.final_mix_pull_time_local else "-" }}</td>
+                    <td data-label="STD">{{ schedule.planned_time_local.strftime("%H:%M") if schedule.planned_time_local else "-" }}</td>
+                    {% endif %}
                     <td data-label="Actions" class="table-actions">
                         <a href="{{ url_for('neomotherbrain.edit_master_schedule', master_id=schedule.id) }}">Edit</a>
                         <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}">
@@ -37,7 +51,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6">No {{ title|lower }} master flights found.</td>
+                    <td colspan="{{ 4 if mission_type == 'arrival' else 7 }}">No {{ title|lower }} master flights found.</td>
                 </tr>
                 {% endfor %}
             </tbody>

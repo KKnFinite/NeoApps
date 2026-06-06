@@ -386,7 +386,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
             origin="SDF",
             destination="RFD",
         )
-        self._add_master(flight_number="DEP001")
+        self._add_master(
+            flight_number="DEP001",
+            pure_pull_time_local=time(1, 10),
+            first_mix_pull_time_local=time(1, 25),
+            final_mix_pull_time_local=time(1, 40),
+        )
         db.session.commit()
 
         response = self.client.get("/motherbrain/master-schedule")
@@ -399,15 +404,29 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Add Master Flights", response.data)
         self.assertIn(b"Edit Multiple Rows", response.data)
         self.assertIn(b"<th>Origin</th>", response.data)
+        self.assertIn(b"<th>STA</th>", response.data)
         self.assertIn(b"<th>Destination</th>", response.data)
-        self.assertIn(b"<th>ETA</th>", response.data)
-        self.assertIn(b"<th>ETD</th>", response.data)
+        self.assertIn(b"<th>Pure Pull</th>", response.data)
+        self.assertIn(b"<th>1st Mix</th>", response.data)
+        self.assertIn(b"<th>Final Mix</th>", response.data)
+        self.assertIn(b"<th>STD</th>", response.data)
         self.assertIn(b"ARR001", response.data)
         self.assertIn(b"DEP001", response.data)
         self.assertIn(b"SDF", response.data)
         self.assertIn(b"02:10", response.data)
+        self.assertIn(b"01:10", response.data)
+        self.assertIn(b"01:25", response.data)
+        self.assertIn(b"01:40", response.data)
         self.assertIn(b">Edit</a>", response.data)
         self.assertIn(b">Delete</button>", response.data)
+        self.assertNotIn(b"<th>Tail</th>", response.data)
+        self.assertNotIn(b"<th>Parking</th>", response.data)
+        self.assertNotIn(b"<th>ETA</th>", response.data)
+        self.assertNotIn(b"<th>ETD</th>", response.data)
+        self.assertNotIn(b"data-label=\"Tail\"", response.data)
+        self.assertNotIn(b"data-label=\"Parking\"", response.data)
+        self.assertNotIn(b"data-label=\"ETA\"", response.data)
+        self.assertNotIn(b"data-label=\"ETD\"", response.data)
         self.assertNotIn(b"<th>Mission</th>", response.data)
         self.assertNotIn(b"Origin/Destination", response.data)
         self.assertNotIn(b"<th>Sort</th>", response.data)
@@ -724,7 +743,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(master.timezone, "America/Chicago")
         self.assertNotIn(b'name="timezone"', form_response.data)
 
-    def test_master_schedule_list_shows_parking_when_applicable(self):
+    def test_master_schedule_list_does_not_show_parking_when_applicable(self):
         master = self._add_master(flight_number="PARK01", preferred_parking="A1")
         db.session.commit()
 
@@ -733,8 +752,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         detail_response = self.client.get(f"/motherbrain/master-schedule/{master.id}")
 
         self.assertEqual(list_response.status_code, 200)
-        self.assertIn(b"Parking", list_response.data)
-        self.assertIn(b"A1", list_response.data)
+        self.assertNotIn(b"Parking", list_response.data)
+        self.assertNotIn(b"A1", list_response.data)
 
         for label, response in (("form", form_response), ("detail", detail_response)):
             with self.subTest(page=label):
