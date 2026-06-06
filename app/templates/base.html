@@ -11,6 +11,9 @@
 {% set is_motherbrain_landing = is_motherbrain_page and request.path == "/motherbrain" %}
 {% set is_user_management_page = is_authenticated_app and request.blueprint == "auth" and request.path.startswith("/admin/users") %}
 {% set uses_motherbrain_header = is_motherbrain_page or is_user_management_page %}
+{% set is_gateway_matrix_page = is_motherbrain_page and request.path.startswith("/motherbrain/gateway-matrix") %}
+{% set is_master_schedule_page = is_motherbrain_page and request.path.startswith("/motherbrain/master-schedule") %}
+{% set is_manage_sort_page = is_motherbrain_page and (request.path.startswith("/motherbrain/manage-sort") or request.path.startswith("/motherbrain/operations")) %}
 <body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_motherbrain_header %} motherbrain-fixed-header{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}">
     <div class="shell">
         <header class="topbar">
@@ -45,13 +48,13 @@
                     <a class="logout-link" href="{{ url_for('auth.logout') }}">Logout</a>
                 </div>
                 <nav class="nav motherbrain-header-nav" aria-label="Primary">
-                    <a href="{{ url_for('neomotherbrain.rfd_hub') }}">Back to NeoGateway</a>
+                    <a class="motherbrain-nav-link motherbrain-nav-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}">Back to NeoGateway</a>
                     {% if can_manage_system(current_user) %}
-                    <a href="{{ url_for('auth.users') }}">User Management</a>
+                    <a class="motherbrain-nav-link{% if is_user_management_page %} is-active{% endif %}" href="{{ url_for('auth.users') }}" {% if is_user_management_page %}aria-current="page"{% endif %}>User Management</a>
                     {% endif %}
-                    <a href="{{ url_for('neomotherbrain.gateway_matrix') }}">Gateway Matrix</a>
-                    <a href="{{ url_for('neomotherbrain.master_schedule') }}">Master Schedule</a>
-                    <a href="{{ url_for('neomotherbrain.manage_sort') }}">Manage Sort</a>
+                    <a class="motherbrain-nav-link{% if is_gateway_matrix_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.gateway_matrix') }}" {% if is_gateway_matrix_page %}aria-current="page"{% endif %}>Gateway Matrix</a>
+                    <a class="motherbrain-nav-link{% if is_master_schedule_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule') }}" {% if is_master_schedule_page %}aria-current="page"{% endif %}>Master Schedule</a>
+                    <a class="motherbrain-nav-link{% if is_manage_sort_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.manage_sort') }}" {% if is_manage_sort_page %}aria-current="page"{% endif %}>Manage Sort</a>
                 </nav>
                 {% else %}
                 <div class="user-chip" aria-label="Logged in user">

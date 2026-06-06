@@ -92,14 +92,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"Generate Nightly Operation", response.data)
 
     def test_motherbrain_header_navigation_routes_work(self):
-        routes = (
-            "/admin/users",
-            "/motherbrain/gateway-matrix",
-            "/motherbrain/master-schedule",
-            "/motherbrain/manage-sort",
-        )
+        routes = {
+            "/admin/users": b'href="/admin/users" aria-current="page"',
+            "/motherbrain/gateway-matrix": b'href="/motherbrain/gateway-matrix" aria-current="page"',
+            "/motherbrain/master-schedule": b'href="/motherbrain/master-schedule" aria-current="page"',
+            "/motherbrain/manage-sort": b'href="/motherbrain/manage-sort" aria-current="page"',
+        }
 
-        for path in routes:
+        for path, active_link in routes.items():
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
@@ -118,6 +118,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertIn(b"Manage Sort", response.data)
                 self.assertIn(b'href="/rfd"', response.data)
                 self.assertIn(b'href="/logout"', response.data)
+                self.assertIn(active_link, response.data)
+                self.assertIn(b'aria-current="page"', response.data)
 
         rfd_response = self.client.get("/rfd")
         self.assertEqual(rfd_response.status_code, 200)
