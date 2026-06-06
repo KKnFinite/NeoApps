@@ -65,6 +65,7 @@ MISSION_TYPE_OPTIONS = (
     ("departure", "Departure"),
 )
 MISSION_TYPES = {"arrival", "departure"}
+MASTER_AIRCRAFT_TYPE_OPTIONS = ("", "A300", "747", "757", "767", "Other")
 FUEL_STATUSES = ("", "waiting", "received", "assigned", "complete")
 ARRIVAL_STATUSES = (
     "",
@@ -224,10 +225,19 @@ def master_schedule():
             )
         except ValueError as error:
             db.session.rollback()
+            if _wants_json_response():
+                return {"ok": False, "message": str(error)}, 400
             flash(str(error), "error")
             return redirect(url_for("neomotherbrain.master_schedule"))
 
         db.session.commit()
+        if _wants_json_response():
+            return {
+                "ok": True,
+                "mission_type": mission_type,
+                "updated": updated_count,
+                "created": created_count,
+            }
         flash(
             f"Master {mission_type} board saved: "
             f"{updated_count} updated, {created_count} created.",
@@ -244,6 +254,7 @@ def master_schedule():
             schedule for schedule in schedules if schedule.mission_type == "departure"
         ],
         active_day_options=ACTIVE_DAY_OPTIONS,
+        aircraft_type_options=MASTER_AIRCRAFT_TYPE_OPTIONS,
         gateway=gateway,
     )
 
@@ -754,6 +765,7 @@ def _render_master_schedule_form(form=None, mode="new", master_schedule=None, ro
     return render_template(
         "neomotherbrain/master_schedule_form.html",
         active_day_options=ACTIVE_DAY_OPTIONS,
+        aircraft_type_options=MASTER_AIRCRAFT_TYPE_OPTIONS,
         blank_row=_master_schedule_row_from_form(
             _blank_master_schedule_form(gateway),
             MASTER_SCHEDULE_BLANK_ROW_INDEX,
@@ -776,6 +788,7 @@ def _master_schedule_form_from_request(gateway=None, prefix="", source=None):
         "sort_name": source.get(f"{prefix}sort_name", "night"),
         "mission_type": source.get(f"{prefix}mission_type", "departure"),
         "flight_number": source.get(f"{prefix}flight_number", ""),
+        "aircraft_type": source.get(f"{prefix}aircraft_type", ""),
         "origin": source.get(f"{prefix}origin", ""),
         "destination": source.get(f"{prefix}destination", ""),
         "active_days": set(source.getlist(f"{prefix}active_days")),
@@ -836,6 +849,7 @@ def _master_schedule_form_from_model(master_schedule):
         "sort_name": master_schedule.sort_name,
         "mission_type": master_schedule.mission_type,
         "flight_number": master_schedule.flight_number,
+        "aircraft_type": master_schedule.aircraft_type or "",
         "origin": master_schedule.origin,
         "destination": master_schedule.destination,
         "active_days": _active_days_set(master_schedule.active_days),
@@ -855,6 +869,7 @@ def _blank_master_schedule_form(gateway=None):
         "sort_name": "night",
         "mission_type": "departure",
         "flight_number": "",
+        "aircraft_type": "",
         "origin": "",
         "destination": "",
         "active_days": set(),
@@ -914,6 +929,7 @@ def _master_schedule_row_has_data(row):
     return any(
         (
             (row.get("flight_number") or "").strip(),
+            (row.get("aircraft_type") or "").strip(),
             (row.get("origin") or "").strip(),
             (row.get("destination") or "").strip(),
             (row.get("planned_time_local") or "").strip(),
@@ -992,8 +1008,11 @@ def _apply_master_schedule_board_edit(rows, schedules, gateway, mission_type):
     for row in rows:
         row["mission_type"] = mission_type
         schedule_id = row.get("id", "").strip()
-        if not schedule_id and not _master_schedule_board_row_has_data(row):
-            continue
+        if not schedule_id:
+            if not _master_schedule_board_row_has_data(row):
+                continue
+            if not _master_schedule_board_row_is_complete(row):
+                continue
 
         if schedule_id:
             schedule = schedules_by_id.get(schedule_id)
@@ -1018,6 +1037,7 @@ def _apply_master_schedule_board_edit(rows, schedules, gateway, mission_type):
 def _master_schedule_board_row_has_data(row):
     fields = [
         (row.get("flight_number") or "").strip(),
+        (row.get("aircraft_type") or "").strip(),
         (row.get("planned_time_local") or "").strip(),
     ]
     if row.get("mission_type") == "arrival":
@@ -1034,11 +1054,27 @@ def _master_schedule_board_row_has_data(row):
     return any(fields)
 
 
+def _master_schedule_board_row_is_complete(row):
+    if not (row.get("flight_number") or "").strip():
+        return False
+    if not re.fullmatch(
+        r"([01][0-9]|2[0-3]):[0-5][0-9]",
+        (row.get("planned_time_local") or "").strip(),
+    ):
+        return False
+    if row.get("mission_type") == "arrival":
+        airport_code = (row.get("origin") or "").strip()
+    else:
+        airport_code = (row.get("destination") or "").strip()
+    return len(airport_code) == 3 and airport_code.isalpha()
+
+
 def _apply_master_schedule_form(master_schedule, form, gateway=None):
     gateway_code = gateway.code if gateway else form["gateway_code"].strip().upper()
     sort_name = form["sort_name"].strip().lower()
     mission_type = form["mission_type"].strip().lower()
     flight_number = _normalize_flight_number(form["flight_number"])
+    aircraft_type = _normalize_master_aircraft_type(form.get("aircraft_type", ""))
     origin = _normalize_airport_code(form["origin"], "Origin")
     destination = _normalize_airport_code(form["destination"], "Destination")
     timezone = _gateway_timezone(gateway)
@@ -1058,6 +1094,7 @@ def _apply_master_schedule_form(master_schedule, form, gateway=None):
     master_schedule.sort_name = sort_name
     master_schedule.mission_type = mission_type
     master_schedule.flight_number = flight_number
+    master_schedule.aircraft_type = aircraft_type
     master_schedule.origin = origin
     master_schedule.destination = destination
     master_schedule.active_days = _active_days_value(form["active_days"])
@@ -1167,6 +1204,28 @@ def _time_value_from_form(source, name):
         return ""
 
     return f"{hour}:{minute}"
+
+
+def _normalize_master_aircraft_type(value):
+    aircraft_type = (value or "").strip()
+    if not aircraft_type:
+        return None
+    normalized = aircraft_type.upper()
+    options_by_upper = {
+        option.upper(): option
+        for option in MASTER_AIRCRAFT_TYPE_OPTIONS
+        if option
+    }
+    if normalized not in options_by_upper:
+        raise ValueError("AC Type must be A300, 747, 757, 767, or Other.")
+    return options_by_upper[normalized]
+
+
+def _wants_json_response():
+    return (
+        request.headers.get("X-Requested-With") == "fetch"
+        or request.accept_mimetypes.best == "application/json"
+    )
 
 
 def _datetime_value_from_form(source, name):

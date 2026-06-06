@@ -45,6 +45,7 @@
                     <a class="logout-link" href="{{ url_for('auth.logout') }}">Logout</a>
                 </div>
                 <nav class="nav motherbrain-header-nav" aria-label="Primary">
+                    <a href="{{ url_for('neomotherbrain.rfd_hub') }}">Back to NeoGateway</a>
                     {% if can_manage_system(current_user) %}
                     <a href="{{ url_for('auth.users') }}">User Management</a>
                     {% endif %}

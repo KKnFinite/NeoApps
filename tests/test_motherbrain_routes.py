@@ -77,9 +77,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b'class="metric-grid"', response.data)
         self.assertNotIn(b"Master Schedule Rows", response.data)
         self.assertIn(b"User Management", response.data)
+        self.assertIn(b"Back to NeoGateway", response.data)
         self.assertIn(b"Gateway Matrix", response.data)
         self.assertIn(b"Master Schedule", response.data)
         self.assertIn(b"Manage Sort", response.data)
+        self.assertIn(b'href="/rfd"', response.data)
         self.assertIn(b"Logout", response.data)
         self.assertIn(b'href="/admin/users"', response.data)
         self.assertIn(b'href="/motherbrain/gateway-matrix"', response.data)
@@ -109,11 +111,20 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertNotIn(b"NeoRFD command", response.data)
                 self.assertNotIn(b"NEORFD COMMAND", response.data)
                 self.assertNotIn(b"motherbrain-screen-logo", response.data)
+                self.assertIn(b"Back to NeoGateway", response.data)
                 self.assertIn(b"User Management", response.data)
                 self.assertIn(b"Gateway Matrix", response.data)
                 self.assertIn(b"Master Schedule", response.data)
                 self.assertIn(b"Manage Sort", response.data)
+                self.assertIn(b'href="/rfd"', response.data)
                 self.assertIn(b'href="/logout"', response.data)
+
+        rfd_response = self.client.get("/rfd")
+        self.assertEqual(rfd_response.status_code, 200)
+        self.assertIn(b"NeoGateway", rfd_response.data)
+
+        still_authenticated = self.client.get("/motherbrain")
+        self.assertEqual(still_authenticated.status_code, 200)
 
         logout_response = self.client.get("/logout", follow_redirects=False)
         self.assertEqual(logout_response.status_code, 302)
@@ -465,6 +476,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"Add Departure", response.data)
         self.assertNotIn(b"Edit Multiple Rows", response.data)
         self.assertIn(b"<th>Origin</th>", response.data)
+        self.assertIn(b"<th>AC Type</th>", response.data)
         self.assertIn(b"<th>STA</th>", response.data)
         self.assertIn(b"<th>Destination</th>", response.data)
         self.assertIn(b"<th>ETD/STD</th>", response.data)
@@ -472,18 +484,23 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"<th>1st Mix</th>", response.data)
         self.assertIn(b"<th>2nd Mix</th>", response.data)
         self.assertIn(b"data-label=\"ETD/STD\"", response.data)
+        self.assertIn(b"data-label=\"AC Type\"", response.data)
         self.assertIn(b"data-label=\"2nd Mix\"", response.data)
         self.assertIn(b"ARR001", response.data)
         self.assertIn(b"DEP001", response.data)
         self.assertIn(b"SDF", response.data)
         self.assertIn(b'name="row_arrival_0_planned_time_local_hour"', response.data)
+        self.assertIn(b'name="row_arrival_0_aircraft_type"', response.data)
+        self.assertIn(b'name="row_departure_0_aircraft_type"', response.data)
         self.assertIn(b'name="row_departure_0_pure_pull_time_local_hour"', response.data)
         self.assertIn(b'name="row_departure_0_first_mix_pull_time_local_hour"', response.data)
         self.assertIn(b'name="row_departure_0_final_mix_pull_time_local_hour"', response.data)
         self.assertIn(b'name="row_arrival_new_flight_number"', response.data)
         self.assertIn(b'name="row_departure_new_flight_number"', response.data)
-        self.assertIn(b"Save Master Arrivals", response.data)
-        self.assertIn(b"Save Master Departures", response.data)
+        self.assertNotIn(b"Save Master Arrivals", response.data)
+        self.assertNotIn(b"Save Master Departures", response.data)
+        for aircraft_type in (b"A300", b"747", b"757", b"767", b"Other"):
+            self.assertIn(b'<option value="' + aircraft_type + b'"', response.data)
         self.assertNotIn(b">Edit</a>", response.data)
         self.assertIn(b">Delete</button>", response.data)
         self.assertNotIn(b"<th>Tail</th>", response.data)
@@ -521,6 +538,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "row_departure_0_active": "1",
                 "row_departure_0_active_days": ["monday", "tuesday"],
                 "row_departure_0_flight_number": "depold",
+                "row_departure_0_aircraft_type": "757",
                 "row_departure_0_origin": "RFD",
                 "row_departure_0_destination": "ont",
                 "row_departure_0_planned_time_local": "03:15",
@@ -533,6 +551,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "row_departure_new_active": "1",
                 "row_departure_new_active_days": ["monday", "tuesday"],
                 "row_departure_new_flight_number": "depnew",
+                "row_departure_new_aircraft_type": "747",
                 "row_departure_new_origin": "RFD",
                 "row_departure_new_destination": "sdf",
                 "row_departure_new_planned_time_local": "04:20",
@@ -548,13 +567,62 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(updated.flight_number, "DEPOLD")
         self.assertEqual(updated.destination, "ONT")
+        self.assertEqual(updated.aircraft_type, "757")
         self.assertEqual(updated.planned_time_local, time(3, 15))
         self.assertEqual(updated.pure_pull_time_local, time(1, 10))
         self.assertIsNotNone(created)
         self.assertEqual(created.origin, "RFD")
         self.assertEqual(created.destination, "SDF")
+        self.assertEqual(created.aircraft_type, "747")
         self.assertEqual(created.planned_time_local, time(4, 20))
         self.assertEqual(created.final_mix_pull_time_local, time(2, 40))
+
+    def test_master_schedule_board_autosave_json_updates_and_skips_incomplete_add_row(self):
+        existing = self._add_master(
+            flight_number="ARROLD",
+            mission_type="arrival",
+            origin="SDF",
+            destination="RFD",
+            active_days="monday,tuesday",
+        )
+        db.session.commit()
+
+        response = self.client.post(
+            "/motherbrain/master-schedule",
+            data={
+                "board_mission_type": "arrival",
+                "row_indexes": ["arrival_0", "arrival_new"],
+                "row_arrival_0_id": str(existing.id),
+                "row_arrival_0_mission_type": "arrival",
+                "row_arrival_0_sort_name": "night",
+                "row_arrival_0_active": "1",
+                "row_arrival_0_active_days": ["monday", "tuesday"],
+                "row_arrival_0_flight_number": "arrold",
+                "row_arrival_0_aircraft_type": "A300",
+                "row_arrival_0_origin": "ont",
+                "row_arrival_0_destination": "RFD",
+                "row_arrival_0_planned_time_local": "03:15",
+                "row_arrival_new_id": "",
+                "row_arrival_new_mission_type": "arrival",
+                "row_arrival_new_sort_name": "night",
+                "row_arrival_new_active": "1",
+                "row_arrival_new_active_days": ["monday", "tuesday"],
+                "row_arrival_new_flight_number": "partial",
+                "row_arrival_new_aircraft_type": "767",
+                "row_arrival_new_origin": "",
+                "row_arrival_new_destination": "RFD",
+                "row_arrival_new_planned_time_local": "04:20",
+            },
+            headers={"Accept": "application/json", "X-Requested-With": "fetch"},
+        )
+
+        updated = db.session.get(MasterFlightSchedule, existing.id)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["updated"], 1)
+        self.assertEqual(response.get_json()["created"], 0)
+        self.assertEqual(updated.origin, "ONT")
+        self.assertEqual(updated.aircraft_type, "A300")
+        self.assertIsNone(MasterFlightSchedule.query.filter_by(flight_number="PARTIAL").first())
 
     def test_master_schedule_form_uses_limited_sort_dropdown_and_capitalized_missions(self):
         response = self.client.get("/motherbrain/master-schedule/new")
@@ -564,6 +632,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b'data-master-mode="arrival"', response.data)
         self.assertIn(b'data-master-mode="departure"', response.data)
         self.assertIn(b'<select name="row_0_sort_name">', response.data)
+        self.assertIn(b'<select name="row_0_aircraft_type">', response.data)
         self.assertNotIn(b'name="sort_name" value=', response.data)
         for value, label in (
             (b"night", b"Night"),
@@ -575,6 +644,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
             self.assertIn(b">" + label + b"</option>", response.data)
         self.assertIn(b">Arrival</a>", response.data)
         self.assertIn(b">Departure</a>", response.data)
+        for aircraft_type in (b"A300", b"747", b"757", b"767", b"Other"):
+            self.assertIn(b'<option value="' + aircraft_type + b'"', response.data)
         self.assertNotIn(b">arrival</option>", response.data)
         self.assertNotIn(b">departure</option>", response.data)
 
@@ -811,6 +882,30 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(master.flight_number, "UP123")
         self.assertEqual(master.origin, "RFD")
         self.assertEqual(master.destination, "SDF")
+
+    def test_master_schedule_aircraft_type_saves_and_rejects_unknown(self):
+        valid = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(
+                flight_number="ACTYPE1",
+                aircraft_type="Other",
+            ),
+            follow_redirects=False,
+        )
+        invalid = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(
+                flight_number="ACTYPE2",
+                aircraft_type="A330",
+            ),
+        )
+
+        master = MasterFlightSchedule.query.filter_by(flight_number="ACTYPE1").first()
+        self.assertEqual(valid.status_code, 302)
+        self.assertEqual(master.aircraft_type, "Other")
+        self.assertEqual(invalid.status_code, 400)
+        self.assertIn(b"AC Type must be A300, 747, 757, 767, or Other.", invalid.data)
+        self.assertIsNone(MasterFlightSchedule.query.filter_by(flight_number="ACTYPE2").first())
 
     def test_master_schedule_flight_number_saves_uppercase(self):
         response = self.client.post(
@@ -1606,6 +1701,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "sort_name": "night",
             "mission_type": "departure",
             "flight_number": "DEP001",
+            "aircraft_type": "",
             "origin": "RFD",
             "destination": "SDF",
             "active": True,

@@ -18,6 +18,7 @@ class MasterFlightSchedule(db.Model):
     sort_name = db.Column(db.String(32), nullable=False, index=True)
     mission_type = db.Column(db.String(16), nullable=False, index=True)
     flight_number = db.Column(db.String(32), nullable=False)
+    aircraft_type = db.Column(db.String(16), nullable=True)
     origin = db.Column(db.String(8), nullable=False)
     destination = db.Column(db.String(8), nullable=False)
     active = db.Column(db.Boolean, nullable=False, default=True)

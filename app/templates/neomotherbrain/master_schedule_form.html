@@ -36,6 +36,17 @@
 <input type="hidden" name="row_{{ row.index }}_{{ field_name }}" value="{{ row.get(field_name, '') }}">
 {% endmacro %}
 
+{% macro aircraft_type_field(row) %}
+<select name="row_{{ row.index }}_aircraft_type">
+    <option value="" {% if not row.aircraft_type %}selected{% endif %}>AC Type</option>
+    {% for aircraft_type in aircraft_type_options %}
+        {% if aircraft_type %}
+        <option value="{{ aircraft_type }}" {% if row.aircraft_type == aircraft_type %}selected{% endif %}>{{ aircraft_type }}</option>
+        {% endif %}
+    {% endfor %}
+</select>
+{% endmacro %}
+
 {% macro schedule_row(row) %}
 <tr class="master-schedule-form-row">
     <td>
@@ -63,6 +74,7 @@
     <td>
         <input type="text" name="row_{{ row.index }}_flight_number" value="{{ row.flight_number }}" maxlength="8" autocomplete="off">
     </td>
+    <td>{{ aircraft_type_field(row) }}</td>
     <td>
         {{ airport_input(row, "origin", "Origin") }}
     </td>
@@ -118,6 +130,10 @@
     <label class="master-field-flight">
         <span>Flight Number</span>
         <input type="text" name="row_{{ row.index }}_flight_number" value="{{ row.flight_number }}" maxlength="8" autocomplete="off">
+    </label>
+    <label class="master-field-ac-type">
+        <span>AC Type</span>
+        {{ aircraft_type_field(row) }}
     </label>
     {% if row.mission_type == "arrival" %}
     <label class="master-field-airport">
@@ -178,6 +194,7 @@
                         <th>Sort</th>
                         <th>Mission</th>
                         <th>Flight</th>
+                        <th>AC Type</th>
                         <th>Origin</th>
                         <th>Destination</th>
                         <th>Active Days</th>

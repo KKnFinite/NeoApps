@@ -38,6 +38,9 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "sort_date_missions": {
         "arrival_status": "VARCHAR(32)",
     },
+    "master_flight_schedules": {
+        "aircraft_type": "VARCHAR(16)",
+    },
 }
 
 POSTGRES_OPTIONAL_COLUMNS = {
@@ -47,6 +50,9 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "sort_date_missions": {
         "arrival_status": "VARCHAR(32)",
+    },
+    "master_flight_schedules": {
+        "aircraft_type": "VARCHAR(16)",
     },
 }
 

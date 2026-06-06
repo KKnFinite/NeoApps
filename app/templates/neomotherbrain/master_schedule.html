@@ -25,6 +25,17 @@
 {{ hidden_active_days(prefix, schedule.active_days if schedule else none) }}
 {% endmacro %}
 
+{% macro aircraft_type_select(name, selected_value="") %}
+<select name="{{ name }}" aria-label="AC Type">
+    <option value="" {% if not selected_value %}selected{% endif %}>AC</option>
+    {% for aircraft_type in aircraft_type_options %}
+        {% if aircraft_type %}
+        <option value="{{ aircraft_type }}" {% if selected_value == aircraft_type %}selected{% endif %}>{{ aircraft_type }}</option>
+        {% endif %}
+    {% endfor %}
+</select>
+{% endmacro %}
+
 {% macro arrival_row(schedule, index, is_new=False) %}
 {% set row_index = "arrival_" ~ index %}
 {% set prefix = "row_" ~ row_index ~ "_" %}
@@ -32,10 +43,13 @@
     <td class="master-board-cell master-cell-flight" data-label="Flight">
         {{ row_hidden_fields(prefix, schedule, "arrival") }}
         <input type="hidden" name="{{ prefix }}destination" value="{{ gateway.code }}">
-        <input type="text" name="{{ prefix }}flight_number" value="{{ schedule.flight_number if schedule else '' }}" maxlength="8" autocomplete="off">
+        <input class="flight-number-input" type="text" name="{{ prefix }}flight_number" value="{{ schedule.flight_number if schedule else '' }}" maxlength="8" autocomplete="off">
     </td>
     <td class="master-board-cell master-cell-origin" data-label="Origin">
         <input class="airport-code-input" type="text" name="{{ prefix }}origin" value="{{ schedule.origin if schedule else '' }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
+    </td>
+    <td class="master-board-cell master-cell-ac-type" data-label="AC Type">
+        {{ aircraft_type_select(prefix ~ "aircraft_type", schedule.aircraft_type if schedule and schedule.aircraft_type else "") }}
     </td>
     <td class="master-board-cell master-cell-sta" data-label="STA">
         {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
@@ -57,10 +71,13 @@
     <td class="master-board-cell master-cell-flight" data-label="Flight">
         {{ row_hidden_fields(prefix, schedule, "departure") }}
         <input type="hidden" name="{{ prefix }}origin" value="{{ gateway.code }}">
-        <input type="text" name="{{ prefix }}flight_number" value="{{ schedule.flight_number if schedule else '' }}" maxlength="8" autocomplete="off">
+        <input class="flight-number-input" type="text" name="{{ prefix }}flight_number" value="{{ schedule.flight_number if schedule else '' }}" maxlength="8" autocomplete="off">
     </td>
     <td class="master-board-cell master-cell-destination" data-label="Destination">
         <input class="airport-code-input" type="text" name="{{ prefix }}destination" value="{{ schedule.destination if schedule else '' }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
+    </td>
+    <td class="master-board-cell master-cell-ac-type" data-label="AC Type">
+        {{ aircraft_type_select(prefix ~ "aircraft_type", schedule.aircraft_type if schedule and schedule.aircraft_type else "") }}
     </td>
     <td class="master-board-cell master-cell-etd" data-label="ETD/STD">
         {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
@@ -90,7 +107,7 @@
         <h2>{{ title }}</h2>
     </div>
 
-    <form class="master-board-form" method="post">
+    <form class="master-board-form" method="post" data-master-board-form data-master-board-type="{{ mission_type }}">
         <input type="hidden" name="board_mission_type" value="{{ mission_type }}">
         <div class="table-wrap">
             <table class="data-table master-flight-table master-board-table">
@@ -99,10 +116,12 @@
                         {% if mission_type == "arrival" %}
                         <th>Flight</th>
                         <th>Origin</th>
+                        <th>AC Type</th>
                         <th>STA</th>
                         {% else %}
                         <th>Flight</th>
                         <th>Destination</th>
+                        <th>AC Type</th>
                         <th>ETD/STD</th>
                         <th>Pure Pull</th>
                         <th>1st Mix</th>
@@ -127,9 +146,6 @@
                 </tbody>
             </table>
         </div>
-        <div class="action-row master-board-actions">
-            <button class="action-button" type="submit">Save {{ title }}</button>
-        </div>
     </form>
 </section>
 {% endmacro %}
@@ -148,9 +164,127 @@
 
 <script>
 (() => {
-    document.querySelectorAll(".airport-code-input").forEach((input) => {
+    const uppercaseInput = (input) => {
         input.addEventListener("input", () => {
             input.value = input.value.toUpperCase();
+        });
+    };
+
+    document.querySelectorAll(".airport-code-input, .flight-number-input").forEach(uppercaseInput);
+
+    const fieldValue = (row, suffix) => {
+        const field = row.querySelector(`[name$='_${suffix}']`);
+        return field ? field.value.trim() : "";
+    };
+
+    const timeComplete = (row, suffix) => {
+        const hour = row.querySelector(`[name$='_${suffix}_hour']`);
+        const minute = row.querySelector(`[name$='_${suffix}_minute']`);
+        return Boolean(hour && minute && hour.value && minute.value);
+    };
+
+    const rowIsComplete = (row) => {
+        const missionType = fieldValue(row, "mission_type");
+        const flightNumber = fieldValue(row, "flight_number");
+        if (!flightNumber || !timeComplete(row, "planned_time_local")) {
+            return false;
+        }
+        if (missionType === "arrival") {
+            return fieldValue(row, "origin").length === 3;
+        }
+        return fieldValue(row, "destination").length === 3;
+    };
+
+    const shouldSaveRow = (row) => {
+        if (!row) {
+            return false;
+        }
+        if (row.classList.contains("master-board-add-row")) {
+            return rowIsComplete(row);
+        }
+        return Boolean(fieldValue(row, "id")) && rowIsComplete(row);
+    };
+
+    const submitForm = (form, delay = 500) => {
+        if (!form) {
+            return;
+        }
+
+        clearTimeout(form.masterAutosaveTimer);
+        form.masterAutosaveTimer = window.setTimeout(async () => {
+            if (form.dataset.autosavePending === "1") {
+                form.dataset.autosaveQueued = "1";
+                return;
+            }
+
+            form.dataset.autosavePending = "1";
+            form.dataset.autosaveQueued = "";
+            try {
+                const response = await fetch(form.action || window.location.href, {
+                    method: "POST",
+                    body: new FormData(form),
+                    headers: {
+                        "Accept": "application/json",
+                        "X-Requested-With": "fetch",
+                    },
+                });
+                const result = await response.json();
+                if (!response.ok || !result.ok) {
+                    return;
+                }
+                if (result.created > 0) {
+                    window.location.reload();
+                    return;
+                }
+            } catch (_error) {
+                return;
+            } finally {
+                form.dataset.autosavePending = "";
+            }
+
+            if (form.dataset.autosaveQueued === "1") {
+                submitForm(form, 150);
+            }
+        }, delay);
+    };
+
+    const handleFieldUpdate = (event, delay) => {
+        const row = event.target.closest(".master-board-row");
+        if (!shouldSaveRow(row)) {
+            return;
+        }
+        submitForm(row.closest("[data-master-board-form]"), delay);
+    };
+
+    document.querySelectorAll("[data-master-board-form]").forEach((form) => {
+        form.addEventListener("input", (event) => {
+            if (event.target.matches("input[type='text']")) {
+                handleFieldUpdate(event, 650);
+            }
+        });
+        form.addEventListener("change", (event) => {
+            if (event.target.matches("select, input")) {
+                handleFieldUpdate(event, 100);
+            }
+        });
+        form.addEventListener("focusout", (event) => {
+            if (event.target.matches("input, select")) {
+                handleFieldUpdate(event, 100);
+            }
+        });
+        form.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" && event.target.matches("input[type='text']")) {
+                event.preventDefault();
+                handleFieldUpdate(event, 0);
+                event.target.blur();
+            }
+        });
+        form.addEventListener("submit", (event) => {
+            if (event.submitter && event.submitter.matches(".table-row-button")) {
+                return;
+            }
+            event.preventDefault();
+            submitForm(form, 0);
         });
     });
 })();

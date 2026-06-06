@@ -302,7 +302,7 @@ a {
     grid-column: 1;
     grid-row: 1;
     display: grid;
-    grid-template-columns: repeat(4, minmax(132px, 1fr));
+    grid-template-columns: repeat(5, minmax(104px, 1fr));
     gap: 10px;
     width: 100%;
 }
@@ -1847,7 +1847,7 @@ select::-ms-expand {
 }
 
 .master-flight-table {
-    min-width: 620px;
+    min-width: 760px;
 }
 
 .master-board-form {
@@ -2408,21 +2408,21 @@ select::-ms-expand {
         margin-top: 0;
         padding: 7px 8px;
         transform: none;
-        grid-template-columns: 72px minmax(0, 1fr);
-        gap: 4px;
-    }
-
-    .motherbrain-fixed-header.motherbrain-home-page .topbar {
-        grid-template-columns: 1fr;
-    }
-
-    .motherbrain-home-page .motherbrain-header-logo-link {
-        display: none;
+        grid-template-columns: minmax(92px, 1fr) 66px minmax(70px, 0.8fr);
+        grid-template-rows: auto auto auto;
+        align-items: center;
+        gap: 7px 8px;
     }
 
     .motherbrain-fixed-header .motherbrain-header-logo {
-        width: 66px;
-        height: 66px;
+        width: 60px;
+        height: 60px;
+    }
+
+    .motherbrain-fixed-header .motherbrain-header-logo-link {
+        grid-column: 2;
+        grid-row: 1;
+        justify-self: center;
     }
 
     .brand {
@@ -2446,32 +2446,30 @@ select::-ms-expand {
     }
 
     .motherbrain-fixed-header .topbar-actions {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 8px;
-        justify-items: stretch;
+        display: contents;
     }
 
     .motherbrain-fixed-header .topbar-user-row {
-        grid-column: 1;
-        grid-row: 1;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: 6px;
-        width: 100%;
+        display: contents;
     }
 
     .motherbrain-fixed-header .user-chip {
+        grid-column: 1;
+        grid-row: 1;
         justify-items: start;
-        min-height: 31px;
+        width: 100%;
+        min-height: 34px;
         padding: 5px 8px;
         text-align: left;
     }
 
     .motherbrain-fixed-header .logout-link {
-        min-height: 31px;
-        padding: 7px 9px;
-        font-size: 0.64rem;
+        grid-column: 3;
+        grid-row: 1;
+        justify-self: stretch;
+        min-height: 34px;
+        padding: 7px 8px;
+        font-size: 0.68rem;
     }
 
     .motherbrain-fixed-header .user-chip span {
@@ -2483,27 +2481,32 @@ select::-ms-expand {
     }
 
     .motherbrain-fixed-header .nav {
-        grid-column: 1;
+        grid-column: 1 / -1;
         grid-row: 2;
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(6, minmax(0, 1fr));
         gap: 7px;
         width: 100%;
     }
 
     .motherbrain-fixed-header .nav a {
-        min-height: 36px;
-        padding: 8px 6px;
-        font-size: 0.68rem;
+        grid-column: span 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+        padding: 8px 7px;
+        font-size: 0.72rem;
+        line-height: 1.05;
         text-align: center;
     }
 
-    .motherbrain-fixed-header .content {
-        padding-top: 168px;
+    .motherbrain-fixed-header .nav a:nth-last-child(-n+2) {
+        grid-column: span 3;
     }
 
-    .motherbrain-home-page.motherbrain-fixed-header .content {
-        padding-top: 146px;
+    .motherbrain-fixed-header .content {
+        padding-top: 196px;
     }
 
     .motherbrain-screen-logo {
@@ -2834,24 +2837,21 @@ select::-ms-expand {
 
     .blueprint-neomotherbrain .master-board-table tr.master-arrival-row {
         grid-template-columns:
-            minmax(76px, 1fr)
-            minmax(58px, 0.76fr)
-            minmax(108px, 1.28fr)
-            minmax(52px, auto);
+            minmax(62px, 0.86fr)
+            minmax(50px, 0.7fr)
+            minmax(58px, 0.78fr)
+            minmax(86px, 1.14fr)
+            minmax(48px, auto);
         align-items: end;
     }
 
     .blueprint-neomotherbrain .master-board-table tr.master-departure-row {
-        grid-template-columns:
-            minmax(72px, 0.84fr)
-            minmax(64px, 0.74fr)
-            minmax(92px, 1fr)
-            minmax(52px, auto);
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         grid-template-areas:
-            "flight destination etd etd"
+            "flight destination ac etd"
             "pure first second delete";
         align-items: end;
-        row-gap: 9px;
+        gap: 9px 6px;
     }
 
     .blueprint-neomotherbrain .master-board-table td.master-board-cell {
@@ -2889,7 +2889,7 @@ select::-ms-expand {
     }
 
     .blueprint-neomotherbrain .master-board-table .military-time-select {
-        grid-template-columns: minmax(39px, 1fr) 5px minmax(39px, 1fr);
+        grid-template-columns: minmax(34px, 1fr) 4px minmax(34px, 1fr);
         gap: 3px;
         width: 100%;
     }
@@ -2911,6 +2911,10 @@ select::-ms-expand {
 
     .blueprint-neomotherbrain .master-board-table .master-departure-row .master-cell-destination {
         grid-area: destination;
+    }
+
+    .blueprint-neomotherbrain .master-board-table .master-departure-row .master-cell-ac-type {
+        grid-area: ac;
     }
 
     .blueprint-neomotherbrain .master-board-table .master-departure-row .master-cell-etd {
@@ -2939,7 +2943,7 @@ select::-ms-expand {
     }
 
     .blueprint-neomotherbrain .master-board-table .master-arrival-row .table-row-button {
-        grid-column: 4;
+        grid-column: 5;
     }
 
     .blueprint-neomotherbrain .master-board-table .master-departure-row .table-row-button {
@@ -3047,34 +3051,38 @@ select::-ms-expand {
     }
 
     .blueprint-neomotherbrain .schedule-form-table td:nth-child(5)::before {
-        content: "Origin";
+        content: "AC Type";
     }
 
     .blueprint-neomotherbrain .schedule-form-table td:nth-child(6)::before {
-        content: "Destination";
+        content: "Origin";
     }
 
     .blueprint-neomotherbrain .schedule-form-table td:nth-child(7)::before {
-        content: "Active Days";
+        content: "Destination";
     }
 
     .blueprint-neomotherbrain .schedule-form-table td:nth-child(8)::before {
-        content: "STA/STD";
+        content: "Active Days";
     }
 
     .blueprint-neomotherbrain .schedule-form-table td:nth-child(9)::before {
-        content: "Pure Pull";
+        content: "STA/STD";
     }
 
     .blueprint-neomotherbrain .schedule-form-table td:nth-child(10)::before {
-        content: "First Mix";
+        content: "Pure Pull";
     }
 
     .blueprint-neomotherbrain .schedule-form-table td:nth-child(11)::before {
-        content: "Final Mix";
+        content: "First Mix";
     }
 
     .blueprint-neomotherbrain .schedule-form-table td:nth-child(12)::before {
+        content: "Final Mix";
+    }
+
+    .blueprint-neomotherbrain .schedule-form-table td:nth-child(13)::before {
         content: "Row";
     }
 
