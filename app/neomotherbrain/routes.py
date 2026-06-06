@@ -774,6 +774,10 @@ def _master_schedule_form_from_request(gateway=None, prefix="", source=None):
         "active": source.get(f"{prefix}active", active_default) == "1",
     }
     _apply_gateway_airport_defaults(form, gateway)
+    if form["mission_type"] == "arrival":
+        form["pure_pull_time_local"] = ""
+        form["first_mix_pull_time_local"] = ""
+        form["final_mix_pull_time_local"] = ""
     return form
 
 

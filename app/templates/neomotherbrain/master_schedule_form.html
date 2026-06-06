@@ -32,6 +32,10 @@
 >
 {% endmacro %}
 
+{% macro hidden_airport(row, field_name) %}
+<input type="hidden" name="row_{{ row.index }}_{{ field_name }}" value="{{ row.get(field_name, '') }}">
+{% endmacro %}
+
 {% macro schedule_row(row) %}
 <tr class="master-schedule-form-row">
     <td>
@@ -114,14 +118,19 @@
         <span>Flight Number</span>
         <input type="text" name="row_{{ row.index }}_flight_number" value="{{ row.flight_number }}" maxlength="8" autocomplete="off">
     </label>
+    {% if row.mission_type == "arrival" %}
     <label class="master-field-airport">
         <span>Origin</span>
         {{ airport_input(row, "origin", "Origin") }}
     </label>
+    {{ hidden_airport(row, "destination") }}
+    {% else %}
+    {{ hidden_airport(row, "origin") }}
     <label class="master-field-airport">
         <span>Destination</span>
         {{ airport_input(row, "destination", "Destination") }}
     </label>
+    {% endif %}
     <label class="master-time-field">
         <span data-master-scheduled-label>{{ "STA" if row.mission_type == "arrival" else "STD" }}</span>
         {{ military_time_select("row_" ~ row.index ~ "_planned_time_local", row.planned_time_local, True) }}
