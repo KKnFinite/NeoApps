@@ -60,20 +60,42 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'src="/static/images/motherbrain_logo1.png"', response.data)
-        self.assertIn(b'aria-label="MotherBrain menu"', response.data)
+        self.assertIn(b'class="blueprint-neomotherbrain motherbrain-fixed-header"', response.data)
+        self.assertIn(b'aria-label="Primary"', response.data)
+        self.assertNotIn(b'aria-label="MotherBrain menu"', response.data)
         self.assertNotIn(b'class="panel motherbrain-landing"', response.data)
         self.assertNotIn(b"action-button-secondary", response.data)
         self.assertNotIn(b">NeoMotherBrain<", response.data)
-        self.assertLess(
-            html.index("motherbrain-screen-logo"),
-            html.index('aria-label="MotherBrain menu"'),
-        )
         self.assertNotIn(b'class="metric-grid"', response.data)
         self.assertNotIn(b"Master Schedule Rows", response.data)
+        self.assertIn(b"User Management", response.data)
         self.assertIn(b"Gateway Matrix", response.data)
+        self.assertIn(b"Master Schedule", response.data)
         self.assertIn(b"Manage Sort", response.data)
+        self.assertIn(b"Logout", response.data)
+        self.assertIn(b'href="/admin/users"', response.data)
+        self.assertIn(b'href="/motherbrain/gateway-matrix"', response.data)
+        self.assertIn(b'href="/motherbrain/master-schedule"', response.data)
+        self.assertIn(b'href="/motherbrain/manage-sort"', response.data)
+        self.assertIn(b'href="/logout"', response.data)
         self.assertNotIn(b"Access Requests", response.data)
         self.assertNotIn(b"Generate Nightly Operation", response.data)
+
+    def test_motherbrain_header_navigation_routes_work(self):
+        routes = (
+            "/admin/users",
+            "/motherbrain/gateway-matrix",
+            "/motherbrain/master-schedule",
+            "/motherbrain/manage-sort",
+        )
+
+        for path in routes:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+
+        logout_response = self.client.get("/logout", follow_redirects=False)
+        self.assertEqual(logout_response.status_code, 302)
 
     def test_gateway_matrix_displays_dynamic_gateway_and_sort_order(self):
         response = self.client.get("/motherbrain/gateway-matrix")
@@ -403,6 +425,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Master Departures", response.data)
         self.assertIn(b"class=\"master-board-form\"", response.data)
         self.assertNotIn(b"Add Master Flights", response.data)
+        self.assertNotIn(b"Add Arrival", response.data)
+        self.assertNotIn(b"Add Departure", response.data)
         self.assertNotIn(b"Edit Multiple Rows", response.data)
         self.assertIn(b"<th>Origin</th>", response.data)
         self.assertIn(b"<th>STA</th>", response.data)

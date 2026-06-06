@@ -212,6 +212,48 @@ a {
     padding: 54px 0;
 }
 
+.motherbrain-fixed-header .topbar {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    width: min(1440px, calc(100% - 32px));
+    margin-top: 8px;
+    padding: 8px 12px;
+    transform: translateX(-50%);
+}
+
+.motherbrain-fixed-header .brand {
+    padding: 0;
+}
+
+.motherbrain-fixed-header .brand strong {
+    font-size: 0.82rem;
+}
+
+.motherbrain-fixed-header .topbar-actions {
+    gap: 8px;
+}
+
+.motherbrain-fixed-header .user-chip {
+    min-height: 32px;
+    min-width: 104px;
+    padding: 5px 9px;
+}
+
+.motherbrain-fixed-header .nav {
+    gap: 7px;
+}
+
+.motherbrain-fixed-header .nav a {
+    min-height: 32px;
+    padding: 7px 9px;
+    font-size: 0.68rem;
+}
+
+.motherbrain-fixed-header .content {
+    padding-top: 104px;
+}
+
 .dashboard-hero {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
@@ -2300,6 +2342,18 @@ select::-ms-expand {
         border-radius: 0;
     }
 
+    .motherbrain-fixed-header .topbar {
+        left: 0;
+        width: 100%;
+        margin-top: 0;
+        padding: 7px 10px;
+        transform: none;
+    }
+
+    .motherbrain-fixed-header .brand strong {
+        font-size: 0.74rem;
+    }
+
     .brand {
         min-width: 0;
     }
@@ -2318,6 +2372,41 @@ select::-ms-expand {
 
     .nav {
         justify-content: center;
+    }
+
+    .motherbrain-fixed-header .topbar-actions {
+        gap: 7px;
+    }
+
+    .motherbrain-fixed-header .user-chip {
+        min-height: 28px;
+        padding: 4px 8px;
+    }
+
+    .motherbrain-fixed-header .user-chip span {
+        font-size: 0.52rem;
+    }
+
+    .motherbrain-fixed-header .user-chip strong {
+        font-size: 0.72rem;
+    }
+
+    .motherbrain-fixed-header .nav {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        width: 100%;
+    }
+
+    .motherbrain-fixed-header .nav a {
+        min-height: 30px;
+        padding: 7px 5px;
+        font-size: 0.58rem;
+        text-align: center;
+    }
+
+    .motherbrain-fixed-header .content {
+        padding-top: 184px;
     }
 
     .node-strip {
