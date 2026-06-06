@@ -10,7 +10,6 @@
     </div>
 
     <div class="action-row">
-        <a class="action-button" href="{{ url_for('neomotherbrain.edit_master_schedule', master_id=master_schedule.id) }}">Edit</a>
         <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.toggle_master_schedule_active', master_id=master_schedule.id) }}">
             <button class="action-button" type="submit">{{ "Deactivate" if master_schedule.active else "Activate" }}</button>
         </form>

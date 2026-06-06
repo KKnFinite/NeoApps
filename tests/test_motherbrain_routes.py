@@ -830,6 +830,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertNotIn(b"Preferred Parking", response.data)
                 self.assertNotIn(b"Parking", response.data)
                 self.assertNotIn(b"A1", response.data)
+        self.assertNotIn(b">Edit</a>", detail_response.data)
 
     def test_delete_master_schedule_removes_row_and_preserves_generated_mission(self):
         master = self._add_master(flight_number="DELMS")

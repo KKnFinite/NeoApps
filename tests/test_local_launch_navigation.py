@@ -46,6 +46,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertEqual(self.app.config["DEFAULT_GATEWAY_CODE"], "RFD")
         self.assertEqual(self.app.config["DEFAULT_GATEWAY_NAME"], "NeoRFD")
         self.assertEqual(self.app.config["DEFAULT_GATEWAY_LOGO"], "images/neorfd_logo1.png")
+        self.assertIn("STATIC_ASSET_VERSION", self.app.config)
 
     def test_neorfd_logo_asset_exists_with_render_safe_casing(self):
         logo_path = Path("app/static/images/neorfd_logo1.png")
@@ -83,6 +84,11 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(".motherbrain-menu {\n        align-items: stretch;\n        flex-direction: column;", css)
         self.assertNotIn("42px 42px", css)
         self.assertNotIn("linear-gradient(90deg, rgba(201, 208, 214, 0.035) 1px", css)
+
+    def test_base_template_cache_busts_stylesheet(self):
+        template = Path("app/templates/base.html").read_text()
+
+        self.assertIn("filename='css/base.css', v=config.STATIC_ASSET_VERSION", template)
 
     def test_neonode_button_asset_exists_with_render_safe_casing(self):
         button_path = Path("app/static/images/neobutton1_medium.png")
