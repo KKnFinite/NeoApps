@@ -28,19 +28,19 @@
 {% macro arrival_row(schedule, index, is_new=False) %}
 {% set row_index = "arrival_" ~ index %}
 {% set prefix = "row_" ~ row_index ~ "_" %}
-<tr class="{{ 'master-board-add-row' if is_new else '' }}">
-    <td data-label="Flight">
+<tr class="master-board-row master-arrival-row{% if is_new %} master-board-add-row{% endif %}">
+    <td class="master-board-cell master-cell-flight" data-label="Flight">
         {{ row_hidden_fields(prefix, schedule, "arrival") }}
         <input type="hidden" name="{{ prefix }}destination" value="{{ gateway.code }}">
         <input type="text" name="{{ prefix }}flight_number" value="{{ schedule.flight_number if schedule else '' }}" maxlength="8" autocomplete="off">
     </td>
-    <td data-label="Origin">
+    <td class="master-board-cell master-cell-origin" data-label="Origin">
         <input class="airport-code-input" type="text" name="{{ prefix }}origin" value="{{ schedule.origin if schedule else '' }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
     </td>
-    <td data-label="STA">
+    <td class="master-board-cell master-cell-sta" data-label="STA">
         {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
     </td>
-    <td data-label="Actions" class="table-actions">
+    <td data-label="Actions" class="table-actions master-cell-actions">
         {% if schedule %}
         <a class="master-mobile-action" href="{{ url_for('neomotherbrain.edit_master_schedule', master_id=schedule.id) }}">Edit</a>
         <button class="table-row-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate>Delete</button>
@@ -54,28 +54,28 @@
 {% macro departure_row(schedule, index, is_new=False) %}
 {% set row_index = "departure_" ~ index %}
 {% set prefix = "row_" ~ row_index ~ "_" %}
-<tr class="{{ 'master-board-add-row' if is_new else '' }}">
-    <td data-label="Flight">
+<tr class="master-board-row master-departure-row{% if is_new %} master-board-add-row{% endif %}">
+    <td class="master-board-cell master-cell-flight" data-label="Flight">
         {{ row_hidden_fields(prefix, schedule, "departure") }}
         <input type="hidden" name="{{ prefix }}origin" value="{{ gateway.code }}">
         <input type="text" name="{{ prefix }}flight_number" value="{{ schedule.flight_number if schedule else '' }}" maxlength="8" autocomplete="off">
     </td>
-    <td data-label="Destination">
+    <td class="master-board-cell master-cell-destination" data-label="Destination">
         <input class="airport-code-input" type="text" name="{{ prefix }}destination" value="{{ schedule.destination if schedule else '' }}" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off">
     </td>
-    <td data-label="Pure Pull">
+    <td class="master-board-cell master-cell-pure-pull" data-label="Pure Pull">
         {{ military_time_select(prefix ~ "pure_pull_time_local", schedule.pure_pull_time_local.strftime("%H:%M") if schedule and schedule.pure_pull_time_local else "") }}
     </td>
-    <td data-label="1st Mix">
+    <td class="master-board-cell master-cell-first-mix" data-label="1st Mix">
         {{ military_time_select(prefix ~ "first_mix_pull_time_local", schedule.first_mix_pull_time_local.strftime("%H:%M") if schedule and schedule.first_mix_pull_time_local else "") }}
     </td>
-    <td data-label="Final Mix">
+    <td class="master-board-cell master-cell-second-mix" data-label="2nd Mix">
         {{ military_time_select(prefix ~ "final_mix_pull_time_local", schedule.final_mix_pull_time_local.strftime("%H:%M") if schedule and schedule.final_mix_pull_time_local else "") }}
     </td>
-    <td data-label="STD">
+    <td class="master-board-cell master-cell-etd" data-label="ETD">
         {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
     </td>
-    <td data-label="Actions" class="table-actions">
+    <td data-label="Actions" class="table-actions master-cell-actions">
         {% if schedule %}
         <a class="master-mobile-action" href="{{ url_for('neomotherbrain.edit_master_schedule', master_id=schedule.id) }}">Edit</a>
         <button class="table-row-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate>Delete</button>
