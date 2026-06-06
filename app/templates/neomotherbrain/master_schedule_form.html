@@ -81,17 +81,14 @@
 {% endmacro %}
 
 {% macro single_entry_form(row) %}
-{% if mode == "edit" and master_schedule %}
-{% set arrival_mode_url = url_for("neomotherbrain.edit_master_schedule", master_id=master_schedule.id, mission_type="arrival") %}
-{% set departure_mode_url = url_for("neomotherbrain.edit_master_schedule", master_id=master_schedule.id, mission_type="departure") %}
-{% else %}
+{% if mode != "edit" %}
 {% set arrival_mode_url = url_for("neomotherbrain.new_master_schedule", mission_type="arrival") %}
 {% set departure_mode_url = url_for("neomotherbrain.new_master_schedule", mission_type="departure") %}
-{% endif %}
 <div class="master-mode-tabs" role="tablist" aria-label="Mission type">
     <a class="master-mode-tab" role="tab" href="{{ arrival_mode_url }}" data-master-mode="arrival" aria-selected="{{ 'true' if row.mission_type == 'arrival' else 'false' }}">Arrival</a>
     <a class="master-mode-tab" role="tab" href="{{ departure_mode_url }}" data-master-mode="departure" aria-selected="{{ 'true' if row.mission_type == 'departure' else 'false' }}">Departure</a>
 </div>
+{% endif %}
 
 <input type="hidden" name="row_indexes" value="{{ row.index }}">
 <input type="hidden" name="row_{{ row.index }}_id" value="{{ row.id }}">
@@ -102,6 +99,9 @@
 </label>
 
 <div class="master-schedule-entry-grid">
+    {% if mode == "edit" %}
+    <input type="hidden" name="row_{{ row.index }}_sort_name" value="{{ row.sort_name }}">
+    {% else %}
     <label class="master-field-sort">
         <span>Sort</span>
         <select name="row_{{ row.index }}_sort_name">
@@ -110,6 +110,7 @@
             {% endfor %}
         </select>
     </label>
+    {% endif %}
     <label class="master-active-days-field">
         <span>Active Days</span>
         {{ active_days_field(row) }}
