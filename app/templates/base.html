@@ -90,6 +90,11 @@
                 {% endif %}
             {% endwith %}
             {% block content %}{% endblock %}
+            {% if uses_motherbrain_header and not is_motherbrain_landing %}
+            <div class="motherbrain-main-menu-return">
+                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}">Back to MotherBrain Main Menu</a>
+            </div>
+            {% endif %}
         </main>
     </div>
     {% if uses_motherbrain_header %}

@@ -344,6 +344,17 @@ a {
     padding-top: 96px;
 }
 
+.motherbrain-main-menu-return {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin: 30px auto 0;
+}
+
+.motherbrain-main-menu-return .action-button {
+    min-width: min(100%, 280px);
+}
+
 .dashboard-hero {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
@@ -2724,6 +2735,15 @@ select::-ms-expand {
 
     .motherbrain-fixed-header .content {
         padding-top: 72px;
+    }
+
+    .motherbrain-main-menu-return {
+        margin-top: 22px;
+    }
+
+    .motherbrain-main-menu-return .action-button {
+        width: min(100%, 360px);
+        min-width: 0;
     }
 
     .motherbrain-screen-logo {

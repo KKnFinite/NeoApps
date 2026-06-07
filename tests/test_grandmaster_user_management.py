@@ -76,6 +76,8 @@ class GrandmasterUserManagementTest(unittest.TestCase):
                 self.assertIn(b"Manage Sort", response.data)
                 self.assertIn(b'href="/motherbrain"', response.data)
                 self.assertIn(b'href="/rfd"', response.data)
+                self.assertIn(b"Back to MotherBrain Main Menu", response.data)
+                self.assertIn(b"motherbrain-main-menu-return", response.data)
 
     def test_master_cannot_access_grandmaster_user_management(self):
         master = self._admin("master_admin", "master")

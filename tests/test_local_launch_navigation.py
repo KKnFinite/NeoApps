@@ -84,6 +84,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(".motherbrain-menu {\n        align-items: stretch;\n        flex-direction: column;", css)
         self.assertIn(".motherbrain-dashboard", css)
         self.assertIn(".motherbrain-dashboard-card", css)
+        self.assertIn(".motherbrain-main-menu-return", css)
         self.assertIn(".motherbrain-fixed-header .topbar", css)
         self.assertIn("position: fixed;", css)
         self.assertIn("grid-template-columns: 72px minmax(0, 1fr);", css)

@@ -77,6 +77,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b'aria-label="MotherBrain menu"', response.data)
         self.assertNotIn(b'class="panel motherbrain-landing"', response.data)
         self.assertNotIn(b"action-button-secondary", response.data)
+        self.assertNotIn(b"Back to MotherBrain Main Menu", response.data)
+        self.assertNotIn(b"motherbrain-main-menu-return", response.data)
         self.assertNotIn(b'class="metric-grid"', response.data)
         self.assertNotIn(b"Master Schedule Rows", response.data)
         self.assertIn(b"MotherBrain Home", response.data)
@@ -147,6 +149,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertIn(b"Master Schedule", response.data)
                 self.assertIn(b"Manage Sort", response.data)
                 self.assertIn(b'href="/motherbrain"', response.data)
+                self.assertIn(b"Back to MotherBrain Main Menu", response.data)
+                self.assertIn(b"motherbrain-main-menu-return", response.data)
+                self.assertIn(b'href="/motherbrain">Back to MotherBrain Main Menu</a>', response.data)
                 self.assertIn(b'href="/rfd"', response.data)
                 self.assertIn(b'href="/logout"', response.data)
                 self.assertIn(b'data-motherbrain-menu-button', response.data)
@@ -163,9 +168,29 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(still_authenticated.status_code, 200)
         self.assertIn(b"MotherBrain Dashboard", still_authenticated.data)
         self.assertIn(b"Logout", still_authenticated.data)
+        self.assertNotIn(b"Back to MotherBrain Main Menu", still_authenticated.data)
 
         logout_response = self.client.get("/logout", follow_redirects=False)
         self.assertEqual(logout_response.status_code, 302)
+
+    def test_motherbrain_main_menu_footer_link_routes_home_without_logout(self):
+        response = self.client.get("/motherbrain/master-schedule")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Back to MotherBrain Main Menu", html)
+        footer_html = html.split('class="motherbrain-main-menu-return"', 1)[1].split("</div>", 1)[0]
+        self.assertIn('href="/motherbrain"', footer_html)
+        self.assertLess(
+            html.index("Master Arrivals"),
+            html.index("Back to MotherBrain Main Menu"),
+        )
+
+        home_response = self.client.get("/motherbrain", follow_redirects=False)
+        self.assertEqual(home_response.status_code, 200)
+        self.assertIn(b"MotherBrain Dashboard", home_response.data)
+        self.assertIn(b"Logout", home_response.data)
+        self.assertNotIn(b"Back to MotherBrain Main Menu", home_response.data)
 
     def test_gateway_matrix_displays_dynamic_gateway_and_sort_order(self):
         response = self.client.get("/motherbrain/gateway-matrix")
@@ -270,9 +295,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Add Special Flight", first_response.data)
         html = first_response.data.decode()
         main_html = html.split('<main class="content">', 1)[1].split("</main>", 1)[0]
-        self.assertNotIn('href="/motherbrain/gateway-matrix"', main_html)
-        self.assertNotIn('href="/motherbrain/master-schedule"', main_html)
-        self.assertNotIn('href="/motherbrain"', main_html)
+        workflow_html = main_html.split('class="motherbrain-main-menu-return"', 1)[0]
+        self.assertNotIn('href="/motherbrain/gateway-matrix"', workflow_html)
+        self.assertNotIn('href="/motherbrain/master-schedule"', workflow_html)
+        self.assertNotIn('href="/motherbrain"', workflow_html)
+        self.assertIn('class="motherbrain-main-menu-return"', main_html)
+        self.assertIn('href="/motherbrain">Back to MotherBrain Main Menu</a>', main_html)
 
     def test_manage_sort_syncs_new_master_rows_into_existing_operation(self):
         sort_date = current_gateway_local_date(self.rfd_gateway)
@@ -375,9 +403,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 if path == "/motherbrain":
                     self.assertIn(b"motherbrain-home-page", response.data)
                     self.assertIn(b"motherbrain-screen-logo", response.data)
+                    self.assertNotIn(b"Back to MotherBrain Main Menu", response.data)
                 else:
                     self.assertNotIn(b"motherbrain-home-page", response.data)
                     self.assertNotIn(b"motherbrain-screen-logo", response.data)
+                    self.assertIn(b"Back to MotherBrain Main Menu", response.data)
+                    self.assertIn(b"motherbrain-main-menu-return", response.data)
                 self.assertNotIn(b"NeoMotherBrain", response.data)
                 self.assertNotIn(b"NEOMOTHERBRAIN", response.data)
                 self.assertNotIn(b">Command<", response.data)
