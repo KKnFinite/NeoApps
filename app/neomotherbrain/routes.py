@@ -749,8 +749,9 @@ def _master_schedules_for_gateway(gateway):
         MasterFlightSchedule.query.filter_by(gateway_code=gateway.code)
         .order_by(
             MasterFlightSchedule.gateway_code.asc(),
-            MasterFlightSchedule.sort_name.asc(),
             MasterFlightSchedule.mission_type.asc(),
+            MasterFlightSchedule.planned_time_local.asc(),
+            MasterFlightSchedule.sort_name.asc(),
             MasterFlightSchedule.flight_number.asc(),
         )
         .all()
@@ -1055,18 +1056,30 @@ def _master_schedule_board_row_has_data(row):
 
 
 def _master_schedule_board_row_is_complete(row):
+    def time_field_is_complete(field_name):
+        return bool(
+            re.fullmatch(
+                r"([01][0-9]|2[0-3]):[0-5][0-9]",
+                (row.get(field_name) or "").strip(),
+            )
+        )
+
     if not (row.get("flight_number") or "").strip():
         return False
-    if not re.fullmatch(
-        r"([01][0-9]|2[0-3]):[0-5][0-9]",
-        (row.get("planned_time_local") or "").strip(),
-    ):
+    if not time_field_is_complete("planned_time_local"):
         return False
     if row.get("mission_type") == "arrival":
         airport_code = (row.get("origin") or "").strip()
-    else:
-        airport_code = (row.get("destination") or "").strip()
-    return len(airport_code) == 3 and airport_code.isalpha()
+        return len(airport_code) == 3 and airport_code.isalpha()
+
+    airport_code = (row.get("destination") or "").strip()
+    return (
+        len(airport_code) == 3
+        and airport_code.isalpha()
+        and time_field_is_complete("pure_pull_time_local")
+        and time_field_is_complete("first_mix_pull_time_local")
+        and time_field_is_complete("final_mix_pull_time_local")
+    )
 
 
 def _apply_master_schedule_form(master_schedule, form, gateway=None):

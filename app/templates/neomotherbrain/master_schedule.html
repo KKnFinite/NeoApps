@@ -27,7 +27,7 @@
 
 {% macro aircraft_type_select(name, selected_value="") %}
 <select name="{{ name }}" aria-label="AC Type">
-    <option value="" {% if not selected_value %}selected{% endif %}>AC</option>
+    <option value="" {% if not selected_value %}selected{% endif %}></option>
     {% for aircraft_type in aircraft_type_options %}
         {% if aircraft_type %}
         <option value="{{ aircraft_type }}" {% if selected_value == aircraft_type %}selected{% endif %}>{{ aircraft_type }}</option>
@@ -203,7 +203,10 @@
         if (missionType === "arrival") {
             return fieldValue(row, "origin").length === 3;
         }
-        return fieldValue(row, "destination").length === 3;
+        return fieldValue(row, "destination").length === 3
+            && timeComplete(row, "pure_pull_time_local")
+            && timeComplete(row, "first_mix_pull_time_local")
+            && timeComplete(row, "final_mix_pull_time_local");
     };
 
     const shouldSaveRow = (row) => {
