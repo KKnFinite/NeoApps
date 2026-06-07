@@ -14,7 +14,7 @@
 {% set is_gateway_matrix_page = is_motherbrain_page and request.path.startswith("/motherbrain/gateway-matrix") %}
 {% set is_master_schedule_page = is_motherbrain_page and request.path.startswith("/motherbrain/master-schedule") %}
 {% set is_manage_sort_page = is_motherbrain_page and (request.path.startswith("/motherbrain/manage-sort") or request.path.startswith("/motherbrain/operations")) %}
-{% set motherbrain_current_label = "User Management" if is_user_management_page else ("Gateway Matrix" if is_gateway_matrix_page else ("Master Schedule" if is_master_schedule_page else ("Manage Sort" if is_manage_sort_page else "Command"))) %}
+{% set motherbrain_current_label = "User Management" if is_user_management_page else ("Gateway Matrix" if is_gateway_matrix_page else ("Master Schedule" if is_master_schedule_page else ("Manage Sort" if is_manage_sort_page else "Dashboard"))) %}
 <body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_motherbrain_header %} motherbrain-fixed-header{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}">
     <div class="shell">
         <header class="topbar">

@@ -7,5 +7,28 @@
     <div class="motherbrain-screen-logo" aria-label="MotherBrain logo">
         <img src="{{ url_for('static', filename='images/motherbrain_logo1.png') }}" alt="MotherBrain logo">
     </div>
+    <section class="motherbrain-dashboard" aria-labelledby="motherbrain-dashboard-title">
+        <h1 id="motherbrain-dashboard-title">MotherBrain Dashboard</h1>
+        <div class="motherbrain-dashboard-grid">
+            <a class="motherbrain-dashboard-card" href="{{ url_for('neomotherbrain.manage_sort') }}">
+                <strong>Manage Sort</strong>
+                <span>Manage current sorts</span>
+            </a>
+            <a class="motherbrain-dashboard-card" href="{{ url_for('neomotherbrain.master_schedule') }}">
+                <strong>Master Schedule</strong>
+                <span>Manage master flight schedule</span>
+            </a>
+            <a class="motherbrain-dashboard-card" href="{{ url_for('neomotherbrain.gateway_matrix') }}">
+                <strong>Gateway Matrix</strong>
+                <span>Assign active sorts</span>
+            </a>
+            {% if can_manage_system(current_user) %}
+            <a class="motherbrain-dashboard-card" href="{{ url_for('auth.users') }}">
+                <strong>User Management</strong>
+                <span>User and access controls</span>
+            </a>
+            {% endif %}
+        </div>
+    </section>
 </section>
 {% endblock %}

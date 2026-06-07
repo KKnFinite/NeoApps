@@ -82,6 +82,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(".rfd-node-rain {\n        order: 7;", css)
         self.assertIn(".rfd-node-scorpion {\n        order: 8;", css)
         self.assertIn(".motherbrain-menu {\n        align-items: stretch;\n        flex-direction: column;", css)
+        self.assertIn(".motherbrain-dashboard", css)
+        self.assertIn(".motherbrain-dashboard-card", css)
         self.assertIn(".motherbrain-fixed-header .topbar", css)
         self.assertIn("position: fixed;", css)
         self.assertIn("grid-template-columns: 72px minmax(0, 1fr);", css)
