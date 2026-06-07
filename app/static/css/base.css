@@ -348,7 +348,7 @@ a {
     display: flex;
     justify-content: center;
     width: 100%;
-    margin: 30px auto 0;
+    margin: 44px auto 0;
 }
 
 .motherbrain-main-menu-return .action-button {
@@ -358,7 +358,12 @@ a {
 .master-board-add-controls {
     display: flex;
     justify-content: flex-start;
-    margin-top: 12px;
+    margin-top: 14px;
+    padding-bottom: 8px;
+}
+
+.master-schedule-section:last-child .master-board-add-controls {
+    padding-bottom: 20px;
 }
 
 .master-board-add-controls .action-button {
@@ -2752,7 +2757,7 @@ select::-ms-expand {
     }
 
     .motherbrain-main-menu-return {
-        margin-top: 22px;
+        margin-top: 34px;
     }
 
     .motherbrain-main-menu-return .action-button {
@@ -2763,6 +2768,11 @@ select::-ms-expand {
     .master-board-add-controls {
         justify-content: stretch;
         margin-top: 10px;
+        padding-bottom: 10px;
+    }
+
+    .master-schedule-section:last-child .master-board-add-controls {
+        padding-bottom: 18px;
     }
 
     .master-board-add-controls .action-button {
