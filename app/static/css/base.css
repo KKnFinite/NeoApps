@@ -307,7 +307,7 @@ a {
     grid-column: 1;
     grid-row: 1;
     display: grid;
-    grid-template-columns: repeat(6, minmax(88px, 1fr));
+    grid-template-columns: repeat(5, minmax(104px, 1fr));
     gap: 8px;
     width: 100%;
 }
@@ -353,6 +353,23 @@ a {
 
 .motherbrain-main-menu-return .action-button {
     min-width: min(100%, 280px);
+}
+
+.master-board-add-controls {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: 12px;
+}
+
+.master-board-add-controls .action-button {
+    min-height: 36px;
+    padding: 8px 12px;
+    font-size: 0.74rem;
+}
+
+.master-unsaved-row-placeholder {
+    display: block;
+    min-height: 1px;
 }
 
 .dashboard-hero {
@@ -2685,13 +2702,13 @@ select::-ms-expand {
     .motherbrain-fixed-header .nav {
         position: absolute;
         top: calc(100% + 6px);
-        left: 8px;
         right: 8px;
+        left: auto;
         z-index: 30;
         display: none;
         grid-template-columns: 1fr;
         gap: 6px;
-        width: auto;
+        width: min(270px, calc(100vw - 16px));
         padding: 9px;
         border: 1px solid rgba(255, 47, 47, 0.46);
         border-radius: 6px;
@@ -2711,26 +2728,23 @@ select::-ms-expand {
     .motherbrain-fixed-header .nav a {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        min-height: 40px;
-        padding: 9px 11px;
+        justify-content: center;
+        min-height: 36px;
+        padding: 8px 10px;
         border-radius: 5px;
-        font-size: 0.78rem;
+        font-size: 0.74rem;
         font-weight: 800;
         line-height: 1;
-        text-align: left;
+        text-align: center;
         text-transform: none;
-    }
-
-    .motherbrain-fixed-header .nav a::after {
-        content: ">";
-        color: rgba(255, 47, 47, 0.86);
-        font-size: 0.78rem;
-        font-weight: 900;
     }
 
     .motherbrain-fixed-header .nav a.motherbrain-nav-link-secondary {
         color: rgba(201, 208, 214, 0.82);
+        border-color: rgba(255, 47, 47, 0.28);
+        background:
+            linear-gradient(135deg, rgba(238, 246, 255, 0.07), transparent 34%),
+            linear-gradient(180deg, rgba(20, 22, 27, 0.96), rgba(5, 5, 6, 0.92));
     }
 
     .motherbrain-fixed-header .content {
@@ -2744,6 +2758,15 @@ select::-ms-expand {
     .motherbrain-main-menu-return .action-button {
         width: min(100%, 360px);
         min-width: 0;
+    }
+
+    .master-board-add-controls {
+        justify-content: stretch;
+        margin-top: 10px;
+    }
+
+    .master-board-add-controls .action-button {
+        width: 100%;
     }
 
     .motherbrain-screen-logo {

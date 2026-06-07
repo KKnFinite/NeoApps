@@ -58,7 +58,7 @@
         {% if schedule %}
         <button class="table-row-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate>Delete</button>
         {% else %}
-        <span class="muted">New arrival</span>
+        <span class="master-unsaved-row-placeholder" aria-hidden="true"></span>
         {% endif %}
     </td>
 </tr>
@@ -95,7 +95,7 @@
         {% if schedule %}
         <button class="table-row-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate>Delete</button>
         {% else %}
-        <span class="muted">New departure</span>
+        <span class="master-unsaved-row-placeholder" aria-hidden="true"></span>
         {% endif %}
     </td>
 </tr>
@@ -138,14 +138,21 @@
                         {{ departure_row(schedule, loop.index0) }}
                         {% endif %}
                     {% endfor %}
-                    {% if mission_type == "arrival" %}
-                    {{ arrival_row(none, "new", True) }}
-                    {% else %}
-                    {{ departure_row(none, "new", True) }}
-                    {% endif %}
                 </tbody>
             </table>
         </div>
+        <div class="master-board-add-controls">
+            <button class="action-button action-button-secondary" type="button" data-master-add-row>
+                {{ "Add Arrival Row" if mission_type == "arrival" else "Add Departure Row" }}
+            </button>
+        </div>
+        <template data-master-row-template>
+            {% if mission_type == "arrival" %}
+            {{ arrival_row(none, "new__INDEX__", True) }}
+            {% else %}
+            {{ departure_row(none, "new__INDEX__", True) }}
+            {% endif %}
+        </template>
     </form>
 </section>
 {% endmacro %}
@@ -170,7 +177,11 @@
         });
     };
 
-    document.querySelectorAll(".airport-code-input, .flight-number-input").forEach(uppercaseInput);
+    const initializeUppercaseInputs = (scope) => {
+        scope.querySelectorAll(".airport-code-input, .flight-number-input").forEach(uppercaseInput);
+    };
+
+    initializeUppercaseInputs(document);
 
     const fieldValue = (row, suffix) => {
         const field = row.querySelector(`[name$='_${suffix}']`);
@@ -257,6 +268,33 @@
     };
 
     document.querySelectorAll("[data-master-board-form]").forEach((form) => {
+        const addButton = form.querySelector("[data-master-add-row]");
+        const rowTemplate = form.querySelector("[data-master-row-template]");
+        const tableBody = form.querySelector("tbody");
+
+        if (addButton && rowTemplate && tableBody) {
+            form.dataset.masterNextNewRow = "0";
+            addButton.addEventListener("click", () => {
+                const nextIndex = form.dataset.masterNextNewRow || "0";
+                form.dataset.masterNextNewRow = String(Number(nextIndex) + 1);
+
+                const rowHtml = rowTemplate.innerHTML.split("__INDEX__").join(nextIndex).trim();
+                const templateBody = document.createElement("tbody");
+                templateBody.innerHTML = rowHtml;
+                const row = templateBody.firstElementChild;
+                if (!row) {
+                    return;
+                }
+
+                tableBody.appendChild(row);
+                initializeUppercaseInputs(row);
+                const firstField = row.querySelector("input[type='text'], select");
+                if (firstField) {
+                    firstField.focus();
+                }
+            });
+        }
+
         form.addEventListener("input", (event) => {
             if (event.target.matches("input[type='text']")) {
                 handleFieldUpdate(event, 650);
