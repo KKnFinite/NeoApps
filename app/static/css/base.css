@@ -307,15 +307,15 @@ a {
     grid-column: 1;
     grid-row: 1;
     display: grid;
-    grid-template-columns: repeat(5, minmax(104px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(6, minmax(88px, 1fr));
+    gap: 8px;
     width: 100%;
 }
 
 .motherbrain-fixed-header .nav a {
     min-height: 32px;
-    padding: 8px 12px;
-    font-size: 0.7rem;
+    padding: 8px 9px;
+    font-size: 0.66rem;
     text-transform: none;
     text-align: center;
 }

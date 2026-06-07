@@ -88,7 +88,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("position: fixed;", css)
         self.assertIn("grid-template-columns: 72px minmax(0, 1fr);", css)
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", css)
-        self.assertIn("grid-template-columns: repeat(5, minmax(104px, 1fr));", css)
+        self.assertIn("grid-template-columns: repeat(6, minmax(88px, 1fr));", css)
         self.assertIn("grid-template-columns: 48px minmax(68px, 1fr) minmax(68px, auto) auto auto;", css)
         self.assertIn(".motherbrain-menu-button", css)
         self.assertIn("top: calc(100% + 6px);", css)

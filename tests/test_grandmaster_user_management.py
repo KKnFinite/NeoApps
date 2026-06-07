@@ -68,11 +68,13 @@ class GrandmasterUserManagementTest(unittest.TestCase):
                 self.assertNotIn(b"motherbrain-screen-logo", response.data)
                 self.assertIn(b"Logged in", response.data)
                 self.assertIn(b"Logout", response.data)
+                self.assertIn(b"MotherBrain Home", response.data)
                 self.assertIn(b"Back to NeoGateway", response.data)
                 self.assertIn(b"User Management", response.data)
                 self.assertIn(b"Gateway Matrix", response.data)
                 self.assertIn(b"Master Schedule", response.data)
                 self.assertIn(b"Manage Sort", response.data)
+                self.assertIn(b'href="/motherbrain"', response.data)
                 self.assertIn(b'href="/rfd"', response.data)
 
     def test_master_cannot_access_grandmaster_user_management(self):

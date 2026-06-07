@@ -57,6 +57,7 @@
                     <span class="motherbrain-menu-icon" aria-hidden="true"></span>
                 </button>
                 <nav class="nav motherbrain-header-nav" id="motherbrain-mobile-menu" aria-label="Primary" data-motherbrain-menu-panel>
+                    <a class="motherbrain-nav-link{% if is_motherbrain_landing %} is-active{% endif %}" href="{{ url_for('neomotherbrain.motherbrain') }}" {% if is_motherbrain_landing %}aria-current="page"{% endif %}>MotherBrain Home</a>
                     <a class="motherbrain-nav-link motherbrain-nav-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}">Back to NeoGateway</a>
                     {% if can_manage_system(current_user) %}
                     <a class="motherbrain-nav-link{% if is_user_management_page %} is-active{% endif %}" href="{{ url_for('auth.users') }}" {% if is_user_management_page %}aria-current="page"{% endif %}>User Management</a>
