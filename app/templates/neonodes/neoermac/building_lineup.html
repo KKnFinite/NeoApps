@@ -9,6 +9,12 @@
     "west_destination_1": "WEST SIDE DESTINATION 1",
     "west_destination_2": "WEST SIDE DESTINATION 2"
 } %}
+{% set slot_classes = {
+    "east_destination_1": "neoermac-slot-east-1",
+    "east_destination_2": "neoermac-slot-east-2",
+    "west_destination_1": "neoermac-slot-west-1",
+    "west_destination_2": "neoermac-slot-west-2"
+} %}
 
 <section class="neoermac-shell neoermac-lineup-shell" aria-labelledby="neoermac-lineup-title">
     <div class="neoermac-hero">
@@ -34,7 +40,7 @@
                 <div class="neoermac-runout-slots">
                     {% for field in ["east_destination_1", "east_destination_2", "west_destination_1", "west_destination_2"] %}
                     {% set selected_value = row|attr(field) %}
-                    <label>
+                    <label class="neoermac-slot {{ slot_classes[field] }}">
                         <span>{{ field_labels[field] }}</span>
                         <select class="neoermac-destination-select" name="{{ field_name(row, field) }}" {% if not can_edit %}disabled{% endif %}>
                             <option value=""></option>
@@ -44,6 +50,17 @@
                         </select>
                     </label>
                     {% endfor %}
+                    <div class="neoermac-door-context" aria-hidden="true">
+                        {% if row.runout_key == "green_runout" %}
+                        <strong>DOOR 1</strong>
+                        <span>SPECIAL RUNOUT</span>
+                        {% else %}
+                        {% set runout_number = loop.index0 %}
+                        <span>DOOR {{ runout_number }}</span>
+                        <strong>RUNOUT SPAN</strong>
+                        <span>DOOR {{ runout_number + 1 }}</span>
+                        {% endif %}
+                    </div>
                 </div>
             </article>
             {% endfor %}

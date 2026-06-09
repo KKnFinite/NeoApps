@@ -1014,6 +1014,10 @@ a {
     text-transform: uppercase;
 }
 
+.neoermac-door-context {
+    display: none;
+}
+
 .neoermac-destination-select {
     width: 100%;
     min-height: 42px;
@@ -1052,6 +1056,109 @@ a {
 
 .neoermac-lineup-actions .neoermac-menu-link {
     min-width: min(100%, 230px);
+}
+
+@media (min-width: 761px) {
+    .neoermac-lineup-shell {
+        width: min(100%, 1220px);
+    }
+
+    .neoermac-runout-list {
+        gap: 10px;
+    }
+
+    .neoermac-runout-card {
+        gap: 10px;
+        padding: 12px;
+    }
+
+    .neoermac-runout-card h2 {
+        text-align: center;
+    }
+
+    .neoermac-runout-card:first-child {
+        border-color: rgba(69, 255, 134, 0.38);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            0 0 24px rgba(69, 255, 134, 0.12),
+            0 0 22px rgba(255, 31, 55, 0.1);
+    }
+
+    .neoermac-runout-slots {
+        grid-template-columns: minmax(0, 1fr) minmax(92px, 116px) minmax(0, 1fr);
+        grid-template-areas:
+            "east1 door west1"
+            "east2 door west2";
+        gap: 8px 10px;
+        align-items: stretch;
+    }
+
+    .neoermac-slot-east-1 {
+        grid-area: east1;
+    }
+
+    .neoermac-slot-east-2 {
+        grid-area: east2;
+    }
+
+    .neoermac-slot-west-1 {
+        grid-area: west1;
+    }
+
+    .neoermac-slot-west-2 {
+        grid-area: west2;
+    }
+
+    .neoermac-door-context {
+        grid-area: door;
+        display: grid;
+        align-content: center;
+        justify-items: center;
+        gap: 6px;
+        min-width: 0;
+        padding: 8px 6px;
+        border: 1px solid rgba(201, 208, 214, 0.22);
+        border-radius: 5px;
+        background:
+            linear-gradient(180deg, rgba(238, 246, 255, 0.08), transparent 32%),
+            linear-gradient(180deg, rgba(15, 18, 22, 0.9), rgba(3, 4, 6, 0.94));
+        color: var(--steel);
+        font-size: 0.58rem;
+        font-weight: 950;
+        letter-spacing: 0.06em;
+        line-height: 1.05;
+        text-align: center;
+        text-transform: uppercase;
+    }
+
+    .neoermac-door-context::before,
+    .neoermac-door-context::after {
+        content: "";
+        width: 1px;
+        min-height: 16px;
+        background: linear-gradient(180deg, transparent, rgba(201, 208, 214, 0.72), transparent);
+    }
+
+    .neoermac-door-context strong {
+        color: #45ff86;
+        font-size: 0.7rem;
+        letter-spacing: 0.08em;
+        text-shadow: 0 0 14px rgba(69, 255, 134, 0.3);
+    }
+
+    .neoermac-runout-card:first-child .neoermac-door-context strong {
+        color: #eef6ff;
+        text-shadow: 0 0 14px rgba(255, 31, 55, 0.36);
+    }
+
+    .neoermac-runout-slots label {
+        padding: 8px;
+    }
+
+    .neoermac-destination-select {
+        min-height: 36px;
+        padding: 7px 8px;
+    }
 }
 
 .rfd-command-hub {
