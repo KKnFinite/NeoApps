@@ -1,9 +1,18 @@
 import unittest
+from datetime import time
 
 from app import create_app
 from app.extensions import db
-from app.models import GatewayMembership, User
+from app.models import (
+    GatewayMembership,
+    GatewayNodeRole,
+    MasterFlightSchedule,
+    NeoErmacBuildingLineup,
+    NeoNode,
+    User,
+)
 from app.services.access_control import ensure_default_gateway_and_nodes
+from app.services.permission_rules import ensure_default_permission_rules
 
 
 class NeoErmacRoutesTest(unittest.TestCase):
@@ -22,6 +31,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
+        self.gateway = ensure_default_gateway_and_nodes()
+        ensure_default_permission_rules()
+        db.session.commit()
         self.client = self.app.test_client()
 
     def tearDown(self):
@@ -65,7 +77,6 @@ class NeoErmacRoutesTest(unittest.TestCase):
     def test_placeholder_pages_render(self):
         self._login_approved_user()
         expected_pages = {
-            "/neoermac/building-lineup": b"BUILDING LINEUP",
             "/neoermac/outbound": b"VIEW OUTBOUND",
             "/neoermac/door-view": b"DOOR VIEW",
             "/neoermac/tug-assignments": b"TUG ASSIGNMENTS",
@@ -80,6 +91,87 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 self.assertIn(b"BACK TO NeoErmac", response.data)
                 self.assertIn(b"OPERATIONAL LOGIC WILL BE ADDED IN A LATER PASS.", response.data)
 
+    def test_building_lineup_page_renders_runout_list(self):
+        self._login_approved_user()
+
+        response = self.client.get("/neoermac/building-lineup")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"BUILDING LINEUP", response.data)
+        self.assertIn(b"Green Runout", response.data)
+        self.assertIn(b"Runout 1", response.data)
+        self.assertIn(b"Runout 22", response.data)
+        self.assertIn(b"EAST SIDE DESTINATIONS", response.data)
+        self.assertIn(b"WEST SIDE DESTINATIONS", response.data)
+        self.assertIn(b"READ ONLY", response.data)
+        self.assertNotIn(b"SAVE BUILDING LINEUP", response.data)
+
+    def test_building_lineup_destination_options_come_from_master_departures(self):
+        self._add_master_departure("UPS101", "sdf")
+        self._add_master_departure("UPS102", "ont")
+        self._add_master_arrival("UPS201", "dfw")
+        db.session.commit()
+        self._login_approved_user()
+
+        response = self.client.get("/neoermac/building-lineup")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'<option value="SDF"', response.data)
+        self.assertIn(b'<option value="ONT"', response.data)
+        self.assertNotIn(b'<option value="DFW"', response.data)
+
+    def test_user_with_building_lineup_edit_can_save_destinations(self):
+        self._add_master_departure("UPS301", "sdf")
+        self._add_master_departure("UPS302", "ont")
+        db.session.commit()
+        self._login_approved_user(role="simulator")
+
+        response = self.client.post(
+            "/neoermac/building-lineup",
+            data={
+                "lineup_green_runout_east_destination_1": "sdf",
+                "lineup_green_runout_east_destination_2": "",
+                "lineup_green_runout_west_destination_1": "ont",
+                "lineup_green_runout_west_destination_2": "",
+            },
+            follow_redirects=False,
+        )
+
+        saved = NeoErmacBuildingLineup.query.filter_by(
+            gateway_id=self.gateway.id,
+            runout_key="green_runout",
+        ).one()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(saved.east_destination_1, "SDF")
+        self.assertEqual(saved.west_destination_1, "ONT")
+
+        reload_response = self.client.get("/neoermac/building-lineup")
+        self.assertIn(b'<option value="SDF" selected', reload_response.data)
+        self.assertIn(b'<option value="ONT" selected', reload_response.data)
+
+    def test_user_without_building_lineup_edit_sees_read_only_and_cannot_save(self):
+        self._add_master_departure("UPS401", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        read_only_response = self.client.get("/neoermac/building-lineup")
+        self.assertEqual(read_only_response.status_code, 200)
+        self.assertIn(b"READ ONLY", read_only_response.data)
+        self.assertIn(b"disabled", read_only_response.data)
+
+        save_response = self.client.post(
+            "/neoermac/building-lineup",
+            data={"lineup_green_runout_east_destination_1": "SDF"},
+            follow_redirects=False,
+        )
+
+        saved = NeoErmacBuildingLineup.query.filter_by(
+            gateway_id=self.gateway.id,
+            runout_key="green_runout",
+        ).one()
+        self.assertEqual(save_response.status_code, 403)
+        self.assertIsNone(saved.east_destination_1)
+
     def test_ermac_route_is_not_used(self):
         self._login_approved_user()
 
@@ -89,27 +181,76 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertNotIn(b'href="/ermac"', menu.data)
 
-    def _login_approved_user(self):
-        user = User(username="neoermac_user", email="neoermac@example.test", role="watcher")
+    def _login_approved_user(self, role="watcher"):
+        user = User(
+            username=f"neoermac_{role}_user",
+            email=f"neoermac_{role}@example.test",
+            role="watcher",
+        )
         user.set_password("TestPassword123!")
         db.session.add(user)
         db.session.flush()
 
-        gateway = ensure_default_gateway_and_nodes()
         db.session.add(
             GatewayMembership(
                 user_id=user.id,
-                gateway_id=gateway.id,
+                gateway_id=self.gateway.id,
                 status="approved",
                 is_active=True,
             )
         )
+        db.session.flush()
+
+        if role != "watcher":
+            ermac = NeoNode.query.filter_by(code="ermac").one()
+            db.session.add(
+                GatewayNodeRole(
+                    gateway_membership_id=user.gateway_memberships[0].id,
+                    node_id=ermac.id,
+                    role=role,
+                    is_active=True,
+                )
+            )
         db.session.commit()
 
         return self.client.post(
             "/login",
             data={"email": user.email, "password": "TestPassword123!"},
             follow_redirects=False,
+        )
+
+    def _add_master_departure(self, flight_number, destination):
+        db.session.add(
+            MasterFlightSchedule(
+                gateway_id=self.gateway.id,
+                gateway_code=self.gateway.code,
+                sort_name="night",
+                mission_type="departure",
+                flight_number=flight_number,
+                origin=self.gateway.code,
+                destination=destination,
+                active=True,
+                active_days="monday,tuesday,wednesday,thursday,friday,saturday,sunday",
+                planned_time_local=time(23, 0),
+                timezone="America/Chicago",
+            )
+        )
+
+    def _add_master_arrival(self, flight_number, origin):
+        db.session.add(
+            MasterFlightSchedule(
+                gateway_id=self.gateway.id,
+                gateway_code=self.gateway.code,
+                sort_name="night",
+                mission_type="arrival",
+                flight_number=flight_number,
+                origin=origin,
+                destination=self.gateway.code,
+                active=True,
+                active_days="monday,tuesday,wednesday,thursday,friday,saturday,sunday",
+                planned_time_local=time(22, 0),
+                timezone="America/Chicago",
+            )
         )
 
     def _neoermac_paths(self):
