@@ -60,7 +60,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"VIEW OUTBOUND", response.data)
         self.assertIn(b"DOOR VIEW", response.data)
         self.assertIn(b"TUG ASSIGNMENTS", response.data)
-        self.assertIn(b"BACK TO NeoGateway", response.data)
+        self.assertIn(b"BACK TO", response.data)
+        self.assertIn(b'<span class="brand-inline-name">NeoGateway</span>', response.data)
 
     def test_neoermac_menu_links_work(self):
         self._login_approved_user()

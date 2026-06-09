@@ -14,7 +14,7 @@
         {% for label, endpoint in menu_items %}
         <a class="neoermac-menu-link" href="{{ url_for(endpoint) }}">{{ label }}</a>
         {% endfor %}
-        <a class="neoermac-menu-link neoermac-menu-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}">BACK TO NeoGateway</a>
+        <a class="neoermac-menu-link neoermac-menu-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}">BACK TO <span class="brand-inline-name">NeoGateway</span></a>
     </nav>
 </section>
 {% endblock %}

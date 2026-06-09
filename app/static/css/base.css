@@ -328,6 +328,13 @@ a {
         linear-gradient(180deg, rgba(18, 20, 25, 0.9), rgba(5, 5, 6, 0.84));
 }
 
+.brand-inline-name {
+    display: inline-block;
+    font-size: 1.09em;
+    line-height: 0.95;
+    text-transform: none;
+}
+
 .motherbrain-fixed-header .nav a.is-active,
 .motherbrain-fixed-header .nav a[aria-current="page"] {
     border-color: rgba(255, 59, 70, 0.78);
@@ -1502,7 +1509,11 @@ h2 {
 }
 
 .master-schedule-panel.centered-command-page {
-    max-width: min(100%, 1500px);
+    max-width: min(100%, 1540px);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
 }
 
 .centered-command-page .section-heading {
@@ -2226,7 +2237,7 @@ select::-ms-expand {
 .master-schedule-sections {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
+    gap: 12px;
     align-items: start;
 }
 
@@ -2251,25 +2262,44 @@ select::-ms-expand {
     table-layout: fixed;
 }
 
+.master-schedule-section .master-flight-table {
+    width: 100%;
+    min-width: 0;
+}
+
 .master-board-form {
     display: grid;
-    gap: 9px;
+    gap: 7px;
 }
 
 .master-board-table input,
 .master-board-table select {
     width: 100%;
     min-width: 0;
-    min-height: 30px;
-    padding: 5px 6px;
+    min-height: 28px;
+    padding: 4px 5px;
     border: 1px solid rgba(255, 59, 70, 0.72);
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 36%),
         #090b0f;
     color: #f2f6fa;
+    font-size: 0.72rem;
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.08),
         0 0 0 1px rgba(0, 0, 0, 0.36);
+}
+
+.master-board-table .flight-number-input {
+    max-width: 6.2rem;
+}
+
+.master-board-table .airport-code-input {
+    max-width: 3.8rem;
+    text-align: center;
+}
+
+.master-board-table .master-cell-ac-type select {
+    max-width: 5.1rem;
 }
 
 .master-board-table input:focus,
@@ -2283,20 +2313,72 @@ select::-ms-expand {
 }
 
 .master-board-table .military-time-select {
-    grid-template-columns: 48px auto 48px;
-    gap: 3px;
+    grid-template-columns: 40px 4px 40px;
+    gap: 2px;
+    width: max-content;
+    max-width: 100%;
 }
 
 .master-board-table .military-time-select select {
-    width: 48px;
-    min-width: 48px;
+    width: 40px;
+    min-width: 40px;
     padding-inline: 2px;
+    text-align-last: center;
 }
 
 .master-board-table th,
 .master-board-table td {
-    padding: 5px 4px;
+    padding: 4px 3px;
     vertical-align: middle;
+}
+
+.master-board-table th {
+    font-size: 0.66rem;
+}
+
+#master-arrivals .master-board-table th:nth-child(1) {
+    width: 23%;
+}
+
+#master-arrivals .master-board-table th:nth-child(2),
+#master-arrivals .master-board-table th:nth-child(3) {
+    width: 15%;
+}
+
+#master-arrivals .master-board-table th:nth-child(4) {
+    width: 28%;
+}
+
+#master-arrivals .master-board-table th:nth-child(5) {
+    width: 19%;
+}
+
+#master-departures .master-board-table th:nth-child(1) {
+    width: 13%;
+}
+
+#master-departures .master-board-table th:nth-child(2),
+#master-departures .master-board-table th:nth-child(3) {
+    width: 10%;
+}
+
+#master-departures .master-board-table th:nth-child(4),
+#master-departures .master-board-table th:nth-child(5),
+#master-departures .master-board-table th:nth-child(6),
+#master-departures .master-board-table th:nth-child(7) {
+    width: 14%;
+}
+
+#master-departures .master-board-table th:nth-child(8) {
+    width: 11%;
+}
+
+.master-board-table .table-row-button {
+    min-height: 28px;
+    min-width: 0;
+    padding: 4px 7px;
+    font-size: 0.64rem;
+    line-height: 1;
 }
 
 .master-board-add-row td {
