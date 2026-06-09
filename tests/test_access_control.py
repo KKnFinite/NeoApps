@@ -185,6 +185,7 @@ class AccessControlTest(unittest.TestCase):
         self.assertIn(b'class="rfd-mobile-logo"', hub.data)
         self.assertIn(b"NeoMotherBrain", hub.data)
         self.assertIn(b"NeoSektor", hub.data)
+        self.assertIn(b'href="/neoermac"', hub.data)
         for node_name in (
             b"NeoScorpion",
             b"NeoReptile",
@@ -266,6 +267,24 @@ class AccessControlTest(unittest.TestCase):
         self.assertIn(b'href="/rfd/sektor"', hub.data)
         self.assertEqual(launch.status_code, 302)
         self.assertEqual(launch.location, "https://neosektor.onrender.com/")
+
+    def test_approved_rfd_user_can_open_neoermac_from_hub(self):
+        self._approved_user("ermac_launcher_user")
+        db.session.commit()
+        client = self.app.test_client()
+        client.post(
+            "/login",
+            data={"username": "ermac_launcher_user", "password": "TestPassword123!"},
+        )
+
+        hub = client.get("/rfd")
+        ermac = client.get("/neoermac")
+
+        self.assertEqual(hub.status_code, 200)
+        self.assertIn(b"NeoErmac", hub.data)
+        self.assertIn(b'href="/neoermac"', hub.data)
+        self.assertEqual(ermac.status_code, 200)
+        self.assertIn(b"NeoErmac", ermac.data)
 
     def test_specific_gateway_node_role_overrides_default_watcher_per_node(self):
         user = self._user("node_role_user")

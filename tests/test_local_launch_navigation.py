@@ -211,6 +211,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(b'class="rfd-mobile-logo"', hub_response.data)
         self.assertIn(b"NeoMotherBrain", hub_response.data)
         self.assertIn(b"NeoSektor", hub_response.data)
+        self.assertIn(b'href="/neoermac"', hub_response.data)
         for node_name in (
             b"NeoScorpion",
             b"NeoReptile",

@@ -108,6 +108,7 @@ def rfd_hub():
             minimum_role="simulator",
         ),
         can_launch_sektor=user_can_access_node(current_user, gateway.code, "sektor"),
+        can_launch_ermac=user_can_access_node(current_user, gateway.code, "ermac"),
     )
 
 

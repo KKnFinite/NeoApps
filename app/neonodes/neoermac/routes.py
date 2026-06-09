@@ -1,4 +1,4 @@
-from flask import render_template
+from flask import redirect, render_template, url_for
 
 from app.auth.decorators import gateway_node_required
 from app.neonodes.neoermac import bp
@@ -14,7 +14,6 @@ NEOERMAC_PAGES = (
 
 
 @bp.route("")
-@bp.route("/")
 @gateway_node_required("ermac")
 def index():
     return render_template(
@@ -22,6 +21,12 @@ def index():
         gateway=get_current_gateway(),
         menu_items=NEOERMAC_PAGES,
     )
+
+
+@bp.route("/")
+@gateway_node_required("ermac")
+def index_slash():
+    return redirect(url_for("neoermac.index"))
 
 
 @bp.route("/building-lineup")

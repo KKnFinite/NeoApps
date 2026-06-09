@@ -47,9 +47,15 @@
             </div>
 
             <div class="rfd-node-column rfd-node-column-right" aria-label="{{ gateway.name }} right NeoNodes">
-                <article class="rfd-node-tile rfd-node-placeholder rfd-node-ermac" aria-disabled="true" aria-label="NeoErmac">
+                {% if can_launch_ermac %}
+                <a class="rfd-node-tile rfd-node-ermac" href="{{ url_for('neoermac.index') }}" aria-label="NeoErmac">
+                    {{ node_label("Ermac") }}
+                </a>
+                {% else %}
+                <article class="rfd-node-tile rfd-node-disabled rfd-node-ermac" aria-disabled="true" aria-label="NeoErmac">
                     {{ node_label("Ermac") }}
                 </article>
+                {% endif %}
                 <article class="rfd-node-tile rfd-node-placeholder rfd-node-subzero" aria-disabled="true" aria-label="NeoSubZero">
                     {{ node_label("SubZero") }}
                 </article>
