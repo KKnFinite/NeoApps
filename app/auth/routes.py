@@ -222,7 +222,12 @@ def change_password():
 @gateway_node_required("motherbrain", minimum_role="grandmaster")
 def users():
     gateway = get_current_gateway()
-    return render_template("auth/users.html", gateway=gateway)
+    memberships = _pending_memberships_for_gateway(gateway).all()
+    return render_template(
+        "auth/users.html",
+        gateway=gateway,
+        memberships=memberships,
+    )
 
 
 @bp.route("/admin/users/edit-users")

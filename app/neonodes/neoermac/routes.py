@@ -6,10 +6,10 @@ from app.services.access_control import get_current_gateway
 
 
 NEOERMAC_PAGES = (
-    ("Building Lineup", "neoermac.building_lineup"),
-    ("View Outbound", "neoermac.outbound"),
-    ("Door View", "neoermac.door_view"),
-    ("Tug Assignments", "neoermac.tug_assignments"),
+    ("BUILDING LINEUP", "neoermac.building_lineup"),
+    ("VIEW OUTBOUND", "neoermac.outbound"),
+    ("DOOR VIEW", "neoermac.door_view"),
+    ("TUG ASSIGNMENTS", "neoermac.tug_assignments"),
 )
 
 
@@ -32,25 +32,25 @@ def index_slash():
 @bp.route("/building-lineup")
 @gateway_node_required("ermac")
 def building_lineup():
-    return _placeholder_page("Building Lineup")
+    return _placeholder_page("BUILDING LINEUP")
 
 
 @bp.route("/outbound")
 @gateway_node_required("ermac")
 def outbound():
-    return _placeholder_page("View Outbound")
+    return _placeholder_page("VIEW OUTBOUND")
 
 
 @bp.route("/door-view")
 @gateway_node_required("ermac")
 def door_view():
-    return _placeholder_page("Door View")
+    return _placeholder_page("DOOR VIEW")
 
 
 @bp.route("/tug-assignments")
 @gateway_node_required("ermac")
 def tug_assignments():
-    return _placeholder_page("Tug Assignments")
+    return _placeholder_page("TUG ASSIGNMENTS")
 
 
 def _placeholder_page(title):

@@ -9,22 +9,22 @@
     </div>
 
     <div class="action-row">
-        <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">Add Mission</a>
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">Operation Overview</a>
-        <a class="action-button" href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">Arrival Board</a>
+        <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">ADD MISSION</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">OPERATION OVERVIEW</a>
+        <a class="action-button" href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">ARRIVAL BOARD</a>
     </div>
 
     <div class="table-wrap">
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Flight</th>
-                    <th>Tail</th>
-                    <th>Destination</th>
-                    <th>Parking</th>
+                    <th>FLIGHT</th>
+                    <th>TAIL</th>
+                    <th>DESTINATION</th>
+                    <th>PARKING</th>
                     <th>ETD</th>
-                    <th>Status</th>
-                    <th>Links</th>
+                    <th>STATUS</th>
+                    <th>LINKS</th>
                 </tr>
             </thead>
             <tbody>
@@ -39,13 +39,13 @@
                     <td>{{ timing.adjusted_planned_departure_time.strftime("%H:%M") if timing.adjusted_planned_departure_time else "-" }}</td>
                     <td>{{ mission.departure_status|status_label }}</td>
                     <td class="table-actions">
-                        <a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=mission.id) }}">View</a>
-                        <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">Edit</a>
+                        <a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=mission.id) }}">VIEW</a>
+                        <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT</a>
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7">No departure missions found.</td>
+                    <td colspan="7">NO DEPARTURE MISSIONS FOUND.</td>
                 </tr>
                 {% endfor %}
             </tbody>

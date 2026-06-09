@@ -5,15 +5,73 @@
 {% block content %}
 <section class="panel users-panel centered-command-page">
     <div class="section-heading">
-        <h1>User Management</h1>
+        <h1>USER MANAGEMENT</h1>
     </div>
 
+    <section class="user-management-stack" aria-labelledby="pending-requests-title">
+        <div class="section-heading">
+            <h2 id="pending-requests-title">PENDING REQUESTS</h2>
+        </div>
+
+        {% if memberships %}
+        <div class="table-wrap">
+            <table class="data-table wide-data-table pending-users-table">
+                <thead>
+                    <tr>
+                        <th>NAME</th>
+                        <th>EMPLOYEE ID</th>
+                        <th>SUPERVISOR</th>
+                        <th>EMAIL</th>
+                        <th>VERIFIED</th>
+                        <th>WORK AREA</th>
+                        <th>REASON</th>
+                        <th>CREATED</th>
+                        <th>ACTIONS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for membership in memberships %}
+                    <tr>
+                        <td data-label="Name">{{ membership.user.display_name }}</td>
+                        <td data-label="Employee ID">{{ membership.user.employee_id or "" }}</td>
+                        <td data-label="Supervisor">{{ membership.user.supervisor_name or "" }}</td>
+                        <td data-label="Email">{{ membership.user.email or "" }}</td>
+                        <td data-label="Verified">{{ "Yes" if membership.user.email_verified_at else "Email not verified yet" }}</td>
+                        <td data-label="Work Area">{{ membership.user.work_area or "" }}</td>
+                        <td data-label="Reason">{{ membership.user.access_reason or "" }}</td>
+                        <td data-label="Created">{{ membership.created_at.strftime("%Y-%m-%d %H:%M") if membership.created_at else "" }}</td>
+                        <td data-label="Actions">
+                            <div class="table-actions">
+                                <a href="{{ url_for('auth.user_detail', user_id=membership.user.id) }}">VIEW DETAILS</a>
+                                {% if membership.user.email_verified_at %}
+                                <form class="inline-button-form" method="post" action="{{ url_for('auth.update_user_gateway_membership', user_id=membership.user.id) }}">
+                                    <input type="hidden" name="action" value="approve">
+                                    <input class="compact-action-input" name="approval_notes" placeholder="Approval notes">
+                                    <button type="submit">APPROVE</button>
+                                </form>
+                                {% else %}
+                                <span class="muted">Email not verified yet</span>
+                                {% endif %}
+                                <form class="inline-button-form" method="post" action="{{ url_for('auth.update_user_gateway_membership', user_id=membership.user.id) }}">
+                                    <input type="hidden" name="action" value="deny">
+                                    <input class="compact-action-input" name="denial_notes" placeholder="Denial notes">
+                                    <button type="submit">DENY</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="muted centered-empty-message">There are no pending requests at this time.</p>
+        {% endif %}
+    </section>
+
     <div class="action-row user-management-choice-grid">
-        <a class="action-button user-management-choice" href="{{ url_for('auth.pending_users') }}">
-            <span>Pending Requests</span>
-        </a>
         <a class="action-button user-management-choice" href="{{ url_for('auth.edit_users') }}">
-            <span>Edit Users</span>
+            <span>EDIT USERS</span>
         </a>
     </div>
 

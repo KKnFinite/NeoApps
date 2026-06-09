@@ -5,18 +5,18 @@
 {% block content %}
 <section class="panel users-panel centered-command-page">
     <div class="section-heading">
-        <h1>Edit Users</h1>
-        <p class="muted">Search by name, employee ID, or email to edit a user.</p>
+        <h1>EDIT USERS</h1>
+        <p class="muted">SEARCH BY NAME, EMPLOYEE ID, OR EMAIL TO EDIT A USER.</p>
     </div>
 
     <form class="operation-form user-search-form" method="get">
         <label>
-            <span>Search</span>
+            <span>SEARCH</span>
             <input name="q" value="{{ search }}" placeholder="Name, employee ID, or email" autocomplete="off" autofocus>
         </label>
-        <button type="submit">Search</button>
+        <button type="submit">SEARCH</button>
         {% if search %}
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.edit_users') }}">Clear</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.edit_users') }}">CLEAR</a>
         {% endif %}
     </form>
 
@@ -25,14 +25,14 @@
         <table class="data-table wide-data-table user-role-table">
             <thead>
                 <tr>
-                    <th>Name</th>
-                    <th>Employee ID</th>
-                    <th>Email</th>
-                    <th>Work Area</th>
-                    <th>Email Verified</th>
-                    <th>{{ gateway.code }} Status</th>
-                    <th>Node Roles</th>
-                    <th>Last Login</th>
+                    <th>NAME</th>
+                    <th>EMPLOYEE ID</th>
+                    <th>EMAIL</th>
+                    <th>WORK AREA</th>
+                    <th>EMAIL VERIFIED</th>
+                    <th>{{ gateway.code }} STATUS</th>
+                    <th>NODE ROLES</th>
+                    <th>LAST LOGIN</th>
                     <th aria-label="Edit"></th>
                 </tr>
             </thead>
@@ -49,7 +49,7 @@
                     <td data-label="Last Login">{{ row.user.last_login|local_datetime if row.user.last_login else "Never" }}</td>
                     <td class="action-cell" data-label="">
                         <div class="table-actions">
-                            <a href="{{ url_for('auth.edit_user', user_id=row.user.id) }}">Edit</a>
+                            <a href="{{ url_for('auth.edit_user', user_id=row.user.id) }}">EDIT</a>
                         </div>
                     </td>
                 </tr>
@@ -62,11 +62,11 @@
         </table>
     </div>
     {% else %}
-    <p class="muted">Enter a search term to find a user.</p>
+    <p class="muted">ENTER A SEARCH TERM TO FIND A USER.</p>
     {% endif %}
 
     <div class="action-row">
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.users') }}">Back to User Management</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.users') }}">BACK TO USER MANAGEMENT</a>
     </div>
 </section>
 {% endblock %}

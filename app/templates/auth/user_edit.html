@@ -11,41 +11,41 @@
 
     <form class="operation-form user-edit-form" method="post">
         <section class="panel-subsection user-edit-section">
-            <h2>Identity</h2>
+            <h2>IDENTITY</h2>
             <label>
-                <span>First Name</span>
+                <span>FIRST NAME</span>
                 <input name="first_name" value="{{ form.first_name }}" autocomplete="given-name" required>
             </label>
             <label>
-                <span>Last Name</span>
+                <span>LAST NAME</span>
                 <input name="last_name" value="{{ form.last_name }}" autocomplete="family-name" required>
             </label>
             <label>
-                <span>Employee ID</span>
+                <span>EMPLOYEE ID</span>
                 <input name="employee_id" value="{{ form.employee_id }}" required>
             </label>
             <label>
-                <span>Email</span>
+                <span>EMAIL</span>
                 <input name="email" type="email" value="{{ form.email }}" autocomplete="email" required>
             </label>
             <label>
-                <span>Supervisor / Manager</span>
+                <span>SUPERVISOR / MANAGER</span>
                 <input name="supervisor_name" value="{{ form.supervisor_name }}">
             </label>
             <label>
-                <span>Work Area</span>
+                <span>WORK AREA</span>
                 <input name="work_area" value="{{ form.work_area }}">
             </label>
             <label>
-                <span>Reason For Access</span>
+                <span>REASON FOR ACCESS</span>
                 <textarea name="access_reason">{{ form.access_reason }}</textarea>
             </label>
         </section>
 
         <section class="panel-subsection user-edit-section">
-            <h2>{{ gateway.name }} Gateway Membership</h2>
+            <h2>{{ gateway.name }} GATEWAY MEMBERSHIP</h2>
             <label>
-                <span>Status</span>
+                <span>STATUS</span>
                 <select name="membership_status">
                     {% for status in ("pending", "approved", "denied") %}
                     <option value="{{ status }}" {% if membership and membership.status == status %}selected{% endif %}>{{ status|title }}</option>
@@ -54,14 +54,14 @@
             </label>
             <label class="checkbox-line centered-checkbox-line">
                 <input type="checkbox" name="membership_is_active" value="1" {% if not membership or membership.is_active %}checked{% endif %}>
-                <span>Gateway membership active</span>
+                <span>GATEWAY MEMBERSHIP ACTIVE</span>
             </label>
             <label>
-                <span>Approval Notes</span>
+                <span>APPROVAL NOTES</span>
                 <input name="approval_notes" value="{{ membership.approval_notes if membership and membership.approval_notes else '' }}">
             </label>
             <label>
-                <span>Denial Notes</span>
+                <span>DENIAL NOTES</span>
                 <input name="denial_notes" value="{{ membership.denial_notes if membership and membership.denial_notes else '' }}">
             </label>
             {% if not target_user.email_verified_at %}
@@ -70,7 +70,7 @@
         </section>
 
         <section class="panel-subsection user-edit-section user-edit-roles-section">
-            <h2>{{ gateway.code }} NeoNode Roles</h2>
+            <h2>{{ gateway.code }} NeoNode ROLES</h2>
             {% if membership and membership.status == "approved" and membership.is_active %}
                 {% for row in node_rows %}
                 <label class="user-edit-role-field">
@@ -89,13 +89,13 @@
             {% endif %}
         </section>
 
-        <button type="submit">Save User</button>
+        <button type="submit">SAVE USER</button>
     </form>
 
     <div class="action-row">
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.edit_users') }}">Back to Edit Users</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.edit_users') }}">BACK TO EDIT USERS</a>
         {% if target_user.id != current_user.id %}
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.emergency_reset_user_password', user_id=target_user.id) }}">Emergency Password Reset</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.emergency_reset_user_password', user_id=target_user.id) }}">EMERGENCY PASSWORD RESET</a>
         {% endif %}
     </div>
 </section>

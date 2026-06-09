@@ -5,27 +5,27 @@
 {% block content %}
 <section class="panel centered-command-page">
     <div class="section-heading">
-        <h1>Pending Requests</h1>
-        <p class="muted">Review pending {{ gateway.name }} gateway access requests.</p>
+        <h1>PENDING REQUESTS</h1>
+        <p class="muted">REVIEW PENDING {{ gateway.name }} GATEWAY ACCESS REQUESTS.</p>
     </div>
 
     <div class="action-row">
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.users') }}">Back to User Management</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.users') }}">BACK TO USER MANAGEMENT</a>
     </div>
 
     <div class="table-wrap">
         <table class="data-table wide-data-table pending-users-table">
             <thead>
                 <tr>
-                    <th>Name</th>
-                    <th>Employee ID</th>
-                    <th>Supervisor</th>
-                    <th>Email</th>
-                    <th>Verified</th>
-                    <th>Work Area</th>
-                    <th>Reason</th>
-                    <th>Created</th>
-                    <th>Actions</th>
+                    <th>NAME</th>
+                    <th>EMPLOYEE ID</th>
+                    <th>SUPERVISOR</th>
+                    <th>EMAIL</th>
+                    <th>VERIFIED</th>
+                    <th>WORK AREA</th>
+                    <th>REASON</th>
+                    <th>CREATED</th>
+                    <th>ACTIONS</th>
                 </tr>
             </thead>
             <tbody>
@@ -41,12 +41,12 @@
                     <td data-label="Created">{{ membership.created_at.strftime("%Y-%m-%d %H:%M") if membership.created_at else "" }}</td>
                     <td data-label="Actions">
                         <div class="table-actions">
-                            <a href="{{ url_for('auth.user_detail', user_id=membership.user.id) }}">View Details</a>
+                            <a href="{{ url_for('auth.user_detail', user_id=membership.user.id) }}">VIEW DETAILS</a>
                             {% if membership.user.email_verified_at %}
                             <form class="inline-button-form" method="post" action="{{ url_for('auth.update_user_gateway_membership', user_id=membership.user.id) }}">
                                 <input type="hidden" name="action" value="approve">
                                 <input class="compact-action-input" name="approval_notes" placeholder="Approval notes">
-                                <button type="submit">Approve</button>
+                                <button type="submit">APPROVE</button>
                             </form>
                             {% else %}
                             <span class="muted">Email not verified yet</span>
@@ -54,14 +54,14 @@
                             <form class="inline-button-form" method="post" action="{{ url_for('auth.update_user_gateway_membership', user_id=membership.user.id) }}">
                                 <input type="hidden" name="action" value="deny">
                                 <input class="compact-action-input" name="denial_notes" placeholder="Denial notes">
-                                <button type="submit">Deny</button>
+                                <button type="submit">DENY</button>
                             </form>
                         </div>
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="9">No pending requests.</td>
+                    <td colspan="9">There are no pending requests at this time.</td>
                 </tr>
                 {% endfor %}
             </tbody>

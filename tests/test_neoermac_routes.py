@@ -44,11 +44,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoErmac", response.data)
-        self.assertIn(b"Building Lineup", response.data)
-        self.assertIn(b"View Outbound", response.data)
-        self.assertIn(b"Door View", response.data)
-        self.assertIn(b"Tug Assignments", response.data)
-        self.assertIn(b"Back to NeoGateway", response.data)
+        self.assertIn(b"BUILDING LINEUP", response.data)
+        self.assertIn(b"VIEW OUTBOUND", response.data)
+        self.assertIn(b"DOOR VIEW", response.data)
+        self.assertIn(b"TUG ASSIGNMENTS", response.data)
+        self.assertIn(b"BACK TO NeoGateway", response.data)
 
     def test_neoermac_menu_links_work(self):
         self._login_approved_user()
@@ -65,10 +65,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
     def test_placeholder_pages_render(self):
         self._login_approved_user()
         expected_pages = {
-            "/neoermac/building-lineup": b"Building Lineup",
-            "/neoermac/outbound": b"View Outbound",
-            "/neoermac/door-view": b"Door View",
-            "/neoermac/tug-assignments": b"Tug Assignments",
+            "/neoermac/building-lineup": b"BUILDING LINEUP",
+            "/neoermac/outbound": b"VIEW OUTBOUND",
+            "/neoermac/door-view": b"DOOR VIEW",
+            "/neoermac/tug-assignments": b"TUG ASSIGNMENTS",
         }
 
         for path, title in expected_pages.items():
@@ -77,8 +77,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(title, response.data)
-                self.assertIn(b"Back to NeoErmac", response.data)
-                self.assertIn(b"Operational logic will be added in a later pass.", response.data)
+                self.assertIn(b"BACK TO NeoErmac", response.data)
+                self.assertIn(b"OPERATIONAL LOGIC WILL BE ADDED IN A LATER PASS.", response.data)
 
     def test_ermac_route_is_not_used(self):
         self._login_approved_user()

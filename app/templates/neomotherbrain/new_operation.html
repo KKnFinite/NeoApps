@@ -5,18 +5,18 @@
 {% block content %}
 <section class="panel compact-panel centered-command-page">
     <div class="section-heading">
-        <h1>Generate Operation</h1>
-        <p class="muted">Uses active MasterFlightSchedule records for {{ form.gateway_code }} matching sort and active day.</p>
+        <h1>GENERATE OPERATION</h1>
+        <p class="muted">USES ACTIVE MASTER FLIGHT SCHEDULE RECORDS FOR {{ form.gateway_code }} MATCHING SORT AND ACTIVE DAY.</p>
     </div>
 
     <form class="operation-form" method="post">
         <label>
-            <span>Sort Date</span>
+            <span>SORT DATE</span>
             <input type="date" name="sort_date" value="{{ form.sort_date }}" required>
         </label>
         <input type="hidden" name="gateway_code" value="{{ form.gateway_code }}">
         <label>
-            <span>Sort Name</span>
+            <span>SORT NAME</span>
             <select name="sort_name" required>
                 {% for sort_value, sort_label in sort_name_options %}
                 <option value="{{ sort_value }}" {% if form.sort_name == sort_value %}selected{% endif %}>{{ sort_label }}</option>
@@ -25,8 +25,8 @@
         </label>
 
         <div class="action-row">
-            <button class="action-button" type="submit">Generate</button>
-            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operations') }}">Nightly Operations</a>
+            <button class="action-button" type="submit">GENERATE</button>
+            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operations') }}">NIGHTLY OPERATIONS</a>
         </div>
     </form>
 </section>

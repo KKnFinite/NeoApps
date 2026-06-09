@@ -5,20 +5,20 @@
 {% block content %}
 <section class="panel centered-command-page">
     <div class="section-heading">
-        <h1>Nightly Operations</h1>
+        <h1>NIGHTLY OPERATIONS</h1>
     </div>
 
     <div class="table-wrap">
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Sort Date</th>
-                    <th>Gateway</th>
-                    <th>Sort</th>
-                    <th>Window</th>
-                    <th>Generated</th>
-                    <th>Missions</th>
-                    <th>Links</th>
+                    <th>SORT DATE</th>
+                    <th>GATEWAY</th>
+                    <th>SORT</th>
+                    <th>WINDOW</th>
+                    <th>GENERATED</th>
+                    <th>MISSIONS</th>
+                    <th>LINKS</th>
                 </tr>
             </thead>
             <tbody>
@@ -27,13 +27,13 @@
                     <td>{{ operation.sort_date }}</td>
                     <td>{{ operation.gateway_code }}</td>
                     <td>{{ operation.sort_name }}</td>
-                    <td>{{ operation.window_minutes }} min</td>
+                    <td>{{ operation.window_minutes }} MIN</td>
                     <td>{{ operation.generated_at_utc.strftime("%Y-%m-%d %H:%M") if operation.generated_at_utc else "-" }} UTC</td>
                     <td>{{ operation.missions|length }}</td>
                     <td class="table-actions">
-                        <a href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">Overview</a>
-                        <a href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">Arrivals</a>
-                        <a href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">Departures</a>
+                        <a href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">OVERVIEW</a>
+                        <a href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">ARRIVALS</a>
+                        <a href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">DEPARTURES</a>
                     </td>
                 </tr>
                 {% else %}

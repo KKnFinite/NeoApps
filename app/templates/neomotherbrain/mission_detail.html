@@ -9,32 +9,32 @@
     </div>
 
     <div class="action-row">
-        <a class="action-button" href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">Edit Mission</a>
+        <a class="action-button" href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT MISSION</a>
         <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.delete_mission', operation_id=operation.id, mission_id=mission.id) }}">
-            <button class="action-button" type="submit">Delete Mission</button>
+            <button class="action-button" type="submit">DELETE MISSION</button>
         </form>
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">Back to Operation</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">BACK TO OPERATION</a>
     </div>
 
     <dl class="detail-list">
         <div>
-            <dt>Mission Type</dt>
+            <dt>MISSION TYPE</dt>
             <dd>{{ mission.mission_type|title }}</dd>
         </div>
         <div>
-            <dt>Mission Source</dt>
+            <dt>MISSION SOURCE</dt>
             <dd>{{ mission.mission_source|status_label }}</dd>
         </div>
         <div>
-            <dt>Origin</dt>
+            <dt>ORIGIN</dt>
             <dd>{{ mission.origin|upper }}</dd>
         </div>
         <div>
-            <dt>Destination</dt>
+            <dt>DESTINATION</dt>
             <dd>{{ mission.destination|upper }}</dd>
         </div>
         <div>
-            <dt>Assigned Tail</dt>
+            <dt>ASSIGNED TAIL</dt>
             <dd>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</dd>
         </div>
         <div>
@@ -46,43 +46,43 @@
             <dd>{{ mission.eta_datetime_utc.strftime("%Y-%m-%d %H:%M") if mission.eta_datetime_utc else "-" }}</dd>
         </div>
         <div>
-            <dt>Actual Block In UTC</dt>
+            <dt>ACTUAL BLOCK IN UTC</dt>
             <dd>{{ mission.actual_block_in_datetime_utc.strftime("%Y-%m-%d %H:%M") if mission.actual_block_in_datetime_utc else "-" }}</dd>
         </div>
         <div>
-            <dt>Actual Block Out UTC</dt>
+            <dt>ACTUAL BLOCK OUT UTC</dt>
             <dd>{{ mission.actual_block_out_datetime_utc.strftime("%Y-%m-%d %H:%M") if mission.actual_block_out_datetime_utc else "-" }}</dd>
         </div>
         <div>
-            <dt>Fuel Status</dt>
+            <dt>FUEL STATUS</dt>
             <dd>{{ mission.fuel_status|status_label }}</dd>
         </div>
         <div>
-            <dt>Arrival Status</dt>
+            <dt>ARRIVAL STATUS</dt>
             <dd>{{ mission.arrival_status|status_label }}</dd>
         </div>
         <div>
-            <dt>Departure Status</dt>
+            <dt>DEPARTURE STATUS</dt>
             <dd>{{ mission.departure_status|status_label }}</dd>
         </div>
         <div>
-            <dt>Pure Pull</dt>
+            <dt>PURE PULL</dt>
             <dd>{{ mission.pure_pull_time_local.strftime("%H:%M") if mission.pure_pull_time_local else "-" }}</dd>
         </div>
         <div>
-            <dt>First Mix Pull</dt>
+            <dt>FIRST MIX PULL</dt>
             <dd>{{ mission.first_mix_pull_time_local.strftime("%H:%M") if mission.first_mix_pull_time_local else "-" }}</dd>
         </div>
         <div>
-            <dt>Final Mix Pull</dt>
+            <dt>FINAL MIX PULL</dt>
             <dd>{{ mission.final_mix_pull_time_local.strftime("%H:%M") if mission.final_mix_pull_time_local else "-" }}</dd>
         </div>
         <div>
-            <dt>Pull Time Source</dt>
+            <dt>PULL TIME SOURCE</dt>
             <dd>{{ mission.pull_time_source|status_label }}</dd>
         </div>
         <div>
-            <dt>Crew Coverage</dt>
+            <dt>CREW COVERAGE</dt>
             <dd>{{ "Covered" if crew_covered else "Open" }}</dd>
         </div>
     </dl>

@@ -10,64 +10,64 @@
 
     <div class="metric-grid">
         <article class="metric-tile">
-            <span>Window</span>
-            <strong>{{ operation.window_minutes }} min</strong>
+            <span>WINDOW</span>
+            <strong>{{ operation.window_minutes }} MIN</strong>
         </article>
         <article class="metric-tile">
-            <span>Total Missions</span>
+            <span>TOTAL MISSIONS</span>
             <strong>{{ mission_count }}</strong>
         </article>
         <article class="metric-tile">
-            <span>Arrivals</span>
+            <span>ARRIVALS</span>
             <strong>{{ arrival_count }}</strong>
         </article>
         <article class="metric-tile">
-            <span>Departures</span>
+            <span>DEPARTURES</span>
             <strong>{{ departure_count }}</strong>
         </article>
     </div>
 
     <dl class="detail-list">
         <div>
-            <dt>Generated</dt>
+            <dt>GENERATED</dt>
             <dd>{{ operation.generated_at_utc.strftime("%Y-%m-%d %H:%M") if operation.generated_at_utc else "-" }} UTC</dd>
         </div>
         <div>
-            <dt>Gateway</dt>
+            <dt>GATEWAY</dt>
             <dd>{{ operation.gateway_code }}</dd>
         </div>
         <div>
-            <dt>Sort</dt>
+            <dt>SORT</dt>
             <dd>{{ operation.sort_name }}</dd>
         </div>
     </dl>
 
     <form class="operation-form inline-operation-form" method="post" action="{{ url_for('neomotherbrain.update_operation_window', operation_id=operation.id) }}">
         <label>
-            <span>Window Minutes</span>
+            <span>WINDOW MINUTES</span>
             <input type="number" name="window_minutes" value="{{ operation.window_minutes }}" min="0" step="1" required>
         </label>
-        <button class="action-button" type="submit">Update Window</button>
+        <button class="action-button" type="submit">UPDATE WINDOW</button>
     </form>
 
     <div class="action-row">
-        <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">Add Mission</a>
-        <a class="action-button" href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">Arrival Board</a>
-        <a class="action-button" href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">Departure Board</a>
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.manage_sort', sort=operation.sort_name) }}">Back to Manage Sort</a>
+        <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">ADD MISSION</a>
+        <a class="action-button" href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">ARRIVAL BOARD</a>
+        <a class="action-button" href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">DEPARTURE BOARD</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.manage_sort', sort=operation.sort_name) }}">BACK TO MANAGE SORT</a>
     </div>
 
     <div class="table-wrap">
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Flight</th>
-                    <th>Tail</th>
-                    <th>Origin/Destination</th>
-                    <th>Parking</th>
+                    <th>FLIGHT</th>
+                    <th>TAIL</th>
+                    <th>ORIGIN/DESTINATION</th>
+                    <th>PARKING</th>
                     <th>ETA/ETD</th>
-                    <th>Status</th>
-                    <th>Links</th>
+                    <th>STATUS</th>
+                    <th>LINKS</th>
                 </tr>
             </thead>
             <tbody>
@@ -81,13 +81,13 @@
                     <td>{{ row.display_time.strftime("%H:%M") if row.display_time else "-" }}</td>
                     <td>{{ row.status|status_label }}</td>
                     <td class="table-actions">
-                        <a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=mission.id) }}">View</a>
-                        <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">Edit</a>
+                        <a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=mission.id) }}">VIEW</a>
+                        <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT</a>
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7">No missions found.</td>
+                    <td colspan="7">NO MISSIONS FOUND.</td>
                 </tr>
                 {% endfor %}
             </tbody>

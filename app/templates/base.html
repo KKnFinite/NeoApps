@@ -14,7 +14,7 @@
 {% set is_gateway_matrix_page = is_motherbrain_page and request.path.startswith("/motherbrain/gateway-matrix") %}
 {% set is_master_schedule_page = is_motherbrain_page and request.path.startswith("/motherbrain/master-schedule") %}
 {% set is_manage_sort_page = is_motherbrain_page and (request.path.startswith("/motherbrain/manage-sort") or request.path.startswith("/motherbrain/operations")) %}
-{% set motherbrain_current_label = "User Management" if is_user_management_page else ("Gateway Matrix" if is_gateway_matrix_page else ("Master Schedule" if is_master_schedule_page else ("Manage Sort" if is_manage_sort_page else "Dashboard"))) %}
+{% set motherbrain_current_label = "USER MANAGEMENT" if is_user_management_page else ("GATEWAY MATRIX" if is_gateway_matrix_page else ("MASTER SCHEDULE" if is_master_schedule_page else ("MANAGE SORT" if is_manage_sort_page else "DASHBOARD"))) %}
 <body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_motherbrain_header %} motherbrain-fixed-header{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}">
     <div class="shell">
         <header class="topbar">
@@ -57,12 +57,12 @@
                     <span class="motherbrain-menu-icon" aria-hidden="true"></span>
                 </button>
                 <nav class="nav motherbrain-header-nav" id="motherbrain-mobile-menu" aria-label="Primary" data-motherbrain-menu-panel>
-                    <a class="motherbrain-nav-link motherbrain-nav-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}">Back to NeoGateway</a>
-                    <a class="motherbrain-nav-link{% if is_manage_sort_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.manage_sort') }}" {% if is_manage_sort_page %}aria-current="page"{% endif %}>Manage Sort</a>
-                    <a class="motherbrain-nav-link{% if is_master_schedule_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule') }}" {% if is_master_schedule_page %}aria-current="page"{% endif %}>Master Schedule</a>
-                    <a class="motherbrain-nav-link{% if is_gateway_matrix_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.gateway_matrix') }}" {% if is_gateway_matrix_page %}aria-current="page"{% endif %}>Gateway Matrix</a>
+                    <a class="motherbrain-nav-link motherbrain-nav-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}">BACK TO NeoGateway</a>
+                    <a class="motherbrain-nav-link{% if is_manage_sort_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.manage_sort') }}" {% if is_manage_sort_page %}aria-current="page"{% endif %}>MANAGE SORT</a>
+                    <a class="motherbrain-nav-link{% if is_master_schedule_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule') }}" {% if is_master_schedule_page %}aria-current="page"{% endif %}>MASTER SCHEDULE</a>
+                    <a class="motherbrain-nav-link{% if is_gateway_matrix_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.gateway_matrix') }}" {% if is_gateway_matrix_page %}aria-current="page"{% endif %}>GATEWAY MATRIX</a>
                     {% if can_manage_system(current_user) %}
-                    <a class="motherbrain-nav-link{% if is_user_management_page %} is-active{% endif %}" href="{{ url_for('auth.users') }}" {% if is_user_management_page %}aria-current="page"{% endif %}>User Management</a>
+                    <a class="motherbrain-nav-link{% if is_user_management_page %} is-active{% endif %}" href="{{ url_for('auth.users') }}" {% if is_user_management_page %}aria-current="page"{% endif %}>USER MANAGEMENT</a>
                     {% endif %}
                 </nav>
                 {% else %}
@@ -91,7 +91,7 @@
             {% block content %}{% endblock %}
             {% if uses_motherbrain_header and not is_motherbrain_landing %}
             <div class="motherbrain-main-menu-return">
-                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}">Back to MotherBrain Main Menu</a>
+                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}">BACK TO NeoMotherBrain MAIN MENU</a>
             </div>
             {% endif %}
         </main>

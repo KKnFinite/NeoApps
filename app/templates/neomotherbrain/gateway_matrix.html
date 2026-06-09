@@ -5,16 +5,16 @@
 {% block content %}
 <section class="panel centered-command-page">
     <div class="section-heading gateway-matrix-heading-block">
-        <h1>Gateway Matrix</h1>
-        <p class="muted">Set active sorts for {{ gateway.code }}</p>
+        <h1>GATEWAY MATRIX</h1>
+        <p class="muted">SET ACTIVE SORTS FOR {{ gateway.code }}</p>
     </div>
 
     <form method="post" class="gateway-matrix-form">
         <div class="gateway-matrix-grid" role="table" aria-label="{{ gateway.code }} Gateway Matrix">
             <div class="gateway-matrix-heading" role="row">
-                <span>Day</span>
+                <span>DAY</span>
                 {% for sort_name, sort_label in sort_options %}
-                <span>{{ sort_label }}</span>
+                <span>{{ sort_label }} Sort</span>
                 {% endfor %}
             </div>
 
@@ -24,7 +24,7 @@
                 {% for sort_name, sort_label in sort_options %}
                 <label class="matrix-toggle">
                     <input type="checkbox" name="{{ day }}_{{ sort_name }}" value="1" {% if matrix[day][sort_name] %}checked{% endif %}>
-                    <span>{{ sort_label }}</span>
+                    <span>{{ sort_label }} Sort</span>
                 </label>
                 {% endfor %}
             </div>
@@ -32,7 +32,7 @@
         </div>
 
         <div class="action-row">
-            <button class="action-button" type="submit">Save Gateway Matrix</button>
+            <button class="action-button" type="submit">SAVE GATEWAY MATRIX</button>
         </div>
     </form>
 </section>

@@ -5,8 +5,8 @@
 {% block content %}
 <section class="panel centered-command-page">
     <div class="section-heading">
-        <h1>Manage Sort</h1>
-        <p class="muted">{{ gateway.name }} local date {{ sort_date }}. Missing active sorts are created automatically from the Master Schedule.</p>
+        <h1>MANAGE SORT</h1>
+        <p class="muted">{{ gateway.name }} LOCAL DATE {{ sort_date }}. MISSING ACTIVE SORTS ARE CREATED AUTOMATICALLY FROM THE MASTER SCHEDULE.</p>
     </div>
 
     {% if errors %}
@@ -21,7 +21,7 @@
     <nav class="sort-selector action-row" aria-label="Select sort">
         {% for operation in operations %}
         <a class="action-button{% if selected_operation and selected_operation.id == operation.id %}{% else %} action-button-secondary{% endif %}" href="{{ url_for('neomotherbrain.manage_sort', sort=operation.sort_name) }}">
-            {{ operation.sort_name|title }}
+            {{ operation.sort_name|upper }}
         </a>
         {% endfor %}
     </nav>
@@ -31,12 +31,12 @@
         <article>
             <span class="node-light"></span>
             <h2>{{ selected_operation.gateway_code }} {{ selected_operation.sort_name|title }}</h2>
-            <p>{{ selected_operation.missions|length }} mission(s), {{ selected_operation.window_minutes }} minute window.</p>
+            <p>{{ selected_operation.missions|length }} MISSION(S), {{ selected_operation.window_minutes }} MINUTE WINDOW.</p>
             <div class="action-row">
-                <a class="action-button" href="{{ url_for('neomotherbrain.operation_detail', operation_id=selected_operation.id) }}">Open Sort Operation</a>
-                <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=selected_operation.id) }}">Add Special Flight</a>
-                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.arrival_board', operation_id=selected_operation.id) }}">Arrival Board</a>
-                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.departure_board', operation_id=selected_operation.id) }}">Departure Board</a>
+                <a class="action-button" href="{{ url_for('neomotherbrain.operation_detail', operation_id=selected_operation.id) }}">OPEN SORT OPERATION</a>
+                <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=selected_operation.id) }}">ADD SPECIAL FLIGHT</a>
+                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.arrival_board', operation_id=selected_operation.id) }}">ARRIVAL BOARD</a>
+                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.departure_board', operation_id=selected_operation.id) }}">DEPARTURE BOARD</a>
             </div>
         </article>
     </section>
@@ -46,29 +46,29 @@
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Sort</th>
-                    <th>Window</th>
-                    <th>Missions</th>
-                    <th>Links</th>
+                    <th>SORT</th>
+                    <th>WINDOW</th>
+                    <th>MISSIONS</th>
+                    <th>LINKS</th>
                 </tr>
             </thead>
             <tbody>
                 {% for operation in operations %}
                 <tr>
-                    <td>{{ operation.sort_name|title }}</td>
-                    <td>{{ operation.window_minutes }} min</td>
+                    <td>{{ operation.sort_name|upper }}</td>
+                    <td>{{ operation.window_minutes }} MIN</td>
                     <td>{{ operation.missions|length }}</td>
                     <td class="table-actions">
-                        <a href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">Manage</a>
-                        <a href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">Add Flight</a>
+                        <a href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">MANAGE</a>
+                        <a href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">ADD FLIGHT</a>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-    {% else %}
+{% else %}
     <p class="muted centered-empty-message">No active sorts today.</p>
-    {% endif %}
+{% endif %}
 </section>
 {% endblock %}

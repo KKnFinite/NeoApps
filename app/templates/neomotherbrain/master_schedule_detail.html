@@ -10,26 +10,26 @@
 
     <div class="action-row">
         <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.toggle_master_schedule_active', master_id=master_schedule.id) }}">
-            <button class="action-button" type="submit">{{ "Deactivate" if master_schedule.active else "Activate" }}</button>
+            <button class="action-button" type="submit">{{ "DEACTIVATE" if master_schedule.active else "ACTIVATE" }}</button>
         </form>
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">Back to Master Schedule</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">BACK TO MASTER SCHEDULE</a>
     </div>
 
     <dl class="detail-list">
         <div>
-            <dt>Status</dt>
+            <dt>STATUS</dt>
             <dd>{{ "Active" if master_schedule.active else "Inactive" }}</dd>
         </div>
         <div>
-            <dt>Gateway</dt>
+            <dt>GATEWAY</dt>
             <dd>{{ master_schedule.gateway_code }}</dd>
         </div>
         <div>
-            <dt>Sort</dt>
+            <dt>SORT</dt>
             <dd>{{ master_schedule.sort_name|title }}</dd>
         </div>
         <div>
-            <dt>Mission Type</dt>
+            <dt>MISSION TYPE</dt>
             <dd>{{ master_schedule.mission_type|title }}</dd>
         </div>
         <div>
@@ -37,15 +37,15 @@
             <dd>{{ master_schedule.aircraft_type or "-" }}</dd>
         </div>
         <div>
-            <dt>Origin</dt>
+            <dt>ORIGIN</dt>
             <dd>{{ master_schedule.origin|upper }}</dd>
         </div>
         <div>
-            <dt>Destination</dt>
+            <dt>DESTINATION</dt>
             <dd>{{ master_schedule.destination|upper }}</dd>
         </div>
         <div>
-            <dt>Active Days</dt>
+            <dt>ACTIVE DAYS</dt>
             <dd>{{ master_schedule.active_days or "-" }}</dd>
         </div>
         <div>
@@ -53,27 +53,27 @@
             <dd>{{ master_schedule.planned_time_local.strftime("%H:%M") if master_schedule.planned_time_local else "-" }}</dd>
         </div>
         <div>
-            <dt>Timezone</dt>
+            <dt>TIMEZONE</dt>
             <dd>{{ master_schedule.timezone }}</dd>
         </div>
         <div>
-            <dt>Pure Pull</dt>
+            <dt>PURE PULL</dt>
             <dd>{{ master_schedule.pure_pull_time_local.strftime("%H:%M") if master_schedule.pure_pull_time_local else "-" }}</dd>
         </div>
         <div>
-            <dt>First Mix Pull</dt>
+            <dt>FIRST MIX PULL</dt>
             <dd>{{ master_schedule.first_mix_pull_time_local.strftime("%H:%M") if master_schedule.first_mix_pull_time_local else "-" }}</dd>
         </div>
         <div>
-            <dt>Final Mix Pull</dt>
+            <dt>FINAL MIX PULL</dt>
             <dd>{{ master_schedule.final_mix_pull_time_local.strftime("%H:%M") if master_schedule.final_mix_pull_time_local else "-" }}</dd>
         </div>
         <div>
-            <dt>Created</dt>
+            <dt>CREATED</dt>
             <dd>{{ master_schedule.created_at.strftime("%Y-%m-%d %H:%M") if master_schedule.created_at else "-" }} UTC</dd>
         </div>
         <div>
-            <dt>Updated</dt>
+            <dt>UPDATED</dt>
             <dd>{{ master_schedule.updated_at.strftime("%Y-%m-%d %H:%M") if master_schedule.updated_at else "-" }} UTC</dd>
         </div>
     </dl>

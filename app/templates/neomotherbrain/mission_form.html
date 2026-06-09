@@ -1,36 +1,36 @@
 {% extends "base.html" %}
 {% from "neomotherbrain/_time_inputs.html" import military_datetime_input, military_time_select %}
 
-{% block title %}{{ "Edit" if mode == "edit" else "Add" }} Mission | NeoApps{% endblock %}
+{% block title %}{{ "EDIT" if mode == "edit" else "ADD" }} MISSION | NeoApps{% endblock %}
 
 {% block content %}
 <section class="panel compact-panel centered-command-page">
     <div class="section-heading">
-        <h1>{{ "Edit" if mode == "edit" else "Add" }} Mission</h1>
+        <h1>{{ "EDIT" if mode == "edit" else "ADD" }} MISSION</h1>
     </div>
 
     <form class="operation-form" method="post">
         <label>
-            <span>Mission Type</span>
+            <span>MISSION TYPE</span>
             <select name="mission_type" required data-mission-type-select>
                 <option value="arrival" {% if form.mission_type == "arrival" %}selected{% endif %}>Arrival</option>
                 <option value="departure" {% if form.mission_type == "departure" %}selected{% endif %}>Departure</option>
             </select>
         </label>
         <label>
-            <span>Flight Number</span>
+            <span>FLIGHT NUMBER</span>
             <input type="text" name="flight_number" value="{{ form.flight_number }}" maxlength="32" required>
         </label>
         <label>
-            <span>Origin</span>
+            <span>ORIGIN</span>
             <input type="text" name="origin" value="{{ form.origin }}" maxlength="8" required>
         </label>
         <label>
-            <span>Destination</span>
+            <span>DESTINATION</span>
             <input type="text" name="destination" value="{{ form.destination }}" maxlength="8" required>
         </label>
         <label>
-            <span>Assigned Tail Number</span>
+            <span>ASSIGNED TAIL NUMBER</span>
             <input type="text" name="assigned_tail_number" value="{{ form.assigned_tail_number }}" maxlength="32">
         </label>
         <label>
@@ -38,7 +38,7 @@
             {{ military_time_select("planned_time_local", form.planned_time_local, True) }}
         </label>
         <label>
-            <span>Timezone</span>
+            <span>TIMEZONE</span>
             <input type="text" name="timezone" value="{{ form.timezone }}" maxlength="64" required>
         </label>
         <label>
@@ -46,19 +46,19 @@
             {{ military_datetime_input("eta_datetime_utc", form.eta_datetime_utc) }}
         </label>
         <label>
-            <span>Actual Block In UTC</span>
+            <span>ACTUAL BLOCK IN UTC</span>
             {{ military_datetime_input("actual_block_in_datetime_utc", form.actual_block_in_datetime_utc) }}
         </label>
         <label>
-            <span>Actual Block Out UTC</span>
+            <span>ACTUAL BLOCK OUT UTC</span>
             {{ military_datetime_input("actual_block_out_datetime_utc", form.actual_block_out_datetime_utc) }}
         </label>
         <label>
-            <span>Planned Fuel Load</span>
+            <span>PLANNED FUEL LOAD</span>
             <input type="number" name="planned_fuel_load" value="{{ form.planned_fuel_load }}" min="0" step="1">
         </label>
         <label>
-            <span>Fuel Status</span>
+            <span>FUEL STATUS</span>
             <select name="fuel_status">
                 {% for status in fuel_statuses %}
                 <option value="{{ status }}" {% if form.fuel_status == status %}selected{% endif %}>{{ status|status_label }}</option>
@@ -66,7 +66,7 @@
             </select>
         </label>
         <label data-mission-arrival-only {% if form.mission_type != "arrival" %}hidden{% endif %}>
-            <span>Arrival Status</span>
+            <span>ARRIVAL STATUS</span>
             <select name="arrival_status">
                 {% for status in arrival_statuses %}
                 <option value="{{ status }}" {% if form.arrival_status == status %}selected{% endif %}>{{ status|status_label }}</option>
@@ -74,7 +74,7 @@
             </select>
         </label>
         <label data-mission-departure-only {% if form.mission_type != "departure" %}hidden{% endif %}>
-            <span>Departure Status</span>
+            <span>DEPARTURE STATUS</span>
             <select name="departure_status">
                 {% for status in departure_statuses %}
                 <option value="{{ status }}" {% if form.departure_status == status %}selected{% endif %}>{{ status|status_label }}</option>
@@ -83,22 +83,22 @@
         </label>
         {% if form.mission_type == "departure" %}
         <label data-mission-departure-only>
-            <span>Pure Pull</span>
+            <span>PURE PULL</span>
             {{ military_time_select("pure_pull_time_local", form.pure_pull_time_local) }}
         </label>
         <label data-mission-departure-only>
-            <span>First Mix Pull</span>
+            <span>FIRST MIX PULL</span>
             {{ military_time_select("first_mix_pull_time_local", form.first_mix_pull_time_local) }}
         </label>
         <label data-mission-departure-only>
-            <span>Final Mix Pull</span>
+            <span>FINAL MIX PULL</span>
             {{ military_time_select("final_mix_pull_time_local", form.final_mix_pull_time_local) }}
         </label>
         {% endif %}
 
         <div class="action-row">
-            <button class="action-button" type="submit">{{ "Save" if mode == "edit" else "Create" }}</button>
-            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">Back to Operation</a>
+            <button class="action-button" type="submit">{{ "SAVE" if mode == "edit" else "CREATE" }}</button>
+            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">BACK TO OPERATION</a>
         </div>
     </form>
 </section>

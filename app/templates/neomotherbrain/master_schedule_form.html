@@ -3,7 +3,7 @@
 
 {% set is_bulk_edit = mode == "bulk_edit" %}
 {% set is_single_entry = not is_bulk_edit %}
-{% set page_title = "Edit Master Flights" if is_bulk_edit else ("Edit Master Flight" if mode == "edit" else "Add Master Flight") %}
+{% set page_title = "EDIT MASTER FLIGHTS" if is_bulk_edit else ("EDIT MASTER FLIGHT" if mode == "edit" else "ADD MASTER FLIGHT") %}
 
 {% block title %}{{ page_title }} | NeoApps{% endblock %}
 
@@ -54,7 +54,7 @@
         <input type="hidden" name="row_{{ row.index }}_id" value="{{ row.id }}">
         <label class="compact-check">
             <input type="checkbox" name="row_{{ row.index }}_active" value="1" {% if row.active %}checked{% endif %}>
-            <span>Active</span>
+            <span>ACTIVE</span>
         </label>
     </td>
     <td>
@@ -87,7 +87,7 @@
     <td>{{ military_time_select("row_" ~ row.index ~ "_first_mix_pull_time_local", row.first_mix_pull_time_local) }}</td>
     <td>{{ military_time_select("row_" ~ row.index ~ "_final_mix_pull_time_local", row.final_mix_pull_time_local) }}</td>
     <td>
-        <button class="table-row-button" type="button" data-remove-schedule-row>Remove</button>
+        <button class="table-row-button" type="button" data-remove-schedule-row>REMOVE</button>
     </td>
 </tr>
 {% endmacro %}
@@ -97,8 +97,8 @@
 {% set arrival_mode_url = url_for("neomotherbrain.new_master_schedule", mission_type="arrival") %}
 {% set departure_mode_url = url_for("neomotherbrain.new_master_schedule", mission_type="departure") %}
 <div class="master-mode-tabs" role="tablist" aria-label="Mission type">
-    <a class="master-mode-tab" role="tab" href="{{ arrival_mode_url }}" data-master-mode="arrival" aria-selected="{{ 'true' if row.mission_type == 'arrival' else 'false' }}">Arrival</a>
-    <a class="master-mode-tab" role="tab" href="{{ departure_mode_url }}" data-master-mode="departure" aria-selected="{{ 'true' if row.mission_type == 'departure' else 'false' }}">Departure</a>
+    <a class="master-mode-tab" role="tab" href="{{ arrival_mode_url }}" data-master-mode="arrival" aria-selected="{{ 'true' if row.mission_type == 'arrival' else 'false' }}">ARRIVAL</a>
+    <a class="master-mode-tab" role="tab" href="{{ departure_mode_url }}" data-master-mode="departure" aria-selected="{{ 'true' if row.mission_type == 'departure' else 'false' }}">DEPARTURE</a>
 </div>
 {% endif %}
 
@@ -107,7 +107,7 @@
 <input type="hidden" name="row_{{ row.index }}_mission_type" value="{{ row.mission_type }}" data-master-mission-type>
 <label class="compact-check master-active-check">
     <input type="checkbox" name="row_{{ row.index }}_active" value="1" {% if row.active %}checked{% endif %}>
-    <span>Active</span>
+    <span>ACTIVE</span>
 </label>
 
 <div class="master-schedule-entry-grid">
@@ -115,7 +115,7 @@
     <input type="hidden" name="row_{{ row.index }}_sort_name" value="{{ row.sort_name }}">
     {% else %}
     <label class="master-field-sort">
-        <span>Sort</span>
+        <span>SORT</span>
         <select name="row_{{ row.index }}_sort_name">
             {% for sort_value, sort_label in sort_name_options %}
             <option value="{{ sort_value }}" {% if row.sort_name == sort_value %}selected{% endif %}>{{ sort_label }}</option>
@@ -124,11 +124,11 @@
     </label>
     {% endif %}
     <label class="master-active-days-field">
-        <span>Active Days</span>
+        <span>ACTIVE DAYS</span>
         {{ active_days_field(row) }}
     </label>
     <label class="master-field-flight">
-        <span>Flight Number</span>
+        <span>FLIGHT NUMBER</span>
         <input type="text" name="row_{{ row.index }}_flight_number" value="{{ row.flight_number }}" maxlength="8" autocomplete="off">
     </label>
     <label class="master-field-ac-type">
@@ -137,14 +137,14 @@
     </label>
     {% if row.mission_type == "arrival" %}
     <label class="master-field-airport">
-        <span>Origin</span>
+        <span>ORIGIN</span>
         {{ airport_input(row, "origin", "Origin") }}
     </label>
     {{ hidden_airport(row, "destination") }}
     {% else %}
     {{ hidden_airport(row, "origin") }}
     <label class="master-field-airport">
-        <span>Destination</span>
+        <span>DESTINATION</span>
         {{ airport_input(row, "destination", "Destination") }}
     </label>
     {% endif %}
@@ -154,15 +154,15 @@
     </label>
     {% if row.mission_type == "departure" %}
     <label class="master-pull-field" data-departure-only>
-        <span>Pure Pull</span>
+        <span>PURE PULL</span>
         {{ military_time_select("row_" ~ row.index ~ "_pure_pull_time_local", row.pure_pull_time_local) }}
     </label>
     <label class="master-pull-field" data-departure-only>
-        <span>First Mix Pull</span>
+        <span>FIRST MIX PULL</span>
         {{ military_time_select("row_" ~ row.index ~ "_first_mix_pull_time_local", row.first_mix_pull_time_local) }}
     </label>
     <label class="master-pull-field" data-departure-only>
-        <span>Final Mix Pull</span>
+        <span>FINAL MIX PULL</span>
         {{ military_time_select("row_" ~ row.index ~ "_final_mix_pull_time_local", row.final_mix_pull_time_local) }}
     </label>
     {% endif %}
@@ -174,7 +174,7 @@
     <div class="section-heading">
         <h1>{{ page_title }}</h1>
         {% if is_bulk_edit %}
-        <p class="muted">Edit multiple recurring schedule rows and save all changes at once.</p>
+        <p class="muted">EDIT MULTIPLE RECURRING SCHEDULE ROWS AND SAVE ALL CHANGES AT ONCE.</p>
         {% endif %}
     </div>
 
@@ -182,27 +182,27 @@
         {% if is_single_entry %}
         {{ single_entry_form(rows[0]) }}
         <div class="action-row">
-            <button class="action-button" type="submit" data-master-save-button>{{ "Save Arrival" if rows[0].mission_type == "arrival" else "Save Departure" }}</button>
-            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">Back to Master Schedule</a>
+            <button class="action-button" type="submit" data-master-save-button>{{ "SAVE ARRIVAL" if rows[0].mission_type == "arrival" else "SAVE DEPARTURE" }}</button>
+            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">BACK TO MASTER SCHEDULE</a>
         </div>
         {% else %}
         <div class="table-wrap">
             <table class="data-table schedule-form-table">
                 <thead>
                     <tr>
-                        <th>Status</th>
-                        <th>Sort</th>
-                        <th>Mission</th>
-                        <th>Flight</th>
+                        <th>STATUS</th>
+                        <th>SORT</th>
+                        <th>MISSION</th>
+                        <th>FLIGHT</th>
                         <th>AC Type</th>
-                        <th>Origin</th>
-                        <th>Destination</th>
-                        <th>Active Days</th>
+                        <th>ORIGIN</th>
+                        <th>DESTINATION</th>
+                        <th>ACTIVE DAYS</th>
                         <th>STA/STD</th>
-                        <th>Pure Pull</th>
-                        <th>First Mix</th>
-                        <th>Final Mix</th>
-                        <th>Row</th>
+                        <th>PURE PULL</th>
+                        <th>FIRST MIX</th>
+                        <th>FINAL MIX</th>
+                        <th>ROW</th>
                     </tr>
                 </thead>
                 <tbody data-master-schedule-rows>
@@ -218,9 +218,9 @@
         </template>
 
         <div class="action-row">
-            <button class="action-button" type="button" data-add-schedule-row>Add Another Row</button>
-            <button class="action-button" type="submit">Save Rows</button>
-            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">Back to Master Schedule</a>
+            <button class="action-button" type="button" data-add-schedule-row>ADD ANOTHER ROW</button>
+            <button class="action-button" type="submit">SAVE ROWS</button>
+            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">BACK TO MASTER SCHEDULE</a>
         </div>
         {% endif %}
     </form>

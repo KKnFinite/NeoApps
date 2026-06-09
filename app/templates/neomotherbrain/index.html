@@ -8,24 +8,24 @@
         <img src="{{ url_for('static', filename='images/motherbrain_logo1.png') }}" alt="MotherBrain logo">
     </div>
     <section class="motherbrain-dashboard" aria-labelledby="motherbrain-dashboard-title">
-        <h1 id="motherbrain-dashboard-title">MotherBrain Dashboard</h1>
+        <h1 id="motherbrain-dashboard-title">NeoMotherBrain DASHBOARD</h1>
         <div class="motherbrain-dashboard-grid">
             <a class="motherbrain-dashboard-card" href="{{ url_for('neomotherbrain.manage_sort') }}">
-                <strong>Manage Sort</strong>
-                <span>Manage current sorts</span>
+                <strong>MANAGE SORT</strong>
+                <span>MANAGE CURRENT SORTS</span>
             </a>
             <a class="motherbrain-dashboard-card" href="{{ url_for('neomotherbrain.master_schedule') }}">
-                <strong>Master Schedule</strong>
-                <span>Manage master flight schedule</span>
+                <strong>MASTER SCHEDULE</strong>
+                <span>MANAGE MASTER FLIGHT SCHEDULE</span>
             </a>
             <a class="motherbrain-dashboard-card" href="{{ url_for('neomotherbrain.gateway_matrix') }}">
-                <strong>Gateway Matrix</strong>
-                <span>Assign active sorts</span>
+                <strong>GATEWAY MATRIX</strong>
+                <span>ASSIGN ACTIVE SORTS</span>
             </a>
             {% if can_manage_system(current_user) %}
             <a class="motherbrain-dashboard-card" href="{{ url_for('auth.users') }}">
-                <strong>User Management</strong>
-                <span>User and access controls</span>
+                <strong>USER MANAGEMENT</strong>
+                <span>USER AND ACCESS CONTROLS</span>
             </a>
             {% endif %}
         </div>

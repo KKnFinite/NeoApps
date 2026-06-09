@@ -5,7 +5,7 @@
 {% block content %}
 <section class="panel compact-panel centered-command-page user-role-page">
     <div class="section-heading">
-        <h1>{{ gateway.code }} NeoNode Roles</h1>
+        <h1>{{ gateway.code }} NeoNode ROLES</h1>
         <p class="muted">{{ target_user.display_name }} - Approved {{ gateway.name }} membership gives Watcher access by default.</p>
     </div>
 
@@ -22,12 +22,12 @@
             </span>
         </label>
         {% endfor %}
-        <button type="submit">Save Node Roles</button>
+        <button type="submit">SAVE NODE ROLES</button>
     </form>
 
     <div class="action-row">
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.edit_user', user_id=target_user.id) }}">Back to Edit User</a>
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.edit_users') }}">Edit Users</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.edit_user', user_id=target_user.id) }}">BACK TO EDIT USER</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.edit_users') }}">EDIT USERS</a>
     </div>
 </section>
 {% endblock %}
