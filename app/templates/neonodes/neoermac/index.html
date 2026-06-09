@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}NeoErmac | NeoGateway{% endblock %}
+
+{% block content %}
+<section class="neoermac-shell" aria-labelledby="neoermac-title">
+    <div class="neoermac-hero">
+        <span class="neoermac-kicker">{{ gateway.name }} NeoNode</span>
+        <h1 id="neoermac-title">NeoErmac</h1>
+        <p>Outbound command shell</p>
+    </div>
+
+    <nav class="neoermac-menu" aria-label="NeoErmac menu">
+        {% for label, endpoint in menu_items %}
+        <a class="neoermac-menu-link" href="{{ url_for(endpoint) }}">{{ label }}</a>
+        {% endfor %}
+        <a class="neoermac-menu-link neoermac-menu-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}">Back to NeoGateway</a>
+    </nav>
+</section>
+{% endblock %}

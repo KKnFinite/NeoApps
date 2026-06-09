@@ -791,6 +791,124 @@ a {
     box-shadow: 0 0 28px rgba(255, 47, 47, 0.16);
 }
 
+.neoermac-shell {
+    display: grid;
+    justify-items: center;
+    gap: 24px;
+    width: min(100%, 880px);
+    margin: 0 auto;
+    padding: clamp(22px, 4vw, 42px);
+    border: 1px solid rgba(201, 208, 214, 0.28);
+    border-radius: 6px;
+    background:
+        radial-gradient(circle at 50% 0%, rgba(255, 31, 55, 0.18), transparent 22rem),
+        radial-gradient(circle at 80% 18%, rgba(50, 255, 126, 0.1), transparent 18rem),
+        linear-gradient(145deg, rgba(238, 246, 255, 0.07), transparent 30%),
+        linear-gradient(180deg, rgba(16, 18, 22, 0.96), rgba(4, 5, 7, 0.96));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        inset 0 -1px 0 rgba(255, 31, 55, 0.26),
+        0 0 34px rgba(255, 31, 55, 0.14),
+        0 20px 60px rgba(0, 0, 0, 0.42);
+    text-align: center;
+}
+
+.neoermac-hero {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+}
+
+.neoermac-kicker {
+    color: #45ff86;
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    text-shadow: 0 0 14px rgba(69, 255, 134, 0.34);
+}
+
+.neoermac-hero h1 {
+    margin: 0;
+    color: #eef6ff;
+    font-size: clamp(2.4rem, 8vw, 5.5rem);
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-shadow:
+        0 0 18px rgba(255, 31, 55, 0.46),
+        0 2px 0 rgba(0, 0, 0, 0.8);
+}
+
+.neoermac-hero p,
+.neoermac-placeholder-panel p {
+    margin: 0;
+    color: var(--steel);
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.neoermac-menu {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(190px, 1fr));
+    gap: 14px;
+    width: min(100%, 560px);
+}
+
+.neoermac-menu-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    padding: 12px 16px;
+    border: 1px solid rgba(238, 246, 255, 0.42);
+    border-radius: 5px;
+    color: #eef6ff;
+    background:
+        linear-gradient(135deg, rgba(238, 246, 255, 0.16), transparent 32%),
+        linear-gradient(180deg, rgba(216, 32, 42, 0.78), rgba(88, 8, 16, 0.84)),
+        linear-gradient(180deg, rgba(32, 35, 41, 0.94), rgba(17, 19, 24, 0.94));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.18),
+        0 0 22px rgba(255, 31, 55, 0.22);
+    font-size: 0.86rem;
+    font-weight: 950;
+    letter-spacing: 0.06em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.neoermac-menu-link:hover,
+.neoermac-menu-link:focus-visible {
+    border-color: rgba(69, 255, 134, 0.72);
+    outline: none;
+    color: #ffffff;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        0 0 26px rgba(255, 31, 55, 0.3),
+        0 0 18px rgba(69, 255, 134, 0.18);
+}
+
+.neoermac-menu-link-secondary {
+    background:
+        linear-gradient(135deg, rgba(238, 246, 255, 0.13), transparent 32%),
+        linear-gradient(180deg, rgba(33, 37, 43, 0.96), rgba(8, 9, 12, 0.92));
+}
+
+.neoermac-placeholder-panel {
+    display: grid;
+    justify-items: center;
+    gap: 18px;
+    width: min(100%, 560px);
+    padding: 22px;
+    border: 1px solid rgba(201, 208, 214, 0.22);
+    border-radius: 6px;
+    background:
+        linear-gradient(135deg, rgba(238, 246, 255, 0.08), transparent 32%),
+        rgba(5, 6, 9, 0.64);
+}
+
 .rfd-command-hub {
     margin-bottom: 0;
 }
@@ -2956,6 +3074,16 @@ select::-ms-expand {
 
     .command-card-grid {
         grid-template-columns: 1fr;
+    }
+
+    .neoermac-shell {
+        width: 100%;
+        padding: 20px 14px;
+    }
+
+    .neoermac-menu {
+        grid-template-columns: 1fr;
+        width: min(100%, 420px);
     }
 
     .user-search-form {

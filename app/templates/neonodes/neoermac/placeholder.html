@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} | NeoErmac{% endblock %}
+
+{% block content %}
+<section class="neoermac-shell neoermac-placeholder" aria-labelledby="neoermac-page-title">
+    <div class="neoermac-hero">
+        <span class="neoermac-kicker">NeoErmac</span>
+        <h1 id="neoermac-page-title">{{ title }}</h1>
+        <p>{{ gateway.name }} placeholder shell</p>
+    </div>
+
+    <div class="neoermac-placeholder-panel">
+        <p>Operational logic will be added in a later pass.</p>
+        <a class="neoermac-menu-link neoermac-menu-link-secondary" href="{{ url_for('neoermac.index') }}">Back to NeoErmac</a>
+    </div>
+</section>
+{% endblock %}
