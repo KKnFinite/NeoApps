@@ -102,8 +102,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"Green Runout", response.data)
         self.assertIn(b"Runout 1", response.data)
         self.assertIn(b"Runout 22", response.data)
-        self.assertIn(b"EAST SIDE DESTINATIONS", response.data)
-        self.assertIn(b"WEST SIDE DESTINATIONS", response.data)
+        self.assertEqual(response.data.count(b'class="neoermac-runout-card"'), 23)
+        self.assertIn(b"EAST SIDE DESTINATION 1", response.data)
+        self.assertIn(b"EAST SIDE DESTINATION 2", response.data)
+        self.assertIn(b"WEST SIDE DESTINATION 1", response.data)
+        self.assertIn(b"WEST SIDE DESTINATION 2", response.data)
+        self.assertNotIn(b"EAST SIDE DESTINATIONS", response.data)
+        self.assertNotIn(b"WEST SIDE DESTINATIONS", response.data)
         self.assertIn(b"READ ONLY", response.data)
         self.assertNotIn(b"SAVE BUILDING LINEUP", response.data)
 
@@ -149,6 +154,41 @@ class NeoErmacRoutesTest(unittest.TestCase):
         reload_response = self.client.get("/neoermac/building-lineup")
         self.assertIn(b'<option value="SDF" selected', reload_response.data)
         self.assertIn(b'<option value="ONT" selected', reload_response.data)
+
+    def test_building_lineup_save_allows_blank_slots_and_clears_destinations(self):
+        self._add_master_departure("UPS351", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="simulator")
+
+        self.client.post(
+            "/neoermac/building-lineup",
+            data={
+                "lineup_green_runout_east_destination_1": "SDF",
+                "lineup_green_runout_east_destination_2": "",
+                "lineup_green_runout_west_destination_1": "",
+                "lineup_green_runout_west_destination_2": "",
+            },
+        )
+        response = self.client.post(
+            "/neoermac/building-lineup",
+            data={
+                "lineup_green_runout_east_destination_1": "",
+                "lineup_green_runout_east_destination_2": "",
+                "lineup_green_runout_west_destination_1": "",
+                "lineup_green_runout_west_destination_2": "",
+            },
+            follow_redirects=False,
+        )
+
+        saved = NeoErmacBuildingLineup.query.filter_by(
+            gateway_id=self.gateway.id,
+            runout_key="green_runout",
+        ).one()
+        self.assertEqual(response.status_code, 302)
+        self.assertIsNone(saved.east_destination_1)
+        self.assertIsNone(saved.east_destination_2)
+        self.assertIsNone(saved.west_destination_1)
+        self.assertIsNone(saved.west_destination_2)
 
     def test_user_without_building_lineup_edit_sees_read_only_and_cannot_save(self):
         self._add_master_departure("UPS401", "SDF")

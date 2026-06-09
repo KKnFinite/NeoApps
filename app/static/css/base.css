@@ -992,35 +992,21 @@ a {
     text-shadow: 0 0 14px rgba(255, 31, 55, 0.34);
 }
 
-.neoermac-runout-sides {
+.neoermac-runout-slots {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: 9px;
 }
 
-.neoermac-runout-side {
+.neoermac-runout-slots label {
     display: grid;
-    gap: 10px;
-    min-width: 0;
-    padding: 12px;
+    gap: 5px;
+    padding: 10px;
     border: 1px solid rgba(201, 208, 214, 0.16);
     border-radius: 5px;
     background: rgba(3, 4, 6, 0.48);
 }
 
-.neoermac-runout-side h3 {
-    color: var(--steel);
-    font-size: 0.76rem;
-    font-weight: 950;
-    letter-spacing: 0.08em;
-}
-
-.neoermac-runout-side label {
-    display: grid;
-    gap: 5px;
-}
-
-.neoermac-runout-side label span {
+.neoermac-runout-slots label span {
     color: var(--muted);
     font-size: 0.64rem;
     font-weight: 900;
@@ -3326,10 +3312,6 @@ select::-ms-expand {
     .neoermac-menu {
         grid-template-columns: 1fr;
         width: min(100%, 420px);
-    }
-
-    .neoermac-runout-sides {
-        grid-template-columns: 1fr;
     }
 
     .neoermac-runout-card {
