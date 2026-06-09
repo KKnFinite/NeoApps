@@ -7,7 +7,7 @@ from unittest.mock import patch
 from app import create_app, maybe_auto_bootstrap_database
 from app.config import resolve_database_uri
 from app.extensions import db
-from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoNode, User
+from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, User
 from app.services.access_control import DEFAULT_NEONODES, user_can_access_node
 from app.services.database_bootstrap import bootstrap_database
 
@@ -83,6 +83,17 @@ class DatabaseBootstrapTest(unittest.TestCase):
             ).count(),
             len(DEFAULT_NEONODES),
         )
+        self.assertEqual(
+            {
+                rule.permission_key: rule.minimum_role
+                for rule in PermissionRule.query.order_by(PermissionRule.permission_key).all()
+            },
+            {
+                "neoermac.building_lineup.edit": "simulator",
+                "neoermac.door_view.enter_actual_pulls": "operator",
+                "neoermac.tug_assignments.edit": "master",
+            },
+        )
 
     def test_bootstrap_updates_existing_kessler_user_without_overwriting_password(self):
         db.create_all()
@@ -127,6 +138,7 @@ class DatabaseBootstrapTest(unittest.TestCase):
         self.assertFalse(second_result["password_applied"])
         self.assertEqual(Gateway.query.filter_by(code="RFD").count(), 1)
         self.assertEqual(NeoNode.query.count(), len(DEFAULT_NEONODES))
+        self.assertEqual(PermissionRule.query.count(), 3)
         self.assertEqual(User.query.filter_by(username="Kessler").count(), 1)
         self.assertEqual(GatewayMembership.query.filter_by(user_id=user.id).count(), 1)
         self.assertEqual(

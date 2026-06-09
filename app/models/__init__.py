@@ -5,6 +5,7 @@ from app.models.gateway_node_role import GatewayNodeRole
 from app.models.gateway_sort_matrix import GatewaySortMatrix
 from app.models.master_flight_schedule import MasterFlightSchedule
 from app.models.neo_node import NeoNode
+from app.models.permission_rule import PermissionRule
 from app.models.sort_date_crew_assignment import SortDateCrewAssignment
 from app.models.sort_date_mission import SortDateMission
 from app.models.sort_date_operation import SortDateOperation
@@ -20,6 +21,7 @@ __all__ = [
     "GatewayNodeRole",
     "GatewaySortMatrix",
     "NeoNode",
+    "PermissionRule",
     "MasterFlightSchedule",
     "SortDateOperation",
     "SortDateMission",

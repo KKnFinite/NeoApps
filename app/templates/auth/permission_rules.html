@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Permission Rules | NeoGateway{% endblock %}
+
+{% block content %}
+<section class="panel users-panel centered-command-page">
+    <div class="section-heading">
+        <h1>PERMISSION RULES</h1>
+        <p class="muted">CONFIGURE MINIMUM ROLES FOR SCREEN ACTIONS.</p>
+    </div>
+
+    <form class="operation-form" method="post">
+        <div class="table-wrap">
+            <table class="data-table wide-data-table">
+                <thead>
+                    <tr>
+                        <th>PERMISSION KEY</th>
+                        <th>DESCRIPTION</th>
+                        <th>MINIMUM ROLE</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rule in rules %}
+                    <tr>
+                        <td data-label="Permission Key">
+                            <input type="hidden" name="rule_ids" value="{{ rule.id }}">
+                            <code>{{ rule.permission_key }}</code>
+                        </td>
+                        <td data-label="Description">
+                            <input name="description_{{ rule.id }}" value="{{ rule.description or '' }}" autocomplete="off">
+                        </td>
+                        <td data-label="Minimum Role">
+                            <span class="role-select-wrap">
+                                <select name="minimum_role_{{ rule.id }}">
+                                    {% for role in role_choices %}
+                                    <option value="{{ role }}" {% if rule.minimum_role == role %}selected{% endif %}>{{ role|role_label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3">NO PERMISSION RULES FOUND.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="action-row">
+            <button class="action-button" type="submit">SAVE PERMISSION RULES</button>
+            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}">BACK TO NeoMotherBrain MAIN MENU</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

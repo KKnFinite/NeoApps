@@ -43,6 +43,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
 
         paths = (
             "/admin/users",
+            "/admin/permissions",
             "/admin/users/pending",
             "/admin/users/edit-users",
             f"/admin/users/{target.id}",
@@ -88,6 +89,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
 
         paths = (
             "/admin/users",
+            "/admin/permissions",
             "/admin/users/pending",
             "/admin/users/edit-users",
             f"/admin/users/{target.id}",

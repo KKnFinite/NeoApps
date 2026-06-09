@@ -8,7 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.auth import bp
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
-from app.models import GatewayMembership, GatewayNodeRole, NeoNode, User
+from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, User
 from app.models.user import ROLE_LEVELS
 from app.services import email_service
 from app.services.access_control import (
@@ -17,6 +17,7 @@ from app.services.access_control import (
     request_default_gateway_access_for_user,
     user_has_gateway_access,
 )
+from app.services.permission_rules import ensure_default_permission_rules
 from app.services.user_tokens import (
     EMAIL_VERIFICATION,
     PASSWORD_RESET,
@@ -282,6 +283,29 @@ def pending_users():
         "auth/pending_users.html",
         gateway=gateway,
         memberships=memberships,
+    )
+
+
+@bp.route("/admin/permissions", methods=["GET", "POST"])
+@gateway_node_required("motherbrain", minimum_role="grandmaster")
+def permission_rules():
+    ensure_default_permission_rules()
+
+    if request.method == "POST":
+        try:
+            _apply_permission_rule_form()
+            db.session.commit()
+            flash("Permission rules updated.", "info")
+            return redirect(url_for("auth.permission_rules"))
+        except ValueError as error:
+            db.session.rollback()
+            flash(str(error), "error")
+
+    rules = PermissionRule.query.order_by(PermissionRule.permission_key.asc()).all()
+    return render_template(
+        "auth/permission_rules.html",
+        role_choices=ROLE_CHOICES,
+        rules=rules,
     )
 
 
@@ -895,6 +919,22 @@ def _apply_node_role_form(target_user, membership):
 
         existing_role.role = selected_role
         existing_role.is_active = True
+
+
+def _apply_permission_rule_form():
+    rule_ids = request.form.getlist("rule_ids")
+    for rule_id in rule_ids:
+        rule = db.session.get(PermissionRule, int(rule_id))
+        if not rule:
+            continue
+
+        minimum_role = request.form.get(f"minimum_role_{rule.id}", "").strip().lower()
+        description = request.form.get(f"description_{rule.id}", "").strip()
+        if minimum_role not in ROLE_CHOICES:
+            raise ValueError("Unsupported minimum role selected.")
+
+        rule.minimum_role = minimum_role
+        rule.description = description
 
 
 def _role_choices_for_node(existing_role):

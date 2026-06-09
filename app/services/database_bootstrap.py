@@ -7,6 +7,7 @@ from app.services.access_control import (
     backfill_default_gateway_node_roles,
     ensure_default_gateway_and_nodes,
 )
+from app.services.permission_rules import ensure_default_permission_rules
 from app.services.schema_sync import sync_database_schema
 
 
@@ -31,6 +32,7 @@ def bootstrap_database(app=None):
         db.create_all()
         sync_database_schema(app)
         ensure_default_gateway_and_nodes()
+        ensure_default_permission_rules()
 
         user, created_user = _find_or_create_bootstrap_user(username, email)
         user.username = username

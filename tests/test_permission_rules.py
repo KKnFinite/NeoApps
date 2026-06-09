@@ -1,0 +1,142 @@
+import unittest
+
+from app import create_app
+from app.extensions import db
+from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, User
+from app.services.access_control import backfill_default_gateway_node_roles, ensure_default_gateway_and_nodes
+from app.services.permission_rules import ensure_default_permission_rules, user_can
+
+
+class PermissionRulesTest(unittest.TestCase):
+    def setUp(self):
+        TestConfig = type(
+            "TestConfig",
+            (),
+            {
+                "SECRET_KEY": "test",
+                "TESTING": True,
+                "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+                "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+            },
+        )
+        self.app = create_app(TestConfig)
+        self.context = self.app.app_context()
+        self.context.push()
+        db.create_all()
+        ensure_default_gateway_and_nodes()
+        ensure_default_permission_rules()
+        db.session.commit()
+        self.client = self.app.test_client()
+
+    def tearDown(self):
+        db.session.remove()
+        db.drop_all()
+        self.context.pop()
+
+    def test_permission_rules_seed_correctly(self):
+        rules = {
+            rule.permission_key: rule.minimum_role
+            for rule in PermissionRule.query.order_by(PermissionRule.permission_key).all()
+        }
+
+        self.assertEqual(
+            rules,
+            {
+                "neoermac.building_lineup.edit": "simulator",
+                "neoermac.door_view.enter_actual_pulls": "operator",
+                "neoermac.tug_assignments.edit": "master",
+            },
+        )
+
+    def test_grandmaster_can_manage_permission_rules(self):
+        grandmaster = self._user_with_ermac_role("permission_grandmaster", "grandmaster")
+        backfill_default_gateway_node_roles(grandmaster, role="grandmaster")
+        db.session.commit()
+        self._login(grandmaster.username)
+        rule = PermissionRule.query.filter_by(
+            permission_key="neoermac.building_lineup.edit"
+        ).one()
+
+        response = self.client.post(
+            "/admin/permissions",
+            data={
+                "rule_ids": [str(rule.id)],
+                f"description_{rule.id}": "Updated Building Lineup rule.",
+                f"minimum_role_{rule.id}": "master",
+            },
+            follow_redirects=True,
+        )
+
+        updated = db.session.get(PermissionRule, rule.id)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"PERMISSION RULES", response.data)
+        self.assertIn(b"neoermac.building_lineup.edit", response.data)
+        self.assertEqual(updated.minimum_role, "master")
+        self.assertEqual(updated.description, "Updated Building Lineup rule.")
+
+    def test_simulator_can_pass_building_lineup_edit(self):
+        simulator = self._user_with_ermac_role("ermac_simulator", "simulator")
+
+        self.assertTrue(user_can("neoermac.building_lineup.edit", simulator))
+
+    def test_operator_cannot_pass_building_lineup_edit(self):
+        operator = self._user_with_ermac_role("ermac_operator_low", "operator")
+
+        self.assertFalse(user_can("neoermac.building_lineup.edit", operator))
+
+    def test_operator_can_enter_actual_pulls(self):
+        operator = self._user_with_ermac_role("ermac_operator", "operator")
+
+        self.assertTrue(user_can("neoermac.door_view.enter_actual_pulls", operator))
+
+    def test_lower_role_cannot_enter_actual_pulls(self):
+        watcher = self._user_with_ermac_role("ermac_watcher", "watcher")
+
+        self.assertFalse(user_can("neoermac.door_view.enter_actual_pulls", watcher))
+
+    def test_missing_permission_key_denies_non_grandmaster_and_allows_grandmaster(self):
+        master = self._user_with_ermac_role("ermac_master", "master")
+        grandmaster = self._user_with_ermac_role("ermac_missing_grandmaster", "grandmaster")
+
+        self.assertFalse(user_can("neoermac.unknown_screen.edit", master))
+        self.assertTrue(user_can("neoermac.unknown_screen.edit", grandmaster))
+
+    def _user_with_ermac_role(self, username, role):
+        user = User(username=username, role="watcher")
+        user.set_password("TestPassword123!")
+        db.session.add(user)
+        db.session.flush()
+
+        gateway = ensure_default_gateway_and_nodes()
+        membership = GatewayMembership(
+            user_id=user.id,
+            gateway_id=gateway.id,
+            status="approved",
+            is_active=True,
+        )
+        db.session.add(membership)
+        db.session.flush()
+
+        ermac = NeoNode.query.filter_by(code="ermac").one()
+        if role != "watcher":
+            db.session.add(
+                GatewayNodeRole(
+                    gateway_membership_id=membership.id,
+                    node_id=ermac.id,
+                    role=role,
+                    is_active=True,
+                )
+            )
+        db.session.commit()
+        return user
+
+    def _login(self, username):
+        return self.client.post(
+            "/login",
+            data={"username": username, "password": "TestPassword123!"},
+            follow_redirects=False,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -31,6 +31,13 @@ from app.services.sort_date_operations import (
     sync_sort_operation_with_master,
 )
 from app.services.schema_sync import sync_local_sqlite_schema
+from app.services.permission_rules import (
+    DEFAULT_PERMISSION_RULES,
+    ensure_default_permission_rules,
+    get_permission_rule,
+    require_permission,
+    user_can,
+)
 from app.services.email_service import (
     send_access_approved,
     send_email_verification,
@@ -74,6 +81,11 @@ __all__ = [
     "parse_active_days",
     "sync_sort_operation_with_master",
     "sync_local_sqlite_schema",
+    "DEFAULT_PERMISSION_RULES",
+    "ensure_default_permission_rules",
+    "get_permission_rule",
+    "require_permission",
+    "user_can",
     "send_access_approved",
     "send_email_verification",
     "send_password_reset",
