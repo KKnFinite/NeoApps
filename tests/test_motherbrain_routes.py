@@ -579,6 +579,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"DEP001", response.data)
         self.assertIn(b"SDF", response.data)
         self.assertIn(b'name="row_arrival_0_planned_time_local_hour"', response.data)
+        self.assertIn(b'data-time-max="23"', response.data)
+        self.assertIn(b'data-time-max="59"', response.data)
+        self.assertNotIn(b'<select name="row_arrival_0_planned_time_local_hour"', response.data)
         self.assertIn(b'name="row_arrival_0_aircraft_type"', response.data)
         self.assertIn(b'name="row_departure_0_aircraft_type"', response.data)
         self.assertIn(b'name="row_departure_0_pure_pull_time_local_hour"', response.data)
@@ -1163,6 +1166,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b'class="military-time-select"', form_response.data)
         self.assertIn(b'name="row_0_planned_time_local_hour"', form_response.data)
         self.assertIn(b'name="row_0_planned_time_local_minute"', form_response.data)
+        self.assertIn(b'data-time-max="23"', form_response.data)
+        self.assertIn(b'data-time-max="59"', form_response.data)
+        self.assertNotIn(b'<select name="row_0_planned_time_local_hour"', form_response.data)
         self.assertNotIn(b'type="time"', form_response.data)
 
     def test_master_schedule_rejects_non_military_time(self):

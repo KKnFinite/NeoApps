@@ -181,7 +181,20 @@
         scope.querySelectorAll(".airport-code-input, .flight-number-input").forEach(uppercaseInput);
     };
 
+    const initializeMilitaryTimeInputs = (scope) => {
+        scope.querySelectorAll(".military-time-part").forEach((input) => {
+            input.addEventListener("input", () => {
+                input.value = input.value.replace(/\D/g, "").slice(0, 2);
+                const max = Number(input.dataset.timeMax || "59");
+                if (input.value !== "" && Number(input.value) > max) {
+                    input.value = String(max);
+                }
+            });
+        });
+    };
+
     initializeUppercaseInputs(document);
+    initializeMilitaryTimeInputs(document);
 
     const fieldValue = (row, suffix) => {
         const field = row.querySelector(`[name$='_${suffix}']`);
@@ -291,6 +304,7 @@
 
                 tableBody.appendChild(row);
                 initializeUppercaseInputs(row);
+                initializeMilitaryTimeInputs(row);
                 const firstField = row.querySelector("input[type='text'], select");
                 if (firstField) {
                     firstField.focus();

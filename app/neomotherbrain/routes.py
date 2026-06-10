@@ -1217,6 +1217,11 @@ def _time_value_from_form(source, name):
     if not hour and not minute:
         return ""
 
+    if hour.isdigit():
+        hour = hour.zfill(2)
+    if minute.isdigit():
+        minute = minute.zfill(2)
+
     return f"{hour}:{minute}"
 
 

@@ -4,21 +4,35 @@
 {% set selected_hour = raw_value[:2] if has_value else "" %}
 {% set selected_minute = raw_value[3:] if has_value else "" %}
 <div class="military-time-select" aria-label="{{ name|replace('_', ' ') }}">
-    <select name="{{ name }}_hour" aria-label="Hour" {% if required %}required{% endif %}>
-        <option value="" {% if not selected_hour %}selected{% endif %}>HH</option>
-        {% for hour in range(24) %}
-        {% set option = "%02d"|format(hour) %}
-        <option value="{{ option }}" {% if option == selected_hour %}selected{% endif %}>{{ option }}</option>
-        {% endfor %}
-    </select>
+    <input
+        class="military-time-part military-time-hour"
+        type="text"
+        name="{{ name }}_hour"
+        value="{{ selected_hour }}"
+        inputmode="numeric"
+        maxlength="2"
+        pattern="([01]?[0-9]|2[0-3])"
+        placeholder="HH"
+        autocomplete="off"
+        aria-label="Hour"
+        data-time-max="23"
+        {% if required %}required{% endif %}
+    >
     <span class="military-time-separator">:</span>
-    <select name="{{ name }}_minute" aria-label="Minute" {% if required %}required{% endif %}>
-        <option value="" {% if not selected_minute %}selected{% endif %}>MM</option>
-        {% for minute in range(60) %}
-        {% set option = "%02d"|format(minute) %}
-        <option value="{{ option }}" {% if option == selected_minute %}selected{% endif %}>{{ option }}</option>
-        {% endfor %}
-    </select>
+    <input
+        class="military-time-part military-time-minute"
+        type="text"
+        name="{{ name }}_minute"
+        value="{{ selected_minute }}"
+        inputmode="numeric"
+        maxlength="2"
+        pattern="[0-5]?[0-9]"
+        placeholder="MM"
+        autocomplete="off"
+        aria-label="Minute"
+        data-time-max="59"
+        {% if required %}required{% endif %}
+    >
 </div>
 {% endmacro %}
 
