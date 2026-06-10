@@ -48,9 +48,10 @@
 {% endmacro %}
 
 {% macro wave_field(row) %}
+{% set selected_wave = row.wave|wave_label %}
 <select name="row_{{ row.index }}_wave">
     {% for wave_value, wave_label in wave_options %}
-    <option value="{{ wave_value }}" {% if (row.wave or "1st Wave") == wave_value %}selected{% endif %}>{{ wave_label }}</option>
+    <option value="{{ wave_value }}" {% if selected_wave == wave_value %}selected{% endif %}>{{ wave_label }}</option>
     {% endfor %}
 </select>
 {% endmacro %}
@@ -83,7 +84,6 @@
         <input type="text" name="row_{{ row.index }}_flight_number" value="{{ row.flight_number }}" maxlength="8" autocomplete="off">
     </td>
     <td>{{ aircraft_type_field(row) }}</td>
-    <td>{{ wave_field(row) }}</td>
     <td>
         {{ airport_input(row, "origin", "Origin") }}
     </td>
@@ -92,11 +92,12 @@
     </td>
     <td>{{ active_days_field(row) }}</td>
     <td>{{ military_time_select("row_" ~ row.index ~ "_planned_time_local", row.planned_time_local) }}</td>
+    <td>{{ wave_field(row) }}</td>
     <td>{{ military_time_select("row_" ~ row.index ~ "_pure_pull_time_local", row.pure_pull_time_local) }}</td>
     <td>{{ military_time_select("row_" ~ row.index ~ "_first_mix_pull_time_local", row.first_mix_pull_time_local) }}</td>
     <td>{{ military_time_select("row_" ~ row.index ~ "_final_mix_pull_time_local", row.final_mix_pull_time_local) }}</td>
     <td>
-        <button class="table-row-button" type="button" data-remove-schedule-row>REMOVE</button>
+        <button class="table-row-button table-row-delete-button" type="button" data-remove-schedule-row aria-label="Remove row">&times;</button>
     </td>
 </tr>
 {% endmacro %}
@@ -144,10 +145,6 @@
         <span>AC Type</span>
         {{ aircraft_type_field(row) }}
     </label>
-    <label class="master-field-wave">
-        <span>WAVE</span>
-        {{ wave_field(row) }}
-    </label>
     {% if row.mission_type == "arrival" %}
     <label class="master-field-airport">
         <span>ORIGIN</span>
@@ -164,6 +161,10 @@
     <label class="master-time-field">
         <span data-master-scheduled-label>{{ "STA" if row.mission_type == "arrival" else "STD" }}</span>
         {{ military_time_select("row_" ~ row.index ~ "_planned_time_local", row.planned_time_local, True) }}
+    </label>
+    <label class="master-field-wave">
+        <span>WAVE</span>
+        {{ wave_field(row) }}
     </label>
     {% if row.mission_type == "departure" %}
     <label class="master-pull-field" data-departure-only>
@@ -208,11 +209,11 @@
                         <th>MISSION</th>
                         <th>FLIGHT</th>
                         <th>AC Type</th>
-                        <th>WAVE</th>
                         <th>ORIGIN</th>
                         <th>DESTINATION</th>
                         <th>ACTIVE DAYS</th>
                         <th>STA/STD</th>
+                        <th>WAVE</th>
                         <th>PURE PULL</th>
                         <th>FIRST MIX</th>
                         <th>FINAL MIX</th>

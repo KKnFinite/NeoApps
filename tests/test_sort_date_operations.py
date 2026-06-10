@@ -64,13 +64,13 @@ class SortDateOperationsTest(unittest.TestCase):
         )
         first_wave_mission = self._mission(
             mission_type="departure",
-            wave="1st Wave",
+            wave="1",
             planned_datetime_local=datetime(2026, 6, 1, 2, 10),
             pure_pull_time_local=time(1, 20),
         )
         second_wave_mission = self._mission(
             mission_type="departure",
-            wave="2nd Wave",
+            wave="2",
             planned_datetime_local=datetime(2026, 6, 1, 2, 10),
             pure_pull_time_local=time(1, 20),
         )
@@ -93,7 +93,7 @@ class SortDateOperationsTest(unittest.TestCase):
         )
         mission = self._mission(
             mission_type="departure",
-            wave="1st Wave",
+            wave="1",
             planned_datetime_local=datetime(2026, 6, 1, 2, 10),
         )
 

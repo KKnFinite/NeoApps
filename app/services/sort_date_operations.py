@@ -18,7 +18,7 @@ from app.services.flight_rules import (
     derive_aircraft_type_from_tail_number,
 )
 
-WAVE_OPTIONS = ("1st Wave", "2nd Wave")
+WAVE_OPTIONS = ("1", "2")
 
 
 def create_sort_date_operation(
@@ -266,10 +266,10 @@ def normalize_optional_window_minutes(window_minutes):
 def normalize_wave(wave):
     wave = str(wave or "").strip().lower()
     if wave in ("1", "1st", "first", "first wave", "1st wave"):
-        return "1st Wave"
+        return "1"
     if wave in ("2", "2nd", "second", "second wave", "2nd wave"):
-        return "2nd Wave"
-    return "1st Wave"
+        return "2"
+    return "1"
 
 
 def effective_window_minutes_for_mission(mission, operation=None):
@@ -280,7 +280,7 @@ def effective_window_minutes_for_mission(mission, operation=None):
         return default_window
 
     wave = normalize_wave(getattr(mission, "wave", None))
-    if wave == "1st Wave":
+    if wave == "1":
         wave_window = getattr(operation, "first_wave_window_minutes", None)
     else:
         wave_window = getattr(operation, "second_wave_window_minutes", None)

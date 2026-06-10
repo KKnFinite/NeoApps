@@ -88,7 +88,7 @@ class SortDateGenerationTest(unittest.TestCase):
         self.assertEqual(parse_active_days('["monday", "wednesday"]'), {"monday", "wednesday"})
 
     def test_generated_mission_has_master_source_and_master_link(self):
-        master = self._add_master(flight_number="5X123", wave="2nd Wave")
+        master = self._add_master(flight_number="5X123", wave="2")
         db.session.commit()
 
         operation = generate_sort_date_operation_from_master(
@@ -99,7 +99,7 @@ class SortDateGenerationTest(unittest.TestCase):
 
         mission = operation.missions[0]
         self.assertEqual(mission.mission_source, "master")
-        self.assertEqual(mission.wave, "2nd Wave")
+        self.assertEqual(mission.wave, "2")
         self.assertEqual(mission.master_flight_schedule_id, master.id)
         self.assertEqual(mission.sort_date_operation, operation)
 
@@ -285,7 +285,7 @@ class SortDateGenerationTest(unittest.TestCase):
         mission = operation.missions[0]
         master.destination = "ONT"
         master.planned_time_local = time(3, 15)
-        master.wave = "2nd Wave"
+        master.wave = "2"
         master.first_mix_pull_time_local = time(2, 45)
         master.final_mix_pull_time_local = time(3, 0)
         master.updated_at = datetime(2026, 1, 2, 0, 0)
@@ -296,7 +296,7 @@ class SortDateGenerationTest(unittest.TestCase):
 
         self.assertEqual(len(result["updated"]), 1)
         self.assertEqual(mission.destination, "ONT")
-        self.assertEqual(mission.wave, "2nd Wave")
+        self.assertEqual(mission.wave, "2")
         self.assertEqual(mission.planned_datetime_local, datetime(2026, 6, 1, 3, 15))
         self.assertEqual(mission.first_mix_pull_time_local, time(2, 45))
         self.assertEqual(mission.final_mix_pull_time_local, time(3, 0))
@@ -344,7 +344,7 @@ class SortDateGenerationTest(unittest.TestCase):
             "gateway_code": "RFD",
             "sort_name": "night",
             "mission_type": "departure",
-            "wave": "1st Wave",
+            "wave": "1",
             "flight_number": "5X123",
             "origin": "RFD",
             "destination": "SDF",
@@ -379,7 +379,7 @@ class SortDateGenerationTest(unittest.TestCase):
             "sort_name": "night",
             "mission_type": "departure",
             "mission_source": "master",
-            "wave": "1st Wave",
+            "wave": "1",
             "flight_number": "5X123",
             "origin": "RFD",
             "destination": "SDF",

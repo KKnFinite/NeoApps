@@ -74,6 +74,12 @@ def register_template_helpers(app):
             return "-"
         return str(value).strip().replace("_", " ").title()
 
+    def format_wave_label(value):
+        normalized = str(value or "").strip().lower()
+        if normalized in ("2", "2nd", "second", "second wave", "2nd wave"):
+            return "2"
+        return "1"
+
     def format_local_datetime(value, timezone_name=None):
         if not value:
             return ""
@@ -97,6 +103,7 @@ def register_template_helpers(app):
     app.jinja_env.filters["local_datetime"] = format_local_datetime
     app.jinja_env.filters["role_label"] = format_role_label
     app.jinja_env.filters["status_label"] = format_status_label
+    app.jinja_env.filters["wave_label"] = format_wave_label
 
     @app.context_processor
     def permission_helpers():

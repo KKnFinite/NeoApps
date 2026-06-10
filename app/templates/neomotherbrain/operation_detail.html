@@ -14,11 +14,11 @@
             <strong>{{ operation.window_minutes }} MIN</strong>
         </article>
         <article class="metric-tile">
-            <span>1ST WAVE WINDOW</span>
+            <span>WAVE 1 WINDOW</span>
             <strong>{{ operation.first_wave_window_minutes if operation.first_wave_window_minutes is not none else operation.window_minutes }} MIN</strong>
         </article>
         <article class="metric-tile">
-            <span>2ND WAVE WINDOW</span>
+            <span>WAVE 2 WINDOW</span>
             <strong>{{ operation.second_wave_window_minutes if operation.second_wave_window_minutes is not none else operation.window_minutes }} MIN</strong>
         </article>
         <article class="metric-tile">
@@ -56,11 +56,11 @@
             <input type="number" name="window_minutes" value="{{ operation.window_minutes }}" min="0" step="1" required>
         </label>
         <label>
-            <span>1ST WAVE WINDOW</span>
+            <span>WAVE 1 WINDOW</span>
             <input type="number" name="first_wave_window_minutes" value="{{ operation.first_wave_window_minutes if operation.first_wave_window_minutes is not none else '' }}" min="0" step="1" placeholder="Default">
         </label>
         <label>
-            <span>2ND WAVE WINDOW</span>
+            <span>WAVE 2 WINDOW</span>
             <input type="number" name="second_wave_window_minutes" value="{{ operation.second_wave_window_minutes if operation.second_wave_window_minutes is not none else '' }}" min="0" step="1" placeholder="Default">
         </label>
         <button class="action-button" type="submit">UPDATE WINDOW</button>
@@ -92,7 +92,7 @@
                 {% set mission = row.mission %}
                 <tr>
                     <td>{{ mission.flight_number|upper }}</td>
-                    <td>{{ mission.wave or "1st Wave" }}</td>
+                    <td>{{ mission.wave|wave_label }}</td>
                     <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
                     <td>{{ (mission.origin if mission.mission_type == "arrival" else mission.destination)|upper }}</td>
                     <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>

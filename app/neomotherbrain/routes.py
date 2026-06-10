@@ -69,8 +69,8 @@ MISSION_TYPE_OPTIONS = (
 )
 MISSION_TYPES = {"arrival", "departure"}
 WAVE_OPTIONS = (
-    ("1st Wave", "1st Wave"),
-    ("2nd Wave", "2nd Wave"),
+    ("1", "1"),
+    ("2", "2"),
 )
 WAVES = {value for value, _label in WAVE_OPTIONS}
 MASTER_AIRCRAFT_TYPE_OPTIONS = ("", "A300", "747", "757", "767", "Other")
@@ -806,7 +806,7 @@ def _master_schedule_form_from_request(gateway=None, prefix="", source=None):
         "gateway_code": gateway_code,
         "sort_name": source.get(f"{prefix}sort_name", "night"),
         "mission_type": source.get(f"{prefix}mission_type", "departure"),
-        "wave": source.get(f"{prefix}wave", "1st Wave"),
+        "wave": source.get(f"{prefix}wave", "1"),
         "flight_number": source.get(f"{prefix}flight_number", ""),
         "aircraft_type": source.get(f"{prefix}aircraft_type", ""),
         "origin": source.get(f"{prefix}origin", ""),
@@ -889,7 +889,7 @@ def _blank_master_schedule_form(gateway=None):
         "gateway_code": gateway_code,
         "sort_name": "night",
         "mission_type": "departure",
-        "wave": "1st Wave",
+        "wave": "1",
         "flight_number": "",
         "aircraft_type": "",
         "origin": "",
@@ -1119,7 +1119,7 @@ def _apply_master_schedule_form(master_schedule, form, gateway=None):
     if mission_type not in MISSION_TYPES:
         raise ValueError("Mission type must be arrival or departure.")
     if wave not in WAVES:
-        raise ValueError("Wave must be 1st Wave or 2nd Wave.")
+        raise ValueError("Wave must be 1 or 2.")
 
     if not all((gateway_code, sort_name, flight_number, origin, destination)):
         raise ValueError("Gateway, sort, flight, origin, and destination are required.")
@@ -1326,7 +1326,7 @@ def _render_mission_form(operation, form, mode, mission=None):
 def _mission_form_from_request(operation):
     return {
         "mission_type": request.form.get("mission_type", "departure"),
-        "wave": request.form.get("wave", "1st Wave"),
+        "wave": request.form.get("wave", "1"),
         "flight_number": request.form.get("flight_number", ""),
         "origin": request.form.get("origin", ""),
         "destination": request.form.get("destination", ""),
@@ -1404,7 +1404,7 @@ def _apply_mission_form(mission, operation, form):
     if mission_type not in MISSION_TYPES:
         raise ValueError("Mission type must be arrival or departure.")
     if wave not in WAVES:
-        raise ValueError("Wave must be 1st Wave or 2nd Wave.")
+        raise ValueError("Wave must be 1 or 2.")
 
     if not all((flight_number, origin, destination)):
         raise ValueError("Flight number, origin, and destination are required.")

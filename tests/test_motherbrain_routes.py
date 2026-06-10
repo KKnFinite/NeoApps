@@ -553,6 +553,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         response = self.client.get("/motherbrain/master-schedule")
 
         self.assertEqual(response.status_code, 200)
+        html = response.data.decode()
         self.assertIn(b"MASTER FLIGHT SCHEDULE", response.data)
         self.assertIn(b"centered-command-page", response.data)
         self.assertIn(b"MASTER ARRIVALS", response.data)
@@ -570,11 +571,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"<th>WAVE</th>", response.data)
         self.assertIn(b"<th>STA</th>", response.data)
         self.assertIn(b"<th>DESTINATION</th>", response.data)
-        self.assertIn(b"<th>ETD/STD</th>", response.data)
+        self.assertIn(b"<th>STD</th>", response.data)
         self.assertIn(b"<th>PURE PULL</th>", response.data)
         self.assertIn(b"<th>1ST MIX</th>", response.data)
         self.assertIn(b"<th>2ND MIX</th>", response.data)
-        self.assertIn(b"data-label=\"ETD/STD\"", response.data)
+        self.assertIn(b"data-label=\"STD\"", response.data)
         self.assertIn(b"data-label=\"AC Type\"", response.data)
         self.assertIn(b"data-label=\"2nd Mix\"", response.data)
         self.assertIn(b"ARR001", response.data)
@@ -591,8 +592,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b'name="row_departure_0_aircraft_type"', response.data)
         self.assertIn(b'name="row_arrival_0_wave"', response.data)
         self.assertIn(b'name="row_departure_0_wave"', response.data)
-        self.assertIn(b'>1st Wave</option>', response.data)
-        self.assertIn(b'>2nd Wave</option>', response.data)
+        self.assertIn(b">1</option>", response.data)
+        self.assertIn(b">2</option>", response.data)
         self.assertIn(b'name="row_departure_0_pure_pull_time_local_hour"', response.data)
         self.assertIn(b'name="row_departure_0_first_mix_pull_time_local_hour"', response.data)
         self.assertIn(b'name="row_departure_0_final_mix_pull_time_local_hour"', response.data)
@@ -609,12 +610,25 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b'<option value="" selected></option>', response.data)
         self.assertNotIn(b">AC</option>", response.data)
         self.assertNotIn(b">Edit</a>", response.data)
-        self.assertIn(b">DELETE</button>", response.data)
+        self.assertIn(b"&times;</button>", response.data)
+        self.assertLess(
+            html.index("<th>STA</th>"),
+            html.index("<th>WAVE</th>"),
+        )
+        departure_header_start = html.index('<section class="master-schedule-section" id="master-departures">')
+        departure_header_html = html[departure_header_start:]
+        self.assertLess(
+            departure_header_html.index("<th>STD</th>"),
+            departure_header_html.index("<th>WAVE</th>"),
+        )
+        self.assertLess(
+            departure_header_html.index("<th>WAVE</th>"),
+            departure_header_html.index("<th>PURE PULL</th>"),
+        )
         self.assertNotIn(b"<th>TAIL</th>", response.data)
         self.assertNotIn(b"<th>PARKING</th>", response.data)
         self.assertNotIn(b"<th>ETA</th>", response.data)
         self.assertNotIn(b"<th>ETD</th>", response.data)
-        self.assertNotIn(b"<th>STD</th>", response.data)
         self.assertNotIn(b"<th>FINAL MIX</th>", response.data)
         self.assertNotIn(b"data-label=\"Tail\"", response.data)
         self.assertNotIn(b"data-label=\"Parking\"", response.data)
@@ -1249,12 +1263,15 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIsNotNone(MasterFlightSchedule.query.filter_by(flight_number="UP789").first())
 
-    def test_master_schedule_saves_wave_assignment(self):
+    def test_master_schedule_saves_arrival_wave_assignment(self):
         response = self.client.post(
             "/motherbrain/master-schedule/new",
             data=self._master_schedule_form_data(
+                mission_type="arrival",
                 flight_number="WAVE01",
-                wave="2nd Wave",
+                origin="SDF",
+                destination="RFD",
+                wave="2",
             ),
             follow_redirects=False,
         )
@@ -1263,9 +1280,24 @@ class MotherBrainRoutesTest(unittest.TestCase):
         detail_response = self.client.get(f"/motherbrain/master-schedule/{master.id}")
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(master.wave, "2nd Wave")
+        self.assertEqual(master.wave, "2")
         self.assertIn(b"WAVE", detail_response.data)
-        self.assertIn(b"2nd Wave", detail_response.data)
+        self.assertIn(b">2</dd>", detail_response.data)
+
+    def test_master_schedule_saves_departure_wave_assignment(self):
+        response = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(
+                flight_number="WAVE02",
+                wave="2",
+            ),
+            follow_redirects=False,
+        )
+
+        master = MasterFlightSchedule.query.filter_by(flight_number="WAVE02").first()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(master.wave, "2")
 
     def test_master_schedule_time_fields_use_24_hour_format_and_save(self):
         response = self.client.post(
@@ -2111,7 +2143,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "gateway_code": "RFD",
             "sort_name": "night",
             "mission_type": "departure",
-            "wave": "1st Wave",
+            "wave": "1",
             "flight_number": "DEP001",
             "aircraft_type": "",
             "origin": "RFD",
@@ -2155,7 +2187,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "gateway_code": "RFD",
             "sort_name": "night",
             "mission_type": "departure",
-            "wave": "1st Wave",
+            "wave": "1",
             "flight_number": "DEP001",
             "origin": "RFD",
             "destination": "SDF",
@@ -2256,7 +2288,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "sort_name": operation.sort_name,
             "mission_type": mission_type,
             "mission_source": "manual",
-            "wave": "1st Wave",
+            "wave": "1",
             "flight_number": flight_number.upper(),
             "origin": "SDF" if mission_type == "arrival" else "RFD",
             "destination": "RFD" if mission_type == "arrival" else "SDF",

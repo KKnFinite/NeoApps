@@ -34,7 +34,7 @@
                 {% set timing = row.timing %}
                 <tr>
                     <td>{{ mission.flight_number|upper }}</td>
-                    <td>{{ mission.wave or "1st Wave" }}</td>
+                    <td>{{ mission.wave|wave_label }}</td>
                     <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
                     <td>{{ mission.destination|upper }}</td>
                     <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>

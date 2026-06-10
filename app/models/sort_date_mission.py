@@ -15,7 +15,7 @@ class SortDateMission(db.Model):
             name="ck_sort_date_missions_mission_source",
         ),
         db.CheckConstraint(
-            "wave IS NULL OR wave IN ('1st Wave', '2nd Wave')",
+            "wave IS NULL OR wave IN ('1', '2', '1st Wave', '2nd Wave')",
             name="ck_sort_date_missions_wave",
         ),
         db.CheckConstraint(

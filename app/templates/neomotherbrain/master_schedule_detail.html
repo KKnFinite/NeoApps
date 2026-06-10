@@ -34,7 +34,7 @@
         </div>
         <div>
             <dt>WAVE</dt>
-            <dd>{{ master_schedule.wave or "1st Wave" }}</dd>
+            <dd>{{ master_schedule.wave|wave_label }}</dd>
         </div>
         <div>
             <dt>AC Type</dt>

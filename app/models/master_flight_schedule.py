@@ -11,7 +11,7 @@ class MasterFlightSchedule(db.Model):
             name="ck_master_flight_schedules_mission_type",
         ),
         db.CheckConstraint(
-            "wave IS NULL OR wave IN ('1st Wave', '2nd Wave')",
+            "wave IS NULL OR wave IN ('1', '2', '1st Wave', '2nd Wave')",
             name="ck_master_flight_schedules_wave",
         ),
     )

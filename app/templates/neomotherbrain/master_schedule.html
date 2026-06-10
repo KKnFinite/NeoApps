@@ -36,10 +36,11 @@
 </select>
 {% endmacro %}
 
-{% macro wave_select(name, selected_value="1st Wave") %}
+{% macro wave_select(name, selected_value="1") %}
+{% set selected_wave = selected_value|wave_label %}
 <select name="{{ name }}" aria-label="Wave">
     {% for wave_value, wave_label in wave_options %}
-    <option value="{{ wave_value }}" {% if (selected_value or "1st Wave") == wave_value %}selected{% endif %}>{{ wave_label }}</option>
+    <option value="{{ wave_value }}" {% if selected_wave == wave_value %}selected{% endif %}>{{ wave_label }}</option>
     {% endfor %}
 </select>
 {% endmacro %}
@@ -59,15 +60,15 @@
     <td class="master-board-cell master-cell-ac-type" data-label="AC Type">
         {{ aircraft_type_select(prefix ~ "aircraft_type", schedule.aircraft_type if schedule and schedule.aircraft_type else "") }}
     </td>
-    <td class="master-board-cell master-cell-wave" data-label="Wave">
-        {{ wave_select(prefix ~ "wave", schedule.wave if schedule and schedule.wave else "1st Wave") }}
-    </td>
     <td class="master-board-cell master-cell-sta" data-label="STA">
         {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
     </td>
+    <td class="master-board-cell master-cell-wave" data-label="Wave">
+        {{ wave_select(prefix ~ "wave", schedule.wave if schedule and schedule.wave else "1") }}
+    </td>
     <td data-label="Delete" class="table-actions master-cell-actions">
         {% if schedule %}
-        <button class="table-row-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate>DELETE</button>
+        <button class="table-row-button table-row-delete-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate aria-label="Delete {{ schedule.flight_number|upper }}">&times;</button>
         {% else %}
         <span class="master-unsaved-row-placeholder" aria-hidden="true"></span>
         {% endif %}
@@ -90,11 +91,11 @@
     <td class="master-board-cell master-cell-ac-type" data-label="AC Type">
         {{ aircraft_type_select(prefix ~ "aircraft_type", schedule.aircraft_type if schedule and schedule.aircraft_type else "") }}
     </td>
-    <td class="master-board-cell master-cell-wave" data-label="Wave">
-        {{ wave_select(prefix ~ "wave", schedule.wave if schedule and schedule.wave else "1st Wave") }}
-    </td>
-    <td class="master-board-cell master-cell-etd" data-label="ETD/STD">
+    <td class="master-board-cell master-cell-etd" data-label="STD">
         {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
+    </td>
+    <td class="master-board-cell master-cell-wave" data-label="Wave">
+        {{ wave_select(prefix ~ "wave", schedule.wave if schedule and schedule.wave else "1") }}
     </td>
     <td class="master-board-cell master-cell-pure-pull" data-label="Pure Pull">
         {{ military_time_select(prefix ~ "pure_pull_time_local", schedule.pure_pull_time_local.strftime("%H:%M") if schedule and schedule.pure_pull_time_local else "") }}
@@ -107,7 +108,7 @@
     </td>
     <td data-label="Delete" class="table-actions master-cell-actions">
         {% if schedule %}
-        <button class="table-row-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate>DELETE</button>
+        <button class="table-row-button table-row-delete-button" type="submit" formmethod="post" formaction="{{ url_for('neomotherbrain.delete_master_schedule', master_id=schedule.id) }}" formnovalidate aria-label="Delete {{ schedule.flight_number|upper }}">&times;</button>
         {% else %}
         <span class="master-unsaved-row-placeholder" aria-hidden="true"></span>
         {% endif %}
@@ -131,14 +132,14 @@
                         <th>FLIGHT</th>
                         <th>ORIGIN</th>
                         <th>AC Type</th>
-                        <th>WAVE</th>
                         <th>STA</th>
+                        <th>WAVE</th>
                         {% else %}
                         <th>FLIGHT</th>
                         <th>DESTINATION</th>
                         <th>AC Type</th>
+                        <th>STD</th>
                         <th>WAVE</th>
-                        <th>ETD/STD</th>
                         <th>PURE PULL</th>
                         <th>1ST MIX</th>
                         <th>2ND MIX</th>

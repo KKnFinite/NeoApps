@@ -21,7 +21,7 @@
             <span>WAVE</span>
             <select name="wave" required>
                 {% for wave_value, wave_label in wave_options %}
-                <option value="{{ wave_value }}" {% if (form.wave or "1st Wave") == wave_value %}selected{% endif %}>{{ wave_label }}</option>
+                <option value="{{ wave_value }}" {% if (form.wave|wave_label) == wave_value %}selected{% endif %}>{{ wave_label }}</option>
                 {% endfor %}
             </select>
         </label>
