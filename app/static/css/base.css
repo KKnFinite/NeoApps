@@ -3707,25 +3707,37 @@ select::-ms-expand {
     .blueprint-neomotherbrain .master-board-table tr.master-board-row {
         display: grid;
         width: 100%;
-        gap: 5px 4px;
+        gap: 8px;
         margin-bottom: 10px;
         padding: 7px;
     }
 
     .blueprint-neomotherbrain .master-board-table tr.master-arrival-row {
-        grid-template-columns: repeat(12, minmax(0, 1fr)) 28px;
+        grid-template-columns:
+            minmax(74px, 1.35fr)
+            minmax(42px, 0.78fr)
+            minmax(50px, 0.92fr)
+            55px
+            minmax(36px, 0.68fr)
+            26px;
         grid-template-areas:
-            "flight flight origin origin ac ac sta sta sta sta wave wave delete";
+            "flight origin ac sta wave delete";
         align-items: end;
     }
 
     .blueprint-neomotherbrain .master-board-table tr.master-departure-row {
-        grid-template-columns: repeat(12, minmax(0, 1fr)) 28px;
+        grid-template-columns:
+            minmax(74px, 1.3fr)
+            minmax(54px, 0.9fr)
+            minmax(54px, 0.95fr)
+            55px
+            minmax(36px, 0.68fr)
+            26px;
         grid-template-areas:
-            "flight flight destination destination ac ac etd etd etd etd wave wave delete"
-            "pure pure pure pure first first first first second second second second delete";
+            "flight destination ac etd wave ."
+            "pure first second second second delete";
         align-items: end;
-        gap: 7px 4px;
+        gap: 8px;
     }
 
     .blueprint-neomotherbrain .master-board-table td.master-board-cell {
@@ -3735,7 +3747,7 @@ select::-ms-expand {
         min-width: 0;
         padding: 0;
         border-bottom: 0;
-        text-align: left;
+        text-align: center;
     }
 
     .blueprint-neomotherbrain .master-board-table td.master-board-cell::before {
@@ -3743,8 +3755,11 @@ select::-ms-expand {
         min-width: 0;
         color: var(--muted);
         font-size: 0.55rem;
-        line-height: 1;
-        white-space: nowrap;
+        line-height: 0.95;
+        overflow: hidden;
+        text-align: center;
+        text-overflow: clip;
+        white-space: normal;
     }
 
     .blueprint-neomotherbrain .master-board-table .master-cell-actions {
@@ -3763,21 +3778,41 @@ select::-ms-expand {
 
     .blueprint-neomotherbrain .master-board-table input,
     .blueprint-neomotherbrain .master-board-table select {
+        justify-self: stretch;
+        width: 100%;
         min-height: 30px;
-        padding: 4px 3px;
+        min-width: 0;
+        padding: 4px 2px;
         font-size: 0.68rem;
         line-height: 1;
     }
 
-    .blueprint-neomotherbrain .master-board-table .military-time-select {
-        grid-template-columns: minmax(24px, 1fr) 3px minmax(24px, 1fr);
-        gap: 1px;
+    .blueprint-neomotherbrain .master-board-table .flight-number-input {
+        max-width: none;
+        font-size: 0.64rem;
+    }
+
+    .blueprint-neomotherbrain .master-board-table .airport-code-input {
+        max-width: none;
+    }
+
+    .blueprint-neomotherbrain .master-board-table .master-cell-ac-type select,
+    .blueprint-neomotherbrain .master-board-table .master-cell-wave select {
+        max-width: none;
         width: 100%;
     }
 
+    .blueprint-neomotherbrain .master-board-table .military-time-select {
+        grid-template-columns: 26px 3px 26px;
+        gap: 0;
+        justify-self: center;
+        margin-inline: auto;
+        width: 55px;
+    }
+
     .blueprint-neomotherbrain .master-board-table .military-time-select input {
-        width: 100%;
-        min-width: 0;
+        width: 26px;
+        min-width: 26px;
         padding-inline: 1px;
     }
 
