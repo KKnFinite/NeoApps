@@ -72,7 +72,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
                 self.assertNotIn(b"MotherBrain Home", response.data)
                 self.assertNotIn(b"Back to NeoMotherBrain", response.data)
                 self.assertIn(b"BACK TO", response.data)
-                self.assertIn(b'<span class="brand-inline-name">NeoGateway</span>', response.data)
+                self.assertIn(b'class="brand-inline-name neo-node-name node-gateway"', response.data)
                 self.assertIn(b"USER MANAGEMENT", response.data)
                 self.assertIn(b"GATEWAY MATRIX", response.data)
                 self.assertIn(b"MASTER SCHEDULE", response.data)

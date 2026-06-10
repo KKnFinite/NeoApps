@@ -61,7 +61,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"DOOR VIEW", response.data)
         self.assertIn(b"TUG ASSIGNMENTS", response.data)
         self.assertIn(b"BACK TO", response.data)
-        self.assertIn(b'<span class="brand-inline-name">NeoGateway</span>', response.data)
+        self.assertIn(b'class="brand-inline-name neo-node-name node-gateway"', response.data)
 
     def test_neoermac_menu_links_work(self):
         self._login_approved_user()
@@ -89,7 +89,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(title, response.data)
-                self.assertIn(b"BACK TO NeoErmac", response.data)
+                self.assertIn(b'aria-label="BACK TO NeoErmac"', response.data)
                 self.assertIn(b"OPERATIONAL LOGIC WILL BE ADDED IN A LATER PASS.", response.data)
 
     def test_building_lineup_page_renders_runout_list(self):

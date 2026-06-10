@@ -6,7 +6,7 @@
 <section class="neoermac-shell" aria-labelledby="neoermac-title">
     <div class="neoermac-hero">
         <span class="neoermac-kicker">{{ gateway.name }} NEONODE</span>
-        <h1 id="neoermac-title">NeoErmac</h1>
+        <h1 id="neoermac-title"><span class="neo-node-name neo-node-ermac node-ermac" aria-label="NeoErmac"><span class="neo-word">Neo</span><span class="node-word">Ermac</span></span></h1>
         <p>OUTBOUND COMMAND SHELL</p>
     </div>
 
@@ -14,7 +14,7 @@
         {% for label, endpoint in menu_items %}
         <a class="neoermac-menu-link" href="{{ url_for(endpoint) }}">{{ label }}</a>
         {% endfor %}
-        <a class="neoermac-menu-link neoermac-menu-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}">BACK TO <span class="brand-inline-name">NeoGateway</span></a>
+        <a class="neoermac-menu-link neoermac-menu-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="BACK TO NeoGateway">BACK TO <span class="brand-inline-name neo-node-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span></a>
     </nav>
 </section>
 {% endblock %}

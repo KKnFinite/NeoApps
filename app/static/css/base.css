@@ -9,6 +9,148 @@
     --steel-dark: #51575f;
     --red: #ff2f2f;
     --red-soft: rgba(255, 47, 47, 0.2);
+    --neo-silver: #d8dde5;
+    --neo-bright-silver: #f4f7fb;
+    --node-gateway-primary: #d95a1f;
+    --node-gateway-secondary: #8f2f18;
+    --node-gateway-highlight: #f0a33a;
+    --node-gateway-primary-rgb: 217, 90, 31;
+    --node-gateway-highlight-rgb: 240, 163, 58;
+    --node-motherbrain-primary: #cf6a6e;
+    --node-motherbrain-secondary: #5a1d23;
+    --node-motherbrain-highlight: #ff8a7a;
+    --node-motherbrain-primary-rgb: 207, 106, 110;
+    --node-motherbrain-highlight-rgb: 255, 138, 122;
+    --node-sektor-primary: #b5121b;
+    --node-sektor-secondary: #343a40;
+    --node-sektor-highlight: #ff4a1c;
+    --node-sektor-primary-rgb: 181, 18, 27;
+    --node-sektor-highlight-rgb: 255, 74, 28;
+    --node-ermac-primary: #8f1826;
+    --node-ermac-secondary: #36e27b;
+    --node-ermac-highlight: #9dffd0;
+    --node-ermac-primary-rgb: 143, 24, 38;
+    --node-ermac-highlight-rgb: 157, 255, 208;
+    --node-scorpion-primary: #f4c21f;
+    --node-scorpion-secondary: #8a4f12;
+    --node-scorpion-highlight: #ff8c1a;
+    --node-scorpion-primary-rgb: 244, 194, 31;
+    --node-scorpion-highlight-rgb: 255, 140, 26;
+    --node-reptile-primary: #70e13b;
+    --node-reptile-secondary: #6f8f16;
+    --node-reptile-highlight: #b6ff2e;
+    --node-reptile-primary-rgb: 112, 225, 59;
+    --node-reptile-highlight-rgb: 182, 255, 46;
+    --node-subzero-primary: #4db7ff;
+    --node-subzero-secondary: #2c5d7a;
+    --node-subzero-highlight: #c8f4ff;
+    --node-subzero-primary-rgb: 77, 183, 255;
+    --node-subzero-highlight-rgb: 200, 244, 255;
+    --node-rain-primary: #7f4dff;
+    --node-rain-secondary: #c7a64a;
+    --node-rain-highlight: #c8a6ff;
+    --node-rain-primary-rgb: 127, 77, 255;
+    --node-rain-highlight-rgb: 200, 166, 255;
+}
+
+.theme-gateway,
+.node-gateway {
+    --node-primary: var(--node-gateway-primary);
+    --node-secondary: var(--node-gateway-secondary);
+    --node-highlight: var(--node-gateway-highlight);
+    --node-rgb: var(--node-gateway-primary-rgb);
+    --node-highlight-rgb: var(--node-gateway-highlight-rgb);
+}
+
+.theme-motherbrain,
+.node-motherbrain,
+.neo-node-motherbrain {
+    --node-primary: var(--node-motherbrain-primary);
+    --node-secondary: var(--node-motherbrain-secondary);
+    --node-highlight: var(--node-motherbrain-highlight);
+    --node-rgb: var(--node-motherbrain-primary-rgb);
+    --node-highlight-rgb: var(--node-motherbrain-highlight-rgb);
+}
+
+.theme-sektor,
+.node-sektor {
+    --node-primary: var(--node-sektor-primary);
+    --node-secondary: var(--node-sektor-secondary);
+    --node-highlight: var(--node-sektor-highlight);
+    --node-rgb: var(--node-sektor-primary-rgb);
+    --node-highlight-rgb: var(--node-sektor-highlight-rgb);
+}
+
+.theme-ermac,
+.node-ermac,
+.neo-node-ermac {
+    --node-primary: var(--node-ermac-primary);
+    --node-secondary: var(--node-ermac-secondary);
+    --node-highlight: var(--node-ermac-highlight);
+    --node-rgb: var(--node-ermac-primary-rgb);
+    --node-highlight-rgb: var(--node-ermac-highlight-rgb);
+}
+
+.theme-scorpion,
+.node-scorpion {
+    --node-primary: var(--node-scorpion-primary);
+    --node-secondary: var(--node-scorpion-secondary);
+    --node-highlight: var(--node-scorpion-highlight);
+    --node-rgb: var(--node-scorpion-primary-rgb);
+    --node-highlight-rgb: var(--node-scorpion-highlight-rgb);
+}
+
+.theme-reptile,
+.node-reptile {
+    --node-primary: var(--node-reptile-primary);
+    --node-secondary: var(--node-reptile-secondary);
+    --node-highlight: var(--node-reptile-highlight);
+    --node-rgb: var(--node-reptile-primary-rgb);
+    --node-highlight-rgb: var(--node-reptile-highlight-rgb);
+}
+
+.theme-subzero,
+.node-subzero {
+    --node-primary: var(--node-subzero-primary);
+    --node-secondary: var(--node-subzero-secondary);
+    --node-highlight: var(--node-subzero-highlight);
+    --node-rgb: var(--node-subzero-primary-rgb);
+    --node-highlight-rgb: var(--node-subzero-highlight-rgb);
+}
+
+.theme-rain,
+.node-rain {
+    --node-primary: var(--node-rain-primary);
+    --node-secondary: var(--node-rain-secondary);
+    --node-highlight: var(--node-rain-highlight);
+    --node-rgb: var(--node-rain-primary-rgb);
+    --node-highlight-rgb: var(--node-rain-highlight-rgb);
+}
+
+.neo-node-name {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    line-height: 1;
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: nowrap;
+}
+
+.neo-word,
+.neo-node-prefix {
+    color: var(--neo-bright-silver);
+    text-shadow:
+        0 0 10px rgba(244, 247, 251, 0.3),
+        0 2px 0 rgba(0, 0, 0, 0.9);
+}
+
+.node-word,
+.neo-node-suffix {
+    color: var(--node-primary, var(--red));
+    text-shadow:
+        0 0 12px rgba(var(--node-rgb, 255, 47, 47), 0.5),
+        0 2px 0 rgba(0, 0, 0, 0.9);
 }
 
 * {
@@ -335,39 +477,8 @@ a {
     text-transform: none;
 }
 
-.neo-node-name {
-    --neo-node-color: var(--red);
-    --neo-node-rgb: 255, 47, 47;
+.brand-inline-name.neo-node-name {
     display: inline-flex;
-    align-items: baseline;
-    justify-content: center;
-    line-height: 1;
-    letter-spacing: 0;
-    white-space: nowrap;
-}
-
-.neo-node-prefix {
-    color: #e8edf2;
-    text-shadow:
-        0 0 10px rgba(235, 241, 246, 0.28),
-        0 2px 0 rgba(0, 0, 0, 0.9);
-}
-
-.neo-node-suffix {
-    color: var(--neo-node-color);
-    text-shadow:
-        0 0 12px rgba(var(--neo-node-rgb), 0.5),
-        0 2px 0 rgba(0, 0, 0, 0.9);
-}
-
-.neo-node-motherbrain {
-    --neo-node-color: #ff3b46;
-    --neo-node-rgb: 255, 59, 70;
-}
-
-.neo-node-ermac {
-    --neo-node-color: #d41830;
-    --neo-node-rgb: 212, 24, 48;
 }
 
 .motherbrain-fixed-header .nav a.is-active,
@@ -520,7 +631,7 @@ a {
 }
 
 .neoapp-rail a {
-    --node-color: var(--red);
+    --node-primary: var(--red);
     --node-rgb: 255, 47, 47;
     --node-art: none;
     --node-logo: none;
@@ -624,37 +735,37 @@ a {
 }
 
 .neoapp-scorpion {
-    --node-color: #ffc247;
-    --node-rgb: 255, 194, 71;
+    --node-primary: var(--node-scorpion-primary);
+    --node-rgb: var(--node-scorpion-primary-rgb);
     --node-art: url("https://commons.wikimedia.org/wiki/Special:Redirect/file/Scorpion_MK11.png");
 }
 
 .neoapp-reptile {
-    --node-color: #5dff75;
-    --node-rgb: 93, 255, 117;
+    --node-primary: var(--node-reptile-primary);
+    --node-rgb: var(--node-reptile-primary-rgb);
     --node-art: url("https://mortalkombat.fandom.com/wiki/Special:Redirect/file/Reptile_render_mk2011.png");
 }
 
 .neoapp-ermac {
-    --node-color: #ff304a;
-    --node-rgb: 255, 48, 74;
+    --node-primary: var(--node-ermac-primary);
+    --node-rgb: var(--node-ermac-primary-rgb);
     --node-art: url("https://mortalkombat.fandom.com/wiki/Special:Redirect/file/Ermac_render_mk2011.png");
 }
 
 .neoapp-subzero {
-    --node-color: #4cbcff;
-    --node-rgb: 76, 188, 255;
+    --node-primary: var(--node-subzero-primary);
+    --node-rgb: var(--node-subzero-primary-rgb);
     --node-art: url("https://commons.wikimedia.org/wiki/Special:Redirect/file/Sub-Zero_Mortal_Kombat_X.png");
 }
 
 .neoapp-sektor {
-    --node-color: #ff2f2f;
-    --node-rgb: 255, 47, 47;
+    --node-primary: var(--node-sektor-primary);
+    --node-rgb: var(--node-sektor-primary-rgb);
 }
 
 .neoapp-rain {
-    --node-color: #b05cff;
-    --node-rgb: 176, 92, 255;
+    --node-primary: var(--node-rain-primary);
+    --node-rgb: var(--node-rain-primary-rgb);
     --node-art: url("https://mortalkombat.fandom.com/wiki/Special:Redirect/file/Rain_render_mk2011.png");
 }
 
@@ -880,12 +991,12 @@ a {
 }
 
 .neoermac-kicker {
-    color: #45ff86;
+    color: var(--node-ermac-secondary);
     font-size: 0.72rem;
     font-weight: 900;
     letter-spacing: 0.16em;
     text-transform: uppercase;
-    text-shadow: 0 0 14px rgba(69, 255, 134, 0.34);
+    text-shadow: 0 0 14px rgba(54, 226, 123, 0.34);
 }
 
 .neoermac-hero h1 {
@@ -941,13 +1052,13 @@ a {
 
 .neoermac-menu-link:hover,
 .neoermac-menu-link:focus-visible {
-    border-color: rgba(69, 255, 134, 0.72);
+    border-color: rgba(54, 226, 123, 0.72);
     outline: none;
     color: #ffffff;
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.2),
         0 0 26px rgba(255, 31, 55, 0.3),
-        0 0 18px rgba(69, 255, 134, 0.18);
+        0 0 18px rgba(54, 226, 123, 0.18);
 }
 
 .neoermac-menu-link-secondary {
@@ -975,13 +1086,13 @@ a {
 
 .neoermac-readonly-note {
     margin: -6px 0 0;
-    color: #45ff86;
+    color: var(--node-ermac-secondary);
     font-size: 0.78rem;
     font-weight: 950;
     letter-spacing: 0.12em;
     text-align: center;
     text-transform: uppercase;
-    text-shadow: 0 0 14px rgba(69, 255, 134, 0.28);
+    text-shadow: 0 0 14px rgba(54, 226, 123, 0.28);
 }
 
 .neoermac-lineup-form {
@@ -1004,7 +1115,7 @@ a {
     border-radius: 6px;
     background:
         radial-gradient(circle at 10% 0%, rgba(255, 31, 55, 0.14), transparent 16rem),
-        radial-gradient(circle at 92% 12%, rgba(69, 255, 134, 0.08), transparent 12rem),
+        radial-gradient(circle at 92% 12%, rgba(54, 226, 123, 0.08), transparent 12rem),
         linear-gradient(135deg, rgba(238, 246, 255, 0.08), transparent 34%),
         rgba(5, 6, 9, 0.76);
     box-shadow:
@@ -1070,10 +1181,10 @@ a {
 }
 
 .neoermac-destination-select:focus {
-    border-color: rgba(69, 255, 134, 0.72);
+    border-color: rgba(54, 226, 123, 0.72);
     outline: none;
     box-shadow:
-        0 0 0 3px rgba(69, 255, 134, 0.1),
+        0 0 0 3px rgba(54, 226, 123, 0.1),
         0 0 18px rgba(255, 31, 55, 0.16);
 }
 
@@ -1112,10 +1223,10 @@ a {
     }
 
     .neoermac-runout-card:first-child {
-        border-color: rgba(69, 255, 134, 0.38);
+        border-color: rgba(54, 226, 123, 0.38);
         box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.08),
-            0 0 24px rgba(69, 255, 134, 0.12),
+            0 0 24px rgba(54, 226, 123, 0.12),
             0 0 22px rgba(255, 31, 55, 0.1);
     }
 
@@ -1175,10 +1286,10 @@ a {
     }
 
     .neoermac-door-context strong {
-        color: #45ff86;
+        color: var(--node-ermac-secondary);
         font-size: 0.7rem;
         letter-spacing: 0.08em;
-        text-shadow: 0 0 14px rgba(69, 255, 134, 0.3);
+        text-shadow: 0 0 14px rgba(54, 226, 123, 0.3);
     }
 
     .neoermac-runout-card:first-child .neoermac-door-context strong {
@@ -1263,7 +1374,7 @@ a {
 
 .rfd-node-tile {
     --node-rgb: 255, 47, 47;
-    --node-color: #ff4b2f;
+    --node-primary: var(--red);
     position: relative;
     isolation: isolate;
     display: flex;
@@ -1325,25 +1436,21 @@ a {
 .rfd-node-name {
     position: relative;
     z-index: 1;
-    display: inline-flex;
-    align-items: baseline;
-    justify-content: center;
-    line-height: 1;
     font-size: clamp(1rem, 2.05vw, 1.42rem);
     font-weight: 900;
-    letter-spacing: 0;
-    white-space: nowrap;
 }
 
-.rfd-node-prefix {
-    color: #f8fbff;
+.rfd-node-prefix,
+.rfd-node-tile .neo-word {
+    color: var(--neo-bright-silver);
     text-shadow:
-        0 0 10px rgba(255, 255, 255, 0.28),
+        0 0 10px rgba(244, 247, 251, 0.28),
         0 2px 0 rgba(0, 0, 0, 0.9);
 }
 
-.rfd-node-suffix {
-    color: var(--node-color);
+.rfd-node-suffix,
+.rfd-node-tile .node-word {
+    color: var(--node-primary);
     text-shadow:
         0 0 10px rgba(var(--node-rgb), 0.54),
         0 2px 0 rgba(0, 0, 0, 0.9);
@@ -1369,14 +1476,16 @@ a {
     opacity: 0.72;
 }
 
-.rfd-node-tile:hover .rfd-node-prefix {
+.rfd-node-tile:hover .rfd-node-prefix,
+.rfd-node-tile:hover .neo-word {
     text-shadow:
-        0 0 14px rgba(255, 255, 255, 0.46),
-        0 0 22px rgba(255, 255, 255, 0.18),
+        0 0 14px rgba(244, 247, 251, 0.46),
+        0 0 22px rgba(244, 247, 251, 0.18),
         0 2px 0 rgba(0, 0, 0, 0.9);
 }
 
-.rfd-node-tile:hover .rfd-node-suffix {
+.rfd-node-tile:hover .rfd-node-suffix,
+.rfd-node-tile:hover .node-word {
     text-shadow:
         0 0 14px rgba(var(--node-rgb), 0.78),
         0 0 26px rgba(var(--node-rgb), 0.42),
@@ -1390,8 +1499,10 @@ a {
 }
 
 .rfd-node-motherbrain {
-    --node-rgb: 255, 91, 42;
-    --node-color: #ff642f;
+    --node-primary: var(--node-motherbrain-primary);
+    --node-secondary: var(--node-motherbrain-secondary);
+    --node-highlight: var(--node-motherbrain-highlight);
+    --node-rgb: var(--node-motherbrain-primary-rgb);
 }
 
 .rfd-motherbrain-launch {
@@ -1399,33 +1510,45 @@ a {
 }
 
 .rfd-node-sektor {
-    --node-rgb: 255, 63, 32;
-    --node-color: #ff452a;
+    --node-primary: var(--node-sektor-primary);
+    --node-secondary: var(--node-sektor-secondary);
+    --node-highlight: var(--node-sektor-highlight);
+    --node-rgb: var(--node-sektor-primary-rgb);
 }
 
 .rfd-node-scorpion {
-    --node-rgb: 255, 202, 48;
-    --node-color: #ffca30;
+    --node-primary: var(--node-scorpion-primary);
+    --node-secondary: var(--node-scorpion-secondary);
+    --node-highlight: var(--node-scorpion-highlight);
+    --node-rgb: var(--node-scorpion-primary-rgb);
 }
 
 .rfd-node-reptile {
-    --node-rgb: 82, 225, 104;
-    --node-color: #52e168;
+    --node-primary: var(--node-reptile-primary);
+    --node-secondary: var(--node-reptile-secondary);
+    --node-highlight: var(--node-reptile-highlight);
+    --node-rgb: var(--node-reptile-primary-rgb);
 }
 
 .rfd-node-ermac {
-    --node-rgb: 212, 24, 48;
-    --node-color: #d41830;
+    --node-primary: var(--node-ermac-primary);
+    --node-secondary: var(--node-ermac-secondary);
+    --node-highlight: var(--node-ermac-highlight);
+    --node-rgb: var(--node-ermac-primary-rgb);
 }
 
 .rfd-node-subzero {
-    --node-rgb: 113, 218, 255;
-    --node-color: #71daff;
+    --node-primary: var(--node-subzero-primary);
+    --node-secondary: var(--node-subzero-secondary);
+    --node-highlight: var(--node-subzero-highlight);
+    --node-rgb: var(--node-subzero-primary-rgb);
 }
 
 .rfd-node-rain {
-    --node-rgb: 179, 102, 255;
-    --node-color: #b366ff;
+    --node-primary: var(--node-rain-primary);
+    --node-secondary: var(--node-rain-secondary);
+    --node-highlight: var(--node-rain-highlight);
+    --node-rgb: var(--node-rain-primary-rgb);
 }
 
 .rfd-node-logo {

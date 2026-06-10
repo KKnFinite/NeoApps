@@ -28,13 +28,13 @@
                 <strong>{{ motherbrain_current_label }}</strong>
             </div>
             {% else %}
-            <a class="brand" href="{% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}{{ url_for('neomotherbrain.rfd_hub') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}">
+            <a class="brand" href="{% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}{{ url_for('neomotherbrain.rfd_hub') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}" aria-label="{% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}NeoGateway - {{ default_gateway.name }}{% else %}NeoGateway{% endif %}">
                 <span>
                     <strong>
                         {% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}
-                        NeoGateway - {{ default_gateway.name }}
+                        <span class="neo-node-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span> - {{ default_gateway.name }}
                         {% else %}
-                        NeoGateway
+                        <span class="neo-node-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span>
                         {% endif %}
                     </strong>
                     {% if not (current_user.is_authenticated and not public_landing|default(false)) %}
@@ -58,7 +58,7 @@
                     <span class="motherbrain-menu-icon" aria-hidden="true"></span>
                 </button>
                 <nav class="nav motherbrain-header-nav" id="motherbrain-mobile-menu" aria-label="Primary" data-motherbrain-menu-panel>
-                    <a class="motherbrain-nav-link motherbrain-nav-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}">BACK TO <span class="brand-inline-name">NeoGateway</span></a>
+                    <a class="motherbrain-nav-link motherbrain-nav-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="BACK TO NeoGateway">BACK TO <span class="brand-inline-name neo-node-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span></a>
                     <a class="motherbrain-nav-link{% if is_manage_sort_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.manage_sort') }}" {% if is_manage_sort_page %}aria-current="page"{% endif %}>MANAGE SORT</a>
                     <a class="motherbrain-nav-link{% if is_master_schedule_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule') }}" {% if is_master_schedule_page %}aria-current="page"{% endif %}>MASTER SCHEDULE</a>
                     <a class="motherbrain-nav-link{% if is_gateway_matrix_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.gateway_matrix') }}" {% if is_gateway_matrix_page %}aria-current="page"{% endif %}>GATEWAY MATRIX</a>
@@ -92,7 +92,7 @@
             {% block content %}{% endblock %}
             {% if uses_motherbrain_header and not is_motherbrain_landing %}
             <div class="motherbrain-main-menu-return">
-                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}">BACK TO NeoMotherBrain MAIN MENU</a>
+                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}" aria-label="BACK TO NeoMotherBrain MAIN MENU">BACK TO <span class="neo-node-name neo-node-motherbrain node-motherbrain"><span class="neo-word">Neo</span><span class="node-word">MotherBrain</span></span> MAIN MENU</a>
             </div>
             {% endif %}
         </main>

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% macro node_label(name) -%}
-<span class="rfd-node-name"><span class="rfd-node-prefix">Neo</span><span class="rfd-node-suffix">{{ name }}</span></span>
+{% macro node_label(slug, name) -%}
+<span class="neo-node-name rfd-node-name node-{{ slug }}" aria-label="Neo{{ name }}"><span class="neo-word">Neo</span><span class="node-word">{{ name }}</span></span>
 {%- endmacro %}
 
 {% block title %}{{ gateway.name }} Command Hub | NeoGateway{% endblock %}
@@ -15,11 +15,11 @@
 
         {% if can_enter_motherbrain %}
         <a class="rfd-node-tile rfd-node-motherbrain rfd-motherbrain-launch" href="{{ url_for('neomotherbrain.motherbrain') }}" aria-label="NeoMotherBrain">
-            {{ node_label("MotherBrain") }}
+            {{ node_label("motherbrain", "MotherBrain") }}
         </a>
         {% else %}
         <article class="rfd-node-tile rfd-node-disabled rfd-node-motherbrain rfd-motherbrain-launch" aria-disabled="true" aria-label="NeoMotherBrain">
-            {{ node_label("MotherBrain") }}
+            {{ node_label("motherbrain", "MotherBrain") }}
         </article>
         {% endif %}
 
@@ -27,18 +27,18 @@
             <div class="rfd-node-column rfd-node-column-left" aria-label="{{ gateway.name }} left NeoNodes">
                 {% if can_launch_sektor %}
                 <a class="rfd-node-tile rfd-node-sektor" href="{{ url_for('neomotherbrain.sektor_launch') }}" aria-label="NeoSektor">
-                    {{ node_label("Sektor") }}
+                    {{ node_label("sektor", "Sektor") }}
                 </a>
                 {% else %}
                 <article class="rfd-node-tile rfd-node-disabled rfd-node-sektor" aria-disabled="true" aria-label="NeoSektor">
-                    {{ node_label("Sektor") }}
+                    {{ node_label("sektor", "Sektor") }}
                 </article>
                 {% endif %}
                 <article class="rfd-node-tile rfd-node-placeholder rfd-node-reptile" aria-disabled="true" aria-label="NeoReptile">
-                    {{ node_label("Reptile") }}
+                    {{ node_label("reptile", "Reptile") }}
                 </article>
                 <article class="rfd-node-tile rfd-node-placeholder rfd-node-rain" aria-disabled="true" aria-label="NeoRain">
-                    {{ node_label("Rain") }}
+                    {{ node_label("rain", "Rain") }}
                 </article>
             </div>
 
@@ -49,18 +49,18 @@
             <div class="rfd-node-column rfd-node-column-right" aria-label="{{ gateway.name }} right NeoNodes">
                 {% if can_launch_ermac %}
                 <a class="rfd-node-tile rfd-node-ermac" href="{{ url_for('neoermac.index') }}" aria-label="NeoErmac">
-                    {{ node_label("Ermac") }}
+                    {{ node_label("ermac", "Ermac") }}
                 </a>
                 {% else %}
                 <article class="rfd-node-tile rfd-node-disabled rfd-node-ermac" aria-disabled="true" aria-label="NeoErmac">
-                    {{ node_label("Ermac") }}
+                    {{ node_label("ermac", "Ermac") }}
                 </article>
                 {% endif %}
-                <article class="rfd-node-tile rfd-node-placeholder rfd-node-subzero" aria-disabled="true" aria-label="NeoSubZero">
-                    {{ node_label("SubZero") }}
+                <article class="rfd-node-tile rfd-node-placeholder rfd-node-subzero" aria-disabled="true" aria-label="NeoSub-Zero">
+                    {{ node_label("subzero", "Sub-Zero") }}
                 </article>
                 <article class="rfd-node-tile rfd-node-placeholder rfd-node-scorpion" aria-disabled="true" aria-label="NeoScorpion">
-                    {{ node_label("Scorpion") }}
+                    {{ node_label("scorpion", "Scorpion") }}
                 </article>
             </div>
         </div>

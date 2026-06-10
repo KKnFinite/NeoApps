@@ -190,7 +190,7 @@ class AccessControlTest(unittest.TestCase):
             b"NeoScorpion",
             b"NeoReptile",
             b"NeoErmac",
-            b"NeoSubZero",
+            b"NeoSub-Zero",
             b"NeoRain",
         ):
             self.assertIn(node_name, hub.data)
@@ -207,7 +207,7 @@ class AccessControlTest(unittest.TestCase):
         )
         right_order = (
             "NeoErmac",
-            "NeoSubZero",
+            "NeoSub-Zero",
             "NeoScorpion",
         )
         left_positions = [left_column.index(f'aria-label="{node}"') for node in left_order]

@@ -5,14 +5,14 @@
 {% block content %}
 <section class="neoermac-shell neoermac-placeholder" aria-labelledby="neoermac-page-title">
     <div class="neoermac-hero">
-        <span class="neoermac-kicker">NeoErmac</span>
+        <span class="neoermac-kicker"><span class="neo-node-name neo-node-ermac node-ermac" aria-label="NeoErmac"><span class="neo-word">Neo</span><span class="node-word">Ermac</span></span></span>
         <h1 id="neoermac-page-title">{{ title }}</h1>
         <p>{{ gateway.name }} PLACEHOLDER SHELL</p>
     </div>
 
     <div class="neoermac-placeholder-panel">
         <p>OPERATIONAL LOGIC WILL BE ADDED IN A LATER PASS.</p>
-        <a class="neoermac-menu-link neoermac-menu-link-secondary" href="{{ url_for('neoermac.index') }}">BACK TO NeoErmac</a>
+        <a class="neoermac-menu-link neoermac-menu-link-secondary" href="{{ url_for('neoermac.index') }}" aria-label="BACK TO NeoErmac">BACK TO <span class="neo-node-name neo-node-ermac node-ermac"><span class="neo-word">Neo</span><span class="node-word">Ermac</span></span></a>
     </div>
 </section>
 {% endblock %}
