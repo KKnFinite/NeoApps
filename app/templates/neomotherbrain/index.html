@@ -8,28 +8,23 @@
         <img src="{{ url_for('static', filename='images/motherbrain_logo1.png') }}" alt="MotherBrain logo">
     </div>
     <section class="motherbrain-dashboard" aria-labelledby="motherbrain-dashboard-title">
-        <h1 id="motherbrain-dashboard-title">NeoMotherBrain DASHBOARD</h1>
+        <h1 id="motherbrain-dashboard-title"><span class="neo-node-name neo-node-motherbrain"><span class="neo-node-prefix">Neo</span><span class="neo-node-suffix">MotherBrain</span></span> DASHBOARD</h1>
         <div class="motherbrain-dashboard-grid">
             <a class="motherbrain-dashboard-card" href="{{ url_for('neomotherbrain.manage_sort') }}">
                 <strong>MANAGE SORT</strong>
-                <span>MANAGE CURRENT SORTS</span>
             </a>
             <a class="motherbrain-dashboard-card" href="{{ url_for('neomotherbrain.master_schedule') }}">
                 <strong>MASTER SCHEDULE</strong>
-                <span>MANAGE MASTER FLIGHT SCHEDULE</span>
             </a>
             <a class="motherbrain-dashboard-card" href="{{ url_for('neomotherbrain.gateway_matrix') }}">
                 <strong>GATEWAY MATRIX</strong>
-                <span>ASSIGN ACTIVE SORTS</span>
             </a>
             {% if can_manage_system(current_user) %}
             <a class="motherbrain-dashboard-card" href="{{ url_for('auth.users') }}">
                 <strong>USER MANAGEMENT</strong>
-                <span>USER AND ACCESS CONTROLS</span>
             </a>
             <a class="motherbrain-dashboard-card" href="{{ url_for('auth.permission_rules') }}">
                 <strong>PERMISSION RULES</strong>
-                <span>SCREEN ACTION CONTROLS</span>
             </a>
             {% endif %}
         </div>
