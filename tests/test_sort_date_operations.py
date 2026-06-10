@@ -56,6 +56,52 @@ class SortDateOperationsTest(unittest.TestCase):
         self.assertEqual(data["adjusted_first_mix_pull_time"], time(2, 0))
         self.assertEqual(data["adjusted_final_mix_pull_time"], time(2, 15))
 
+    def test_wave_specific_window_overrides_default_window(self):
+        operation = self._operation(
+            window_minutes=20,
+            first_wave_window_minutes=5,
+            second_wave_window_minutes=30,
+        )
+        first_wave_mission = self._mission(
+            mission_type="departure",
+            wave="1st Wave",
+            planned_datetime_local=datetime(2026, 6, 1, 2, 10),
+            pure_pull_time_local=time(1, 20),
+        )
+        second_wave_mission = self._mission(
+            mission_type="departure",
+            wave="2nd Wave",
+            planned_datetime_local=datetime(2026, 6, 1, 2, 10),
+            pure_pull_time_local=time(1, 20),
+        )
+
+        first_wave_data = mission_display_timing_data(first_wave_mission, operation)
+        second_wave_data = mission_display_timing_data(second_wave_mission, operation)
+
+        self.assertEqual(first_wave_data["effective_window_minutes"], 5)
+        self.assertEqual(first_wave_data["adjusted_planned_departure_time"], datetime(2026, 6, 1, 2, 15))
+        self.assertEqual(first_wave_data["adjusted_pure_pull_time"], time(1, 25))
+        self.assertEqual(second_wave_data["effective_window_minutes"], 30)
+        self.assertEqual(second_wave_data["adjusted_planned_departure_time"], datetime(2026, 6, 1, 2, 40))
+        self.assertEqual(second_wave_data["adjusted_pure_pull_time"], time(1, 50))
+
+    def test_wave_window_falls_back_to_default_when_blank(self):
+        operation = self._operation(
+            window_minutes=20,
+            first_wave_window_minutes=None,
+            second_wave_window_minutes=35,
+        )
+        mission = self._mission(
+            mission_type="departure",
+            wave="1st Wave",
+            planned_datetime_local=datetime(2026, 6, 1, 2, 10),
+        )
+
+        data = mission_display_timing_data(mission, operation)
+
+        self.assertEqual(data["effective_window_minutes"], 20)
+        self.assertEqual(data["adjusted_planned_departure_time"], datetime(2026, 6, 1, 2, 30))
+
     def test_window_does_not_mutate_base_mission_times(self):
         operation = self._operation(window_minutes=20)
         mission = self._mission(
@@ -108,12 +154,16 @@ class SortDateOperationsTest(unittest.TestCase):
         self.assertIs(mission.sort_date_operation, operation)
         self.assertIn(mission, operation.missions)
 
-    def _operation(self, window_minutes=0):
+    def _operation(self, window_minutes=0, **overrides):
+        values = {
+            "sort_date": date(2026, 6, 1),
+            "gateway_code": "RFD",
+            "sort_name": "night",
+            "window_minutes": window_minutes,
+        }
+        values.update(overrides)
         return SortDateOperation(
-            sort_date=date(2026, 6, 1),
-            gateway_code="RFD",
-            sort_name="night",
-            window_minutes=window_minutes,
+            **values,
         )
 
     def _mission(self, mission_type, flight_number="5X123", **overrides):

@@ -18,6 +18,8 @@ from app.services.flight_rules import (
     derive_aircraft_type_from_tail_number,
 )
 
+WAVE_OPTIONS = ("1st Wave", "2nd Wave")
+
 
 def create_sort_date_operation(
     sort_date,
@@ -254,6 +256,41 @@ def normalize_window_minutes(window_minutes):
     return window_minutes
 
 
+def normalize_optional_window_minutes(window_minutes):
+    if window_minutes in (None, ""):
+        return None
+
+    return normalize_window_minutes(window_minutes)
+
+
+def normalize_wave(wave):
+    wave = str(wave or "").strip().lower()
+    if wave in ("1", "1st", "first", "first wave", "1st wave"):
+        return "1st Wave"
+    if wave in ("2", "2nd", "second", "second wave", "2nd wave"):
+        return "2nd Wave"
+    return "1st Wave"
+
+
+def effective_window_minutes_for_mission(mission, operation=None):
+    default_window = normalize_window_minutes(
+        getattr(operation, "window_minutes", 0) if operation else 0
+    )
+    if not operation:
+        return default_window
+
+    wave = normalize_wave(getattr(mission, "wave", None))
+    if wave == "1st Wave":
+        wave_window = getattr(operation, "first_wave_window_minutes", None)
+    else:
+        wave_window = getattr(operation, "second_wave_window_minutes", None)
+
+    if wave_window is None:
+        return default_window
+
+    return normalize_window_minutes(wave_window)
+
+
 def apply_window_minutes(value, window_minutes):
     if value is None:
         return None
@@ -270,12 +307,12 @@ def apply_window_minutes(value, window_minutes):
 
 
 def mission_display_timing_data(mission, operation=None):
-    window_minutes = normalize_window_minutes(
-        getattr(operation, "window_minutes", 0) if operation else 0
-    )
+    window_minutes = effective_window_minutes_for_mission(mission, operation)
 
     if mission.mission_type == "departure":
         return {
+            "wave": normalize_wave(getattr(mission, "wave", None)),
+            "effective_window_minutes": window_minutes,
             "base_planned_departure_time": mission.planned_datetime_local,
             "adjusted_planned_departure_time": apply_window_minutes(
                 mission.planned_datetime_local,
@@ -299,6 +336,8 @@ def mission_display_timing_data(mission, operation=None):
         }
 
     return {
+        "wave": normalize_wave(getattr(mission, "wave", None)),
+        "effective_window_minutes": window_minutes,
         "base_planned_arrival_time": mission.planned_datetime_local,
         "adjusted_planned_arrival_time": mission.planned_datetime_local,
         "base_eta_time_utc": mission.eta_datetime_utc,
@@ -327,6 +366,7 @@ def _build_mission_from_master(operation, master_row, sort_date):
         sort_name=master_row.sort_name,
         mission_type=master_row.mission_type,
         mission_source="master",
+        wave=normalize_wave(getattr(master_row, "wave", None)),
         master_flight_schedule_id=master_row.id,
         flight_number=master_row.flight_number.strip().upper(),
         origin=master_row.origin.strip().upper(),
@@ -372,6 +412,7 @@ def _apply_master_template_to_mission(mission, master_row, operation):
     mission.sort_name = master_row.sort_name
     mission.mission_type = master_row.mission_type
     mission.mission_source = "master"
+    mission.wave = normalize_wave(getattr(master_row, "wave", None))
     mission.master_flight_schedule_id = master_row.id
     mission.flight_number = master_row.flight_number.strip().upper()
     mission.origin = master_row.origin.strip().upper()
@@ -414,6 +455,7 @@ def _master_template_snapshot(mission):
         mission.sort_name,
         mission.mission_type,
         mission.mission_source,
+        mission.wave,
         mission.master_flight_schedule_id,
         mission.flight_number,
         mission.origin,

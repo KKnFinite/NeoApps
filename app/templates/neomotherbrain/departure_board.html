@@ -19,6 +19,7 @@
             <thead>
                 <tr>
                     <th>FLIGHT</th>
+                    <th>WAVE</th>
                     <th>TAIL</th>
                     <th>DESTINATION</th>
                     <th>PARKING</th>
@@ -33,6 +34,7 @@
                 {% set timing = row.timing %}
                 <tr>
                     <td>{{ mission.flight_number|upper }}</td>
+                    <td>{{ mission.wave or "1st Wave" }}</td>
                     <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
                     <td>{{ mission.destination|upper }}</td>
                     <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>
@@ -45,7 +47,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7">NO DEPARTURE MISSIONS FOUND.</td>
+                    <td colspan="8">NO DEPARTURE MISSIONS FOUND.</td>
                 </tr>
                 {% endfor %}
             </tbody>

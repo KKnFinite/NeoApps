@@ -33,6 +33,10 @@
             <dd>{{ master_schedule.mission_type|title }}</dd>
         </div>
         <div>
+            <dt>WAVE</dt>
+            <dd>{{ master_schedule.wave or "1st Wave" }}</dd>
+        </div>
+        <div>
             <dt>AC Type</dt>
             <dd>{{ master_schedule.aircraft_type or "-" }}</dd>
         </div>

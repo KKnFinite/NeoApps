@@ -36,6 +36,14 @@
 </select>
 {% endmacro %}
 
+{% macro wave_select(name, selected_value="1st Wave") %}
+<select name="{{ name }}" aria-label="Wave">
+    {% for wave_value, wave_label in wave_options %}
+    <option value="{{ wave_value }}" {% if (selected_value or "1st Wave") == wave_value %}selected{% endif %}>{{ wave_label }}</option>
+    {% endfor %}
+</select>
+{% endmacro %}
+
 {% macro arrival_row(schedule, index, is_new=False) %}
 {% set row_index = "arrival_" ~ index %}
 {% set prefix = "row_" ~ row_index ~ "_" %}
@@ -50,6 +58,9 @@
     </td>
     <td class="master-board-cell master-cell-ac-type" data-label="AC Type">
         {{ aircraft_type_select(prefix ~ "aircraft_type", schedule.aircraft_type if schedule and schedule.aircraft_type else "") }}
+    </td>
+    <td class="master-board-cell master-cell-wave" data-label="Wave">
+        {{ wave_select(prefix ~ "wave", schedule.wave if schedule and schedule.wave else "1st Wave") }}
     </td>
     <td class="master-board-cell master-cell-sta" data-label="STA">
         {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
@@ -78,6 +89,9 @@
     </td>
     <td class="master-board-cell master-cell-ac-type" data-label="AC Type">
         {{ aircraft_type_select(prefix ~ "aircraft_type", schedule.aircraft_type if schedule and schedule.aircraft_type else "") }}
+    </td>
+    <td class="master-board-cell master-cell-wave" data-label="Wave">
+        {{ wave_select(prefix ~ "wave", schedule.wave if schedule and schedule.wave else "1st Wave") }}
     </td>
     <td class="master-board-cell master-cell-etd" data-label="ETD/STD">
         {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
@@ -117,11 +131,13 @@
                         <th>FLIGHT</th>
                         <th>ORIGIN</th>
                         <th>AC Type</th>
+                        <th>WAVE</th>
                         <th>STA</th>
                         {% else %}
                         <th>FLIGHT</th>
                         <th>DESTINATION</th>
                         <th>AC Type</th>
+                        <th>WAVE</th>
                         <th>ETD/STD</th>
                         <th>PURE PULL</th>
                         <th>1ST MIX</th>

@@ -15,6 +15,10 @@ class SortDateMission(db.Model):
             name="ck_sort_date_missions_mission_source",
         ),
         db.CheckConstraint(
+            "wave IS NULL OR wave IN ('1st Wave', '2nd Wave')",
+            name="ck_sort_date_missions_wave",
+        ),
+        db.CheckConstraint(
             "pull_time_source IS NULL OR pull_time_source IN ('master', 'manual')",
             name="ck_sort_date_missions_pull_time_source",
         ),
@@ -46,6 +50,7 @@ class SortDateMission(db.Model):
     )
     mission_type = db.Column(db.String(16), nullable=False, index=True)
     mission_source = db.Column(db.String(32), nullable=False, default="master")
+    wave = db.Column(db.String(16), nullable=True, index=True)
     master_flight_schedule_id = db.Column(
         db.Integer,
         db.ForeignKey("master_flight_schedules.id"),

@@ -31,6 +31,8 @@ from app.services.sort_date_operations import (
     ensure_tail_state_for_mission,
     generate_sort_date_operation_from_master,
     mission_display_timing_data,
+    normalize_optional_window_minutes,
+    normalize_wave,
     normalize_window_minutes,
     sync_sort_operation_with_master,
 )
@@ -66,6 +68,11 @@ MISSION_TYPE_OPTIONS = (
     ("departure", "Departure"),
 )
 MISSION_TYPES = {"arrival", "departure"}
+WAVE_OPTIONS = (
+    ("1st Wave", "1st Wave"),
+    ("2nd Wave", "2nd Wave"),
+)
+WAVES = {value for value, _label in WAVE_OPTIONS}
 MASTER_AIRCRAFT_TYPE_OPTIONS = ("", "A300", "747", "757", "767", "Other")
 FUEL_STATUSES = ("", "waiting", "received", "assigned", "complete")
 ARRIVAL_STATUSES = (
@@ -258,6 +265,7 @@ def master_schedule():
         active_day_options=ACTIVE_DAY_OPTIONS,
         aircraft_type_options=MASTER_AIRCRAFT_TYPE_OPTIONS,
         gateway=gateway,
+        wave_options=WAVE_OPTIONS,
     )
 
 
@@ -574,6 +582,12 @@ def update_operation_window(operation_id):
         operation.window_minutes = normalize_window_minutes(
             request.form.get("window_minutes", 0)
         )
+        operation.first_wave_window_minutes = normalize_optional_window_minutes(
+            request.form.get("first_wave_window_minutes", "")
+        )
+        operation.second_wave_window_minutes = normalize_optional_window_minutes(
+            request.form.get("second_wave_window_minutes", "")
+        )
     except (TypeError, ValueError):
         flash("Window minutes must be 0 or higher.", "error")
         return redirect(url_for("neomotherbrain.operation_detail", operation_id=operation.id))
@@ -780,6 +794,7 @@ def _render_master_schedule_form(form=None, mode="new", master_schedule=None, ro
         mission_type_options=MISSION_TYPE_OPTIONS,
         rows=rows,
         sort_name_options=SORT_NAME_OPTIONS,
+        wave_options=WAVE_OPTIONS,
     )
 
 
@@ -791,6 +806,7 @@ def _master_schedule_form_from_request(gateway=None, prefix="", source=None):
         "gateway_code": gateway_code,
         "sort_name": source.get(f"{prefix}sort_name", "night"),
         "mission_type": source.get(f"{prefix}mission_type", "departure"),
+        "wave": source.get(f"{prefix}wave", "1st Wave"),
         "flight_number": source.get(f"{prefix}flight_number", ""),
         "aircraft_type": source.get(f"{prefix}aircraft_type", ""),
         "origin": source.get(f"{prefix}origin", ""),
@@ -852,6 +868,7 @@ def _master_schedule_form_from_model(master_schedule):
         "gateway_code": master_schedule.gateway_code,
         "sort_name": master_schedule.sort_name,
         "mission_type": master_schedule.mission_type,
+        "wave": normalize_wave(master_schedule.wave),
         "flight_number": master_schedule.flight_number,
         "aircraft_type": master_schedule.aircraft_type or "",
         "origin": master_schedule.origin,
@@ -872,6 +889,7 @@ def _blank_master_schedule_form(gateway=None):
         "gateway_code": gateway_code,
         "sort_name": "night",
         "mission_type": "departure",
+        "wave": "1st Wave",
         "flight_number": "",
         "aircraft_type": "",
         "origin": "",
@@ -1089,6 +1107,7 @@ def _apply_master_schedule_form(master_schedule, form, gateway=None):
     gateway_code = gateway.code if gateway else form["gateway_code"].strip().upper()
     sort_name = form["sort_name"].strip().lower()
     mission_type = form["mission_type"].strip().lower()
+    wave = normalize_wave(form.get("wave"))
     flight_number = _normalize_flight_number(form["flight_number"])
     aircraft_type = _normalize_master_aircraft_type(form.get("aircraft_type", ""))
     origin = _normalize_airport_code(form["origin"], "Origin")
@@ -1099,6 +1118,8 @@ def _apply_master_schedule_form(master_schedule, form, gateway=None):
         raise ValueError("Sort name must be Night, Twilight, Day, or Sunrise.")
     if mission_type not in MISSION_TYPES:
         raise ValueError("Mission type must be arrival or departure.")
+    if wave not in WAVES:
+        raise ValueError("Wave must be 1st Wave or 2nd Wave.")
 
     if not all((gateway_code, sort_name, flight_number, origin, destination)):
         raise ValueError("Gateway, sort, flight, origin, and destination are required.")
@@ -1109,6 +1130,7 @@ def _apply_master_schedule_form(master_schedule, form, gateway=None):
     master_schedule.gateway_id = gateway.id if gateway else None
     master_schedule.sort_name = sort_name
     master_schedule.mission_type = mission_type
+    master_schedule.wave = wave
     master_schedule.flight_number = flight_number
     master_schedule.aircraft_type = aircraft_type
     master_schedule.origin = origin
@@ -1297,12 +1319,14 @@ def _render_mission_form(operation, form, mode, mission=None):
         mission=mission,
         mode=mode,
         operation=operation,
+        wave_options=WAVE_OPTIONS,
     )
 
 
 def _mission_form_from_request(operation):
     return {
         "mission_type": request.form.get("mission_type", "departure"),
+        "wave": request.form.get("wave", "1st Wave"),
         "flight_number": request.form.get("flight_number", ""),
         "origin": request.form.get("origin", ""),
         "destination": request.form.get("destination", ""),
@@ -1340,6 +1364,7 @@ def _mission_form_from_request(operation):
 def _mission_form_from_model(mission):
     return {
         "mission_type": mission.mission_type,
+        "wave": normalize_wave(mission.wave),
         "flight_number": mission.flight_number,
         "origin": mission.origin,
         "destination": mission.destination,
@@ -1369,6 +1394,7 @@ def _mission_form_from_model(mission):
 
 def _apply_mission_form(mission, operation, form):
     mission_type = form["mission_type"].strip().lower()
+    wave = normalize_wave(form.get("wave"))
     flight_number = form["flight_number"].strip().upper()
     origin = form["origin"].strip().upper()
     destination = form["destination"].strip().upper()
@@ -1377,6 +1403,8 @@ def _apply_mission_form(mission, operation, form):
 
     if mission_type not in MISSION_TYPES:
         raise ValueError("Mission type must be arrival or departure.")
+    if wave not in WAVES:
+        raise ValueError("Wave must be 1st Wave or 2nd Wave.")
 
     if not all((flight_number, origin, destination)):
         raise ValueError("Flight number, origin, and destination are required.")
@@ -1390,6 +1418,7 @@ def _apply_mission_form(mission, operation, form):
     mission.sort_name = operation.sort_name
     mission.mission_type = mission_type
     mission.mission_source = "manual"
+    mission.wave = wave
     mission.master_flight_schedule_id = None
     mission.flight_number = flight_number
     mission.origin = origin

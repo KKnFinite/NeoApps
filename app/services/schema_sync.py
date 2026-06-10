@@ -37,9 +37,15 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     },
     "sort_date_missions": {
         "arrival_status": "VARCHAR(32)",
+        "wave": "VARCHAR(16)",
+    },
+    "sort_date_operations": {
+        "first_wave_window_minutes": "INTEGER",
+        "second_wave_window_minutes": "INTEGER",
     },
     "master_flight_schedules": {
         "aircraft_type": "VARCHAR(16)",
+        "wave": "VARCHAR(16)",
     },
 }
 
@@ -50,9 +56,15 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "sort_date_missions": {
         "arrival_status": "VARCHAR(32)",
+        "wave": "VARCHAR(16)",
+    },
+    "sort_date_operations": {
+        "first_wave_window_minutes": "INTEGER",
+        "second_wave_window_minutes": "INTEGER",
     },
     "master_flight_schedules": {
         "aircraft_type": "VARCHAR(16)",
+        "wave": "VARCHAR(16)",
     },
 }
 

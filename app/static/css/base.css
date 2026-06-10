@@ -2465,40 +2465,45 @@ select::-ms-expand {
 }
 
 #master-arrivals .master-board-table th:nth-child(1) {
-    width: 25%;
+    width: 22%;
 }
 
 #master-arrivals .master-board-table th:nth-child(2),
 #master-arrivals .master-board-table th:nth-child(3) {
-    width: 17%;
+    width: 15%;
 }
 
 #master-arrivals .master-board-table th:nth-child(4) {
-    width: 25%;
+    width: 18%;
 }
 
 #master-arrivals .master-board-table th:nth-child(5) {
+    width: 18%;
+}
+
+#master-arrivals .master-board-table th:nth-child(6) {
     width: 16%;
 }
 
 #master-departures .master-board-table th:nth-child(1) {
-    width: 13%;
+    width: 12%;
 }
 
 #master-departures .master-board-table th:nth-child(2),
 #master-departures .master-board-table th:nth-child(3) {
-    width: 10%;
+    width: 9%;
 }
 
 #master-departures .master-board-table th:nth-child(4),
 #master-departures .master-board-table th:nth-child(5),
 #master-departures .master-board-table th:nth-child(6),
-#master-departures .master-board-table th:nth-child(7) {
-    width: 14%;
+#master-departures .master-board-table th:nth-child(7),
+#master-departures .master-board-table th:nth-child(8) {
+    width: 12%;
 }
 
-#master-departures .master-board-table th:nth-child(8) {
-    width: 11%;
+#master-departures .master-board-table th:nth-child(9) {
+    width: 10%;
 }
 
 .master-board-table .table-row-button {
@@ -3661,6 +3666,7 @@ select::-ms-expand {
             minmax(62px, 0.86fr)
             minmax(50px, 0.7fr)
             minmax(58px, 0.78fr)
+            minmax(74px, 0.9fr)
             minmax(86px, 1.14fr)
             minmax(48px, auto);
         align-items: end;
@@ -3669,8 +3675,9 @@ select::-ms-expand {
     .blueprint-neomotherbrain .master-board-table tr.master-departure-row {
         grid-template-columns: repeat(4, minmax(0, 1fr));
         grid-template-areas:
-            "flight destination ac etd"
-            "pure first second delete";
+            "flight destination ac wave"
+            "etd pure first second"
+            "delete delete delete delete";
         align-items: end;
         gap: 9px 6px;
     }
@@ -3737,6 +3744,10 @@ select::-ms-expand {
         grid-area: ac;
     }
 
+    .blueprint-neomotherbrain .master-board-table .master-departure-row .master-cell-wave {
+        grid-area: wave;
+    }
+
     .blueprint-neomotherbrain .master-board-table .master-departure-row .master-cell-etd {
         grid-area: etd;
     }
@@ -3763,7 +3774,7 @@ select::-ms-expand {
     }
 
     .blueprint-neomotherbrain .master-board-table .master-arrival-row .table-row-button {
-        grid-column: 5;
+        grid-column: 6;
     }
 
     .blueprint-neomotherbrain .master-board-table .master-departure-row .table-row-button {

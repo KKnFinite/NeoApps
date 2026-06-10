@@ -47,6 +47,14 @@
 </select>
 {% endmacro %}
 
+{% macro wave_field(row) %}
+<select name="row_{{ row.index }}_wave">
+    {% for wave_value, wave_label in wave_options %}
+    <option value="{{ wave_value }}" {% if (row.wave or "1st Wave") == wave_value %}selected{% endif %}>{{ wave_label }}</option>
+    {% endfor %}
+</select>
+{% endmacro %}
+
 {% macro schedule_row(row) %}
 <tr class="master-schedule-form-row">
     <td>
@@ -75,6 +83,7 @@
         <input type="text" name="row_{{ row.index }}_flight_number" value="{{ row.flight_number }}" maxlength="8" autocomplete="off">
     </td>
     <td>{{ aircraft_type_field(row) }}</td>
+    <td>{{ wave_field(row) }}</td>
     <td>
         {{ airport_input(row, "origin", "Origin") }}
     </td>
@@ -134,6 +143,10 @@
     <label class="master-field-ac-type">
         <span>AC Type</span>
         {{ aircraft_type_field(row) }}
+    </label>
+    <label class="master-field-wave">
+        <span>WAVE</span>
+        {{ wave_field(row) }}
     </label>
     {% if row.mission_type == "arrival" %}
     <label class="master-field-airport">
@@ -195,6 +208,7 @@
                         <th>MISSION</th>
                         <th>FLIGHT</th>
                         <th>AC Type</th>
+                        <th>WAVE</th>
                         <th>ORIGIN</th>
                         <th>DESTINATION</th>
                         <th>ACTIVE DAYS</th>

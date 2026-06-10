@@ -10,6 +10,10 @@ class MasterFlightSchedule(db.Model):
             "mission_type IN ('arrival', 'departure')",
             name="ck_master_flight_schedules_mission_type",
         ),
+        db.CheckConstraint(
+            "wave IS NULL OR wave IN ('1st Wave', '2nd Wave')",
+            name="ck_master_flight_schedules_wave",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -17,6 +21,7 @@ class MasterFlightSchedule(db.Model):
     gateway_code = db.Column(db.String(8), nullable=False, index=True)
     sort_name = db.Column(db.String(32), nullable=False, index=True)
     mission_type = db.Column(db.String(16), nullable=False, index=True)
+    wave = db.Column(db.String(16), nullable=True, index=True)
     flight_number = db.Column(db.String(32), nullable=False)
     aircraft_type = db.Column(db.String(16), nullable=True)
     origin = db.Column(db.String(8), nullable=False)

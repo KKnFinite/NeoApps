@@ -26,6 +26,10 @@
             <dd>{{ mission.mission_source|status_label }}</dd>
         </div>
         <div>
+            <dt>WAVE</dt>
+            <dd>{{ mission.wave or "1st Wave" }}</dd>
+        </div>
+        <div>
             <dt>ORIGIN</dt>
             <dd>{{ mission.origin|upper }}</dd>
         </div>
