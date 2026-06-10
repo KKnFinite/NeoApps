@@ -42,6 +42,7 @@ from app.services.gateway_matrix import (
     operations_for_gateway_date,
     save_gateway_matrix,
 )
+from app.services.night_sorting import master_schedule_sort_key, mission_board_sort_key
 
 ACTIVE_DAY_OPTIONS = (
     ("monday", "Monday"),
@@ -746,17 +747,18 @@ def _master_schedule_or_404(master_id):
 
 
 def _master_schedules_for_gateway(gateway):
-    return (
+    schedules = (
         MasterFlightSchedule.query.filter_by(gateway_code=gateway.code)
         .order_by(
             MasterFlightSchedule.gateway_code.asc(),
             MasterFlightSchedule.mission_type.asc(),
-            MasterFlightSchedule.planned_time_local.asc(),
             MasterFlightSchedule.sort_name.asc(),
+            MasterFlightSchedule.planned_time_local.asc(),
             MasterFlightSchedule.flight_number.asc(),
         )
         .all()
     )
+    return sorted(schedules, key=master_schedule_sort_key)
 
 
 def _render_master_schedule_form(form=None, mode="new", master_schedule=None, rows=None):
@@ -1601,7 +1603,7 @@ def _planned_datetime_utc_for_mission(planned_datetime_local, timezone):
 
 
 def _all_missions_for_operation(operation):
-    return (
+    missions = (
         SortDateMission.query.filter_by(sort_date_operation_id=operation.id)
         .order_by(
             SortDateMission.mission_type.asc(),
@@ -1610,10 +1612,11 @@ def _all_missions_for_operation(operation):
         )
         .all()
     )
+    return sorted(missions, key=mission_board_sort_key)
 
 
 def _missions_for_operation(operation, mission_type):
-    return (
+    missions = (
         SortDateMission.query.filter_by(
             sort_date_operation_id=operation.id,
             mission_type=mission_type,
@@ -1621,6 +1624,7 @@ def _missions_for_operation(operation, mission_type):
         .order_by(SortDateMission.planned_datetime_utc.asc())
         .all()
     )
+    return sorted(missions, key=mission_board_sort_key)
 
 
 def _mission_count(operation, mission_type):

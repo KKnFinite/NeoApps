@@ -2436,7 +2436,21 @@ select::-ms-expand {
 .master-board-table th,
 .master-board-table td {
     padding: 3px 2px;
+    border-bottom-color: rgba(235, 241, 246, 0.16);
     vertical-align: middle;
+}
+
+.master-board-table tbody tr {
+    border-bottom: 1px solid rgba(235, 241, 246, 0.16);
+}
+
+.master-board-table tbody tr:last-child {
+    border-bottom: 0;
+}
+
+.master-board-table td.table-actions {
+    display: table-cell;
+    text-align: center;
 }
 
 .master-board-table th {
@@ -2482,10 +2496,10 @@ select::-ms-expand {
 }
 
 .master-board-table .table-row-button {
-    min-height: 28px;
+    min-height: 30px;
     min-width: 0;
     padding: 4px 7px;
-    font-size: 0.64rem;
+    font-size: 0.66rem;
     line-height: 1;
 }
 

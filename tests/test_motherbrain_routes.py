@@ -16,6 +16,7 @@ from app.models import (
 )
 from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.gateway_matrix import current_gateway_local_date
+from app.services.night_sorting import night_sort_time_key
 
 
 class MotherBrainRoutesTest(unittest.TestCase):
@@ -654,6 +655,99 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertLess(html.index("ARREARLY"), html.index("ARRLATE"))
         self.assertLess(html.index("DEPEARLY"), html.index("DEPLATE"))
+
+    def test_night_sort_time_key_places_after_midnight_times_after_late_night(self):
+        self.assertLess(
+            night_sort_time_key(time(23, 34), "night"),
+            night_sort_time_key(time(0, 43), "night"),
+        )
+        self.assertLess(
+            night_sort_time_key(time(0, 43), "day"),
+            night_sort_time_key(time(23, 34), "day"),
+        )
+
+    def test_master_schedule_night_sort_orders_late_night_before_after_midnight(self):
+        self._add_master(
+            flight_number="NITE0043",
+            mission_type="arrival",
+            origin="SDF",
+            destination="RFD",
+            planned_time_local=time(0, 43),
+            sort_name="night",
+        )
+        self._add_master(
+            flight_number="NITE2334",
+            mission_type="arrival",
+            origin="ONT",
+            destination="RFD",
+            planned_time_local=time(23, 34),
+            sort_name="night",
+        )
+        db.session.commit()
+
+        response = self.client.get("/motherbrain/master-schedule")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLess(html.index("NITE2334"), html.index("NITE0043"))
+
+    def test_departure_board_night_sort_orders_late_night_before_after_midnight(self):
+        operation = self._operation(sort_name="night")
+        db.session.add(operation)
+        db.session.add(
+            self._mission(
+                operation=operation,
+                mission_type="departure",
+                flight_number="DEP0043",
+                planned_datetime_local=datetime(2026, 6, 2, 0, 43),
+                planned_datetime_utc=datetime(2026, 6, 2, 5, 43),
+            )
+        )
+        db.session.add(
+            self._mission(
+                operation=operation,
+                mission_type="departure",
+                flight_number="DEP2334",
+                planned_datetime_local=datetime(2026, 6, 1, 23, 34),
+                planned_datetime_utc=datetime(2026, 6, 2, 4, 34),
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/departures")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLess(html.index("DEP2334"), html.index("DEP0043"))
+
+    def test_operation_overview_night_sort_orders_late_night_before_after_midnight(self):
+        operation = self._operation(sort_name="night")
+        db.session.add(operation)
+        db.session.add(
+            self._mission(
+                operation=operation,
+                mission_type="arrival",
+                flight_number="ARR0043",
+                planned_datetime_local=datetime(2026, 6, 2, 0, 43),
+                planned_datetime_utc=datetime(2026, 6, 2, 5, 43),
+            )
+        )
+        db.session.add(
+            self._mission(
+                operation=operation,
+                mission_type="arrival",
+                flight_number="ARR2334",
+                planned_datetime_local=datetime(2026, 6, 1, 23, 34),
+                planned_datetime_utc=datetime(2026, 6, 2, 4, 34),
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLess(html.index("ARR2334"), html.index("ARR0043"))
 
     def test_master_schedule_board_save_updates_existing_and_creates_new_row(self):
         existing = self._add_master(
