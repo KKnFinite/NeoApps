@@ -3707,30 +3707,25 @@ select::-ms-expand {
     .blueprint-neomotherbrain .master-board-table tr.master-board-row {
         display: grid;
         width: 100%;
-        gap: 6px;
+        gap: 5px 4px;
         margin-bottom: 10px;
-        padding: 8px;
+        padding: 7px;
     }
 
     .blueprint-neomotherbrain .master-board-table tr.master-arrival-row {
-        grid-template-columns:
-            minmax(62px, 0.86fr)
-            minmax(50px, 0.7fr)
-            minmax(58px, 0.78fr)
-            minmax(74px, 0.9fr)
-            minmax(86px, 1.14fr)
-            minmax(48px, auto);
+        grid-template-columns: repeat(12, minmax(0, 1fr)) 28px;
+        grid-template-areas:
+            "flight flight origin origin ac ac sta sta sta sta wave wave delete";
         align-items: end;
     }
 
     .blueprint-neomotherbrain .master-board-table tr.master-departure-row {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(12, minmax(0, 1fr)) 28px;
         grid-template-areas:
-            "flight destination ac etd"
-            "wave pure first second"
-            "delete delete delete delete";
+            "flight flight destination destination ac ac etd etd etd etd wave wave delete"
+            "pure pure pure pure first first first first second second second second delete";
         align-items: end;
-        gap: 9px 6px;
+        gap: 7px 4px;
     }
 
     .blueprint-neomotherbrain .master-board-table td.master-board-cell {
@@ -3753,7 +3748,13 @@ select::-ms-expand {
     }
 
     .blueprint-neomotherbrain .master-board-table .master-cell-actions {
-        display: contents;
+        display: grid;
+        justify-items: center;
+        align-self: end;
+        width: auto;
+        min-width: 0;
+        padding: 0;
+        border-bottom: 0;
     }
 
     .blueprint-neomotherbrain .master-board-table .master-cell-actions::before {
@@ -3762,25 +3763,46 @@ select::-ms-expand {
 
     .blueprint-neomotherbrain .master-board-table input,
     .blueprint-neomotherbrain .master-board-table select {
-        min-height: 34px;
-        padding: 6px 5px;
-        font-size: 0.74rem;
+        min-height: 30px;
+        padding: 4px 3px;
+        font-size: 0.68rem;
+        line-height: 1;
     }
 
     .blueprint-neomotherbrain .master-board-table .military-time-select {
-        grid-template-columns: minmax(34px, 1fr) 4px minmax(34px, 1fr);
-        gap: 3px;
+        grid-template-columns: minmax(24px, 1fr) 3px minmax(24px, 1fr);
+        gap: 1px;
         width: 100%;
     }
 
     .blueprint-neomotherbrain .master-board-table .military-time-select input {
         width: 100%;
         min-width: 0;
-        padding-inline: 2px;
+        padding-inline: 1px;
     }
 
     .blueprint-neomotherbrain .master-board-table .military-time-separator {
-        font-size: 0.72rem;
+        font-size: 0.62rem;
+    }
+
+    .blueprint-neomotherbrain .master-board-table .master-arrival-row .master-cell-flight {
+        grid-area: flight;
+    }
+
+    .blueprint-neomotherbrain .master-board-table .master-arrival-row .master-cell-origin {
+        grid-area: origin;
+    }
+
+    .blueprint-neomotherbrain .master-board-table .master-arrival-row .master-cell-ac-type {
+        grid-area: ac;
+    }
+
+    .blueprint-neomotherbrain .master-board-table .master-arrival-row .master-cell-sta {
+        grid-area: sta;
+    }
+
+    .blueprint-neomotherbrain .master-board-table .master-arrival-row .master-cell-wave {
+        grid-area: wave;
     }
 
     .blueprint-neomotherbrain .master-board-table .master-departure-row .master-cell-flight {
@@ -3816,25 +3838,31 @@ select::-ms-expand {
     }
 
     .blueprint-neomotherbrain .master-board-table .table-row-button {
-        min-height: 34px;
+        min-height: 30px;
         min-width: 0;
-        padding: 6px 7px;
+        padding: 4px 5px;
         font-size: 0.66rem;
         line-height: 1;
         text-align: center;
     }
 
-    .blueprint-neomotherbrain .master-board-table .master-arrival-row .table-row-button {
-        grid-column: 6;
-    }
-
     .blueprint-neomotherbrain .master-board-table .table-row-delete-button {
-        width: 100%;
-        border-radius: 5px;
-        font-size: 1rem;
+        flex: 0 0 26px;
+        width: 26px;
+        min-width: 26px;
+        min-height: 26px;
+        height: 26px;
+        padding: 0;
+        border-radius: 50%;
+        font-size: 0.94rem;
     }
 
-    .blueprint-neomotherbrain .master-board-table .master-departure-row .table-row-button {
+    .blueprint-neomotherbrain .master-flight-table .table-actions .table-row-delete-button {
+        flex: 0 0 26px;
+    }
+
+    .blueprint-neomotherbrain .master-board-table .master-arrival-row .master-cell-actions,
+    .blueprint-neomotherbrain .master-board-table .master-departure-row .master-cell-actions {
         grid-area: delete;
     }
 
