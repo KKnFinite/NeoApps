@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "neomotherbrain/_time_inputs.html" import military_time_select %}
+{% from "neomotherbrain/_time_inputs.html" import military_time_script, military_time_select %}
 
 {% block title %}Master Schedule | NeoApps{% endblock %}
 
@@ -169,6 +169,7 @@
     </div>
 </section>
 
+{{ military_time_script()|safe }}
 <script>
 (() => {
     const uppercaseInput = (input) => {
@@ -181,20 +182,8 @@
         scope.querySelectorAll(".airport-code-input, .flight-number-input").forEach(uppercaseInput);
     };
 
-    const initializeMilitaryTimeInputs = (scope) => {
-        scope.querySelectorAll(".military-time-part").forEach((input) => {
-            input.addEventListener("input", () => {
-                input.value = input.value.replace(/\D/g, "").slice(0, 2);
-                const max = Number(input.dataset.timeMax || "59");
-                if (input.value !== "" && Number(input.value) > max) {
-                    input.value = String(max);
-                }
-            });
-        });
-    };
-
     initializeUppercaseInputs(document);
-    initializeMilitaryTimeInputs(document);
+    window.NeoAppsTimeInputs.initialize(document);
 
     const fieldValue = (row, suffix) => {
         const field = row.querySelector(`[name$='_${suffix}']`);
@@ -304,7 +293,7 @@
 
                 tableBody.appendChild(row);
                 initializeUppercaseInputs(row);
-                initializeMilitaryTimeInputs(row);
+                window.NeoAppsTimeInputs.initialize(row);
                 const firstField = row.querySelector("input[type='text'], select");
                 if (firstField) {
                     firstField.focus();

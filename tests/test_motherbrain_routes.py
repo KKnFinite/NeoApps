@@ -582,6 +582,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b'name="row_arrival_0_planned_time_local_hour"', response.data)
         self.assertIn(b'data-time-max="23"', response.data)
         self.assertIn(b'data-time-max="59"', response.data)
+        self.assertIn(b"<script>", response.data)
+        self.assertIn(b"NeoAppsTimeInputs", response.data)
+        self.assertIn(b'padStart(2, "0")', response.data)
         self.assertNotIn(b'<select name="row_arrival_0_planned_time_local_hour"', response.data)
         self.assertIn(b'name="row_arrival_0_aircraft_type"', response.data)
         self.assertIn(b'name="row_departure_0_aircraft_type"', response.data)
@@ -1262,8 +1265,45 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b'name="row_0_planned_time_local_minute"', form_response.data)
         self.assertIn(b'data-time-max="23"', form_response.data)
         self.assertIn(b'data-time-max="59"', form_response.data)
+        self.assertIn(b"<script>", form_response.data)
+        self.assertIn(b"NeoAppsTimeInputs", form_response.data)
+        self.assertIn(b'padStart(2, "0")', form_response.data)
         self.assertNotIn(b'<select name="row_0_planned_time_local_hour"', form_response.data)
         self.assertNotIn(b'type="time"', form_response.data)
+
+    def test_master_schedule_split_time_fields_save_zero_padded_values(self):
+        data = self._master_schedule_form_data(
+            flight_number="PAD001",
+            planned_time_local="",
+            pure_pull_time_local="",
+            first_mix_pull_time_local="",
+            final_mix_pull_time_local="",
+        )
+        data.update(
+            {
+                "planned_time_local_hour": "1",
+                "planned_time_local_minute": "5",
+                "pure_pull_time_local_hour": "0",
+                "pure_pull_time_local_minute": "7",
+                "first_mix_pull_time_local_hour": "2",
+                "first_mix_pull_time_local_minute": "3",
+                "final_mix_pull_time_local_hour": "4",
+                "final_mix_pull_time_local_minute": "9",
+            }
+        )
+
+        response = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=data,
+            follow_redirects=False,
+        )
+
+        master = MasterFlightSchedule.query.filter_by(flight_number="PAD001").first()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(master.planned_time_local, time(1, 5))
+        self.assertEqual(master.pure_pull_time_local, time(0, 7))
+        self.assertEqual(master.first_mix_pull_time_local, time(2, 3))
+        self.assertEqual(master.final_mix_pull_time_local, time(4, 9))
 
     def test_master_schedule_rejects_non_military_time(self):
         response = self.client.post(

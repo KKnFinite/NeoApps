@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "neomotherbrain/_time_inputs.html" import military_datetime_input, military_time_select %}
+{% from "neomotherbrain/_time_inputs.html" import military_datetime_input, military_time_script, military_time_select %}
 
 {% block title %}{{ "EDIT" if mode == "edit" else "ADD" }} MISSION | NeoApps{% endblock %}
 
@@ -102,6 +102,7 @@
         </div>
     </form>
 </section>
+{{ military_time_script()|safe }}
 <script>
 (() => {
     const missionType = document.querySelector("[data-mission-type-select]");

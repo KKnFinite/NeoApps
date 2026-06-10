@@ -45,3 +45,38 @@
     {{ military_time_select(name, time_value) }}
 </div>
 {% endmacro %}
+
+{% macro military_time_script() %}
+<script>
+(() => {
+    window.NeoAppsTimeInputs = window.NeoAppsTimeInputs || {
+        initialize(root = document) {
+            root.querySelectorAll(".military-time-part").forEach((input) => {
+                if (input.dataset.militaryTimeBound === "1") {
+                    return;
+                }
+                input.dataset.militaryTimeBound = "1";
+
+                const normalizeTimePart = () => {
+                    if (input.value !== "") {
+                        input.value = input.value.padStart(2, "0");
+                    }
+                };
+
+                input.addEventListener("input", () => {
+                    input.value = input.value.replace(/\D/g, "").slice(0, 2);
+                    const max = Number(input.dataset.timeMax || "59");
+                    if (input.value !== "" && Number(input.value) > max) {
+                        input.value = String(max);
+                    }
+                });
+                input.addEventListener("blur", normalizeTimePart);
+                input.addEventListener("change", normalizeTimePart);
+            });
+        },
+    };
+
+    window.NeoAppsTimeInputs.initialize(document);
+})();
+</script>
+{% endmacro %}
