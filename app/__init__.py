@@ -151,6 +151,16 @@ def register_request_guards(app):
 
 
 def register_pwa_assets(app):
+    def send_pwa_image(filename):
+        response = send_from_directory(
+            app.static_folder,
+            f"images/{filename}",
+            mimetype="image/png",
+            max_age=0,
+        )
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
     @app.route("/manifest.webmanifest")
     def pwa_manifest():
         response = send_from_directory(
@@ -173,6 +183,26 @@ def register_pwa_assets(app):
         response.headers["Cache-Control"] = "no-cache"
         response.headers["Service-Worker-Allowed"] = "/"
         return response
+
+    @app.route("/apple-touch-icon.png")
+    def apple_touch_icon():
+        return send_pwa_image("apple_touch_icon_180.png")
+
+    @app.route("/apple-touch-icon-precomposed.png")
+    def apple_touch_icon_precomposed():
+        return send_pwa_image("apple_touch_icon_180.png")
+
+    @app.route("/favicon-32x32.png")
+    def favicon_32():
+        return send_pwa_image("favicon_32.png")
+
+    @app.route("/favicon-16x16.png")
+    def favicon_16():
+        return send_pwa_image("favicon_16.png")
+
+    @app.route("/favicon.ico")
+    def favicon_ico():
+        return send_pwa_image("favicon_32.png")
 
 
 def register_blueprints(app):

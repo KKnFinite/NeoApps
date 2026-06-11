@@ -10,9 +10,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>{% block title %}NeoApps{% endblock %}</title>
     <link rel="manifest" href="{{ url_for('pwa_manifest', v=config.STATIC_ASSET_VERSION) }}">
-    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='images/apple_touch_icon_180.png', v=config.STATIC_ASSET_VERSION) }}">
-    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='images/favicon_32.png', v=config.STATIC_ASSET_VERSION) }}">
-    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='images/favicon_16.png', v=config.STATIC_ASSET_VERSION) }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('apple_touch_icon') }}">
+    <link rel="apple-touch-icon-precomposed" sizes="180x180" href="{{ url_for('apple_touch_icon_precomposed') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('favicon_32') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('favicon_16') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css', v=config.STATIC_ASSET_VERSION) }}">
 </head>
 {% set is_authenticated_app = current_user.is_authenticated and not public_landing|default(false) %}

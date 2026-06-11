@@ -108,9 +108,10 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("url_for('service_worker', v=config.STATIC_ASSET_VERSION)", template)
         self.assertIn('name="theme-color" content="#d95a1f"', template)
         self.assertIn('name="apple-mobile-web-app-title" content="NeoGateway"', template)
-        self.assertIn("filename='images/apple_touch_icon_180.png', v=config.STATIC_ASSET_VERSION", template)
-        self.assertIn("filename='images/favicon_32.png', v=config.STATIC_ASSET_VERSION", template)
-        self.assertIn("filename='images/favicon_16.png', v=config.STATIC_ASSET_VERSION", template)
+        self.assertIn("url_for('apple_touch_icon')", template)
+        self.assertIn("url_for('apple_touch_icon_precomposed')", template)
+        self.assertIn("url_for('favicon_32')", template)
+        self.assertIn("url_for('favicon_16')", template)
 
     def test_neogateway_manifest_uses_current_branding(self):
         response = self.client.get("/manifest.webmanifest")
@@ -155,6 +156,24 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         manifest_text = response.get_data(as_text=True)
         self.assertNotIn("NeoRFD", manifest_text)
         self.assertNotIn("neorfd", manifest_text.lower())
+
+    def test_pwa_root_icon_routes_serve_neogateway_images(self):
+        icon_routes = {
+            "/apple-touch-icon.png": Path("app/static/images/apple_touch_icon_180.png"),
+            "/apple-touch-icon-precomposed.png": Path("app/static/images/apple_touch_icon_180.png"),
+            "/favicon-32x32.png": Path("app/static/images/favicon_32.png"),
+            "/favicon-16x16.png": Path("app/static/images/favicon_16.png"),
+            "/favicon.ico": Path("app/static/images/favicon_32.png"),
+        }
+
+        for route, source_path in icon_routes.items():
+            with self.subTest(route=route):
+                response = self.client.get(route)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.mimetype, "image/png")
+                self.assertIn("no-cache", response.headers["Cache-Control"])
+                self.assertEqual(response.data, source_path.read_bytes())
 
     def test_service_worker_is_conservative_and_uses_current_logo_assets(self):
         response = self.client.get("/service-worker.js")
