@@ -48,6 +48,7 @@ class PermissionRulesTest(unittest.TestCase):
                 "neomotherbrain.manage_sort.view": "operator",
                 "neomotherbrain.master_schedule.view": "operator",
                 "neoermac.building_lineup.edit": "simulator",
+                "neoermac.building_lineup.view": "operator",
                 "neoermac.door_view.enter_actual_pulls": "operator",
                 "neoermac.tug_assignments.edit": "master",
             },
@@ -127,6 +128,11 @@ class PermissionRulesTest(unittest.TestCase):
         operator = self._user_with_ermac_role("ermac_operator_low", "operator")
 
         self.assertFalse(user_can("neoermac.building_lineup.edit", operator))
+
+    def test_operator_can_pass_building_lineup_view(self):
+        operator = self._user_with_ermac_role("ermac_operator_view", "operator")
+
+        self.assertTrue(user_can("neoermac.building_lineup.view", operator))
 
     def test_operator_can_enter_actual_pulls(self):
         operator = self._user_with_ermac_role("ermac_operator", "operator")

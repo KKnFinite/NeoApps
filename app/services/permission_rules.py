@@ -31,6 +31,11 @@ DEFAULT_PERMISSION_RULES = (
         "View NeoMotherBrain Gateway Matrix screens.",
     ),
     (
+        "neoermac.building_lineup.view",
+        "operator",
+        "View NeoErmac Building Lineup screens.",
+    ),
+    (
         "neoermac.building_lineup.edit",
         "simulator",
         "Edit NeoErmac Building Lineup screens.",
@@ -124,6 +129,16 @@ def user_can(permission_key, user=None):
         return False
 
     return ROLE_LEVELS.get(node_role, 0) >= ROLE_LEVELS.get(rule.minimum_role, 0)
+
+
+def permission_access(view_permission_key, edit_permission_key=None, user=None):
+    can_edit = bool(edit_permission_key and user_can(edit_permission_key, user))
+    can_view = can_edit or user_can(view_permission_key, user)
+
+    return {
+        "can_view": can_view,
+        "can_edit": can_edit,
+    }
 
 
 def require_permission(permission_key):

@@ -37,6 +37,7 @@ from app.services.permission_rules import (
     DEFAULT_PERMISSION_RULES,
     ensure_default_permission_rules,
     get_permission_rule,
+    permission_access,
     require_permission,
     user_can,
 )
@@ -88,6 +89,7 @@ __all__ = [
     "DEFAULT_PERMISSION_RULES",
     "ensure_default_permission_rules",
     "get_permission_rule",
+    "permission_access",
     "require_permission",
     "user_can",
     "send_access_approved",

@@ -11,7 +11,11 @@ from app.services.neoermac_building_lineup import (
     lineup_field_name,
     save_building_lineup,
 )
-from app.services.permission_rules import user_can
+from app.services.permission_rules import permission_access
+
+
+BUILDING_LINEUP_VIEW_PERMISSION = "neoermac.building_lineup.view"
+BUILDING_LINEUP_EDIT_PERMISSION = "neoermac.building_lineup.edit"
 
 
 NEOERMAC_PAGES = (
@@ -42,28 +46,35 @@ def index_slash():
 @gateway_node_required("ermac")
 def building_lineup():
     gateway = get_current_gateway()
-    can_edit = user_can("neoermac.building_lineup.edit")
+    access = permission_access(
+        BUILDING_LINEUP_VIEW_PERMISSION,
+        BUILDING_LINEUP_EDIT_PERMISSION,
+    )
 
     if request.method == "POST":
-        if not can_edit:
+        if not access["can_edit"]:
             db.session.rollback()
             flash("Access denied.", "error")
-            return _building_lineup_response(gateway, can_edit, status_code=403)
+            return _building_lineup_response(gateway, access, status_code=403)
 
         try:
             save_building_lineup(gateway, request.form)
         except ValueError as exc:
             db.session.rollback()
             flash(str(exc), "error")
-            return _building_lineup_response(gateway, can_edit, status_code=400)
+            return _building_lineup_response(gateway, access, status_code=400)
 
         db.session.commit()
         flash("BUILDING LINEUP SAVED.", "success")
         return redirect(url_for("neoermac.building_lineup"))
 
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neoermac.index"))
+
     rows = get_building_lineup_rows(gateway)
     db.session.commit()
-    return _building_lineup_response(gateway, can_edit, rows=rows)
+    return _building_lineup_response(gateway, access, rows=rows)
 
 
 @bp.route("/outbound")
@@ -92,7 +103,7 @@ def _placeholder_page(title):
     )
 
 
-def _building_lineup_response(gateway, can_edit, rows=None, status_code=200):
+def _building_lineup_response(gateway, access, rows=None, status_code=200):
     rows = rows or get_building_lineup_rows(gateway)
     destination_choices = get_departure_destination_choices(gateway)
     response = render_template(
@@ -102,6 +113,7 @@ def _building_lineup_response(gateway, can_edit, rows=None, status_code=200):
         destination_choices=destination_choices,
         destination_fields=DESTINATION_FIELDS,
         field_name=lineup_field_name,
-        can_edit=can_edit,
+        can_view=access["can_view"],
+        can_edit=access["can_edit"],
     )
     return response, status_code

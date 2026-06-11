@@ -94,6 +94,7 @@ class DatabaseBootstrapTest(unittest.TestCase):
                 "neomotherbrain.manage_sort.view": "operator",
                 "neomotherbrain.master_schedule.view": "operator",
                 "neoermac.building_lineup.edit": "simulator",
+                "neoermac.building_lineup.view": "operator",
                 "neoermac.door_view.enter_actual_pulls": "operator",
                 "neoermac.tug_assignments.edit": "master",
             },
@@ -142,7 +143,7 @@ class DatabaseBootstrapTest(unittest.TestCase):
         self.assertFalse(second_result["password_applied"])
         self.assertEqual(Gateway.query.filter_by(code="RFD").count(), 1)
         self.assertEqual(NeoNode.query.count(), len(DEFAULT_NEONODES))
-        self.assertEqual(PermissionRule.query.count(), 7)
+        self.assertEqual(PermissionRule.query.count(), 8)
         self.assertEqual(User.query.filter_by(username="Kessler").count(), 1)
         self.assertEqual(GatewayMembership.query.filter_by(user_id=user.id).count(), 1)
         self.assertEqual(

@@ -15,7 +15,7 @@ from app.auth.permissions import (
 from app.config import Config
 from app.extensions import db, login_manager
 from app.services.access_control import user_can_access_node, user_has_gateway_access
-from app.services.permission_rules import user_can
+from app.services.permission_rules import permission_access, user_can
 
 
 def create_app(config_class=Config, auto_bootstrap=True):
@@ -115,6 +115,7 @@ def register_template_helpers(app):
             "user_has_gateway_access": user_has_gateway_access,
             "user_can_access_node": user_can_access_node,
             "user_can": user_can,
+            "permission_access": permission_access,
         }
 
     @app.context_processor

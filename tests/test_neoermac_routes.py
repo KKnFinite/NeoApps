@@ -93,7 +93,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 self.assertIn(b"OPERATIONAL LOGIC WILL BE ADDED IN A LATER PASS.", response.data)
 
     def test_building_lineup_page_renders_runout_list(self):
-        self._login_approved_user()
+        self._login_approved_user(role="operator")
 
         response = self.client.get("/neoermac/building-lineup")
 
@@ -114,7 +114,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"WEST SIDE DESTINATION 2", response.data)
         self.assertNotIn(b"EAST SIDE DESTINATIONS", response.data)
         self.assertNotIn(b"WEST SIDE DESTINATIONS", response.data)
-        self.assertIn(b"READ ONLY", response.data)
+        self.assertIn(b"View Only", response.data)
         self.assertNotIn(b"SAVE BUILDING LINEUP", response.data)
 
     def test_building_lineup_destination_options_come_from_master_departures(self):
@@ -122,7 +122,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self._add_master_departure("UPS102", "ont")
         self._add_master_arrival("UPS201", "dfw")
         db.session.commit()
-        self._login_approved_user()
+        self._login_approved_user(role="operator")
 
         response = self.client.get("/neoermac/building-lineup")
 
@@ -195,15 +195,23 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIsNone(saved.west_destination_1)
         self.assertIsNone(saved.west_destination_2)
 
-    def test_user_without_building_lineup_edit_sees_read_only_and_cannot_save(self):
+    def test_user_with_building_lineup_view_can_open_read_only(self):
         self._add_master_departure("UPS401", "SDF")
         db.session.commit()
         self._login_approved_user(role="operator")
 
         read_only_response = self.client.get("/neoermac/building-lineup")
         self.assertEqual(read_only_response.status_code, 200)
-        self.assertIn(b"READ ONLY", read_only_response.data)
+        self.assertIn(b"View Only", read_only_response.data)
         self.assertIn(b"disabled", read_only_response.data)
+        self.assertNotIn(b"SAVE BUILDING LINEUP", read_only_response.data)
+
+    def test_view_only_user_cannot_post_building_lineup(self):
+        self._add_master_departure("UPS402", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        self.client.get("/neoermac/building-lineup")
 
         save_response = self.client.post(
             "/neoermac/building-lineup",
@@ -217,6 +225,14 @@ class NeoErmacRoutesTest(unittest.TestCase):
         ).one()
         self.assertEqual(save_response.status_code, 403)
         self.assertIsNone(saved.east_destination_1)
+
+    def test_user_without_building_lineup_view_cannot_open_page(self):
+        self._login_approved_user(role="watcher")
+
+        response = self.client.get("/neoermac/building-lineup", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/neoermac", response.location)
 
     def test_ermac_route_is_not_used(self):
         self._login_approved_user()

@@ -23,8 +23,8 @@
         <p>{{ gateway.code }} RUNOUT DESTINATION CONTROL</p>
     </div>
 
-    {% if not can_edit %}
-    <p class="neoermac-readonly-note">READ ONLY</p>
+    {% if can_view and not can_edit %}
+    <p class="neoermac-readonly-note">View Only</p>
     {% endif %}
 
     {% if not destination_choices %}
