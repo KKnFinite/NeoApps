@@ -5,6 +5,8 @@ from app.models.gateway_node_role import GatewayNodeRole
 from app.models.gateway_sort_matrix import GatewaySortMatrix
 from app.models.master_flight_schedule import MasterFlightSchedule
 from app.models.neoermac_building_lineup import NeoErmacBuildingLineup
+from app.models.neoermac_door_pull import NeoErmacDoorPull
+from app.models.neoermac_uld_request import NeoErmacUldRequest
 from app.models.neo_node import NeoNode
 from app.models.permission_rule import PermissionRule
 from app.models.sort_date_crew_assignment import SortDateCrewAssignment
@@ -24,6 +26,8 @@ __all__ = [
     "NeoNode",
     "PermissionRule",
     "NeoErmacBuildingLineup",
+    "NeoErmacDoorPull",
+    "NeoErmacUldRequest",
     "MasterFlightSchedule",
     "SortDateOperation",
     "SortDateMission",

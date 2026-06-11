@@ -41,9 +41,14 @@ DEFAULT_PERMISSION_RULES = (
         "Edit NeoErmac Building Lineup screens.",
     ),
     (
-        "neoermac.door_view.enter_actual_pulls",
+        "neoermac.door_view.view",
         "operator",
-        "Enter actual pull information in NeoErmac Door View.",
+        "View NeoErmac Door View screens.",
+    ),
+    (
+        "neoermac.door_view.edit",
+        "operator",
+        "Edit NeoErmac Door View pulls and ULD requests.",
     ),
     (
         "neoermac.tug_assignments.edit",

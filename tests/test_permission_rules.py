@@ -49,7 +49,8 @@ class PermissionRulesTest(unittest.TestCase):
                 "neomotherbrain.master_schedule.view": "operator",
                 "neoermac.building_lineup.edit": "simulator",
                 "neoermac.building_lineup.view": "operator",
-                "neoermac.door_view.enter_actual_pulls": "operator",
+                "neoermac.door_view.edit": "operator",
+                "neoermac.door_view.view": "operator",
                 "neoermac.tug_assignments.edit": "master",
             },
         )
@@ -134,10 +135,11 @@ class PermissionRulesTest(unittest.TestCase):
 
         self.assertTrue(user_can("neoermac.building_lineup.view", operator))
 
-    def test_operator_can_enter_actual_pulls(self):
+    def test_operator_can_view_and_edit_door_view(self):
         operator = self._user_with_ermac_role("ermac_operator", "operator")
 
-        self.assertTrue(user_can("neoermac.door_view.enter_actual_pulls", operator))
+        self.assertTrue(user_can("neoermac.door_view.view", operator))
+        self.assertTrue(user_can("neoermac.door_view.edit", operator))
 
     def test_motherbrain_view_permission_uses_operator_minimum(self):
         watcher = self._user_with_node_role("motherbrain_watcher", "motherbrain", "watcher")
@@ -146,10 +148,11 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertFalse(user_can("neomotherbrain.dashboard.view", watcher))
         self.assertTrue(user_can("neomotherbrain.dashboard.view", operator))
 
-    def test_lower_role_cannot_enter_actual_pulls(self):
+    def test_lower_role_cannot_view_or_edit_door_view(self):
         watcher = self._user_with_ermac_role("ermac_watcher", "watcher")
 
-        self.assertFalse(user_can("neoermac.door_view.enter_actual_pulls", watcher))
+        self.assertFalse(user_can("neoermac.door_view.view", watcher))
+        self.assertFalse(user_can("neoermac.door_view.edit", watcher))
 
     def test_missing_permission_key_denies_non_grandmaster_and_allows_grandmaster(self):
         master = self._user_with_ermac_role("ermac_master", "master")

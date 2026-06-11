@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}DOOR VIEW | NeoErmac{% endblock %}
+
+{% block content %}
+<section class="neoermac-shell neoermac-door-shell" aria-labelledby="neoermac-door-title">
+    <div class="neoermac-hero neoermac-door-hero">
+        <span class="neoermac-kicker"><span class="neo-node-name neo-node-ermac node-ermac" aria-label="NeoErmac"><span class="neo-word">Neo</span><span class="node-word">Ermac</span></span></span>
+        <h1 id="neoermac-door-title">DOOR VIEW</h1>
+        <p>{{ gateway.code }} DOOR OPERATIONS</p>
+    </div>
+
+    {% if can_view and not can_edit %}
+    <p class="neoermac-readonly-note">View Only</p>
+    {% endif %}
+
+    <form class="neoermac-door-selector" method="get" action="{{ url_for('neoermac.door_view') }}">
+        <label for="door-select">DOOR</label>
+        <div class="neoermac-door-selector-row">
+            <select id="door-select" class="neoermac-destination-select" name="door">
+                <option value="">Select a door</option>
+                {% for door_option in door_options %}
+                <option value="{{ door_option }}" {% if selected_door == door_option %}selected{% endif %}>{{ door_option }}</option>
+                {% endfor %}
+            </select>
+            <button class="neoermac-menu-link" type="submit">OPEN</button>
+        </div>
+    </form>
+
+    {% if not selected_door %}
+    <p class="neoermac-door-empty">Select a door.</p>
+    {% else %}
+    <header class="neoermac-selected-door">
+        <span>SELECTED DOOR</span>
+        <strong>{{ selected_door }}</strong>
+    </header>
+
+    <section class="neoermac-door-panel" aria-label="Door pull operations">
+        <h2>DESTINATION PULLS</h2>
+
+        {% if destinations %}
+        <form method="post" class="neoermac-door-pull-form">
+            <input type="hidden" name="door" value="{{ selected_door }}">
+            <input type="hidden" name="action" value="save_pulls">
+            <input type="hidden" name="destination_count" value="{{ destinations|length }}">
+
+            <div class="neoermac-door-destination-list">
+                {% for card in destinations %}
+                {% set destination_index = loop.index0 %}
+                <article class="neoermac-door-destination-card">
+                    <input type="hidden" name="destination_{{ destination_index }}" value="{{ card.destination }}">
+                    <div class="neoermac-door-card-head">
+                        <div>
+                            <span>DESTINATION</span>
+                            <strong>{{ card.destination }}</strong>
+                        </div>
+                        <div>
+                            <span>TAIL</span>
+                            <strong>{{ card.tail or "-" }}</strong>
+                        </div>
+                        <div>
+                            <span>PARKING</span>
+                            <strong>{{ card.parking or "-" }}</strong>
+                        </div>
+                    </div>
+
+                    <div class="neoermac-door-belt-list">
+                        {% for slot_label in card.slot_labels %}
+                        <span>{{ slot_label }}</span>
+                        {% endfor %}
+                    </div>
+
+                    <div class="neoermac-door-pull-grid">
+                        {% for pull in pull_fields %}
+                        <section class="neoermac-door-pull-row">
+                            <div class="neoermac-door-planned">
+                                <span>PLANNED {{ pull.label }}</span>
+                                <strong>{{ card.planned[pull.key] or "-" }}</strong>
+                            </div>
+                            {% if can_edit %}
+                            <label class="neoermac-door-actual">
+                                <span>ACTUAL {{ pull.label }}</span>
+                                <input
+                                    type="time"
+                                    name="{{ pull.actual_field }}_{{ destination_index }}"
+                                    value="{{ card.actual[pull.key] }}"
+                                    data-no-pull-input="{{ pull.key }}-{{ destination_index }}"
+                                    {% if card.no_pull[pull.key] %}disabled{% endif %}
+                                >
+                            </label>
+                            <label class="neoermac-door-toggle">
+                                <input
+                                    type="checkbox"
+                                    name="{{ pull.no_field }}_{{ destination_index }}"
+                                    data-no-pull-toggle="{{ pull.key }}-{{ destination_index }}"
+                                    {% if card.no_pull[pull.key] %}checked{% endif %}
+                                >
+                                <span>No {{ pull.label }}</span>
+                            </label>
+                            {% else %}
+                            <div class="neoermac-door-actual neoermac-door-static">
+                                <span>ACTUAL {{ pull.label }}</span>
+                                <strong>{{ "NO " ~ pull.label if card.no_pull[pull.key] else (card.actual[pull.key] or "-") }}</strong>
+                            </div>
+                            {% endif %}
+                        </section>
+                        {% endfor %}
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+
+            {% if can_edit %}
+            <button class="neoermac-menu-link neoermac-door-save" type="submit">SAVE PULLS</button>
+            {% endif %}
+        </form>
+        {% else %}
+        <p class="neoermac-door-empty">NO DESTINATIONS ASSIGNED TO {{ selected_door }}.</p>
+        {% endif %}
+    </section>
+
+    <section class="neoermac-door-panel" aria-label="Tugs assigned">
+        <h2>TUGS ASSIGNED TO {{ selected_door }}</h2>
+        {% if tugs %}
+        <ul class="neoermac-door-simple-list">
+            {% for tug in tugs %}
+            <li>{{ tug }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="neoermac-door-empty">No tugs assigned yet.</p>
+        {% endif %}
+    </section>
+
+    <section class="neoermac-door-panel" aria-label="ULD request">
+        <h2>REQUEST ULDS</h2>
+        {% if can_edit %}
+        <form method="post" class="neoermac-uld-form">
+            <input type="hidden" name="door" value="{{ selected_door }}">
+            <input type="hidden" name="action" value="save_uld_request">
+            <div class="neoermac-uld-grid">
+                <label>
+                    <span>A2</span>
+                    <input type="number" name="uld_a2_count" min="0" inputmode="numeric" value="{{ uld_request.a2_count if uld_request else 0 }}">
+                </label>
+                <label>
+                    <span>A1</span>
+                    <input type="number" name="uld_a1_count" min="0" inputmode="numeric" value="{{ uld_request.a1_count if uld_request else 0 }}">
+                </label>
+                <label>
+                    <span>AMP</span>
+                    <input type="number" name="uld_amp_count" min="0" inputmode="numeric" value="{{ uld_request.amp_count if uld_request else 0 }}">
+                </label>
+            </div>
+            <label class="neoermac-door-toggle neoermac-setup-toggle">
+                <input type="checkbox" name="setup_needed" {% if uld_request and uld_request.setup_needed %}checked{% endif %}>
+                <span>Needed for setup</span>
+            </label>
+            <div class="neoermac-door-action-row">
+                <button class="neoermac-menu-link" type="submit">SAVE ULD REQUEST</button>
+                <button class="neoermac-menu-link neoermac-menu-link-secondary" type="submit" name="clear_uld_request" value="1">CLEAR REQUEST</button>
+            </div>
+        </form>
+        {% else %}
+        <div class="neoermac-uld-status">
+            <span>A2 <strong>{{ uld_request.a2_count if uld_request else 0 }}</strong></span>
+            <span>A1 <strong>{{ uld_request.a1_count if uld_request else 0 }}</strong></span>
+            <span>AMP <strong>{{ uld_request.amp_count if uld_request else 0 }}</strong></span>
+            <span>{{ "Needed for setup" if uld_request and uld_request.setup_needed else "Setup priority off" }}</span>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="neoermac-door-panel" aria-label="ULDs on the way">
+        <h2>ON THE WAY</h2>
+        {% if on_the_way_events %}
+        <ul class="neoermac-door-simple-list">
+            {% for event in on_the_way_events %}
+            <li>{{ event }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="neoermac-door-empty">No active on-the-way events.</p>
+        {% endif %}
+    </section>
+
+    <button class="neoermac-menu-link neoermac-menu-link-secondary neoermac-staffing-button" type="button" disabled>STAFFING</button>
+    {% endif %}
+</section>
+
+{% if can_edit %}
+<script>
+(() => {
+    document.querySelectorAll("[data-no-pull-toggle]").forEach((toggle) => {
+        const input = document.querySelector(`[data-no-pull-input="${toggle.dataset.noPullToggle}"]`);
+        if (!input) {
+            return;
+        }
+
+        const syncInput = () => {
+            input.disabled = toggle.checked;
+            if (toggle.checked) {
+                input.value = "";
+            }
+        };
+
+        toggle.addEventListener("change", syncInput);
+        syncInput();
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -12,11 +12,18 @@ from app.services.neoermac_building_lineup import (
     lineup_field_name,
     save_building_lineup,
 )
+from app.services.neoermac_door_view import (
+    door_view_context,
+    save_door_pulls,
+    save_uld_request,
+)
 from app.services.permission_rules import permission_access
 
 
 BUILDING_LINEUP_VIEW_PERMISSION = "neoermac.building_lineup.view"
 BUILDING_LINEUP_EDIT_PERMISSION = "neoermac.building_lineup.edit"
+DOOR_VIEW_VIEW_PERMISSION = "neoermac.door_view.view"
+DOOR_VIEW_EDIT_PERMISSION = "neoermac.door_view.edit"
 
 
 NEOERMAC_PAGES = (
@@ -87,10 +94,43 @@ def outbound():
     return _placeholder_page("VIEW OUTBOUND")
 
 
-@bp.route("/door-view")
+@bp.route("/door-view", methods=["GET", "POST"])
 @gateway_node_required("ermac")
 def door_view():
-    return _placeholder_page("DOOR VIEW")
+    gateway = get_current_gateway()
+    access = permission_access(DOOR_VIEW_VIEW_PERMISSION, DOOR_VIEW_EDIT_PERMISSION)
+    selected_door = request.values.get("door", "")
+
+    if request.method == "POST":
+        if not access["can_edit"]:
+            db.session.rollback()
+            flash("Access denied.", "error")
+            return _door_view_response(gateway, access, selected_door, status_code=403)
+
+        action = request.form.get("action")
+        try:
+            if action == "save_pulls":
+                save_door_pulls(gateway, selected_door, request.form)
+                flash("DOOR PULLS SAVED.", "success")
+            elif action == "save_uld_request":
+                save_uld_request(gateway, selected_door, request.form)
+                flash("ULD REQUEST UPDATED.", "success")
+            else:
+                raise ValueError("Unknown Door View action.")
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "error")
+            return _door_view_response(gateway, access, selected_door, status_code=400)
+
+        db.session.commit()
+        return redirect(url_for("neoermac.door_view", door=selected_door))
+
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neoermac.index"))
+
+    db.session.commit()
+    return _door_view_response(gateway, access, selected_door)
 
 
 @bp.route("/tug-assignments")
@@ -133,5 +173,17 @@ def _building_lineup_response(gateway, access, rows=None, status_code=200):
         field_name=lineup_field_name,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
+    )
+    return response, status_code
+
+
+def _door_view_response(gateway, access, selected_door, status_code=200):
+    context = door_view_context(gateway, selected_door)
+    response = render_template(
+        "neonodes/neoermac/door_view.html",
+        gateway=gateway,
+        can_view=access["can_view"],
+        can_edit=access["can_edit"],
+        **context,
     )
     return response, status_code

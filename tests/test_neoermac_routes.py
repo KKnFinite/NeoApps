@@ -1,5 +1,5 @@
 import unittest
-from datetime import time
+from datetime import date, datetime, time
 
 from app import create_app
 from app.extensions import db
@@ -8,7 +8,13 @@ from app.models import (
     GatewayNodeRole,
     MasterFlightSchedule,
     NeoErmacBuildingLineup,
+    NeoErmacDoorPull,
+    NeoErmacUldRequest,
     NeoNode,
+    PermissionRule,
+    SortDateMission,
+    SortDateOperation,
+    SortDateTailState,
     User,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
@@ -86,7 +92,6 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self._login_approved_user()
         expected_pages = {
             "/neoermac/outbound": b"VIEW OUTBOUND",
-            "/neoermac/door-view": b"DOOR VIEW",
             "/neoermac/tug-assignments": b"TUG ASSIGNMENTS",
         }
 
@@ -98,6 +103,154 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 self.assertIn(title, response.data)
                 self.assertIn(b'aria-label="BACK TO NeoErmac"', response.data)
                 self.assertIn(b"OPERATIONAL LOGIC WILL BE ADDED IN A LATER PASS.", response.data)
+
+    def test_door_view_route_loads_for_view_authorized_user(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"DOOR VIEW", response.data)
+        self.assertIn(b"Select a door.", response.data)
+        self.assertIn(b'<option value="D34"', response.data)
+
+    def test_door_view_unauthorized_user_is_blocked_by_view_permission(self):
+        view_rule = PermissionRule.query.filter_by(permission_key="neoermac.door_view.view").one()
+        edit_rule = PermissionRule.query.filter_by(permission_key="neoermac.door_view.edit").one()
+        view_rule.minimum_role = "master"
+        edit_rule.minimum_role = "master"
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/neoermac", response.location)
+
+    def test_door_view_selected_door_shows_building_lineup_destinations(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_11", "west_destination_2", "ONT")
+        self._add_operation_departure("UPS301", "SDF", tail="N123UP", parking="A12")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'<strong>D34</strong>', response.data)
+        self.assertIn(b"SDF", response.data)
+        self.assertIn(b"ONT", response.data)
+        self.assertIn(b"N123UP", response.data)
+        self.assertIn(b"A12", response.data)
+        self.assertIn(b"PLANNED Pure", response.data)
+        self.assertIn(b"01:20", response.data)
+        self.assertIn(b"No tugs assigned yet.", response.data)
+        self.assertIn(b"No active on-the-way events.", response.data)
+
+    def test_door_view_view_only_user_cannot_save_pulls_or_uld_requests(self):
+        edit_rule = PermissionRule.query.filter_by(permission_key="neoermac.door_view.edit").one()
+        edit_rule.minimum_role = "simulator"
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        pull_response = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "save_pulls",
+                "destination_count": "1",
+                "destination_0": "SDF",
+                "actual_pure_0": "01:15",
+            },
+            follow_redirects=False,
+        )
+        uld_response = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "save_uld_request",
+                "uld_a2_count": "2",
+                "uld_a1_count": "1",
+                "uld_amp_count": "3",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(pull_response.status_code, 403)
+        self.assertEqual(uld_response.status_code, 403)
+        self.assertEqual(NeoErmacDoorPull.query.count(), 0)
+        self.assertEqual(NeoErmacUldRequest.query.count(), 0)
+
+    def test_door_view_edit_user_can_save_actual_pull_and_no_pull_states(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._add_operation_departure("UPS302", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "save_pulls",
+                "destination_count": "1",
+                "destination_0": "SDF",
+                "actual_pure_0": "01:15",
+                "actual_first_mix_0": "01:30",
+                "no_first_mix_0": "on",
+                "actual_second_mix_0": "01:55",
+            },
+            follow_redirects=False,
+        )
+
+        saved = NeoErmacDoorPull.query.filter_by(door="D34", destination="SDF").one()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(saved.actual_pure_pull_time_local, time(1, 15))
+        self.assertTrue(saved.no_first_mix_pull)
+        self.assertIsNone(saved.actual_first_mix_pull_time_local)
+        self.assertFalse(saved.no_second_mix_pull)
+        self.assertEqual(saved.actual_second_mix_pull_time_local, time(1, 55))
+
+        reload_response = self.client.get("/neoermac/door-view?door=D34")
+        self.assertIn(b'value="01:15"', reload_response.data)
+        self.assertIn(b"checked", reload_response.data)
+
+    def test_door_view_edit_user_can_create_and_update_uld_requested_counts(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        create_response = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "save_uld_request",
+                "uld_a2_count": "2",
+                "uld_a1_count": "1",
+                "uld_amp_count": "3",
+                "setup_needed": "on",
+            },
+            follow_redirects=False,
+        )
+        update_response = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "save_uld_request",
+                "uld_a2_count": "4",
+                "uld_a1_count": "0",
+                "uld_amp_count": "1",
+            },
+            follow_redirects=False,
+        )
+
+        saved = NeoErmacUldRequest.query.filter_by(door="D34").one()
+        self.assertEqual(create_response.status_code, 302)
+        self.assertEqual(update_response.status_code, 302)
+        self.assertEqual(saved.a2_count, 4)
+        self.assertEqual(saved.a1_count, 0)
+        self.assertEqual(saved.amp_count, 1)
+        self.assertFalse(saved.setup_needed)
 
     def test_building_lineup_page_renders_belt_map(self):
         self._login_approved_user(role="operator")
@@ -306,6 +459,69 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 timezone="America/Chicago",
             )
         )
+
+    def _assign_lineup_destination(self, runout_key, field_name, destination):
+        row = NeoErmacBuildingLineup.query.filter_by(
+            gateway_id=self.gateway.id,
+            runout_key=runout_key,
+        ).first()
+        if row is None:
+            row = NeoErmacBuildingLineup(
+                gateway_id=self.gateway.id,
+                runout_key=runout_key,
+                runout_name=runout_key.replace("_", " ").title(),
+            )
+            db.session.add(row)
+        setattr(row, field_name, destination)
+
+    def _add_operation_departure(self, flight_number, destination, tail=None, parking=None):
+        operation = SortDateOperation.query.filter_by(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_name="night",
+        ).first()
+        if operation is None:
+            operation = SortDateOperation(
+                gateway_id=self.gateway.id,
+                sort_date=date(2026, 6, 11),
+                gateway_code=self.gateway.code,
+                sort_name="night",
+            )
+            db.session.add(operation)
+            db.session.flush()
+
+        mission = SortDateMission(
+            sort_date=operation.sort_date,
+            gateway_code=self.gateway.code,
+            sort_name=operation.sort_name,
+            sort_date_operation_id=operation.id,
+            mission_type="departure",
+            mission_source="master",
+            flight_number=flight_number,
+            origin=self.gateway.code,
+            destination=destination,
+            timezone="America/Chicago",
+            planned_datetime_local=datetime(2026, 6, 11, 2, 15),
+            planned_datetime_utc=datetime(2026, 6, 11, 7, 15),
+            planned_source="master",
+            assigned_tail_number=tail,
+            pure_pull_time_local=time(1, 20),
+            first_mix_pull_time_local=time(1, 40),
+            final_mix_pull_time_local=time(1, 55),
+        )
+        db.session.add(mission)
+        db.session.flush()
+
+        if tail and parking:
+            db.session.add(
+                SortDateTailState(
+                    sort_date=operation.sort_date,
+                    gateway_code=self.gateway.code,
+                    sort_name=operation.sort_name,
+                    tail_number=tail,
+                    parking_position=parking,
+                )
+            )
 
     def _add_master_arrival(self, flight_number, origin):
         db.session.add(
