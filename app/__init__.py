@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from flask import Flask, redirect, request, url_for
+from flask import Flask, redirect, request, send_from_directory, url_for
 from flask_login import current_user
 
 from app.auth.permissions import (
@@ -31,6 +31,7 @@ def create_app(config_class=Config, auto_bootstrap=True):
 
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)
+    register_pwa_assets(app)
     register_blueprints(app)
     register_template_helpers(app)
     register_request_guards(app)
@@ -147,6 +148,31 @@ def register_request_guards(app):
             return None
 
         return redirect(url_for("auth.change_password"))
+
+
+def register_pwa_assets(app):
+    @app.route("/manifest.webmanifest")
+    def pwa_manifest():
+        response = send_from_directory(
+            app.static_folder,
+            "manifest.webmanifest",
+            mimetype="application/manifest+json",
+            max_age=0,
+        )
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+    @app.route("/service-worker.js")
+    def service_worker():
+        response = send_from_directory(
+            app.static_folder,
+            "service-worker.js",
+            mimetype="application/javascript",
+            max_age=0,
+        )
+        response.headers["Cache-Control"] = "no-cache"
+        response.headers["Service-Worker-Allowed"] = "/"
+        return response
 
 
 def register_blueprints(app):

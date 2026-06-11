@@ -3,7 +3,13 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#d95a1f">
+    <meta name="application-name" content="NeoGateway">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="NeoGateway">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>{% block title %}NeoApps{% endblock %}</title>
+    <link rel="manifest" href="{{ url_for('pwa_manifest', v=config.STATIC_ASSET_VERSION) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css', v=config.STATIC_ASSET_VERSION) }}">
 </head>
 {% set is_authenticated_app = current_user.is_authenticated and not public_landing|default(false) %}
@@ -147,5 +153,16 @@
     })();
     </script>
     {% endif %}
+    <script>
+    (() => {
+        if (!("serviceWorker" in navigator)) {
+            return;
+        }
+
+        window.addEventListener("load", () => {
+            navigator.serviceWorker.register("{{ url_for('service_worker', v=config.STATIC_ASSET_VERSION) }}").catch(() => {});
+        });
+    })();
+    </script>
 </body>
 </html>

@@ -104,6 +104,47 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         template = Path("app/templates/base.html").read_text()
 
         self.assertIn("filename='css/base.css', v=config.STATIC_ASSET_VERSION", template)
+        self.assertIn("url_for('pwa_manifest', v=config.STATIC_ASSET_VERSION)", template)
+        self.assertIn("url_for('service_worker', v=config.STATIC_ASSET_VERSION)", template)
+        self.assertIn('name="theme-color" content="#d95a1f"', template)
+        self.assertIn('name="apple-mobile-web-app-title" content="NeoGateway"', template)
+
+    def test_neogateway_manifest_uses_current_branding(self):
+        response = self.client.get("/manifest.webmanifest")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/manifest+json")
+        self.assertIn("no-cache", response.headers["Cache-Control"])
+        manifest = response.get_json()
+        self.assertEqual(manifest["name"], "NeoGateway")
+        self.assertEqual(manifest["short_name"], "NeoGateway")
+        self.assertEqual(manifest["start_url"], "/login")
+        self.assertEqual(manifest["scope"], "/")
+        self.assertEqual(manifest["display"], "standalone")
+        icon_sources = [icon["src"] for icon in manifest["icons"]]
+        self.assertIn("/static/images/neogateway_logo3_small.png", icon_sources)
+        self.assertIn("/static/images/neogateway_logo3_medium.png", icon_sources)
+        self.assertIn("/static/images/neogateway_logo3_large.png", icon_sources)
+        manifest_text = response.get_data(as_text=True)
+        self.assertNotIn("NeoRFD", manifest_text)
+        self.assertNotIn("neorfd", manifest_text.lower())
+
+    def test_service_worker_is_conservative_and_uses_current_logo_assets(self):
+        response = self.client.get("/service-worker.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/javascript")
+        self.assertIn("no-cache", response.headers["Cache-Control"])
+        self.assertEqual(response.headers["Service-Worker-Allowed"], "/")
+        service_worker = response.get_data(as_text=True)
+        self.assertIn("CACHE_NAME", service_worker)
+        self.assertIn('request.mode === "navigate"', service_worker)
+        self.assertIn('event.respondWith(fetch(request));', service_worker)
+        self.assertIn("/static/images/neogateway_logo3_small.png", service_worker)
+        self.assertIn("/static/images/neogateway_logo3_medium.png", service_worker)
+        self.assertIn("/static/images/neogateway_logo3_large.png", service_worker)
+        self.assertNotIn("NeoRFD", service_worker)
+        self.assertNotIn("neorfd", service_worker.lower())
 
     def test_neonode_button_asset_exists_with_render_safe_casing(self):
         button_path = Path("app/static/images/neobutton1_medium.png")

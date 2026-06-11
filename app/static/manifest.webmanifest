@@ -1,0 +1,30 @@
+{
+  "name": "NeoGateway",
+  "short_name": "NeoGateway",
+  "description": "NeoGateway operational access portal.",
+  "start_url": "/login",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#050506",
+  "theme_color": "#d95a1f",
+  "icons": [
+    {
+      "src": "/static/images/neogateway_logo3_small.png",
+      "sizes": "300x100",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/images/neogateway_logo3_medium.png",
+      "sizes": "600x200",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/images/neogateway_logo3_large.png",
+      "sizes": "1200x400",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
