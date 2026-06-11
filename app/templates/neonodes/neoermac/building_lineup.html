@@ -3,13 +3,6 @@
 {% block title %}BUILDING LINEUP | NeoErmac{% endblock %}
 
 {% block content %}
-{% set slot_classes = {
-    "east_destination_1": "neoermac-slot-east-1",
-    "east_destination_2": "neoermac-slot-east-2",
-    "west_destination_1": "neoermac-slot-west-1",
-    "west_destination_2": "neoermac-slot-west-2"
-} %}
-
 <section class="neoermac-shell neoermac-lineup-shell" aria-labelledby="neoermac-lineup-title">
     <div class="neoermac-hero">
         <span class="neoermac-kicker"><span class="neo-node-name neo-node-ermac node-ermac" aria-label="NeoErmac"><span class="neo-word">Neo</span><span class="node-word">Ermac</span></span></span>
@@ -28,27 +21,28 @@
     <form class="neoermac-lineup-form" method="post">
         <div class="neoermac-runout-list">
             {% for row in rows %}
-            <article class="neoermac-runout-card">
-                <h2>{{ row.belt_group_label }} BELTS</h2>
+            <article class="neoermac-runout-card neoermac-belt-group">
+                <h2 class="neoermac-door-bar">{{ row.door_start }} - {{ row.door_end }}</h2>
 
-                <div class="neoermac-runout-slots">
-                    {% for field in ["east_destination_1", "east_destination_2", "west_destination_1", "west_destination_2"] %}
-                    {% set selected_value = row|attr(field) %}
-                    <label class="neoermac-slot {{ slot_classes[field] }}">
-                        <span>{{ row.slot_labels[field] }}</span>
-                        <select class="neoermac-destination-select" name="{{ field_name(row, field) }}" {% if not can_edit %}disabled{% endif %}>
-                            <option value=""></option>
-                            {% for destination in destination_choices %}
-                            <option value="{{ destination }}" {% if selected_value == destination %}selected{% endif %}>{{ destination }}</option>
+                <div class="neoermac-belt-grid-scroll">
+                    <div class="neoermac-runout-slots neoermac-belt-grid" aria-label="{{ row.belt_group_label }} belt assignments">
+                        {% for side_label, slots in [("E", row.east_slots), ("W", row.west_slots)] %}
+                        <div class="neoermac-belt-row">
+                            <div class="neoermac-side-label">{{ side_label }}</div>
+                            {% for slot in slots %}
+                            {% set selected_value = row|attr(slot.field) %}
+                            <label class="neoermac-slot neoermac-belt-cell">
+                                <span class="neoermac-belt-label">{{ slot.belt }}</span>
+                                <select class="neoermac-destination-select" name="{{ field_name(row, slot.field) }}" {% if not can_edit %}disabled{% endif %}>
+                                    <option value=""></option>
+                                    {% for destination in destination_choices %}
+                                    <option value="{{ destination }}" {% if selected_value == destination %}selected{% endif %}>{{ destination }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
                             {% endfor %}
-                        </select>
-                    </label>
-                    {% endfor %}
-                    <div class="neoermac-door-context" aria-hidden="true">
-                        <span>{{ row.door_start }}</span>
-                        <strong>BELTS</strong>
-                        <em>{{ row.belt_names[0] }}<br>{{ row.belt_names[1] }}</em>
-                        <span>{{ row.door_end }}</span>
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
             </article>
