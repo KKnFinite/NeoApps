@@ -11,6 +11,26 @@ from app.services.access_control import get_current_gateway, get_user_node_role
 
 DEFAULT_PERMISSION_RULES = (
     (
+        "neomotherbrain.dashboard.view",
+        "operator",
+        "View NeoMotherBrain dashboard screens.",
+    ),
+    (
+        "neomotherbrain.manage_sort.view",
+        "operator",
+        "View NeoMotherBrain Manage Sort screens.",
+    ),
+    (
+        "neomotherbrain.master_schedule.view",
+        "operator",
+        "View NeoMotherBrain Master Schedule screens.",
+    ),
+    (
+        "neomotherbrain.gateway_matrix.view",
+        "operator",
+        "View NeoMotherBrain Gateway Matrix screens.",
+    ),
+    (
         "neoermac.building_lineup.edit",
         "simulator",
         "Edit NeoErmac Building Lineup screens.",
@@ -25,6 +45,17 @@ DEFAULT_PERMISSION_RULES = (
         "master",
         "Edit NeoErmac Tug Assignments.",
     ),
+)
+
+PERMISSION_RULE_GROUPS = (
+    ("system", "NeoGateway / System", ("neogateway.", "neoapps.", "system.")),
+    ("motherbrain", "NeoMotherBrain", ("neomotherbrain.", "motherbrain.")),
+    ("sektor", "NeoSektor", ("neosektor.", "sektor.")),
+    ("ermac", "NeoErmac", ("neoermac.", "ermac.")),
+    ("scorpion", "NeoScorpion", ("neoscorpion.", "scorpion.")),
+    ("reptile", "NeoReptile", ("neoreptile.", "reptile.")),
+    ("subzero", "NeoSub-Zero", ("neosubzero.", "subzero.", "neosub-zero.", "sub-zero.")),
+    ("rain", "NeoRain", ("neorain.", "rain.")),
 )
 
 
@@ -55,6 +86,20 @@ def get_permission_rule(permission_key):
         return None
 
     return PermissionRule.query.filter_by(permission_key=normalized_key).first()
+
+
+def grouped_permission_rules(rules):
+    grouped = {
+        group_key: {"key": group_key, "label": label, "rules": []}
+        for group_key, label, _prefixes in PERMISSION_RULE_GROUPS
+    }
+    fallback_key = "system"
+
+    for rule in rules:
+        group_key = _permission_rule_group_key(rule.permission_key)
+        grouped.get(group_key, grouped[fallback_key])["rules"].append(rule)
+
+    return [grouped[group_key] for group_key, _label, _prefixes in PERMISSION_RULE_GROUPS]
 
 
 def user_can(permission_key, user=None):
@@ -98,6 +143,14 @@ def require_permission(permission_key):
 
 def normalize_permission_key(permission_key):
     return str(permission_key or "").strip().lower()
+
+
+def _permission_rule_group_key(permission_key):
+    normalized_key = normalize_permission_key(permission_key)
+    for group_key, _label, prefixes in PERMISSION_RULE_GROUPS:
+        if normalized_key.startswith(prefixes):
+            return group_key
+    return "system"
 
 
 def _node_code_from_permission_key(permission_key):

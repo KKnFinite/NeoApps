@@ -17,7 +17,7 @@ from app.services.access_control import (
     request_default_gateway_access_for_user,
     user_has_gateway_access,
 )
-from app.services.permission_rules import ensure_default_permission_rules
+from app.services.permission_rules import ensure_default_permission_rules, grouped_permission_rules
 from app.services.user_tokens import (
     EMAIL_VERIFICATION,
     PASSWORD_RESET,
@@ -286,6 +286,7 @@ def permission_rules():
     rules = PermissionRule.query.order_by(PermissionRule.permission_key.asc()).all()
     return render_template(
         "auth/permission_rules.html",
+        grouped_rules=grouped_permission_rules(rules),
         role_choices=ROLE_CHOICES,
         rules=rules,
     )

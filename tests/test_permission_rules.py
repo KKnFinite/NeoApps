@@ -5,6 +5,7 @@ from app.extensions import db
 from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, User
 from app.services.access_control import backfill_default_gateway_node_roles, ensure_default_gateway_and_nodes
 from app.services.permission_rules import ensure_default_permission_rules, user_can
+from app.models.user import ROLE_LEVELS
 
 
 class PermissionRulesTest(unittest.TestCase):
@@ -42,11 +43,21 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertEqual(
             rules,
             {
+                "neomotherbrain.dashboard.view": "operator",
+                "neomotherbrain.gateway_matrix.view": "operator",
+                "neomotherbrain.manage_sort.view": "operator",
+                "neomotherbrain.master_schedule.view": "operator",
                 "neoermac.building_lineup.edit": "simulator",
                 "neoermac.door_view.enter_actual_pulls": "operator",
                 "neoermac.tug_assignments.edit": "master",
             },
         )
+
+    def test_role_order_is_watcher_to_grandmaster(self):
+        self.assertLess(ROLE_LEVELS["watcher"], ROLE_LEVELS["operator"])
+        self.assertLess(ROLE_LEVELS["operator"], ROLE_LEVELS["simulator"])
+        self.assertLess(ROLE_LEVELS["simulator"], ROLE_LEVELS["master"])
+        self.assertLess(ROLE_LEVELS["master"], ROLE_LEVELS["grandmaster"])
 
     def test_grandmaster_can_manage_permission_rules(self):
         grandmaster = self._user_with_ermac_role("permission_grandmaster", "grandmaster")
@@ -72,11 +83,40 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertIn(b"PERMISSION RULES", response.data)
         self.assertIn(b"DESCRIPTION", response.data)
         self.assertIn(b"MINIMUM ROLE", response.data)
+        self.assertIn(b"NeoGateway / System", response.data)
+        self.assertIn(b"NeoMotherBrain", response.data)
+        self.assertIn(b"NeoSektor", response.data)
+        self.assertIn(b"NeoErmac", response.data)
+        self.assertIn(b"NeoScorpion", response.data)
+        self.assertIn(b"NeoReptile", response.data)
+        self.assertIn(b"NeoSub-Zero", response.data)
+        self.assertIn(b"NeoRain", response.data)
         self.assertNotIn(b"PERMISSION KEY", response.data)
         self.assertNotIn(b"neoermac.building_lineup.edit", response.data)
         self.assertEqual(response.data.count(b'aria-label="BACK TO NeoMotherBrain MAIN MENU"'), 1)
         self.assertEqual(updated.minimum_role, "master")
         self.assertEqual(updated.description, "Updated Building Lineup rule.")
+
+    def test_motherbrain_view_defaults_to_operator_and_remains_editable(self):
+        grandmaster = self._user_with_ermac_role("motherbrain_rule_grandmaster", "grandmaster")
+        backfill_default_gateway_node_roles(grandmaster, role="grandmaster")
+        db.session.commit()
+        self._login(grandmaster.username)
+        rule = PermissionRule.query.filter_by(permission_key="neomotherbrain.dashboard.view").one()
+
+        response = self.client.post(
+            "/admin/permissions",
+            data={
+                "rule_ids": [str(rule.id)],
+                f"description_{rule.id}": rule.description,
+                f"minimum_role_{rule.id}": "simulator",
+            },
+            follow_redirects=True,
+        )
+
+        updated = db.session.get(PermissionRule, rule.id)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(updated.minimum_role, "simulator")
 
     def test_simulator_can_pass_building_lineup_edit(self):
         simulator = self._user_with_ermac_role("ermac_simulator", "simulator")
@@ -92,6 +132,13 @@ class PermissionRulesTest(unittest.TestCase):
         operator = self._user_with_ermac_role("ermac_operator", "operator")
 
         self.assertTrue(user_can("neoermac.door_view.enter_actual_pulls", operator))
+
+    def test_motherbrain_view_permission_uses_operator_minimum(self):
+        watcher = self._user_with_node_role("motherbrain_watcher", "motherbrain", "watcher")
+        operator = self._user_with_node_role("motherbrain_operator", "motherbrain", "operator")
+
+        self.assertFalse(user_can("neomotherbrain.dashboard.view", watcher))
+        self.assertTrue(user_can("neomotherbrain.dashboard.view", operator))
 
     def test_lower_role_cannot_enter_actual_pulls(self):
         watcher = self._user_with_ermac_role("ermac_watcher", "watcher")
@@ -127,6 +174,35 @@ class PermissionRulesTest(unittest.TestCase):
                 GatewayNodeRole(
                     gateway_membership_id=membership.id,
                     node_id=ermac.id,
+                    role=role,
+                    is_active=True,
+                )
+            )
+        db.session.commit()
+        return user
+
+    def _user_with_node_role(self, username, node_code, role):
+        user = User(username=username, role="watcher")
+        user.set_password("TestPassword123!")
+        db.session.add(user)
+        db.session.flush()
+
+        gateway = ensure_default_gateway_and_nodes()
+        membership = GatewayMembership(
+            user_id=user.id,
+            gateway_id=gateway.id,
+            status="approved",
+            is_active=True,
+        )
+        db.session.add(membership)
+        db.session.flush()
+
+        node = NeoNode.query.filter_by(code=node_code).one()
+        if role != "watcher":
+            db.session.add(
+                GatewayNodeRole(
+                    gateway_membership_id=membership.id,
+                    node_id=node.id,
                     role=role,
                     is_active=True,
                 )
