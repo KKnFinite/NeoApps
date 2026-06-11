@@ -52,13 +52,13 @@
                     {% endfor %}
                     <div class="neoermac-door-context" aria-hidden="true">
                         {% if row.runout_key == "green_runout" %}
-                        <strong>DOOR 1</strong>
-                        <span>SPECIAL RUNOUT</span>
+                        <strong>D1</strong>
+                        <span>{{ row.runout_name }}</span>
                         {% else %}
                         {% set runout_number = loop.index0 %}
-                        <span>DOOR {{ runout_number }}</span>
-                        <strong>RUNOUT SPAN</strong>
-                        <span>DOOR {{ runout_number + 1 }}</span>
+                        <span>D{{ runout_number }}</span>
+                        <strong>{{ row.runout_name }}</strong>
+                        <span>D{{ runout_number + 1 }}</span>
                         {% endif %}
                     </div>
                 </div>

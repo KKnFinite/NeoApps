@@ -1315,20 +1315,51 @@ a {
 
 @media (min-width: 761px) {
     .neoermac-lineup-shell {
-        width: min(100%, 1220px);
+        width: min(100%, 1320px);
     }
 
     .neoermac-runout-list {
-        gap: 10px;
+        gap: 6px;
+        padding: 12px;
+        border: 1px solid rgba(255, 31, 55, 0.34);
+        border-radius: 8px;
+        background:
+            linear-gradient(90deg, rgba(255, 31, 55, 0.08), transparent 14% 86%, rgba(255, 31, 55, 0.08)),
+            linear-gradient(180deg, rgba(22, 8, 12, 0.72), rgba(4, 5, 7, 0.9));
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.09),
+            0 0 30px rgba(255, 31, 55, 0.12);
     }
 
     .neoermac-runout-card {
-        gap: 10px;
-        padding: 12px;
+        grid-template-columns: minmax(92px, 130px) minmax(0, 1fr);
+        gap: 0;
+        overflow: hidden;
+        padding: 0;
+        border-color: rgba(255, 31, 55, 0.34);
+        border-radius: 5px;
+        background: rgba(10, 3, 6, 0.72);
+        box-shadow: none;
     }
 
     .neoermac-runout-card h2 {
+        display: grid;
+        place-items: center;
+        min-height: 108px;
+        padding: 10px 8px;
+        border-right: 1px solid rgba(255, 224, 229, 0.28);
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 22%),
+            linear-gradient(180deg, #c83342 0%, #8f1420 46%, #52070d 100%);
+        color: #fff7f8;
+        font-size: clamp(0.82rem, 1.2vw, 1.05rem);
+        line-height: 1.05;
         text-align: center;
+        text-shadow:
+            0 0 12px rgba(255, 255, 255, 0.3),
+            0 2px 0 rgba(0, 0, 0, 0.7);
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
     }
 
     .neoermac-runout-card:first-child {
@@ -1340,12 +1371,13 @@ a {
     }
 
     .neoermac-runout-slots {
-        grid-template-columns: minmax(0, 1fr) minmax(92px, 116px) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr) minmax(96px, 120px) minmax(0, 1fr);
         grid-template-areas:
             "east1 door west1"
             "east2 door west2";
-        gap: 8px 10px;
+        gap: 0;
         align-items: stretch;
+        min-height: 108px;
     }
 
     .neoermac-slot-east-1 {
@@ -1369,15 +1401,15 @@ a {
         display: grid;
         align-content: center;
         justify-items: center;
-        gap: 6px;
+        gap: 8px;
         min-width: 0;
-        padding: 8px 6px;
-        border: 1px solid rgba(201, 208, 214, 0.22);
-        border-radius: 5px;
+        padding: 10px 6px;
+        border-inline: 2px solid rgba(255, 225, 230, 0.34);
+        border-radius: 0;
         background:
-            linear-gradient(180deg, rgba(238, 246, 255, 0.08), transparent 32%),
-            linear-gradient(180deg, rgba(15, 18, 22, 0.9), rgba(3, 4, 6, 0.94));
-        color: var(--steel);
+            linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 20%),
+            linear-gradient(180deg, #de3344 0%, #9f1624 44%, #5a0810 100%);
+        color: #fff5f7;
         font-size: 0.58rem;
         font-weight: 950;
         letter-spacing: 0.06em;
@@ -1389,30 +1421,84 @@ a {
     .neoermac-door-context::before,
     .neoermac-door-context::after {
         content: "";
-        width: 1px;
-        min-height: 16px;
-        background: linear-gradient(180deg, transparent, rgba(201, 208, 214, 0.72), transparent);
+        width: 76%;
+        min-height: 2px;
+        background: linear-gradient(90deg, transparent, rgba(255, 234, 238, 0.82), transparent);
+    }
+
+    .neoermac-door-context span {
+        color: #ffdbe0;
+        font-size: clamp(1.2rem, 2.1vw, 2rem);
+        letter-spacing: 0.04em;
+        text-shadow:
+            0 0 12px rgba(255, 255, 255, 0.26),
+            0 2px 0 rgba(0, 0, 0, 0.7);
     }
 
     .neoermac-door-context strong {
-        color: var(--node-ermac-secondary);
-        font-size: 0.7rem;
-        letter-spacing: 0.08em;
-        text-shadow: 0 0 14px rgba(54, 226, 123, 0.3);
+        color: #fff;
+        font-size: clamp(1.5rem, 2.6vw, 2.35rem);
+        letter-spacing: 0.04em;
+        text-shadow:
+            0 0 14px rgba(255, 255, 255, 0.36),
+            0 2px 0 rgba(0, 0, 0, 0.74);
     }
 
     .neoermac-runout-card:first-child .neoermac-door-context strong {
-        color: #eef6ff;
-        text-shadow: 0 0 14px rgba(255, 31, 55, 0.36);
+        color: #f7fff9;
+        text-shadow:
+            0 0 14px rgba(54, 226, 123, 0.42),
+            0 2px 0 rgba(0, 0, 0, 0.74);
     }
 
     .neoermac-runout-slots label {
-        padding: 8px;
+        justify-content: stretch;
+        gap: 7px;
+        min-height: 54px;
+        padding: 8px 10px;
+        border: 1px solid rgba(120, 13, 23, 0.32);
+        border-radius: 0;
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.24), transparent 26%),
+            linear-gradient(180deg, #ffd5dc 0%, #f1a3af 100%);
+        color: #41050b;
+    }
+
+    .neoermac-runout-slots label span {
+        color: rgba(65, 5, 11, 0.78);
+        font-size: 0.58rem;
+        letter-spacing: 0.05em;
+    }
+
+    .neoermac-slot-east-1,
+    .neoermac-slot-west-1 {
+        border-bottom-color: rgba(120, 13, 23, 0.24);
+    }
+
+    .neoermac-slot-east-1,
+    .neoermac-slot-east-2 {
+        border-right: 2px solid rgba(120, 13, 23, 0.28);
+    }
+
+    .neoermac-slot-west-1,
+    .neoermac-slot-west-2 {
+        border-left: 2px solid rgba(120, 13, 23, 0.28);
     }
 
     .neoermac-destination-select {
-        min-height: 36px;
-        padding: 7px 8px;
+        min-height: 34px;
+        padding: 6px 8px;
+        border-color: rgba(74, 4, 10, 0.4);
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 38%),
+            #ffe8ec;
+        color: #2b0307;
+        font-size: 0.96rem;
+        text-align: center;
+        text-align-last: center;
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.52),
+            0 0 0 1px rgba(255, 255, 255, 0.18);
     }
 }
 
