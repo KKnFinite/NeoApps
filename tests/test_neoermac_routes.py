@@ -1,3 +1,4 @@
+import re
 import unittest
 from datetime import date, datetime, time
 
@@ -22,6 +23,22 @@ from app.services.permission_rules import ensure_default_permission_rules
 
 
 class NeoErmacRoutesTest(unittest.TestCase):
+    REAL_OUTBOUND_DOORS = (
+        b"D1",
+        b"D4",
+        b"D6",
+        b"D9",
+        b"D13",
+        b"D17",
+        b"D21",
+        b"D24",
+        b"D26",
+        b"D29",
+        b"D32",
+        b"D34",
+        b"D37",
+    )
+
     def setUp(self):
         TestConfig = type(
             "TestConfig",
@@ -119,6 +136,27 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'class="neoermac-door-selector"', response.data)
         self.assertNotIn(b"PLACEHOLDER SHELL", response.data)
         self.assertNotIn(b"OPERATIONAL LOGIC WILL BE ADDED IN A LATER PASS.", response.data)
+
+    def test_door_view_dropdown_includes_only_real_outbound_doors(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._door_options(response), list(self.REAL_OUTBOUND_DOORS))
+        for fake_door in (b"D2", b"D3", b"D5", b"D7", b"D8", b"D10", b"D11", b"D12"):
+            self.assertNotIn(b'<option value="' + fake_door + b'"', response.data)
+
+    def test_door_view_invalid_door_query_shows_empty_state(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=DX")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._door_options(response), list(self.REAL_OUTBOUND_DOORS))
+        self.assertIn(b"Select a door.", response.data)
+        self.assertNotIn(b"SELECTED DOOR", response.data)
+        self.assertNotIn(b"DX", response.data)
 
     def test_door_view_unauthorized_user_is_blocked_by_view_permission(self):
         view_rule = PermissionRule.query.filter_by(permission_key="neoermac.door_view.view").one()
@@ -554,6 +592,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "/neoermac/door-view",
             "/neoermac/tug-assignments",
         )
+
+    def _door_options(self, response):
+        return re.findall(rb'<option value="(D\d+)"', response.data)
 
 
 if __name__ == "__main__":

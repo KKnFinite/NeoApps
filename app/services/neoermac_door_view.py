@@ -14,6 +14,7 @@ from app.models import (
 from app.services.neoermac_building_lineup import (
     DESTINATION_FIELDS,
     get_building_lineup_rows,
+    get_outbound_door_options,
     normalize_destination,
 )
 
@@ -146,15 +147,7 @@ def normalize_door(value):
 
 
 def get_door_options(gateway):
-    doors = set()
-    for row in get_building_lineup_rows(gateway):
-        start = _door_number(row.door_start)
-        end = _door_number(row.door_end)
-        if start is None or end is None:
-            continue
-        low, high = sorted((start, end))
-        doors.update(f"D{door_number}" for door_number in range(low, high + 1))
-    return sorted(doors, key=_door_number)
+    return get_outbound_door_options()
 
 
 def _destination_cards_for_door(gateway, selected_door, operation):

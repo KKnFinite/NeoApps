@@ -27,6 +27,15 @@ DESTINATION_FIELDS = (
 )
 
 
+def get_outbound_door_options():
+    doors = []
+    for _, start_door, end_door, _ in BUILDING_LINEUP_BELT_GROUPS:
+        for door in (start_door, end_door):
+            if door not in doors:
+                doors.append(door)
+    return tuple(doors)
+
+
 def get_building_lineup_rows(gateway):
     existing_rows = {
         row.runout_key: row
