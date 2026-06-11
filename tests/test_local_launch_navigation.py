@@ -108,6 +108,9 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("url_for('service_worker', v=config.STATIC_ASSET_VERSION)", template)
         self.assertIn('name="theme-color" content="#d95a1f"', template)
         self.assertIn('name="apple-mobile-web-app-title" content="NeoGateway"', template)
+        self.assertIn("filename='images/apple_touch_icon_180.png', v=config.STATIC_ASSET_VERSION", template)
+        self.assertIn("filename='images/favicon_32.png', v=config.STATIC_ASSET_VERSION", template)
+        self.assertIn("filename='images/favicon_16.png', v=config.STATIC_ASSET_VERSION", template)
 
     def test_neogateway_manifest_uses_current_branding(self):
         response = self.client.get("/manifest.webmanifest")
@@ -121,10 +124,34 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertEqual(manifest["start_url"], "/login")
         self.assertEqual(manifest["scope"], "/")
         self.assertEqual(manifest["display"], "standalone")
-        icon_sources = [icon["src"] for icon in manifest["icons"]]
-        self.assertIn("/static/images/neogateway_logo3_small.png", icon_sources)
-        self.assertIn("/static/images/neogateway_logo3_medium.png", icon_sources)
-        self.assertIn("/static/images/neogateway_logo3_large.png", icon_sources)
+        icon_map = {
+            (icon["src"], icon["sizes"], icon["purpose"])
+            for icon in manifest["icons"]
+        }
+        self.assertIn(
+            ("/static/images/neogateway_icon_192.png", "192x192", "any"),
+            icon_map,
+        )
+        self.assertIn(
+            ("/static/images/neogateway_icon_512.png", "512x512", "any"),
+            icon_map,
+        )
+        self.assertIn(
+            (
+                "/static/images/neogateway_icon_maskable_192.png",
+                "192x192",
+                "maskable",
+            ),
+            icon_map,
+        )
+        self.assertIn(
+            (
+                "/static/images/neogateway_icon_maskable_512.png",
+                "512x512",
+                "maskable",
+            ),
+            icon_map,
+        )
         manifest_text = response.get_data(as_text=True)
         self.assertNotIn("NeoRFD", manifest_text)
         self.assertNotIn("neorfd", manifest_text.lower())
