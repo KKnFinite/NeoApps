@@ -131,6 +131,7 @@
     display: inline-flex;
     align-items: baseline;
     justify-content: center;
+    font-weight: 950;
     line-height: 1;
     letter-spacing: 0;
     text-transform: none;
@@ -479,6 +480,13 @@ a {
 
 .brand-inline-name.neo-node-name {
     display: inline-flex;
+}
+
+.action-button .neo-node-name,
+.motherbrain-nav-link .neo-node-name,
+.neoermac-menu-link .neo-node-name {
+    margin-inline: 0.28em;
+    font-size: 1.08em;
 }
 
 .motherbrain-fixed-header .nav a.is-active,
@@ -884,19 +892,6 @@ a {
     margin-top: 24px;
 }
 
-.user-management-choice-grid {
-    display: grid;
-    gap: 12px;
-    justify-content: center;
-    margin: 18px 0;
-}
-
-.user-management-choice {
-    min-height: 42px;
-    min-width: 180px;
-    text-align: center;
-}
-
 .user-management-stack {
     display: grid;
     gap: 14px;
@@ -913,21 +908,6 @@ a {
     font-size: 1rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-}
-
-.user-management-choice span {
-    color: var(--text);
-    font-size: 1.02rem;
-    font-weight: 900;
-    text-transform: uppercase;
-}
-
-.user-management-choice small {
-    color: var(--muted);
-    font-size: 0.8rem;
-    font-weight: 700;
-    line-height: 1.45;
-    text-transform: none;
 }
 
 .command-card {
@@ -1394,9 +1374,10 @@ a {
     text-align: center;
     text-decoration: none;
     transition:
-        filter 160ms ease,
-        transform 160ms ease,
-        box-shadow 160ms ease;
+        filter 110ms ease,
+        transform 110ms ease,
+        box-shadow 110ms ease;
+    will-change: filter, transform;
 }
 
 .rfd-node-column .rfd-node-tile {
@@ -1419,7 +1400,7 @@ a {
         linear-gradient(90deg, rgba(255, 255, 255, 0.1), transparent 20% 80%, rgba(var(--node-rgb), 0.12));
     filter: blur(16px);
     opacity: 0;
-    transition: opacity 160ms ease, filter 160ms ease;
+    transition: opacity 110ms ease, filter 110ms ease;
 }
 
 .rfd-node-tile::after {
@@ -1430,7 +1411,7 @@ a {
         radial-gradient(circle at 50% 84%, rgba(var(--node-rgb), 0.16), transparent 46%);
     border-radius: 4px;
     opacity: 0.52;
-    transition: opacity 160ms ease;
+    transition: opacity 110ms ease;
 }
 
 .rfd-node-name {
@@ -1454,22 +1435,22 @@ a {
     text-shadow:
         0 0 10px rgba(var(--node-rgb), 0.54),
         0 2px 0 rgba(0, 0, 0, 0.9);
-    transition: text-shadow 160ms ease, color 160ms ease;
+    transition: text-shadow 110ms ease, color 110ms ease;
 }
 
 .rfd-node-tile:hover {
     filter:
-        brightness(1.12)
-        saturate(1.08)
-        drop-shadow(0 14px 18px rgba(0, 0, 0, 0.48))
-        drop-shadow(0 0 20px rgba(var(--node-rgb), 0.28))
-        drop-shadow(0 0 38px rgba(255, 47, 47, 0.12));
-    transform: translateY(-2px);
+        brightness(1.2)
+        saturate(1.18)
+        drop-shadow(0 18px 22px rgba(0, 0, 0, 0.56))
+        drop-shadow(0 0 26px rgba(var(--node-rgb), 0.44))
+        drop-shadow(0 0 52px rgba(255, 47, 47, 0.18));
+    transform: translateY(-6px) scale(1.025);
 }
 
 .rfd-node-tile:hover::before {
-    filter: blur(18px);
-    opacity: 0.42;
+    filter: blur(22px);
+    opacity: 0.62;
 }
 
 .rfd-node-tile:hover::after {
@@ -1479,16 +1460,16 @@ a {
 .rfd-node-tile:hover .rfd-node-prefix,
 .rfd-node-tile:hover .neo-word {
     text-shadow:
-        0 0 14px rgba(244, 247, 251, 0.46),
-        0 0 22px rgba(244, 247, 251, 0.18),
+        0 0 18px rgba(244, 247, 251, 0.62),
+        0 0 28px rgba(244, 247, 251, 0.28),
         0 2px 0 rgba(0, 0, 0, 0.9);
 }
 
 .rfd-node-tile:hover .rfd-node-suffix,
 .rfd-node-tile:hover .node-word {
     text-shadow:
-        0 0 14px rgba(var(--node-rgb), 0.78),
-        0 0 26px rgba(var(--node-rgb), 0.42),
+        0 0 18px rgba(var(--node-rgb), 0.92),
+        0 0 34px rgba(var(--node-rgb), 0.58),
         0 2px 0 rgba(0, 0, 0, 0.9);
 }
 
@@ -3773,11 +3754,6 @@ select::-ms-expand {
         padding: 8px 11px;
         border-color: rgba(235, 241, 246, 0.12);
         background: rgba(3, 4, 6, 0.52);
-    }
-
-    .user-management-choice {
-        min-height: 42px;
-        text-align: center;
     }
 
     .blueprint-auth .user-role-table,

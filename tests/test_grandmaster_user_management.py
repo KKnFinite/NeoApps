@@ -133,7 +133,9 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertIn(b"PENDING REQUESTS", response.data)
         self.assertIn(b"EDIT USERS", response.data)
         self.assertIn(b"centered-command-page", response.data)
-        self.assertIn(b'href="/admin/users/edit-users"', response.data)
+        self.assertIn(b'name="q"', response.data)
+        self.assertIn(b"SEARCH BY NAME, EMPLOYEE ID, OR EMAIL TO EDIT A USER.", response.data)
+        self.assertNotIn(b'class="action-button user-management-choice"', response.data)
         self.assertIn(b"There are no pending requests at this time.", response.data)
         self.assertNotIn(b"Grandmaster User Management", response.data)
         self.assertNotIn(b"Search approved users", response.data)
@@ -146,7 +148,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertNotIn(b"Unverified Email", response.data)
         self.assertNotIn(b"Pending Access Requests", response.data)
 
-    def test_edit_users_requires_search_then_filters_by_name_employee_id_and_email(self):
+    def test_user_management_search_filters_by_name_employee_id_and_email(self):
         grandmaster = self._admin("search_grandmaster", "grandmaster")
         alpha = self._approved_user("alpha_user", "alpha@example.com")[0]
         alpha.last_login = datetime(2026, 6, 5, 18, 30)
@@ -154,11 +156,12 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         db.session.commit()
         self._login(grandmaster.username)
 
-        default_response = self.client.get("/admin/users/edit-users")
+        default_response = self.client.get("/admin/users")
         legacy_response = self.client.get("/admin/users/manage-roles?q=Alpha", follow_redirects=False)
-        name_response = self.client.get("/admin/users/edit-users?q=Alpha")
-        employee_response = self.client.get("/admin/users/edit-users?q=EMP-beta_user")
-        email_response = self.client.get("/admin/users/edit-users?q=alpha@example.com")
+        old_route_response = self.client.get("/admin/users/edit-users?q=Alpha")
+        name_response = self.client.get("/admin/users?q=Alpha")
+        employee_response = self.client.get("/admin/users?q=EMP-beta_user")
+        email_response = self.client.get("/admin/users?q=alpha@example.com")
 
         self.assertEqual(default_response.status_code, 200)
         self.assertIn(b"centered-command-page", default_response.data)
@@ -166,6 +169,8 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertNotIn(b"Alpha User", default_response.data)
         self.assertEqual(legacy_response.status_code, 302)
         self.assertIn("/admin/users/edit-users", legacy_response.location)
+        self.assertEqual(old_route_response.status_code, 200)
+        self.assertIn(b"Alpha User", old_route_response.data)
         self.assertEqual(name_response.status_code, 200)
         self.assertIn(b"Alpha User", name_response.data)
         self.assertNotIn(b"Beta User", name_response.data)

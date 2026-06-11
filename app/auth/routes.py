@@ -224,10 +224,14 @@ def change_password():
 def users():
     gateway = get_current_gateway()
     memberships = _pending_memberships_for_gateway(gateway).all()
+    search = request.args.get("q", "").strip()
+    rows = _search_user_management_rows(gateway, search) if search else []
     return render_template(
         "auth/users.html",
         gateway=gateway,
         memberships=memberships,
+        rows=rows,
+        search=search,
     )
 
 
@@ -236,29 +240,7 @@ def users():
 def edit_users():
     gateway = get_current_gateway()
     search = request.args.get("q", "").strip()
-    rows = []
-    if search:
-        pattern = f"%{search.lower()}%"
-        query = User.query.filter(
-            func.lower(User.first_name).like(pattern)
-            | func.lower(User.last_name).like(pattern)
-            | func.lower(User.full_name).like(pattern)
-            | func.lower(User.employee_id).like(pattern)
-            | func.lower(User.email).like(pattern)
-        )
-
-        users = query.order_by(
-            User.last_name.asc(),
-            User.first_name.asc(),
-            User.full_name.asc(),
-            User.email.asc(),
-        ).limit(50).all()
-        memberships_by_user_id = _gateway_memberships_by_user_id(gateway)
-        node_roles_by_user_id = _node_roles_by_user_id(gateway)
-        rows = [
-            _user_management_row(user, memberships_by_user_id, node_roles_by_user_id)
-            for user in users
-        ]
+    rows = _search_user_management_rows(gateway, search) if search else []
 
     return render_template(
         "auth/edit_users.html",
@@ -791,6 +773,30 @@ def _node_roles_by_user_id(gateway):
         user_id = user_id_by_membership_id.get(role.gateway_membership_id)
         roles_by_user_id.setdefault(user_id, []).append(role)
     return roles_by_user_id
+
+
+def _search_user_management_rows(gateway, search):
+    pattern = f"%{search.lower()}%"
+    query = User.query.filter(
+        func.lower(User.first_name).like(pattern)
+        | func.lower(User.last_name).like(pattern)
+        | func.lower(User.full_name).like(pattern)
+        | func.lower(User.employee_id).like(pattern)
+        | func.lower(User.email).like(pattern)
+    )
+
+    users = query.order_by(
+        User.last_name.asc(),
+        User.first_name.asc(),
+        User.full_name.asc(),
+        User.email.asc(),
+    ).limit(50).all()
+    memberships_by_user_id = _gateway_memberships_by_user_id(gateway)
+    node_roles_by_user_id = _node_roles_by_user_id(gateway)
+    return [
+        _user_management_row(user, memberships_by_user_id, node_roles_by_user_id)
+        for user in users
+    ]
 
 
 def _user_management_row(user, memberships_by_user_id, node_roles_by_user_id):

@@ -14,7 +14,6 @@
             <table class="data-table wide-data-table">
                 <thead>
                     <tr>
-                        <th>PERMISSION KEY</th>
                         <th>DESCRIPTION</th>
                         <th>MINIMUM ROLE</th>
                     </tr>
@@ -22,11 +21,8 @@
                 <tbody>
                     {% for rule in rules %}
                     <tr>
-                        <td data-label="Permission Key">
-                            <input type="hidden" name="rule_ids" value="{{ rule.id }}">
-                            <code>{{ rule.permission_key }}</code>
-                        </td>
                         <td data-label="Description">
+                            <input type="hidden" name="rule_ids" value="{{ rule.id }}">
                             <input name="description_{{ rule.id }}" value="{{ rule.description or '' }}" autocomplete="off">
                         </td>
                         <td data-label="Minimum Role">
@@ -41,7 +37,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="3">NO PERMISSION RULES FOUND.</td>
+                        <td colspan="2">NO PERMISSION RULES FOUND.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -50,7 +46,6 @@
 
         <div class="action-row">
             <button class="action-button" type="submit">SAVE PERMISSION RULES</button>
-            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}" aria-label="BACK TO NeoMotherBrain MAIN MENU">BACK TO <span class="neo-node-name neo-node-motherbrain node-motherbrain"><span class="neo-word">Neo</span><span class="node-word">MotherBrain</span></span> MAIN MENU</a>
         </div>
     </form>
 </section>

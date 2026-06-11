@@ -9,61 +9,8 @@
         <p class="muted">SEARCH BY NAME, EMPLOYEE ID, OR EMAIL TO EDIT A USER.</p>
     </div>
 
-    <form class="operation-form user-search-form" method="get">
-        <label>
-            <span>SEARCH</span>
-            <input name="q" value="{{ search }}" placeholder="Name, employee ID, or email" autocomplete="off" autofocus>
-        </label>
-        <button type="submit">SEARCH</button>
-        {% if search %}
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.edit_users') }}">CLEAR</a>
-        {% endif %}
-    </form>
-
-    {% if search %}
-    <div class="table-wrap">
-        <table class="data-table wide-data-table user-role-table">
-            <thead>
-                <tr>
-                    <th>NAME</th>
-                    <th>EMPLOYEE ID</th>
-                    <th>EMAIL</th>
-                    <th>WORK AREA</th>
-                    <th>EMAIL VERIFIED</th>
-                    <th>{{ gateway.code }} STATUS</th>
-                    <th>NODE ROLES</th>
-                    <th>LAST LOGIN</th>
-                    <th aria-label="Edit"></th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in rows %}
-                <tr>
-                    <td data-label="Name">{{ row.user.display_name }}</td>
-                    <td data-label="Employee ID">{{ row.user.employee_id or "" }}</td>
-                    <td data-label="Email">{{ row.user.email or "" }}</td>
-                    <td data-label="Work Area">{{ row.user.work_area or "" }}</td>
-                    <td data-label="Email Verified">{{ "Yes" if row.user.email_verified_at else "No" }}</td>
-                    <td data-label="{{ gateway.code }} Status">{{ row.membership_status }}</td>
-                    <td data-label="Node Roles">{{ row.important_roles }}</td>
-                    <td data-label="Last Login">{{ row.user.last_login|local_datetime if row.user.last_login else "Never" }}</td>
-                    <td class="action-cell" data-label="">
-                        <div class="table-actions">
-                            <a href="{{ url_for('auth.edit_user', user_id=row.user.id) }}">EDIT</a>
-                        </div>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="9">No users found.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <p class="muted">ENTER A SEARCH TERM TO FIND A USER.</p>
-    {% endif %}
+    {% set search_action = url_for('auth.edit_users') %}
+    {% include "auth/_user_search.html" %}
 
     <div class="action-row">
         <a class="action-button action-button-secondary" href="{{ url_for('auth.users') }}">BACK TO USER MANAGEMENT</a>

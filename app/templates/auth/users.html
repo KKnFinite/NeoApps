@@ -69,11 +69,15 @@
         {% endif %}
     </section>
 
-    <div class="action-row user-management-choice-grid">
-        <a class="action-button user-management-choice" href="{{ url_for('auth.edit_users') }}">
-            <span>EDIT USERS</span>
-        </a>
-    </div>
+    <section class="user-management-stack" aria-labelledby="edit-users-title">
+        <div class="section-heading">
+            <h2 id="edit-users-title">EDIT USERS</h2>
+            <p class="muted">SEARCH BY NAME, EMPLOYEE ID, OR EMAIL TO EDIT A USER.</p>
+        </div>
+
+        {% set search_action = url_for('auth.users') %}
+        {% include "auth/_user_search.html" %}
+    </section>
 
 </section>
 {% endblock %}

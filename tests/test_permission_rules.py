@@ -70,7 +70,11 @@ class PermissionRulesTest(unittest.TestCase):
         updated = db.session.get(PermissionRule, rule.id)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"PERMISSION RULES", response.data)
-        self.assertIn(b"neoermac.building_lineup.edit", response.data)
+        self.assertIn(b"DESCRIPTION", response.data)
+        self.assertIn(b"MINIMUM ROLE", response.data)
+        self.assertNotIn(b"PERMISSION KEY", response.data)
+        self.assertNotIn(b"neoermac.building_lineup.edit", response.data)
+        self.assertEqual(response.data.count(b'aria-label="BACK TO NeoMotherBrain MAIN MENU"'), 1)
         self.assertEqual(updated.minimum_role, "master")
         self.assertEqual(updated.description, "Updated Building Lineup rule.")
 
