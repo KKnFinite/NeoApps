@@ -130,7 +130,9 @@ def sektor_launch():
 @gateway_node_required("motherbrain")
 def motherbrain():
     gateway = get_current_gateway()
-    _auto_generate_today_sorts(gateway)
+    generation_result = _auto_generate_today_sorts(gateway)
+    sort_date = generation_result["sort_date"]
+    current_sort_operations = operations_for_gateway_date(gateway, sort_date)
     operation_count = SortDateOperation.query.filter_by(gateway_code=gateway.code).count()
     master_schedule_count = MasterFlightSchedule.query.filter_by(
         gateway_code=gateway.code
@@ -138,8 +140,10 @@ def motherbrain():
     return render_template(
         "neomotherbrain/index.html",
         gateway=gateway,
+        current_sort_operations=current_sort_operations,
         operation_count=operation_count,
         master_schedule_count=master_schedule_count,
+        sort_date=sort_date,
     )
 
 

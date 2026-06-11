@@ -9,6 +9,25 @@
     </div>
     <section class="motherbrain-dashboard" aria-labelledby="motherbrain-dashboard-title">
         <h1 id="motherbrain-dashboard-title"><span class="neo-node-name neo-node-motherbrain node-motherbrain" aria-label="NeoMotherBrain"><span class="neo-word">Neo</span><span class="node-word">MotherBrain</span></span> DASHBOARD</h1>
+        <section class="motherbrain-current-sort-overview" aria-labelledby="current-sort-overview-title">
+            <div class="section-heading">
+                <h2 id="current-sort-overview-title">CURRENT SORT OVERVIEW</h2>
+                <p class="muted">{{ gateway.code }} {{ sort_date }}</p>
+            </div>
+            {% if current_sort_operations %}
+            <div class="current-sort-overview-grid">
+                {% for operation in current_sort_operations %}
+                <a class="current-sort-overview-card" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">
+                    <span>{{ operation.sort_name|upper }}</span>
+                    <strong>{{ operation.missions|length }} MISSION{{ "" if operation.missions|length == 1 else "S" }}</strong>
+                    <small>{{ operation.window_minutes }} MIN WINDOW</small>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="muted centered-empty-message">No active sort selected.</p>
+            {% endif %}
+        </section>
         <div class="motherbrain-dashboard-grid">
             <a class="motherbrain-dashboard-card" href="{{ url_for('neomotherbrain.manage_sort') }}">
                 <strong>MANAGE SORT</strong>

@@ -95,6 +95,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"MANAGE SORT", response.data)
         self.assertIn(b"PERMISSION RULES", response.data)
         self.assertIn(b"neo-node-name neo-node-motherbrain", response.data)
+        self.assertIn(b"CURRENT SORT OVERVIEW", response.data)
+        self.assertIn(b"No active sort selected.", response.data)
         self.assertNotIn(b"MANAGE CURRENT SORTS", response.data)
         self.assertNotIn(b"MANAGE MASTER FLIGHT SCHEDULE", response.data)
         self.assertNotIn(b"ASSIGN ACTIVE SORTS", response.data)
