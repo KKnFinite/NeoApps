@@ -182,7 +182,7 @@ class AccessControlTest(unittest.TestCase):
         self.assertIn(b"NeoGateway - RFD", hub.data)
         self.assertNotIn(b"NeoRFD", hub.data)
         self.assertIn(b"watcher_hub_user", hub.data)
-        self.assertIn(b'src="/static/images/neorfd_logo1.png"', hub.data)
+        self.assertIn(b'src="/static/images/neogateway_logo3_large.png"', hub.data)
         self.assertIn(b'class="rfd-mobile-logo"', hub.data)
         self.assertIn(b"NeoMotherBrain", hub.data)
         self.assertIn(b"NeoSektor", hub.data)

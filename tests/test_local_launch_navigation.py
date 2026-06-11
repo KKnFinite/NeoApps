@@ -209,7 +209,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         hub_html = hub_response.data.decode()
         left_column = hub_html.split('rfd-node-column-left"', 1)[1].split("</div>", 1)[0]
         right_column = hub_html.split('rfd-node-column-right"', 1)[1].split("</div>", 1)[0]
-        self.assertIn(b'src="/static/images/neorfd_logo1.png"', hub_response.data)
+        self.assertIn(b'src="/static/images/neogateway_logo3_large.png"', hub_response.data)
         self.assertIn(b'class="rfd-mobile-logo"', hub_response.data)
         self.assertIn(b"NeoMotherBrain", hub_response.data)
         self.assertIn(b"NeoSektor", hub_response.data)
