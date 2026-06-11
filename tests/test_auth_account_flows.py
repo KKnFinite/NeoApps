@@ -341,7 +341,9 @@ class AuthAccountFlowsTest(unittest.TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'src="/static/images/neorfd_logo1.png"', response.data)
+        self.assertIn(b'src="/static/images/neogateway_logo3_large.png"', response.data)
+        self.assertIn(b'neogateway_logo3_small.png', response.data)
+        self.assertIn(b'neogateway_logo3_medium.png', response.data)
         self.assertIn(b'<button class="command-access-panel command-enter-button" type="submit">', response.data)
         self.assertIn(b'<label for="dashboard-email">Email</label>', response.data)
         self.assertIn(b'name="email"', response.data)
