@@ -71,6 +71,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"VIEW OUTBOUND", response.data)
         self.assertIn(b"DOOR VIEW", response.data)
         self.assertIn(b"TUG ASSIGNMENTS", response.data)
+        self.assertIn(b'<a class="neoermac-menu-link" href="/neoermac/door-view">DOOR VIEW</a>', response.data)
+        self.assertIn(b'<strong>OPEN</strong>', response.data)
+        self.assertNotIn(b"COMING SOON", response.data)
         self.assertIn(b"BACK TO", response.data)
         self.assertIn(b'class="brand-inline-name neo-node-name node-gateway"', response.data)
         self.assertNotIn(b"RFD NEONODE", response.data)
@@ -82,10 +85,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
         response = self.client.get("/neoermac")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'href="/neoermac/building-lineup"', response.data)
-        self.assertIn(b'href="/neoermac/outbound"', response.data)
-        self.assertIn(b'href="/neoermac/door-view"', response.data)
-        self.assertIn(b'href="/neoermac/tug-assignments"', response.data)
+        self.assertGreaterEqual(response.data.count(b'href="/neoermac/building-lineup"'), 2)
+        self.assertGreaterEqual(response.data.count(b'href="/neoermac/outbound"'), 2)
+        self.assertGreaterEqual(response.data.count(b'href="/neoermac/door-view"'), 2)
+        self.assertGreaterEqual(response.data.count(b'href="/neoermac/tug-assignments"'), 2)
         self.assertIn(b'href="/rfd"', response.data)
 
     def test_placeholder_pages_render(self):
@@ -113,6 +116,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"DOOR VIEW", response.data)
         self.assertIn(b"Select a door.", response.data)
         self.assertIn(b'<option value="D34"', response.data)
+        self.assertIn(b'class="neoermac-door-selector"', response.data)
+        self.assertNotIn(b"PLACEHOLDER SHELL", response.data)
+        self.assertNotIn(b"OPERATIONAL LOGIC WILL BE ADDED IN A LATER PASS.", response.data)
 
     def test_door_view_unauthorized_user_is_blocked_by_view_permission(self):
         view_rule = PermissionRule.query.filter_by(permission_key="neoermac.door_view.view").one()
