@@ -1390,6 +1390,8 @@ a {
 .rfd-node-tile {
     --node-rgb: 255, 47, 47;
     --node-primary: var(--red);
+    --node-hover-y: -5px;
+    --node-hover-scale: 1.025;
     position: relative;
     isolation: isolate;
     display: flex;
@@ -1406,13 +1408,13 @@ a {
     filter:
         drop-shadow(0 12px 16px rgba(0, 0, 0, 0.42))
         drop-shadow(0 0 13px rgba(var(--node-rgb), 0.12));
+    box-shadow: 0 0 0 rgba(var(--node-rgb), 0);
     text-align: center;
     text-decoration: none;
     transition:
-        filter 110ms ease,
-        transform 110ms ease,
-        box-shadow 110ms ease;
-    will-change: filter, transform;
+        transform 105ms cubic-bezier(0.2, 0.8, 0.2, 1),
+        box-shadow 105ms ease;
+    will-change: transform;
 }
 
 .rfd-node-column .rfd-node-tile {
@@ -1435,7 +1437,7 @@ a {
         linear-gradient(90deg, rgba(255, 255, 255, 0.1), transparent 20% 80%, rgba(var(--node-rgb), 0.12));
     filter: blur(16px);
     opacity: 0;
-    transition: opacity 110ms ease, filter 110ms ease;
+    transition: opacity 105ms ease;
 }
 
 .rfd-node-tile::after {
@@ -1446,7 +1448,7 @@ a {
         radial-gradient(circle at 50% 84%, rgba(var(--node-rgb), 0.16), transparent 46%);
     border-radius: 4px;
     opacity: 0.52;
-    transition: opacity 110ms ease;
+    transition: opacity 105ms ease;
 }
 
 .rfd-node-name {
@@ -1470,42 +1472,51 @@ a {
     text-shadow:
         0 0 10px rgba(var(--node-rgb), 0.54),
         0 2px 0 rgba(0, 0, 0, 0.9);
-    transition: text-shadow 110ms ease, color 110ms ease;
+    transition:
+        text-shadow 105ms ease,
+        color 105ms ease;
 }
 
-.rfd-node-tile:hover {
-    filter:
-        brightness(1.2)
-        saturate(1.18)
-        drop-shadow(0 18px 22px rgba(0, 0, 0, 0.56))
-        drop-shadow(0 0 26px rgba(var(--node-rgb), 0.44))
-        drop-shadow(0 0 52px rgba(255, 47, 47, 0.18));
-    transform: translateY(-6px) scale(1.025);
-}
+@media (hover: hover) and (pointer: fine) {
+    .rfd-node-tile:not(.rfd-node-disabled):hover,
+    .rfd-node-tile:not(.rfd-node-disabled):focus-visible {
+        outline: none;
+        box-shadow:
+            0 0 0 1px rgba(var(--node-rgb), 0.42),
+            0 0 18px rgba(var(--node-rgb), 0.42),
+            0 0 34px rgba(255, 47, 47, 0.2);
+        transform: translateY(var(--node-hover-y)) scale(var(--node-hover-scale));
+    }
 
-.rfd-node-tile:hover::before {
-    filter: blur(22px);
-    opacity: 0.62;
-}
+    .rfd-node-tile:not(.rfd-node-disabled):hover::before,
+    .rfd-node-tile:not(.rfd-node-disabled):focus-visible::before {
+        opacity: 0.68;
+    }
 
-.rfd-node-tile:hover::after {
-    opacity: 0.72;
-}
+    .rfd-node-tile:not(.rfd-node-disabled):hover::after,
+    .rfd-node-tile:not(.rfd-node-disabled):focus-visible::after {
+        opacity: 0.82;
+    }
 
-.rfd-node-tile:hover .rfd-node-prefix,
-.rfd-node-tile:hover .neo-word {
-    text-shadow:
-        0 0 18px rgba(244, 247, 251, 0.62),
-        0 0 28px rgba(244, 247, 251, 0.28),
-        0 2px 0 rgba(0, 0, 0, 0.9);
-}
+    .rfd-node-tile:not(.rfd-node-disabled):hover .rfd-node-prefix,
+    .rfd-node-tile:not(.rfd-node-disabled):hover .neo-word,
+    .rfd-node-tile:not(.rfd-node-disabled):focus-visible .rfd-node-prefix,
+    .rfd-node-tile:not(.rfd-node-disabled):focus-visible .neo-word {
+        text-shadow:
+            0 0 16px rgba(244, 247, 251, 0.72),
+            0 0 26px rgba(244, 247, 251, 0.32),
+            0 2px 0 rgba(0, 0, 0, 0.9);
+    }
 
-.rfd-node-tile:hover .rfd-node-suffix,
-.rfd-node-tile:hover .node-word {
-    text-shadow:
-        0 0 18px rgba(var(--node-rgb), 0.92),
-        0 0 34px rgba(var(--node-rgb), 0.58),
-        0 2px 0 rgba(0, 0, 0, 0.9);
+    .rfd-node-tile:not(.rfd-node-disabled):hover .rfd-node-suffix,
+    .rfd-node-tile:not(.rfd-node-disabled):hover .node-word,
+    .rfd-node-tile:not(.rfd-node-disabled):focus-visible .rfd-node-suffix,
+    .rfd-node-tile:not(.rfd-node-disabled):focus-visible .node-word {
+        text-shadow:
+            0 0 16px rgba(var(--node-rgb), 0.98),
+            0 0 30px rgba(var(--node-rgb), 0.62),
+            0 2px 0 rgba(0, 0, 0, 0.9);
+    }
 }
 
 .rfd-node-disabled {
