@@ -147,6 +147,17 @@ class NeoErmacRoutesTest(unittest.TestCase):
         for fake_door in (b"D2", b"D3", b"D5", b"D7", b"D8", b"D10", b"D11", b"D12"):
             self.assertNotIn(b'<option value="' + fake_door + b'"', response.data)
 
+    def test_door_view_rendered_select_has_exact_real_door_options(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view")
+
+        self.assertEqual(response.status_code, 200)
+        select_html = self._door_select_html(response)
+        self.assertEqual(self._door_options(response), list(self.REAL_OUTBOUND_DOORS))
+        for fake_door in (b"D2", b"D3", b"D5", b"D7", b"D8", b"D10", b"D11", b"D12"):
+            self.assertNotIn(b'value="' + fake_door + b'"', select_html)
+
     def test_door_view_invalid_door_query_shows_empty_state(self):
         self._login_approved_user(role="operator")
 
@@ -595,6 +606,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
     def _door_options(self, response):
         return re.findall(rb'<option value="(D\d+)"', response.data)
+
+    def _door_select_html(self, response):
+        match = re.search(rb'<select id="door-select".*?</select>', response.data, re.S)
+        self.assertIsNotNone(match)
+        return match.group(0)
 
 
 if __name__ == "__main__":

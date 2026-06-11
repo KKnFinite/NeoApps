@@ -1,6 +1,7 @@
-const CACHE_NAME = "neogateway-static-v20260611-1";
+const CACHE_PREFIX = "neogateway-static-";
+const CACHE_NAME = "neogateway-static-v20260611-2";
 const STATIC_ASSETS = [
-  "/static/css/base.css?v=20260611-1",
+  "/static/css/base.css?v=20260611-2",
   "/static/images/neogateway_logo3_small.png",
   "/static/images/neogateway_logo3_medium.png",
   "/static/images/neogateway_logo3_large.png",
@@ -23,7 +24,7 @@ self.addEventListener("activate", (event) => {
       .then((cacheNames) =>
         Promise.all(
           cacheNames
-            .filter((cacheName) => cacheName.startsWith("neogateway-static-") && cacheName !== CACHE_NAME)
+            .filter((cacheName) => cacheName.startsWith(CACHE_PREFIX) && cacheName !== CACHE_NAME)
             .map((cacheName) => caches.delete(cacheName))
         )
       )
@@ -44,7 +45,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request));
+    event.respondWith(fetch(request, { cache: "no-store" }));
     return;
   }
 
