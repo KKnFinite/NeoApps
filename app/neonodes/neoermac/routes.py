@@ -2,6 +2,7 @@ from flask import flash, redirect, render_template, request, url_for
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
+from app.models import NeoErmacBuildingLineup
 from app.neonodes.neoermac import bp
 from app.services.access_control import get_current_gateway
 from app.services.neoermac_building_lineup import (
@@ -29,9 +30,12 @@ NEOERMAC_PAGES = (
 @bp.route("")
 @gateway_node_required("ermac")
 def index():
+    gateway = get_current_gateway()
+    lineup_summary = _building_lineup_summary(gateway)
     return render_template(
         "neonodes/neoermac/index.html",
-        gateway=get_current_gateway(),
+        gateway=gateway,
+        lineup_summary=lineup_summary,
         menu_items=NEOERMAC_PAGES,
     )
 
@@ -101,6 +105,20 @@ def _placeholder_page(title):
         gateway=get_current_gateway(),
         title=title,
     )
+
+
+def _building_lineup_summary(gateway):
+    rows = NeoErmacBuildingLineup.query.filter_by(gateway_id=gateway.id).all()
+    assigned_slots = sum(
+        1
+        for row in rows
+        for field_name in DESTINATION_FIELDS
+        if getattr(row, field_name)
+    )
+    return {
+        "runout_count": len(rows),
+        "assigned_slots": assigned_slots,
+    }
 
 
 def _building_lineup_response(gateway, access, rows=None, status_code=200):

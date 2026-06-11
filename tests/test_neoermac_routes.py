@@ -56,12 +56,19 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoErmac", response.data)
+        self.assertIn(b'src="/static/images/neoermac_logo1_large.png"', response.data)
+        self.assertIn(b'srcset="/static/images/neoermac_logo1_medium.png"', response.data)
+        self.assertIn(b'srcset="/static/images/neoermac_logo1_small.png"', response.data)
+        self.assertIn(b"OPERATIONAL OVERVIEW", response.data)
+        self.assertIn(b"ACTIVE GATEWAY", response.data)
         self.assertIn(b"BUILDING LINEUP", response.data)
         self.assertIn(b"VIEW OUTBOUND", response.data)
         self.assertIn(b"DOOR VIEW", response.data)
         self.assertIn(b"TUG ASSIGNMENTS", response.data)
         self.assertIn(b"BACK TO", response.data)
         self.assertIn(b'class="brand-inline-name neo-node-name node-gateway"', response.data)
+        self.assertNotIn(b"RFD NEONODE", response.data)
+        self.assertNotIn(b'<nav class="neoermac-menu"', response.data)
 
     def test_neoermac_menu_links_work(self):
         self._login_approved_user()

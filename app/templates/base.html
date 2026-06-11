@@ -12,20 +12,23 @@
 {% set is_user_management_page = is_authenticated_app and request.blueprint == "auth" and request.path.startswith("/admin/users") %}
 {% set is_permission_management_page = is_authenticated_app and request.blueprint == "auth" and request.path.startswith("/admin/permissions") %}
 {% set uses_motherbrain_header = is_motherbrain_page or is_user_management_page or is_permission_management_page %}
+{% set is_neoermac_page = is_authenticated_app and request.blueprint == "neoermac" %}
+{% set uses_node_header = uses_motherbrain_header or is_neoermac_page %}
 {% set is_gateway_matrix_page = is_motherbrain_page and request.path.startswith("/motherbrain/gateway-matrix") %}
 {% set is_master_schedule_page = is_motherbrain_page and request.path.startswith("/motherbrain/master-schedule") %}
 {% set is_manage_sort_page = is_motherbrain_page and (request.path.startswith("/motherbrain/manage-sort") or request.path.startswith("/motherbrain/operations")) %}
 {% set motherbrain_current_label = "PERMISSION RULES" if is_permission_management_page else ("USER MANAGEMENT" if is_user_management_page else ("GATEWAY MATRIX" if is_gateway_matrix_page else ("MASTER SCHEDULE" if is_master_schedule_page else ("MANAGE SORT" if is_manage_sort_page else "DASHBOARD")))) %}
-<body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_motherbrain_header %} motherbrain-fixed-header{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}">
+{% set neoermac_current_label = "BUILDING LINEUP" if request.path.startswith("/neoermac/building-lineup") else ("DOOR VIEW" if request.path.startswith("/neoermac/door-view") else ("VIEW OUTBOUND" if request.path.startswith("/neoermac/outbound") else ("TUG ASSIGNMENTS" if request.path.startswith("/neoermac/tug-assignments") else "DASHBOARD"))) %}
+<body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}">
     <div class="shell">
         <header class="topbar">
-            {% if uses_motherbrain_header %}
-            <a class="motherbrain-header-logo-link" href="{{ url_for('neomotherbrain.motherbrain') }}" aria-label="MotherBrain home">
-                <img class="motherbrain-header-logo" src="{{ url_for('static', filename='images/motherbrain_logo1.png') }}" alt="MotherBrain logo">
+            {% if uses_node_header %}
+            <a class="motherbrain-header-logo-link" href="{{ url_for('neoermac.index') if is_neoermac_page else url_for('neomotherbrain.motherbrain') }}" aria-label="{{ 'NeoErmac home' if is_neoermac_page else 'MotherBrain home' }}">
+                <img class="motherbrain-header-logo{% if is_neoermac_page %} neoermac-header-logo{% endif %}" src="{{ url_for('static', filename='images/neoermac_logo1_small.png' if is_neoermac_page else 'images/motherbrain_logo1.png') }}" alt="{{ 'NeoErmac logo' if is_neoermac_page else 'MotherBrain logo' }}">
             </a>
-            <div class="motherbrain-header-identity" aria-label="MotherBrain current area">
-                <span>MotherBrain</span>
-                <strong>{{ motherbrain_current_label }}</strong>
+            <div class="motherbrain-header-identity" aria-label="{{ 'NeoErmac current area' if is_neoermac_page else 'MotherBrain current area' }}">
+                <span>{{ 'NeoErmac' if is_neoermac_page else 'MotherBrain' }}</span>
+                <strong>{{ neoermac_current_label if is_neoermac_page else motherbrain_current_label }}</strong>
             </div>
             {% else %}
             <a class="brand" href="{% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}{{ url_for('neomotherbrain.rfd_hub') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}" aria-label="{% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}NeoGateway - {{ default_gateway.code }}{% else %}NeoGateway{% endif %}">
@@ -45,7 +48,7 @@
             {% endif %}
             <div class="topbar-actions">
                 {% if is_authenticated_app %}
-                {% if uses_motherbrain_header %}
+                {% if uses_node_header %}
                 <div class="topbar-user-row">
                     <div class="user-chip" aria-label="Logged in user">
                         <span>Logged in</span>
@@ -58,12 +61,20 @@
                     <span class="motherbrain-menu-icon" aria-hidden="true"></span>
                 </button>
                 <nav class="nav motherbrain-header-nav" id="motherbrain-mobile-menu" aria-label="Primary" data-motherbrain-menu-panel>
+                    {% if is_neoermac_page %}
+                    <a class="motherbrain-nav-link motherbrain-nav-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="BACK TO NeoGateway">BACK TO <span class="brand-inline-name neo-node-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span></a>
+                    <a class="motherbrain-nav-link{% if request.path.startswith('/neoermac/building-lineup') %} is-active{% endif %}" href="{{ url_for('neoermac.building_lineup') }}" {% if request.path.startswith('/neoermac/building-lineup') %}aria-current="page"{% endif %}>BUILDING LINEUP</a>
+                    <a class="motherbrain-nav-link{% if request.path.startswith('/neoermac/door-view') %} is-active{% endif %}" href="{{ url_for('neoermac.door_view') }}" {% if request.path.startswith('/neoermac/door-view') %}aria-current="page"{% endif %}>DOOR VIEW</a>
+                    <a class="motherbrain-nav-link{% if request.path.startswith('/neoermac/outbound') %} is-active{% endif %}" href="{{ url_for('neoermac.outbound') }}" {% if request.path.startswith('/neoermac/outbound') %}aria-current="page"{% endif %}>VIEW OUTBOUND</a>
+                    <a class="motherbrain-nav-link{% if request.path.startswith('/neoermac/tug-assignments') %} is-active{% endif %}" href="{{ url_for('neoermac.tug_assignments') }}" {% if request.path.startswith('/neoermac/tug-assignments') %}aria-current="page"{% endif %}>TUG ASSIGNMENTS</a>
+                    {% else %}
                     <a class="motherbrain-nav-link motherbrain-nav-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="BACK TO NeoGateway">BACK TO <span class="brand-inline-name neo-node-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span></a>
                     <a class="motherbrain-nav-link{% if is_manage_sort_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.manage_sort') }}" {% if is_manage_sort_page %}aria-current="page"{% endif %}>MANAGE SORT</a>
                     <a class="motherbrain-nav-link{% if is_master_schedule_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule') }}" {% if is_master_schedule_page %}aria-current="page"{% endif %}>MASTER SCHEDULE</a>
                     <a class="motherbrain-nav-link{% if is_gateway_matrix_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.gateway_matrix') }}" {% if is_gateway_matrix_page %}aria-current="page"{% endif %}>GATEWAY MATRIX</a>
                     {% if can_manage_system(current_user) %}
                     <a class="motherbrain-nav-link{% if is_user_management_page %} is-active{% endif %}" href="{{ url_for('auth.users') }}" {% if is_user_management_page %}aria-current="page"{% endif %}>USER MANAGEMENT</a>
+                    {% endif %}
                     {% endif %}
                 </nav>
                 {% else %}
@@ -97,7 +108,7 @@
             {% endif %}
         </main>
     </div>
-    {% if uses_motherbrain_header %}
+    {% if uses_node_header %}
     <script>
     (() => {
         const button = document.querySelector("[data-motherbrain-menu-button]");

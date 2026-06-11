@@ -3,18 +3,42 @@
 {% block title %}NeoErmac | NeoGateway{% endblock %}
 
 {% block content %}
-<section class="neoermac-shell" aria-labelledby="neoermac-title">
-    <div class="neoermac-hero">
-        <span class="neoermac-kicker">{{ gateway.code }} NEONODE</span>
-        <h1 id="neoermac-title"><span class="neo-node-name neo-node-ermac node-ermac" aria-label="NeoErmac"><span class="neo-word">Neo</span><span class="node-word">Ermac</span></span></h1>
-        <p>OUTBOUND COMMAND SHELL</p>
+<section class="neoermac-shell neoermac-dashboard-shell" aria-label="NeoErmac dashboard">
+    <div class="neoermac-hero neoermac-dashboard-hero">
+        <picture>
+            <source media="(max-width: 520px)" srcset="{{ url_for('static', filename='images/neoermac_logo1_small.png') }}">
+            <source media="(max-width: 900px)" srcset="{{ url_for('static', filename='images/neoermac_logo1_medium.png') }}">
+            <img class="neoermac-dashboard-logo" src="{{ url_for('static', filename='images/neoermac_logo1_large.png') }}" alt="NeoErmac">
+        </picture>
     </div>
 
-    <nav class="neoermac-menu" aria-label="NeoErmac menu">
-        {% for label, endpoint in menu_items %}
-        <a class="neoermac-menu-link" href="{{ url_for(endpoint) }}">{{ label }}</a>
-        {% endfor %}
-        <a class="neoermac-menu-link neoermac-menu-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="BACK TO NeoGateway">BACK TO <span class="brand-inline-name neo-node-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span></a>
-    </nav>
+    <section class="neoermac-overview-panel" aria-label="NeoErmac operational overview">
+        <h2>OPERATIONAL OVERVIEW</h2>
+        <div class="neoermac-overview-grid">
+            <div>
+                <span>ACTIVE GATEWAY</span>
+                <strong>{{ gateway.code }}</strong>
+            </div>
+            <div>
+                <span>BUILDING LINEUP</span>
+                <strong>
+                    {% if lineup_summary.assigned_slots %}
+                    {{ lineup_summary.assigned_slots }} SLOT{{ "" if lineup_summary.assigned_slots == 1 else "S" }} SET
+                    {% else %}
+                    READY
+                    {% endif %}
+                </strong>
+            </div>
+            <div>
+                <span>OUTBOUND</span>
+                <strong>FOUNDATION</strong>
+            </div>
+            <div>
+                <span>DOOR VIEW</span>
+                <strong>COMING SOON</strong>
+            </div>
+        </div>
+        <p>NeoErmac operational overview coming soon.</p>
+    </section>
 </section>
 {% endblock %}
