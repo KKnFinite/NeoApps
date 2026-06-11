@@ -3,12 +3,6 @@
 {% block title %}BUILDING LINEUP | NeoErmac{% endblock %}
 
 {% block content %}
-{% set field_labels = {
-    "east_destination_1": "EAST SIDE DESTINATION 1",
-    "east_destination_2": "EAST SIDE DESTINATION 2",
-    "west_destination_1": "WEST SIDE DESTINATION 1",
-    "west_destination_2": "WEST SIDE DESTINATION 2"
-} %}
 {% set slot_classes = {
     "east_destination_1": "neoermac-slot-east-1",
     "east_destination_2": "neoermac-slot-east-2",
@@ -20,7 +14,7 @@
     <div class="neoermac-hero">
         <span class="neoermac-kicker"><span class="neo-node-name neo-node-ermac node-ermac" aria-label="NeoErmac"><span class="neo-word">Neo</span><span class="node-word">Ermac</span></span></span>
         <h1 id="neoermac-lineup-title">BUILDING LINEUP</h1>
-        <p>{{ gateway.code }} RUNOUT DESTINATION CONTROL</p>
+        <p>{{ gateway.code }} BELT DESTINATION CONTROL</p>
     </div>
 
     {% if can_view and not can_edit %}
@@ -35,13 +29,13 @@
         <div class="neoermac-runout-list">
             {% for row in rows %}
             <article class="neoermac-runout-card">
-                <h2>{{ row.runout_name }}</h2>
+                <h2>{{ row.belt_group_label }} BELTS</h2>
 
                 <div class="neoermac-runout-slots">
                     {% for field in ["east_destination_1", "east_destination_2", "west_destination_1", "west_destination_2"] %}
                     {% set selected_value = row|attr(field) %}
                     <label class="neoermac-slot {{ slot_classes[field] }}">
-                        <span>{{ field_labels[field] }}</span>
+                        <span>{{ row.slot_labels[field] }}</span>
                         <select class="neoermac-destination-select" name="{{ field_name(row, field) }}" {% if not can_edit %}disabled{% endif %}>
                             <option value=""></option>
                             {% for destination in destination_choices %}
@@ -51,15 +45,10 @@
                     </label>
                     {% endfor %}
                     <div class="neoermac-door-context" aria-hidden="true">
-                        {% if row.runout_key == "green_runout" %}
-                        <strong>D1</strong>
-                        <span>{{ row.runout_name }}</span>
-                        {% else %}
-                        {% set runout_number = loop.index0 %}
-                        <span>D{{ runout_number }}</span>
-                        <strong>{{ row.runout_name }}</strong>
-                        <span>D{{ runout_number + 1 }}</span>
-                        {% endif %}
+                        <span>{{ row.door_start }}</span>
+                        <strong>BELTS</strong>
+                        <em>{{ row.belt_names[0] }}<br>{{ row.belt_names[1] }}</em>
+                        <span>{{ row.door_end }}</span>
                     </div>
                 </div>
             </article>

@@ -1436,15 +1436,28 @@ a {
     }
 
     .neoermac-door-context strong {
-        color: #fff;
-        font-size: clamp(1.5rem, 2.6vw, 2.35rem);
-        letter-spacing: 0.04em;
+        color: #fff2f4;
+        font-size: clamp(0.58rem, 0.9vw, 0.78rem);
+        letter-spacing: 0.1em;
+        line-height: 1;
         text-shadow:
             0 0 14px rgba(255, 255, 255, 0.36),
             0 2px 0 rgba(0, 0, 0, 0.74);
     }
 
-    .neoermac-runout-card:first-child .neoermac-door-context strong {
+    .neoermac-door-context em {
+        color: #fff;
+        font-size: clamp(0.72rem, 1.05vw, 0.98rem);
+        font-style: normal;
+        font-weight: 950;
+        letter-spacing: 0.05em;
+        line-height: 1.25;
+        text-shadow:
+            0 0 12px rgba(255, 255, 255, 0.3),
+            0 2px 0 rgba(0, 0, 0, 0.74);
+    }
+
+    .neoermac-runout-card:first-child .neoermac-door-context em {
         color: #f7fff9;
         text-shadow:
             0 0 14px rgba(54, 226, 123, 0.42),
@@ -4000,6 +4013,10 @@ select::-ms-expand {
 
     .neoermac-runout-card {
         padding: 14px;
+    }
+
+    .neoermac-door-context {
+        display: none;
     }
 
     .neoermac-lineup-actions {
