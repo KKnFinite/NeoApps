@@ -36,7 +36,7 @@
     </section>
 
     <section class="panel-subsection">
-        <h2>{{ gateway.name }} GATEWAY MEMBERSHIP</h2>
+        <h2>{{ gateway.code }} GATEWAY MEMBERSHIP</h2>
         {% if membership %}
         <dl class="detail-list">
             <div><dt>STATUS</dt><dd>{{ membership.status }}</dd></div>
@@ -45,7 +45,7 @@
             <div><dt>DENIED AT</dt><dd>{{ membership.denied_at.strftime("%Y-%m-%d %H:%M") if membership.denied_at else "" }}</dd></div>
         </dl>
         {% else %}
-        <p class="muted">No {{ gateway.name }} membership exists for this user.</p>
+        <p class="muted">No {{ gateway.code }} membership exists for this user.</p>
         {% endif %}
 
         <div class="action-row">

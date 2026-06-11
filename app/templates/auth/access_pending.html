@@ -13,7 +13,7 @@
     </p>
     {% elif membership and membership.status == "pending" %}
     <p class="hero-copy">
-        Your {{ gateway.name }} access request is pending review. Operational data and NeoNode dashboards remain unavailable until approval is complete.
+        Your {{ gateway.code }} access request is pending review. Operational data and NeoNode dashboards remain unavailable until approval is complete.
     </p>
     {% elif membership and membership.status == "denied" %}
     <p class="hero-copy">
@@ -21,7 +21,7 @@
     </p>
     {% elif not membership %}
     <p class="hero-copy">
-        No {{ gateway.name }} access request is active for this account yet. Contact a supervisor or Grandmaster for access review.
+        No {{ gateway.code }} access request is active for this account yet. Contact a supervisor or Grandmaster for access review.
     </p>
     {% else %}
     <p class="hero-copy">

@@ -2,13 +2,13 @@
 
 {% set public_landing = true %}
 
-{% block title %}NeoGateway | {{ default_gateway.name }}{% endblock %}
+{% block title %}NeoGateway | {{ default_gateway.code }}{% endblock %}
 
 {% block content %}
 <section class="motherbrain-command public-command" aria-label="NeoGateway login">
     <section class="motherbrain-core">
         <div class="motherbrain-core-image">
-            <img class="gateway-logo" src="{{ url_for('static', filename=default_gateway.logo) }}" alt="{{ default_gateway.name }}" />
+            <img class="gateway-logo" src="{{ url_for('static', filename=default_gateway.logo) }}" alt="{{ default_gateway.code }}" />
         </div>
 
         <form class="command-login-form" method="post" action="{{ url_for('auth.login') }}">

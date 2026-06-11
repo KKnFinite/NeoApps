@@ -28,13 +28,13 @@
                 <strong>{{ motherbrain_current_label }}</strong>
             </div>
             {% else %}
-            <a class="brand" href="{% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}{{ url_for('neomotherbrain.rfd_hub') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}" aria-label="{% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}NeoGateway - {{ default_gateway.name }}{% else %}NeoGateway{% endif %}">
+            <a class="brand" href="{% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}{{ url_for('neomotherbrain.rfd_hub') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}" aria-label="{% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}NeoGateway - {{ default_gateway.code }}{% else %}NeoGateway{% endif %}">
                 <span>
                     <strong>
                         {% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}
-                        <span class="neo-node-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span> - {{ default_gateway.name }}
+                        <span class="neo-node-name brand-inline-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span> - {{ default_gateway.code }}
                         {% else %}
-                        <span class="neo-node-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span>
+                        <span class="neo-node-name brand-inline-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span>
                         {% endif %}
                     </strong>
                     {% if not (current_user.is_authenticated and not public_landing|default(false)) %}

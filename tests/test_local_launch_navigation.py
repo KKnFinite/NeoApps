@@ -116,7 +116,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"NeoRFD", response.data)
+        self.assertIn(b"RFD", response.data)
+        self.assertNotIn(b"NeoRFD", response.data)
         self.assertIn(b"NeoGateway", response.data)
         self.assertIn(b"Powered by NeoApps", response.data)
         self.assertNotIn(b"Gateway Command Layer", response.data)
@@ -153,7 +154,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         response = self.client.get("/login")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"NeoRFD", response.data)
+        self.assertIn(b"RFD", response.data)
+        self.assertNotIn(b"NeoRFD", response.data)
         self.assertIn(b'src="/static/images/neorfd_logo1.png"', response.data)
         self.assertNotIn(b"Gateway Command Layer", response.data)
         self.assertIn(b'<form class="command-login-form" method="post" action="/login">', response.data)

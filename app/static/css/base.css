@@ -473,7 +473,7 @@ a {
 
 .brand-inline-name {
     display: inline-block;
-    font-size: 1.09em;
+    font-size: 1.18em;
     line-height: 0.95;
     text-transform: none;
 }
@@ -485,8 +485,9 @@ a {
 .action-button .neo-node-name,
 .motherbrain-nav-link .neo-node-name,
 .neoermac-menu-link .neo-node-name {
-    margin-inline: 0.28em;
-    font-size: 1.08em;
+    margin-inline: 0.34em;
+    font-size: 1.18em;
+    font-weight: 950;
 }
 
 .motherbrain-fixed-header .nav a.is-active,
@@ -1389,8 +1390,8 @@ a {
 .rfd-node-tile {
     --node-rgb: 255, 47, 47;
     --node-primary: var(--red);
-    --node-hover-y: -5px;
-    --node-hover-scale: 1.025;
+    --node-hover-y: -4px;
+    --node-hover-scale: 1.028;
     position: relative;
     isolation: isolate;
     display: flex;
@@ -1407,12 +1408,11 @@ a {
     filter:
         drop-shadow(0 12px 16px rgba(0, 0, 0, 0.42))
         drop-shadow(0 0 13px rgba(var(--node-rgb), 0.12));
-    box-shadow: 0 0 0 rgba(var(--node-rgb), 0);
+    cursor: pointer;
     text-align: center;
     text-decoration: none;
     transition:
-        transform 105ms cubic-bezier(0.2, 0.8, 0.2, 1),
-        box-shadow 105ms ease;
+        transform 95ms cubic-bezier(0.2, 0.8, 0.2, 1);
     will-change: transform;
 }
 
@@ -1436,7 +1436,7 @@ a {
         linear-gradient(90deg, rgba(255, 255, 255, 0.1), transparent 20% 80%, rgba(var(--node-rgb), 0.12));
     filter: blur(16px);
     opacity: 0;
-    transition: opacity 105ms ease;
+    transition: opacity 95ms ease;
 }
 
 .rfd-node-tile::after {
@@ -1447,7 +1447,7 @@ a {
         radial-gradient(circle at 50% 84%, rgba(var(--node-rgb), 0.16), transparent 46%);
     border-radius: 4px;
     opacity: 0.52;
-    transition: opacity 105ms ease;
+    transition: opacity 95ms ease;
 }
 
 .rfd-node-name {
@@ -1472,18 +1472,14 @@ a {
         0 0 10px rgba(var(--node-rgb), 0.54),
         0 2px 0 rgba(0, 0, 0, 0.9);
     transition:
-        text-shadow 105ms ease,
-        color 105ms ease;
+        text-shadow 95ms ease,
+        color 95ms ease;
 }
 
 @media (hover: hover) and (pointer: fine) {
     .rfd-node-tile:not(.rfd-node-disabled):hover,
     .rfd-node-tile:not(.rfd-node-disabled):focus-visible {
         outline: none;
-        box-shadow:
-            0 0 0 1px rgba(var(--node-rgb), 0.42),
-            0 0 18px rgba(var(--node-rgb), 0.42),
-            0 0 34px rgba(255, 47, 47, 0.2);
         transform: translateY(var(--node-hover-y)) scale(var(--node-hover-scale));
     }
 
@@ -1502,8 +1498,8 @@ a {
     .rfd-node-tile:not(.rfd-node-disabled):focus-visible .rfd-node-prefix,
     .rfd-node-tile:not(.rfd-node-disabled):focus-visible .neo-word {
         text-shadow:
-            0 0 16px rgba(244, 247, 251, 0.72),
-            0 0 26px rgba(244, 247, 251, 0.32),
+            0 0 18px rgba(244, 247, 251, 0.82),
+            0 0 28px rgba(244, 247, 251, 0.36),
             0 2px 0 rgba(0, 0, 0, 0.9);
     }
 
@@ -1512,8 +1508,8 @@ a {
     .rfd-node-tile:not(.rfd-node-disabled):focus-visible .rfd-node-suffix,
     .rfd-node-tile:not(.rfd-node-disabled):focus-visible .node-word {
         text-shadow:
-            0 0 16px rgba(var(--node-rgb), 0.98),
-            0 0 30px rgba(var(--node-rgb), 0.62),
+            0 0 18px rgba(var(--node-rgb), 1),
+            0 0 34px rgba(var(--node-rgb), 0.68),
             0 2px 0 rgba(0, 0, 0, 0.9);
     }
 }

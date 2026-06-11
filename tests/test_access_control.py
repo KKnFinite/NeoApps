@@ -178,8 +178,9 @@ class AccessControlTest(unittest.TestCase):
         hub_html = hub.data.decode()
         left_column = hub_html.split('rfd-node-column-left"', 1)[1].split("</div>", 1)[0]
         right_column = hub_html.split('rfd-node-column-right"', 1)[1].split("</div>", 1)[0]
-        self.assertIn(b"NeoRFD Command Hub", hub.data)
-        self.assertIn(b"NeoGateway - NeoRFD", hub.data)
+        self.assertIn(b"RFD Command Hub", hub.data)
+        self.assertIn(b"NeoGateway - RFD", hub.data)
+        self.assertNotIn(b"NeoRFD", hub.data)
         self.assertIn(b"watcher_hub_user", hub.data)
         self.assertIn(b'src="/static/images/neorfd_logo1.png"', hub.data)
         self.assertIn(b'class="rfd-mobile-logo"', hub.data)

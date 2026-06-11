@@ -4,13 +4,13 @@
 <span class="neo-node-name rfd-node-name node-{{ slug }}" aria-label="Neo{{ name }}"><span class="neo-word">Neo</span><span class="node-word">{{ name }}</span></span>
 {%- endmacro %}
 
-{% block title %}{{ gateway.name }} Command Hub | NeoGateway{% endblock %}
+{% block title %}{{ gateway.code }} Command Hub | NeoGateway{% endblock %}
 
 {% block content %}
-<section class="motherbrain-command rfd-command-layout" aria-label="{{ gateway.name }} command hub">
-    <section class="rfd-node-menu" aria-label="{{ gateway.name }} NeoNode launcher">
-        <div class="rfd-mobile-logo" aria-label="{{ gateway.name }} logo">
-            <img class="gateway-logo" src="{{ url_for('static', filename=default_gateway.logo) }}" alt="{{ gateway.name }}" />
+<section class="motherbrain-command rfd-command-layout" aria-label="{{ gateway.code }} command hub">
+    <section class="rfd-node-menu" aria-label="{{ gateway.code }} NeoNode launcher">
+        <div class="rfd-mobile-logo" aria-label="{{ gateway.code }} logo">
+            <img class="gateway-logo" src="{{ url_for('static', filename=default_gateway.logo) }}" alt="{{ gateway.code }}" />
         </div>
 
         {% if can_enter_motherbrain %}
@@ -23,8 +23,8 @@
         </article>
         {% endif %}
 
-        <div class="rfd-node-grid" aria-label="{{ gateway.name }} NeoNodes">
-            <div class="rfd-node-column rfd-node-column-left" aria-label="{{ gateway.name }} left NeoNodes">
+        <div class="rfd-node-grid" aria-label="{{ gateway.code }} NeoNodes">
+            <div class="rfd-node-column rfd-node-column-left" aria-label="{{ gateway.code }} left NeoNodes">
                 {% if can_launch_sektor %}
                 <a class="rfd-node-tile rfd-node-sektor" href="{{ url_for('neomotherbrain.sektor_launch') }}" aria-label="NeoSektor">
                     {{ node_label("sektor", "Sektor") }}
@@ -42,11 +42,11 @@
                 </article>
             </div>
 
-            <div class="rfd-hub-logo" aria-label="{{ gateway.name }} logo">
-                <img class="gateway-logo" src="{{ url_for('static', filename=default_gateway.logo) }}" alt="{{ gateway.name }}" />
+            <div class="rfd-hub-logo" aria-label="{{ gateway.code }} logo">
+                <img class="gateway-logo" src="{{ url_for('static', filename=default_gateway.logo) }}" alt="{{ gateway.code }}" />
             </div>
 
-            <div class="rfd-node-column rfd-node-column-right" aria-label="{{ gateway.name }} right NeoNodes">
+            <div class="rfd-node-column rfd-node-column-right" aria-label="{{ gateway.code }} right NeoNodes">
                 {% if can_launch_ermac %}
                 <a class="rfd-node-tile rfd-node-ermac" href="{{ url_for('neoermac.index') }}" aria-label="NeoErmac">
                     {{ node_label("ermac", "Ermac") }}
