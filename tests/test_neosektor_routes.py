@@ -74,7 +74,6 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         paths = {
             "/neosektor/discharge": b"DISCHARGE",
-            "/neosektor/driver-routing": b"DRIVER ROUTING",
         }
 
         for path, title in paths.items():
@@ -83,6 +82,116 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(title, response.data)
                 self.assertIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
+
+    def test_driver_routing_loads_for_view_authorized_user(self):
+        self._login_approved_user(role="watcher")
+
+        response = self.client.get("/neosektor/driver-routing")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"DRIVER ROUTING", response.data)
+        self.assertIn(b"DRIVER COUNTS", response.data)
+        self.assertIn(b"data-driver-routing", response.data)
+        self.assertIn(b"data-can-edit=\"false\"", response.data)
+        self.assertIn(b"VIEW ONLY", response.data)
+        self.assertNotIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
+
+    def test_driver_routing_blocks_user_without_view_permission(self):
+        view_rule = PermissionRule.query.filter_by(
+            permission_key="neosektor.driver_routing.view"
+        ).one()
+        edit_rule = PermissionRule.query.filter_by(
+            permission_key="neosektor.driver_routing.edit"
+        ).one()
+        view_rule.minimum_role = "simulator"
+        edit_rule.minimum_role = "simulator"
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neosektor/driver-routing", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/neosektor")
+
+    def test_view_only_driver_routing_user_cannot_update_settings(self):
+        self._login_approved_user(role="watcher")
+
+        response = self.client.post(
+            "/neosektor/driver-routing/update",
+            json={"west_offset": 4},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(NeoSektorDriverRouteSetting.query.count(), 0)
+
+    def test_edit_authorized_user_can_update_driver_route_offset(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neosektor/driver-routing/update",
+            json={"west_offset": 4},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["state"]["routing"]["west_offset"], 4)
+        self.assertEqual(
+            NeoSektorDriverRouteSetting.query.filter_by(
+                route_name="WEST OFFSET",
+            ).one().route_value,
+            "4",
+        )
+
+    def test_driver_routing_reflects_shared_neosektor_state(self):
+        self._login_approved_user(role="operator")
+        self.client.get("/neosektor/ebm")
+        self.client.post(
+            "/neosektor/ballmat/update?side=east",
+            json={
+                "side": "east",
+                "waves": {
+                    "first": {"count": 7, "status": "Light"},
+                    "second": {"count": 2, "status": "Light"},
+                },
+                "open_bays": 3,
+                "bay_statuses": {"EAST 1": "Moderate"},
+            },
+        )
+        self.client.post(
+            "/neosektor/driver-routing/update",
+            json={"west_offset": 3},
+        )
+
+        page = self.client.get("/neosektor/driver-routing")
+        state_response = self.client.get("/neosektor/driver-routing/state")
+
+        payload = state_response.get_json()
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"West Ballmat Stay Left", page.data)
+        self.assertIn(b"East Ballmat Stay Right", page.data)
+        self.assertEqual(payload["state"]["routing"]["west_offset"], 3)
+        self.assertEqual(
+            payload["state"]["routing"]["routes"]["first"]["target"],
+            "West Ballmat Stay Left",
+        )
+        self.assertEqual(
+            payload["state"]["routing"]["routes"]["second"]["target"],
+            "East Ballmat Stay Right",
+        )
+        self.assertEqual(payload["state"]["sides"]["east"]["open_bays"], 3)
+
+    def test_neosektor_dashboard_and_header_link_to_real_driver_routing(self):
+        self._login_approved_user(role="operator")
+
+        dashboard = self.client.get("/neosektor")
+        driver_routing = self.client.get("/neosektor/driver-routing")
+
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertIn(b'href="/neosektor/driver-routing"', dashboard.data)
+        self.assertEqual(driver_routing.status_code, 200)
+        self.assertIn(b'href="/neosektor/driver-routing"', driver_routing.data)
+        self.assertIn(b'aria-current="page"', driver_routing.data)
 
     def test_tunnel_conductor_loads_for_view_authorized_user(self):
         self._login_approved_user(role="operator")
@@ -233,7 +342,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(payload["state"]["waves"][1]["unloaded"], 4)
         self.assertEqual(NeoSektorSortState.query.one().unloaded_total, 4)
         self.assertEqual(live_counts.status_code, 200)
-        self.assertIn(b"<dd>4</dd>", live_counts.data)
+        self.assertIn(b"<span>UNLOADED</span><strong>4</strong>", live_counts.data)
 
     def test_neosektor_dashboard_and_header_link_to_real_tunnel_conductor(self):
         self._login_approved_user(role="operator")
@@ -459,8 +568,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"VIEW LIVE COUNTS", response.data)
-        self.assertIn(b"READ ONLY DATABASE FOUNDATION", response.data)
-        self.assertIn(b"LEFT TO UNLOAD", response.data)
+        self.assertIn(b"LIVE COUNTS", response.data)
+        self.assertIn(b"LEFT", response.data)
         self.assertIn(b"1ST WAVE", response.data)
         self.assertIn(b"2ND WAVE", response.data)
         self.assertIn(b"EAST BALLMAT", response.data)
@@ -473,7 +582,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 4)
         self.assertEqual(NeoSektorOpenBayState.query.count(), 2)
         self.assertEqual(NeoSektorBayStatus.query.count(), 6)
-        self.assertEqual(NeoSektorDriverRouteSetting.query.count(), 2)
+        self.assertEqual(NeoSektorDriverRouteSetting.query.count(), 3)
 
     def test_neosektor_dashboard_and_header_link_to_real_live_counts(self):
         self._login_approved_user(role="operator")

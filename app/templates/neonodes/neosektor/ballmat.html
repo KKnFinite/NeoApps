@@ -12,11 +12,24 @@
     data-state-url="{{ url_for('neosektor.ballmat_state') }}"
     data-update-url="{{ url_for('neosektor.ballmat_update', side=selected_side) }}"
 >
-    <div class="neosektor-hero neosektor-ballmat-hero">
-        <span class="neosektor-kicker">{{ gateway.code }} BALLMAT OPERATIONS</span>
+    <header class="neosektor-operator-title neosektor-ballmat-title">
+        <span>{{ gateway.code }} BALLMAT OPERATIONS</span>
         <h1 id="neosektor-ballmat-title">{{ selected_manager_label }}</h1>
         <p>{{ selected_side_label }} BALLMAT SELECTED</p>
-    </div>
+    </header>
+
+    <section class="neosektor-live-wave-strip neosektor-ballmat-wave-strip" aria-label="Shared wave totals">
+        {% for wave in state.waves %}
+        <article class="neosektor-live-wave-card">
+            <h2>{{ wave.name }}</h2>
+            <div class="neosektor-live-wave-metrics">
+                <div><span>PLANNED</span><strong>{{ wave.planned }}</strong></div>
+                <div><span>UNLOADED</span><strong>{{ wave.unloaded }}</strong></div>
+                <div><span>LEFT</span><strong>{{ wave.left }}</strong></div>
+            </div>
+        </article>
+        {% endfor %}
+    </section>
 
     <div class="neosektor-ballmat-modebar" aria-label="Ballmat mode">
         <a class="neosektor-mode-tab{% if selected_side == 'east' %} is-active{% endif %}" href="{{ url_for('neosektor.ebm') }}">EBM</a>

@@ -11,11 +11,11 @@
     data-state-url="{{ url_for('neosektor.tunnel_conductor_state') }}"
     data-delta-url="{{ url_for('neosektor.tunnel_conductor_delta') }}"
 >
-    <div class="neosektor-hero neosektor-tunnel-hero">
-        <span class="neosektor-kicker">{{ gateway.code }} LIVE FLOW</span>
+    <header class="neosektor-operator-title neosektor-tunnel-title">
+        <span>{{ gateway.code }} LIVE FLOW</span>
         <h1 id="neosektor-tunnel-title">TUNNEL CONDUCTOR</h1>
         <p>BALLMAT COUNT CONTROL</p>
-    </div>
+    </header>
 
     <div class="neosektor-ballmat-modebar" aria-label="Tunnel Conductor mode">
         <span class="neosektor-mode-pill">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
@@ -72,6 +72,20 @@
         </section>
         {% endfor %}
     </div>
+
+    <section class="neosektor-tunnel-bay-panel" aria-label="Bay status">
+        <h2>BAY STATUS</h2>
+        <div class="neosektor-tunnel-bay-grid">
+            {% for side_key in ["east", "west"] %}
+            {% for bay in state.sides[side_key].bays %}
+            <article class="neosektor-tunnel-bay-card" data-tunnel-bay="{{ bay.bay_name }}">
+                <span>{{ bay.bay_name }}</span>
+                <strong>{{ bay.status }}</strong>
+            </article>
+            {% endfor %}
+            {% endfor %}
+        </div>
+    </section>
 </section>
 
 <script>
@@ -114,6 +128,14 @@
                     count.textContent = wave.count;
                 }
                 updateStatusClass(panel.querySelector(`[data-wave-status="${wave.key}"]`), wave.status);
+            });
+
+            (side.bays || []).forEach((bay) => {
+                const card = root.querySelector(`[data-tunnel-bay="${bay.bay_name}"]`);
+                if (!card) {
+                    return;
+                }
+                card.querySelector("strong").textContent = bay.status;
             });
         });
     };

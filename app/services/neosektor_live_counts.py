@@ -32,7 +32,14 @@ DEFAULT_BAYS = (
     ("WEST", "WEST 2"),
     ("WEST", "WEST 3"),
 )
-DEFAULT_DRIVER_ROUTES = ("EAST ROUTE", "WEST ROUTE")
+DRIVER_ROUTE_FIRST_WAVE_NAME = "1ST WAVE ROUTE"
+DRIVER_ROUTE_SECOND_WAVE_NAME = "2ND WAVE ROUTE"
+DRIVER_ROUTE_WEST_OFFSET_NAME = "WEST OFFSET"
+DEFAULT_DRIVER_ROUTES = (
+    DRIVER_ROUTE_FIRST_WAVE_NAME,
+    DRIVER_ROUTE_SECOND_WAVE_NAME,
+    DRIVER_ROUTE_WEST_OFFSET_NAME,
+)
 TUNNEL_CONDUCTOR_VIEW_PERMISSION = "neosektor.tunnel_conductor.view"
 TUNNEL_CONDUCTOR_EDIT_PERMISSION = "neosektor.tunnel_conductor.edit"
 
@@ -49,6 +56,9 @@ def live_counts_context(gateway, sort_date=None, sort_name=None):
     bay_statuses = _get_or_create_bay_statuses(sort_state)
     driver_routes = _get_or_create_driver_routes(sort_state)
     _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats)
+    side_views = _side_state_views(ballmat_wave_counts, ballmats, open_bays, bay_statuses)
+    routing = _driver_routing_calculation(sort_state, side_views, driver_routes)
+    _sync_driver_route_values(driver_routes, routing)
     db.session.flush()
 
     planned_total = max(0, sort_state.planned_total or 0)
@@ -177,6 +187,38 @@ def tunnel_conductor_context(gateway, sort_date=None, sort_name=None):
         "state": ballmat_state_payload(gateway, sort_date, sort_name),
         "status_labels": STATUS_LABELS,
     }
+
+
+def driver_routing_context(gateway, sort_date=None, sort_name=None):
+    return {
+        "state": driver_routing_state_payload(gateway, sort_date, sort_name),
+    }
+
+
+def driver_routing_state_payload(gateway, sort_date=None, sort_name=None):
+    sort_date = sort_date or date.today()
+    sort_name = normalize_sort_name(sort_name)
+    state = ballmat_state_payload(gateway, sort_date, sort_name)
+    sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
+    driver_routes = _get_or_create_driver_routes(sort_state)
+    routing = _driver_routing_calculation(sort_state, state["sides"], driver_routes)
+    _sync_driver_route_values(driver_routes, routing)
+    db.session.flush()
+
+    state["routing"] = routing
+    state["driver_routes"] = [_driver_route_view(row) for row in driver_routes]
+    return state
+
+
+def update_driver_routing_settings(gateway, payload, sort_date=None, sort_name=None):
+    sort_date = sort_date or date.today()
+    sort_name = normalize_sort_name(sort_name)
+    sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
+    driver_routes = _get_or_create_driver_routes(sort_state)
+    offset_row = _driver_route_by_name(driver_routes, DRIVER_ROUTE_WEST_OFFSET_NAME)
+    offset_row.route_value = str(_clean_offset((payload or {}).get("west_offset")))
+    db.session.flush()
+    return driver_routing_state_payload(gateway, sort_date, sort_name)
 
 
 def adjust_tunnel_count(gateway, side, wave, delta, sort_date=None, sort_name=None):
@@ -381,6 +423,7 @@ def _get_or_create_driver_routes(sort_state):
             row = NeoSektorDriverRouteSetting(
                 sort_state_id=sort_state.id,
                 route_name=route_name,
+                route_value=_driver_route_default_value(route_name),
                 display_order=index,
             )
             db.session.add(row)
@@ -434,6 +477,147 @@ def _driver_route_view(row):
         "route_name": row.route_name,
         "route_value": row.route_value or "-",
     }
+
+
+def _driver_route_default_value(route_name):
+    return "0" if route_name == DRIVER_ROUTE_WEST_OFFSET_NAME else ""
+
+
+def _driver_route_by_name(driver_routes, route_name):
+    return next(row for row in driver_routes if row.route_name == route_name)
+
+
+def _driver_routing_calculation(sort_state, sides, driver_routes):
+    east = sides["east"]
+    west = sides["west"]
+    west_offset = _driver_route_offset(driver_routes)
+    east_open_bays = max(east["open_bays"], 0)
+    west_open_bays = max(west["open_bays"], 0)
+    first_route = _driver_wave_route(
+        _side_wave_count(east, "first"),
+        _side_wave_count(west, "first"),
+        east_open_bays,
+        west_open_bays,
+        west_offset,
+    )
+    second_route = _driver_wave_route(
+        _side_wave_count(east, "second"),
+        _side_wave_count(west, "second"),
+        east_open_bays,
+        west_open_bays,
+        west_offset,
+    )
+
+    return {
+        "sort_name": sort_state.sort_name.upper(),
+        "active_wave": sort_state.active_wave,
+        "west_offset": west_offset,
+        "routes": {
+            "first": {
+                "wave_key": "first",
+                "wave_label": "1ST WAVE",
+                "east_count": _side_wave_count(east, "first"),
+                "west_count": _side_wave_count(west, "first"),
+                **first_route,
+            },
+            "second": {
+                "wave_key": "second",
+                "wave_label": "2ND WAVE",
+                "east_count": _side_wave_count(east, "second"),
+                "west_count": _side_wave_count(west, "second"),
+                **second_route,
+            },
+        },
+        "bay_priority": _driver_bay_priority(sides),
+    }
+
+
+def _driver_wave_route(east_value, west_value, east_open_bays, west_open_bays, west_offset):
+    if east_value == 0 and west_value == 0:
+        if east_open_bays >= west_open_bays:
+            return {
+                "target": "East Ballmat Stay Right",
+                "direction": "east",
+                "arrow": "right",
+            }
+        return {
+            "target": "West Ballmat Stay Left",
+            "direction": "west",
+            "arrow": "left",
+        }
+
+    if east_value <= west_value + west_offset:
+        return {
+            "target": "East Ballmat Stay Right",
+            "direction": "east",
+            "arrow": "right",
+        }
+
+    return {
+        "target": "West Ballmat Stay Left",
+        "direction": "west",
+        "arrow": "left",
+    }
+
+
+def _side_wave_count(side, wave_key):
+    wave = next((row for row in side["waves"] if row["key"] == wave_key), None)
+    return max((wave or {}).get("count") or 0, 0)
+
+
+def _driver_bay_priority(sides):
+    priority = [
+        {
+            **bay,
+            "side": side["label"],
+            "rank_label": "",
+            "status_rank": STATUS_RANKS[_status(bay["status"])],
+        }
+        for side in sides.values()
+        for bay in side["bays"]
+    ]
+    priority.sort(
+        key=lambda bay: (bay["status_rank"], _bay_number(bay["bay_name"])),
+        reverse=True,
+    )
+    for index, bay in enumerate(priority, start=1):
+        bay["rank"] = index
+        bay["rank_label"] = _ordinal(index)
+    return priority
+
+
+def _bay_number(value):
+    digits = "".join(character for character in str(value or "") if character.isdigit())
+    return int(digits or 0)
+
+
+def _ordinal(number):
+    if number == 1:
+        suffix = "st"
+    elif number == 2:
+        suffix = "nd"
+    elif number == 3:
+        suffix = "rd"
+    else:
+        suffix = "th"
+    return f"{number}{suffix}"
+
+
+def _driver_route_offset(driver_routes):
+    offset_row = _driver_route_by_name(driver_routes, DRIVER_ROUTE_WEST_OFFSET_NAME)
+    return _clean_offset(offset_row.route_value)
+
+
+def _sync_driver_route_values(driver_routes, routing):
+    _driver_route_by_name(driver_routes, DRIVER_ROUTE_FIRST_WAVE_NAME).route_value = (
+        routing["routes"]["first"]["target"]
+    )
+    _driver_route_by_name(driver_routes, DRIVER_ROUTE_SECOND_WAVE_NAME).route_value = (
+        routing["routes"]["second"]["target"]
+    )
+    _driver_route_by_name(driver_routes, DRIVER_ROUTE_WEST_OFFSET_NAME).route_value = str(
+        routing["west_offset"]
+    )
 
 
 def _side_state_views(ballmat_wave_counts, ballmats, open_bays, bay_statuses):
@@ -556,6 +740,14 @@ def _clean_delta(value):
     except (TypeError, ValueError):
         cleaned = 0
     return min(max(cleaned, -1000), 1000)
+
+
+def _clean_offset(value):
+    try:
+        cleaned = int(value)
+    except (TypeError, ValueError):
+        cleaned = 0
+    return min(max(cleaned, -999), 999)
 
 
 def _status(value):

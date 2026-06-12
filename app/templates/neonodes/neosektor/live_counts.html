@@ -4,119 +4,64 @@
 
 {% block content %}
 <section class="neosektor-shell neosektor-live-shell" aria-labelledby="neosektor-live-title">
-    <div class="neosektor-hero neosektor-live-hero">
-        <span class="neosektor-kicker">{{ gateway.code }} LIVE COUNTS</span>
+    <header class="neosektor-operator-title">
+        <span>{{ gateway.code }} LIVE COUNTS</span>
         <h1 id="neosektor-live-title">VIEW LIVE COUNTS</h1>
-        <p>READ ONLY DATABASE FOUNDATION</p>
-    </div>
+        <p>{{ summary.sort_name }} | {{ summary.sort_date.strftime("%m/%d/%Y") }}</p>
+    </header>
 
-    <section class="neosektor-live-panel neosektor-live-summary" aria-label="Sort summary">
-        <div class="neosektor-live-summary-head">
-            <div>
-                <span>SORT</span>
-                <strong>{{ summary.sort_name }}</strong>
+    <section class="neosektor-live-wave-strip" aria-label="Wave counts">
+        {% for wave in waves %}
+        <article class="neosektor-live-wave-card">
+            <h2>{{ wave.name }}</h2>
+            <div class="neosektor-live-wave-metrics">
+                <div><span>PLANNED</span><strong>{{ wave.planned }}</strong></div>
+                <div><span>UNLOADED</span><strong>{{ wave.unloaded }}</strong></div>
+                <div><span>LEFT</span><strong>{{ wave.left }}</strong></div>
             </div>
-            <div>
-                <span>DATE</span>
-                <strong>{{ summary.sort_date.strftime("%m/%d/%Y") }}</strong>
-            </div>
-            <div>
-                <span>ACTIVE WAVE</span>
-                <strong>{{ summary.active_wave }}</strong>
-            </div>
-        </div>
-        <div class="neosektor-live-totals">
-            <div>
-                <span>PLANNED</span>
-                <strong>{{ summary.planned_total }}</strong>
-            </div>
-            <div>
-                <span>UNLOADED</span>
-                <strong>{{ summary.unloaded_total }}</strong>
-            </div>
-            <div>
-                <span>LEFT TO UNLOAD</span>
-                <strong>{{ summary.left_to_unload }}</strong>
-            </div>
-            <div>
-                <span>COMPLETE</span>
-                <strong>{{ summary.completion_percent }}%</strong>
-            </div>
-        </div>
+        </article>
+        {% endfor %}
     </section>
 
-    <section class="neosektor-live-panel" aria-label="Wave counts">
-        <h2>WAVE COUNTS</h2>
-        <div class="neosektor-wave-grid">
-            {% for wave in waves %}
-            <article class="neosektor-live-card">
-                <header>
-                    <span>{{ wave.name }}</span>
-                    <strong class="neosektor-status neosektor-status-{{ wave.status|lower }}">{{ wave.status }}</strong>
-                </header>
-                <dl>
-                    <div><dt>PLANNED</dt><dd>{{ wave.planned }}</dd></div>
-                    <div><dt>UNLOADED</dt><dd>{{ wave.unloaded }}</dd></div>
-                    <div><dt>LEFT</dt><dd>{{ wave.left }}</dd></div>
-                </dl>
-            </article>
+    <section class="neosektor-live-ops-grid" aria-label="Ballmat counts">
+        {% for side_label in ["EAST", "WEST"] %}
+        <article class="neosektor-live-ops-column">
+            <h2>{{ side_label }} BALLMAT</h2>
+
+            {% for ballmat in ballmats if ballmat.side == side_label %}
+            <div class="neosektor-live-counter-card">
+                <span>TOTAL COUNT</span>
+                <strong>{{ ballmat.count }}</strong>
+                <em class="neosektor-status neosektor-status-{{ ballmat.status|lower }}">{{ ballmat.status }}</em>
+            </div>
             {% endfor %}
-        </div>
+
+            {% for open_bay in open_bays if open_bay.side == side_label %}
+            <div class="neosektor-live-counter-card">
+                <span>OPEN BAYS</span>
+                <strong>{{ open_bay.open_count }}</strong>
+            </div>
+            {% endfor %}
+
+            <div class="neosektor-live-bay-stack">
+                {% for bay in bay_statuses if bay.side == side_label %}
+                <div class="neosektor-live-bay-card">
+                    <span>{{ bay.bay_name }}</span>
+                    <strong>{{ bay.status }}</strong>
+                </div>
+                {% endfor %}
+            </div>
+        </article>
+        {% endfor %}
     </section>
 
-    <section class="neosektor-live-panel" aria-label="Ballmat counts">
-        <h2>BALLMAT COUNTS</h2>
-        <div class="neosektor-ballmat-grid">
-            {% for ballmat in ballmats %}
-            <article class="neosektor-live-card">
-                <header>
-                    <span>{{ ballmat.side }} BALLMAT</span>
-                    <strong class="neosektor-status neosektor-status-{{ ballmat.status|lower }}">{{ ballmat.status }}</strong>
-                </header>
-                <dl>
-                    <div><dt>COUNT</dt><dd>{{ ballmat.count }}</dd></div>
-                </dl>
-            </article>
-            {% endfor %}
+    <section class="neosektor-live-route-strip" aria-label="Driver routing">
+        {% for route in driver_routes %}
+        <div>
+            <span>{{ route.route_name }}</span>
+            <strong>{{ route.route_value }}</strong>
         </div>
-    </section>
-
-    <section class="neosektor-live-panel" aria-label="Open bays">
-        <h2>OPEN BAYS</h2>
-        <div class="neosektor-open-bay-grid">
-            {% for open_bay in open_bays %}
-            <article class="neosektor-live-card">
-                <header>
-                    <span>{{ open_bay.side }}</span>
-                    <strong>{{ open_bay.open_count }}</strong>
-                </header>
-            </article>
-            {% endfor %}
-        </div>
-    </section>
-
-    <section class="neosektor-live-panel" aria-label="Bay statuses">
-        <h2>BAY STATUS</h2>
-        <div class="neosektor-bay-status-grid">
-            {% for bay in bay_statuses %}
-            <article class="neosektor-bay-status-row">
-                <span>{{ bay.bay_name }}</span>
-                <strong class="neosektor-status neosektor-status-{{ bay.status|lower }}">{{ bay.status }}</strong>
-            </article>
-            {% endfor %}
-        </div>
-    </section>
-
-    <section class="neosektor-live-panel" aria-label="Driver routing">
-        <h2>DRIVER ROUTING</h2>
-        <div class="neosektor-bay-status-grid">
-            {% for route in driver_routes %}
-            <article class="neosektor-bay-status-row">
-                <span>{{ route.route_name }}</span>
-                <strong>{{ route.route_value }}</strong>
-            </article>
-            {% endfor %}
-        </div>
+        {% endfor %}
     </section>
 </section>
 {% endblock %}

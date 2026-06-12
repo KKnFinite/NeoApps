@@ -5840,6 +5840,185 @@ select::-ms-expand {
     font-size: clamp(2.2rem, 7vw, 4.8rem);
 }
 
+.neosektor-operator-title {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: center;
+}
+
+.neosektor-operator-title span {
+    color: var(--node-sektor-highlight);
+    font-size: 0.72rem;
+    font-weight: 950;
+    letter-spacing: 0.2em;
+    line-height: 1.15;
+    text-transform: uppercase;
+    text-shadow: 0 0 14px rgba(var(--node-sektor-highlight-rgb), 0.28);
+}
+
+.neosektor-operator-title h1 {
+    margin: 0;
+    color: var(--neo-bright-silver);
+    font-size: clamp(2rem, 7vw, 4.4rem);
+    font-weight: 950;
+    letter-spacing: 0.04em;
+    line-height: 0.95;
+    text-transform: uppercase;
+    text-shadow:
+        0 0 18px rgba(var(--node-sektor-primary-rgb), 0.3),
+        0 2px 0 rgba(0, 0, 0, 0.72);
+}
+
+.neosektor-operator-title p {
+    margin: 0;
+    color: rgba(238, 246, 255, 0.74);
+    font-size: 0.78rem;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    line-height: 1.25;
+    text-transform: uppercase;
+}
+
+.neosektor-live-wave-strip,
+.neosektor-live-ops-grid,
+.neosektor-live-route-strip {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+}
+
+.neosektor-live-wave-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.neosektor-live-wave-card,
+.neosektor-live-ops-column,
+.neosektor-live-counter-card,
+.neosektor-live-bay-card,
+.neosektor-live-route-strip > div,
+.neosektor-tunnel-bay-panel,
+.neosektor-tunnel-bay-card {
+    border: 1px solid rgba(244, 246, 248, 0.17);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(244, 246, 248, 0.08), transparent 42%),
+        linear-gradient(180deg, rgba(31, 35, 41, 0.92), rgba(7, 8, 11, 0.95));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.neosektor-live-wave-card {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+}
+
+.neosektor-live-wave-card h2,
+.neosektor-live-ops-column h2,
+.neosektor-tunnel-bay-panel h2 {
+    margin: 0;
+    color: var(--node-sektor-highlight);
+    font-size: clamp(0.92rem, 2vw, 1.18rem);
+    font-weight: 950;
+    letter-spacing: 0.14em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.neosektor-live-wave-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+}
+
+.neosektor-live-wave-metrics div,
+.neosektor-live-counter-card,
+.neosektor-live-bay-card,
+.neosektor-live-route-strip > div,
+.neosektor-tunnel-bay-card {
+    display: grid;
+    justify-items: center;
+    gap: 5px;
+    min-width: 0;
+    padding: 9px;
+    text-align: center;
+}
+
+.neosektor-live-wave-metrics div {
+    border: 1px solid rgba(244, 246, 248, 0.12);
+    border-radius: 6px;
+    background: rgba(3, 5, 8, 0.42);
+}
+
+.neosektor-live-wave-metrics span,
+.neosektor-live-counter-card span,
+.neosektor-live-bay-card span,
+.neosektor-live-route-strip span,
+.neosektor-tunnel-bay-card span {
+    color: rgba(238, 246, 255, 0.64);
+    font-size: 0.62rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    line-height: 1.15;
+    text-transform: uppercase;
+}
+
+.neosektor-live-wave-metrics strong,
+.neosektor-live-counter-card strong,
+.neosektor-live-bay-card strong,
+.neosektor-live-route-strip strong,
+.neosektor-tunnel-bay-card strong {
+    color: #fff;
+    font-size: clamp(1.04rem, 2.6vw, 1.5rem);
+    font-weight: 950;
+    line-height: 1;
+}
+
+.neosektor-live-ops-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+}
+
+.neosektor-live-ops-column {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+    padding: 12px;
+}
+
+.neosektor-live-counter-card strong {
+    color: var(--node-sektor-highlight);
+    font-size: clamp(1.8rem, 6vw, 3rem);
+}
+
+.neosektor-live-bay-stack,
+.neosektor-tunnel-bay-grid {
+    display: grid;
+    gap: 7px;
+}
+
+.neosektor-tunnel-bay-panel {
+    display: grid;
+    gap: 10px;
+    width: 100%;
+    padding: 12px;
+}
+
+.neosektor-tunnel-bay-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.neosektor-live-bay-card {
+    background:
+        linear-gradient(135deg, rgba(244, 246, 248, 0.11), rgba(156, 166, 176, 0.05) 36%, transparent 58%),
+        linear-gradient(180deg, rgba(42, 47, 54, 0.94), rgba(13, 16, 21, 0.98));
+}
+
+.neosektor-live-route-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .neosektor-live-panel {
     display: grid;
     gap: 14px;
@@ -6454,6 +6633,235 @@ select::-ms-expand {
     opacity: 0.52;
 }
 
+.neosektor-driver-shell {
+    width: min(100%, 760px);
+    gap: 10px;
+}
+
+.neosektor-driver-board {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+}
+
+.neosektor-driver-wave-card {
+    position: relative;
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+    overflow: hidden;
+    padding: clamp(16px, 4vw, 28px);
+    border: 1px solid rgba(244, 246, 248, 0.18);
+    border-radius: 8px;
+    background:
+        linear-gradient(135deg, rgba(var(--node-sektor-primary-rgb), 0.12), transparent 28%),
+        linear-gradient(180deg, rgba(18, 21, 27, 0.96), rgba(4, 6, 9, 0.98));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.09),
+        0 18px 36px rgba(0, 0, 0, 0.24);
+}
+
+.neosektor-driver-wave-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 8px;
+    background: var(--node-sektor-primary);
+    opacity: 0.84;
+}
+
+.neosektor-driver-wave-card[data-direction="west"]::before {
+    right: 0;
+    left: auto;
+}
+
+.neosektor-driver-wave-card h2 {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    color: var(--node-sektor-primary);
+    font-size: clamp(2rem, 8vw, 4.6rem);
+    font-weight: 950;
+    letter-spacing: 0.04em;
+    line-height: 0.95;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.neosektor-driver-target {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    justify-items: center;
+    gap: 6px;
+    text-align: center;
+}
+
+.neosektor-driver-target strong {
+    display: block;
+    color: var(--neo-bright-silver);
+    font-size: clamp(2.1rem, 9vw, 5rem);
+    font-weight: 950;
+    letter-spacing: 0.02em;
+    line-height: 0.95;
+    text-transform: uppercase;
+}
+
+.neosektor-driver-target span {
+    color: #fff;
+    font-size: clamp(4.4rem, 18vw, 9rem);
+    font-weight: 950;
+    line-height: 0.82;
+}
+
+.neosektor-driver-wave-context {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+}
+
+.neosektor-driver-wave-context div,
+.neosektor-driver-offset-panel,
+.neosektor-driver-priority-card {
+    border: 1px solid rgba(244, 246, 248, 0.16);
+    border-radius: 7px;
+    background:
+        linear-gradient(180deg, rgba(244, 246, 248, 0.08), transparent 42%),
+        linear-gradient(180deg, rgba(31, 35, 41, 0.92), rgba(7, 8, 11, 0.95));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.neosektor-driver-wave-context div {
+    display: grid;
+    justify-items: center;
+    gap: 4px;
+    padding: 8px;
+}
+
+.neosektor-driver-wave-context dt,
+.neosektor-driver-wave-context dd {
+    margin: 0;
+}
+
+.neosektor-driver-wave-context dt,
+.neosektor-driver-offset-panel span,
+.neosektor-driver-priority-card span,
+.neosektor-driver-priority-card em {
+    color: rgba(238, 246, 255, 0.64);
+    font-size: 0.62rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    line-height: 1.15;
+    text-transform: uppercase;
+}
+
+.neosektor-driver-wave-context dd,
+.neosektor-driver-offset-panel strong,
+.neosektor-driver-priority-card strong {
+    color: #fff;
+    font-size: clamp(1.1rem, 3vw, 1.55rem);
+    font-weight: 950;
+    line-height: 1;
+}
+
+.neosektor-driver-offset-panel {
+    display: grid;
+    grid-template-columns: minmax(96px, 0.52fr) minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+    padding: 10px;
+}
+
+.neosektor-driver-offset-panel > div:first-child {
+    display: grid;
+    justify-items: center;
+    gap: 5px;
+    text-align: center;
+}
+
+.neosektor-driver-offset-control {
+    display: grid;
+    grid-template-columns: 44px minmax(72px, 1fr) 44px;
+    gap: 8px;
+    min-width: 0;
+}
+
+.neosektor-driver-offset-control button,
+.neosektor-driver-offset-control input {
+    min-width: 0;
+    min-height: 40px;
+    border-radius: 6px;
+    font: inherit;
+    font-weight: 950;
+    text-align: center;
+}
+
+.neosektor-driver-offset-control input {
+    border: 1px solid rgba(var(--node-sektor-highlight-rgb), 0.42);
+    background: rgba(2, 4, 7, 0.86);
+    color: #fff;
+}
+
+.neosektor-driver-offset-control button {
+    border: 1px solid rgba(244, 246, 248, 0.24);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 40%),
+        linear-gradient(180deg, var(--node-sektor-primary), #4e060c);
+    color: #fff;
+    font-size: 1rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.neosektor-driver-offset-control button:not(:disabled):hover,
+.neosektor-driver-offset-control button:not(:disabled):focus-visible,
+.neosektor-driver-offset-control input:focus {
+    border-color: rgba(var(--node-sektor-highlight-rgb), 0.74);
+    box-shadow: 0 0 14px rgba(var(--node-sektor-highlight-rgb), 0.22);
+    outline: none;
+}
+
+.neosektor-driver-offset-control button:disabled,
+.neosektor-driver-offset-control input:disabled {
+    cursor: not-allowed;
+    opacity: 0.52;
+}
+
+.neosektor-driver-bay-priority {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 7px;
+    width: 100%;
+}
+
+.neosektor-driver-priority-card {
+    display: grid;
+    justify-items: center;
+    gap: 4px;
+    min-width: 0;
+    padding: 8px 6px;
+    text-align: center;
+}
+
+.neosektor-driver-priority-card span {
+    color: var(--node-sektor-primary);
+}
+
+.neosektor-driver-priority-card strong {
+    overflow: hidden;
+    max-width: 100%;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.neosektor-driver-priority-card em {
+    font-style: normal;
+}
+
 @media (max-width: 760px) {
     .neosektor-menu,
     .neosektor-overview-grid,
@@ -6461,9 +6869,12 @@ select::-ms-expand {
     .neosektor-live-totals,
     .neosektor-wave-grid,
     .neosektor-ballmat-grid,
+    .neosektor-live-ops-grid,
+    .neosektor-live-route-strip,
     .neosektor-open-bay-grid,
     .neosektor-tunnel-summary,
-    .neosektor-tunnel-grid {
+    .neosektor-tunnel-grid,
+    .neosektor-driver-offset-panel {
         grid-template-columns: 1fr;
     }
 
@@ -6514,5 +6925,17 @@ select::-ms-expand {
     .neosektor-tunnel-delta-controls {
         grid-template-columns: repeat(4, minmax(42px, 1fr));
         gap: 6px;
+    }
+
+    .neosektor-driver-offset-control {
+        grid-template-columns: 42px minmax(0, 1fr) 42px;
+    }
+
+    .neosektor-driver-bay-priority {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .neosektor-tunnel-bay-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }

@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}DRIVER ROUTING | NeoSektor{% endblock %}
+
+{% block content %}
+<section
+    class="neosektor-shell neosektor-driver-shell"
+    aria-labelledby="neosektor-driver-title"
+    data-driver-routing
+    data-can-edit="{{ 'true' if can_edit else 'false' }}"
+    data-state-url="{{ url_for('neosektor.driver_routing_state') }}"
+    data-update-url="{{ url_for('neosektor.driver_routing_update') }}"
+>
+    <header class="neosektor-operator-title">
+        <span>{{ gateway.code }} DRIVER COUNTS</span>
+        <h1 id="neosektor-driver-title">DRIVER ROUTING</h1>
+        <p>{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</p>
+    </header>
+
+    <main class="neosektor-driver-board" aria-label="Driver routing">
+        {% for wave_key in ["first", "second"] %}
+        {% set route = state.routing.routes[wave_key] %}
+        <section
+            class="neosektor-driver-wave-card"
+            data-driver-wave="{{ wave_key }}"
+            data-direction="{{ route.direction }}"
+            aria-label="{{ route.wave_label }} route"
+        >
+            <h2>{{ route.wave_label }}</h2>
+            <div class="neosektor-driver-target">
+                <strong data-driver-target>{{ route.target }}</strong>
+                <span data-driver-arrow aria-hidden="true">{% if route.arrow == "right" %}&rarr;{% else %}&larr;{% endif %}</span>
+            </div>
+            <dl class="neosektor-driver-wave-context">
+                <div><dt>EAST</dt><dd data-driver-east-count>{{ route.east_count }}</dd></div>
+                <div><dt>WEST</dt><dd data-driver-west-count>{{ route.west_count }}</dd></div>
+            </dl>
+        </section>
+        {% endfor %}
+
+        <section class="neosektor-driver-offset-panel" aria-label="West route offset">
+            <div>
+                <span>WEST OFFSET</span>
+                <strong data-driver-offset-display>{{ state.routing.west_offset }}</strong>
+            </div>
+            <div class="neosektor-driver-offset-control">
+                <button type="button" data-driver-offset-step="-1" {% if not can_edit %}disabled{% endif %}>-</button>
+                <input
+                    type="number"
+                    inputmode="numeric"
+                    value="{{ state.routing.west_offset }}"
+                    data-driver-offset-input
+                    aria-label="West route offset"
+                    {% if not can_edit %}disabled{% endif %}
+                >
+                <button type="button" data-driver-offset-step="1" {% if not can_edit %}disabled{% endif %}>+</button>
+            </div>
+        </section>
+
+        <section class="neosektor-driver-bay-priority" aria-label="Bay priority">
+            {% for bay in state.routing.bay_priority %}
+            <article class="neosektor-driver-priority-card" data-driver-priority-index="{{ loop.index0 }}">
+                <span data-driver-rank>{{ bay.rank_label }}</span>
+                <strong data-driver-bay-name>{{ bay.bay_name }}</strong>
+                <em data-driver-bay-status>{{ bay.status }}</em>
+            </article>
+            {% endfor %}
+        </section>
+    </main>
+</section>
+
+<script>
+(() => {
+    const root = document.querySelector("[data-driver-routing]");
+    if (!root) {
+        return;
+    }
+
+    const stateUrl = root.dataset.stateUrl;
+    const updateUrl = root.dataset.updateUrl;
+    const canEdit = root.dataset.canEdit === "true";
+    const offsetInput = root.querySelector("[data-driver-offset-input]");
+
+    const readOffset = () => {
+        const value = Number.parseInt(offsetInput.value, 10);
+        return Number.isFinite(value) ? Math.min(Math.max(value, -999), 999) : 0;
+    };
+
+    const applyRoute = (waveKey, route) => {
+        const panel = root.querySelector(`[data-driver-wave="${waveKey}"]`);
+        if (!panel || !route) {
+            return;
+        }
+        panel.dataset.direction = route.direction;
+        panel.querySelector("[data-driver-target]").textContent = route.target;
+        panel.querySelector("[data-driver-arrow]").textContent = route.arrow === "right" ? "\u2192" : "\u2190";
+        panel.querySelector("[data-driver-east-count]").textContent = route.east_count;
+        panel.querySelector("[data-driver-west-count]").textContent = route.west_count;
+    };
+
+    const applyBayPriority = (bays) => {
+        (bays || []).forEach((bay, index) => {
+            const card = root.querySelector(`[data-driver-priority-index="${index}"]`);
+            if (!card) {
+                return;
+            }
+            card.querySelector("[data-driver-rank]").textContent = bay.rank_label;
+            card.querySelector("[data-driver-bay-name]").textContent = bay.bay_name;
+            card.querySelector("[data-driver-bay-status]").textContent = bay.status;
+        });
+    };
+
+    const applyState = (state) => {
+        const routing = state.routing || {};
+        applyRoute("first", (routing.routes || {}).first);
+        applyRoute("second", (routing.routes || {}).second);
+        root.querySelector("[data-driver-offset-display]").textContent = routing.west_offset ?? 0;
+        if (offsetInput && document.activeElement !== offsetInput) {
+            offsetInput.value = routing.west_offset ?? 0;
+        }
+        applyBayPriority(routing.bay_priority);
+    };
+
+    const refreshState = async () => {
+        try {
+            const response = await fetch(stateUrl, { cache: "no-store", credentials: "same-origin" });
+            if (!response.ok) {
+                return;
+            }
+            const payload = await response.json();
+            if (payload.ok) {
+                applyState(payload.state);
+            }
+        } catch (_error) {}
+    };
+
+    const saveOffset = async () => {
+        if (!canEdit || !offsetInput) {
+            return;
+        }
+
+        try {
+            const response = await fetch(updateUrl, {
+                method: "POST",
+                cache: "no-store",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ west_offset: readOffset() }),
+            });
+            if (!response.ok) {
+                return;
+            }
+            const payload = await response.json();
+            if (payload.ok) {
+                applyState(payload.state);
+            }
+        } catch (_error) {}
+    };
+
+    root.addEventListener("click", (event) => {
+        const step = event.target.closest("[data-driver-offset-step]");
+        if (!step || step.disabled || !offsetInput) {
+            return;
+        }
+        offsetInput.value = readOffset() + Number.parseInt(step.dataset.driverOffsetStep, 10);
+        saveOffset();
+    });
+
+    root.addEventListener("change", (event) => {
+        if (event.target.matches("[data-driver-offset-input]") && !event.target.disabled) {
+            saveOffset();
+        }
+    });
+
+    window.setInterval(refreshState, 3000);
+})();
+</script>
+{% endblock %}

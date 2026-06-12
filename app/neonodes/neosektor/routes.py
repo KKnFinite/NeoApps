@@ -10,9 +10,12 @@ from app.services.neosektor_live_counts import (
     adjust_tunnel_count,
     ballmat_operations_context,
     ballmat_state_payload,
+    driver_routing_context,
+    driver_routing_state_payload,
     live_counts_context,
     normalize_ballmat_side,
     tunnel_conductor_context,
+    update_driver_routing_settings,
     update_ballmat_side,
 )
 from app.services.permission_rules import permission_access
@@ -252,7 +255,49 @@ def live_counts():
 @bp.route("/driver-routing")
 @gateway_node_required("sektor")
 def driver_routing():
-    return _placeholder_page("DRIVER ROUTING")
+    page = _page_by_title("DRIVER ROUTING")
+    access = permission_access(page["view_permission"], page["edit_permission"])
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neosektor.index"))
+
+    gateway = get_current_gateway()
+    context = driver_routing_context(gateway)
+    db.session.commit()
+    return render_template(
+        "neonodes/neosektor/driver_routing.html",
+        gateway=gateway,
+        can_view=access["can_view"],
+        can_edit=access["can_edit"],
+        **context,
+    )
+
+
+@bp.route("/driver-routing/state")
+@gateway_node_required("sektor")
+def driver_routing_state():
+    page = _page_by_title("DRIVER ROUTING")
+    access = permission_access(page["view_permission"], page["edit_permission"])
+    if not access["can_view"]:
+        return jsonify({"ok": False, "error": "Access denied."}), 403
+
+    state = driver_routing_state_payload(get_current_gateway())
+    db.session.commit()
+    return jsonify({"ok": True, "state": state})
+
+
+@bp.route("/driver-routing/update", methods=["POST"])
+@gateway_node_required("sektor")
+def driver_routing_update():
+    page = _page_by_title("DRIVER ROUTING")
+    access = permission_access(page["view_permission"], page["edit_permission"])
+    if not access["can_edit"]:
+        return jsonify({"ok": False, "error": "Edit access denied."}), 403
+
+    payload = request.get_json(silent=True) or request.form
+    state = update_driver_routing_settings(get_current_gateway(), payload)
+    db.session.commit()
+    return jsonify({"ok": True, "state": state})
 
 
 def _placeholder_page(title):
