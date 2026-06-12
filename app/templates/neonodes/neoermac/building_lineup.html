@@ -7,7 +7,6 @@
     <div class="neoermac-hero">
         <span class="neoermac-kicker"><span class="neo-node-name neo-node-ermac node-ermac" aria-label="NeoErmac"><span class="neo-word">Neo</span><span class="node-word">Ermac</span></span></span>
         <h1 id="neoermac-lineup-title">BUILDING LINEUP</h1>
-        <p>{{ gateway.code }} BELT DESTINATION CONTROL</p>
     </div>
 
     {% if can_view and not can_edit %}
@@ -25,36 +24,41 @@
             <div class="neoermac-sequence-door">{{ row.door_start }}</div>
             {% endif %}
             <article class="neoermac-runout-card neoermac-belt-group">
-                <h2 class="neoermac-belt-section-title">BELT SECTION</h2>
-
                 <div class="neoermac-belt-grid-scroll">
                     <div class="neoermac-runout-slots neoermac-belt-grid" aria-label="{{ row.belt_group_label }} belt assignments">
-                        {% for belt_row in row.belt_rows %}
-                        <div class="neoermac-belt-row">
-                            <div class="neoermac-belt-name">
-                                <span>{{ belt_row.position }}</span>
-                                <strong>{{ belt_row.belt }}</strong>
+                        {% for block in row.belt_blocks %}
+                        <div class="neoermac-belt-block">
+                            <div class="neoermac-belt-destination-row">
+                                {% for slot in block.top_slots %}
+                                {% set selected_value = row|attr(slot.field) if slot.field else "" %}
+                                <label class="neoermac-slot neoermac-belt-cell">
+                                    <select class="neoermac-destination-select" name="{{ field_name(row, slot.field) if slot.field else '' }}" {% if not can_edit or not slot.field %}disabled{% endif %}>
+                                        <option value="">{{ slot.placeholder }}</option>
+                                        {% if slot.field %}
+                                        {% for destination in destination_choices %}
+                                        <option value="{{ destination }}" {% if selected_value == destination %}selected{% endif %}>{{ destination }}</option>
+                                        {% endfor %}
+                                        {% endif %}
+                                    </select>
+                                </label>
+                                {% endfor %}
                             </div>
-                            {% set east_value = row|attr(belt_row.east_field) %}
-                            {% set west_value = row|attr(belt_row.west_field) %}
-                            <label class="neoermac-slot neoermac-belt-cell">
-                                <span class="neoermac-belt-label">EAST SIDE</span>
-                                <select class="neoermac-destination-select" name="{{ field_name(row, belt_row.east_field) }}" {% if not can_edit %}disabled{% endif %}>
-                                    <option value=""></option>
-                                    {% for destination in destination_choices %}
-                                    <option value="{{ destination }}" {% if east_value == destination %}selected{% endif %}>{{ destination }}</option>
-                                    {% endfor %}
-                                </select>
-                            </label>
-                            <label class="neoermac-slot neoermac-belt-cell">
-                                <span class="neoermac-belt-label">WEST SIDE</span>
-                                <select class="neoermac-destination-select" name="{{ field_name(row, belt_row.west_field) }}" {% if not can_edit %}disabled{% endif %}>
-                                    <option value=""></option>
-                                    {% for destination in destination_choices %}
-                                    <option value="{{ destination }}" {% if west_value == destination %}selected{% endif %}>{{ destination }}</option>
-                                    {% endfor %}
-                                </select>
-                            </label>
+                            <div class="neoermac-belt-name">{{ block.label }}</div>
+                            <div class="neoermac-belt-destination-row">
+                                {% for slot in block.bottom_slots %}
+                                {% set selected_value = row|attr(slot.field) if slot.field else "" %}
+                                <label class="neoermac-slot neoermac-belt-cell">
+                                    <select class="neoermac-destination-select" name="{{ field_name(row, slot.field) if slot.field else '' }}" {% if not can_edit or not slot.field %}disabled{% endif %}>
+                                        <option value="">{{ slot.placeholder }}</option>
+                                        {% if slot.field %}
+                                        {% for destination in destination_choices %}
+                                        <option value="{{ destination }}" {% if selected_value == destination %}selected{% endif %}>{{ destination }}</option>
+                                        {% endfor %}
+                                        {% endif %}
+                                    </select>
+                                </label>
+                                {% endfor %}
+                            </div>
                         </div>
                         {% endfor %}
                     </div>

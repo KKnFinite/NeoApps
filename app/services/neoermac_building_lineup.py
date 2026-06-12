@@ -42,6 +42,17 @@ DESTINATION_FIELDS = (
     "west_destination_2",
 )
 
+BELT_COLOR_LABELS = {
+    "WHT": "white",
+    "BLU": "blue",
+    "ORG": "orange",
+    "RED": "red",
+    "YEL": "yellow",
+    "BLK": "black",
+    "BRN": "brown",
+    "GRN": "green",
+}
+
 
 def get_outbound_door_options():
     return OUTBOUND_DOOR_OPTIONS
@@ -120,18 +131,28 @@ def apply_belt_display_metadata(row, start_door, end_door, belt_names):
     row.door_end = end_door
     row.belt_names = belt_names
     row.belt_group_label = f"{start_door}-{end_door}"
-    row.belt_rows = (
+    row.belt_blocks = (
         {
-            "position": "NORTH BELT",
-            "belt": second_belt,
-            "east_field": "east_destination_2",
-            "west_field": "west_destination_2",
+            "label": display_belt_label(second_belt),
+            "top_slots": (
+                {"field": "east_destination_2", "placeholder": "DEST 1"},
+                {"field": None, "placeholder": "DEST 2"},
+            ),
+            "bottom_slots": (
+                {"field": "west_destination_2", "placeholder": "DEST 1"},
+                {"field": None, "placeholder": "DEST 2"},
+            ),
         },
         {
-            "position": "SOUTH BELT",
-            "belt": first_belt,
-            "east_field": "east_destination_1",
-            "west_field": "west_destination_1",
+            "label": display_belt_label(first_belt),
+            "top_slots": (
+                {"field": "east_destination_1", "placeholder": "DEST 1"},
+                {"field": None, "placeholder": "DEST 2"},
+            ),
+            "bottom_slots": (
+                {"field": "west_destination_1", "placeholder": "DEST 1"},
+                {"field": None, "placeholder": "DEST 2"},
+            ),
         },
     )
     row.slot_labels = {
@@ -144,3 +165,8 @@ def apply_belt_display_metadata(row, start_door, end_door, belt_names):
 
 def normalize_destination(destination):
     return str(destination or "").strip().upper()
+
+
+def display_belt_label(belt_name):
+    parts = str(belt_name or "").split("/")
+    return "/".join(BELT_COLOR_LABELS.get(part, part.lower()) for part in parts)

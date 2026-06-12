@@ -5285,3 +5285,114 @@ select::-ms-expand {
         font-size: 0.78rem;
     }
 }
+
+.neoermac-belt-grid {
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    gap: clamp(18px, 4vw, 34px);
+    min-width: 500px;
+    padding: 8px 0 10px;
+}
+
+.neoermac-belt-block {
+    display: grid;
+    gap: 5px;
+    align-content: center;
+}
+
+.neoermac-belt-destination-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(86px, 1fr));
+    gap: 7px;
+}
+
+.neoermac-runout-slots .neoermac-belt-block .neoermac-belt-cell {
+    display: block;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.neoermac-belt-block .neoermac-destination-select {
+    min-height: 34px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #050609;
+    font-size: clamp(0.92rem, 1.6vw, 1.08rem);
+    font-weight: 850;
+    letter-spacing: 0;
+    text-align: center;
+    text-align-last: center;
+    text-transform: none;
+}
+
+.neoermac-belt-block .neoermac-destination-select:disabled {
+    color: rgba(5, 6, 9, 0.74);
+    opacity: 1;
+}
+
+.neoermac-belt-block .neoermac-destination-select:focus {
+    box-shadow:
+        0 0 0 2px rgba(54, 226, 123, 0.22),
+        0 0 14px rgba(255, 31, 55, 0.16);
+}
+
+.neoermac-belt-block .neoermac-belt-name {
+    display: grid;
+    place-items: center;
+    min-height: 44px;
+    padding: 7px 10px;
+    border: 0;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 42%),
+        #ffd09b;
+    color: #050609;
+    font-size: clamp(1.02rem, 2.2vw, 1.28rem);
+    font-weight: 850;
+    letter-spacing: 0;
+    line-height: 1.05;
+    text-align: center;
+    text-transform: lowercase;
+}
+
+.neoermac-belt-block:nth-child(2) .neoermac-belt-name {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 42%),
+        #cfe2f3;
+}
+
+.neoermac-belt-group {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.neoermac-runout-list {
+    gap: 4px;
+}
+
+@media (max-width: 760px) {
+    .neoermac-belt-grid {
+        min-width: 440px;
+        gap: 18px;
+        padding: 7px 0 9px;
+    }
+
+    .neoermac-belt-destination-row {
+        grid-template-columns: repeat(2, minmax(72px, 1fr));
+        gap: 4px;
+    }
+
+    .neoermac-belt-block .neoermac-destination-select {
+        min-height: 30px;
+        padding: 4px;
+        font-size: 0.84rem;
+    }
+
+    .neoermac-belt-block .neoermac-belt-name {
+        min-height: 36px;
+        padding: 6px;
+        font-size: 0.94rem;
+    }
+}
