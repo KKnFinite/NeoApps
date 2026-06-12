@@ -33,8 +33,6 @@ DEFAULT_BAYS = (
     ("WEST", "WEST 3"),
 )
 DEFAULT_DRIVER_ROUTES = ("EAST ROUTE", "WEST ROUTE")
-BALLMAT_VIEW_PERMISSION = "neosektor.ballmat.view"
-BALLMAT_EDIT_PERMISSION = "neosektor.ballmat.edit"
 TUNNEL_CONDUCTOR_VIEW_PERMISSION = "neosektor.tunnel_conductor.view"
 TUNNEL_CONDUCTOR_EDIT_PERMISSION = "neosektor.tunnel_conductor.edit"
 

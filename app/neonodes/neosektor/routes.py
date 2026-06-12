@@ -5,8 +5,6 @@ from app.extensions import db
 from app.neonodes.neosektor import bp
 from app.services.access_control import get_current_gateway
 from app.services.neosektor_live_counts import (
-    BALLMAT_EDIT_PERMISSION,
-    BALLMAT_VIEW_PERMISSION,
     TUNNEL_CONDUCTOR_EDIT_PERMISSION,
     TUNNEL_CONDUCTOR_VIEW_PERMISSION,
     adjust_tunnel_count,
@@ -21,6 +19,10 @@ from app.services.permission_rules import permission_access
 
 
 DASHBOARD_VIEW_PERMISSION = "neosektor.dashboard.view"
+EBM_VIEW_PERMISSION = "neosektor.ebm.view"
+EBM_EDIT_PERMISSION = "neosektor.ebm.edit"
+WBM_VIEW_PERMISSION = "neosektor.wbm.view"
+WBM_EDIT_PERMISSION = "neosektor.wbm.edit"
 
 NEOSEKTOR_PAGES = (
     (
@@ -33,15 +35,15 @@ NEOSEKTOR_PAGES = (
     (
         "EBM",
         "neosektor.ebm",
-        BALLMAT_VIEW_PERMISSION,
-        BALLMAT_EDIT_PERMISSION,
+        EBM_VIEW_PERMISSION,
+        EBM_EDIT_PERMISSION,
         "East Ballmat Operations count entry.",
     ),
     (
         "WBM",
         "neosektor.wbm",
-        BALLMAT_VIEW_PERMISSION,
-        BALLMAT_EDIT_PERMISSION,
+        WBM_VIEW_PERMISSION,
+        WBM_EDIT_PERMISSION,
         "West Ballmat Operations count entry.",
     ),
     (
@@ -156,24 +158,28 @@ def tunnel_conductor_delta():
 @bp.route("/ebm")
 @gateway_node_required("sektor")
 def ebm():
-    return redirect(url_for("neosektor.ballmat_operations", side="east"))
+    return _render_ballmat_operations("east")
 
 
 @bp.route("/wbm")
 @gateway_node_required("sektor")
 def wbm():
-    return redirect(url_for("neosektor.ballmat_operations", side="west"))
+    return _render_ballmat_operations("west")
 
 
 @bp.route("/ballmat")
 @gateway_node_required("sektor")
 def ballmat_operations():
-    access = permission_access(BALLMAT_VIEW_PERMISSION, BALLMAT_EDIT_PERMISSION)
+    selected_side = _selected_ballmat_side()
+    return redirect(_ballmat_route_for_side(selected_side))
+
+
+def _render_ballmat_operations(selected_side):
+    access = _ballmat_access(selected_side)
     if not access["can_view"]:
         flash("Access denied.", "error")
         return redirect(url_for("neosektor.index"))
 
-    selected_side = _selected_ballmat_side()
     session["neosektor_ballmat_side"] = selected_side
     gateway = get_current_gateway()
     context = ballmat_operations_context(gateway, selected_side)
@@ -190,8 +196,7 @@ def ballmat_operations():
 @bp.route("/ballmat/state")
 @gateway_node_required("sektor")
 def ballmat_state():
-    access = permission_access(BALLMAT_VIEW_PERMISSION, BALLMAT_EDIT_PERMISSION)
-    if not access["can_view"]:
+    if not _can_view_any_ballmat():
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
     state = ballmat_state_payload(get_current_gateway())
@@ -202,11 +207,11 @@ def ballmat_state():
 @bp.route("/ballmat/update", methods=["POST"])
 @gateway_node_required("sektor")
 def ballmat_update():
-    access = permission_access(BALLMAT_VIEW_PERMISSION, BALLMAT_EDIT_PERMISSION)
+    selected_side = _selected_ballmat_side()
+    access = _ballmat_access(selected_side)
     if not access["can_edit"]:
         return jsonify({"ok": False, "error": "Edit access denied."}), 403
 
-    selected_side = _selected_ballmat_side()
     payload = request.get_json(silent=True) or request.form.to_dict(flat=False)
     try:
         state = update_ballmat_side(get_current_gateway(), selected_side, payload)
@@ -286,3 +291,28 @@ def _selected_ballmat_side():
     requested_side = normalize_ballmat_side(request.args.get("side"))
     session_side = normalize_ballmat_side(session.get("neosektor_ballmat_side"))
     return requested_side or session_side or "east"
+
+
+def _ballmat_access(side):
+    view_permission, edit_permission = _ballmat_permission_keys(side)
+    return permission_access(view_permission, edit_permission)
+
+
+def _can_view_any_ballmat():
+    for side in ("east", "west"):
+        if _ballmat_access(side)["can_view"]:
+            return True
+    return False
+
+
+def _ballmat_permission_keys(side):
+    selected_side = normalize_ballmat_side(side)
+    if selected_side == "west":
+        return WBM_VIEW_PERMISSION, WBM_EDIT_PERMISSION
+    return EBM_VIEW_PERMISSION, EBM_EDIT_PERMISSION
+
+
+def _ballmat_route_for_side(side):
+    selected_side = normalize_ballmat_side(side)
+    endpoint = "neosektor.wbm" if selected_side == "west" else "neosektor.ebm"
+    return url_for(endpoint)

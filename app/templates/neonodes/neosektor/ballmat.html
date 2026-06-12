@@ -19,8 +19,8 @@
     </div>
 
     <div class="neosektor-ballmat-modebar" aria-label="Ballmat mode">
-        <a class="neosektor-mode-tab{% if selected_side == 'east' %} is-active{% endif %}" href="{{ url_for('neosektor.ballmat_operations', side='east') }}">EBM</a>
-        <a class="neosektor-mode-tab{% if selected_side == 'west' %} is-active{% endif %}" href="{{ url_for('neosektor.ballmat_operations', side='west') }}">WBM</a>
+        <a class="neosektor-mode-tab{% if selected_side == 'east' %} is-active{% endif %}" href="{{ url_for('neosektor.ebm') }}">EBM</a>
+        <a class="neosektor-mode-tab{% if selected_side == 'west' %} is-active{% endif %}" href="{{ url_for('neosektor.wbm') }}">WBM</a>
         <span class="neosektor-mode-pill">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
     </div>
 

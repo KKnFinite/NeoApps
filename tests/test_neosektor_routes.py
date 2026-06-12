@@ -250,29 +250,31 @@ class NeoSektorRoutesTest(unittest.TestCase):
     def test_ebm_and_wbm_open_shared_ballmat_operations_screen(self):
         self._login_approved_user(role="operator")
 
-        ebm = self.client.get("/neosektor/ebm", follow_redirects=False)
-        wbm = self.client.get("/neosektor/wbm", follow_redirects=False)
-        east = self.client.get("/neosektor/ballmat?side=east")
-        west = self.client.get("/neosektor/ballmat?side=west")
+        ebm = self.client.get("/neosektor/ebm")
+        wbm = self.client.get("/neosektor/wbm")
+        east_compat = self.client.get("/neosektor/ballmat?side=east", follow_redirects=False)
+        west_compat = self.client.get("/neosektor/ballmat?side=west", follow_redirects=False)
 
-        self.assertEqual(ebm.status_code, 302)
-        self.assertEqual(ebm.location, "/neosektor/ballmat?side=east")
-        self.assertEqual(wbm.status_code, 302)
-        self.assertEqual(wbm.location, "/neosektor/ballmat?side=west")
-        self.assertEqual(east.status_code, 200)
-        self.assertIn(b"BALLMAT OPERATIONS", east.data)
-        self.assertIn(b"EAST BALLMAT SELECTED", east.data)
-        self.assertIn(b"data-selected-side=\"east\"", east.data)
-        self.assertIn(b"EAST BALLMAT", east.data)
-        self.assertIn(b"WEST BALLMAT", east.data)
-        self.assertIn(b"data-can-edit=\"true\"", east.data)
-        self.assertEqual(west.status_code, 200)
-        self.assertIn(b"WEST BALLMAT SELECTED", west.data)
-        self.assertIn(b"data-selected-side=\"west\"", west.data)
+        self.assertEqual(ebm.status_code, 200)
+        self.assertIn(b"BALLMAT OPERATIONS", ebm.data)
+        self.assertIn(b"EAST BALLMAT SELECTED", ebm.data)
+        self.assertIn(b"data-selected-side=\"east\"", ebm.data)
+        self.assertIn(b"EAST BALLMAT", ebm.data)
+        self.assertIn(b"WEST BALLMAT", ebm.data)
+        self.assertIn(b"data-can-edit=\"true\"", ebm.data)
+        self.assertIn(b'href="/neosektor/ebm"', ebm.data)
+        self.assertIn(b'href="/neosektor/wbm"', ebm.data)
+        self.assertEqual(wbm.status_code, 200)
+        self.assertIn(b"WEST BALLMAT SELECTED", wbm.data)
+        self.assertIn(b"data-selected-side=\"west\"", wbm.data)
+        self.assertEqual(east_compat.status_code, 302)
+        self.assertEqual(east_compat.location, "/neosektor/ebm")
+        self.assertEqual(west_compat.status_code, 302)
+        self.assertEqual(west_compat.location, "/neosektor/wbm")
 
     def test_view_only_ballmat_user_cannot_update_counts(self):
         edit_rule = PermissionRule.query.filter_by(
-            permission_key="neosektor.ballmat.edit"
+            permission_key="neosektor.ebm.edit"
         ).one()
         edit_rule.minimum_role = "simulator"
         db.session.commit()
@@ -291,9 +293,55 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 0)
 
+    def test_ebm_view_permission_controls_screen_access(self):
+        view_rule = PermissionRule.query.filter_by(
+            permission_key="neosektor.ebm.view"
+        ).one()
+        edit_rule = PermissionRule.query.filter_by(
+            permission_key="neosektor.ebm.edit"
+        ).one()
+        view_rule.minimum_role = "simulator"
+        edit_rule.minimum_role = "simulator"
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neosektor/ebm", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/neosektor")
+
+    def test_wbm_view_only_user_sees_disabled_controls_and_cannot_update(self):
+        edit_rule = PermissionRule.query.filter_by(
+            permission_key="neosektor.wbm.edit"
+        ).one()
+        edit_rule.minimum_role = "simulator"
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        page = self.client.get("/neosektor/wbm")
+        update = self.client.post(
+            "/neosektor/ballmat/update?side=west",
+            json={
+                "side": "west",
+                "waves": {"first": {"count": 5, "status": "Light"}},
+                "open_bays": 1,
+                "bay_statuses": {},
+            },
+        )
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"data-can-edit=\"false\"", page.data)
+        self.assertIn(b"VIEW ONLY", page.data)
+        self.assertEqual(update.status_code, 403)
+        self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 4)
+        self.assertEqual(
+            sum(row.count for row in NeoSektorBallmatWaveCount.query.all()),
+            0,
+        )
+
     def test_edit_authorized_user_updates_selected_side_only(self):
         self._login_approved_user(role="operator")
-        self.client.get("/neosektor/ballmat?side=east")
+        self.client.get("/neosektor/ebm")
 
         response = self.client.post(
             "/neosektor/ballmat/update?side=east",
@@ -339,7 +387,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_edit_authorized_user_cannot_update_unselected_side(self):
         self._login_approved_user(role="operator")
-        self.client.get("/neosektor/ballmat?side=east")
+        self.client.get("/neosektor/ebm")
 
         response = self.client.post(
             "/neosektor/ballmat/update?side=east",
@@ -356,6 +404,29 @@ class NeoSektorRoutesTest(unittest.TestCase):
             sum(row.count for row in NeoSektorBallmatWaveCount.query.all()),
             0,
         )
+
+    def test_ballmat_update_counts_clamp_at_zero(self):
+        self._login_approved_user(role="operator")
+        self.client.get("/neosektor/ebm")
+
+        response = self.client.post(
+            "/neosektor/ballmat/update?side=east",
+            json={
+                "side": "east",
+                "waves": {
+                    "first": {"count": -4, "status": "Light"},
+                    "second": {"count": 0, "status": "Empty"},
+                },
+                "open_bays": -1,
+                "bay_statuses": {},
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        east_state = payload["state"]["sides"]["east"]
+        self.assertEqual(east_state["waves"][0]["count"], 0)
+        self.assertEqual(east_state["open_bays"], 0)
 
     def test_live_json_endpoint_returns_updated_ballmat_state(self):
         self._login_approved_user(role="operator")
@@ -421,15 +492,15 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         dashboard = self.client.get("/neosektor", follow_redirects=False)
         ebm = self.client.get("/neosektor/ebm", follow_redirects=False)
+        wbm = self.client.get("/neosektor/wbm", follow_redirects=False)
         live_counts = self.client.get("/neosektor/live-counts", follow_redirects=False)
 
         self.assertEqual(dashboard.status_code, 200)
         self.assertIn(b"NeoSektor", dashboard.data)
         self.assertEqual(ebm.status_code, 302)
-        self.assertEqual(ebm.location, "/neosektor/ballmat?side=east")
-        ballmat = self.client.get("/neosektor/ballmat?side=east", follow_redirects=False)
-        self.assertEqual(ballmat.status_code, 302)
-        self.assertEqual(ballmat.location, "/neosektor")
+        self.assertEqual(ebm.location, "/neosektor")
+        self.assertEqual(wbm.status_code, 302)
+        self.assertEqual(wbm.location, "/neosektor")
         self.assertEqual(live_counts.status_code, 200)
         self.assertIn(b"VIEW LIVE COUNTS", live_counts.data)
 

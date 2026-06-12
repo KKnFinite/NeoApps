@@ -61,14 +61,24 @@ DEFAULT_PERMISSION_RULES = (
         "View NeoSektor dashboard screens.",
     ),
     (
-        "neosektor.ballmat.view",
+        "neosektor.ebm.view",
         "operator",
-        "View NeoSektor Ballmat Operations screens.",
+        "View NeoSektor EBM Ballmat Operations screens.",
     ),
     (
-        "neosektor.ballmat.edit",
+        "neosektor.ebm.edit",
         "operator",
-        "Edit NeoSektor Ballmat Operations counts and bay status.",
+        "Edit NeoSektor EBM Ballmat Operations counts and bay status.",
+    ),
+    (
+        "neosektor.wbm.view",
+        "operator",
+        "View NeoSektor WBM Ballmat Operations screens.",
+    ),
+    (
+        "neosektor.wbm.edit",
+        "operator",
+        "Edit NeoSektor WBM Ballmat Operations counts and bay status.",
     ),
     (
         "neosektor.tunnel_conductor.view",
