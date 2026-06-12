@@ -143,6 +143,25 @@ class NeoSektorRoutesTest(unittest.TestCase):
             "4",
         )
 
+    def test_driver_route_offset_clamps_to_non_negative_standalone_behavior(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neosektor/driver-routing/update",
+            json={"west_offset": -5},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["state"]["routing"]["west_offset"], 0)
+        self.assertEqual(
+            NeoSektorDriverRouteSetting.query.filter_by(
+                route_name="WEST OFFSET",
+            ).one().route_value,
+            "0",
+        )
+
     def test_driver_routing_reflects_shared_neosektor_state(self):
         self._login_approved_user(role="operator")
         self.client.get("/neosektor/ebm")
@@ -155,7 +174,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     "second": {"count": 2, "status": "Light"},
                 },
                 "open_bays": 3,
-                "bay_statuses": {"EAST 1": "Moderate"},
+                "bay_statuses": {"Bay 1": "Moderate"},
             },
         )
         self.client.post(
@@ -180,6 +199,122 @@ class NeoSektorRoutesTest(unittest.TestCase):
             "East Ballmat Stay Right",
         )
         self.assertEqual(payload["state"]["sides"]["east"]["open_bays"], 3)
+
+    def test_driver_routing_zero_counts_use_standalone_open_bay_tiebreaker(self):
+        self._login_approved_user(role="operator")
+        self.client.post(
+            "/neosektor/ballmat/update?side=east",
+            json={
+                "side": "east",
+                "waves": {
+                    "first": {"count": 0, "status": "Empty"},
+                    "second": {"count": 0, "status": "Empty"},
+                },
+                "open_bays": 1,
+                "bay_statuses": {},
+            },
+        )
+        self.client.post(
+            "/neosektor/ballmat/update?side=west",
+            json={
+                "side": "west",
+                "waves": {
+                    "first": {"count": 0, "status": "Empty"},
+                    "second": {"count": 0, "status": "Empty"},
+                },
+                "open_bays": 2,
+                "bay_statuses": {},
+            },
+        )
+
+        response = self.client.get("/neosektor/driver-routing/state")
+
+        self.assertEqual(response.status_code, 200)
+        routing = response.get_json()["state"]["routing"]
+        self.assertEqual(routing["routes"]["first"]["target"], "West Ballmat Stay Left")
+        self.assertEqual(routing["routes"]["second"]["target"], "West Ballmat Stay Left")
+
+    def test_driver_routing_west_offset_changes_standalone_threshold_output(self):
+        self._login_approved_user(role="operator")
+        self.client.post(
+            "/neosektor/ballmat/update?side=east",
+            json={
+                "side": "east",
+                "waves": {
+                    "first": {"count": 6, "status": "Moderate"},
+                    "second": {"count": 0, "status": "Empty"},
+                },
+                "open_bays": 0,
+                "bay_statuses": {},
+            },
+        )
+        self.client.post(
+            "/neosektor/ballmat/update?side=west",
+            json={
+                "side": "west",
+                "waves": {
+                    "first": {"count": 4, "status": "Light"},
+                    "second": {"count": 0, "status": "Empty"},
+                },
+                "open_bays": 0,
+                "bay_statuses": {},
+            },
+        )
+
+        before_offset = self.client.get("/neosektor/driver-routing/state").get_json()
+        self.client.post("/neosektor/driver-routing/update", json={"west_offset": 2})
+        after_offset = self.client.get("/neosektor/driver-routing/state").get_json()
+
+        self.assertEqual(
+            before_offset["state"]["routing"]["routes"]["first"]["target"],
+            "West Ballmat Stay Left",
+        )
+        self.assertEqual(
+            after_offset["state"]["routing"]["routes"]["first"]["target"],
+            "East Ballmat Stay Right",
+        )
+        self.assertEqual(after_offset["state"]["routing"]["west_offset"], 2)
+
+    def test_driver_bay_priority_matches_standalone_status_then_bay_number(self):
+        self._login_approved_user(role="operator")
+        self.client.post(
+            "/neosektor/ballmat/update?side=east",
+            json={
+                "side": "east",
+                "waves": {},
+                "open_bays": 0,
+                "bay_statuses": {
+                    "Bay 1": "Full",
+                    "Bay 2": "Moderate",
+                    "Bay 3": "Full",
+                },
+            },
+        )
+        self.client.post(
+            "/neosektor/ballmat/update?side=west",
+            json={
+                "side": "west",
+                "waves": {},
+                "open_bays": 0,
+                "bay_statuses": {
+                    "Bay 4": "Overflowing",
+                    "Bay 5": "Full",
+                },
+            },
+        )
+
+        response = self.client.get("/neosektor/driver-routing/state")
+
+        self.assertEqual(response.status_code, 200)
+        priority = response.get_json()["state"]["routing"]["bay_priority"]
+        self.assertEqual(
+            [bay["bay_name"] for bay in priority],
+            ["Bay 4", "Bay 5", "Bay 3", "Bay 1", "Bay 2"],
+        )
+        self.assertEqual(
+            [bay["rank_label"] for bay in priority],
+            ["1st", "2nd", "3rd", "4th", "5th"],
+        )
 
     def test_neosektor_dashboard_and_header_link_to_real_driver_routing(self):
         self._login_approved_user(role="operator")
@@ -461,7 +596,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     "second": {"count": 4, "status": "Moderate"},
                 },
                 "open_bays": 3,
-                "bay_statuses": {"EAST 1": "Full", "EAST 2": "Light"},
+                "bay_statuses": {"Bay 1": "Full", "Bay 2": "Light"},
             },
         )
 
@@ -485,7 +620,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             3,
         )
         self.assertEqual(
-            NeoSektorBayStatus.query.filter_by(bay_name="EAST 1").one().status,
+            NeoSektorBayStatus.query.filter_by(bay_name="Bay 1").one().status,
             "Full",
         )
         self.assertEqual(
@@ -548,7 +683,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     "second": {"count": 8, "status": "Moderate"},
                 },
                 "open_bays": 2,
-                "bay_statuses": {"WEST 1": "Full"},
+                "bay_statuses": {"Bay 4": "Full"},
             },
         )
 
@@ -581,7 +716,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(NeoSektorBallmatCount.query.count(), 2)
         self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 4)
         self.assertEqual(NeoSektorOpenBayState.query.count(), 2)
-        self.assertEqual(NeoSektorBayStatus.query.count(), 6)
+        self.assertEqual(NeoSektorBayStatus.query.count(), 5)
         self.assertEqual(NeoSektorDriverRouteSetting.query.count(), 3)
 
     def test_neosektor_dashboard_and_header_link_to_real_live_counts(self):

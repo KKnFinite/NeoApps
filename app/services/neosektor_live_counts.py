@@ -25,12 +25,11 @@ DEFAULT_BALLMAT_SIDES = (
     ("west", "WEST", "WBM"),
 )
 DEFAULT_BAYS = (
-    ("EAST", "EAST 1"),
-    ("EAST", "EAST 2"),
-    ("EAST", "EAST 3"),
-    ("WEST", "WEST 1"),
-    ("WEST", "WEST 2"),
-    ("WEST", "WEST 3"),
+    ("EAST", "Bay 1"),
+    ("EAST", "Bay 2"),
+    ("EAST", "Bay 3"),
+    ("WEST", "Bay 4"),
+    ("WEST", "Bay 5"),
 )
 DRIVER_ROUTE_FIRST_WAVE_NAME = "1ST WAVE ROUTE"
 DRIVER_ROUTE_SECOND_WAVE_NAME = "2ND WAVE ROUTE"
@@ -747,7 +746,7 @@ def _clean_offset(value):
         cleaned = int(value)
     except (TypeError, ValueError):
         cleaned = 0
-    return min(max(cleaned, -999), 999)
+    return min(max(cleaned, 0), 999)
 
 
 def _status(value):

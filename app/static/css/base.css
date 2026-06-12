@@ -6006,7 +6006,7 @@ select::-ms-expand {
 }
 
 .neosektor-tunnel-bay-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .neosektor-live-bay-card {
@@ -6833,7 +6833,7 @@ select::-ms-expand {
 
 .neosektor-driver-bay-priority {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 7px;
     width: 100%;
 }

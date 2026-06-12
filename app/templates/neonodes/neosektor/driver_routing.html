@@ -48,6 +48,8 @@
                 <input
                     type="number"
                     inputmode="numeric"
+                    min="0"
+                    max="999"
                     value="{{ state.routing.west_offset }}"
                     data-driver-offset-input
                     aria-label="West route offset"
@@ -83,7 +85,7 @@
 
     const readOffset = () => {
         const value = Number.parseInt(offsetInput.value, 10);
-        return Number.isFinite(value) ? Math.min(Math.max(value, -999), 999) : 0;
+        return Number.isFinite(value) ? Math.min(Math.max(value, 0), 999) : 0;
     };
 
     const applyRoute = (waveKey, route) => {
