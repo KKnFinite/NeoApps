@@ -13,6 +13,7 @@ from app.models.neosektor_bay_status import NeoSektorBayStatus
 from app.models.neosektor_driver_route_setting import NeoSektorDriverRouteSetting
 from app.models.neosektor_open_bay_state import NeoSektorOpenBayState
 from app.models.neosektor_sort_state import NeoSektorSortState
+from app.models.neosektor_uld_on_the_way_event import NeoSektorUldOnTheWayEvent
 from app.models.neosektor_wave_state import NeoSektorWaveState
 from app.models.neo_node import NeoNode
 from app.models.permission_rule import PermissionRule
@@ -42,6 +43,7 @@ __all__ = [
     "NeoSektorOpenBayState",
     "NeoSektorBayStatus",
     "NeoSektorDriverRouteSetting",
+    "NeoSektorUldOnTheWayEvent",
     "MasterFlightSchedule",
     "SortDateOperation",
     "SortDateMission",

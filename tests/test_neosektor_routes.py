@@ -1,10 +1,12 @@
 import unittest
+from datetime import datetime, timedelta
 
 from app import create_app
 from app.extensions import db
 from app.models import (
     GatewayMembership,
     GatewayNodeRole,
+    NeoErmacUldRequest,
     NeoNode,
     NeoSektorBallmatCount,
     NeoSektorBallmatWaveCount,
@@ -12,12 +14,18 @@ from app.models import (
     NeoSektorDriverRouteSetting,
     NeoSektorOpenBayState,
     NeoSektorSortState,
+    NeoSektorUldOnTheWayEvent,
     NeoSektorWaveState,
     PermissionRule,
     User,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.permission_rules import ensure_default_permission_rules
+from app.services.uld_requests import (
+    active_on_the_way_events,
+    active_request_views,
+    send_uld_on_the_way,
+)
 
 
 class NeoSektorRoutesTest(unittest.TestCase):
@@ -69,19 +77,160 @@ class NeoSektorRoutesTest(unittest.TestCase):
         ):
             self.assertIn(label, response.data)
 
-    def test_placeholder_routes_load_for_view_authorized_user(self):
+    def test_discharge_page_loads_for_operator(self):
+        self._login_approved_user(role="operator")
+        self._add_uld_request("D34", a2_count=2, a1_count=1, amp_count=0, setup_needed=True)
+
+        response = self.client.get("/neosektor/discharge")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"DISCHARGE", response.data)
+        self.assertIn(b"D34", response.data)
+        self.assertIn(b"A2 REQUESTED", response.data)
+        self.assertIn(b"NEEDED FOR SETUP", response.data)
+        self.assertNotIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
+
+    def test_discharge_view_only_user_cannot_send_ulds(self):
+        edit_rule = PermissionRule.query.filter_by(
+            permission_key="neosektor.discharge.edit"
+        ).one()
+        edit_rule.minimum_role = "simulator"
+        self._add_uld_request("D34", a2_count=2)
+        db.session.commit()
         self._login_approved_user(role="operator")
 
-        paths = {
-            "/neosektor/discharge": b"DISCHARGE",
-        }
+        page = self.client.get("/neosektor/discharge")
+        response = self.client.post(
+            "/neosektor/discharge/send",
+            json={"door": "D34", "uld_type": "A2", "quantity": 1},
+        )
 
-        for path, title in paths.items():
-            with self.subTest(path=path):
-                response = self.client.get(path)
-                self.assertEqual(response.status_code, 200)
-                self.assertIn(title, response.data)
-                self.assertIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"VIEW ONLY", page.data)
+        self.assertIn(b"disabled", page.data)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(NeoSektorUldOnTheWayEvent.query.count(), 0)
+        self.assertEqual(NeoErmacUldRequest.query.filter_by(door="D34").one().a2_count, 2)
+
+    def test_discharge_edit_user_can_send_ulds_and_reduce_requested_count(self):
+        self._add_uld_request("D34", a2_count=3, a1_count=1)
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neosektor/discharge/send",
+            json={"door": "D34", "uld_type": "A2", "quantity": 2},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["event"]["door"], "D34")
+        self.assertEqual(payload["event"]["uld_type"], "A2")
+        self.assertEqual(payload["event"]["quantity"], 2)
+        self.assertEqual(NeoErmacUldRequest.query.filter_by(door="D34").one().a2_count, 1)
+        event = NeoSektorUldOnTheWayEvent.query.one()
+        self.assertEqual(event.quantity, 2)
+        self.assertEqual(event.uld_type, "A2")
+
+    def test_discharge_edit_user_can_send_a1_and_amp_ulds(self):
+        self._add_uld_request("D34", a1_count=1, amp_count=2)
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        a1_response = self.client.post(
+            "/neosektor/discharge/send",
+            json={"door": "D34", "uld_type": "A1", "quantity": 1},
+        )
+        amp_response = self.client.post(
+            "/neosektor/discharge/send",
+            json={"door": "D34", "uld_type": "AMP", "quantity": 2},
+        )
+
+        saved = NeoErmacUldRequest.query.filter_by(door="D34").one()
+        events = NeoSektorUldOnTheWayEvent.query.order_by(
+            NeoSektorUldOnTheWayEvent.id.asc()
+        ).all()
+        self.assertEqual(a1_response.status_code, 200)
+        self.assertEqual(amp_response.status_code, 200)
+        self.assertEqual(saved.a1_count, 0)
+        self.assertEqual(saved.amp_count, 0)
+        self.assertEqual(
+            [(event.uld_type, event.quantity) for event in events],
+            [("A1", 1), ("AMP", 2)],
+        )
+
+    def test_discharge_send_quantity_clamps_to_requested_count(self):
+        self._add_uld_request("D34", a2_count=1)
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neosektor/discharge/send",
+            json={"door": "D34", "uld_type": "A2", "quantity": 5},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["event"]["quantity"], 1)
+        self.assertEqual(NeoErmacUldRequest.query.filter_by(door="D34").one().a2_count, 0)
+        self.assertEqual(NeoSektorUldOnTheWayEvent.query.one().quantity, 1)
+
+    def test_each_discharge_send_creates_separate_expiring_event(self):
+        base_time = datetime(2026, 6, 12, 12, 4)
+        self._add_uld_request("D34", a2_count=3)
+        first_event = send_uld_on_the_way(self.gateway, "D34", "A2", 2, now=base_time)
+        second_event = send_uld_on_the_way(
+            self.gateway,
+            "D34",
+            "A2",
+            1,
+            now=base_time + timedelta(minutes=3),
+        )
+        db.session.commit()
+
+        self.assertNotEqual(first_event.id, second_event.id)
+        self.assertEqual(first_event.expires_at_utc, base_time + timedelta(minutes=5))
+        self.assertEqual(
+            second_event.expires_at_utc,
+            base_time + timedelta(minutes=8),
+        )
+        self.assertEqual(
+            [event.quantity for event in active_on_the_way_events(self.gateway, now=base_time + timedelta(minutes=4, seconds=59))],
+            [2, 1],
+        )
+        self.assertEqual(
+            [event.quantity for event in active_on_the_way_events(self.gateway, now=base_time + timedelta(minutes=5))],
+            [1],
+        )
+        self.assertEqual(
+            active_on_the_way_events(self.gateway, now=base_time + timedelta(minutes=8)),
+            [],
+        )
+
+    def test_discharge_keeps_on_the_way_event_visible_after_count_reaches_zero(self):
+        sent_at = datetime.utcnow()
+        self._add_uld_request("D34", a2_count=1)
+        send_uld_on_the_way(self.gateway, "D34", "A2", 1, now=sent_at)
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neosektor/discharge")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"D34", response.data)
+        self.assertIn(b"0", response.data)
+        self.assertIn(f"1 A2 sent at {sent_at:%H:%M}".encode(), response.data)
+
+    def test_discharge_sorting_puts_setup_needed_requests_first(self):
+        normal = self._add_uld_request("D34", a2_count=1, setup_needed=False)
+        setup = self._add_uld_request("D1", a1_count=1, setup_needed=True)
+        normal.updated_at = datetime(2026, 6, 12, 12, 0)
+        setup.updated_at = datetime(2026, 6, 12, 12, 5)
+        db.session.commit()
+
+        views = active_request_views(self.gateway, now=datetime(2026, 6, 12, 12, 10))
+
+        self.assertEqual([row["door"] for row in views], ["D1", "D34"])
 
     def test_driver_routing_loads_for_view_authorized_user(self):
         self._login_approved_user(role="watcher")
@@ -773,6 +922,26 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"NeoSektor", response.data)
         self.assertIn(b'href="/neosektor"', response.data)
         self.assertNotIn(b'href="/rfd/sektor"', response.data)
+
+    def _add_uld_request(
+        self,
+        door,
+        a2_count=0,
+        a1_count=0,
+        amp_count=0,
+        setup_needed=False,
+    ):
+        request_record = NeoErmacUldRequest(
+            gateway_id=self.gateway.id,
+            door=door,
+            a2_count=a2_count,
+            a1_count=a1_count,
+            amp_count=amp_count,
+            setup_needed=setup_needed,
+        )
+        db.session.add(request_record)
+        db.session.flush()
+        return request_record
 
     def _login_approved_user(self, role):
         user = User(

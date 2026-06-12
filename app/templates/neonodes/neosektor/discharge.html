@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}DISCHARGE | NeoSektor{% endblock %}
+
+{% block content %}
+<section class="neosektor-shell neosektor-discharge-shell" aria-labelledby="neosektor-discharge-title">
+    <header class="neosektor-operator-title">
+        <span>{{ gateway.code }} ULD REQUESTS</span>
+        <h1 id="neosektor-discharge-title">DISCHARGE</h1>
+        {% if can_edit %}
+        <p>EDIT ENABLED</p>
+        {% else %}
+        <p>VIEW ONLY</p>
+        {% endif %}
+    </header>
+
+    {% if requests %}
+    <div class="neosektor-discharge-list" aria-label="Active ULD requests">
+        {% for request_row in requests %}
+        <article class="neosektor-discharge-card{% if request_row.setup_needed %} is-setup-needed{% endif %}">
+            <header class="neosektor-discharge-card-head">
+                <div>
+                    <span>DOOR</span>
+                    <strong>{{ request_row.door }}</strong>
+                </div>
+                <em>{{ "NEEDED FOR SETUP" if request_row.setup_needed else "STANDARD" }}</em>
+            </header>
+
+            <div class="neosektor-discharge-count-grid">
+                {% for uld_type in uld_types %}
+                <section class="neosektor-discharge-count-card">
+                    <span>{{ uld_type }} REQUESTED</span>
+                    <strong>{{ request_row.counts[uld_type] }}</strong>
+                    {% if can_edit %}
+                    <form method="post" action="{{ url_for('neosektor.discharge_send') }}" class="neosektor-discharge-send-form">
+                        <input type="hidden" name="door" value="{{ request_row.door }}">
+                        <input type="hidden" name="uld_type" value="{{ uld_type }}">
+                        <label>
+                            <span>SEND</span>
+                            <input type="number" name="quantity" min="1" max="{{ request_row.counts[uld_type] }}" inputmode="numeric" value="{{ 1 if request_row.counts[uld_type] else 0 }}" {% if request_row.counts[uld_type] <= 0 %}disabled{% endif %}>
+                        </label>
+                        <button type="submit" {% if request_row.counts[uld_type] <= 0 %}disabled{% endif %}>ON THE WAY</button>
+                    </form>
+                    {% else %}
+                    <button type="button" disabled>ON THE WAY</button>
+                    {% endif %}
+                </section>
+                {% endfor %}
+            </div>
+
+            <section class="neosektor-discharge-events" aria-label="On the way for {{ request_row.door }}">
+                <h2>ON THE WAY</h2>
+                {% if request_row.on_the_way_events %}
+                <ul>
+                    {% for event in request_row.on_the_way_events %}
+                    <li>{{ event.label }}</li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p>No active on-the-way events.</p>
+                {% endif %}
+            </section>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <section class="neosektor-discharge-empty">
+        <h2>NO ACTIVE ULD REQUESTS</h2>
+        <p>Door requests will appear here when NeoErmac users request A2, A1, or AMP equipment.</p>
+    </section>
+    {% endif %}
+</section>
+{% endblock %}

@@ -19,6 +19,7 @@ from app.services.neosektor_live_counts import (
     update_ballmat_side,
 )
 from app.services.permission_rules import user_can
+from app.services.uld_requests import discharge_context, send_uld_on_the_way
 
 
 EBM_VIEW_PERMISSION = "neosektor.ebm.view"
@@ -53,7 +54,7 @@ NEOSEKTOR_PAGES = (
         "neosektor.discharge",
         "neosektor.discharge.view",
         "neosektor.discharge.edit",
-        "Future NeoSektor ULD request queue foundation.",
+        "NeoSektor ULD request discharge queue.",
     ),
     (
         "VIEW LIVE COUNTS",
@@ -222,7 +223,66 @@ def ballmat_update():
 @bp.route("/discharge")
 @gateway_node_required("sektor")
 def discharge():
-    return _placeholder_page("DISCHARGE")
+    page = _page_by_title("DISCHARGE")
+    access = _neosektor_access(page["view_permission"], page["edit_permission"])
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neosektor.index"))
+
+    gateway = get_current_gateway()
+    context = discharge_context(gateway)
+    db.session.commit()
+    return render_template(
+        "neonodes/neosektor/discharge.html",
+        gateway=gateway,
+        can_view=access["can_view"],
+        can_edit=access["can_edit"],
+        **context,
+    )
+
+
+@bp.route("/discharge/send", methods=["POST"])
+@gateway_node_required("sektor")
+def discharge_send():
+    page = _page_by_title("DISCHARGE")
+    access = _neosektor_access(page["view_permission"], page["edit_permission"])
+    if not access["can_edit"]:
+        if request.is_json:
+            return jsonify({"ok": False, "error": "Edit access denied."}), 403
+        flash("Access denied.", "error")
+        return redirect(url_for("neosektor.discharge"))
+
+    payload = request.get_json(silent=True) if request.is_json else request.form
+    try:
+        event = send_uld_on_the_way(
+            get_current_gateway(),
+            payload.get("door"),
+            payload.get("uld_type"),
+            payload.get("quantity"),
+        )
+    except ValueError as exc:
+        db.session.rollback()
+        if request.is_json:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        flash(str(exc), "error")
+        return redirect(url_for("neosektor.discharge"))
+
+    db.session.commit()
+    if request.is_json:
+        return jsonify(
+            {
+                "ok": True,
+                "event": {
+                    "door": event.door,
+                    "uld_type": event.uld_type,
+                    "quantity": event.quantity,
+                },
+                "state": discharge_context(get_current_gateway()),
+            }
+        )
+
+    flash(f"{event.quantity} {event.uld_type} SENT TO {event.door}.", "success")
+    return redirect(url_for("neosektor.discharge"))
 
 
 @bp.route("/live-counts")

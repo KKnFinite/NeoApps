@@ -176,7 +176,7 @@
         {% if on_the_way_events %}
         <ul class="neoermac-door-simple-list">
             {% for event in on_the_way_events %}
-            <li>{{ event }}</li>
+            <li>{{ event.label }}</li>
             {% endfor %}
         </ul>
         {% else %}

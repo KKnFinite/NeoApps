@@ -1,6 +1,6 @@
 import re
 import unittest
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
 from app import create_app
 from app.extensions import db
@@ -12,6 +12,7 @@ from app.models import (
     NeoErmacDoorPull,
     NeoErmacUldRequest,
     NeoNode,
+    NeoSektorUldOnTheWayEvent,
     PermissionRule,
     SortDateMission,
     SortDateOperation,
@@ -308,6 +309,58 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(saved.a1_count, 0)
         self.assertEqual(saved.amp_count, 1)
         self.assertFalse(saved.setup_needed)
+
+    def test_door_view_displays_active_on_the_way_events(self):
+        sent_at = datetime.utcnow()
+        db.session.add(
+            NeoSektorUldOnTheWayEvent(
+                gateway_id=self.gateway.id,
+                door="D34",
+                uld_type="A2",
+                quantity=2,
+                sent_at_utc=sent_at,
+                expires_at_utc=sent_at + timedelta(minutes=5),
+            )
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(f"2 A2s sent at {sent_at:%H:%M}".encode(), response.data)
+
+    def test_door_view_uld_request_edits_do_not_clear_on_the_way_events(self):
+        sent_at = datetime.utcnow()
+        db.session.add(
+            NeoSektorUldOnTheWayEvent(
+                gateway_id=self.gateway.id,
+                door="D34",
+                uld_type="AMP",
+                quantity=1,
+                sent_at_utc=sent_at,
+                expires_at_utc=sent_at + timedelta(minutes=5),
+            )
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "save_uld_request",
+                "uld_a2_count": "1",
+                "uld_a1_count": "0",
+                "uld_amp_count": "0",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(NeoSektorUldOnTheWayEvent.query.count(), 1)
+        reload_response = self.client.get("/neoermac/door-view?door=D34")
+        self.assertIn(f"1 AMP sent at {sent_at:%H:%M}".encode(), reload_response.data)
 
     def test_building_lineup_page_renders_belt_map(self):
         self._login_approved_user(role="operator")

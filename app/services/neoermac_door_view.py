@@ -6,7 +6,6 @@ from app.extensions import db
 from app.models import (
     MasterFlightSchedule,
     NeoErmacDoorPull,
-    NeoErmacUldRequest,
     SortDateMission,
     SortDateOperation,
     SortDateTailState,
@@ -16,6 +15,12 @@ from app.services.neoermac_building_lineup import (
     get_building_lineup_rows,
     get_outbound_door_options,
     normalize_destination,
+)
+from app.services.uld_requests import (
+    ULD_TYPES,
+    active_on_the_way_event_views,
+    get_uld_request,
+    update_uld_request_from_form,
 )
 
 
@@ -49,9 +54,6 @@ PULL_FIELDS = (
     },
 )
 
-ULD_TYPES = ("A2", "A1", "AMP")
-
-
 def door_view_context(gateway, selected_door=None):
     selected_door = normalize_door(selected_door)
     door_options = get_door_options(gateway)
@@ -74,7 +76,9 @@ def door_view_context(gateway, selected_door=None):
         "uld_request": uld_request,
         "operation": operation,
         "tugs": [],
-        "on_the_way_events": [],
+        "on_the_way_events": (
+            active_on_the_way_event_views(gateway, selected_door) if selected_door else []
+        ),
     }
 
 
@@ -119,18 +123,7 @@ def save_uld_request(gateway, selected_door, form_data):
     if selected_door not in get_door_options(gateway):
         raise ValueError(f"{selected_door} is not available.")
 
-    request_record = _uld_request_for_door(gateway, selected_door)
-    if not request_record:
-        request_record = NeoErmacUldRequest(gateway_id=gateway.id, door=selected_door)
-        db.session.add(request_record)
-
-    should_clear = form_data.get("clear_uld_request") == "1"
-    request_record.a2_count = 0 if should_clear else _int_value(form_data.get("uld_a2_count"))
-    request_record.a1_count = 0 if should_clear else _int_value(form_data.get("uld_a1_count"))
-    request_record.amp_count = 0 if should_clear else _int_value(form_data.get("uld_amp_count"))
-    request_record.setup_needed = False if should_clear else form_data.get("setup_needed") == "on"
-    db.session.flush()
-    return request_record
+    return update_uld_request_from_form(gateway, selected_door, form_data)
 
 
 def normalize_door(value):
@@ -308,7 +301,7 @@ def _door_pull_record(gateway, selected_door, destination, operation, create=Fal
 
 
 def _uld_request_for_door(gateway, selected_door):
-    return NeoErmacUldRequest.query.filter_by(gateway_id=gateway.id, door=selected_door).first()
+    return get_uld_request(gateway, selected_door)
 
 
 def _tail_state_for_mission(mission):
