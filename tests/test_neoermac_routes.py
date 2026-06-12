@@ -198,12 +198,32 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'<strong>D34</strong>', response.data)
         self.assertIn(b"SDF", response.data)
         self.assertIn(b"ONT", response.data)
+        self.assertIn(b"UPS301", response.data)
+        self.assertIn(b"LIVE SORT", response.data)
+        self.assertIn(b"NO FLIGHT DATA", response.data)
         self.assertIn(b"N123UP", response.data)
         self.assertIn(b"A12", response.data)
         self.assertIn(b"PLANNED Pure", response.data)
         self.assertIn(b"01:20", response.data)
+        self.assertLess(response.data.index(b"UPS301"), response.data.index(b"ONT"))
         self.assertIn(b"No tugs assigned yet.", response.data)
         self.assertIn(b"No active on-the-way events.", response.data)
+
+    def test_door_view_displays_window_adjusted_planned_pull_times(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._add_operation_departure("UPS401", "SDF", window_minutes=20)
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"UPS401", response.data)
+        self.assertIn(b"WINDOW Pure", response.data)
+        self.assertIn(b"01:40", response.data)
+        self.assertIn(b"BASE 01:20 +20 MIN", response.data)
+        self.assertIn(b"02:00", response.data)
+        self.assertIn(b"02:15", response.data)
 
     def test_door_view_view_only_user_cannot_save_pulls_or_uld_requests(self):
         edit_rule = PermissionRule.query.filter_by(permission_key="neoermac.door_view.edit").one()
@@ -702,7 +722,16 @@ class NeoErmacRoutesTest(unittest.TestCase):
             db.session.add(row)
         setattr(row, field_name, destination)
 
-    def _add_operation_departure(self, flight_number, destination, tail=None, parking=None):
+    def _add_operation_departure(
+        self,
+        flight_number,
+        destination,
+        tail=None,
+        parking=None,
+        window_minutes=0,
+        departure_status=None,
+        wave="1",
+    ):
         operation = SortDateOperation.query.filter_by(
             gateway_id=self.gateway.id,
             gateway_code=self.gateway.code,
@@ -714,9 +743,12 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 sort_date=date(2026, 6, 11),
                 gateway_code=self.gateway.code,
                 sort_name="night",
+                window_minutes=window_minutes,
             )
             db.session.add(operation)
             db.session.flush()
+        else:
+            operation.window_minutes = window_minutes
 
         mission = SortDateMission(
             sort_date=operation.sort_date,
@@ -725,6 +757,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             sort_date_operation_id=operation.id,
             mission_type="departure",
             mission_source="master",
+            wave=wave,
             flight_number=flight_number,
             origin=self.gateway.code,
             destination=destination,
@@ -733,6 +766,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             planned_datetime_utc=datetime(2026, 6, 11, 7, 15),
             planned_source="master",
             assigned_tail_number=tail,
+            departure_status=departure_status,
             pure_pull_time_local=time(1, 20),
             first_mix_pull_time_local=time(1, 40),
             final_mix_pull_time_local=time(1, 55),

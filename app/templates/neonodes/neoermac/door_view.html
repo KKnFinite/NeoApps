@@ -57,15 +57,23 @@
                 <article class="neoermac-door-destination-card">
                     <input type="hidden" name="destination_{{ destination_index }}" value="{{ card.destination }}">
                     <div class="neoermac-door-card-head">
-                        <div>
+                        <div class="neoermac-door-flight">
+                            <span>FLIGHT</span>
+                            <strong>{{ card.flight_number or "-" }}</strong>
+                        </div>
+                        <div class="neoermac-door-destination">
                             <span>DESTINATION</span>
                             <strong>{{ card.destination }}</strong>
                         </div>
-                        <div>
+                        <div class="neoermac-door-status">
+                            <span>STATUS</span>
+                            <strong>{{ card.status }}</strong>
+                        </div>
+                        <div class="neoermac-door-tail">
                             <span>TAIL</span>
                             <strong>{{ card.tail or "-" }}</strong>
                         </div>
-                        <div>
+                        <div class="neoermac-door-parking">
                             <span>PARKING</span>
                             <strong>{{ card.parking or "-" }}</strong>
                         </div>
@@ -81,8 +89,11 @@
                         {% for pull in pull_fields %}
                         <section class="neoermac-door-pull-row">
                             <div class="neoermac-door-planned">
-                                <span>PLANNED {{ pull.label }}</span>
+                                <span>{% if card.window_minutes %}WINDOW{% else %}PLANNED{% endif %} {{ pull.label }}</span>
                                 <strong>{{ card.planned[pull.key] or "-" }}</strong>
+                                {% if card.window_minutes and card.base_planned[pull.key] and card.base_planned[pull.key] != card.planned[pull.key] %}
+                                <em>BASE {{ card.base_planned[pull.key] }} +{{ card.window_minutes }} MIN</em>
+                                {% endif %}
                             </div>
                             {% if can_edit %}
                             <label class="neoermac-door-actual">
@@ -148,15 +159,15 @@
             <div class="neoermac-uld-grid">
                 <label>
                     <span>A2</span>
-                    <input type="number" name="uld_a2_count" min="0" inputmode="numeric" value="{{ uld_request.a2_count if uld_request else 0 }}" data-uld-count="A2">
+                    <input type="number" name="uld_a2_count" min="0" step="1" inputmode="numeric" value="{{ uld_request.a2_count if uld_request else 0 }}" data-uld-count="A2">
                 </label>
                 <label>
                     <span>A1</span>
-                    <input type="number" name="uld_a1_count" min="0" inputmode="numeric" value="{{ uld_request.a1_count if uld_request else 0 }}" data-uld-count="A1">
+                    <input type="number" name="uld_a1_count" min="0" step="1" inputmode="numeric" value="{{ uld_request.a1_count if uld_request else 0 }}" data-uld-count="A1">
                 </label>
                 <label>
                     <span>AMP</span>
-                    <input type="number" name="uld_amp_count" min="0" inputmode="numeric" value="{{ uld_request.amp_count if uld_request else 0 }}" data-uld-count="AMP">
+                    <input type="number" name="uld_amp_count" min="0" step="1" inputmode="numeric" value="{{ uld_request.amp_count if uld_request else 0 }}" data-uld-count="AMP">
                 </label>
             </div>
             <label class="neoermac-door-toggle neoermac-setup-toggle">
@@ -165,7 +176,7 @@
             </label>
             <div class="neoermac-door-action-row">
                 <button class="neoermac-menu-link" type="submit">SAVE ULD REQUEST</button>
-                <button class="neoermac-menu-link neoermac-menu-link-secondary" type="submit" name="clear_uld_request" value="1">CLEAR REQUEST</button>
+                <button class="neoermac-menu-link neoermac-menu-link-secondary neoermac-clear-request" type="submit" name="clear_uld_request" value="1">CLEAR REQUEST</button>
             </div>
         </form>
         {% else %}

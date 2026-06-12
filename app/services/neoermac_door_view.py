@@ -16,6 +16,7 @@ from app.services.neoermac_building_lineup import (
     get_outbound_door_options,
     normalize_destination,
 )
+from app.services.sort_date_operations import mission_display_timing_data
 from app.services.uld_requests import (
     ULD_TYPES,
     active_on_the_way_event_views,
@@ -165,25 +166,32 @@ def _destination_cards_for_door(gateway, selected_door, operation):
         master = masters.get(destination)
         door_pull = _door_pull_record(gateway, selected_door, destination, operation)
         tail_state = _tail_state_for_mission(mission)
+        timing_data = _mission_timing_data(mission, operation)
 
         cards.append(
             {
+                "sort_priority": _card_sort_priority(mission, master),
+                "flight_number": _flight_number_for_card(mission, master),
                 "destination": destination,
+                "status": _status_for_card(mission, master),
                 "slot_labels": slot_labels,
                 "tail": mission.assigned_tail_number if mission else "",
                 "parking": tail_state.parking_position if tail_state else "",
+                "window_minutes": timing_data.get("effective_window_minutes", 0),
                 "planned": {
-                    "pure": _time_value(
-                        getattr(mission, "pure_pull_time_local", None)
-                        or getattr(master, "pure_pull_time_local", None)
-                    ),
+                    "pure": _time_value(_planned_pull_time(timing_data, master, "pure")),
                     "first_mix": _time_value(
-                        getattr(mission, "first_mix_pull_time_local", None)
-                        or getattr(master, "first_mix_pull_time_local", None)
+                        _planned_pull_time(timing_data, master, "first_mix")
                     ),
                     "second_mix": _time_value(
-                        getattr(mission, "final_mix_pull_time_local", None)
-                        or getattr(master, "final_mix_pull_time_local", None)
+                        _planned_pull_time(timing_data, master, "second_mix")
+                    ),
+                },
+                "base_planned": {
+                    "pure": _time_value(_base_pull_time(timing_data, master, "pure")),
+                    "first_mix": _time_value(_base_pull_time(timing_data, master, "first_mix")),
+                    "second_mix": _time_value(
+                        _base_pull_time(timing_data, master, "second_mix")
                     ),
                 },
                 "actual": {
@@ -203,6 +211,9 @@ def _destination_cards_for_door(gateway, selected_door, operation):
             }
         )
 
+    cards.sort(key=lambda card: (card["sort_priority"], card["destination"]))
+    for card in cards:
+        card.pop("sort_priority", None)
     return cards
 
 
@@ -325,6 +336,69 @@ def _tail_state_for_mission(mission):
         sort_name=mission.sort_name,
         tail_number=mission.assigned_tail_number.strip().upper(),
     ).first()
+
+
+def _mission_timing_data(mission, operation):
+    if not mission:
+        return {}
+    return mission_display_timing_data(mission, operation)
+
+
+def _flight_number_for_card(mission, master):
+    flight_number = getattr(mission, "flight_number", None) or getattr(
+        master,
+        "flight_number",
+        None,
+    )
+    return str(flight_number or "").strip().upper()
+
+
+def _status_for_card(mission, master):
+    if mission:
+        status = str(getattr(mission, "departure_status", "") or "").strip()
+        return _labelize(status) if status else "LIVE SORT"
+    if master:
+        return "MASTER SCHEDULE"
+    return "NO FLIGHT DATA"
+
+
+def _card_sort_priority(mission, master):
+    if mission:
+        return 0
+    if master:
+        return 1
+    return 2
+
+
+def _planned_pull_time(timing_data, master, pull_key):
+    adjusted_key = {
+        "pure": "adjusted_pure_pull_time",
+        "first_mix": "adjusted_first_mix_pull_time",
+        "second_mix": "adjusted_final_mix_pull_time",
+    }[pull_key]
+    return timing_data.get(adjusted_key) or _master_pull_time(master, pull_key)
+
+
+def _base_pull_time(timing_data, master, pull_key):
+    base_key = {
+        "pure": "base_pure_pull_time",
+        "first_mix": "base_first_mix_pull_time",
+        "second_mix": "base_final_mix_pull_time",
+    }[pull_key]
+    return timing_data.get(base_key) or _master_pull_time(master, pull_key)
+
+
+def _master_pull_time(master, pull_key):
+    attr = {
+        "pure": "pure_pull_time_local",
+        "first_mix": "first_mix_pull_time_local",
+        "second_mix": "final_mix_pull_time_local",
+    }[pull_key]
+    return getattr(master, attr, None)
+
+
+def _labelize(value):
+    return str(value or "").strip().replace("_", " ").title()
 
 
 def _parse_optional_time(value):

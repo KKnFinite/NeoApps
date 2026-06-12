@@ -1646,7 +1646,12 @@ a {
 
 .neoermac-door-card-head {
     display: grid;
-    grid-template-columns: minmax(84px, 1.1fr) minmax(64px, 0.9fr) minmax(72px, 0.9fr);
+    grid-template-columns:
+        minmax(72px, 1fr)
+        minmax(66px, 0.9fr)
+        minmax(74px, 0.95fr)
+        minmax(60px, 0.78fr)
+        minmax(64px, 0.82fr);
     gap: 8px;
 }
 
@@ -1676,6 +1681,27 @@ a {
     font-size: 0.96rem;
     font-weight: 950;
     letter-spacing: 0.04em;
+}
+
+.neoermac-door-flight strong,
+.neoermac-door-destination strong {
+    color: #ffffff;
+    font-size: 1rem;
+    text-shadow: 0 0 14px rgba(54, 226, 123, 0.16);
+}
+
+.neoermac-door-status strong {
+    color: var(--node-ermac-secondary);
+    font-size: 0.78rem;
+}
+
+.neoermac-door-planned em {
+    color: var(--steel);
+    font-size: 0.54rem;
+    font-style: normal;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
 }
 
 .neoermac-door-belt-list {
@@ -1713,7 +1739,7 @@ a {
 .neoermac-uld-grid input {
     width: 100%;
     min-width: 0;
-    min-height: 38px;
+    min-height: 42px;
     border: 1px solid rgba(54, 226, 123, 0.36);
     border-radius: 4px;
     background:
@@ -1818,6 +1844,12 @@ a {
     gap: 9px;
 }
 
+.neoermac-clear-request {
+    justify-self: center;
+    width: min(100%, 210px);
+    padding-block: 9px;
+}
+
 .neoermac-uld-status {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1845,8 +1877,12 @@ a {
     }
 
     .neoermac-door-card-head {
-        grid-template-columns: minmax(76px, 1fr) minmax(58px, 0.8fr) minmax(64px, 0.85fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 6px;
+    }
+
+    .neoermac-door-status {
+        grid-column: 1 / -1;
     }
 
     .neoermac-door-pull-row {
