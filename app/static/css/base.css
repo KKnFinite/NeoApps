@@ -6049,6 +6049,260 @@ select::-ms-expand {
     box-shadow: 0 0 14px rgba(255, 74, 28, 0.16);
 }
 
+.neosektor-ballmat-shell {
+    width: min(100%, 1040px);
+    gap: clamp(14px, 3vw, 22px);
+}
+
+.neosektor-ballmat-hero h1 {
+    font-size: clamp(3rem, 12vw, 7rem);
+}
+
+.neosektor-ballmat-modebar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    width: min(100%, 560px);
+}
+
+.neosektor-mode-tab,
+.neosektor-ballmat-panel button,
+.neosektor-ballmat-panel input,
+.neosektor-ballmat-panel select {
+    font: inherit;
+}
+
+.neosektor-mode-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 112px;
+    min-height: 42px;
+    padding: 9px 16px;
+    border: 1px solid rgba(244, 246, 248, 0.28);
+    border-radius: 999px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.09), transparent 42%),
+        linear-gradient(180deg, #1e2229, #06070a);
+    color: rgba(238, 246, 255, 0.8);
+    font-size: 0.72rem;
+    font-weight: 950;
+    letter-spacing: 0.1em;
+    text-decoration: none;
+    text-transform: uppercase;
+}
+
+.neosektor-mode-tab.is-active {
+    border-color: rgba(var(--node-sektor-highlight-rgb), 0.72);
+    color: #fff;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 42%),
+        linear-gradient(180deg, var(--node-sektor-primary), #4e060c);
+    box-shadow: 0 0 18px rgba(var(--node-sektor-primary-rgb), 0.24);
+}
+
+.neosektor-ballmat-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    width: 100%;
+}
+
+.neosektor-ballmat-panel {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+    padding: clamp(12px, 2.5vw, 18px);
+    border: 1px solid rgba(244, 246, 248, 0.18);
+    border-radius: 8px;
+    background:
+        radial-gradient(circle at 50% 0%, rgba(var(--node-sektor-primary-rgb), 0.12), transparent 14rem),
+        linear-gradient(180deg, rgba(17, 19, 24, 0.96), rgba(4, 6, 9, 0.98));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.09),
+        0 0 20px rgba(var(--node-sektor-primary-rgb), 0.12);
+}
+
+.neosektor-ballmat-panel.is-selected {
+    border-color: rgba(var(--node-sektor-highlight-rgb), 0.54);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        0 0 22px rgba(var(--node-sektor-highlight-rgb), 0.18);
+}
+
+.neosektor-ballmat-panel-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: start;
+}
+
+.neosektor-ballmat-panel-head span,
+.neosektor-ballmat-total span,
+.neosektor-open-bay-control span,
+.neosektor-bay-control span {
+    color: rgba(238, 246, 255, 0.62);
+    font-size: 0.62rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.neosektor-ballmat-panel-head strong {
+    display: block;
+    margin-top: 4px;
+    color: #fff;
+    font-size: clamp(1rem, 3vw, 1.42rem);
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    line-height: 1.08;
+    text-transform: uppercase;
+}
+
+.neosektor-ballmat-total {
+    display: grid;
+    justify-items: end;
+    gap: 6px;
+    text-align: right;
+}
+
+.neosektor-ballmat-total strong {
+    margin: 0;
+    color: var(--node-sektor-highlight);
+    font-size: clamp(1.35rem, 4vw, 2rem);
+    line-height: 1;
+}
+
+.neosektor-ballmat-wave-stack {
+    display: grid;
+    gap: 10px;
+}
+
+.neosektor-ballmat-wave {
+    display: grid;
+    gap: 9px;
+    padding: 11px;
+    border: 1px solid rgba(244, 246, 248, 0.14);
+    border-radius: 7px;
+    background: rgba(3, 5, 8, 0.44);
+}
+
+.neosektor-ballmat-wave-title,
+.neosektor-open-bay-control > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(126px, auto);
+    gap: 10px;
+    align-items: center;
+}
+
+.neosektor-ballmat-wave-title span {
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 950;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.neosektor-ballmat-panel select,
+.neosektor-ballmat-panel input[type="number"] {
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid rgba(var(--node-sektor-primary-rgb), 0.72);
+    border-radius: 6px;
+    background: #07090d;
+    color: #f4f7fb;
+    font-size: 0.82rem;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    text-align: center;
+    text-transform: uppercase;
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+        0 0 10px rgba(var(--node-sektor-primary-rgb), 0.12);
+}
+
+.neosektor-ballmat-panel select:focus,
+.neosektor-ballmat-panel input:focus {
+    border-color: rgba(var(--node-sektor-highlight-rgb), 0.86);
+    outline: none;
+    box-shadow:
+        0 0 0 2px rgba(var(--node-sektor-primary-rgb), 0.28),
+        0 0 16px rgba(var(--node-sektor-highlight-rgb), 0.24);
+}
+
+.neosektor-count-control {
+    display: grid;
+    grid-template-columns: minmax(42px, 0.7fr) minmax(42px, 0.7fr) minmax(68px, 1fr) minmax(42px, 0.7fr) minmax(42px, 0.7fr);
+    gap: 7px;
+    align-items: center;
+}
+
+.neosektor-ballmat-panel button {
+    min-height: 38px;
+    border: 1px solid rgba(244, 246, 248, 0.24);
+    border-radius: 6px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 40%),
+        linear-gradient(180deg, var(--node-sektor-primary), #4e060c);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 950;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.neosektor-ballmat-panel button:not(:disabled):hover,
+.neosektor-ballmat-panel button:not(:disabled):focus-visible {
+    border-color: rgba(var(--node-sektor-highlight-rgb), 0.72);
+    box-shadow: 0 0 14px rgba(var(--node-sektor-highlight-rgb), 0.22);
+}
+
+.neosektor-ballmat-panel button:disabled,
+.neosektor-ballmat-panel input:disabled,
+.neosektor-ballmat-panel select:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+}
+
+.neosektor-open-bay-control {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid rgba(244, 246, 248, 0.14);
+    border-radius: 7px;
+    background: rgba(3, 5, 8, 0.44);
+}
+
+.neosektor-open-bay-control strong {
+    color: var(--node-sektor-highlight);
+    font-size: 1.22rem;
+    font-weight: 950;
+    justify-self: end;
+}
+
+.neosektor-ballmat-panel input[type="range"] {
+    accent-color: var(--node-sektor-primary);
+    width: 100%;
+}
+
+.neosektor-bay-control-grid {
+    display: grid;
+    gap: 8px;
+}
+
+.neosektor-bay-control {
+    display: grid;
+    grid-template-columns: minmax(72px, 1fr) minmax(126px, 1.35fr);
+    gap: 10px;
+    align-items: center;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid rgba(244, 246, 248, 0.12);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.035);
+}
+
 @media (max-width: 760px) {
     .neosektor-menu,
     .neosektor-overview-grid,
@@ -6056,7 +6310,8 @@ select::-ms-expand {
     .neosektor-live-totals,
     .neosektor-wave-grid,
     .neosektor-ballmat-grid,
-    .neosektor-open-bay-grid {
+    .neosektor-open-bay-grid,
+    .neosektor-ballmat-grid {
         grid-template-columns: 1fr;
     }
 
@@ -6073,5 +6328,23 @@ select::-ms-expand {
 
     .neosektor-live-card dl {
         grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .neosektor-ballmat-panel-head {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .neosektor-ballmat-total {
+        justify-items: start;
+        text-align: left;
+    }
+
+    .neosektor-count-control {
+        grid-template-columns: repeat(2, minmax(42px, 1fr)) minmax(74px, 1.2fr) repeat(2, minmax(42px, 1fr));
+        gap: 6px;
+    }
+
+    .neosektor-bay-control {
+        grid-template-columns: minmax(62px, 0.8fr) minmax(118px, 1.2fr);
     }
 }

@@ -3,6 +3,7 @@ from datetime import date
 from app.extensions import db
 from app.models import (
     NeoSektorBallmatCount,
+    NeoSektorBallmatWaveCount,
     NeoSektorBayStatus,
     NeoSektorDriverRouteSetting,
     NeoSektorOpenBayState,
@@ -12,10 +13,17 @@ from app.models import (
 
 
 STATUS_LABELS = ("Empty", "Light", "Moderate", "Full", "Overflowing")
+STATUS_RANKS = {label: index for index, label in enumerate(STATUS_LABELS)}
 DEFAULT_SORT_NAME = "night"
 DEFAULT_ACTIVE_WAVE = "1ST WAVE"
-DEFAULT_WAVES = ("1ST WAVE", "2ND WAVE")
-DEFAULT_BALLMAT_SIDES = ("EAST", "WEST")
+DEFAULT_WAVES = (
+    ("first", "1ST WAVE"),
+    ("second", "2ND WAVE"),
+)
+DEFAULT_BALLMAT_SIDES = (
+    ("east", "EAST", "EBM"),
+    ("west", "WEST", "WBM"),
+)
 DEFAULT_BAYS = (
     ("EAST", "EAST 1"),
     ("EAST", "EAST 2"),
@@ -25,6 +33,8 @@ DEFAULT_BAYS = (
     ("WEST", "WEST 3"),
 )
 DEFAULT_DRIVER_ROUTES = ("EAST ROUTE", "WEST ROUTE")
+BALLMAT_VIEW_PERMISSION = "neosektor.ballmat.view"
+BALLMAT_EDIT_PERMISSION = "neosektor.ballmat.edit"
 
 
 def live_counts_context(gateway, sort_date=None, sort_name=None):
@@ -32,11 +42,13 @@ def live_counts_context(gateway, sort_date=None, sort_name=None):
     sort_name = normalize_sort_name(sort_name)
     sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
 
+    ballmat_wave_counts = _get_or_create_ballmat_wave_counts(sort_state)
     waves = _get_or_create_waves(sort_state)
     ballmats = _get_or_create_ballmats(sort_state)
     open_bays = _get_or_create_open_bays(sort_state)
     bay_statuses = _get_or_create_bay_statuses(sort_state)
     driver_routes = _get_or_create_driver_routes(sort_state)
+    _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats)
     db.session.flush()
 
     planned_total = max(0, sort_state.planned_total or 0)
@@ -61,6 +73,103 @@ def live_counts_context(gateway, sort_date=None, sort_name=None):
         "bay_statuses": [_bay_status_view(row) for row in bay_statuses],
         "driver_routes": [_driver_route_view(row) for row in driver_routes],
     }
+
+
+def ballmat_operations_context(gateway, selected_side, sort_date=None, sort_name=None):
+    selected_side = normalize_ballmat_side(selected_side) or "east"
+    state = ballmat_state_payload(gateway, sort_date, sort_name)
+
+    return {
+        "selected_side": selected_side,
+        "selected_side_label": side_display_label(selected_side),
+        "selected_manager_label": side_manager_label(selected_side),
+        "state": state,
+        "status_labels": STATUS_LABELS,
+    }
+
+
+def ballmat_state_payload(gateway, sort_date=None, sort_name=None):
+    sort_date = sort_date or date.today()
+    sort_name = normalize_sort_name(sort_name)
+    sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
+
+    ballmat_wave_counts = _get_or_create_ballmat_wave_counts(sort_state)
+    waves = _get_or_create_waves(sort_state)
+    ballmats = _get_or_create_ballmats(sort_state)
+    open_bays = _get_or_create_open_bays(sort_state)
+    bay_statuses = _get_or_create_bay_statuses(sort_state)
+    _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats)
+    db.session.flush()
+
+    planned_total = max(0, sort_state.planned_total or 0)
+    unloaded_total = max(0, sort_state.unloaded_total or 0)
+
+    return {
+        "summary": {
+            "sort_date": sort_state.sort_date.isoformat(),
+            "sort_name": sort_state.sort_name.upper(),
+            "active_wave": sort_state.active_wave,
+            "planned_total": planned_total,
+            "unloaded_total": unloaded_total,
+            "left_to_unload": max(planned_total - unloaded_total, 0),
+            "completion_percent": _completion_percent(planned_total, unloaded_total),
+        },
+        "sides": _side_state_views(
+            ballmat_wave_counts,
+            ballmats,
+            open_bays,
+            bay_statuses,
+        ),
+        "waves": [_wave_view(row) for row in waves],
+    }
+
+
+def update_ballmat_side(gateway, selected_side, payload, sort_date=None, sort_name=None):
+    selected_side = normalize_ballmat_side(selected_side)
+    target_side = normalize_ballmat_side((payload or {}).get("side"))
+    if not selected_side or not target_side or selected_side != target_side:
+        raise ValueError("Selected side does not match update side.")
+
+    sort_date = sort_date or date.today()
+    sort_name = normalize_sort_name(sort_name)
+    sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
+
+    ballmat_wave_counts = _get_or_create_ballmat_wave_counts(sort_state)
+    waves = _get_or_create_waves(sort_state)
+    ballmats = _get_or_create_ballmats(sort_state)
+    open_bays = _get_or_create_open_bays(sort_state)
+    bay_statuses = _get_or_create_bay_statuses(sort_state)
+
+    side_label = side_display_label(selected_side)
+    wave_payload = (payload or {}).get("waves") or {}
+    rows_by_wave = {
+        row.wave_name: row
+        for row in ballmat_wave_counts
+        if row.side == side_label
+    }
+    for wave_key, wave_name in DEFAULT_WAVES:
+        row = rows_by_wave[wave_name]
+        row.count = _clean_count(
+            (wave_payload.get(wave_key) or {}).get("count"),
+            default=row.count,
+        )
+        row.status = _status((wave_payload.get(wave_key) or {}).get("status") or row.status)
+
+    open_bay_row = next(row for row in open_bays if row.side == side_label)
+    open_bay_row.open_count = _clean_count(
+        (payload or {}).get("open_bays"),
+        default=open_bay_row.open_count,
+        maximum=12,
+    )
+
+    bay_payload = (payload or {}).get("bay_statuses") or {}
+    for bay in bay_statuses:
+        if bay.side == side_label and bay.bay_name in bay_payload:
+            bay.status = _status(bay_payload[bay.bay_name])
+
+    _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats)
+    db.session.flush()
+    return ballmat_state_payload(gateway, sort_date, sort_name)
 
 
 def get_or_create_sort_state(gateway, sort_date, sort_name):
@@ -89,10 +198,32 @@ def normalize_sort_name(sort_name):
     return value or DEFAULT_SORT_NAME
 
 
+def normalize_ballmat_side(value):
+    normalized = str(value or "").strip().lower()
+    if normalized in {"e", "east", "ebm"}:
+        return "east"
+    if normalized in {"w", "west", "wbm"}:
+        return "west"
+    return None
+
+
+def side_display_label(side):
+    normalized = normalize_ballmat_side(side) or "east"
+    return "EAST" if normalized == "east" else "WEST"
+
+
+def side_manager_label(side):
+    normalized = normalize_ballmat_side(side) or "east"
+    return "EBM" if normalized == "east" else "WBM"
+
+
 def _get_or_create_waves(sort_state):
-    existing = {row.wave_name: row for row in sort_state.wave_states}
+    existing = {
+        row.wave_name: row
+        for row in NeoSektorWaveState.query.filter_by(sort_state_id=sort_state.id).all()
+    }
     rows = []
-    for index, wave_name in enumerate(DEFAULT_WAVES, start=1):
+    for index, (_wave_key, wave_name) in enumerate(DEFAULT_WAVES, start=1):
         row = existing.get(wave_name)
         if row is None:
             row = NeoSektorWaveState(
@@ -106,31 +237,65 @@ def _get_or_create_waves(sort_state):
 
 
 def _get_or_create_ballmats(sort_state):
-    existing = {row.side: row for row in sort_state.ballmat_counts}
+    existing = {
+        row.side: row
+        for row in NeoSektorBallmatCount.query.filter_by(sort_state_id=sort_state.id).all()
+    }
     rows = []
-    for side in DEFAULT_BALLMAT_SIDES:
-        row = existing.get(side)
+    for _side_key, side_label, _manager_label in DEFAULT_BALLMAT_SIDES:
+        row = existing.get(side_label)
         if row is None:
-            row = NeoSektorBallmatCount(sort_state_id=sort_state.id, side=side)
+            row = NeoSektorBallmatCount(sort_state_id=sort_state.id, side=side_label)
             db.session.add(row)
         rows.append(row)
     return rows
 
 
-def _get_or_create_open_bays(sort_state):
-    existing = {row.side: row for row in sort_state.open_bay_states}
+def _get_or_create_ballmat_wave_counts(sort_state):
+    existing = {
+        (row.side, row.wave_name): row
+        for row in NeoSektorBallmatWaveCount.query.filter_by(
+            sort_state_id=sort_state.id
+        ).all()
+    }
     rows = []
-    for side in DEFAULT_BALLMAT_SIDES:
-        row = existing.get(side)
+    display_order = 0
+    for _side_key, side_label, _manager_label in DEFAULT_BALLMAT_SIDES:
+        for _wave_key, wave_name in DEFAULT_WAVES:
+            display_order += 1
+            row = existing.get((side_label, wave_name))
+            if row is None:
+                row = NeoSektorBallmatWaveCount(
+                    sort_state_id=sort_state.id,
+                    side=side_label,
+                    wave_name=wave_name,
+                    display_order=display_order,
+                )
+                db.session.add(row)
+            rows.append(row)
+    return sorted(rows, key=lambda row: row.display_order)
+
+
+def _get_or_create_open_bays(sort_state):
+    existing = {
+        row.side: row
+        for row in NeoSektorOpenBayState.query.filter_by(sort_state_id=sort_state.id).all()
+    }
+    rows = []
+    for _side_key, side_label, _manager_label in DEFAULT_BALLMAT_SIDES:
+        row = existing.get(side_label)
         if row is None:
-            row = NeoSektorOpenBayState(sort_state_id=sort_state.id, side=side)
+            row = NeoSektorOpenBayState(sort_state_id=sort_state.id, side=side_label)
             db.session.add(row)
         rows.append(row)
     return rows
 
 
 def _get_or_create_bay_statuses(sort_state):
-    existing = {row.bay_name: row for row in sort_state.bay_statuses}
+    existing = {
+        row.bay_name: row
+        for row in NeoSektorBayStatus.query.filter_by(sort_state_id=sort_state.id).all()
+    }
     rows = []
     for index, (side, bay_name) in enumerate(DEFAULT_BAYS, start=1):
         row = existing.get(bay_name)
@@ -147,7 +312,12 @@ def _get_or_create_bay_statuses(sort_state):
 
 
 def _get_or_create_driver_routes(sort_state):
-    existing = {row.route_name: row for row in sort_state.driver_route_settings}
+    existing = {
+        row.route_name: row
+        for row in NeoSektorDriverRouteSetting.query.filter_by(
+            sort_state_id=sort_state.id
+        ).all()
+    }
     rows = []
     for index, route_name in enumerate(DEFAULT_DRIVER_ROUTES, start=1):
         row = existing.get(route_name)
@@ -208,6 +378,120 @@ def _driver_route_view(row):
         "route_name": row.route_name,
         "route_value": row.route_value or "-",
     }
+
+
+def _side_state_views(ballmat_wave_counts, ballmats, open_bays, bay_statuses):
+    ballmat_by_side = {row.side: row for row in ballmats}
+    open_bay_by_side = {row.side: row for row in open_bays}
+    wave_counts_by_side = {
+        side_label: [
+            row
+            for row in ballmat_wave_counts
+            if row.side == side_label
+        ]
+        for _side_key, side_label, _manager_label in DEFAULT_BALLMAT_SIDES
+    }
+    bay_statuses_by_side = {
+        side_label: [
+            row
+            for row in bay_statuses
+            if row.side == side_label
+        ]
+        for _side_key, side_label, _manager_label in DEFAULT_BALLMAT_SIDES
+    }
+
+    sides = {}
+    for side_key, side_label, manager_label in DEFAULT_BALLMAT_SIDES:
+        sides[side_key] = {
+            "key": side_key,
+            "label": side_label,
+            "manager_label": manager_label,
+            "total_count": max(ballmat_by_side[side_label].count or 0, 0),
+            "status": _status(ballmat_by_side[side_label].status),
+            "open_bays": max(open_bay_by_side[side_label].open_count or 0, 0),
+            "waves": [
+                _ballmat_wave_view(row)
+                for row in sorted(
+                    wave_counts_by_side[side_label],
+                    key=lambda row: row.display_order,
+                )
+            ],
+            "bays": [
+                _bay_status_view(row)
+                for row in sorted(
+                    bay_statuses_by_side[side_label],
+                    key=lambda row: row.display_order,
+                )
+            ],
+        }
+    return sides
+
+
+def _ballmat_wave_view(row):
+    return {
+        "key": _wave_key(row.wave_name),
+        "name": row.wave_name,
+        "count": max(row.count or 0, 0),
+        "status": _status(row.status),
+    }
+
+
+def _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats):
+    wave_rows = {row.wave_name: row for row in waves}
+    side_rows = {row.side: row for row in ballmats}
+    total_unloaded = 0
+
+    for _wave_key, wave_name in DEFAULT_WAVES:
+        matching_rows = [
+            row
+            for row in ballmat_wave_counts
+            if row.wave_name == wave_name
+        ]
+        wave_total = sum(max(row.count or 0, 0) for row in matching_rows)
+        wave_row = wave_rows[wave_name]
+        wave_row.unloaded_count = wave_total
+        wave_row.status = _aggregate_status(matching_rows, wave_total)
+
+    for _side_key, side_label, _manager_label in DEFAULT_BALLMAT_SIDES:
+        matching_rows = [
+            row
+            for row in ballmat_wave_counts
+            if row.side == side_label
+        ]
+        side_total = sum(max(row.count or 0, 0) for row in matching_rows)
+        side_row = side_rows[side_label]
+        side_row.count = side_total
+        side_row.status = _aggregate_status(matching_rows, side_total)
+        total_unloaded += side_total
+
+    sort_state.unloaded_total = total_unloaded
+
+
+def _aggregate_status(rows, total_count):
+    statuses = [_status(row.status) for row in rows]
+    if not statuses:
+        return "Empty"
+
+    strongest = max(statuses, key=lambda status: STATUS_RANKS[status])
+    if total_count > 0 and strongest == "Empty":
+        return "Light"
+    return strongest
+
+
+def _wave_key(wave_name):
+    normalized = str(wave_name or "").strip().upper()
+    for wave_key, configured_name in DEFAULT_WAVES:
+        if normalized == configured_name:
+            return wave_key
+    return normalized.lower().replace(" ", "_")
+
+
+def _clean_count(value, default=0, maximum=9999):
+    try:
+        cleaned = int(value)
+    except (TypeError, ValueError):
+        cleaned = default or 0
+    return min(max(cleaned, 0), maximum)
 
 
 def _status(value):

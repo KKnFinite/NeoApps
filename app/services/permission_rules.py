@@ -61,6 +61,16 @@ DEFAULT_PERMISSION_RULES = (
         "View NeoSektor dashboard screens.",
     ),
     (
+        "neosektor.ballmat.view",
+        "operator",
+        "View NeoSektor Ballmat Operations screens.",
+    ),
+    (
+        "neosektor.ballmat.edit",
+        "operator",
+        "Edit NeoSektor Ballmat Operations counts and bay status.",
+    ),
+    (
         "neosektor.tunnel_conductor.view",
         "operator",
         "View NeoSektor Tunnel Conductor screens.",
@@ -69,26 +79,6 @@ DEFAULT_PERMISSION_RULES = (
         "neosektor.tunnel_conductor.edit",
         "operator",
         "Edit NeoSektor Tunnel Conductor screens.",
-    ),
-    (
-        "neosektor.ebm.view",
-        "operator",
-        "View NeoSektor EBM screens.",
-    ),
-    (
-        "neosektor.ebm.edit",
-        "operator",
-        "Edit NeoSektor EBM screens.",
-    ),
-    (
-        "neosektor.wbm.view",
-        "operator",
-        "View NeoSektor WBM screens.",
-    ),
-    (
-        "neosektor.wbm.edit",
-        "operator",
-        "Edit NeoSektor WBM screens.",
     ),
     (
         "neosektor.discharge.view",

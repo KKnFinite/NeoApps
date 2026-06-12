@@ -1,10 +1,18 @@
-from flask import flash, redirect, render_template, url_for
+from flask import flash, jsonify, redirect, render_template, request, session, url_for
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
 from app.neonodes.neosektor import bp
 from app.services.access_control import get_current_gateway
-from app.services.neosektor_live_counts import live_counts_context
+from app.services.neosektor_live_counts import (
+    BALLMAT_EDIT_PERMISSION,
+    BALLMAT_VIEW_PERMISSION,
+    ballmat_operations_context,
+    ballmat_state_payload,
+    live_counts_context,
+    normalize_ballmat_side,
+    update_ballmat_side,
+)
 from app.services.permission_rules import permission_access
 
 
@@ -21,16 +29,16 @@ NEOSEKTOR_PAGES = (
     (
         "EBM",
         "neosektor.ebm",
-        "neosektor.ebm.view",
-        "neosektor.ebm.edit",
-        "East Ballmat Manager foundation for future EBM count entry.",
+        BALLMAT_VIEW_PERMISSION,
+        BALLMAT_EDIT_PERMISSION,
+        "East Ballmat Operations count entry.",
     ),
     (
         "WBM",
         "neosektor.wbm",
-        "neosektor.wbm.view",
-        "neosektor.wbm.edit",
-        "West Ballmat Manager foundation for future WBM count entry.",
+        BALLMAT_VIEW_PERMISSION,
+        BALLMAT_EDIT_PERMISSION,
+        "West Ballmat Operations count entry.",
     ),
     (
         "DISCHARGE",
@@ -87,13 +95,66 @@ def tunnel_conductor():
 @bp.route("/ebm")
 @gateway_node_required("sektor")
 def ebm():
-    return _placeholder_page("EBM")
+    return redirect(url_for("neosektor.ballmat_operations", side="east"))
 
 
 @bp.route("/wbm")
 @gateway_node_required("sektor")
 def wbm():
-    return _placeholder_page("WBM")
+    return redirect(url_for("neosektor.ballmat_operations", side="west"))
+
+
+@bp.route("/ballmat")
+@gateway_node_required("sektor")
+def ballmat_operations():
+    access = permission_access(BALLMAT_VIEW_PERMISSION, BALLMAT_EDIT_PERMISSION)
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neosektor.index"))
+
+    selected_side = _selected_ballmat_side()
+    session["neosektor_ballmat_side"] = selected_side
+    gateway = get_current_gateway()
+    context = ballmat_operations_context(gateway, selected_side)
+    db.session.commit()
+    return render_template(
+        "neonodes/neosektor/ballmat.html",
+        gateway=gateway,
+        can_view=access["can_view"],
+        can_edit=access["can_edit"],
+        **context,
+    )
+
+
+@bp.route("/ballmat/state")
+@gateway_node_required("sektor")
+def ballmat_state():
+    access = permission_access(BALLMAT_VIEW_PERMISSION, BALLMAT_EDIT_PERMISSION)
+    if not access["can_view"]:
+        return jsonify({"ok": False, "error": "Access denied."}), 403
+
+    state = ballmat_state_payload(get_current_gateway())
+    db.session.commit()
+    return jsonify({"ok": True, "state": state})
+
+
+@bp.route("/ballmat/update", methods=["POST"])
+@gateway_node_required("sektor")
+def ballmat_update():
+    access = permission_access(BALLMAT_VIEW_PERMISSION, BALLMAT_EDIT_PERMISSION)
+    if not access["can_edit"]:
+        return jsonify({"ok": False, "error": "Edit access denied."}), 403
+
+    selected_side = _selected_ballmat_side()
+    payload = request.get_json(silent=True) or request.form.to_dict(flat=False)
+    try:
+        state = update_ballmat_side(get_current_gateway(), selected_side, payload)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 403
+
+    session["neosektor_ballmat_side"] = selected_side
+    db.session.commit()
+    return jsonify({"ok": True, "state": state})
 
 
 @bp.route("/discharge")
@@ -158,3 +219,9 @@ def _page_by_title(title):
                 "description": description,
             }
     raise ValueError(f"Unknown NeoSektor page: {title}")
+
+
+def _selected_ballmat_side():
+    requested_side = normalize_ballmat_side(request.args.get("side"))
+    session_side = normalize_ballmat_side(session.get("neosektor_ballmat_side"))
+    return requested_side or session_side or "east"

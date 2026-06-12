@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}{{ selected_manager_label }} | NeoSektor{% endblock %}
+
+{% block content %}
+<section
+    class="neosektor-shell neosektor-ballmat-shell"
+    aria-labelledby="neosektor-ballmat-title"
+    data-ballmat-operations
+    data-selected-side="{{ selected_side }}"
+    data-can-edit="{{ 'true' if can_edit else 'false' }}"
+    data-state-url="{{ url_for('neosektor.ballmat_state') }}"
+    data-update-url="{{ url_for('neosektor.ballmat_update', side=selected_side) }}"
+>
+    <div class="neosektor-hero neosektor-ballmat-hero">
+        <span class="neosektor-kicker">{{ gateway.code }} BALLMAT OPERATIONS</span>
+        <h1 id="neosektor-ballmat-title">{{ selected_manager_label }}</h1>
+        <p>{{ selected_side_label }} BALLMAT SELECTED</p>
+    </div>
+
+    <div class="neosektor-ballmat-modebar" aria-label="Ballmat mode">
+        <a class="neosektor-mode-tab{% if selected_side == 'east' %} is-active{% endif %}" href="{{ url_for('neosektor.ballmat_operations', side='east') }}">EBM</a>
+        <a class="neosektor-mode-tab{% if selected_side == 'west' %} is-active{% endif %}" href="{{ url_for('neosektor.ballmat_operations', side='west') }}">WBM</a>
+        <span class="neosektor-mode-pill">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
+    </div>
+
+    <div class="neosektor-ballmat-grid" aria-label="East and West ballmat counts">
+        {% for side_key in ["east", "west"] %}
+        {% set side = state.sides[side_key] %}
+        {% set side_editable = can_edit and selected_side == side.key %}
+        <section class="neosektor-ballmat-panel{% if selected_side == side.key %} is-selected{% endif %}" data-ballmat-side="{{ side.key }}" aria-label="{{ side.label }} Ballmat">
+            <header class="neosektor-ballmat-panel-head">
+                <div>
+                    <span>{{ side.manager_label }}</span>
+                    <strong>{{ side.label }} BALLMAT</strong>
+                </div>
+                <div class="neosektor-ballmat-total">
+                    <span>TOTAL</span>
+                    <strong data-total-count>{{ side.total_count }}</strong>
+                    <em class="neosektor-status neosektor-status-{{ side.status|lower }}" data-total-status>{{ side.status }}</em>
+                </div>
+            </header>
+
+            <div class="neosektor-ballmat-wave-stack">
+                {% for wave in side.waves %}
+                <div class="neosektor-ballmat-wave" data-wave="{{ wave.key }}">
+                    <div class="neosektor-ballmat-wave-title">
+                        <span>{{ wave.name }}</span>
+                        <select data-wave-status="{{ wave.key }}" aria-label="{{ side.label }} {{ wave.name }} status" {% if not side_editable %}disabled{% endif %}>
+                            {% for status in status_labels %}
+                            <option value="{{ status }}" {% if status == wave.status %}selected{% endif %}>{{ status }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="neosektor-count-control">
+                        <button type="button" data-count-step="-10" {% if not side_editable %}disabled{% endif %}>-10</button>
+                        <button type="button" data-count-step="-1" {% if not side_editable %}disabled{% endif %}>-1</button>
+                        <input type="number" inputmode="numeric" min="0" max="9999" value="{{ wave.count }}" data-wave-count="{{ wave.key }}" aria-label="{{ side.label }} {{ wave.name }} count" {% if not side_editable %}disabled{% endif %}>
+                        <button type="button" data-count-step="1" {% if not side_editable %}disabled{% endif %}>+1</button>
+                        <button type="button" data-count-step="10" {% if not side_editable %}disabled{% endif %}>+10</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="neosektor-open-bay-control">
+                <div>
+                    <span>OPEN BAYS</span>
+                    <strong data-open-bays-value>{{ side.open_bays }}</strong>
+                </div>
+                <input type="range" min="0" max="12" step="1" value="{{ side.open_bays }}" data-open-bays aria-label="{{ side.label }} open bays" {% if not side_editable %}disabled{% endif %}>
+            </div>
+
+            <div class="neosektor-bay-control-grid" aria-label="{{ side.label }} bay statuses">
+                {% for bay in side.bays %}
+                <label class="neosektor-bay-control">
+                    <span>{{ bay.bay_name }}</span>
+                    <select data-bay-status="{{ bay.bay_name }}" aria-label="{{ bay.bay_name }} status" {% if not side_editable %}disabled{% endif %}>
+                        {% for status in status_labels %}
+                        <option value="{{ status }}" {% if status == bay.status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                {% endfor %}
+            </div>
+        </section>
+        {% endfor %}
+    </div>
+</section>
+
+<script>
+(() => {
+    const root = document.querySelector("[data-ballmat-operations]");
+    if (!root) {
+        return;
+    }
+
+    const stateUrl = root.dataset.stateUrl;
+    const updateUrl = root.dataset.updateUrl;
+    const selectedSide = root.dataset.selectedSide;
+    const canEdit = root.dataset.canEdit === "true";
+    const selectedPanel = root.querySelector(`[data-ballmat-side="${selectedSide}"]`);
+    let saveTimer = null;
+
+    const readNumber = (input) => {
+        const value = Number.parseInt(input.value, 10);
+        return Number.isFinite(value) && value > 0 ? value : 0;
+    };
+
+    const collectPayload = () => {
+        const waves = {};
+        selectedPanel.querySelectorAll("[data-wave]").forEach((waveRow) => {
+            const waveKey = waveRow.dataset.wave;
+            waves[waveKey] = {
+                count: readNumber(waveRow.querySelector("[data-wave-count]")),
+                status: waveRow.querySelector("[data-wave-status]").value,
+            };
+        });
+
+        const bayStatuses = {};
+        selectedPanel.querySelectorAll("[data-bay-status]").forEach((select) => {
+            bayStatuses[select.dataset.bayStatus] = select.value;
+        });
+
+        return {
+            side: selectedSide,
+            waves,
+            open_bays: readNumber(selectedPanel.querySelector("[data-open-bays]")),
+            bay_statuses: bayStatuses,
+        };
+    };
+
+    const applyState = (state) => {
+        Object.entries(state.sides || {}).forEach(([sideKey, side]) => {
+            const panel = root.querySelector(`[data-ballmat-side="${sideKey}"]`);
+            if (!panel) {
+                return;
+            }
+
+            panel.querySelector("[data-total-count]").textContent = side.total_count;
+            const totalStatus = panel.querySelector("[data-total-status]");
+            totalStatus.textContent = side.status;
+            totalStatus.className = `neosektor-status neosektor-status-${String(side.status).toLowerCase()}`;
+
+            side.waves.forEach((wave) => {
+                const countInput = panel.querySelector(`[data-wave-count="${wave.key}"]`);
+                const statusSelect = panel.querySelector(`[data-wave-status="${wave.key}"]`);
+                if (countInput && document.activeElement !== countInput) {
+                    countInput.value = wave.count;
+                }
+                if (statusSelect && document.activeElement !== statusSelect) {
+                    statusSelect.value = wave.status;
+                }
+            });
+
+            const openBays = panel.querySelector("[data-open-bays]");
+            const openBaysValue = panel.querySelector("[data-open-bays-value]");
+            if (openBays && document.activeElement !== openBays) {
+                openBays.value = side.open_bays;
+            }
+            if (openBaysValue) {
+                openBaysValue.textContent = side.open_bays;
+            }
+
+            side.bays.forEach((bay) => {
+                const select = panel.querySelector(`[data-bay-status="${bay.bay_name}"]`);
+                if (select && document.activeElement !== select) {
+                    select.value = bay.status;
+                }
+            });
+        });
+    };
+
+    const refreshState = async () => {
+        try {
+            const response = await fetch(stateUrl, { cache: "no-store", credentials: "same-origin" });
+            if (!response.ok) {
+                return;
+            }
+            const payload = await response.json();
+            if (payload.ok) {
+                applyState(payload.state);
+            }
+        } catch (_error) {}
+    };
+
+    const saveSelectedSide = async () => {
+        if (!canEdit || !selectedPanel) {
+            return;
+        }
+
+        try {
+            const response = await fetch(updateUrl, {
+                method: "POST",
+                cache: "no-store",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(collectPayload()),
+            });
+            if (!response.ok) {
+                return;
+            }
+            const payload = await response.json();
+            if (payload.ok) {
+                applyState(payload.state);
+            }
+        } catch (_error) {}
+    };
+
+    const queueSave = () => {
+        window.clearTimeout(saveTimer);
+        saveTimer = window.setTimeout(saveSelectedSide, 300);
+    };
+
+    root.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-count-step]");
+        if (!button || button.disabled) {
+            return;
+        }
+        const control = button.closest(".neosektor-count-control");
+        const input = control ? control.querySelector("[data-wave-count]") : null;
+        if (!input || input.disabled) {
+            return;
+        }
+        input.value = Math.max(readNumber(input) + Number.parseInt(button.dataset.countStep, 10), 0);
+        queueSave();
+    });
+
+    root.addEventListener("input", (event) => {
+        const target = event.target;
+        if (!target.closest(`[data-ballmat-side="${selectedSide}"]`) || target.disabled) {
+            return;
+        }
+        if (target.matches("[data-wave-count], [data-open-bays]")) {
+            const openBaysValue = target.closest(".neosektor-open-bay-control")?.querySelector("[data-open-bays-value]");
+            if (openBaysValue) {
+                openBaysValue.textContent = readNumber(target);
+            }
+            queueSave();
+        }
+    });
+
+    root.addEventListener("change", (event) => {
+        const target = event.target;
+        if (!target.closest(`[data-ballmat-side="${selectedSide}"]`) || target.disabled) {
+            return;
+        }
+        if (target.matches("[data-wave-status], [data-open-bays], [data-bay-status]")) {
+            queueSave();
+        }
+    });
+
+    window.setInterval(refreshState, 3000);
+})();
+</script>
+{% endblock %}

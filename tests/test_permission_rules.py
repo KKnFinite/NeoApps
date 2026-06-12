@@ -53,17 +53,15 @@ class PermissionRulesTest(unittest.TestCase):
                 "neoermac.door_view.view": "operator",
                 "neoermac.tug_assignments.edit": "master",
                 "neosektor.dashboard.view": "operator",
+                "neosektor.ballmat.edit": "operator",
+                "neosektor.ballmat.view": "operator",
                 "neosektor.discharge.edit": "operator",
                 "neosektor.discharge.view": "operator",
                 "neosektor.driver_routing.edit": "operator",
                 "neosektor.driver_routing.view": "watcher",
-                "neosektor.ebm.edit": "operator",
-                "neosektor.ebm.view": "operator",
                 "neosektor.live_counts.view": "watcher",
                 "neosektor.tunnel_conductor.edit": "operator",
                 "neosektor.tunnel_conductor.view": "operator",
-                "neosektor.wbm.edit": "operator",
-                "neosektor.wbm.view": "operator",
             },
         )
 
@@ -167,7 +165,8 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertFalse(user_can("neosektor.dashboard.view", watcher))
         self.assertTrue(user_can("neosektor.live_counts.view", watcher))
         self.assertTrue(user_can("neosektor.dashboard.view", operator))
-        self.assertTrue(user_can("neosektor.ebm.edit", operator))
+        self.assertTrue(user_can("neosektor.ballmat.view", operator))
+        self.assertTrue(user_can("neosektor.ballmat.edit", operator))
         self.assertTrue(user_can("neosektor.driver_routing.edit", operator))
 
     def test_lower_role_cannot_view_or_edit_door_view(self):

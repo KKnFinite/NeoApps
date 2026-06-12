@@ -8,6 +8,7 @@ from app.models.neoermac_building_lineup import NeoErmacBuildingLineup
 from app.models.neoermac_door_pull import NeoErmacDoorPull
 from app.models.neoermac_uld_request import NeoErmacUldRequest
 from app.models.neosektor_ballmat_count import NeoSektorBallmatCount
+from app.models.neosektor_ballmat_wave_count import NeoSektorBallmatWaveCount
 from app.models.neosektor_bay_status import NeoSektorBayStatus
 from app.models.neosektor_driver_route_setting import NeoSektorDriverRouteSetting
 from app.models.neosektor_open_bay_state import NeoSektorOpenBayState
@@ -37,6 +38,7 @@ __all__ = [
     "NeoSektorSortState",
     "NeoSektorWaveState",
     "NeoSektorBallmatCount",
+    "NeoSektorBallmatWaveCount",
     "NeoSektorOpenBayState",
     "NeoSektorBayStatus",
     "NeoSektorDriverRouteSetting",
