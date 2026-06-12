@@ -77,6 +77,85 @@ class NeoSektorRoutesTest(unittest.TestCase):
         ):
             self.assertIn(label, response.data)
 
+    def test_neosektor_role_access_matrix_matches_permission_defaults(self):
+        expectations = {
+            "watcher": {
+                "/neosektor": 200,
+                "/neosektor/live-counts": 200,
+                "/neosektor/driver-routing": 200,
+                "/neosektor/tunnel-conductor": 302,
+                "/neosektor/ebm": 302,
+                "/neosektor/wbm": 302,
+                "/neosektor/discharge": 302,
+            },
+            "operator": {
+                "/neosektor": 200,
+                "/neosektor/live-counts": 200,
+                "/neosektor/driver-routing": 200,
+                "/neosektor/tunnel-conductor": 302,
+                "/neosektor/ebm": 200,
+                "/neosektor/wbm": 200,
+                "/neosektor/discharge": 200,
+            },
+            "simulator": {
+                "/neosektor": 200,
+                "/neosektor/live-counts": 200,
+                "/neosektor/driver-routing": 200,
+                "/neosektor/tunnel-conductor": 200,
+                "/neosektor/ebm": 200,
+                "/neosektor/wbm": 200,
+                "/neosektor/discharge": 200,
+            },
+            "master": {
+                "/neosektor": 200,
+                "/neosektor/live-counts": 200,
+                "/neosektor/driver-routing": 200,
+                "/neosektor/tunnel-conductor": 200,
+                "/neosektor/ebm": 200,
+                "/neosektor/wbm": 200,
+                "/neosektor/discharge": 200,
+            },
+            "grandmaster": {
+                "/neosektor": 200,
+                "/neosektor/live-counts": 200,
+                "/neosektor/driver-routing": 200,
+                "/neosektor/tunnel-conductor": 200,
+                "/neosektor/ebm": 200,
+                "/neosektor/wbm": 200,
+                "/neosektor/discharge": 200,
+            },
+        }
+
+        for role, route_expectations in expectations.items():
+            with self.subTest(role=role):
+                self._login_approved_user(role=role)
+                for path, expected_status in route_expectations.items():
+                    response = self.client.get(path, follow_redirects=False)
+                    self.assertEqual(
+                        response.status_code,
+                        expected_status,
+                        f"{role} unexpected status for {path}",
+                    )
+                    if expected_status == 302:
+                        self.assertEqual(response.location, "/neosektor")
+
+    def test_neosektor_subpages_include_consistent_menu_return_navigation(self):
+        self._login_approved_user(role="simulator")
+
+        for path in (
+            "/neosektor/live-counts",
+            "/neosektor/tunnel-conductor",
+            "/neosektor/ebm",
+            "/neosektor/wbm",
+            "/neosektor/driver-routing",
+            "/neosektor/discharge",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b'href="/neosektor"', response.data)
+                self.assertIn(b'aria-label="BACK TO NeoSektor MENU"', response.data)
+
     def test_discharge_page_loads_for_operator(self):
         self._login_approved_user(role="operator")
         self._add_uld_request("D34", a2_count=2, a1_count=1, amp_count=0, setup_needed=True)

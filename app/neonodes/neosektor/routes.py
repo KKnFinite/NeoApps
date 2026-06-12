@@ -364,25 +364,6 @@ def driver_routing_update():
     return jsonify({"ok": True, "state": state})
 
 
-def _placeholder_page(title):
-    page = _page_by_title(title)
-    view_permission = page["view_permission"]
-    edit_permission = page["edit_permission"]
-    access = _neosektor_access(view_permission, edit_permission)
-    if not access["can_view"]:
-        flash("Access denied.", "error")
-        return redirect(url_for("neosektor.index"))
-
-    return render_template(
-        "neonodes/neosektor/placeholder.html",
-        gateway=get_current_gateway(),
-        title=title,
-        description=page["description"],
-        can_view=access["can_view"],
-        can_edit=access["can_edit"],
-    )
-
-
 def _page_by_title(title):
     for label, endpoint, view_permission, edit_permission, description in NEOSEKTOR_PAGES:
         if label == title:

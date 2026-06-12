@@ -24,6 +24,7 @@
 {% set uses_motherbrain_header = is_motherbrain_page or is_user_management_page or is_permission_management_page %}
 {% set is_neoermac_page = is_authenticated_app and request.blueprint == "neoermac" %}
 {% set is_neosektor_page = is_authenticated_app and request.blueprint == "neosektor" %}
+{% set is_neosektor_landing = is_neosektor_page and request.path.rstrip("/") == "/neosektor" %}
 {% set uses_node_header = uses_motherbrain_header or is_neoermac_page or is_neosektor_page %}
 {% set is_gateway_matrix_page = is_motherbrain_page and request.path.startswith("/motherbrain/gateway-matrix") %}
 {% set is_master_schedule_page = is_motherbrain_page and request.path.startswith("/motherbrain/master-schedule") %}
@@ -83,6 +84,7 @@
                 <nav class="nav motherbrain-header-nav" id="motherbrain-mobile-menu" aria-label="Primary" data-motherbrain-menu-panel>
                     {% if is_neosektor_page %}
                     <a class="motherbrain-nav-link motherbrain-nav-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="BACK TO NeoGateway">BACK TO <span class="brand-inline-name neo-node-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span></a>
+                    <a class="motherbrain-nav-link{% if is_neosektor_landing %} is-active{% endif %}" href="{{ url_for('neosektor.index') }}" {% if is_neosektor_landing %}aria-current="page"{% endif %} aria-label="NeoSektor menu"><span class="brand-inline-name neo-node-name node-sektor"><span class="neo-word">Neo</span><span class="node-word">Sektor</span></span> MENU</a>
                     <a class="motherbrain-nav-link{% if request.path.startswith('/neosektor/tunnel-conductor') %} is-active{% endif %}" href="{{ url_for('neosektor.tunnel_conductor') }}" {% if request.path.startswith('/neosektor/tunnel-conductor') %}aria-current="page"{% endif %}>TUNNEL CONDUCTOR</a>
                     <a class="motherbrain-nav-link{% if is_neosektor_ebm_page %} is-active{% endif %}" href="{{ url_for('neosektor.ebm') }}" {% if is_neosektor_ebm_page %}aria-current="page"{% endif %}>EBM</a>
                     <a class="motherbrain-nav-link{% if is_neosektor_wbm_page %} is-active{% endif %}" href="{{ url_for('neosektor.wbm') }}" {% if is_neosektor_wbm_page %}aria-current="page"{% endif %}>WBM</a>
@@ -132,6 +134,11 @@
             {% if uses_motherbrain_header and not is_motherbrain_landing %}
             <div class="motherbrain-main-menu-return">
                 <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}" aria-label="BACK TO NeoMotherBrain MAIN MENU">BACK TO <span class="neo-node-name neo-node-motherbrain node-motherbrain"><span class="neo-word">Neo</span><span class="node-word">MotherBrain</span></span> MAIN MENU</a>
+            </div>
+            {% endif %}
+            {% if is_neosektor_page and not is_neosektor_landing %}
+            <div class="motherbrain-main-menu-return node-main-menu-return">
+                <a class="action-button action-button-secondary" href="{{ url_for('neosektor.index') }}" aria-label="BACK TO NeoSektor MENU">BACK TO <span class="neo-node-name neo-node-sektor node-sektor"><span class="neo-word">Neo</span><span class="node-word">Sektor</span></span> MENU</a>
             </div>
             {% endif %}
         </main>

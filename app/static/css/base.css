@@ -5702,8 +5702,7 @@ select::-ms-expand {
         0 2px 0 rgba(0, 0, 0, 0.72);
 }
 
-.neosektor-hero p,
-.neosektor-placeholder-panel p {
+.neosektor-hero p {
     max-width: 680px;
     margin: 0;
     color: rgba(238, 246, 255, 0.74);
@@ -5766,8 +5765,7 @@ select::-ms-expand {
         0 0 16px rgba(var(--node-sektor-primary-rgb), 0.16);
 }
 
-.neosektor-overview-panel,
-.neosektor-placeholder-panel {
+.neosektor-overview-panel {
     display: grid;
     justify-items: center;
     gap: 18px;
@@ -7080,7 +7078,6 @@ select::-ms-expand {
     }
 
     .neosektor-overview-panel,
-    .neosektor-placeholder-panel,
     .neosektor-live-panel {
         width: 100%;
     }
