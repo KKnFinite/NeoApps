@@ -55,6 +55,66 @@ DEFAULT_PERMISSION_RULES = (
         "master",
         "Edit NeoErmac Tug Assignments.",
     ),
+    (
+        "neosektor.dashboard.view",
+        "operator",
+        "View NeoSektor dashboard screens.",
+    ),
+    (
+        "neosektor.tunnel_conductor.view",
+        "operator",
+        "View NeoSektor Tunnel Conductor screens.",
+    ),
+    (
+        "neosektor.tunnel_conductor.edit",
+        "operator",
+        "Edit NeoSektor Tunnel Conductor screens.",
+    ),
+    (
+        "neosektor.ebm.view",
+        "operator",
+        "View NeoSektor EBM screens.",
+    ),
+    (
+        "neosektor.ebm.edit",
+        "operator",
+        "Edit NeoSektor EBM screens.",
+    ),
+    (
+        "neosektor.wbm.view",
+        "operator",
+        "View NeoSektor WBM screens.",
+    ),
+    (
+        "neosektor.wbm.edit",
+        "operator",
+        "Edit NeoSektor WBM screens.",
+    ),
+    (
+        "neosektor.discharge.view",
+        "operator",
+        "View NeoSektor Discharge screens.",
+    ),
+    (
+        "neosektor.discharge.edit",
+        "operator",
+        "Edit NeoSektor Discharge screens.",
+    ),
+    (
+        "neosektor.live_counts.view",
+        "watcher",
+        "View NeoSektor live counts screens.",
+    ),
+    (
+        "neosektor.driver_routing.view",
+        "watcher",
+        "View NeoSektor Driver Routing screens.",
+    ),
+    (
+        "neosektor.driver_routing.edit",
+        "operator",
+        "Edit NeoSektor Driver Routing screens.",
+    ),
 )
 
 PERMISSION_RULE_GROUPS = (

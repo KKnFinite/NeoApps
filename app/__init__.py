@@ -210,11 +210,13 @@ def register_blueprints(app):
     from app.neomotherbrain import bp as neomotherbrain_bp
     from app.neonodes import bp as neonodes_bp
     from app.neonodes.neoermac import bp as neoermac_bp
+    from app.neonodes.neosektor import bp as neosektor_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(neomotherbrain_bp)
     app.register_blueprint(neonodes_bp, url_prefix="/nodes")
     app.register_blueprint(neoermac_bp, url_prefix="/neoermac")
+    app.register_blueprint(neosektor_bp, url_prefix="/neosektor")
 
 
 def _fallback_chicago_datetime(utc_datetime):

@@ -98,6 +98,18 @@ class DatabaseBootstrapTest(unittest.TestCase):
                 "neoermac.door_view.edit": "operator",
                 "neoermac.door_view.view": "operator",
                 "neoermac.tug_assignments.edit": "master",
+                "neosektor.dashboard.view": "operator",
+                "neosektor.discharge.edit": "operator",
+                "neosektor.discharge.view": "operator",
+                "neosektor.driver_routing.edit": "operator",
+                "neosektor.driver_routing.view": "watcher",
+                "neosektor.ebm.edit": "operator",
+                "neosektor.ebm.view": "operator",
+                "neosektor.live_counts.view": "watcher",
+                "neosektor.tunnel_conductor.edit": "operator",
+                "neosektor.tunnel_conductor.view": "operator",
+                "neosektor.wbm.edit": "operator",
+                "neosektor.wbm.view": "operator",
             },
         )
 
@@ -144,7 +156,7 @@ class DatabaseBootstrapTest(unittest.TestCase):
         self.assertFalse(second_result["password_applied"])
         self.assertEqual(Gateway.query.filter_by(code="RFD").count(), 1)
         self.assertEqual(NeoNode.query.count(), len(DEFAULT_NEONODES))
-        self.assertEqual(PermissionRule.query.count(), 9)
+        self.assertEqual(PermissionRule.query.count(), 21)
         self.assertEqual(User.query.filter_by(username="Kessler").count(), 1)
         self.assertEqual(GatewayMembership.query.filter_by(user_id=user.id).count(), 1)
         self.assertEqual(

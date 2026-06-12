@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}NeoSektor | NeoGateway{% endblock %}
+
+{% block content %}
+<section class="neosektor-shell neosektor-dashboard-shell" aria-label="NeoSektor dashboard">
+    <div class="neosektor-hero">
+        <span class="neosektor-kicker">{{ gateway.code }} NEONODE FOUNDATION</span>
+        <h1>
+            <span class="neo-node-name neo-node-sektor node-sektor" aria-label="NeoSektor"><span class="neo-word">Neo</span><span class="node-word">Sektor</span></span>
+        </h1>
+        <p>NeoGateway NeoSektor shell is ready for the future database-backed operation screens.</p>
+    </div>
+
+    <nav class="neosektor-menu" aria-label="NeoSektor menu">
+        {% for label, endpoint, _view_permission, _edit_permission, _description in menu_items %}
+        <a class="neosektor-menu-link" href="{{ url_for(endpoint) }}">{{ label }}</a>
+        {% endfor %}
+    </nav>
+
+    <section class="neosektor-overview-panel" aria-label="NeoSektor foundation status">
+        <h2>FOUNDATION STATUS</h2>
+        <div class="neosektor-overview-grid">
+            <div>
+                <span>ACTIVE GATEWAY</span>
+                <strong>{{ gateway.code }}</strong>
+            </div>
+            <div>
+                <span>DATA STORE</span>
+                <strong>NEON READY</strong>
+            </div>
+            <div>
+                <span>STANDALONE</span>
+                <strong>UNCHANGED</strong>
+            </div>
+        </div>
+    </section>
+</section>
+{% endblock %}
