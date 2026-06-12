@@ -120,13 +120,19 @@ def apply_belt_display_metadata(row, start_door, end_door, belt_names):
     row.door_end = end_door
     row.belt_names = belt_names
     row.belt_group_label = f"{start_door}-{end_door}"
-    row.east_slots = (
-        {"belt": first_belt, "field": "east_destination_1"},
-        {"belt": second_belt, "field": "east_destination_2"},
-    )
-    row.west_slots = (
-        {"belt": first_belt, "field": "west_destination_1"},
-        {"belt": second_belt, "field": "west_destination_2"},
+    row.belt_rows = (
+        {
+            "position": "NORTH BELT",
+            "belt": second_belt,
+            "east_field": "east_destination_2",
+            "west_field": "west_destination_2",
+        },
+        {
+            "position": "SOUTH BELT",
+            "belt": first_belt,
+            "east_field": "east_destination_1",
+            "west_field": "west_destination_1",
+        },
     )
     row.slot_labels = {
         "east_destination_1": f"EAST {first_belt} BELT",

@@ -5176,3 +5176,112 @@ select::-ms-expand {
         font-size: 0.82rem;
     }
 }
+
+.neoermac-sequence-door {
+    display: grid;
+    place-items: center;
+    min-height: 44px;
+    border: 1px solid rgba(255, 225, 230, 0.34);
+    border-radius: 6px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.15), transparent 26%),
+        linear-gradient(180deg, #d73343 0%, #991725 52%, #5d0810 100%);
+    color: #fff8f9;
+    font-size: clamp(1.08rem, 2.1vw, 1.42rem);
+    font-weight: 950;
+    letter-spacing: 0.14em;
+    text-align: center;
+    text-shadow:
+        0 0 14px rgba(255, 255, 255, 0.3),
+        0 2px 0 rgba(0, 0, 0, 0.72);
+}
+
+.neoermac-runout-card.neoermac-belt-group .neoermac-belt-section-title {
+    display: grid;
+    place-items: center;
+    min-height: 30px;
+    margin: 0;
+    padding: 5px 10px;
+    border-bottom: 1px solid rgba(255, 225, 230, 0.18);
+    background:
+        linear-gradient(90deg, rgba(255, 31, 55, 0.14), rgba(54, 226, 123, 0.07), rgba(255, 31, 55, 0.14)),
+        rgba(7, 8, 11, 0.82);
+    color: rgba(238, 246, 255, 0.82);
+    font-size: 0.66rem;
+    font-weight: 950;
+    letter-spacing: 0.14em;
+    text-align: center;
+    text-transform: uppercase;
+    writing-mode: horizontal-tb;
+    transform: none;
+}
+
+.neoermac-belt-row {
+    grid-template-columns: minmax(124px, 0.48fr) repeat(2, minmax(170px, 1fr));
+}
+
+.neoermac-belt-name {
+    display: grid;
+    place-items: center;
+    gap: 4px;
+    min-height: 58px;
+    padding: 8px;
+    border-right: 2px solid rgba(116, 19, 29, 0.34);
+    border-bottom: 1px solid rgba(116, 19, 29, 0.24);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 34%),
+        linear-gradient(180deg, #f4c8d0 0%, #e6929f 100%);
+    color: #52070d;
+    text-align: center;
+}
+
+.neoermac-belt-name span {
+    font-size: 0.62rem;
+    font-weight: 950;
+    letter-spacing: 0.1em;
+}
+
+.neoermac-belt-name strong {
+    font-size: 0.9rem;
+    font-weight: 950;
+    letter-spacing: 0.04em;
+    line-height: 1.05;
+}
+
+.neoermac-belt-row:last-child .neoermac-belt-name {
+    border-bottom: 0;
+}
+
+@media (min-width: 761px) {
+    .neoermac-belt-row {
+        grid-template-columns: minmax(160px, 0.45fr) repeat(2, minmax(240px, 1fr));
+    }
+}
+
+@media (max-width: 760px) {
+    .neoermac-sequence-door {
+        min-height: 38px;
+        font-size: 1rem;
+    }
+
+    .neoermac-belt-grid {
+        min-width: 520px;
+    }
+
+    .neoermac-belt-row {
+        grid-template-columns: minmax(118px, 0.46fr) repeat(2, minmax(170px, 1fr));
+    }
+
+    .neoermac-belt-name {
+        min-height: 54px;
+        padding: 7px 6px;
+    }
+
+    .neoermac-belt-name span {
+        font-size: 0.56rem;
+    }
+
+    .neoermac-belt-name strong {
+        font-size: 0.78rem;
+    }
+}

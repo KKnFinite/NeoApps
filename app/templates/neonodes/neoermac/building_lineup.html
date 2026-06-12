@@ -21,31 +21,46 @@
     <form class="neoermac-lineup-form" method="post">
         <div class="neoermac-runout-list">
             {% for row in rows %}
+            {% if loop.first %}
+            <div class="neoermac-sequence-door">{{ row.door_start }}</div>
+            {% endif %}
             <article class="neoermac-runout-card neoermac-belt-group">
-                <h2 class="neoermac-door-bar">{{ row.door_start }} - {{ row.door_end }}</h2>
+                <h2 class="neoermac-belt-section-title">BELT SECTION</h2>
 
                 <div class="neoermac-belt-grid-scroll">
                     <div class="neoermac-runout-slots neoermac-belt-grid" aria-label="{{ row.belt_group_label }} belt assignments">
-                        {% for side_label, slots in [("E", row.east_slots), ("W", row.west_slots)] %}
+                        {% for belt_row in row.belt_rows %}
                         <div class="neoermac-belt-row">
-                            <div class="neoermac-side-label">{{ side_label }}</div>
-                            {% for slot in slots %}
-                            {% set selected_value = row|attr(slot.field) %}
+                            <div class="neoermac-belt-name">
+                                <span>{{ belt_row.position }}</span>
+                                <strong>{{ belt_row.belt }}</strong>
+                            </div>
+                            {% set east_value = row|attr(belt_row.east_field) %}
+                            {% set west_value = row|attr(belt_row.west_field) %}
                             <label class="neoermac-slot neoermac-belt-cell">
-                                <span class="neoermac-belt-label">{{ slot.belt }}</span>
-                                <select class="neoermac-destination-select" name="{{ field_name(row, slot.field) }}" {% if not can_edit %}disabled{% endif %}>
+                                <span class="neoermac-belt-label">EAST SIDE</span>
+                                <select class="neoermac-destination-select" name="{{ field_name(row, belt_row.east_field) }}" {% if not can_edit %}disabled{% endif %}>
                                     <option value=""></option>
                                     {% for destination in destination_choices %}
-                                    <option value="{{ destination }}" {% if selected_value == destination %}selected{% endif %}>{{ destination }}</option>
+                                    <option value="{{ destination }}" {% if east_value == destination %}selected{% endif %}>{{ destination }}</option>
                                     {% endfor %}
                                 </select>
                             </label>
-                            {% endfor %}
+                            <label class="neoermac-slot neoermac-belt-cell">
+                                <span class="neoermac-belt-label">WEST SIDE</span>
+                                <select class="neoermac-destination-select" name="{{ field_name(row, belt_row.west_field) }}" {% if not can_edit %}disabled{% endif %}>
+                                    <option value=""></option>
+                                    {% for destination in destination_choices %}
+                                    <option value="{{ destination }}" {% if west_value == destination %}selected{% endif %}>{{ destination }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
                         </div>
                         {% endfor %}
                     </div>
                 </div>
             </article>
+            <div class="neoermac-sequence-door">{{ row.door_end }}</div>
             {% endfor %}
         </div>
 
