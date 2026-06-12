@@ -36,7 +36,7 @@
         <div class="rfd-node-grid" aria-label="{{ gateway.code }} NeoNodes">
             <div class="rfd-node-column rfd-node-column-left" aria-label="{{ gateway.code }} left NeoNodes">
                 {% if can_launch_sektor %}
-                <a class="rfd-node-tile rfd-node-sektor" href="{{ url_for('neomotherbrain.sektor_launch') }}" aria-label="NeoSektor">
+                <a class="rfd-node-tile rfd-node-sektor" href="{{ url_for('neosektor.index') }}" aria-label="NeoSektor">
                     {{ node_label("sektor", "Sektor") }}
                 </a>
                 {% else %}

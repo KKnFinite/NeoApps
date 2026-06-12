@@ -5831,9 +5831,232 @@ select::-ms-expand {
     text-transform: uppercase;
 }
 
+.neosektor-live-shell {
+    width: min(100%, 980px);
+    gap: clamp(14px, 3vw, 22px);
+}
+
+.neosektor-live-hero h1 {
+    font-size: clamp(2.2rem, 7vw, 4.8rem);
+}
+
+.neosektor-live-panel {
+    display: grid;
+    gap: 14px;
+    width: min(100%, 880px);
+    padding: clamp(14px, 3vw, 24px);
+    border: 1px solid rgba(244, 246, 248, 0.22);
+    border-radius: 8px;
+    background:
+        radial-gradient(circle at 50% 0%, rgba(var(--node-sektor-primary-rgb), 0.15), transparent 16rem),
+        linear-gradient(135deg, rgba(244, 246, 248, 0.07), transparent 36%),
+        linear-gradient(180deg, rgba(15, 17, 21, 0.96), rgba(4, 6, 9, 0.98));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 0 24px rgba(var(--node-sektor-primary-rgb), 0.14);
+}
+
+.neosektor-live-panel h2 {
+    margin: 0;
+    color: var(--node-sektor-highlight);
+    font-size: clamp(0.92rem, 2vw, 1.12rem);
+    font-weight: 950;
+    letter-spacing: 0.14em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.neosektor-live-summary-head,
+.neosektor-live-totals,
+.neosektor-wave-grid,
+.neosektor-ballmat-grid,
+.neosektor-open-bay-grid {
+    display: grid;
+    gap: 10px;
+    width: 100%;
+}
+
+.neosektor-live-summary-head {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.neosektor-live-totals {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.neosektor-wave-grid,
+.neosektor-ballmat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.neosektor-open-bay-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.neosektor-live-summary-head > div,
+.neosektor-live-totals > div,
+.neosektor-live-card,
+.neosektor-bay-status-row {
+    border: 1px solid rgba(244, 246, 248, 0.17);
+    border-radius: 7px;
+    background:
+        linear-gradient(180deg, rgba(244, 246, 248, 0.08), transparent 42%),
+        linear-gradient(180deg, rgba(31, 35, 41, 0.92), rgba(7, 8, 11, 0.95));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.neosektor-live-summary-head > div,
+.neosektor-live-totals > div {
+    display: grid;
+    justify-items: center;
+    gap: 7px;
+    min-height: 76px;
+    padding: 12px 10px;
+    text-align: center;
+}
+
+.neosektor-live-summary-head span,
+.neosektor-live-totals span,
+.neosektor-live-card dt,
+.neosektor-bay-status-row span {
+    color: rgba(238, 246, 255, 0.64);
+    font-size: 0.62rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    line-height: 1.15;
+    text-transform: uppercase;
+}
+
+.neosektor-live-summary-head strong,
+.neosektor-live-totals strong {
+    color: #fff;
+    font-size: clamp(0.98rem, 2.2vw, 1.38rem);
+    font-weight: 950;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.neosektor-live-card {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+}
+
+.neosektor-live-card header,
+.neosektor-bay-status-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+}
+
+.neosektor-live-card header span {
+    color: #fff;
+    font-size: 0.86rem;
+    font-weight: 950;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.neosektor-live-card dl {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+}
+
+.neosektor-live-card dl div {
+    display: grid;
+    justify-items: center;
+    gap: 5px;
+    min-height: 56px;
+    padding: 8px;
+    border: 1px solid rgba(244, 246, 248, 0.12);
+    border-radius: 6px;
+    background: rgba(3, 5, 8, 0.42);
+}
+
+.neosektor-live-card dt,
+.neosektor-live-card dd {
+    margin: 0;
+}
+
+.neosektor-live-card dd {
+    color: #fff;
+    font-size: 1.12rem;
+    font-weight: 950;
+    line-height: 1;
+}
+
+.neosektor-bay-status-grid {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+}
+
+.neosektor-bay-status-row {
+    min-height: 48px;
+    padding: 10px 12px;
+}
+
+.neosektor-bay-status-row strong {
+    justify-self: end;
+}
+
+.neosektor-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 86px;
+    padding: 6px 9px;
+    border: 1px solid rgba(244, 246, 248, 0.2);
+    border-radius: 999px;
+    background: rgba(6, 7, 10, 0.82);
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.neosektor-status-empty {
+    border-color: rgba(244, 246, 248, 0.24);
+    color: rgba(238, 246, 255, 0.84);
+}
+
+.neosektor-status-light {
+    border-color: rgba(112, 225, 59, 0.52);
+    color: #b6ff2e;
+}
+
+.neosektor-status-moderate {
+    border-color: rgba(240, 163, 58, 0.6);
+    color: #f0a33a;
+}
+
+.neosektor-status-full {
+    border-color: rgba(var(--node-sektor-primary-rgb), 0.66);
+    color: var(--node-sektor-primary);
+}
+
+.neosektor-status-overflowing {
+    border-color: rgba(255, 74, 28, 0.74);
+    background: rgba(181, 18, 27, 0.18);
+    color: #ff4a1c;
+    box-shadow: 0 0 14px rgba(255, 74, 28, 0.16);
+}
+
 @media (max-width: 760px) {
     .neosektor-menu,
-    .neosektor-overview-grid {
+    .neosektor-overview-grid,
+    .neosektor-live-summary-head,
+    .neosektor-live-totals,
+    .neosektor-wave-grid,
+    .neosektor-ballmat-grid,
+    .neosektor-open-bay-grid {
         grid-template-columns: 1fr;
     }
 
@@ -5843,7 +6066,12 @@ select::-ms-expand {
     }
 
     .neosektor-overview-panel,
-    .neosektor-placeholder-panel {
+    .neosektor-placeholder-panel,
+    .neosektor-live-panel {
         width: 100%;
+    }
+
+    .neosektor-live-card dl {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }

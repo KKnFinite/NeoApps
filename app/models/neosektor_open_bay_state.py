@@ -1,0 +1,33 @@
+from datetime import datetime
+
+from app.extensions import db
+
+
+class NeoSektorOpenBayState(db.Model):
+    __tablename__ = "neosektor_open_bay_states"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "sort_state_id",
+            "side",
+            name="uq_neosektor_open_bay_states_sort_side",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    sort_state_id = db.Column(
+        db.Integer,
+        db.ForeignKey("neosektor_sort_states.id"),
+        nullable=False,
+        index=True,
+    )
+    side = db.Column(db.String(16), nullable=False, index=True)
+    open_count = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    sort_state = db.relationship("NeoSektorSortState", backref="open_bay_states")

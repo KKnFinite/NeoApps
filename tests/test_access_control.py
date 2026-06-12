@@ -16,6 +16,7 @@ from app.services.access_control import (
     user_can_access_node,
     user_has_gateway_access,
 )
+from app.services.permission_rules import ensure_default_permission_rules
 
 
 class AccessControlTest(unittest.TestCase):
@@ -34,6 +35,7 @@ class AccessControlTest(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
+        ensure_default_permission_rules()
 
     def tearDown(self):
         db.session.remove()
@@ -262,10 +264,14 @@ class AccessControlTest(unittest.TestCase):
 
         hub = client.get("/rfd")
         launch = client.get("/rfd/sektor", follow_redirects=False)
+        internal_dashboard = client.get("/neosektor")
 
         self.assertEqual(hub.status_code, 200)
         self.assertIn(b"NeoSektor", hub.data)
-        self.assertIn(b'href="/rfd/sektor"', hub.data)
+        self.assertIn(b'href="/neosektor"', hub.data)
+        self.assertNotIn(b'href="/rfd/sektor"', hub.data)
+        self.assertEqual(internal_dashboard.status_code, 200)
+        self.assertIn(b"NeoSektor", internal_dashboard.data)
         self.assertEqual(launch.status_code, 302)
         self.assertEqual(launch.location, "https://neosektor.onrender.com/")
 

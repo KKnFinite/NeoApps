@@ -1,8 +1,10 @@
 from flask import flash, redirect, render_template, url_for
 
 from app.auth.decorators import gateway_node_required
+from app.extensions import db
 from app.neonodes.neosektor import bp
 from app.services.access_control import get_current_gateway
+from app.services.neosektor_live_counts import live_counts_context
 from app.services.permission_rules import permission_access
 
 
@@ -58,7 +60,8 @@ NEOSEKTOR_PAGES = (
 @gateway_node_required("sektor")
 def index():
     access = permission_access(DASHBOARD_VIEW_PERMISSION)
-    if not access["can_view"]:
+    live_counts_access = permission_access("neosektor.live_counts.view")
+    if not access["can_view"] and not live_counts_access["can_view"]:
         flash("Access denied.", "error")
         return redirect(url_for("neomotherbrain.rfd_hub"))
 
@@ -102,7 +105,21 @@ def discharge():
 @bp.route("/live-counts")
 @gateway_node_required("sektor")
 def live_counts():
-    return _placeholder_page("VIEW LIVE COUNTS")
+    page = _page_by_title("VIEW LIVE COUNTS")
+    access = permission_access(page["view_permission"])
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neosektor.index"))
+
+    gateway = get_current_gateway()
+    context = live_counts_context(gateway)
+    db.session.commit()
+    return render_template(
+        "neonodes/neosektor/live_counts.html",
+        gateway=gateway,
+        can_view=access["can_view"],
+        **context,
+    )
 
 
 @bp.route("/driver-routing")
