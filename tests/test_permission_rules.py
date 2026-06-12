@@ -52,16 +52,14 @@ class PermissionRulesTest(unittest.TestCase):
                 "neoermac.door_view.edit": "operator",
                 "neoermac.door_view.view": "operator",
                 "neoermac.tug_assignments.edit": "master",
-                "neosektor.dashboard.view": "operator",
+                "neosektor.conductor.view": "simulator",
                 "neosektor.discharge.edit": "operator",
                 "neosektor.discharge.view": "operator",
                 "neosektor.driver_routing.edit": "operator",
                 "neosektor.driver_routing.view": "watcher",
                 "neosektor.ebm.edit": "operator",
                 "neosektor.ebm.view": "operator",
-                "neosektor.live_counts.view": "watcher",
-                "neosektor.tunnel_conductor.edit": "operator",
-                "neosektor.tunnel_conductor.view": "operator",
+                "neosektor.tunnel_conductor.edit": "simulator",
                 "neosektor.wbm.edit": "operator",
                 "neosektor.wbm.view": "operator",
             },
@@ -163,10 +161,12 @@ class PermissionRulesTest(unittest.TestCase):
     def test_neosektor_rules_are_grouped_and_use_existing_role_order(self):
         watcher = self._user_with_node_role("sektor_watcher", "sektor", "watcher")
         operator = self._user_with_node_role("sektor_operator", "sektor", "operator")
+        simulator = self._user_with_node_role("sektor_simulator", "sektor", "simulator")
 
-        self.assertFalse(user_can("neosektor.dashboard.view", watcher))
-        self.assertTrue(user_can("neosektor.live_counts.view", watcher))
-        self.assertTrue(user_can("neosektor.dashboard.view", operator))
+        self.assertFalse(user_can("neosektor.conductor.view", watcher))
+        self.assertFalse(user_can("neosektor.conductor.view", operator))
+        self.assertTrue(user_can("neosektor.conductor.view", simulator))
+        self.assertTrue(user_can("neosektor.tunnel_conductor.edit", simulator))
         self.assertTrue(user_can("neosektor.ebm.view", operator))
         self.assertTrue(user_can("neosektor.ebm.edit", operator))
         self.assertTrue(user_can("neosektor.wbm.view", operator))

@@ -56,11 +56,6 @@ DEFAULT_PERMISSION_RULES = (
         "Edit NeoErmac Tug Assignments.",
     ),
     (
-        "neosektor.dashboard.view",
-        "operator",
-        "View NeoSektor dashboard screens.",
-    ),
-    (
         "neosektor.ebm.view",
         "operator",
         "View NeoSektor EBM Ballmat Operations screens.",
@@ -81,13 +76,13 @@ DEFAULT_PERMISSION_RULES = (
         "Edit NeoSektor WBM Ballmat Operations counts and bay status.",
     ),
     (
-        "neosektor.tunnel_conductor.view",
-        "operator",
+        "neosektor.conductor.view",
+        "simulator",
         "View NeoSektor Tunnel Conductor screens.",
     ),
     (
         "neosektor.tunnel_conductor.edit",
-        "operator",
+        "simulator",
         "Edit NeoSektor Tunnel Conductor screens.",
     ),
     (
@@ -99,11 +94,6 @@ DEFAULT_PERMISSION_RULES = (
         "neosektor.discharge.edit",
         "operator",
         "Edit NeoSektor Discharge screens.",
-    ),
-    (
-        "neosektor.live_counts.view",
-        "watcher",
-        "View NeoSektor live counts screens.",
     ),
     (
         "neosektor.driver_routing.view",

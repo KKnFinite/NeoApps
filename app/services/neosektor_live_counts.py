@@ -39,7 +39,7 @@ DEFAULT_DRIVER_ROUTES = (
     DRIVER_ROUTE_SECOND_WAVE_NAME,
     DRIVER_ROUTE_WEST_OFFSET_NAME,
 )
-TUNNEL_CONDUCTOR_VIEW_PERMISSION = "neosektor.tunnel_conductor.view"
+TUNNEL_CONDUCTOR_VIEW_PERMISSION = "neosektor.conductor.view"
 TUNNEL_CONDUCTOR_EDIT_PERMISSION = "neosektor.tunnel_conductor.edit"
 
 

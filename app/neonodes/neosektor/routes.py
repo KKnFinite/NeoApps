@@ -18,10 +18,9 @@ from app.services.neosektor_live_counts import (
     update_driver_routing_settings,
     update_ballmat_side,
 )
-from app.services.permission_rules import permission_access
+from app.services.permission_rules import user_can
 
 
-DASHBOARD_VIEW_PERMISSION = "neosektor.dashboard.view"
 EBM_VIEW_PERMISSION = "neosektor.ebm.view"
 EBM_EDIT_PERMISSION = "neosektor.ebm.edit"
 WBM_VIEW_PERMISSION = "neosektor.wbm.view"
@@ -59,7 +58,7 @@ NEOSEKTOR_PAGES = (
     (
         "VIEW LIVE COUNTS",
         "neosektor.live_counts",
-        "neosektor.live_counts.view",
+        None,
         None,
         "Read-only live counts foundation.",
     ),
@@ -76,12 +75,6 @@ NEOSEKTOR_PAGES = (
 @bp.route("")
 @gateway_node_required("sektor")
 def index():
-    access = permission_access(DASHBOARD_VIEW_PERMISSION)
-    live_counts_access = permission_access("neosektor.live_counts.view")
-    if not access["can_view"] and not live_counts_access["can_view"]:
-        flash("Access denied.", "error")
-        return redirect(url_for("neomotherbrain.rfd_hub"))
-
     return render_template(
         "neonodes/neosektor/index.html",
         gateway=get_current_gateway(),
@@ -98,7 +91,7 @@ def index_slash():
 @bp.route("/tunnel-conductor")
 @gateway_node_required("sektor")
 def tunnel_conductor():
-    access = permission_access(
+    access = _neosektor_access(
         TUNNEL_CONDUCTOR_VIEW_PERMISSION,
         TUNNEL_CONDUCTOR_EDIT_PERMISSION,
     )
@@ -121,7 +114,7 @@ def tunnel_conductor():
 @bp.route("/tunnel-conductor/state")
 @gateway_node_required("sektor")
 def tunnel_conductor_state():
-    access = permission_access(
+    access = _neosektor_access(
         TUNNEL_CONDUCTOR_VIEW_PERMISSION,
         TUNNEL_CONDUCTOR_EDIT_PERMISSION,
     )
@@ -136,7 +129,7 @@ def tunnel_conductor_state():
 @bp.route("/tunnel-conductor/delta", methods=["POST"])
 @gateway_node_required("sektor")
 def tunnel_conductor_delta():
-    access = permission_access(
+    access = _neosektor_access(
         TUNNEL_CONDUCTOR_VIEW_PERMISSION,
         TUNNEL_CONDUCTOR_EDIT_PERMISSION,
     )
@@ -235,19 +228,13 @@ def discharge():
 @bp.route("/live-counts")
 @gateway_node_required("sektor")
 def live_counts():
-    page = _page_by_title("VIEW LIVE COUNTS")
-    access = permission_access(page["view_permission"])
-    if not access["can_view"]:
-        flash("Access denied.", "error")
-        return redirect(url_for("neosektor.index"))
-
     gateway = get_current_gateway()
     context = live_counts_context(gateway)
     db.session.commit()
     return render_template(
         "neonodes/neosektor/live_counts.html",
         gateway=gateway,
-        can_view=access["can_view"],
+        can_view=True,
         **context,
     )
 
@@ -256,7 +243,7 @@ def live_counts():
 @gateway_node_required("sektor")
 def driver_routing():
     page = _page_by_title("DRIVER ROUTING")
-    access = permission_access(page["view_permission"], page["edit_permission"])
+    access = _neosektor_access(page["view_permission"], page["edit_permission"])
     if not access["can_view"]:
         flash("Access denied.", "error")
         return redirect(url_for("neosektor.index"))
@@ -277,7 +264,7 @@ def driver_routing():
 @gateway_node_required("sektor")
 def driver_routing_state():
     page = _page_by_title("DRIVER ROUTING")
-    access = permission_access(page["view_permission"], page["edit_permission"])
+    access = _neosektor_access(page["view_permission"], page["edit_permission"])
     if not access["can_view"]:
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
@@ -290,7 +277,7 @@ def driver_routing_state():
 @gateway_node_required("sektor")
 def driver_routing_update():
     page = _page_by_title("DRIVER ROUTING")
-    access = permission_access(page["view_permission"], page["edit_permission"])
+    access = _neosektor_access(page["view_permission"], page["edit_permission"])
     if not access["can_edit"]:
         return jsonify({"ok": False, "error": "Edit access denied."}), 403
 
@@ -304,7 +291,7 @@ def _placeholder_page(title):
     page = _page_by_title(title)
     view_permission = page["view_permission"]
     edit_permission = page["edit_permission"]
-    access = permission_access(view_permission, edit_permission)
+    access = _neosektor_access(view_permission, edit_permission)
     if not access["can_view"]:
         flash("Access denied.", "error")
         return redirect(url_for("neosektor.index"))
@@ -340,7 +327,17 @@ def _selected_ballmat_side():
 
 def _ballmat_access(side):
     view_permission, edit_permission = _ballmat_permission_keys(side)
-    return permission_access(view_permission, edit_permission)
+    return _neosektor_access(view_permission, edit_permission)
+
+
+def _neosektor_access(view_permission, edit_permission=None):
+    can_view = True if not view_permission else user_can(view_permission)
+    can_edit = bool(edit_permission and can_view and user_can(edit_permission))
+
+    return {
+        "can_view": can_view,
+        "can_edit": can_edit,
+    }
 
 
 def _can_view_any_ballmat():

@@ -329,7 +329,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b'aria-current="page"', driver_routing.data)
 
     def test_tunnel_conductor_loads_for_view_authorized_user(self):
-        self._login_approved_user(role="operator")
+        self._login_approved_user(role="simulator")
 
         response = self.client.get("/neosektor/tunnel-conductor")
 
@@ -341,15 +341,6 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
 
     def test_tunnel_conductor_blocks_user_without_view_permission(self):
-        view_rule = PermissionRule.query.filter_by(
-            permission_key="neosektor.tunnel_conductor.view"
-        ).one()
-        edit_rule = PermissionRule.query.filter_by(
-            permission_key="neosektor.tunnel_conductor.edit"
-        ).one()
-        view_rule.minimum_role = "simulator"
-        edit_rule.minimum_role = "simulator"
-        db.session.commit()
         self._login_approved_user(role="operator")
 
         response = self.client.get("/neosektor/tunnel-conductor", follow_redirects=False)
@@ -361,9 +352,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
         edit_rule = PermissionRule.query.filter_by(
             permission_key="neosektor.tunnel_conductor.edit"
         ).one()
-        edit_rule.minimum_role = "simulator"
+        edit_rule.minimum_role = "master"
         db.session.commit()
-        self._login_approved_user(role="operator")
+        self._login_approved_user(role="simulator")
 
         response = self.client.post(
             "/neosektor/tunnel-conductor/delta",
@@ -374,7 +365,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 0)
 
     def test_tunnel_conductor_delta_updates_east_first_wave(self):
-        self._login_approved_user(role="operator")
+        self._login_approved_user(role="simulator")
 
         response = self.client.post(
             "/neosektor/tunnel-conductor/delta",
@@ -391,7 +382,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
 
     def test_tunnel_conductor_delta_updates_east_second_wave(self):
-        self._login_approved_user(role="operator")
+        self._login_approved_user(role="simulator")
 
         response = self.client.post(
             "/neosektor/tunnel-conductor/delta",
@@ -408,7 +399,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
 
     def test_tunnel_conductor_delta_updates_west_first_wave(self):
-        self._login_approved_user(role="operator")
+        self._login_approved_user(role="simulator")
 
         response = self.client.post(
             "/neosektor/tunnel-conductor/delta",
@@ -425,7 +416,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
 
     def test_tunnel_conductor_delta_updates_west_second_wave(self):
-        self._login_approved_user(role="operator")
+        self._login_approved_user(role="simulator")
 
         response = self.client.post(
             "/neosektor/tunnel-conductor/delta",
@@ -442,7 +433,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
 
     def test_tunnel_conductor_delta_counts_cannot_go_below_zero(self):
-        self._login_approved_user(role="operator")
+        self._login_approved_user(role="simulator")
 
         response = self.client.post(
             "/neosektor/tunnel-conductor/delta",
@@ -461,7 +452,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
 
     def test_tunnel_conductor_delta_updates_shared_live_state(self):
-        self._login_approved_user(role="operator")
+        self._login_approved_user(role="simulator")
 
         response = self.client.post(
             "/neosektor/tunnel-conductor/delta",
@@ -480,7 +471,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"<span>UNLOADED</span><strong>4</strong>", live_counts.data)
 
     def test_neosektor_dashboard_and_header_link_to_real_tunnel_conductor(self):
-        self._login_approved_user(role="operator")
+        self._login_approved_user(role="simulator")
 
         dashboard = self.client.get("/neosektor")
         tunnel = self.client.get("/neosektor/tunnel-conductor")
@@ -731,20 +722,37 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b'href="/neosektor/live-counts"', live_counts.data)
         self.assertIn(b'aria-current="page"', live_counts.data)
 
-    def test_watcher_can_open_dashboard_and_live_counts_but_not_operator_pages(self):
+    def test_watcher_can_open_dashboard_and_live_counts_without_special_view_keys(self):
         self._login_approved_user(role="watcher")
 
+        self.assertIsNone(
+            PermissionRule.query.filter_by(
+                permission_key="neosektor.dashboard.view",
+            ).first()
+        )
+        self.assertIsNone(
+            PermissionRule.query.filter_by(
+                permission_key="neosektor.live_counts.view",
+            ).first()
+        )
+
         dashboard = self.client.get("/neosektor", follow_redirects=False)
+        conductor = self.client.get("/neosektor/tunnel-conductor", follow_redirects=False)
         ebm = self.client.get("/neosektor/ebm", follow_redirects=False)
         wbm = self.client.get("/neosektor/wbm", follow_redirects=False)
+        discharge = self.client.get("/neosektor/discharge", follow_redirects=False)
         live_counts = self.client.get("/neosektor/live-counts", follow_redirects=False)
 
         self.assertEqual(dashboard.status_code, 200)
         self.assertIn(b"NeoSektor", dashboard.data)
+        self.assertEqual(conductor.status_code, 302)
+        self.assertEqual(conductor.location, "/neosektor")
         self.assertEqual(ebm.status_code, 302)
         self.assertEqual(ebm.location, "/neosektor")
         self.assertEqual(wbm.status_code, 302)
         self.assertEqual(wbm.location, "/neosektor")
+        self.assertEqual(discharge.status_code, 302)
+        self.assertEqual(discharge.location, "/neosektor")
         self.assertEqual(live_counts.status_code, 200)
         self.assertIn(b"VIEW LIVE COUNTS", live_counts.data)
 
