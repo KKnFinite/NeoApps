@@ -1,7 +1,7 @@
-const CACHE_PREFIX = "neogateway-static-";
-const CACHE_NAME = "neogateway-static-v20260611-2";
+const CACHE_PREFIX = "neogateway-";
+const CACHE_NAME = "neogateway-static-v20260611-3";
 const STATIC_ASSETS = [
-  "/static/css/base.css?v=20260611-2",
+  "/static/css/base.css?v=20260611-3",
   "/static/images/neogateway_logo3_small.png",
   "/static/images/neogateway_logo3_medium.png",
   "/static/images/neogateway_logo3_large.png",

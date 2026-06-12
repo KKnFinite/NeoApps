@@ -1,4 +1,4 @@
-from flask import flash, redirect, render_template, request, url_for
+from flask import flash, make_response, redirect, render_template, request, url_for
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
@@ -9,6 +9,7 @@ from app.services.neoermac_building_lineup import (
     DESTINATION_FIELDS,
     get_building_lineup_rows,
     get_departure_destination_choices,
+    get_outbound_door_options,
     lineup_field_name,
     save_building_lineup,
 )
@@ -179,11 +180,18 @@ def _building_lineup_response(gateway, access, rows=None, status_code=200):
 
 def _door_view_response(gateway, access, selected_door, status_code=200):
     context = door_view_context(gateway, selected_door)
-    response = render_template(
-        "neonodes/neoermac/door_view.html",
-        gateway=gateway,
-        can_view=access["can_view"],
-        can_edit=access["can_edit"],
-        **context,
+    response = make_response(
+        render_template(
+            "neonodes/neoermac/door_view.html",
+            gateway=gateway,
+            can_view=access["can_view"],
+            can_edit=access["can_edit"],
+            canonical_door_options=get_outbound_door_options(),
+            **context,
+        ),
+        status_code,
     )
-    return response, status_code
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response

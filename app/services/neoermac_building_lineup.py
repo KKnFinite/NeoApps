@@ -4,19 +4,35 @@ from app.extensions import db
 from app.models import MasterFlightSchedule, NeoErmacBuildingLineup
 
 
+OUTBOUND_DOOR_OPTIONS = (
+    "D1",
+    "D4",
+    "D6",
+    "D9",
+    "D13",
+    "D17",
+    "D21",
+    "D24",
+    "D26",
+    "D29",
+    "D32",
+    "D34",
+    "D37",
+)
+
 BUILDING_LINEUP_BELT_GROUPS = (
-    ("green_runout", "D1", "D4", ("WHT/BLU", "ORG")),
-    ("runout_1", "D4", "D6", ("WHT/RED", "WHT/WHT")),
-    ("runout_2", "D6", "D9", ("YEL", "BLK")),
-    ("runout_3", "D9", "D13", ("BRN/RED", "BRN/WHT")),
-    ("runout_4", "D13", "D17", ("BRN/ORG", "BRN/GRN")),
-    ("runout_5", "D17", "D21", ("BRN/YEL", "BRN/BLK")),
-    ("runout_6", "D21", "D24", ("BRN/BRN", "BRN/BLU")),
-    ("runout_7", "D24", "D26", ("WHT/ORG", "WHT/GRN")),
-    ("runout_8", "D26", "D29", ("BLU/RED", "BLU/WHT")),
-    ("runout_9", "D29", "D32", ("BLU/ORG", "BLU/GRN")),
-    ("runout_10", "D32", "D34", ("BLU/BLU", "BRN/WHT")),
-    ("runout_11", "D34", "D37", ("BLU/YEL", "BLU/BLK")),
+    ("green_runout", OUTBOUND_DOOR_OPTIONS[0], OUTBOUND_DOOR_OPTIONS[1], ("WHT/BLU", "ORG")),
+    ("runout_1", OUTBOUND_DOOR_OPTIONS[1], OUTBOUND_DOOR_OPTIONS[2], ("WHT/RED", "WHT/WHT")),
+    ("runout_2", OUTBOUND_DOOR_OPTIONS[2], OUTBOUND_DOOR_OPTIONS[3], ("YEL", "BLK")),
+    ("runout_3", OUTBOUND_DOOR_OPTIONS[3], OUTBOUND_DOOR_OPTIONS[4], ("BRN/RED", "BRN/WHT")),
+    ("runout_4", OUTBOUND_DOOR_OPTIONS[4], OUTBOUND_DOOR_OPTIONS[5], ("BRN/ORG", "BRN/GRN")),
+    ("runout_5", OUTBOUND_DOOR_OPTIONS[5], OUTBOUND_DOOR_OPTIONS[6], ("BRN/YEL", "BRN/BLK")),
+    ("runout_6", OUTBOUND_DOOR_OPTIONS[6], OUTBOUND_DOOR_OPTIONS[7], ("BRN/BRN", "BRN/BLU")),
+    ("runout_7", OUTBOUND_DOOR_OPTIONS[7], OUTBOUND_DOOR_OPTIONS[8], ("WHT/ORG", "WHT/GRN")),
+    ("runout_8", OUTBOUND_DOOR_OPTIONS[8], OUTBOUND_DOOR_OPTIONS[9], ("BLU/RED", "BLU/WHT")),
+    ("runout_9", OUTBOUND_DOOR_OPTIONS[9], OUTBOUND_DOOR_OPTIONS[10], ("BLU/ORG", "BLU/GRN")),
+    ("runout_10", OUTBOUND_DOOR_OPTIONS[10], OUTBOUND_DOOR_OPTIONS[11], ("BLU/BLU", "BRN/WHT")),
+    ("runout_11", OUTBOUND_DOOR_OPTIONS[11], OUTBOUND_DOOR_OPTIONS[12], ("BLU/YEL", "BLU/BLK")),
 )
 
 DESTINATION_FIELDS = (
@@ -28,12 +44,7 @@ DESTINATION_FIELDS = (
 
 
 def get_outbound_door_options():
-    doors = []
-    for _, start_door, end_door, _ in BUILDING_LINEUP_BELT_GROUPS:
-        for door in (start_door, end_door):
-            if door not in doors:
-                doors.append(door)
-    return tuple(doors)
+    return OUTBOUND_DOOR_OPTIONS
 
 
 def get_building_lineup_rows(gateway):

@@ -17,9 +17,9 @@
     <form class="neoermac-door-selector" method="get" action="{{ url_for('neoermac.door_view') }}">
         <label for="door-select">DOOR</label>
         <div class="neoermac-door-selector-row">
-            <select id="door-select" class="neoermac-destination-select" name="door">
+            <select id="door-select" class="neoermac-destination-select" name="door" data-canonical-doors='{{ canonical_door_options|tojson }}'>
                 <option value="">Select a door</option>
-                {% for door_option in door_options %}
+                {% for door_option in canonical_door_options %}
                 <option value="{{ door_option }}" {% if selected_door == door_option %}selected{% endif %}>{{ door_option }}</option>
                 {% endfor %}
             </select>
@@ -187,6 +187,34 @@
     <button class="neoermac-menu-link neoermac-menu-link-secondary neoermac-staffing-button" type="button" disabled>STAFFING</button>
     {% endif %}
 </section>
+
+<script>
+(() => {
+    const select = document.getElementById("door-select");
+    if (!select) {
+        return;
+    }
+
+    let canonicalDoors = [];
+    try {
+        canonicalDoors = JSON.parse(select.dataset.canonicalDoors || "[]");
+    } catch {
+        canonicalDoors = [];
+    }
+
+    if (!canonicalDoors.length) {
+        return;
+    }
+
+    const selectedDoor = select.value;
+    select.replaceChildren(new Option("Select a door", ""));
+    canonicalDoors.forEach((door) => {
+        const option = new Option(door, door);
+        option.selected = door === selectedDoor;
+        select.append(option);
+    });
+})();
+</script>
 
 {% if can_edit %}
 <script>

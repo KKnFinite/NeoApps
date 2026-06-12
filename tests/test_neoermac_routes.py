@@ -134,6 +134,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"Select a door.", response.data)
         self.assertIn(b'<option value="D34"', response.data)
         self.assertIn(b'class="neoermac-door-selector"', response.data)
+        self.assertIn("no-store", response.headers["Cache-Control"])
         self.assertNotIn(b"PLACEHOLDER SHELL", response.data)
         self.assertNotIn(b"OPERATIONAL LOGIC WILL BE ADDED IN A LATER PASS.", response.data)
 
@@ -155,6 +156,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         select_html = self._door_select_html(response)
         self.assertEqual(self._door_options(response), list(self.REAL_OUTBOUND_DOORS))
+        self.assertIn(b'data-canonical-doors=', select_html)
         for fake_door in (b"D2", b"D3", b"D5", b"D7", b"D8", b"D10", b"D11", b"D12"):
             self.assertNotIn(b'value="' + fake_door + b'"', select_html)
 
