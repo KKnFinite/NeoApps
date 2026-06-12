@@ -35,6 +35,8 @@ DEFAULT_BAYS = (
 DEFAULT_DRIVER_ROUTES = ("EAST ROUTE", "WEST ROUTE")
 BALLMAT_VIEW_PERMISSION = "neosektor.ballmat.view"
 BALLMAT_EDIT_PERMISSION = "neosektor.ballmat.edit"
+TUNNEL_CONDUCTOR_VIEW_PERMISSION = "neosektor.tunnel_conductor.view"
+TUNNEL_CONDUCTOR_EDIT_PERMISSION = "neosektor.tunnel_conductor.edit"
 
 
 def live_counts_context(gateway, sort_date=None, sort_name=None):
@@ -172,6 +174,44 @@ def update_ballmat_side(gateway, selected_side, payload, sort_date=None, sort_na
     return ballmat_state_payload(gateway, sort_date, sort_name)
 
 
+def tunnel_conductor_context(gateway, sort_date=None, sort_name=None):
+    return {
+        "state": ballmat_state_payload(gateway, sort_date, sort_name),
+        "status_labels": STATUS_LABELS,
+    }
+
+
+def adjust_tunnel_count(gateway, side, wave, delta, sort_date=None, sort_name=None):
+    normalized_side = normalize_ballmat_side(side)
+    wave_key, wave_name = normalize_wave_key(wave)
+    if not normalized_side or not wave_name:
+        raise ValueError("Invalid side or wave.")
+
+    sort_date = sort_date or date.today()
+    sort_name = normalize_sort_name(sort_name)
+    sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
+
+    ballmat_wave_counts = _get_or_create_ballmat_wave_counts(sort_state)
+    waves = _get_or_create_waves(sort_state)
+    ballmats = _get_or_create_ballmats(sort_state)
+
+    side_label = side_display_label(normalized_side)
+    target_row = next(
+        row
+        for row in ballmat_wave_counts
+        if row.side == side_label and row.wave_name == wave_name
+    )
+    target_row.count = max((target_row.count or 0) + _clean_delta(delta), 0)
+    if target_row.count == 0:
+        target_row.status = "Empty"
+    elif _status(target_row.status) == "Empty":
+        target_row.status = "Light"
+
+    _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats)
+    db.session.flush()
+    return ballmat_state_payload(gateway, sort_date, sort_name)
+
+
 def get_or_create_sort_state(gateway, sort_date, sort_name):
     sort_state = NeoSektorSortState.query.filter_by(
         gateway_id=gateway.id,
@@ -215,6 +255,24 @@ def side_display_label(side):
 def side_manager_label(side):
     normalized = normalize_ballmat_side(side) or "east"
     return "EBM" if normalized == "east" else "WBM"
+
+
+def normalize_wave_key(value):
+    normalized = str(value or "").strip().lower()
+    for wave_key, wave_name in DEFAULT_WAVES:
+        wave_aliases = {
+            wave_key,
+            wave_name.lower(),
+            wave_name.lower().replace(" ", "_"),
+            wave_name.lower().replace(" ", "-"),
+        }
+        if normalized in wave_aliases:
+            return wave_key, wave_name
+    if normalized in {"1", "first", "1st", "1st_wave", "1st-wave"}:
+        return "first", "1ST WAVE"
+    if normalized in {"2", "second", "2nd", "2nd_wave", "2nd-wave"}:
+        return "second", "2ND WAVE"
+    return None, None
 
 
 def _get_or_create_waves(sort_state):
@@ -492,6 +550,14 @@ def _clean_count(value, default=0, maximum=9999):
     except (TypeError, ValueError):
         cleaned = default or 0
     return min(max(cleaned, 0), maximum)
+
+
+def _clean_delta(value):
+    try:
+        cleaned = int(value)
+    except (TypeError, ValueError):
+        cleaned = 0
+    return min(max(cleaned, -1000), 1000)
 
 
 def _status(value):

@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}TUNNEL CONDUCTOR | NeoSektor{% endblock %}
+
+{% block content %}
+<section
+    class="neosektor-shell neosektor-tunnel-shell"
+    aria-labelledby="neosektor-tunnel-title"
+    data-tunnel-conductor
+    data-can-edit="{{ 'true' if can_edit else 'false' }}"
+    data-state-url="{{ url_for('neosektor.tunnel_conductor_state') }}"
+    data-delta-url="{{ url_for('neosektor.tunnel_conductor_delta') }}"
+>
+    <div class="neosektor-hero neosektor-tunnel-hero">
+        <span class="neosektor-kicker">{{ gateway.code }} LIVE FLOW</span>
+        <h1 id="neosektor-tunnel-title">TUNNEL CONDUCTOR</h1>
+        <p>BALLMAT COUNT CONTROL</p>
+    </div>
+
+    <div class="neosektor-ballmat-modebar" aria-label="Tunnel Conductor mode">
+        <span class="neosektor-mode-pill">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
+    </div>
+
+    <section class="neosektor-tunnel-summary" aria-label="Tunnel summary">
+        <div>
+            <span>ACTIVE WAVE</span>
+            <strong data-summary-active-wave>{{ state.summary.active_wave }}</strong>
+        </div>
+        <div>
+            <span>UNLOADED</span>
+            <strong data-summary-unloaded>{{ state.summary.unloaded_total }}</strong>
+        </div>
+        <div>
+            <span>LEFT TO UNLOAD</span>
+            <strong data-summary-left>{{ state.summary.left_to_unload }}</strong>
+        </div>
+    </section>
+
+    <div class="neosektor-tunnel-grid" aria-label="East and West tunnel counts">
+        {% for side_key in ["east", "west"] %}
+        {% set side = state.sides[side_key] %}
+        <section class="neosektor-tunnel-panel" data-tunnel-side="{{ side.key }}" aria-label="{{ side.label }} tunnel counts">
+            <header class="neosektor-tunnel-panel-head">
+                <div>
+                    <span>{{ side.manager_label }}</span>
+                    <strong>{{ side.label }} BALLMAT</strong>
+                </div>
+                <div class="neosektor-ballmat-total">
+                    <span>TOTAL</span>
+                    <strong data-total-count>{{ side.total_count }}</strong>
+                    <em class="neosektor-status neosektor-status-{{ side.status|lower }}" data-total-status>{{ side.status }}</em>
+                </div>
+            </header>
+
+            <div class="neosektor-tunnel-wave-stack">
+                {% for wave in side.waves %}
+                <article class="neosektor-tunnel-wave" data-wave="{{ wave.key }}">
+                    <div class="neosektor-tunnel-wave-readout">
+                        <span>{{ side.label }} {{ wave.name }}</span>
+                        <strong data-wave-count="{{ wave.key }}">{{ wave.count }}</strong>
+                        <em class="neosektor-status neosektor-status-{{ wave.status|lower }}" data-wave-status="{{ wave.key }}">{{ wave.status }}</em>
+                    </div>
+                    <div class="neosektor-tunnel-delta-controls" aria-label="{{ side.label }} {{ wave.name }} count controls">
+                        <button type="button" data-tunnel-delta="-10" {% if not can_edit %}disabled{% endif %}>-10</button>
+                        <button type="button" data-tunnel-delta="-1" {% if not can_edit %}disabled{% endif %}>-1</button>
+                        <button type="button" data-tunnel-delta="1" {% if not can_edit %}disabled{% endif %}>+1</button>
+                        <button type="button" data-tunnel-delta="10" {% if not can_edit %}disabled{% endif %}>+10</button>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+        {% endfor %}
+    </div>
+</section>
+
+<script>
+(() => {
+    const root = document.querySelector("[data-tunnel-conductor]");
+    if (!root) {
+        return;
+    }
+
+    const stateUrl = root.dataset.stateUrl;
+    const deltaUrl = root.dataset.deltaUrl;
+    const canEdit = root.dataset.canEdit === "true";
+
+    const updateStatusClass = (element, status) => {
+        if (!element) {
+            return;
+        }
+        element.textContent = status;
+        element.className = `neosektor-status neosektor-status-${String(status).toLowerCase()}`;
+    };
+
+    const applyState = (state) => {
+        const summary = state.summary || {};
+        root.querySelector("[data-summary-active-wave]").textContent = summary.active_wave || "";
+        root.querySelector("[data-summary-unloaded]").textContent = summary.unloaded_total ?? 0;
+        root.querySelector("[data-summary-left]").textContent = summary.left_to_unload ?? 0;
+
+        Object.entries(state.sides || {}).forEach(([sideKey, side]) => {
+            const panel = root.querySelector(`[data-tunnel-side="${sideKey}"]`);
+            if (!panel) {
+                return;
+            }
+
+            panel.querySelector("[data-total-count]").textContent = side.total_count;
+            updateStatusClass(panel.querySelector("[data-total-status]"), side.status);
+
+            side.waves.forEach((wave) => {
+                const count = panel.querySelector(`[data-wave-count="${wave.key}"]`);
+                if (count) {
+                    count.textContent = wave.count;
+                }
+                updateStatusClass(panel.querySelector(`[data-wave-status="${wave.key}"]`), wave.status);
+            });
+        });
+    };
+
+    const refreshState = async () => {
+        try {
+            const response = await fetch(stateUrl, { cache: "no-store", credentials: "same-origin" });
+            if (!response.ok) {
+                return;
+            }
+            const payload = await response.json();
+            if (payload.ok) {
+                applyState(payload.state);
+            }
+        } catch (_error) {}
+    };
+
+    const applyDelta = async (side, wave, delta) => {
+        if (!canEdit) {
+            return;
+        }
+
+        try {
+            const response = await fetch(deltaUrl, {
+                method: "POST",
+                cache: "no-store",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ side, wave, delta }),
+            });
+            if (!response.ok) {
+                return;
+            }
+            const payload = await response.json();
+            if (payload.ok) {
+                applyState(payload.state);
+            }
+        } catch (_error) {}
+    };
+
+    root.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-tunnel-delta]");
+        if (!button || button.disabled) {
+            return;
+        }
+
+        const sidePanel = button.closest("[data-tunnel-side]");
+        const wavePanel = button.closest("[data-wave]");
+        if (!sidePanel || !wavePanel) {
+            return;
+        }
+
+        applyDelta(
+            sidePanel.dataset.tunnelSide,
+            wavePanel.dataset.wave,
+            Number.parseInt(button.dataset.tunnelDelta, 10),
+        );
+    });
+
+    window.setInterval(refreshState, 3000);
+})();
+</script>
+{% endblock %}

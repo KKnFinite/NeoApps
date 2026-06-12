@@ -7,10 +7,14 @@ from app.services.access_control import get_current_gateway
 from app.services.neosektor_live_counts import (
     BALLMAT_EDIT_PERMISSION,
     BALLMAT_VIEW_PERMISSION,
+    TUNNEL_CONDUCTOR_EDIT_PERMISSION,
+    TUNNEL_CONDUCTOR_VIEW_PERMISSION,
+    adjust_tunnel_count,
     ballmat_operations_context,
     ballmat_state_payload,
     live_counts_context,
     normalize_ballmat_side,
+    tunnel_conductor_context,
     update_ballmat_side,
 )
 from app.services.permission_rules import permission_access
@@ -22,9 +26,9 @@ NEOSEKTOR_PAGES = (
     (
         "TUNNEL CONDUCTOR",
         "neosektor.tunnel_conductor",
-        "neosektor.tunnel_conductor.view",
-        "neosektor.tunnel_conductor.edit",
-        "Tunnel Conductor foundation for left-to-arrive and tunnel workflow controls.",
+        TUNNEL_CONDUCTOR_VIEW_PERMISSION,
+        TUNNEL_CONDUCTOR_EDIT_PERMISSION,
+        "Tunnel Conductor live count controls.",
     ),
     (
         "EBM",
@@ -89,7 +93,64 @@ def index_slash():
 @bp.route("/tunnel-conductor")
 @gateway_node_required("sektor")
 def tunnel_conductor():
-    return _placeholder_page("TUNNEL CONDUCTOR")
+    access = permission_access(
+        TUNNEL_CONDUCTOR_VIEW_PERMISSION,
+        TUNNEL_CONDUCTOR_EDIT_PERMISSION,
+    )
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neosektor.index"))
+
+    gateway = get_current_gateway()
+    context = tunnel_conductor_context(gateway)
+    db.session.commit()
+    return render_template(
+        "neonodes/neosektor/tunnel_conductor.html",
+        gateway=gateway,
+        can_view=access["can_view"],
+        can_edit=access["can_edit"],
+        **context,
+    )
+
+
+@bp.route("/tunnel-conductor/state")
+@gateway_node_required("sektor")
+def tunnel_conductor_state():
+    access = permission_access(
+        TUNNEL_CONDUCTOR_VIEW_PERMISSION,
+        TUNNEL_CONDUCTOR_EDIT_PERMISSION,
+    )
+    if not access["can_view"]:
+        return jsonify({"ok": False, "error": "Access denied."}), 403
+
+    state = ballmat_state_payload(get_current_gateway())
+    db.session.commit()
+    return jsonify({"ok": True, "state": state})
+
+
+@bp.route("/tunnel-conductor/delta", methods=["POST"])
+@gateway_node_required("sektor")
+def tunnel_conductor_delta():
+    access = permission_access(
+        TUNNEL_CONDUCTOR_VIEW_PERMISSION,
+        TUNNEL_CONDUCTOR_EDIT_PERMISSION,
+    )
+    if not access["can_edit"]:
+        return jsonify({"ok": False, "error": "Edit access denied."}), 403
+
+    payload = request.get_json(silent=True) or request.form
+    try:
+        state = adjust_tunnel_count(
+            get_current_gateway(),
+            payload.get("side"),
+            payload.get("wave"),
+            payload.get("delta"),
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    db.session.commit()
+    return jsonify({"ok": True, "state": state})
 
 
 @bp.route("/ebm")

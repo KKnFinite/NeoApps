@@ -73,7 +73,6 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="operator")
 
         paths = {
-            "/neosektor/tunnel-conductor": b"TUNNEL CONDUCTOR",
             "/neosektor/discharge": b"DISCHARGE",
             "/neosektor/driver-routing": b"DRIVER ROUTING",
         }
@@ -84,6 +83,169 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(title, response.data)
                 self.assertIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
+
+    def test_tunnel_conductor_loads_for_view_authorized_user(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neosektor/tunnel-conductor")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"TUNNEL CONDUCTOR", response.data)
+        self.assertIn(b"BALLMAT COUNT CONTROL", response.data)
+        self.assertIn(b"data-tunnel-conductor", response.data)
+        self.assertIn(b"data-can-edit=\"true\"", response.data)
+        self.assertNotIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
+
+    def test_tunnel_conductor_blocks_user_without_view_permission(self):
+        view_rule = PermissionRule.query.filter_by(
+            permission_key="neosektor.tunnel_conductor.view"
+        ).one()
+        edit_rule = PermissionRule.query.filter_by(
+            permission_key="neosektor.tunnel_conductor.edit"
+        ).one()
+        view_rule.minimum_role = "simulator"
+        edit_rule.minimum_role = "simulator"
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neosektor/tunnel-conductor", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/neosektor")
+
+    def test_view_only_tunnel_conductor_user_cannot_update_counts(self):
+        edit_rule = PermissionRule.query.filter_by(
+            permission_key="neosektor.tunnel_conductor.edit"
+        ).one()
+        edit_rule.minimum_role = "simulator"
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/delta",
+            json={"side": "east", "wave": "first", "delta": 1},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 0)
+
+    def test_tunnel_conductor_delta_updates_east_first_wave(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/delta",
+            json={"side": "east", "wave": "first", "delta": 1},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            NeoSektorBallmatWaveCount.query.filter_by(
+                side="EAST",
+                wave_name="1ST WAVE",
+            ).one().count,
+            1,
+        )
+
+    def test_tunnel_conductor_delta_updates_east_second_wave(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/delta",
+            json={"side": "east", "wave": "second", "delta": 1},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            NeoSektorBallmatWaveCount.query.filter_by(
+                side="EAST",
+                wave_name="2ND WAVE",
+            ).one().count,
+            1,
+        )
+
+    def test_tunnel_conductor_delta_updates_west_first_wave(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/delta",
+            json={"side": "west", "wave": "first", "delta": 1},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            NeoSektorBallmatWaveCount.query.filter_by(
+                side="WEST",
+                wave_name="1ST WAVE",
+            ).one().count,
+            1,
+        )
+
+    def test_tunnel_conductor_delta_updates_west_second_wave(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/delta",
+            json={"side": "west", "wave": "second", "delta": 1},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            NeoSektorBallmatWaveCount.query.filter_by(
+                side="WEST",
+                wave_name="2ND WAVE",
+            ).one().count,
+            1,
+        )
+
+    def test_tunnel_conductor_delta_counts_cannot_go_below_zero(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/delta",
+            json={"side": "east", "wave": "first", "delta": -1},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["state"]["sides"]["east"]["waves"][0]["count"], 0)
+        self.assertEqual(
+            NeoSektorBallmatWaveCount.query.filter_by(
+                side="EAST",
+                wave_name="1ST WAVE",
+            ).one().count,
+            0,
+        )
+
+    def test_tunnel_conductor_delta_updates_shared_live_state(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/delta",
+            json={"side": "west", "wave": "second", "delta": 4},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        state_response = self.client.get("/neosektor/ballmat/state")
+        live_counts = self.client.get("/neosektor/live-counts")
+
+        payload = state_response.get_json()
+        self.assertEqual(payload["state"]["sides"]["west"]["total_count"], 4)
+        self.assertEqual(payload["state"]["waves"][1]["unloaded"], 4)
+        self.assertEqual(NeoSektorSortState.query.one().unloaded_total, 4)
+        self.assertEqual(live_counts.status_code, 200)
+        self.assertIn(b"<dd>4</dd>", live_counts.data)
+
+    def test_neosektor_dashboard_and_header_link_to_real_tunnel_conductor(self):
+        self._login_approved_user(role="operator")
+
+        dashboard = self.client.get("/neosektor")
+        tunnel = self.client.get("/neosektor/tunnel-conductor")
+
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertIn(b'href="/neosektor/tunnel-conductor"', dashboard.data)
+        self.assertEqual(tunnel.status_code, 200)
+        self.assertIn(b'href="/neosektor/tunnel-conductor"', tunnel.data)
+        self.assertIn(b'aria-current="page"', tunnel.data)
 
     def test_ebm_and_wbm_open_shared_ballmat_operations_screen(self):
         self._login_approved_user(role="operator")
