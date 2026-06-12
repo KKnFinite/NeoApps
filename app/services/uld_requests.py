@@ -65,6 +65,29 @@ def discharge_context(gateway, now=None):
     }
 
 
+def discharge_state_payload(gateway, now=None):
+    return {
+        "requests": [_request_payload(row) for row in active_request_views(gateway, now)],
+        "uld_types": list(ULD_TYPES),
+    }
+
+
+def door_uld_state_payload(gateway, door, now=None):
+    normalized_door = normalize_door(door)
+    if not normalized_door:
+        raise ValueError("Select a door.")
+
+    request_record = get_uld_request(gateway, normalized_door)
+    return {
+        "door": normalized_door,
+        "request": _request_counts_payload(request_record),
+        "on_the_way_events": [
+            _event_payload(event)
+            for event in active_on_the_way_event_views(gateway, normalized_door, now)
+        ],
+    }
+
+
 def active_request_views(gateway, now=None):
     now = now or datetime.utcnow()
     active_events_by_door = {}
@@ -200,6 +223,26 @@ def _request_view(request_record, active_events_by_door, now):
     }
 
 
+def _request_payload(row):
+    return {
+        "id": row["id"],
+        "door": row["door"],
+        "counts": row["counts"],
+        "setup_needed": row["setup_needed"],
+        "on_the_way_events": [_event_payload(event) for event in row["on_the_way_events"]],
+    }
+
+
+def _request_counts_payload(request_record):
+    return {
+        "counts": {
+            uld_type: max(getattr(request_record, field_name, 0) or 0, 0)
+            for uld_type, field_name in ULD_REQUEST_FIELDS.items()
+        },
+        "setup_needed": bool(getattr(request_record, "setup_needed", False)),
+    }
+
+
 def _event_view(event):
     return {
         "id": event.id,
@@ -212,6 +255,18 @@ def _event_view(event):
             f"{max(event.quantity or 0, 0)} {_plural_uld(event.uld_type, event.quantity)} "
             f"sent at {event.sent_at_utc.strftime('%H:%M')}"
         ),
+    }
+
+
+def _event_payload(event):
+    return {
+        "id": event["id"],
+        "door": event["door"],
+        "uld_type": event["uld_type"],
+        "quantity": event["quantity"],
+        "label": event["label"],
+        "sent_at": event["sent_at"].isoformat() if event.get("sent_at") else None,
+        "expires_at": event["expires_at"].isoformat() if event.get("expires_at") else None,
     }
 
 

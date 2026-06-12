@@ -19,7 +19,11 @@ from app.services.neosektor_live_counts import (
     update_ballmat_side,
 )
 from app.services.permission_rules import user_can
-from app.services.uld_requests import discharge_context, send_uld_on_the_way
+from app.services.uld_requests import (
+    discharge_context,
+    discharge_state_payload,
+    send_uld_on_the_way,
+)
 
 
 EBM_VIEW_PERMISSION = "neosektor.ebm.view"
@@ -241,6 +245,19 @@ def discharge():
     )
 
 
+@bp.route("/discharge/state")
+@gateway_node_required("sektor")
+def discharge_state():
+    page = _page_by_title("DISCHARGE")
+    access = _neosektor_access(page["view_permission"], page["edit_permission"])
+    if not access["can_view"]:
+        return jsonify({"ok": False, "error": "Access denied."}), 403
+
+    state = discharge_state_payload(get_current_gateway())
+    db.session.commit()
+    return jsonify({"ok": True, "state": state})
+
+
 @bp.route("/discharge/send", methods=["POST"])
 @gateway_node_required("sektor")
 def discharge_send():
@@ -277,7 +294,7 @@ def discharge_send():
                     "uld_type": event.uld_type,
                     "quantity": event.quantity,
                 },
-                "state": discharge_context(get_current_gateway()),
+                "state": discharge_state_payload(get_current_gateway()),
             }
         )
 

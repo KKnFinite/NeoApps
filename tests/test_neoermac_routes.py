@@ -310,6 +310,85 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(saved.amp_count, 1)
         self.assertFalse(saved.setup_needed)
 
+    def test_door_view_state_reflects_request_changes_from_another_update_cycle(self):
+        request_record = NeoErmacUldRequest(
+            gateway_id=self.gateway.id,
+            door="D34",
+            a2_count=1,
+            a1_count=0,
+            amp_count=2,
+            setup_needed=False,
+        )
+        db.session.add(request_record)
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        first_response = self.client.get("/neoermac/door-view/state?door=D34")
+        request_record.a2_count = 4
+        request_record.a1_count = 2
+        request_record.amp_count = 0
+        request_record.setup_needed = True
+        db.session.commit()
+        second_response = self.client.get("/neoermac/door-view/state?door=D34")
+
+        first_payload = first_response.get_json()
+        second_payload = second_response.get_json()
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(first_payload["state"]["request"]["counts"]["A2"], 1)
+        self.assertFalse(first_payload["state"]["request"]["setup_needed"])
+        self.assertEqual(second_response.status_code, 200)
+        self.assertEqual(
+            second_payload["state"]["request"]["counts"],
+            {"A2": 4, "A1": 2, "AMP": 0},
+        )
+        self.assertTrue(second_payload["state"]["request"]["setup_needed"])
+
+    def test_door_view_state_reflects_active_on_the_way_events_and_excludes_expired(self):
+        now = datetime.utcnow()
+        db.session.add_all(
+            [
+                NeoSektorUldOnTheWayEvent(
+                    gateway_id=self.gateway.id,
+                    door="D34",
+                    uld_type="A2",
+                    quantity=1,
+                    sent_at_utc=now,
+                    expires_at_utc=now + timedelta(minutes=5),
+                ),
+                NeoSektorUldOnTheWayEvent(
+                    gateway_id=self.gateway.id,
+                    door="D34",
+                    uld_type="AMP",
+                    quantity=2,
+                    sent_at_utc=now - timedelta(minutes=10),
+                    expires_at_utc=now - timedelta(minutes=5),
+                ),
+            ]
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view/state?door=D34")
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(payload["state"]["on_the_way_events"]), 1)
+        self.assertEqual(payload["state"]["on_the_way_events"][0]["uld_type"], "A2")
+        self.assertIn("1 A2 sent at", payload["state"]["on_the_way_events"][0]["label"])
+
+    def test_door_view_state_requires_view_permission(self):
+        view_rule = PermissionRule.query.filter_by(permission_key="neoermac.door_view.view").one()
+        edit_rule = PermissionRule.query.filter_by(permission_key="neoermac.door_view.edit").one()
+        view_rule.minimum_role = "master"
+        edit_rule.minimum_role = "master"
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view/state?door=D34")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(response.get_json()["ok"])
+
     def test_door_view_displays_active_on_the_way_events(self):
         sent_at = datetime.utcnow()
         db.session.add(

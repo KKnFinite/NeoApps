@@ -232,6 +232,96 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual([row["door"] for row in views], ["D1", "D34"])
 
+    def test_discharge_state_reflects_request_changes_from_another_update_cycle(self):
+        request_record = self._add_uld_request("D34", a2_count=1, a1_count=0, amp_count=0)
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        first_response = self.client.get("/neosektor/discharge/state")
+        request_record.a2_count = 0
+        request_record.a1_count = 3
+        request_record.amp_count = 1
+        request_record.setup_needed = True
+        db.session.commit()
+        second_response = self.client.get("/neosektor/discharge/state")
+
+        first_payload = first_response.get_json()
+        second_payload = second_response.get_json()
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(first_payload["state"]["requests"][0]["counts"]["A2"], 1)
+        self.assertFalse(first_payload["state"]["requests"][0]["setup_needed"])
+        self.assertEqual(second_response.status_code, 200)
+        self.assertEqual(
+            second_payload["state"]["requests"][0]["counts"],
+            {"A2": 0, "A1": 3, "AMP": 1},
+        )
+        self.assertTrue(second_payload["state"]["requests"][0]["setup_needed"])
+
+    def test_discharge_state_reflects_active_on_the_way_events_and_excludes_expired(self):
+        now = datetime.utcnow()
+        self._add_uld_request("D34", a2_count=0)
+        db.session.add_all(
+            [
+                NeoSektorUldOnTheWayEvent(
+                    gateway_id=self.gateway.id,
+                    door="D34",
+                    uld_type="A2",
+                    quantity=1,
+                    sent_at_utc=now,
+                    expires_at_utc=now + timedelta(minutes=5),
+                ),
+                NeoSektorUldOnTheWayEvent(
+                    gateway_id=self.gateway.id,
+                    door="D34",
+                    uld_type="AMP",
+                    quantity=2,
+                    sent_at_utc=now - timedelta(minutes=10),
+                    expires_at_utc=now - timedelta(minutes=5),
+                ),
+            ]
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neosektor/discharge/state")
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(payload["state"]["requests"]), 1)
+        self.assertEqual(
+            [event["uld_type"] for event in payload["state"]["requests"][0]["on_the_way_events"]],
+            ["A2"],
+        )
+        self.assertIn(
+            "1 A2 sent at",
+            payload["state"]["requests"][0]["on_the_way_events"][0]["label"],
+        )
+
+    def test_discharge_state_sorting_puts_setup_needed_first_after_refresh(self):
+        normal = self._add_uld_request("D34", a2_count=1, setup_needed=False)
+        setup = self._add_uld_request("D1", a1_count=1, setup_needed=True)
+        normal.updated_at = datetime(2026, 6, 12, 12, 0)
+        setup.updated_at = datetime(2026, 6, 12, 12, 5)
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neosektor/discharge/state")
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [request_row["door"] for request_row in payload["state"]["requests"]],
+            ["D1", "D34"],
+        )
+
+    def test_discharge_state_requires_view_permission(self):
+        self._login_approved_user(role="watcher")
+
+        response = self.client.get("/neosektor/discharge/state")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(response.get_json()["ok"])
+
     def test_driver_routing_loads_for_view_authorized_user(self):
         self._login_approved_user(role="watcher")
 

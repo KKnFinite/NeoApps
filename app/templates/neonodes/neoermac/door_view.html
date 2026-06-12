@@ -3,7 +3,14 @@
 {% block title %}DOOR VIEW | NeoErmac{% endblock %}
 
 {% block content %}
-<section class="neoermac-shell neoermac-door-shell" aria-labelledby="neoermac-door-title">
+<section
+    class="neoermac-shell neoermac-door-shell"
+    aria-labelledby="neoermac-door-title"
+    {% if selected_door %}
+    data-door-view
+    data-state-url="{{ url_for('neoermac.door_view_state', door=selected_door) }}"
+    {% endif %}
+>
     <div class="neoermac-hero neoermac-door-hero">
         <span class="neoermac-kicker"><span class="neo-node-name neo-node-ermac node-ermac" aria-label="NeoErmac"><span class="neo-word">Neo</span><span class="node-word">Ermac</span></span></span>
         <h1 id="neoermac-door-title">DOOR VIEW</h1>
@@ -141,19 +148,19 @@
             <div class="neoermac-uld-grid">
                 <label>
                     <span>A2</span>
-                    <input type="number" name="uld_a2_count" min="0" inputmode="numeric" value="{{ uld_request.a2_count if uld_request else 0 }}">
+                    <input type="number" name="uld_a2_count" min="0" inputmode="numeric" value="{{ uld_request.a2_count if uld_request else 0 }}" data-uld-count="A2">
                 </label>
                 <label>
                     <span>A1</span>
-                    <input type="number" name="uld_a1_count" min="0" inputmode="numeric" value="{{ uld_request.a1_count if uld_request else 0 }}">
+                    <input type="number" name="uld_a1_count" min="0" inputmode="numeric" value="{{ uld_request.a1_count if uld_request else 0 }}" data-uld-count="A1">
                 </label>
                 <label>
                     <span>AMP</span>
-                    <input type="number" name="uld_amp_count" min="0" inputmode="numeric" value="{{ uld_request.amp_count if uld_request else 0 }}">
+                    <input type="number" name="uld_amp_count" min="0" inputmode="numeric" value="{{ uld_request.amp_count if uld_request else 0 }}" data-uld-count="AMP">
                 </label>
             </div>
             <label class="neoermac-door-toggle neoermac-setup-toggle">
-                <input type="checkbox" name="setup_needed" {% if uld_request and uld_request.setup_needed %}checked{% endif %}>
+                <input type="checkbox" name="setup_needed" data-uld-setup {% if uld_request and uld_request.setup_needed %}checked{% endif %}>
                 <span>Needed for setup</span>
             </label>
             <div class="neoermac-door-action-row">
@@ -163,15 +170,15 @@
         </form>
         {% else %}
         <div class="neoermac-uld-status">
-            <span>A2 <strong>{{ uld_request.a2_count if uld_request else 0 }}</strong></span>
-            <span>A1 <strong>{{ uld_request.a1_count if uld_request else 0 }}</strong></span>
-            <span>AMP <strong>{{ uld_request.amp_count if uld_request else 0 }}</strong></span>
-            <span>{{ "Needed for setup" if uld_request and uld_request.setup_needed else "Setup priority off" }}</span>
+            <span>A2 <strong data-uld-status-count="A2">{{ uld_request.a2_count if uld_request else 0 }}</strong></span>
+            <span>A1 <strong data-uld-status-count="A1">{{ uld_request.a1_count if uld_request else 0 }}</strong></span>
+            <span>AMP <strong data-uld-status-count="AMP">{{ uld_request.amp_count if uld_request else 0 }}</strong></span>
+            <span data-uld-status-setup>{{ "Needed for setup" if uld_request and uld_request.setup_needed else "Setup priority off" }}</span>
         </div>
         {% endif %}
     </section>
 
-    <section class="neoermac-door-panel" aria-label="ULDs on the way">
+    <section class="neoermac-door-panel" aria-label="ULDs on the way" data-uld-events>
         <h2>ON THE WAY</h2>
         {% if on_the_way_events %}
         <ul class="neoermac-door-simple-list">
@@ -215,6 +222,91 @@
     });
 })();
 </script>
+
+{% if selected_door %}
+<script>
+(() => {
+    const root = document.querySelector("[data-door-view]");
+    if (!root) {
+        return;
+    }
+
+    const stateUrl = root.dataset.stateUrl;
+    const uldTypes = ["A2", "A1", "AMP"];
+
+    const renderEvents = (events) => {
+        const panel = root.querySelector("[data-uld-events]");
+        if (!panel) {
+            return;
+        }
+
+        let body = "<h2>ON THE WAY</h2>";
+        if (events && events.length) {
+            body += `<ul class="neoermac-door-simple-list">${events
+                .map((event) => `<li>${escapeHtml(event.label || "")}</li>`)
+                .join("")}</ul>`;
+        } else {
+            body += '<p class="neoermac-door-empty">No active on-the-way events.</p>';
+        }
+        panel.innerHTML = body;
+    };
+
+    const applyState = (state) => {
+        const request = state.request || {};
+        const counts = request.counts || {};
+
+        uldTypes.forEach((uldType) => {
+            const count = counts[uldType] ?? 0;
+            const input = root.querySelector(`[data-uld-count="${uldType}"]`);
+            if (input && document.activeElement !== input) {
+                input.value = count;
+            }
+
+            const status = root.querySelector(`[data-uld-status-count="${uldType}"]`);
+            if (status) {
+                status.textContent = count;
+            }
+        });
+
+        const setupNeeded = Boolean(request.setup_needed);
+        const setupInput = root.querySelector("[data-uld-setup]");
+        if (setupInput && document.activeElement !== setupInput) {
+            setupInput.checked = setupNeeded;
+        }
+
+        const setupStatus = root.querySelector("[data-uld-status-setup]");
+        if (setupStatus) {
+            setupStatus.textContent = setupNeeded ? "Needed for setup" : "Setup priority off";
+        }
+
+        renderEvents(state.on_the_way_events || []);
+    };
+
+    const refreshState = async () => {
+        try {
+            const response = await fetch(stateUrl, { cache: "no-store", credentials: "same-origin" });
+            if (!response.ok) {
+                return;
+            }
+            const payload = await response.json();
+            if (payload.ok) {
+                applyState(payload.state);
+            }
+        } catch (_error) {}
+    };
+
+    const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+    }[character]));
+
+    window.setInterval(refreshState, 3000);
+})();
+</script>
+{% endif %}
 
 {% if can_edit %}
 <script>

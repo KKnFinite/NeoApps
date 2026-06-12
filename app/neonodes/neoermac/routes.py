@@ -1,4 +1,4 @@
-from flask import flash, make_response, redirect, render_template, request, url_for
+from flask import flash, jsonify, make_response, redirect, render_template, request, url_for
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
@@ -16,6 +16,7 @@ from app.services.neoermac_building_lineup import (
 )
 from app.services.neoermac_door_view import (
     door_view_context,
+    door_view_uld_state,
     save_door_pulls,
     save_uld_request,
 )
@@ -133,6 +134,23 @@ def door_view():
 
     db.session.commit()
     return _door_view_response(gateway, access, selected_door)
+
+
+@bp.route("/door-view/state")
+@gateway_node_required("ermac")
+def door_view_state():
+    gateway = get_current_gateway()
+    access = permission_access(DOOR_VIEW_VIEW_PERMISSION, DOOR_VIEW_EDIT_PERMISSION)
+    if not access["can_view"]:
+        return jsonify({"ok": False, "error": "Access denied."}), 403
+
+    try:
+        state = door_view_uld_state(gateway, request.args.get("door", ""))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    db.session.commit()
+    return jsonify({"ok": True, "state": state})
 
 
 @bp.route("/tug-assignments")

@@ -3,7 +3,15 @@
 {% block title %}DISCHARGE | NeoSektor{% endblock %}
 
 {% block content %}
-<section class="neosektor-shell neosektor-discharge-shell" aria-labelledby="neosektor-discharge-title">
+<section
+    class="neosektor-shell neosektor-discharge-shell"
+    aria-labelledby="neosektor-discharge-title"
+    data-neosektor-discharge
+    data-state-url="{{ url_for('neosektor.discharge_state') }}"
+    data-send-url="{{ url_for('neosektor.discharge_send') }}"
+    data-can-edit="{{ 'true' if can_edit else 'false' }}"
+    data-uld-types='{{ uld_types|tojson }}'
+>
     <header class="neosektor-operator-title">
         <span>{{ gateway.code }} ULD REQUESTS</span>
         <h1 id="neosektor-discharge-title">DISCHARGE</h1>
@@ -14,8 +22,7 @@
         {% endif %}
     </header>
 
-    {% if requests %}
-    <div class="neosektor-discharge-list" aria-label="Active ULD requests">
+    <div class="neosektor-discharge-list" aria-label="Active ULD requests" data-discharge-list {% if not requests %}hidden{% endif %}>
         {% for request_row in requests %}
         <article class="neosektor-discharge-card{% if request_row.setup_needed %} is-setup-needed{% endif %}">
             <header class="neosektor-discharge-card-head">
@@ -32,7 +39,7 @@
                     <span>{{ uld_type }} REQUESTED</span>
                     <strong>{{ request_row.counts[uld_type] }}</strong>
                     {% if can_edit %}
-                    <form method="post" action="{{ url_for('neosektor.discharge_send') }}" class="neosektor-discharge-send-form">
+                    <form method="post" action="{{ url_for('neosektor.discharge_send') }}" class="neosektor-discharge-send-form" data-discharge-send-form>
                         <input type="hidden" name="door" value="{{ request_row.door }}">
                         <input type="hidden" name="uld_type" value="{{ uld_type }}">
                         <label>
@@ -63,11 +70,169 @@
         </article>
         {% endfor %}
     </div>
-    {% else %}
-    <section class="neosektor-discharge-empty">
+    <section class="neosektor-discharge-empty" data-discharge-empty {% if requests %}hidden{% endif %}>
         <h2>NO ACTIVE ULD REQUESTS</h2>
         <p>Door requests will appear here when NeoErmac users request A2, A1, or AMP equipment.</p>
     </section>
-    {% endif %}
 </section>
+
+<script>
+(() => {
+    const root = document.querySelector("[data-neosektor-discharge]");
+    if (!root) {
+        return;
+    }
+
+    const stateUrl = root.dataset.stateUrl;
+    const sendUrl = root.dataset.sendUrl;
+    const canEdit = root.dataset.canEdit === "true";
+    let uldTypes = ["A2", "A1", "AMP"];
+
+    try {
+        uldTypes = JSON.parse(root.dataset.uldTypes || "[]");
+    } catch (_error) {}
+
+    const list = root.querySelector("[data-discharge-list]");
+    const empty = root.querySelector("[data-discharge-empty]");
+
+    const renderState = (state) => {
+        const requests = state.requests || [];
+        if (!list || !empty) {
+            return;
+        }
+
+        list.hidden = requests.length === 0;
+        empty.hidden = requests.length > 0;
+        list.innerHTML = requests.map(renderRequest).join("");
+    };
+
+    const renderRequest = (requestRow) => {
+        const status = requestRow.setup_needed ? "NEEDED FOR SETUP" : "STANDARD";
+        const setupClass = requestRow.setup_needed ? " is-setup-needed" : "";
+        return `
+            <article class="neosektor-discharge-card${setupClass}">
+                <header class="neosektor-discharge-card-head">
+                    <div>
+                        <span>DOOR</span>
+                        <strong>${escapeHtml(requestRow.door || "")}</strong>
+                    </div>
+                    <em>${status}</em>
+                </header>
+
+                <div class="neosektor-discharge-count-grid">
+                    ${uldTypes.map((uldType) => renderCountCard(requestRow, uldType)).join("")}
+                </div>
+
+                <section class="neosektor-discharge-events" aria-label="On the way for ${escapeHtml(requestRow.door || "")}">
+                    <h2>ON THE WAY</h2>
+                    ${renderEvents(requestRow.on_the_way_events || [])}
+                </section>
+            </article>
+        `;
+    };
+
+    const renderCountCard = (requestRow, uldType) => {
+        const count = Number.parseInt(requestRow.counts?.[uldType] ?? 0, 10) || 0;
+        if (!canEdit) {
+            return `
+                <section class="neosektor-discharge-count-card">
+                    <span>${escapeHtml(uldType)} REQUESTED</span>
+                    <strong>${count}</strong>
+                    <button type="button" disabled>ON THE WAY</button>
+                </section>
+            `;
+        }
+
+        const disabled = count <= 0 ? " disabled" : "";
+        const value = count > 0 ? 1 : 0;
+        return `
+            <section class="neosektor-discharge-count-card">
+                <span>${escapeHtml(uldType)} REQUESTED</span>
+                <strong>${count}</strong>
+                <form method="post" action="${sendUrl}" class="neosektor-discharge-send-form" data-discharge-send-form>
+                    <input type="hidden" name="door" value="${escapeHtml(requestRow.door || "")}">
+                    <input type="hidden" name="uld_type" value="${escapeHtml(uldType)}">
+                    <label>
+                        <span>SEND</span>
+                        <input type="number" name="quantity" min="1" max="${count}" inputmode="numeric" value="${value}"${disabled}>
+                    </label>
+                    <button type="submit"${disabled}>ON THE WAY</button>
+                </form>
+            </section>
+        `;
+    };
+
+    const renderEvents = (events) => {
+        if (!events.length) {
+            return "<p>No active on-the-way events.</p>";
+        }
+
+        return `<ul>${events
+            .map((event) => `<li>${escapeHtml(event.label || "")}</li>`)
+            .join("")}</ul>`;
+    };
+
+    const refreshState = async () => {
+        try {
+            const response = await fetch(stateUrl, { cache: "no-store", credentials: "same-origin" });
+            if (!response.ok) {
+                return;
+            }
+            const payload = await response.json();
+            if (payload.ok) {
+                renderState(payload.state);
+            }
+        } catch (_error) {}
+    };
+
+    const sendUlds = async (form) => {
+        if (!canEdit) {
+            return;
+        }
+
+        const payload = {
+            door: form.querySelector('[name="door"]')?.value,
+            uld_type: form.querySelector('[name="uld_type"]')?.value,
+            quantity: form.querySelector('[name="quantity"]')?.value,
+        };
+
+        try {
+            const response = await fetch(sendUrl, {
+                method: "POST",
+                cache: "no-store",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            if (!response.ok) {
+                return;
+            }
+            const result = await response.json();
+            if (result.ok) {
+                renderState(result.state);
+            }
+        } catch (_error) {}
+    };
+
+    const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+    }[character]));
+
+    root.addEventListener("submit", (event) => {
+        const form = event.target.closest("[data-discharge-send-form]");
+        if (!form) {
+            return;
+        }
+
+        event.preventDefault();
+        sendUlds(form);
+    });
+
+    window.setInterval(refreshState, 3000);
+})();
+</script>
 {% endblock %}

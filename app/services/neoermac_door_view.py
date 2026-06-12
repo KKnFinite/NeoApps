@@ -19,6 +19,7 @@ from app.services.neoermac_building_lineup import (
 from app.services.uld_requests import (
     ULD_TYPES,
     active_on_the_way_event_views,
+    door_uld_state_payload,
     get_uld_request,
     update_uld_request_from_form,
 )
@@ -124,6 +125,16 @@ def save_uld_request(gateway, selected_door, form_data):
         raise ValueError(f"{selected_door} is not available.")
 
     return update_uld_request_from_form(gateway, selected_door, form_data)
+
+
+def door_view_uld_state(gateway, selected_door):
+    selected_door = normalize_door(selected_door)
+    if not selected_door:
+        raise ValueError("Select a door.")
+    if selected_door not in get_door_options(gateway):
+        raise ValueError(f"{selected_door} is not available.")
+
+    return door_uld_state_payload(gateway, selected_door)
 
 
 def normalize_door(value):
