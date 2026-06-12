@@ -317,9 +317,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"BUILDING LINEUP", response.data)
         self.assertIn(b"neoermac-sequence-door", response.data)
-        self.assertIn(b"orange", response.data)
-        self.assertIn(b"white/blue", response.data)
-        self.assertIn(b"blue/black", response.data)
+        self.assertIn(b"Orange", response.data)
+        self.assertIn(b"White/Blue", response.data)
+        self.assertIn(b"Blue/Black", response.data)
+        self.assertIn(b"neoermac-pull-edge", response.data)
+        self.assertIn(b"Pure", response.data)
+        self.assertIn(b"1st Mix", response.data)
+        self.assertIn(b"2nd Mix", response.data)
         self.assertEqual(response.data.count(b"neoermac-belt-group"), 12)
         self.assertEqual(response.data.count(b"neoermac-sequence-door"), 13)
         self.assertIn(b"neoermac-belt-block", response.data)
@@ -338,8 +342,28 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"RUNOUT DESTINATION CONTROL", response.data)
         self.assertNotIn(b"EAST SIDE DESTINATIONS", response.data)
         self.assertNotIn(b"WEST SIDE DESTINATIONS", response.data)
+        self.assertNotIn(b'<span class="neoermac-kicker"', response.data)
         self.assertIn(b"View Only", response.data)
         self.assertNotIn(b"SAVE BUILDING LINEUP", response.data)
+
+    def test_building_lineup_displays_planned_pull_times_for_assigned_destination(self):
+        self._add_master_departure(
+            "UPS105",
+            "SDF",
+            pure_pull_time_local=time(1, 10),
+            first_mix_pull_time_local=time(1, 25),
+            final_mix_pull_time_local=time(1, 40),
+        )
+        self._assign_lineup_destination("green_runout", "east_destination_1", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/building-lineup")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"01:10", response.data)
+        self.assertIn(b"01:25", response.data)
+        self.assertIn(b"01:40", response.data)
 
     def test_building_lineup_destination_options_come_from_master_departures(self):
         self._add_master_departure("UPS101", "sdf")
@@ -505,7 +529,14 @@ class NeoErmacRoutesTest(unittest.TestCase):
             follow_redirects=False,
         )
 
-    def _add_master_departure(self, flight_number, destination):
+    def _add_master_departure(
+        self,
+        flight_number,
+        destination,
+        pure_pull_time_local=None,
+        first_mix_pull_time_local=None,
+        final_mix_pull_time_local=None,
+    ):
         db.session.add(
             MasterFlightSchedule(
                 gateway_id=self.gateway.id,
@@ -519,6 +550,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 active_days="monday,tuesday,wednesday,thursday,friday,saturday,sunday",
                 planned_time_local=time(23, 0),
                 timezone="America/Chicago",
+                pure_pull_time_local=pure_pull_time_local,
+                first_mix_pull_time_local=first_mix_pull_time_local,
+                final_mix_pull_time_local=final_mix_pull_time_local,
             )
         )
 

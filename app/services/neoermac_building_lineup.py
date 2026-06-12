@@ -43,14 +43,14 @@ DESTINATION_FIELDS = (
 )
 
 BELT_COLOR_LABELS = {
-    "WHT": "white",
-    "BLU": "blue",
-    "ORG": "orange",
-    "RED": "red",
-    "YEL": "yellow",
-    "BLK": "black",
-    "BRN": "brown",
-    "GRN": "green",
+    "WHT": "White",
+    "BLU": "Blue",
+    "ORG": "Orange",
+    "RED": "Red",
+    "YEL": "Yellow",
+    "BLK": "Black",
+    "BRN": "Brown",
+    "GRN": "Green",
 }
 
 
@@ -106,6 +106,37 @@ def get_departure_destination_choices(gateway):
     return sorted(destinations)
 
 
+def get_departure_destination_pull_times(gateway):
+    rows = (
+        MasterFlightSchedule.query.filter(
+            MasterFlightSchedule.mission_type == "departure",
+            MasterFlightSchedule.active.is_(True),
+            or_(
+                MasterFlightSchedule.gateway_id == gateway.id,
+                MasterFlightSchedule.gateway_code == gateway.code,
+            ),
+        )
+        .order_by(MasterFlightSchedule.destination.asc(), MasterFlightSchedule.flight_number.asc())
+        .all()
+    )
+
+    pull_times = {}
+    for row in rows:
+        destination = normalize_destination(row.destination)
+        if not destination:
+            continue
+
+        destination_times = pull_times.setdefault(
+            destination,
+            {"pure": "--", "first_mix": "--", "final_mix": "--"},
+        )
+        _fill_pull_time(destination_times, "pure", row.pure_pull_time_local)
+        _fill_pull_time(destination_times, "first_mix", row.first_mix_pull_time_local)
+        _fill_pull_time(destination_times, "final_mix", row.final_mix_pull_time_local)
+
+    return pull_times
+
+
 def save_building_lineup(gateway, form_data):
     rows = get_building_lineup_rows(gateway)
     destination_choices = set(get_departure_destination_choices(gateway))
@@ -134,6 +165,8 @@ def apply_belt_display_metadata(row, start_door, end_door, belt_names):
     row.belt_blocks = (
         {
             "label": display_belt_label(second_belt),
+            "top_field": "east_destination_2",
+            "bottom_field": "west_destination_2",
             "top_slots": (
                 {"field": "east_destination_2", "placeholder": "DEST 1"},
                 {"field": None, "placeholder": "DEST 2"},
@@ -145,6 +178,8 @@ def apply_belt_display_metadata(row, start_door, end_door, belt_names):
         },
         {
             "label": display_belt_label(first_belt),
+            "top_field": "east_destination_1",
+            "bottom_field": "west_destination_1",
             "top_slots": (
                 {"field": "east_destination_1", "placeholder": "DEST 1"},
                 {"field": None, "placeholder": "DEST 2"},
@@ -169,4 +204,9 @@ def normalize_destination(destination):
 
 def display_belt_label(belt_name):
     parts = str(belt_name or "").split("/")
-    return "/".join(BELT_COLOR_LABELS.get(part, part.lower()) for part in parts)
+    return "/".join(BELT_COLOR_LABELS.get(part, part.title()) for part in parts)
+
+
+def _fill_pull_time(destination_times, key, value):
+    if destination_times[key] == "--" and value:
+        destination_times[key] = value.strftime("%H:%M")

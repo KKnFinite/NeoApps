@@ -9,6 +9,7 @@ from app.services.neoermac_building_lineup import (
     DESTINATION_FIELDS,
     get_building_lineup_rows,
     get_departure_destination_choices,
+    get_departure_destination_pull_times,
     get_outbound_door_options,
     lineup_field_name,
     save_building_lineup,
@@ -165,11 +166,13 @@ def _building_lineup_summary(gateway):
 def _building_lineup_response(gateway, access, rows=None, status_code=200):
     rows = rows or get_building_lineup_rows(gateway)
     destination_choices = get_departure_destination_choices(gateway)
+    pull_time_lookup = get_departure_destination_pull_times(gateway)
     response = render_template(
         "neonodes/neoermac/building_lineup.html",
         gateway=gateway,
         rows=rows,
         destination_choices=destination_choices,
+        pull_time_lookup=pull_time_lookup,
         destination_fields=DESTINATION_FIELDS,
         field_name=lineup_field_name,
         can_view=access["can_view"],

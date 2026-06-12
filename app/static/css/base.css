@@ -5573,3 +5573,85 @@ select::-ms-expand {
         font-size: 0.86rem;
     }
 }
+
+.neoermac-pull-edge {
+    display: none;
+}
+
+.neoermac-belt-block .neoermac-belt-name,
+.neoermac-belt-block:nth-child(2) .neoermac-belt-name,
+.neoermac-belt-block:nth-child(3) .neoermac-belt-name {
+    border: 1px solid rgba(238, 246, 255, 0.48);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.08) 28%, rgba(0, 0, 0, 0.18) 100%),
+        linear-gradient(135deg, #f6f9fb 0%, #aeb8c1 34%, #555e67 64%, #22272d 100%);
+    color: #ff3145;
+    text-shadow:
+        0 0 12px rgba(255, 31, 55, 0.42),
+        0 1px 0 rgba(255, 255, 255, 0.36),
+        0 2px 0 rgba(0, 0, 0, 0.44);
+    text-transform: none;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.58),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.42),
+        0 0 14px rgba(255, 31, 55, 0.14);
+}
+
+@media (min-width: 761px) {
+    .neoermac-runout-list {
+        width: min(100%, 840px);
+    }
+
+    .neoermac-sequence-door,
+    .neoermac-belt-group {
+        width: min(100%, 780px);
+    }
+
+    .neoermac-belt-group .neoermac-belt-grid {
+        grid-template-columns: minmax(62px, 76px) repeat(2, minmax(210px, 1fr)) minmax(62px, 76px);
+        align-items: center;
+        gap: 12px;
+    }
+
+    .neoermac-pull-edge {
+        display: grid;
+        min-height: 112px;
+        align-content: center;
+        justify-items: center;
+        gap: 2px;
+        padding: 8px 6px;
+        border: 1px solid rgba(238, 246, 255, 0.28);
+        border-radius: 6px;
+        background:
+            linear-gradient(180deg, rgba(238, 246, 255, 0.08), rgba(255, 31, 55, 0.05)),
+            linear-gradient(180deg, #15181d, #07080b);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.09),
+            0 0 12px rgba(255, 31, 55, 0.1);
+        color: rgba(238, 246, 255, 0.8);
+        text-align: center;
+    }
+
+    .neoermac-pull-edge span {
+        color: rgba(238, 246, 255, 0.58);
+        font-size: 0.52rem;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        line-height: 1;
+        text-transform: uppercase;
+    }
+
+    .neoermac-pull-edge strong {
+        color: #eef6ff;
+        font-size: 0.68rem;
+        font-weight: 950;
+        letter-spacing: 0.04em;
+        line-height: 1.1;
+        text-shadow: 0 0 8px rgba(255, 31, 55, 0.18);
+    }
+
+    .neoermac-belt-block .neoermac-destination-select option {
+        background: #f7f8fa;
+        color: #111318;
+    }
+}

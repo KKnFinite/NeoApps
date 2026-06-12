@@ -5,7 +5,6 @@
 {% block content %}
 <section class="neoermac-shell neoermac-lineup-shell" aria-labelledby="neoermac-lineup-title">
     <div class="neoermac-hero">
-        <span class="neoermac-kicker"><span class="neo-node-name neo-node-ermac node-ermac" aria-label="NeoErmac"><span class="neo-word">Neo</span><span class="node-word">Ermac</span></span></span>
         <h1 id="neoermac-lineup-title">BUILDING LINEUP</h1>
     </div>
 
@@ -26,6 +25,17 @@
             <article class="neoermac-runout-card neoermac-belt-group">
                 <div class="neoermac-belt-grid-scroll">
                     <div class="neoermac-runout-slots neoermac-belt-grid" aria-label="{{ row.belt_group_label }} belt assignments">
+                        {% set left_block = row.belt_blocks[0] %}
+                        {% set left_destination = (row|attr(left_block.top_field)) or (row|attr(left_block.bottom_field)) %}
+                        {% set left_pull_times = pull_time_lookup.get(left_destination, {}) %}
+                        <div class="neoermac-pull-edge neoermac-pull-edge-left" aria-label="planned pull times">
+                            <span>Pure</span>
+                            <strong>{{ left_pull_times.get("pure", "--") }}</strong>
+                            <span>1st Mix</span>
+                            <strong>{{ left_pull_times.get("first_mix", "--") }}</strong>
+                            <span>2nd Mix</span>
+                            <strong>{{ left_pull_times.get("final_mix", "--") }}</strong>
+                        </div>
                         {% for block in row.belt_blocks %}
                         <div class="neoermac-belt-block">
                             <div class="neoermac-belt-destination-row">
@@ -61,6 +71,17 @@
                             </div>
                         </div>
                         {% endfor %}
+                        {% set right_block = row.belt_blocks[1] %}
+                        {% set right_destination = (row|attr(right_block.top_field)) or (row|attr(right_block.bottom_field)) %}
+                        {% set right_pull_times = pull_time_lookup.get(right_destination, {}) %}
+                        <div class="neoermac-pull-edge neoermac-pull-edge-right" aria-label="planned pull times">
+                            <span>Pure</span>
+                            <strong>{{ right_pull_times.get("pure", "--") }}</strong>
+                            <span>1st Mix</span>
+                            <strong>{{ right_pull_times.get("first_mix", "--") }}</strong>
+                            <span>2nd Mix</span>
+                            <strong>{{ right_pull_times.get("final_mix", "--") }}</strong>
+                        </div>
                     </div>
                 </div>
             </article>
