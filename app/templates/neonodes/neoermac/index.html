@@ -29,9 +29,9 @@
                     {% endif %}
                 </strong>
             </a>
-            <a class="neoermac-overview-link" href="{{ url_for('neoermac.outbound') }}">
+            <a class="neoermac-overview-link" href="{{ url_for('neoermac.view_outbound') }}">
                 <span>OUTBOUND</span>
-                <strong>FOUNDATION</strong>
+                <strong>SUMMARY</strong>
             </a>
             <a class="neoermac-overview-link" href="{{ url_for('neoermac.door_view') }}">
                 <span>DOOR VIEW</span>
@@ -41,7 +41,7 @@
         <div class="neoermac-menu neoermac-dashboard-menu" aria-label="NeoErmac actions">
             <a class="neoermac-menu-link" href="{{ url_for('neoermac.door_view') }}">DOOR VIEW</a>
             <a class="neoermac-menu-link" href="{{ url_for('neoermac.building_lineup') }}">BUILDING LINEUP</a>
-            <a class="neoermac-menu-link neoermac-menu-link-secondary" href="{{ url_for('neoermac.outbound') }}">VIEW OUTBOUND</a>
+            <a class="neoermac-menu-link neoermac-menu-link-secondary" href="{{ url_for('neoermac.view_outbound') }}">VIEW OUTBOUND</a>
             <a class="neoermac-menu-link neoermac-menu-link-secondary" href="{{ url_for('neoermac.tug_assignments') }}">TUG ASSIGNMENTS</a>
         </div>
     </section>

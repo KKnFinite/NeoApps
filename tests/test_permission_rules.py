@@ -52,6 +52,7 @@ class PermissionRulesTest(unittest.TestCase):
                 "neoermac.door_view.edit": "operator",
                 "neoermac.door_view.view": "operator",
                 "neoermac.tug_assignments.edit": "master",
+                "neoermac.view_outbound.view": "watcher",
                 "neosektor.conductor.view": "simulator",
                 "neosektor.discharge.edit": "operator",
                 "neosektor.discharge.view": "operator",
@@ -150,6 +151,11 @@ class PermissionRulesTest(unittest.TestCase):
 
         self.assertTrue(user_can("neoermac.door_view.view", operator))
         self.assertTrue(user_can("neoermac.door_view.edit", operator))
+
+    def test_watcher_can_view_outbound_summary(self):
+        watcher = self._user_with_ermac_role("ermac_outbound_watcher", "watcher")
+
+        self.assertTrue(user_can("neoermac.view_outbound.view", watcher))
 
     def test_motherbrain_view_permission_uses_operator_minimum(self):
         watcher = self._user_with_node_role("motherbrain_watcher", "motherbrain", "watcher")

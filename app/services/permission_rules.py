@@ -51,6 +51,11 @@ DEFAULT_PERMISSION_RULES = (
         "Edit NeoErmac Door View pulls and ULD requests.",
     ),
     (
+        "neoermac.view_outbound.view",
+        "watcher",
+        "View NeoErmac outbound destination summary screens.",
+    ),
+    (
         "neoermac.tug_assignments.edit",
         "master",
         "Edit NeoErmac Tug Assignments.",

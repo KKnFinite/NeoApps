@@ -29,6 +29,8 @@ def create_app(config_class=Config, auto_bootstrap=True):
     db.init_app(app)
     login_manager.init_app(app)
 
+    sync_existing_local_schema(app)
+
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)
     register_pwa_assets(app)
@@ -37,6 +39,22 @@ def create_app(config_class=Config, auto_bootstrap=True):
     register_request_guards(app)
 
     return app
+
+
+def sync_existing_local_schema(app):
+    if app.config.get("TESTING"):
+        return False
+
+    database_uri = str(app.config.get("SQLALCHEMY_DATABASE_URI", ""))
+    if not database_uri.startswith("sqlite:"):
+        return False
+
+    from app.services.schema_sync import sync_local_sqlite_schema
+
+    with app.app_context():
+        sync_local_sqlite_schema(app)
+        db.session.commit()
+    return True
 
 
 def maybe_auto_bootstrap_database(app):

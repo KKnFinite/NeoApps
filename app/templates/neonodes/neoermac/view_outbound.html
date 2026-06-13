@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}VIEW OUTBOUND | NeoErmac{% endblock %}
+
+{% block content %}
+<section class="neoermac-shell neoermac-outbound-shell" aria-labelledby="neoermac-outbound-title">
+    <div class="neoermac-hero neoermac-outbound-hero">
+        <span class="neoermac-kicker"><span class="neo-node-name neo-node-ermac node-ermac" aria-label="NeoErmac"><span class="neo-word">Neo</span><span class="node-word">Ermac</span></span></span>
+        <h1 id="neoermac-outbound-title">VIEW OUTBOUND</h1>
+        <p>{{ gateway.code }} OUTBOUND DESTINATION SUMMARY</p>
+    </div>
+
+    <section class="neoermac-outbound-summary" aria-label="Current sort window">
+        <div>
+            <span>CURRENT SORT</span>
+            <strong>
+                {% if operation %}
+                {{ operation.sort_name|upper }} {{ operation.sort_date }}
+                {% else %}
+                NO CURRENT SORT
+                {% endif %}
+            </strong>
+        </div>
+        <div>
+            <span>WINDOW</span>
+            <strong>{{ operation_window_minutes if operation_window_minutes is not none else "-" }}{% if operation_window_minutes is not none %} MIN{% endif %}</strong>
+        </div>
+    </section>
+
+    {% if rows %}
+    <div class="neoermac-outbound-list">
+        {% for row in rows %}
+        <article class="neoermac-outbound-card{% if not row.has_mission %} is-missing-mission{% endif %}">
+            <header class="neoermac-outbound-card-head">
+                <div class="neoermac-outbound-destination">
+                    <span>DESTINATION</span>
+                    <strong>{{ row.destination }}</strong>
+                </div>
+                <div>
+                    <span>FLIGHT</span>
+                    <strong>{{ row.flight_number or "-" }}</strong>
+                </div>
+                <div>
+                    <span>ETD</span>
+                    <strong>{{ row.etd or "-" }}</strong>
+                </div>
+                <div>
+                    <span>ASSIGNED DOOR</span>
+                    <strong>{{ row.assigned_doors|join(", ") if row.assigned_doors else "-" }}</strong>
+                </div>
+            </header>
+
+            <div class="neoermac-outbound-location">
+                <span>LOCATION</span>
+                <strong>{{ row.assignment_locations|join(" / ") if row.assignment_locations else "-" }}</strong>
+            </div>
+
+            {% if not row.has_mission %}
+            <p class="neoermac-outbound-missing">NO CURRENT SORT MISSION FOR {{ row.destination }}.</p>
+            {% endif %}
+
+            <div class="neoermac-outbound-pull-grid" aria-label="{{ row.destination }} pull summary">
+                {% for key, label, _planned_attr, _actual_attr, _no_attr in pull_labels %}
+                <section class="neoermac-outbound-pull-card">
+                    <h2>{{ label }}</h2>
+                    <dl>
+                        <div>
+                            <dt>PLANNED</dt>
+                            <dd>{{ row.planned_pulls[key] or "-" }}</dd>
+                        </div>
+                        <div>
+                            <dt>WINDOW</dt>
+                            <dd>{{ row.adjusted_pulls[key] or "-" }}</dd>
+                        </div>
+                        <div>
+                            <dt>ACTUAL</dt>
+                            <dd>
+                                {% if row.no_pulls[key] %}
+                                NO {{ label|upper }}
+                                {% else %}
+                                {{ row.actual_pulls[key] or "-" }}
+                                {% endif %}
+                            </dd>
+                        </div>
+                    </dl>
+                    {% if row.has_window_adjustment and row.planned_pulls[key] and row.adjusted_pulls[key] and row.planned_pulls[key] != row.adjusted_pulls[key] %}
+                    <small>BASE {{ row.planned_pulls[key] }} +{{ row.window_minutes }} MIN</small>
+                    {% endif %}
+                </section>
+                {% endfor %}
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="neoermac-door-empty">NO OUTBOUND DESTINATIONS FOUND FOR THE CURRENT SORT.</p>
+    {% endif %}
+</section>
+{% endblock %}

@@ -114,6 +114,7 @@ def save_door_pulls(gateway, selected_door, form_data):
                 field["actual_attr"],
                 _parse_optional_time(form_data.get(f"{field['actual_field']}_{index}")),
             )
+        _sync_mission_actual_pulls(gateway, operation, destination, record)
 
     db.session.flush()
 
@@ -336,6 +337,55 @@ def _tail_state_for_mission(mission):
         sort_name=mission.sort_name,
         tail_number=mission.assigned_tail_number.strip().upper(),
     ).first()
+
+
+def _sync_mission_actual_pulls(gateway, operation, destination, door_pull):
+    if not operation:
+        return
+
+    mission = _mission_for_destination(gateway, operation, destination)
+    if not mission:
+        return
+
+    sync_fields = (
+        (
+            "actual_pure_pull_time_local",
+            "no_pure_pull",
+        ),
+        (
+            "actual_first_mix_pull_time_local",
+            "no_first_mix_pull",
+        ),
+        (
+            "actual_second_mix_pull_time_local",
+            "no_second_mix_pull",
+        ),
+    )
+    for actual_attr, no_attr in sync_fields:
+        value = None if getattr(door_pull, no_attr, False) else getattr(door_pull, actual_attr, None)
+        setattr(mission, actual_attr, value)
+
+
+def _mission_for_destination(gateway, operation, destination):
+    destination = normalize_destination(destination)
+    if not operation or not destination:
+        return None
+
+    return (
+        SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id,
+            mission_type="departure",
+        )
+        .filter(
+            SortDateMission.destination == destination,
+            or_(
+                SortDateMission.gateway_code == gateway.code,
+                SortDateMission.sort_date_operation.has(SortDateOperation.gateway_id == gateway.id),
+            ),
+        )
+        .order_by(SortDateMission.planned_datetime_utc.asc(), SortDateMission.id.asc())
+        .first()
+    )
 
 
 def _mission_timing_data(mission, operation):

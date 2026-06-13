@@ -38,6 +38,9 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "sort_date_missions": {
         "arrival_status": "VARCHAR(32)",
         "wave": "VARCHAR(16)",
+        "actual_pure_pull_time_local": "TIME",
+        "actual_first_mix_pull_time_local": "TIME",
+        "actual_second_mix_pull_time_local": "TIME",
     },
     "sort_date_operations": {
         "first_wave_window_minutes": "INTEGER",
@@ -57,6 +60,9 @@ POSTGRES_OPTIONAL_COLUMNS = {
     "sort_date_missions": {
         "arrival_status": "VARCHAR(32)",
         "wave": "VARCHAR(16)",
+        "actual_pure_pull_time_local": "TIME",
+        "actual_first_mix_pull_time_local": "TIME",
+        "actual_second_mix_pull_time_local": "TIME",
     },
     "sort_date_operations": {
         "first_wave_window_minutes": "INTEGER",

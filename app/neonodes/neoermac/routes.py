@@ -20,6 +20,7 @@ from app.services.neoermac_door_view import (
     save_door_pulls,
     save_uld_request,
 )
+from app.services.neoermac_view_outbound import view_outbound_context
 from app.services.permission_rules import permission_access
 
 
@@ -27,11 +28,12 @@ BUILDING_LINEUP_VIEW_PERMISSION = "neoermac.building_lineup.view"
 BUILDING_LINEUP_EDIT_PERMISSION = "neoermac.building_lineup.edit"
 DOOR_VIEW_VIEW_PERMISSION = "neoermac.door_view.view"
 DOOR_VIEW_EDIT_PERMISSION = "neoermac.door_view.edit"
+VIEW_OUTBOUND_VIEW_PERMISSION = "neoermac.view_outbound.view"
 
 
 NEOERMAC_PAGES = (
     ("BUILDING LINEUP", "neoermac.building_lineup"),
-    ("VIEW OUTBOUND", "neoermac.outbound"),
+    ("VIEW OUTBOUND", "neoermac.view_outbound"),
     ("DOOR VIEW", "neoermac.door_view"),
     ("TUG ASSIGNMENTS", "neoermac.tug_assignments"),
 )
@@ -94,7 +96,25 @@ def building_lineup():
 @bp.route("/outbound")
 @gateway_node_required("ermac")
 def outbound():
-    return _placeholder_page("VIEW OUTBOUND")
+    return redirect(url_for("neoermac.view_outbound"))
+
+
+@bp.route("/view-outbound")
+@gateway_node_required("ermac")
+def view_outbound():
+    gateway = get_current_gateway()
+    access = permission_access(VIEW_OUTBOUND_VIEW_PERMISSION)
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neoermac.index"))
+
+    context = view_outbound_context(gateway)
+    return render_template(
+        "neonodes/neoermac/view_outbound.html",
+        gateway=gateway,
+        can_view=access["can_view"],
+        **context,
+    )
 
 
 @bp.route("/door-view", methods=["GET", "POST"])
