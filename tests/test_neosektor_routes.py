@@ -145,8 +145,6 @@ class NeoSektorRoutesTest(unittest.TestCase):
         for path in (
             "/neosektor/live-counts",
             "/neosektor/tunnel-conductor",
-            "/neosektor/ebm",
-            "/neosektor/wbm",
             "/neosektor/driver-routing",
             "/neosektor/discharge",
         ):
@@ -816,8 +814,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"East Ballmat", ebm.data)
         self.assertIn(b"West Ballmat", ebm.data)
         self.assertIn(b"data-can-edit=\"true\"", ebm.data)
-        self.assertIn(b'href="/neosektor/ebm"', ebm.data)
-        self.assertIn(b'href="/neosektor/wbm"', ebm.data)
+        self.assertIn(b'href="/logout"', ebm.data)
+        self.assertNotIn(b'aria-label="BACK TO NeoSektor MENU"', ebm.data)
+        self.assertNotIn(b"motherbrain-header-nav", ebm.data)
+        self.assertIn(b"neosektor-ballmat-operator-page", ebm.data)
+        self.assertIn(b"data-open-bays", ebm.data)
         self.assertEqual(wbm.status_code, 200)
         self.assertIn(b"WBM | EDIT ENABLED", wbm.data)
         self.assertIn(b"data-selected-side=\"west\"", wbm.data)

@@ -17,7 +17,8 @@
             <p>NeoSektor</p>
             <h1 id="neosektor-ballmat-title">Live Ballmat Counts</h1>
         </div>
-        <span class="header-link header-link-static">{{ selected_manager_label }} | {{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
+        <a class="header-link" href="{{ url_for('auth.logout') }}">Logout</a>
+        <span class="visually-hidden">{{ selected_manager_label }} | {{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
     </header>
 
     <main class="counts-wrap">
@@ -64,28 +65,33 @@
                         >
                         <button type="button" data-count-step="1" aria-label="Increase {{ side.label }} {{ wave.name }}">+</button>
                     </div>
-                    <label class="neosektor-inline-status">
-                        <span>Status</span>
-                        <select data-wave-status="{{ wave.key }}" aria-label="{{ side.label }} {{ wave.name }} status">
-                            {% for status in status_labels %}
-                            <option value="{{ status }}" {% if status == wave.status %}selected{% endif %}>{{ status }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
+                    <input type="hidden" data-wave-status="{{ wave.key }}" value="{{ wave.status }}">
                     {% else %}
                     <strong class="readonly-count" data-wave-count="{{ wave.key }}">{{ wave.count }}</strong>
-                    <em class="neosektor-status neosektor-status-{{ wave.status|lower }}" data-wave-status="{{ wave.key }}">{{ wave.status }}</em>
+                    <input type="hidden" data-wave-status="{{ wave.key }}" value="{{ wave.status }}">
                     {% endif %}
                 </article>
                 {% endfor %}
 
                 <article class="counter-card neosektor-open-bay-control">
-                    <div>
-                        <span>Open Bays</span>
-                        <strong class="readonly-count" data-open-bays-value>{{ side.open_bays }}</strong>
-                    </div>
+                    <span>Open Bays</span>
                     {% if side_editable %}
-                    <input type="range" min="0" max="12" step="1" value="{{ side.open_bays }}" data-open-bays aria-label="{{ side.label }} open bays">
+                    <div class="counter-control neosektor-count-control">
+                        <button type="button" data-count-step="-1" aria-label="Decrease {{ side.label }} open bays">-</button>
+                        <input
+                            type="number"
+                            inputmode="numeric"
+                            min="0"
+                            max="12"
+                            value="{{ side.open_bays }}"
+                            class="counter-number"
+                            data-open-bays
+                            aria-label="Set {{ side.label }} open bays"
+                        >
+                        <button type="button" data-count-step="1" aria-label="Increase {{ side.label }} open bays">+</button>
+                    </div>
+                    {% else %}
+                    <strong class="readonly-count" data-open-bays-value>{{ side.open_bays }}</strong>
                     {% endif %}
                 </article>
 
@@ -199,7 +205,7 @@
                     }
                 }
                 if (statusControl && document.activeElement !== statusControl) {
-                    if (statusControl.tagName === "SELECT") {
+                    if (statusControl.tagName === "SELECT" || statusControl.tagName === "INPUT") {
                         statusControl.value = wave.status;
                     } else {
                         setStatusClass(statusControl, wave.status);
@@ -280,11 +286,13 @@
             return;
         }
         const control = button.closest(".neosektor-count-control");
-        const input = control ? control.querySelector("[data-wave-count]") : null;
+        const input = control ? control.querySelector("[data-wave-count], [data-open-bays]") : null;
         if (!input || input.disabled) {
             return;
         }
-        input.value = Math.max(readNumber(input) + Number.parseInt(button.dataset.countStep, 10), 0);
+        const max = Number.parseInt(input.max, 10);
+        const nextValue = Math.max(readNumber(input) + Number.parseInt(button.dataset.countStep, 10), 0);
+        input.value = Number.isFinite(max) ? Math.min(nextValue, max) : nextValue;
         queueSave();
     });
 

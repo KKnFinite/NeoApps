@@ -1655,6 +1655,104 @@ a {
     gap: 8px;
 }
 
+/* NeoSektor EBM/WBM standalone operating layout */
+.neosektor-ballmat-operator-page {
+    min-height: 100svh;
+    overflow-x: hidden;
+}
+
+.neosektor-ballmat-operator-page .topbar {
+    display: none;
+}
+
+.neosektor-ballmat-operator-page .shell,
+.neosektor-ballmat-operator-page .content {
+    width: 100%;
+    max-width: none;
+    min-height: 100svh;
+    margin: 0;
+    padding: 0;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-ballmat-shell {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 10px;
+    width: min(100%, 590px);
+    min-height: 100svh;
+    margin: 0 auto;
+    padding: 18px 18px;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-standalone-header.app-header {
+    width: 100%;
+    padding-inline: 0;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .counts-wrap {
+    grid-template-rows: auto 1fr;
+    gap: 10px;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-strip,
+.blueprint-neosektor.neosektor-ballmat-operator-page .ops-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card {
+    min-height: 118px;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .ops-grid {
+    min-height: calc(100svh - 214px);
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .ops-column {
+    min-height: 100%;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .counter-control {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    margin-top: 0;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .counter-control button,
+.blueprint-neosektor.neosektor-ballmat-operator-page .counter-number,
+.blueprint-neosektor.neosektor-ballmat-operator-page .readonly-count {
+    min-height: 52px;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .readonly-count {
+    display: grid;
+    place-items: center;
+    margin: 0;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-status,
+.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-inline-status {
+    display: none;
+}
+
+@media (max-width: 430px) {
+    .blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-ballmat-shell {
+        padding-inline: 14px;
+    }
+
+    .blueprint-neosektor.neosektor-ballmat-operator-page .wave-strip,
+    .blueprint-neosektor.neosektor-ballmat-operator-page .ops-grid {
+        gap: 7px;
+    }
+
+    .blueprint-neosektor.neosektor-ballmat-operator-page .counter-control {
+        grid-template-columns: 43px minmax(0, 1fr) 43px;
+    }
+}
+
 .neoermac-door-card-head div,
 .neoermac-door-planned,
 .neoermac-door-actual,
