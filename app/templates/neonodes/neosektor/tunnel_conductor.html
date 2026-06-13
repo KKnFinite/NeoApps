@@ -17,6 +17,8 @@
             <p>NeoSektor</p>
             <h1 id="neosektor-tunnel-title">Tunnel Conductor</h1>
         </div>
+        {% set character_switcher_modifier = "character-switcher-standalone" %}
+        {% include "_change_characters.html" %}
         <a class="header-link" href="{{ url_for('auth.logout') }}">Logout</a>
         <span class="visually-hidden">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
     </header>

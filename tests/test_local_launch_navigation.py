@@ -98,7 +98,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(".motherbrain-menu-button", css)
         self.assertIn("top: calc(100% + 6px);", css)
         self.assertIn(".topbar.is-menu-open .motherbrain-header-nav", css)
-        self.assertIn("padding-top: 72px;", css)
+        self.assertIn(".character-switcher", css)
+        self.assertIn("padding-top: 108px;", css)
         self.assertIn(".motherbrain-fixed-header .content", css)
         self.assertNotIn('content: ">";', css)
         self.assertNotIn("42px 42px", css)
@@ -255,6 +256,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"Change Characters", response.data)
         self.assertNotIn(b"NeoSektor", response.data)
         self.assertNotIn(b"NeoMotherBrain", response.data)
         self.assertNotIn(b'href="https://neosektor.onrender.com/"', response.data)
@@ -265,6 +267,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"RFD", response.data)
+        self.assertNotIn(b"Change Characters", response.data)
         self.assertNotIn(b"NeoRFD", response.data)
         self.assertIn(b'src="/static/images/neogateway_logo3_large.png"', response.data)
         self.assertIn(b'neogateway_logo3_small.png', response.data)

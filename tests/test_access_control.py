@@ -232,6 +232,80 @@ class AccessControlTest(unittest.TestCase):
         self.assertEqual(motherbrain.status_code, 302)
         self.assertEqual(motherbrain.location, "/rfd")
 
+    def test_change_characters_menu_filters_accessible_node_targets(self):
+        self._approved_user("watcher_character_user")
+        db.session.commit()
+        client = self.app.test_client()
+        client.post(
+            "/login",
+            data={"username": "watcher_character_user", "password": "TestPassword123!"},
+        )
+
+        response = client.get("/rfd")
+        switcher = self._character_switcher_html(response)
+
+        self.assertIn("Change Characters", switcher)
+        self.assertIn('href="/rfd"', switcher)
+        self.assertIn("Neo", switcher)
+        self.assertIn("Gateway", switcher)
+        self.assertIn("RFD Hub", switcher)
+        self.assertIn('href="/neosektor"', switcher)
+        self.assertIn("Sektor", switcher)
+        self.assertIn('href="/neoermac"', switcher)
+        self.assertIn("Ermac", switcher)
+        self.assertNotIn('href="/motherbrain"', switcher)
+        self.assertNotIn("MotherBrain", switcher)
+        for unavailable_node in (
+            "Scorpion",
+            "Reptile",
+            "Sub-Zero",
+            "Rain",
+        ):
+            self.assertNotIn(unavailable_node, switcher)
+
+    def test_change_characters_shows_motherbrain_only_with_motherbrain_access(self):
+        _user, membership = self._approved_user("simulator_character_user")
+        motherbrain = NeoNode.query.filter_by(code="motherbrain").one()
+        db.session.add(
+            GatewayNodeRole(
+                gateway_membership_id=membership.id,
+                node_id=motherbrain.id,
+                role="simulator",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+        client = self.app.test_client()
+        client.post(
+            "/login",
+            data={
+                "username": "simulator_character_user",
+                "password": "TestPassword123!",
+            },
+        )
+
+        response = client.get("/rfd")
+        switcher = self._character_switcher_html(response)
+
+        self.assertIn('href="/motherbrain"', switcher)
+        self.assertIn("MotherBrain", switcher)
+
+    def test_change_characters_appears_on_authenticated_node_pages(self):
+        self._approved_user("ermac_character_user")
+        db.session.commit()
+        client = self.app.test_client()
+        client.post(
+            "/login",
+            data={"username": "ermac_character_user", "password": "TestPassword123!"},
+        )
+
+        for path in ("/rfd", "/neoermac", "/neosektor"):
+            with self.subTest(path=path):
+                response = client.get(path)
+                self.assertEqual(response.status_code, 200)
+                switcher = self._character_switcher_html(response)
+                self.assertIn("Change Characters", switcher)
+
     def test_simulator_or_higher_can_enter_motherbrain(self):
         user, membership = self._approved_user("simulator_motherbrain_user")
         motherbrain = NeoNode.query.filter_by(code="motherbrain").first()
@@ -389,6 +463,11 @@ class AccessControlTest(unittest.TestCase):
         db.session.add(membership)
         db.session.flush()
         return user, membership
+
+    def _character_switcher_html(self, response):
+        html = response.data.decode()
+        self.assertIn("data-character-switcher", html)
+        return html.split("data-character-switcher", 1)[1].split("</details>", 1)[0]
 
 
 if __name__ == "__main__":

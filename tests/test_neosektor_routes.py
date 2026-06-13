@@ -153,6 +153,25 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertIn(b'href="/neosektor"', response.data)
                 self.assertIn(b'aria-label="BACK TO NeoSektor MENU"', response.data)
 
+    def test_standalone_operator_pages_include_change_characters_control(self):
+        self._login_approved_user(role="simulator")
+
+        for path in (
+            "/neosektor/ebm",
+            "/neosektor/wbm",
+            "/neosektor/tunnel-conductor",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b"neosektor-standalone-header", response.data)
+                self.assertIn(b"character-switcher-standalone", response.data)
+                self.assertEqual(response.data.count(b'<details class="character-switcher'), 1)
+                self.assertIn(b"Change Characters", response.data)
+                self.assertIn(b'href="/rfd"', response.data)
+                self.assertIn(b'href="/neosektor"', response.data)
+                self.assertNotIn(b"Placeholder Shell", response.data)
+
     def test_discharge_page_loads_for_operator(self):
         self._login_approved_user(role="operator")
         self._add_uld_request("D34", a2_count=2, a1_count=1, amp_count=0, setup_needed=True)

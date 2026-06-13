@@ -120,6 +120,105 @@ def register_template_helpers(app):
 
         return utc_value.astimezone(local_timezone).strftime("%Y-%m-%d %H:%M")
 
+    def change_character_targets():
+        if not current_user.is_authenticated:
+            return []
+
+        gateway_code = app.config["DEFAULT_GATEWAY_CODE"]
+        targets = []
+        if user_has_gateway_access(current_user, gateway_code):
+            targets.append(
+                {
+                    "key": "gateway",
+                    "node_word": "Gateway",
+                    "suffix": f"{gateway_code} Hub",
+                    "href": url_for("neomotherbrain.rfd_hub"),
+                    "is_current": request.path.rstrip("/") == "/rfd",
+                }
+            )
+
+        node_specs = (
+            {
+                "key": "motherbrain",
+                "node_code": "motherbrain",
+                "node_word": "MotherBrain",
+                "endpoint": "neomotherbrain.motherbrain",
+                "minimum_role": "simulator",
+                "path_prefixes": ("/motherbrain", "/admin/users", "/admin/permissions"),
+            },
+            {
+                "key": "ermac",
+                "node_code": "ermac",
+                "node_word": "Ermac",
+                "endpoint": "neoermac.index",
+                "minimum_role": "watcher",
+                "path_prefixes": ("/neoermac",),
+            },
+            {
+                "key": "sektor",
+                "node_code": "sektor",
+                "node_word": "Sektor",
+                "endpoint": "neosektor.index",
+                "minimum_role": "watcher",
+                "path_prefixes": ("/neosektor",),
+            },
+            {
+                "key": "scorpion",
+                "node_code": "scorpion",
+                "node_word": "Scorpion",
+                "endpoint": "neoscorpion.index",
+                "minimum_role": "watcher",
+                "path_prefixes": ("/neoscorpion",),
+            },
+            {
+                "key": "reptile",
+                "node_code": "reptile",
+                "node_word": "Reptile",
+                "endpoint": "neoreptile.index",
+                "minimum_role": "watcher",
+                "path_prefixes": ("/neoreptile",),
+            },
+            {
+                "key": "subzero",
+                "node_code": "subzero",
+                "node_word": "Sub-Zero",
+                "endpoint": "neosubzero.index",
+                "minimum_role": "watcher",
+                "path_prefixes": ("/neosubzero", "/neosub-zero", "/neo-sub-zero"),
+            },
+            {
+                "key": "rain",
+                "node_code": "rain",
+                "node_word": "Rain",
+                "endpoint": "neorain.index",
+                "minimum_role": "watcher",
+                "path_prefixes": ("/neorain",),
+            },
+        )
+        for spec in node_specs:
+            if spec["endpoint"] not in app.view_functions:
+                continue
+            if not user_can_access_node(
+                current_user,
+                gateway_code,
+                spec["node_code"],
+                minimum_role=spec["minimum_role"],
+            ):
+                continue
+            targets.append(
+                {
+                    "key": spec["key"],
+                    "node_word": spec["node_word"],
+                    "suffix": "",
+                    "href": url_for(spec["endpoint"]),
+                    "is_current": any(
+                        request.path.startswith(prefix) for prefix in spec["path_prefixes"]
+                    ),
+                }
+            )
+
+        return targets
+
     app.jinja_env.filters["local_datetime"] = format_local_datetime
     app.jinja_env.filters["role_label"] = format_role_label
     app.jinja_env.filters["status_label"] = format_status_label
@@ -136,6 +235,7 @@ def register_template_helpers(app):
             "user_can_access_node": user_can_access_node,
             "user_can": user_can,
             "permission_access": permission_access,
+            "change_character_targets": change_character_targets,
         }
 
     @app.context_processor

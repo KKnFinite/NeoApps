@@ -1,0 +1,23 @@
+{% set character_targets = change_character_targets() %}
+{% if character_targets %}
+<details class="character-switcher {{ character_switcher_modifier|default('') }}" data-character-switcher>
+    <summary class="character-switcher-trigger">Change Characters</summary>
+    <div class="character-switcher-panel" role="menu" aria-label="Accessible NeoNodes">
+        {% for target in character_targets %}
+        <a
+            class="character-switcher-link node-{{ target.key }}{% if target.is_current %} is-active{% endif %}"
+            href="{{ target.href }}"
+            role="menuitem"
+            {% if target.is_current %}aria-current="page"{% endif %}
+        >
+            <span class="neo-node-name brand-inline-name node-{{ target.key }}">
+                <span class="neo-word">Neo</span><span class="node-word">{{ target.node_word }}</span>
+            </span>
+            {% if target.suffix %}
+            <span class="character-switcher-suffix">{{ target.suffix }}</span>
+            {% endif %}
+        </a>
+        {% endfor %}
+    </div>
+</details>
+{% endif %}

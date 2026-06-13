@@ -80,6 +80,8 @@
                         <span>Logged in</span>
                         <strong>{{ current_user.display_name }}</strong>
                     </div>
+                    {% set character_switcher_modifier = "character-switcher-header" %}
+                    {% include "_change_characters.html" %}
                     <a class="logout-link" href="{{ url_for('auth.logout') }}">Logout</a>
                 </div>
                 <button class="motherbrain-menu-button" type="button" aria-expanded="false" aria-controls="motherbrain-mobile-menu" data-motherbrain-menu-button>
@@ -117,6 +119,10 @@
                     <span>Logged in</span>
                     <strong>{{ current_user.display_name }}</strong>
                 </div>
+                {% if not is_neosektor_standalone_operator_page %}
+                {% set character_switcher_modifier = "character-switcher-header" %}
+                {% include "_change_characters.html" %}
+                {% endif %}
                 <nav class="nav" aria-label="Primary">
                     <a href="{{ url_for('auth.logout') }}">Logout</a>
                 </nav>
@@ -187,6 +193,35 @@
     })();
     </script>
     {% endif %}
+    <script>
+    (() => {
+        const switchers = Array.from(document.querySelectorAll("[data-character-switcher]"));
+        if (!switchers.length) {
+            return;
+        }
+
+        document.addEventListener("click", (event) => {
+            switchers.forEach((switcher) => {
+                if (!switcher.contains(event.target)) {
+                    switcher.open = false;
+                }
+            });
+        });
+
+        switchers.forEach((switcher) => {
+            switcher.addEventListener("toggle", () => {
+                if (!switcher.open) {
+                    return;
+                }
+                switchers.forEach((other) => {
+                    if (other !== switcher) {
+                        other.open = false;
+                    }
+                });
+            });
+        });
+    })();
+    </script>
     <script>
     (() => {
         if (!("serviceWorker" in navigator)) {
