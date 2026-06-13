@@ -126,17 +126,6 @@ def register_template_helpers(app):
 
         gateway_code = app.config["DEFAULT_GATEWAY_CODE"]
         targets = []
-        if user_has_gateway_access(current_user, gateway_code):
-            targets.append(
-                {
-                    "key": "gateway",
-                    "node_word": "Gateway",
-                    "suffix": f"{gateway_code} Hub",
-                    "href": url_for("neomotherbrain.rfd_hub"),
-                    "is_current": request.path.rstrip("/") == "/rfd",
-                }
-            )
-
         node_specs = (
             {
                 "key": "motherbrain",

@@ -245,10 +245,10 @@ class AccessControlTest(unittest.TestCase):
         switcher = self._character_switcher_html(response)
 
         self.assertIn("Change Characters", switcher)
-        self.assertIn('href="/rfd"', switcher)
         self.assertIn("Neo", switcher)
-        self.assertIn("Gateway", switcher)
-        self.assertIn("RFD Hub", switcher)
+        self.assertNotIn('href="/rfd"', switcher)
+        self.assertNotIn("Gateway", switcher)
+        self.assertNotIn("RFD Hub", switcher)
         self.assertIn('href="/neosektor"', switcher)
         self.assertIn("Sektor", switcher)
         self.assertIn('href="/neoermac"', switcher)

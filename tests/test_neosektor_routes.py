@@ -168,7 +168,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertIn(b"character-switcher-standalone", response.data)
                 self.assertEqual(response.data.count(b'<details class="character-switcher'), 1)
                 self.assertIn(b"Change Characters", response.data)
-                self.assertIn(b'href="/rfd"', response.data)
+                switcher = response.data.split(b"data-character-switcher", 1)[1].split(
+                    b"</details>",
+                    1,
+                )[0]
+                self.assertNotIn(b'href="/rfd"', switcher)
                 self.assertIn(b'href="/neosektor"', response.data)
                 self.assertNotIn(b"Placeholder Shell", response.data)
 
