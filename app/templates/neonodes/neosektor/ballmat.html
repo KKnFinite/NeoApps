@@ -4,7 +4,7 @@
 
 {% block content %}
 <section
-    class="neosektor-shell neosektor-ballmat-shell"
+    class="neosektor-standalone-page neosektor-ballmat-shell mode-{{ selected_side }}"
     aria-labelledby="neosektor-ballmat-title"
     data-ballmat-operations
     data-selected-side="{{ selected_side }}"
@@ -12,93 +12,113 @@
     data-state-url="{{ url_for('neosektor.ballmat_state') }}"
     data-update-url="{{ url_for('neosektor.ballmat_update', side=selected_side) }}"
 >
-    <header class="neosektor-operator-title neosektor-ballmat-title">
-        <span>{{ gateway.code }} BALLMAT OPERATIONS</span>
-        <h1 id="neosektor-ballmat-title">{{ selected_manager_label }}</h1>
-        <p>{{ selected_side_label }} BALLMAT SELECTED</p>
+    <header class="app-header neosektor-standalone-header">
+        <div class="header-title">
+            <p>NeoSektor</p>
+            <h1 id="neosektor-ballmat-title">Live Ballmat Counts</h1>
+        </div>
+        <span class="header-link header-link-static">{{ selected_manager_label }} | {{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
     </header>
 
-    <section class="neosektor-live-wave-strip neosektor-ballmat-wave-strip" aria-label="Shared wave totals">
-        {% for wave in state.waves %}
-        <article class="neosektor-live-wave-card">
-            <h2>{{ wave.name }}</h2>
-            <div class="neosektor-live-wave-metrics">
-                <div><span>PLANNED</span><strong>{{ wave.planned }}</strong></div>
-                <div><span>UNLOADED</span><strong>{{ wave.unloaded }}</strong></div>
-                <div><span>LEFT</span><strong>{{ wave.left }}</strong></div>
-            </div>
-        </article>
-        {% endfor %}
-    </section>
-
-    <div class="neosektor-ballmat-modebar" aria-label="Ballmat mode">
-        <a class="neosektor-mode-tab{% if selected_side == 'east' %} is-active{% endif %}" href="{{ url_for('neosektor.ebm') }}">EBM</a>
-        <a class="neosektor-mode-tab{% if selected_side == 'west' %} is-active{% endif %}" href="{{ url_for('neosektor.wbm') }}">WBM</a>
-        <span class="neosektor-mode-pill">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
-    </div>
-
-    <div class="neosektor-ballmat-grid" aria-label="East and West ballmat counts">
-        {% for side_key in ["east", "west"] %}
-        {% set side = state.sides[side_key] %}
-        {% set side_editable = can_edit and selected_side == side.key %}
-        <section class="neosektor-ballmat-panel{% if selected_side == side.key %} is-selected{% endif %}" data-ballmat-side="{{ side.key }}" aria-label="{{ side.label }} Ballmat">
-            <header class="neosektor-ballmat-panel-head">
-                <div>
-                    <span>{{ side.manager_label }}</span>
-                    <strong>{{ side.label }} BALLMAT</strong>
+    <main class="counts-wrap">
+        <section class="wave-strip" aria-label="Wave summary">
+            {% for wave_key, wave in [("first", state.waves[0]), ("second", state.waves[1])] %}
+            <article class="wave-card">
+                <h2>{{ wave.name }}</h2>
+                <div class="wave-metrics">
+                    <div>
+                        <span>Left to Arrive</span>
+                        <strong data-wave="{{ wave_key }}" data-metric="left_to_arrive">{{ wave.planned }}</strong>
+                    </div>
+                    <div>
+                        <span>Left to Unload</span>
+                        <strong data-wave="{{ wave_key }}" data-metric="left_to_unload">{{ wave.left }}</strong>
+                    </div>
                 </div>
-                <div class="neosektor-ballmat-total">
-                    <span>TOTAL</span>
-                    <strong data-total-count>{{ side.total_count }}</strong>
-                    <em class="neosektor-status neosektor-status-{{ side.status|lower }}" data-total-status>{{ side.status }}</em>
-                </div>
-            </header>
+            </article>
+            {% endfor %}
+        </section>
 
-            <div class="neosektor-ballmat-wave-stack">
+        <section class="ops-grid mode-{{ selected_side }}" aria-label="Live counts">
+            {% for side_key in ["east", "west"] %}
+            {% set side = state.sides[side_key] %}
+            {% set side_editable = can_edit and selected_side == side.key %}
+            <section class="ops-column {{ side.key }}-column{% if selected_side == side.key %} is-selected{% endif %}" data-ballmat-side="{{ side.key }}" aria-label="{{ side.label }} Ballmat">
+                <h2>{{ side.label.title() }} Ballmat</h2>
+
                 {% for wave in side.waves %}
-                <div class="neosektor-ballmat-wave" data-wave="{{ wave.key }}">
-                    <div class="neosektor-ballmat-wave-title">
-                        <span>{{ wave.name }}</span>
-                        <select data-wave-status="{{ wave.key }}" aria-label="{{ side.label }} {{ wave.name }} status" {% if not side_editable %}disabled{% endif %}>
+                <article class="counter-card" data-wave="{{ wave.key }}">
+                    <span>{{ wave.name }}</span>
+                    {% if side_editable %}
+                    <div class="counter-control neosektor-count-control">
+                        <button type="button" data-count-step="-1" aria-label="Decrease {{ side.label }} {{ wave.name }}">-</button>
+                        <input
+                            type="number"
+                            inputmode="numeric"
+                            min="0"
+                            max="9999"
+                            value="{{ wave.count }}"
+                            class="counter-number"
+                            data-wave-count="{{ wave.key }}"
+                            aria-label="Set {{ side.label }} {{ wave.name }}"
+                        >
+                        <button type="button" data-count-step="1" aria-label="Increase {{ side.label }} {{ wave.name }}">+</button>
+                    </div>
+                    <label class="neosektor-inline-status">
+                        <span>Status</span>
+                        <select data-wave-status="{{ wave.key }}" aria-label="{{ side.label }} {{ wave.name }} status">
                             {% for status in status_labels %}
                             <option value="{{ status }}" {% if status == wave.status %}selected{% endif %}>{{ status }}</option>
                             {% endfor %}
                         </select>
-                    </div>
-                    <div class="neosektor-count-control">
-                        <button type="button" data-count-step="-10" {% if not side_editable %}disabled{% endif %}>-10</button>
-                        <button type="button" data-count-step="-1" {% if not side_editable %}disabled{% endif %}>-1</button>
-                        <input type="number" inputmode="numeric" min="0" max="9999" value="{{ wave.count }}" data-wave-count="{{ wave.key }}" aria-label="{{ side.label }} {{ wave.name }} count" {% if not side_editable %}disabled{% endif %}>
-                        <button type="button" data-count-step="1" {% if not side_editable %}disabled{% endif %}>+1</button>
-                        <button type="button" data-count-step="10" {% if not side_editable %}disabled{% endif %}>+10</button>
-                    </div>
-                </div>
+                    </label>
+                    {% else %}
+                    <strong class="readonly-count" data-wave-count="{{ wave.key }}">{{ wave.count }}</strong>
+                    <em class="neosektor-status neosektor-status-{{ wave.status|lower }}" data-wave-status="{{ wave.key }}">{{ wave.status }}</em>
+                    {% endif %}
+                </article>
                 {% endfor %}
-            </div>
 
-            <div class="neosektor-open-bay-control">
-                <div>
-                    <span>OPEN BAYS</span>
-                    <strong data-open-bays-value>{{ side.open_bays }}</strong>
-                </div>
-                <input type="range" min="0" max="12" step="1" value="{{ side.open_bays }}" data-open-bays aria-label="{{ side.label }} open bays" {% if not side_editable %}disabled{% endif %}>
-            </div>
+                <article class="counter-card neosektor-open-bay-control">
+                    <div>
+                        <span>Open Bays</span>
+                        <strong class="readonly-count" data-open-bays-value>{{ side.open_bays }}</strong>
+                    </div>
+                    {% if side_editable %}
+                    <input type="range" min="0" max="12" step="1" value="{{ side.open_bays }}" data-open-bays aria-label="{{ side.label }} open bays">
+                    {% endif %}
+                </article>
 
-            <div class="neosektor-bay-control-grid" aria-label="{{ side.label }} bay statuses">
-                {% for bay in side.bays %}
-                <label class="neosektor-bay-control">
-                    <span>{{ bay.bay_name }}</span>
-                    <select data-bay-status="{{ bay.bay_name }}" aria-label="{{ bay.bay_name }} status" {% if not side_editable %}disabled{% endif %}>
-                        {% for status in status_labels %}
-                        <option value="{{ status }}" {% if status == bay.status %}selected{% endif %}>{{ status }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-                {% endfor %}
-            </div>
+                <section class="column-bays">
+                    <div class="column-bay-title">
+                        <h3>{{ side.label.title() }} Bays</h3>
+                    </div>
+                    {% for bay in side.bays %}
+                    <article class="bay-card">
+                        <div class="bay-heading">
+                            <span>{{ bay.bay_name }}</span>
+                            <strong data-bay-field="{{ bay.bay_name }}">{{ bay.status }}</strong>
+                        </div>
+                        {% if side_editable %}
+                        <input
+                            type="range"
+                            min="0"
+                            max="{{ status_labels|length - 1 }}"
+                            step="1"
+                            value="{{ status_labels.index(bay.status) }}"
+                            data-bay-status="{{ bay.bay_name }}"
+                            aria-label="{{ bay.bay_name }} status"
+                        >
+                        {% else %}
+                        <input type="hidden" data-bay-status="{{ bay.bay_name }}" value="{{ bay.status }}">
+                        {% endif %}
+                    </article>
+                    {% endfor %}
+                </section>
+            </section>
+            {% endfor %}
         </section>
-        {% endfor %}
-    </div>
+    </main>
 </section>
 
 <script>
@@ -113,26 +133,36 @@
     const selectedSide = root.dataset.selectedSide;
     const canEdit = root.dataset.canEdit === "true";
     const selectedPanel = root.querySelector(`[data-ballmat-side="${selectedSide}"]`);
+    const statusLabels = {{ status_labels|list|tojson }};
     let saveTimer = null;
 
     const readNumber = (input) => {
-        const value = Number.parseInt(input.value, 10);
+        const value = Number.parseInt(input?.value, 10);
         return Number.isFinite(value) && value > 0 ? value : 0;
+    };
+
+    const statusFromSlider = (input) => {
+        if (!input) {
+            return "Empty";
+        }
+        const index = Math.min(Math.max(readNumber(input), 0), statusLabels.length - 1);
+        return statusLabels[index] || "Empty";
     };
 
     const collectPayload = () => {
         const waves = {};
         selectedPanel.querySelectorAll("[data-wave]").forEach((waveRow) => {
             const waveKey = waveRow.dataset.wave;
+            const statusControl = waveRow.querySelector("[data-wave-status]");
             waves[waveKey] = {
                 count: readNumber(waveRow.querySelector("[data-wave-count]")),
-                status: waveRow.querySelector("[data-wave-status]").value,
+                status: statusControl?.value || statusControl?.textContent || "Empty",
             };
         });
 
         const bayStatuses = {};
-        selectedPanel.querySelectorAll("[data-bay-status]").forEach((select) => {
-            bayStatuses[select.dataset.bayStatus] = select.value;
+        selectedPanel.querySelectorAll("[data-bay-status]").forEach((control) => {
+            bayStatuses[control.dataset.bayStatus] = control.type === "range" ? statusFromSlider(control) : control.value;
         });
 
         return {
@@ -143,6 +173,14 @@
         };
     };
 
+    const setStatusClass = (element, status) => {
+        if (!element) {
+            return;
+        }
+        element.textContent = status;
+        element.className = `neosektor-status neosektor-status-${String(status).toLowerCase()}`;
+    };
+
     const applyState = (state) => {
         Object.entries(state.sides || {}).forEach(([sideKey, side]) => {
             const panel = root.querySelector(`[data-ballmat-side="${sideKey}"]`);
@@ -150,19 +188,22 @@
                 return;
             }
 
-            panel.querySelector("[data-total-count]").textContent = side.total_count;
-            const totalStatus = panel.querySelector("[data-total-status]");
-            totalStatus.textContent = side.status;
-            totalStatus.className = `neosektor-status neosektor-status-${String(side.status).toLowerCase()}`;
-
             side.waves.forEach((wave) => {
                 const countInput = panel.querySelector(`[data-wave-count="${wave.key}"]`);
-                const statusSelect = panel.querySelector(`[data-wave-status="${wave.key}"]`);
+                const statusControl = panel.querySelector(`[data-wave-status="${wave.key}"]`);
                 if (countInput && document.activeElement !== countInput) {
-                    countInput.value = wave.count;
+                    if (countInput.tagName === "INPUT") {
+                        countInput.value = wave.count;
+                    } else {
+                        countInput.textContent = wave.count;
+                    }
                 }
-                if (statusSelect && document.activeElement !== statusSelect) {
-                    statusSelect.value = wave.status;
+                if (statusControl && document.activeElement !== statusControl) {
+                    if (statusControl.tagName === "SELECT") {
+                        statusControl.value = wave.status;
+                    } else {
+                        setStatusClass(statusControl, wave.status);
+                    }
                 }
             });
 
@@ -176,9 +217,17 @@
             }
 
             side.bays.forEach((bay) => {
-                const select = panel.querySelector(`[data-bay-status="${bay.bay_name}"]`);
-                if (select && document.activeElement !== select) {
-                    select.value = bay.status;
+                const control = panel.querySelector(`[data-bay-status="${bay.bay_name}"]`);
+                const readout = panel.querySelector(`[data-bay-field="${bay.bay_name}"]`);
+                if (control && document.activeElement !== control) {
+                    if (control.type === "range") {
+                        control.value = Math.max(statusLabels.indexOf(bay.status), 0);
+                    } else {
+                        control.value = bay.status;
+                    }
+                }
+                if (readout) {
+                    readout.textContent = bay.status;
                 }
             });
         });
@@ -244,10 +293,17 @@
         if (!target.closest(`[data-ballmat-side="${selectedSide}"]`) || target.disabled) {
             return;
         }
-        if (target.matches("[data-wave-count], [data-open-bays]")) {
+        if (target.matches("[data-wave-count], [data-open-bays], [data-bay-status]")) {
             const openBaysValue = target.closest(".neosektor-open-bay-control")?.querySelector("[data-open-bays-value]");
             if (openBaysValue) {
                 openBaysValue.textContent = readNumber(target);
+            }
+            const bayCard = target.closest(".bay-card");
+            if (bayCard && target.matches("[data-bay-status]")) {
+                const bayReadout = bayCard.querySelector("[data-bay-field]");
+                if (bayReadout) {
+                    bayReadout.textContent = statusFromSlider(target);
+                }
             }
             queueSave();
         }

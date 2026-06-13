@@ -4,88 +4,92 @@
 
 {% block content %}
 <section
-    class="neosektor-shell neosektor-tunnel-shell"
+    class="neosektor-standalone-page neosektor-tunnel-shell tunnel-body"
     aria-labelledby="neosektor-tunnel-title"
     data-tunnel-conductor
     data-can-edit="{{ 'true' if can_edit else 'false' }}"
     data-state-url="{{ url_for('neosektor.tunnel_conductor_state') }}"
     data-delta-url="{{ url_for('neosektor.tunnel_conductor_delta') }}"
 >
-    <header class="neosektor-operator-title neosektor-tunnel-title">
-        <span>{{ gateway.code }} LIVE FLOW</span>
-        <h1 id="neosektor-tunnel-title">TUNNEL CONDUCTOR</h1>
-        <p>BALLMAT COUNT CONTROL</p>
+    <header class="app-header tunnel-header neosektor-standalone-header">
+        <div class="header-title">
+            <p>NeoSektor</p>
+            <h1 id="neosektor-tunnel-title">Tunnel Conductor</h1>
+        </div>
+        <span class="header-link header-link-static">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
     </header>
 
-    <div class="neosektor-ballmat-modebar" aria-label="Tunnel Conductor mode">
-        <span class="neosektor-mode-pill">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
-    </div>
-
-    <section class="neosektor-tunnel-summary" aria-label="Tunnel summary">
-        <div>
-            <span>ACTIVE WAVE</span>
-            <strong data-summary-active-wave>{{ state.summary.active_wave }}</strong>
-        </div>
-        <div>
-            <span>UNLOADED</span>
-            <strong data-summary-unloaded>{{ state.summary.unloaded_total }}</strong>
-        </div>
-        <div>
-            <span>LEFT TO UNLOAD</span>
-            <strong data-summary-left>{{ state.summary.left_to_unload }}</strong>
-        </div>
-    </section>
-
-    <div class="neosektor-tunnel-grid" aria-label="East and West tunnel counts">
-        {% for side_key in ["east", "west"] %}
-        {% set side = state.sides[side_key] %}
-        <section class="neosektor-tunnel-panel" data-tunnel-side="{{ side.key }}" aria-label="{{ side.label }} tunnel counts">
-            <header class="neosektor-tunnel-panel-head">
-                <div>
-                    <span>{{ side.manager_label }}</span>
-                    <strong>{{ side.label }} BALLMAT</strong>
+    <main class="tunnel-wrap">
+        <section class="tunnel-wave-grid" aria-label="Wave summary">
+            {% for wave_key, wave in [("first", state.waves[0]), ("second", state.waves[1])] %}
+            <article class="tunnel-panel">
+                <h2>{{ wave.name }}</h2>
+                <div class="tunnel-metric">
+                    <span>Left to Arrive</span>
+                    <strong data-wave-summary="{{ wave_key }}" data-metric="left_to_arrive">{{ wave.planned }}</strong>
                 </div>
-                <div class="neosektor-ballmat-total">
-                    <span>TOTAL</span>
-                    <strong data-total-count>{{ side.total_count }}</strong>
-                    <em class="neosektor-status neosektor-status-{{ side.status|lower }}" data-total-status>{{ side.status }}</em>
+                <div class="tunnel-metric">
+                    <span>Left to Unload</span>
+                    <strong data-wave-summary="{{ wave_key }}" data-metric="left_to_unload">{{ wave.left }}</strong>
                 </div>
-            </header>
+            </article>
+            {% endfor %}
+            <article class="tunnel-panel tunnel-offset-panel">
+                <h2>Live Flow</h2>
+                <div class="tunnel-metric">
+                    <span>Active Wave</span>
+                    <strong data-summary-active-wave>{{ state.summary.active_wave }}</strong>
+                </div>
+                <div class="tunnel-metric">
+                    <span>Unloaded</span>
+                    <strong data-summary-unloaded>{{ state.summary.unloaded_total }}</strong>
+                </div>
+            </article>
+        </section>
 
-            <div class="neosektor-tunnel-wave-stack">
-                {% for wave in side.waves %}
-                <article class="neosektor-tunnel-wave" data-wave="{{ wave.key }}">
-                    <div class="neosektor-tunnel-wave-readout">
-                        <span>{{ side.label }} {{ wave.name }}</span>
+        <section class="tunnel-panel tunnel-counts-panel" aria-label="Ballmat counts">
+            <h2>Ballmat Counts</h2>
+            <div class="tunnel-ballmat-grid">
+                {% for side_key in ["east", "west"] %}
+                {% set side = state.sides[side_key] %}
+                <section class="tunnel-ballmat-column" data-tunnel-side="{{ side.key }}">
+                    <h3>{{ side.label.title() }} Ballmat</h3>
+                    <article class="tunnel-readonly-card">
+                        <span>Total</span>
+                        <strong data-total-count>{{ side.total_count }}</strong>
+                        <em class="neosektor-status neosektor-status-{{ side.status|lower }}" data-total-status>{{ side.status }}</em>
+                    </article>
+                    {% for wave in side.waves %}
+                    <article class="tunnel-readonly-card tunnel-count-control-card" data-wave="{{ wave.key }}">
+                        <span>{{ wave.name }}</span>
                         <strong data-wave-count="{{ wave.key }}">{{ wave.count }}</strong>
                         <em class="neosektor-status neosektor-status-{{ wave.status|lower }}" data-wave-status="{{ wave.key }}">{{ wave.status }}</em>
-                    </div>
-                    <div class="neosektor-tunnel-delta-controls" aria-label="{{ side.label }} {{ wave.name }} count controls">
-                        <button type="button" data-tunnel-delta="-10" {% if not can_edit %}disabled{% endif %}>-10</button>
-                        <button type="button" data-tunnel-delta="-1" {% if not can_edit %}disabled{% endif %}>-1</button>
-                        <button type="button" data-tunnel-delta="1" {% if not can_edit %}disabled{% endif %}>+1</button>
-                        <button type="button" data-tunnel-delta="10" {% if not can_edit %}disabled{% endif %}>+10</button>
-                    </div>
-                </article>
+                        <div class="counter-control tunnel-control" aria-label="{{ side.label }} {{ wave.name }} count controls">
+                            <button type="button" data-tunnel-delta="-1" {% if not can_edit %}disabled{% endif %}>-</button>
+                            <span class="counter-number" aria-hidden="true">{{ wave.count }}</span>
+                            <button type="button" data-tunnel-delta="1" {% if not can_edit %}disabled{% endif %}>+</button>
+                        </div>
+                    </article>
+                    {% endfor %}
+                </section>
                 {% endfor %}
             </div>
         </section>
-        {% endfor %}
-    </div>
 
-    <section class="neosektor-tunnel-bay-panel" aria-label="Bay status">
-        <h2>BAY STATUS</h2>
-        <div class="neosektor-tunnel-bay-grid">
-            {% for side_key in ["east", "west"] %}
-            {% for bay in state.sides[side_key].bays %}
-            <article class="neosektor-tunnel-bay-card" data-tunnel-bay="{{ bay.bay_name }}">
-                <span>{{ bay.bay_name }}</span>
-                <strong>{{ bay.status }}</strong>
-            </article>
-            {% endfor %}
-            {% endfor %}
-        </div>
-    </section>
+        <section class="tunnel-panel tunnel-bay-panel" aria-label="Bay status">
+            <h2>Bay Status</h2>
+            <div class="tunnel-bay-grid">
+                {% for side_key in ["east", "west"] %}
+                {% for bay in state.sides[side_key].bays %}
+                <article class="tunnel-bay-card" data-tunnel-bay="{{ bay.bay_name }}">
+                    <span>{{ bay.bay_name }}</span>
+                    <strong>{{ bay.status }}</strong>
+                </article>
+                {% endfor %}
+                {% endfor %}
+            </div>
+        </section>
+    </main>
 </section>
 
 <script>
@@ -99,6 +103,13 @@
     const deltaUrl = root.dataset.deltaUrl;
     const canEdit = root.dataset.canEdit === "true";
 
+    const setText = (selector, value) => {
+        const element = root.querySelector(selector);
+        if (element) {
+            element.textContent = value;
+        }
+    };
+
     const updateStatusClass = (element, status) => {
         if (!element) {
             return;
@@ -109,9 +120,15 @@
 
     const applyState = (state) => {
         const summary = state.summary || {};
-        root.querySelector("[data-summary-active-wave]").textContent = summary.active_wave || "";
-        root.querySelector("[data-summary-unloaded]").textContent = summary.unloaded_total ?? 0;
-        root.querySelector("[data-summary-left]").textContent = summary.left_to_unload ?? 0;
+        setText("[data-summary-active-wave]", summary.active_wave || "");
+        setText("[data-summary-unloaded]", summary.unloaded_total ?? 0);
+        setText("[data-summary-left]", summary.left_to_unload ?? 0);
+
+        (state.waves || []).forEach((wave) => {
+            const waveKey = wave.name === "1ST WAVE" ? "first" : "second";
+            setText(`[data-wave-summary="${waveKey}"][data-metric="left_to_arrive"]`, wave.planned ?? 0);
+            setText(`[data-wave-summary="${waveKey}"][data-metric="left_to_unload"]`, wave.left ?? 0);
+        });
 
         Object.entries(state.sides || {}).forEach(([sideKey, side]) => {
             const panel = root.querySelector(`[data-tunnel-side="${sideKey}"]`);
@@ -119,13 +136,17 @@
                 return;
             }
 
-            panel.querySelector("[data-total-count]").textContent = side.total_count;
+            setText(`[data-tunnel-side="${sideKey}"] [data-total-count]`, side.total_count);
             updateStatusClass(panel.querySelector("[data-total-status]"), side.status);
 
             side.waves.forEach((wave) => {
                 const count = panel.querySelector(`[data-wave-count="${wave.key}"]`);
                 if (count) {
                     count.textContent = wave.count;
+                }
+                const numberReadout = panel.querySelector(`[data-wave="${wave.key}"] .counter-number`);
+                if (numberReadout) {
+                    numberReadout.textContent = wave.count;
                 }
                 updateStatusClass(panel.querySelector(`[data-wave-status="${wave.key}"]`), wave.status);
             });

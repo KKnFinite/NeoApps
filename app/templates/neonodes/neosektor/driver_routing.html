@@ -4,43 +4,55 @@
 
 {% block content %}
 <section
-    class="neosektor-shell neosektor-driver-shell"
+    class="neosektor-standalone-page neosektor-driver-shell driver-body"
     aria-labelledby="neosektor-driver-title"
     data-driver-routing
     data-can-edit="{{ 'true' if can_edit else 'false' }}"
     data-state-url="{{ url_for('neosektor.driver_routing_state') }}"
     data-update-url="{{ url_for('neosektor.driver_routing_update') }}"
 >
-    <header class="neosektor-operator-title">
-        <span>{{ gateway.code }} DRIVER COUNTS</span>
-        <h1 id="neosektor-driver-title">DRIVER ROUTING</h1>
-        <p>{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</p>
-    </header>
-
-    <main class="neosektor-driver-board" aria-label="Driver routing">
+    <h1 id="neosektor-driver-title" class="visually-hidden">Driver Routing</h1>
+    <span class="visually-hidden">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
+    <main class="driver-routing neosektor-driver-board" aria-label="Driver routing">
         {% for wave_key in ["first", "second"] %}
         {% set route = state.routing.routes[wave_key] %}
         <section
-            class="neosektor-driver-wave-card"
+            class="driver-wave driver-wave-{{ wave_key }} neosektor-driver-wave-card"
             data-driver-wave="{{ wave_key }}"
             data-direction="{{ route.direction }}"
             aria-label="{{ route.wave_label }} route"
         >
-            <h2>{{ route.wave_label }}</h2>
-            <div class="neosektor-driver-target">
-                <strong data-driver-target>{{ route.target }}</strong>
-                <span data-driver-arrow aria-hidden="true">{% if route.arrow == "right" %}&rarr;{% else %}&larr;{% endif %}</span>
+            <h2 class="driver-wave-label">{{ route.wave_label }}</h2>
+            <div class="driver-target neosektor-driver-target">
+                <strong data-driver-target aria-label="{{ route.target }}">
+                    {% if route.direction == "east" %}
+                    East Ballmat <span class="driver-instruction">Stay Right</span>
+                    {% else %}
+                    West Ballmat <span class="driver-instruction">Stay Left</span>
+                    {% endif %}
+                </strong>
+                <span class="driver-arrow" data-driver-arrow aria-hidden="true">{% if route.arrow == "right" %}&rarr;{% else %}&larr;{% endif %}</span>
             </div>
-            <dl class="neosektor-driver-wave-context">
-                <div><dt>EAST</dt><dd data-driver-east-count>{{ route.east_count }}</dd></div>
-                <div><dt>WEST</dt><dd data-driver-west-count>{{ route.west_count }}</dd></div>
+            <dl class="driver-wave-context neosektor-driver-wave-context" aria-label="{{ route.wave_label }} count context">
+                <div><dt>East</dt><dd data-driver-east-count>{{ route.east_count }}</dd></div>
+                <div><dt>West</dt><dd data-driver-west-count>{{ route.west_count }}</dd></div>
             </dl>
         </section>
         {% endfor %}
 
+        <section class="driver-bay-priority neosektor-driver-bay-priority" aria-label="Bay priority">
+            {% for bay in state.routing.bay_priority %}
+            <article class="driver-priority-card neosektor-driver-priority-card" data-driver-priority-index="{{ loop.index0 }}">
+                <span class="driver-priority-rank" data-driver-rank>{{ bay.rank_label }}</span>
+                <strong data-driver-bay-name>{{ bay.bay_name }}</strong>
+                <em class="visually-hidden" data-driver-bay-status>{{ bay.status }}</em>
+            </article>
+            {% endfor %}
+        </section>
+
         <section class="neosektor-driver-offset-panel" aria-label="West route offset">
             <div>
-                <span>WEST OFFSET</span>
+                <span>West Offset</span>
                 <strong data-driver-offset-display>{{ state.routing.west_offset }}</strong>
             </div>
             <div class="neosektor-driver-offset-control">
@@ -57,16 +69,6 @@
                 >
                 <button type="button" data-driver-offset-step="1" {% if not can_edit %}disabled{% endif %}>+</button>
             </div>
-        </section>
-
-        <section class="neosektor-driver-bay-priority" aria-label="Bay priority">
-            {% for bay in state.routing.bay_priority %}
-            <article class="neosektor-driver-priority-card" data-driver-priority-index="{{ loop.index0 }}">
-                <span data-driver-rank>{{ bay.rank_label }}</span>
-                <strong data-driver-bay-name>{{ bay.bay_name }}</strong>
-                <em data-driver-bay-status>{{ bay.status }}</em>
-            </article>
-            {% endfor %}
         </section>
     </main>
 </section>

@@ -77,6 +77,7 @@ def live_counts_context(gateway, sort_date=None, sort_name=None):
             "completion_percent": _completion_percent(planned_total, unloaded_total),
         },
         "waves": [_wave_view(row) for row in waves],
+        "sides": side_views,
         "ballmats": [_ballmat_view(row) for row in ballmats],
         "open_bays": [_open_bay_view(row) for row in open_bays],
         "bay_statuses": [_bay_status_view(row) for row in bay_statuses],

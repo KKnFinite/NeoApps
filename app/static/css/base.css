@@ -7382,3 +7382,1129 @@ select::-ms-expand {
         justify-self: start;
     }
 }
+
+/* NeoSektor standalone-layout alignment */
+.visually-hidden {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    margin: -1px !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    clip: rect(0 0 0 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+.blueprint-neosektor .neosektor-standalone-page {
+    display: grid;
+    gap: 8px;
+    width: min(100%, 1440px);
+    margin: 0 auto;
+    color: var(--neo-bright-silver);
+}
+
+.blueprint-neosektor .neosektor-standalone-header.app-header {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: min(100%, 1440px);
+    min-height: 56px;
+    margin: 0 auto;
+    padding: 8px 10px 7px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.blueprint-neosektor .header-title {
+    min-width: 0;
+}
+
+.blueprint-neosektor .header-title p {
+    margin: 0 0 2px;
+    color: var(--node-sektor-primary);
+    font-size: 0.72rem;
+    font-weight: 950;
+    line-height: 1;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .header-title h1 {
+    margin: 0;
+    color: var(--neo-bright-silver);
+    font-size: clamp(1.02rem, 2.6vw, 1.78rem);
+    font-weight: 950;
+    line-height: 1.05;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-shadow: 0 0 16px rgba(var(--node-sektor-primary-rgb), 0.25);
+}
+
+.blueprint-neosektor .header-link,
+.blueprint-neosektor .header-link-static {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    padding: 0 11px;
+    border: 1px solid rgba(244, 246, 248, 0.22);
+    border-radius: 6px;
+    background: linear-gradient(180deg, var(--node-sektor-primary), #4e060c);
+    box-shadow:
+        inset 0 1px 0 rgba(244, 246, 248, 0.18),
+        0 8px 18px rgba(var(--node-sektor-primary-rgb), 0.22);
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-align: center;
+    text-decoration: none;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .counts-wrap {
+    display: grid;
+    grid-template-rows: auto auto auto;
+    gap: 8px;
+    width: min(100%, 1320px);
+    margin: 0 auto;
+    padding: 6px 7px 7px;
+    overflow: visible;
+}
+
+.blueprint-neosektor .wave-strip,
+.blueprint-neosektor .ops-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 6px;
+    width: 100%;
+}
+
+.blueprint-neosektor .wave-card,
+.blueprint-neosektor .ops-column,
+.blueprint-neosektor .counter-card,
+.blueprint-neosektor .bay-card,
+.blueprint-neosektor .view-bay-card,
+.blueprint-neosektor .tunnel-panel,
+.blueprint-neosektor .tunnel-readonly-card,
+.blueprint-neosektor .tunnel-bay-card,
+.blueprint-neosektor .driver-priority-card {
+    min-width: 0;
+    border: 1px solid rgba(216, 220, 224, 0.22);
+    border-radius: 8px;
+    background:
+        linear-gradient(135deg, rgba(244, 246, 248, 0.06), transparent 24%),
+        linear-gradient(180deg, rgba(18, 26, 36, 0.94), rgba(8, 12, 18, 0.96));
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+}
+
+.blueprint-neosektor .mode-view .wave-metrics div,
+.blueprint-neosektor .mode-view .counter-card,
+.blueprint-neosektor .view-bay-card,
+.blueprint-neosektor .tunnel-metric:not(.tunnel-editable),
+.blueprint-neosektor .tunnel-readonly-card,
+.blueprint-neosektor .tunnel-bay-card {
+    border-color: rgba(var(--node-sektor-primary-rgb), 0.38);
+    background:
+        linear-gradient(135deg, rgba(244, 246, 248, 0.05), transparent 28%),
+        linear-gradient(180deg, rgba(64, 14, 20, 0.92), rgba(23, 7, 11, 0.96));
+    box-shadow:
+        inset 0 1px 0 rgba(244, 246, 248, 0.08),
+        0 14px 34px rgba(0, 0, 0, 0.28),
+        0 0 18px rgba(var(--node-sektor-primary-rgb), 0.14);
+}
+
+.blueprint-neosektor .wave-card {
+    padding: 11px 10px;
+}
+
+.blueprint-neosektor .wave-card h2,
+.blueprint-neosektor .ops-column h2,
+.blueprint-neosektor .column-bay-title h3,
+.blueprint-neosektor .tunnel-panel h2,
+.blueprint-neosektor .tunnel-ballmat-column h3,
+.blueprint-neosektor .view-bay-dashboard h2 {
+    margin: 0;
+    color: var(--neo-silver);
+    font-size: 0.76rem;
+    font-weight: 950;
+    line-height: 1.1;
+    text-align: center;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .wave-metrics {
+    display: grid;
+    gap: 8px;
+    margin-top: 9px;
+}
+
+.blueprint-neosektor .wave-metrics div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.blueprint-neosektor .wave-metrics span,
+.blueprint-neosektor .counter-card > span,
+.blueprint-neosektor .bay-heading span,
+.blueprint-neosektor .tunnel-metric span,
+.blueprint-neosektor .tunnel-readonly-card span,
+.blueprint-neosektor .tunnel-bay-card span,
+.blueprint-neosektor .view-bay-card span {
+    color: rgba(238, 246, 255, 0.66);
+    font-size: 0.62rem;
+    font-weight: 900;
+    line-height: 1.2;
+    text-align: center;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .wave-metrics strong {
+    color: var(--node-sektor-highlight);
+    font-size: clamp(1.05rem, 3vw, 1.42rem);
+    font-weight: 950;
+    line-height: 1;
+}
+
+.blueprint-neosektor .ops-grid {
+    min-height: 0;
+    margin-top: 0;
+}
+
+.blueprint-neosektor .ops-column {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-height: 0;
+    padding: 7px;
+    border-color: rgba(var(--node-sektor-primary-rgb), 0.44);
+}
+
+.blueprint-neosektor .ops-column h2 {
+    margin-bottom: 1px;
+    font-size: 0.82rem;
+}
+
+.blueprint-neosektor .counter-card {
+    display: grid;
+    justify-items: stretch;
+    gap: 5px;
+    padding: 6px;
+    text-align: center;
+}
+
+.blueprint-neosektor .counter-card > span {
+    display: block;
+    min-height: 18px;
+}
+
+.blueprint-neosektor .counter-control {
+    display: grid;
+    grid-template-columns: 38px minmax(42px, 1fr) 38px;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.blueprint-neosektor .counter-control button,
+.blueprint-neosektor .counter-number,
+.blueprint-neosektor .neosektor-inline-status select,
+.blueprint-neosektor .neosektor-driver-offset-control button,
+.blueprint-neosektor .neosektor-driver-offset-control input,
+.blueprint-neosektor .neosektor-discharge-send-form input,
+.blueprint-neosektor .neosektor-discharge-count-card button {
+    min-width: 0;
+    min-height: 38px;
+    border-radius: 6px;
+    font: inherit;
+    font-weight: 950;
+    text-align: center;
+}
+
+.blueprint-neosektor .counter-control button,
+.blueprint-neosektor .neosektor-driver-offset-control button,
+.blueprint-neosektor .neosektor-discharge-count-card button {
+    border: 1px solid rgba(244, 246, 248, 0.22);
+    background: linear-gradient(180deg, var(--node-sektor-primary), #4e060c);
+    color: #fff;
+    font-size: 1rem;
+    line-height: 1;
+    box-shadow: 0 8px 20px rgba(var(--node-sektor-primary-rgb), 0.2);
+}
+
+.blueprint-neosektor .counter-number,
+.blueprint-neosektor .readonly-count,
+.blueprint-neosektor .neosektor-inline-status select,
+.blueprint-neosektor .neosektor-driver-offset-control input,
+.blueprint-neosektor .neosektor-discharge-send-form input {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    border: 1px solid rgba(216, 220, 224, 0.18);
+    background: rgba(5, 7, 11, 0.54);
+    box-shadow: inset 0 0 16px rgba(0, 0, 0, 0.32);
+    color: var(--neo-bright-silver);
+    font-size: 1.05rem;
+    font-weight: 950;
+    line-height: 1;
+    text-align: center;
+}
+
+.blueprint-neosektor .readonly-count {
+    min-height: 42px;
+    margin-top: 0;
+    color: var(--neo-bright-silver);
+    font-size: 1.5rem;
+}
+
+.blueprint-neosektor .mode-view .readonly-count {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    font-size: clamp(1.55rem, 4vw, 2.5rem);
+}
+
+.blueprint-neosektor .neosektor-inline-status {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 6px;
+}
+
+.blueprint-neosektor .neosektor-inline-status span {
+    color: rgba(238, 246, 255, 0.66);
+    font-size: 0.58rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .counter-number:focus,
+.blueprint-neosektor .neosektor-inline-status select:focus,
+.blueprint-neosektor .neosektor-driver-offset-control input:focus,
+.blueprint-neosektor .neosektor-discharge-send-form input:focus {
+    border-color: var(--node-sektor-highlight);
+    outline: none;
+    box-shadow:
+        0 0 0 2px rgba(var(--node-sektor-primary-rgb), 0.22),
+        inset 0 0 16px rgba(0, 0, 0, 0.32);
+}
+
+.blueprint-neosektor .counter-control button:disabled,
+.blueprint-neosektor .counter-number:disabled,
+.blueprint-neosektor .neosektor-inline-status select:disabled,
+.blueprint-neosektor .neosektor-driver-offset-control button:disabled,
+.blueprint-neosektor .neosektor-driver-offset-control input:disabled,
+.blueprint-neosektor .neosektor-discharge-send-form input:disabled,
+.blueprint-neosektor .neosektor-discharge-count-card button:disabled {
+    cursor: not-allowed;
+    opacity: 0.54;
+}
+
+.blueprint-neosektor .column-bays {
+    display: grid;
+    gap: 5px;
+    margin-top: 2px;
+}
+
+.blueprint-neosektor .bay-card {
+    display: block;
+    min-height: 0;
+    padding: 6px;
+}
+
+.blueprint-neosektor .bay-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.blueprint-neosektor .bay-heading strong {
+    color: var(--neo-bright-silver);
+    font-size: 0.72rem;
+    font-weight: 950;
+    text-align: right;
+}
+
+.blueprint-neosektor .bay-card input[type="range"],
+.blueprint-neosektor .neosektor-open-bay-control input[type="range"] {
+    width: 100%;
+    min-height: 22px;
+    accent-color: var(--node-sektor-primary);
+}
+
+.blueprint-neosektor .neosektor-open-bay-control > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.blueprint-neosektor .neosektor-open-bay-control .readonly-count {
+    min-height: 0;
+    font-size: 1.45rem;
+}
+
+.blueprint-neosektor .view-bay-dashboard {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+}
+
+.blueprint-neosektor .view-bay-dashboard section {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+}
+
+.blueprint-neosektor .view-bay-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+}
+
+.blueprint-neosektor .view-bay-card {
+    display: grid;
+    place-items: center;
+    gap: 5px;
+    min-height: 56px;
+    padding: 8px;
+}
+
+.blueprint-neosektor .view-bay-card strong {
+    color: var(--neo-bright-silver);
+    font-size: clamp(1rem, 2vw, 1.35rem);
+    font-weight: 950;
+    line-height: 1;
+}
+
+.blueprint-neosektor .neosektor-status {
+    justify-self: center;
+}
+
+.blueprint-neosektor .tunnel-wrap {
+    display: grid;
+    grid-template-rows: auto auto auto;
+    gap: 8px;
+    width: min(100%, 1320px);
+    margin: 0 auto;
+    padding: 6px 7px 7px;
+    overflow: visible;
+}
+
+.blueprint-neosektor .tunnel-wave-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.blueprint-neosektor .tunnel-offset-panel {
+    grid-column: 1 / -1;
+}
+
+.blueprint-neosektor .tunnel-panel {
+    display: grid;
+    gap: 7px;
+    padding: 8px;
+}
+
+.blueprint-neosektor .tunnel-panel h2 {
+    margin-bottom: 0;
+}
+
+.blueprint-neosektor .tunnel-metric {
+    display: grid;
+    gap: 4px;
+    padding: 7px;
+    border: 1px solid rgba(216, 220, 224, 0.16);
+    border-radius: 6px;
+    background: rgba(5, 7, 11, 0.34);
+}
+
+.blueprint-neosektor .tunnel-metric strong,
+.blueprint-neosektor .tunnel-readonly-card strong,
+.blueprint-neosektor .tunnel-bay-card strong {
+    color: var(--neo-bright-silver);
+    font-size: clamp(1.35rem, 3vw, 2.2rem);
+    font-weight: 950;
+    line-height: 1;
+    text-align: center;
+}
+
+.blueprint-neosektor .tunnel-ballmat-grid,
+.blueprint-neosektor .tunnel-bay-grid {
+    display: grid;
+    gap: 6px;
+}
+
+.blueprint-neosektor .tunnel-ballmat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.blueprint-neosektor .tunnel-ballmat-column {
+    display: grid;
+    gap: 6px;
+    min-height: 0;
+}
+
+.blueprint-neosektor .tunnel-readonly-card,
+.blueprint-neosektor .tunnel-bay-card {
+    display: grid;
+    align-content: center;
+    gap: 5px;
+    min-height: 52px;
+    padding: 6px;
+    text-align: center;
+}
+
+.blueprint-neosektor .tunnel-count-control-card .counter-control {
+    margin-top: 0;
+}
+
+.blueprint-neosektor .tunnel-bay-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.blueprint-neosektor .tunnel-bay-card strong {
+    font-size: clamp(0.86rem, 2vw, 1.2rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.blueprint-neosektor .driver-body {
+    display: grid;
+    place-items: center;
+    width: min(100%, 820px);
+}
+
+.blueprint-neosektor .driver-routing {
+    display: grid;
+    grid-template-rows: auto auto auto auto;
+    width: min(100%, 760px);
+    min-height: 0;
+    overflow: visible;
+    border-inline: 1px solid rgba(216, 220, 224, 0.16);
+    background: rgba(5, 7, 11, 0.3);
+}
+
+.blueprint-neosektor .driver-wave {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    min-height: clamp(260px, 34svh, 390px);
+    padding: clamp(18px, 3svh, 34px) clamp(18px, 5vw, 42px) clamp(12px, 2svh, 22px);
+    overflow: hidden;
+    border-bottom: 1px solid rgba(216, 220, 224, 0.18);
+    background:
+        linear-gradient(135deg, rgba(244, 246, 248, 0.08), transparent 32%),
+        linear-gradient(180deg, rgba(18, 26, 36, 0.86), rgba(5, 7, 11, 0.92));
+}
+
+.blueprint-neosektor .driver-wave-second {
+    border-top: 1px solid rgba(var(--node-sektor-primary-rgb), 0.32);
+}
+
+.blueprint-neosektor .driver-wave::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-left: 10px solid rgba(var(--node-sektor-primary-rgb), 0.82);
+    opacity: 0.85;
+    pointer-events: none;
+}
+
+.blueprint-neosektor .driver-wave[data-direction="west"]::before {
+    border-right: 10px solid rgba(var(--node-sektor-primary-rgb), 0.82);
+    border-left: 0;
+}
+
+.blueprint-neosektor .driver-wave-label,
+.blueprint-neosektor .driver-target {
+    position: relative;
+    z-index: 1;
+}
+
+.blueprint-neosektor .driver-wave-label {
+    margin: 0;
+    color: var(--node-sektor-primary);
+    font-size: clamp(2.1rem, 8vw, 4.5rem);
+    font-weight: 950;
+    line-height: 1;
+    text-align: center;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .driver-target {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    place-items: center;
+    align-content: center;
+    gap: clamp(4px, 1svh, 14px);
+    min-height: 0;
+}
+
+.blueprint-neosektor .driver-target strong {
+    display: grid;
+    gap: 0.02em;
+    color: var(--neo-bright-silver);
+    font-size: clamp(2.6rem, 11vw, 6rem);
+    font-weight: 950;
+    line-height: 0.92;
+    text-align: center;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    text-shadow: 0 0 18px rgba(var(--node-sektor-primary-rgb), 0.36);
+}
+
+.blueprint-neosektor .driver-instruction {
+    color: var(--node-sektor-primary);
+}
+
+.blueprint-neosektor .driver-arrow {
+    display: grid;
+    place-items: center;
+    color: white;
+    font-size: clamp(5rem, 18svh, 11rem);
+    font-weight: 950;
+    line-height: 0.75;
+    text-shadow:
+        0 0 24px rgba(var(--node-sektor-primary-rgb), 0.48),
+        0 16px 48px rgba(0, 0, 0, 0.56);
+}
+
+.blueprint-neosektor .driver-wave-context {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0;
+}
+
+.blueprint-neosektor .driver-wave-context div {
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    padding: 6px;
+    border: 1px solid rgba(244, 246, 248, 0.12);
+    border-radius: 6px;
+    background: rgba(3, 5, 8, 0.42);
+}
+
+.blueprint-neosektor .driver-wave-context dt,
+.blueprint-neosektor .driver-wave-context dd {
+    margin: 0;
+}
+
+.blueprint-neosektor .driver-wave-context dt,
+.blueprint-neosektor .neosektor-driver-offset-panel span,
+.blueprint-neosektor .driver-priority-rank {
+    color: rgba(238, 246, 255, 0.66);
+    font-size: 0.62rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .driver-wave-context dd,
+.blueprint-neosektor .neosektor-driver-offset-panel strong,
+.blueprint-neosektor .driver-priority-card strong {
+    color: var(--neo-bright-silver);
+    font-size: 1rem;
+    font-weight: 950;
+    line-height: 1;
+}
+
+.blueprint-neosektor .driver-bay-priority {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: clamp(5px, 1vw, 9px);
+    min-height: 0;
+    padding: 9px;
+    border-top: 1px solid rgba(var(--node-sektor-primary-rgb), 0.44);
+    background:
+        linear-gradient(135deg, rgba(244, 246, 248, 0.08), transparent 32%),
+        linear-gradient(180deg, rgba(18, 26, 36, 0.98), rgba(5, 7, 11, 0.96));
+}
+
+.blueprint-neosektor .driver-priority-card {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    place-items: center;
+    overflow: hidden;
+}
+
+.blueprint-neosektor .driver-priority-rank {
+    width: 100%;
+    padding: 4px 2px;
+    background: rgba(244, 246, 248, 0.9);
+    color: var(--node-sektor-primary);
+    font-size: clamp(0.9rem, 3vw, 1.5rem);
+    line-height: 1;
+    text-align: center;
+}
+
+.blueprint-neosektor .driver-priority-card strong {
+    max-width: 100%;
+    overflow: hidden;
+    padding: 8px 4px;
+    font-size: clamp(1.25rem, 4vw, 2.4rem);
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.blueprint-neosektor .neosektor-driver-offset-panel {
+    display: grid;
+    grid-template-columns: minmax(96px, 0.52fr) minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    border-top: 1px solid rgba(var(--node-sektor-primary-rgb), 0.28);
+    background:
+        linear-gradient(135deg, rgba(244, 246, 248, 0.06), transparent 32%),
+        linear-gradient(180deg, rgba(18, 26, 36, 0.92), rgba(5, 7, 11, 0.96));
+}
+
+.blueprint-neosektor .neosektor-driver-offset-panel > div:first-child {
+    display: grid;
+    justify-items: center;
+    gap: 5px;
+    text-align: center;
+}
+
+.blueprint-neosektor .neosektor-driver-offset-control {
+    display: grid;
+    grid-template-columns: 44px minmax(72px, 1fr) 44px;
+    gap: 8px;
+}
+
+.blueprint-neosektor .neosektor-discharge-wrap {
+    gap: 10px;
+}
+
+.blueprint-neosektor .neosektor-discharge-list {
+    display: grid;
+    gap: 10px;
+    width: 100%;
+}
+
+.blueprint-neosektor .neosektor-discharge-card,
+.blueprint-neosektor .neosektor-discharge-empty {
+    gap: 10px;
+}
+
+.blueprint-neosektor .neosektor-discharge-card.is-setup-needed {
+    border-color: rgba(var(--node-sektor-highlight-rgb), 0.62);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 0 22px rgba(var(--node-sektor-highlight-rgb), 0.16);
+}
+
+.blueprint-neosektor .neosektor-discharge-card-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.blueprint-neosektor .neosektor-discharge-card-head div {
+    display: grid;
+    justify-items: start;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid rgba(216, 220, 224, 0.18);
+    border-radius: 7px;
+    background: rgba(5, 7, 11, 0.34);
+}
+
+.blueprint-neosektor .neosektor-discharge-card-head span,
+.blueprint-neosektor .neosektor-discharge-card-head em,
+.blueprint-neosektor .neosektor-discharge-count-card span,
+.blueprint-neosektor .neosektor-discharge-send-form span,
+.blueprint-neosektor .neosektor-discharge-events h2,
+.blueprint-neosektor .neosektor-discharge-empty h2 {
+    margin: 0;
+    color: rgba(238, 246, 255, 0.66);
+    font-size: 0.62rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    line-height: 1.15;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-discharge-card-head strong {
+    color: var(--node-sektor-highlight);
+    font-size: clamp(1.8rem, 6vw, 3.2rem);
+    font-weight: 950;
+    line-height: 0.95;
+}
+
+.blueprint-neosektor .neosektor-discharge-card-head em {
+    justify-self: end;
+    padding: 8px 10px;
+    border: 1px solid rgba(var(--node-sektor-highlight-rgb), 0.34);
+    border-radius: 999px;
+    color: var(--node-sektor-highlight);
+    font-style: normal;
+}
+
+.blueprint-neosektor .neosektor-discharge-count-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.blueprint-neosektor .neosektor-discharge-count-card {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    text-align: center;
+}
+
+.blueprint-neosektor .neosektor-discharge-count-card > strong {
+    color: var(--node-sektor-highlight);
+    font-size: clamp(2rem, 8vw, 3.6rem);
+    line-height: 0.95;
+}
+
+.blueprint-neosektor .neosektor-discharge-send-form {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+}
+
+.blueprint-neosektor .neosektor-discharge-send-form label {
+    display: grid;
+    gap: 5px;
+}
+
+.blueprint-neosektor .neosektor-discharge-events {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+}
+
+.blueprint-neosektor .neosektor-discharge-events ul {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.blueprint-neosektor .neosektor-discharge-events li,
+.blueprint-neosektor .neosektor-discharge-events p,
+.blueprint-neosektor .neosektor-discharge-empty p {
+    margin: 0;
+    color: rgba(238, 246, 255, 0.82);
+    font-size: 0.86rem;
+    font-weight: 800;
+    line-height: 1.3;
+}
+
+.blueprint-neosektor .neosektor-menu {
+    align-self: start;
+    width: min(100%, 760px);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.blueprint-neosektor .neosektor-dashboard-wrap {
+    justify-items: center;
+    width: min(100%, 900px);
+}
+
+.blueprint-neosektor .neosektor-dashboard-title-strip {
+    width: min(100%, 760px);
+}
+
+@media (min-width: 900px) {
+    .blueprint-neosektor .counts-wrap {
+        padding: 8px 10px 10px;
+    }
+
+    .blueprint-neosektor .mode-view .wave-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .blueprint-neosektor .mode-view .wave-metrics div {
+        display: grid;
+        justify-items: center;
+        gap: 6px;
+        min-height: 76px;
+        padding: 8px 12px;
+        border: 1px solid rgba(var(--node-sektor-primary-rgb), 0.34);
+        border-radius: 8px;
+        background:
+            linear-gradient(135deg, rgba(244, 246, 248, 0.05), transparent 28%),
+            linear-gradient(180deg, rgba(64, 14, 20, 0.92), rgba(23, 7, 11, 0.96));
+        text-align: center;
+    }
+
+    .blueprint-neosektor .mode-view .ops-column {
+        gap: 6px;
+        padding: 10px;
+    }
+
+    .blueprint-neosektor .mode-view .view-bay-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
+    .blueprint-neosektor .tunnel-wrap {
+        grid-template-columns: minmax(330px, 0.72fr) minmax(500px, 1fr) minmax(240px, 0.42fr);
+        grid-template-rows: minmax(0, 1fr);
+        gap: 10px;
+    }
+
+    .blueprint-neosektor .tunnel-wave-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(0, 1.16fr) minmax(0, 1.16fr) minmax(0, 0.82fr);
+    }
+
+    .blueprint-neosektor .tunnel-offset-panel {
+        grid-column: auto;
+    }
+
+    .blueprint-neosektor .tunnel-bay-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: repeat(5, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 760px) {
+    .blueprint-neosektor .neosektor-standalone-page {
+        gap: 6px;
+    }
+
+    .blueprint-neosektor .neosektor-standalone-header.app-header {
+        min-height: 50px;
+        padding-inline: 6px;
+    }
+
+    .blueprint-neosektor .header-title p {
+        font-size: 0.58rem;
+    }
+
+    .blueprint-neosektor .header-title h1 {
+        font-size: 0.94rem;
+    }
+
+    .blueprint-neosektor .header-link,
+    .blueprint-neosektor .header-link-static {
+        min-height: 28px;
+        padding-inline: 8px;
+        font-size: 0.58rem;
+    }
+
+    .blueprint-neosektor .counts-wrap,
+    .blueprint-neosektor .tunnel-wrap {
+        width: 100%;
+        padding: 5px;
+    }
+
+    .blueprint-neosektor .wave-strip,
+    .blueprint-neosektor .ops-grid,
+    .blueprint-neosektor .tunnel-wave-grid {
+        gap: 5px;
+    }
+
+    .blueprint-neosektor .wave-card,
+    .blueprint-neosektor .ops-column,
+    .blueprint-neosektor .counter-card,
+    .blueprint-neosektor .bay-card,
+    .blueprint-neosektor .tunnel-panel,
+    .blueprint-neosektor .tunnel-readonly-card,
+    .blueprint-neosektor .tunnel-bay-card {
+        border-radius: 7px;
+    }
+
+    .blueprint-neosektor .wave-card {
+        padding: 8px 6px;
+    }
+
+    .blueprint-neosektor .wave-card h2,
+    .blueprint-neosektor .ops-column h2,
+    .blueprint-neosektor .column-bay-title h3,
+    .blueprint-neosektor .tunnel-panel h2,
+    .blueprint-neosektor .tunnel-ballmat-column h3,
+    .blueprint-neosektor .view-bay-dashboard h2 {
+        font-size: 0.62rem;
+        letter-spacing: 0.07em;
+    }
+
+    .blueprint-neosektor .wave-metrics {
+        gap: 5px;
+        margin-top: 6px;
+    }
+
+    .blueprint-neosektor .wave-metrics span,
+    .blueprint-neosektor .counter-card > span,
+    .blueprint-neosektor .bay-heading span,
+    .blueprint-neosektor .tunnel-metric span,
+    .blueprint-neosektor .tunnel-readonly-card span,
+    .blueprint-neosektor .tunnel-bay-card span,
+    .blueprint-neosektor .view-bay-card span {
+        font-size: 0.54rem;
+        letter-spacing: 0.04em;
+    }
+
+    .blueprint-neosektor .wave-metrics strong {
+        font-size: 1rem;
+    }
+
+    .blueprint-neosektor .ops-column {
+        padding: 5px;
+    }
+
+    .blueprint-neosektor .counter-card {
+        padding: 5px;
+    }
+
+    .blueprint-neosektor .counter-control {
+        grid-template-columns: 32px minmax(38px, 1fr) 32px;
+        gap: 3px;
+    }
+
+    .blueprint-neosektor .counter-control button,
+    .blueprint-neosektor .counter-number,
+    .blueprint-neosektor .neosektor-inline-status select {
+        min-height: 34px;
+        font-size: 0.9rem;
+    }
+
+    .blueprint-neosektor .readonly-count {
+        min-height: 36px;
+        font-size: 1.18rem;
+    }
+
+    .blueprint-neosektor .mode-view .readonly-count {
+        font-size: 1.46rem;
+    }
+
+    .blueprint-neosektor .neosektor-inline-status {
+        grid-template-columns: 1fr;
+        gap: 3px;
+    }
+
+    .blueprint-neosektor .bay-card {
+        padding: 5px;
+    }
+
+    .blueprint-neosektor .bay-heading {
+        gap: 5px;
+    }
+
+    .blueprint-neosektor .bay-heading strong {
+        font-size: 0.62rem;
+    }
+
+    .blueprint-neosektor .view-bay-dashboard {
+        grid-template-columns: 1fr;
+    }
+
+    .blueprint-neosektor .view-bay-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .blueprint-neosektor .tunnel-wave-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .blueprint-neosektor .tunnel-offset-panel {
+        grid-column: 1 / -1;
+    }
+
+    .blueprint-neosektor .tunnel-ballmat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .blueprint-neosektor .tunnel-bay-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
+    .blueprint-neosektor .tunnel-metric,
+    .blueprint-neosektor .tunnel-readonly-card,
+    .blueprint-neosektor .tunnel-bay-card {
+        padding: 5px;
+    }
+
+    .blueprint-neosektor .tunnel-metric strong,
+    .blueprint-neosektor .tunnel-readonly-card strong {
+        font-size: 1.14rem;
+    }
+
+    .blueprint-neosektor .tunnel-bay-card strong {
+        font-size: 0.64rem;
+    }
+
+    .blueprint-neosektor .driver-wave {
+        min-height: clamp(230px, 31svh, 330px);
+        padding-inline: 18px;
+    }
+
+    .blueprint-neosektor .driver-wave-label {
+        font-size: clamp(1.9rem, 10vw, 3.2rem);
+    }
+
+    .blueprint-neosektor .driver-target strong {
+        font-size: clamp(2.2rem, 12vw, 4rem);
+    }
+
+    .blueprint-neosektor .driver-arrow {
+        font-size: clamp(4.8rem, 17svh, 8rem);
+    }
+
+    .blueprint-neosektor .driver-bay-priority {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 4px;
+        padding: 6px;
+    }
+
+    .blueprint-neosektor .driver-priority-rank {
+        font-size: 0.76rem;
+    }
+
+    .blueprint-neosektor .driver-priority-card strong {
+        padding: 6px 2px;
+        font-size: clamp(0.9rem, 4vw, 1.25rem);
+    }
+
+    .blueprint-neosektor .neosektor-driver-offset-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .blueprint-neosektor .neosektor-driver-offset-control {
+        grid-template-columns: 40px minmax(0, 1fr) 40px;
+    }
+
+    .blueprint-neosektor .neosektor-discharge-card-head,
+    .blueprint-neosektor .neosektor-discharge-count-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .blueprint-neosektor .neosektor-discharge-card-head em {
+        justify-self: start;
+    }
+
+    .blueprint-neosektor .neosektor-menu {
+        grid-template-columns: 1fr;
+        width: min(100%, 360px);
+    }
+}

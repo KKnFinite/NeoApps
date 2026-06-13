@@ -3,65 +3,85 @@
 {% block title %}VIEW LIVE COUNTS | NeoSektor{% endblock %}
 
 {% block content %}
-<section class="neosektor-shell neosektor-live-shell" aria-labelledby="neosektor-live-title">
-    <header class="neosektor-operator-title">
-        <span>{{ gateway.code }} LIVE COUNTS</span>
-        <h1 id="neosektor-live-title">VIEW LIVE COUNTS</h1>
-        <p>{{ summary.sort_name }} | {{ summary.sort_date.strftime("%m/%d/%Y") }}</p>
+<section class="neosektor-standalone-page neosektor-live-shell mode-view" aria-labelledby="neosektor-live-title">
+    <header class="app-header neosektor-standalone-header">
+        <div class="header-title">
+            <p>NeoSektor</p>
+            <h1 id="neosektor-live-title">Live Ballmat Counts</h1>
+        </div>
+        <span class="header-link header-link-static">{{ summary.sort_name }} | {{ summary.sort_date.strftime("%m/%d/%Y") }}</span>
     </header>
 
-    <section class="neosektor-live-wave-strip" aria-label="Wave counts">
-        {% for wave in waves %}
-        <article class="neosektor-live-wave-card">
-            <h2>{{ wave.name }}</h2>
-            <div class="neosektor-live-wave-metrics">
-                <div><span>PLANNED</span><strong>{{ wave.planned }}</strong></div>
-                <div><span>UNLOADED</span><strong>{{ wave.unloaded }}</strong></div>
-                <div><span>LEFT</span><strong>{{ wave.left }}</strong></div>
-            </div>
-        </article>
-        {% endfor %}
-    </section>
-
-    <section class="neosektor-live-ops-grid" aria-label="Ballmat counts">
-        {% for side_label in ["EAST", "WEST"] %}
-        <article class="neosektor-live-ops-column">
-            <h2>{{ side_label }} BALLMAT</h2>
-
-            {% for ballmat in ballmats if ballmat.side == side_label %}
-            <div class="neosektor-live-counter-card">
-                <span>TOTAL COUNT</span>
-                <strong>{{ ballmat.count }}</strong>
-                <em class="neosektor-status neosektor-status-{{ ballmat.status|lower }}">{{ ballmat.status }}</em>
-            </div>
-            {% endfor %}
-
-            {% for open_bay in open_bays if open_bay.side == side_label %}
-            <div class="neosektor-live-counter-card">
-                <span>OPEN BAYS</span>
-                <strong>{{ open_bay.open_count }}</strong>
-            </div>
-            {% endfor %}
-
-            <div class="neosektor-live-bay-stack">
-                {% for bay in bay_statuses if bay.side == side_label %}
-                <div class="neosektor-live-bay-card">
-                    <span>{{ bay.bay_name }}</span>
-                    <strong>{{ bay.status }}</strong>
+    <main class="counts-wrap">
+        <section class="wave-strip" aria-label="Wave summary">
+            {% for wave_key, wave in [("first", waves[0]), ("second", waves[1])] %}
+            <article class="wave-card">
+                <h2>{{ wave.name }}</h2>
+                <div class="wave-metrics">
+                    <div>
+                        <span>Left to Arrive</span>
+                        <strong data-wave="{{ wave_key }}" data-metric="left_to_arrive">{{ wave.planned }}</strong>
+                    </div>
+                    <div>
+                        <span>Left to Unload</span>
+                        <strong data-wave="{{ wave_key }}" data-metric="left_to_unload">{{ wave.left }}</strong>
+                    </div>
                 </div>
-                {% endfor %}
-            </div>
-        </article>
-        {% endfor %}
-    </section>
+            </article>
+            {% endfor %}
+        </section>
 
-    <section class="neosektor-live-route-strip" aria-label="Driver routing">
-        {% for route in driver_routes %}
-        <div>
-            <span>{{ route.route_name }}</span>
-            <strong>{{ route.route_value }}</strong>
-        </div>
-        {% endfor %}
-    </section>
+        <section class="ops-grid mode-view" aria-label="Live counts">
+            {% for side_key in ["east", "west"] %}
+            {% set side = sides[side_key] %}
+            <section class="ops-column {{ side.key }}-column" aria-label="{{ side.label }} Ballmat">
+                <h2>{{ side.label.title() }} Ballmat</h2>
+
+                {% for wave in side.waves %}
+                <article class="counter-card">
+                    <span>{{ wave.name }}</span>
+                    <strong class="readonly-count" data-count-field="{{ side.key }}_{{ wave.key }}_wave">{{ wave.count }}</strong>
+                </article>
+                {% endfor %}
+
+                <article class="counter-card">
+                    <span>Open Bays</span>
+                    <strong class="readonly-count" data-open-bays-value>{{ side.open_bays }}</strong>
+                </article>
+
+                <section class="column-bays">
+                    <div class="column-bay-title">
+                        <h3>{{ side.label.title() }} Bays</h3>
+                    </div>
+                    {% for bay in side.bays %}
+                    <article class="bay-card">
+                        <div class="bay-heading">
+                            <span>{{ bay.bay_name }}</span>
+                            <strong data-bay-field="{{ bay.bay_name }}">{{ bay.status }}</strong>
+                        </div>
+                    </article>
+                    {% endfor %}
+                </section>
+            </section>
+            {% endfor %}
+        </section>
+
+        <section class="view-bay-dashboard" aria-label="Bay status dashboard">
+            {% for side_key in ["east", "west"] %}
+            {% set side = sides[side_key] %}
+            <section>
+                <h2>{{ side.label.title() }} Bays</h2>
+                <div class="view-bay-grid">
+                    {% for bay in side.bays %}
+                    <article class="view-bay-card">
+                        <span>{{ bay.bay_name }}</span>
+                        <strong data-bay-field="{{ bay.bay_name }}">{{ bay.status }}</strong>
+                    </article>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endfor %}
+        </section>
+    </main>
 </section>
 {% endblock %}

@@ -3,37 +3,54 @@
 {% block title %}NeoSektor | NeoGateway{% endblock %}
 
 {% block content %}
-<section class="neosektor-shell neosektor-dashboard-shell" aria-label="NeoSektor dashboard">
-    <div class="neosektor-hero">
-        <span class="neosektor-kicker">{{ gateway.code }} OPERATIONS MENU</span>
-        <h1>
-            <span class="neo-node-name neo-node-sektor node-sektor" aria-label="NeoSektor"><span class="neo-word">Neo</span><span class="node-word">Sektor</span></span>
-        </h1>
-        <p>Select a NeoSektor operating screen.</p>
-    </div>
-
-    <nav class="neosektor-menu" aria-label="NeoSektor menu">
-        {% for label, endpoint, _view_permission, _edit_permission, _description in menu_items %}
-        <a class="neosektor-menu-link" href="{{ url_for(endpoint) }}">{{ label }}</a>
-        {% endfor %}
-    </nav>
-
-    <section class="neosektor-overview-panel" aria-label="NeoSektor foundation status">
-        <h2>LIVE STATE</h2>
-        <div class="neosektor-overview-grid">
-            <div>
-                <span>ACTIVE GATEWAY</span>
-                <strong>{{ gateway.code }}</strong>
-            </div>
-            <div>
-                <span>DATA STORE</span>
-                <strong>NEON READY</strong>
-            </div>
-            <div>
-                <span>STANDALONE</span>
-                <strong>UNCHANGED</strong>
-            </div>
+<section class="neosektor-standalone-page neosektor-dashboard-shell mode-view" aria-label="NeoSektor dashboard">
+    <header class="app-header neosektor-standalone-header">
+        <div class="header-title">
+            <p>NeoSektor</p>
+            <h1>Operations Menu</h1>
         </div>
-    </section>
+        <span class="header-link header-link-static">{{ gateway.code }}</span>
+    </header>
+
+    <main class="counts-wrap neosektor-dashboard-wrap">
+        <section class="wave-strip neosektor-dashboard-title-strip" aria-label="NeoSektor status">
+            <article class="wave-card">
+                <h2>
+                    <span class="neo-node-name neo-node-sektor node-sektor" aria-label="NeoSektor">
+                        <span class="neo-word">Neo</span><span class="node-word">Sektor</span>
+                    </span>
+                </h2>
+                <div class="wave-metrics">
+                    <div>
+                        <span>Gateway</span>
+                        <strong>{{ gateway.code }}</strong>
+                    </div>
+                    <div>
+                        <span>Data</span>
+                        <strong>Ready</strong>
+                    </div>
+                </div>
+            </article>
+            <article class="wave-card">
+                <h2>Live Flow</h2>
+                <div class="wave-metrics">
+                    <div>
+                        <span>Standalone</span>
+                        <strong>Untouched</strong>
+                    </div>
+                    <div>
+                        <span>State</span>
+                        <strong>DB</strong>
+                    </div>
+                </div>
+            </article>
+        </section>
+
+        <nav class="neosektor-menu" aria-label="NeoSektor menu">
+            {% for label, endpoint, _view_permission, _edit_permission, _description in menu_items %}
+            <a class="neosektor-menu-link" href="{{ url_for(endpoint) }}">{{ label }}</a>
+            {% endfor %}
+        </nav>
+    </main>
 </section>
 {% endblock %}
