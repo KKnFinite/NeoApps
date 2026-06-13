@@ -37,6 +37,7 @@ def create_app(config_class=Config, auto_bootstrap=True):
     register_blueprints(app)
     register_template_helpers(app)
     register_request_guards(app)
+    register_security_headers(app)
 
     return app
 
@@ -166,6 +167,19 @@ def register_request_guards(app):
             return None
 
         return redirect(url_for("auth.change_password"))
+
+
+def register_security_headers(app):
+    @app.after_request
+    def add_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=()",
+        )
+        return response
 
 
 def register_pwa_assets(app):

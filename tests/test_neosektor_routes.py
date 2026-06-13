@@ -417,11 +417,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         view_rule = PermissionRule.query.filter_by(
             permission_key="neosektor.driver_routing.view"
         ).one()
-        edit_rule = PermissionRule.query.filter_by(
-            permission_key="neosektor.driver_routing.edit"
-        ).one()
         view_rule.minimum_role = "simulator"
-        edit_rule.minimum_role = "simulator"
         db.session.commit()
         self._login_approved_user(role="operator")
 
@@ -678,14 +674,6 @@ class NeoSektorRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login_approved_user(role="simulator")
 
-        response = self.client.post(
-            "/neosektor/tunnel-conductor/delta",
-            json={"side": "east", "wave": "first", "delta": 1},
-        )
-
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 0)
-
         wave_response = self.client.post(
             "/neosektor/tunnel-conductor/wave",
             json={"wave": "first", "delta": 1},
@@ -715,7 +703,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             6,
         )
 
-    def test_tunnel_conductor_delta_updates_east_first_wave(self):
+    def test_tunnel_conductor_no_longer_exposes_ballmat_count_delta_endpoint(self):
         self._login_approved_user(role="simulator")
 
         response = self.client.post(
@@ -723,103 +711,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
             json={"side": "east", "wave": "first", "delta": 1},
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            NeoSektorBallmatWaveCount.query.filter_by(
-                side="EAST",
-                wave_name="1ST WAVE",
-            ).one().count,
-            1,
-        )
-
-    def test_tunnel_conductor_delta_updates_east_second_wave(self):
-        self._login_approved_user(role="simulator")
-
-        response = self.client.post(
-            "/neosektor/tunnel-conductor/delta",
-            json={"side": "east", "wave": "second", "delta": 1},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            NeoSektorBallmatWaveCount.query.filter_by(
-                side="EAST",
-                wave_name="2ND WAVE",
-            ).one().count,
-            1,
-        )
-
-    def test_tunnel_conductor_delta_updates_west_first_wave(self):
-        self._login_approved_user(role="simulator")
-
-        response = self.client.post(
-            "/neosektor/tunnel-conductor/delta",
-            json={"side": "west", "wave": "first", "delta": 1},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            NeoSektorBallmatWaveCount.query.filter_by(
-                side="WEST",
-                wave_name="1ST WAVE",
-            ).one().count,
-            1,
-        )
-
-    def test_tunnel_conductor_delta_updates_west_second_wave(self):
-        self._login_approved_user(role="simulator")
-
-        response = self.client.post(
-            "/neosektor/tunnel-conductor/delta",
-            json={"side": "west", "wave": "second", "delta": 1},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            NeoSektorBallmatWaveCount.query.filter_by(
-                side="WEST",
-                wave_name="2ND WAVE",
-            ).one().count,
-            1,
-        )
-
-    def test_tunnel_conductor_delta_counts_cannot_go_below_zero(self):
-        self._login_approved_user(role="simulator")
-
-        response = self.client.post(
-            "/neosektor/tunnel-conductor/delta",
-            json={"side": "east", "wave": "first", "delta": -1},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        payload = response.get_json()
-        self.assertEqual(payload["state"]["sides"]["east"]["waves"][0]["count"], 0)
-        self.assertEqual(
-            NeoSektorBallmatWaveCount.query.filter_by(
-                side="EAST",
-                wave_name="1ST WAVE",
-            ).one().count,
-            0,
-        )
-
-    def test_tunnel_conductor_delta_updates_shared_live_state(self):
-        self._login_approved_user(role="simulator")
-
-        response = self.client.post(
-            "/neosektor/tunnel-conductor/delta",
-            json={"side": "west", "wave": "second", "delta": 4},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        state_response = self.client.get("/neosektor/ballmat/state")
-        live_counts = self.client.get("/neosektor/live-counts")
-
-        payload = state_response.get_json()
-        self.assertEqual(payload["state"]["sides"]["west"]["total_count"], 4)
-        self.assertEqual(payload["state"]["waves"][1]["unloaded"], 4)
-        self.assertEqual(NeoSektorSortState.query.one().unloaded_total, 4)
-        self.assertEqual(live_counts.status_code, 200)
-        self.assertIn(b'data-count-field="west_second_wave">4</strong>', live_counts.data)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 0)
 
     def test_neosektor_dashboard_and_header_link_to_real_tunnel_conductor(self):
         self._login_approved_user(role="simulator")

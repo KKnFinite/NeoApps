@@ -34,7 +34,7 @@ def ensure_default_gateway_and_nodes():
     if not gateway:
         gateway = Gateway(
             code=gateway_code,
-            name=current_app.config.get("DEFAULT_GATEWAY_NAME", "NeoRFD"),
+            name=current_app.config.get("DEFAULT_GATEWAY_NAME", "NeoGateway"),
             is_active=True,
         )
         db.session.add(gateway)

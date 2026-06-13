@@ -1,11 +1,13 @@
 import json
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from flask import current_app
 
 
 BREVO_SMTP_EMAIL_URL = "https://api.brevo.com/v3/smtp/email"
+BREVO_SMTP_EMAIL_HOST = "api.brevo.com"
 
 
 def send_email_verification(user, token):
@@ -92,7 +94,7 @@ def _send_transactional_email(
         "textContent": text_content,
     }
     request = Request(
-        BREVO_SMTP_EMAIL_URL,
+        _validated_brevo_email_url(),
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "accept": "application/json",
@@ -103,13 +105,20 @@ def _send_transactional_email(
     )
 
     try:
-        with urlopen(request, timeout=10) as response:
+        with urlopen(request, timeout=10) as response:  # nosec B310
             response_body = response.read().decode("utf-8")
     except (HTTPError, URLError, TimeoutError) as error:
         current_app.logger.warning("Brevo email send failed: %s", error)
         return {"sent": False, "reason": "send_failed"}
 
     return {"sent": True, "response": response_body}
+
+
+def _validated_brevo_email_url():
+    parsed = urlparse(BREVO_SMTP_EMAIL_URL)
+    if parsed.scheme != "https" or parsed.hostname != BREVO_SMTP_EMAIL_HOST:
+        raise RuntimeError("Brevo email URL must use the approved HTTPS API host.")
+    return BREVO_SMTP_EMAIL_URL
 
 
 def _absolute_url(path):

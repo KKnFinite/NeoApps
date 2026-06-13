@@ -105,11 +105,6 @@ DEFAULT_PERMISSION_RULES = (
         "watcher",
         "View NeoSektor Driver Routing screens.",
     ),
-    (
-        "neosektor.driver_routing.edit",
-        "operator",
-        "Edit NeoSektor Driver Routing screens.",
-    ),
 )
 
 PERMISSION_RULE_GROUPS = (

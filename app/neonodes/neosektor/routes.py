@@ -8,7 +8,6 @@ from app.services.neosektor_live_counts import (
     TUNNEL_CONDUCTOR_EDIT_PERMISSION,
     TUNNEL_CONDUCTOR_VIEW_PERMISSION,
     adjust_tunnel_wave_arrivals,
-    adjust_tunnel_count,
     ballmat_operations_context,
     ballmat_state_payload,
     driver_routing_context,
@@ -72,7 +71,7 @@ NEOSEKTOR_PAGES = (
         "DRIVER ROUTING",
         "neosektor.driver_routing",
         "neosektor.driver_routing.view",
-        "neosektor.driver_routing.edit",
+        None,
         "Driver routing foundation.",
     ),
 )
@@ -168,31 +167,6 @@ def tunnel_conductor_offset():
 
     payload = request.get_json(silent=True) or request.form
     state = update_tunnel_driver_offset(get_current_gateway(), payload)
-    db.session.commit()
-    return jsonify({"ok": True, "state": state})
-
-
-@bp.route("/tunnel-conductor/delta", methods=["POST"])
-@gateway_node_required("sektor")
-def tunnel_conductor_delta():
-    access = _neosektor_access(
-        TUNNEL_CONDUCTOR_VIEW_PERMISSION,
-        TUNNEL_CONDUCTOR_EDIT_PERMISSION,
-    )
-    if not access["can_edit"]:
-        return jsonify({"ok": False, "error": "Edit access denied."}), 403
-
-    payload = request.get_json(silent=True) or request.form
-    try:
-        state = adjust_tunnel_count(
-            get_current_gateway(),
-            payload.get("side"),
-            payload.get("wave"),
-            payload.get("delta"),
-        )
-    except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
-
     db.session.commit()
     return jsonify({"ok": True, "state": state})
 

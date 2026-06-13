@@ -30,8 +30,6 @@ def role_required(*roles):
         return wrapped_view
 
     return decorator
-
-
 def gateway_node_required(node_code, minimum_role="watcher"):
     def decorator(view_func):
         @wraps(view_func)
@@ -59,12 +57,3 @@ def gateway_node_required(node_code, minimum_role="watcher"):
         return wrapped_view
 
     return decorator
-
-
-def mfa_required(view_func):
-    @wraps(view_func)
-    def wrapped_view(*args, **kwargs):
-        # TODO: Add final MFA enforcement after MFA enrollment and challenge flows are built.
-        return view_func(*args, **kwargs)
-
-    return wrapped_view

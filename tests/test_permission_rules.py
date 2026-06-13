@@ -56,7 +56,6 @@ class PermissionRulesTest(unittest.TestCase):
                 "neosektor.conductor.view": "simulator",
                 "neosektor.discharge.edit": "operator",
                 "neosektor.discharge.view": "operator",
-                "neosektor.driver_routing.edit": "operator",
                 "neosektor.driver_routing.view": "watcher",
                 "neosektor.ebm.edit": "operator",
                 "neosektor.ebm.view": "operator",
@@ -177,7 +176,7 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertTrue(user_can("neosektor.ebm.edit", operator))
         self.assertTrue(user_can("neosektor.wbm.view", operator))
         self.assertTrue(user_can("neosektor.wbm.edit", operator))
-        self.assertTrue(user_can("neosektor.driver_routing.edit", operator))
+        self.assertFalse(user_can("neosektor.driver_routing.edit", operator))
 
     def test_lower_role_cannot_view_or_edit_door_view(self):
         watcher = self._user_with_ermac_role("ermac_watcher", "watcher")

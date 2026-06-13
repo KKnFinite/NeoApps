@@ -42,17 +42,21 @@ class LocalLaunchNavigationTest(unittest.TestCase):
     def test_root_app_py_is_intentionally_absent(self):
         self.assertFalse(Path("app.py").exists())
 
-    def test_default_gateway_branding_config_is_neorfd(self):
+    def test_default_gateway_branding_config_preserves_rfd_context_with_neogateway_logo(self):
         self.assertEqual(self.app.config["DEFAULT_GATEWAY_CODE"], "RFD")
-        self.assertEqual(self.app.config["DEFAULT_GATEWAY_NAME"], "NeoRFD")
-        self.assertEqual(self.app.config["DEFAULT_GATEWAY_LOGO"], "images/neorfd_logo1.png")
+        self.assertEqual(self.app.config["DEFAULT_GATEWAY_NAME"], "NeoGateway")
+        self.assertEqual(self.app.config["DEFAULT_GATEWAY_LOGO"], "images/neogateway_logo3_small.png")
         self.assertIn("STATIC_ASSET_VERSION", self.app.config)
+        self.assertEqual(self.app.config["SESSION_COOKIE_SAMESITE"], "Lax")
+        self.assertTrue(self.app.config["SESSION_COOKIE_HTTPONLY"])
+        self.assertEqual(self.app.config["REMEMBER_COOKIE_SAMESITE"], "Lax")
+        self.assertTrue(self.app.config["REMEMBER_COOKIE_HTTPONLY"])
 
-    def test_neorfd_logo_asset_exists_with_render_safe_casing(self):
-        logo_path = Path("app/static/images/neorfd_logo1.png")
+    def test_default_neogateway_logo_asset_exists_with_render_safe_casing(self):
+        logo_path = Path("app/static/images/neogateway_logo3_small.png")
 
         self.assertTrue(logo_path.is_file())
-        self.assertEqual(logo_path.name, "neorfd_logo1.png")
+        self.assertEqual(logo_path.name, "neogateway_logo3_small.png")
         self.assertGreater(logo_path.stat().st_size, 0)
 
     def test_base_css_uses_cyber_topbar_without_vertical_grid_background(self):
@@ -64,7 +68,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("text-align-last: center;", css)
         self.assertIn(".user-edit-role-field select,", css)
         self.assertIn(".role-select-wrap::after", css)
-        self.assertIn("border-right: 2px solid #ff3b46;", css)
+        self.assertIn("border-right: 2px solid var(--node-highlight);", css)
         self.assertIn("width: min(100%, 240px);", css)
         self.assertIn(".user-chip", css)
         self.assertIn(".topbar::after", css)
@@ -185,8 +189,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         service_worker = response.get_data(as_text=True)
         self.assertIn("CACHE_NAME", service_worker)
         self.assertIn('CACHE_PREFIX = "neogateway-"', service_worker)
-        self.assertIn("neogateway-static-v20260611-3", service_worker)
-        self.assertIn("/static/css/base.css?v=20260611-3", service_worker)
+        self.assertIn("neogateway-static-v20260613-1", service_worker)
+        self.assertIn("/static/css/base.css?v=20260613-1", service_worker)
         self.assertIn('request.mode === "navigate"', service_worker)
         self.assertIn('event.respondWith(fetch(request, { cache: "no-store" }));', service_worker)
         self.assertIn("caches.delete(cacheName)", service_worker)
@@ -197,6 +201,17 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("/static/images/neogateway_logo3_large.png", service_worker)
         self.assertNotIn("NeoRFD", service_worker)
         self.assertNotIn("neorfd", service_worker.lower())
+
+    def test_security_headers_are_applied(self):
+        response = self.client.get("/login")
+
+        self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(response.headers["X-Frame-Options"], "SAMEORIGIN")
+        self.assertEqual(response.headers["Referrer-Policy"], "strict-origin-when-cross-origin")
+        self.assertEqual(
+            response.headers["Permissions-Policy"],
+            "camera=(), microphone=(), geolocation=()",
+        )
 
     def test_neonode_button_asset_exists_with_render_safe_casing(self):
         button_path = Path("app/static/images/neobutton1_medium.png")

@@ -15,41 +15,49 @@
     --node-gateway-secondary: #8f2f18;
     --node-gateway-highlight: #f0a33a;
     --node-gateway-primary-rgb: 217, 90, 31;
+    --node-gateway-secondary-rgb: 143, 47, 24;
     --node-gateway-highlight-rgb: 240, 163, 58;
     --node-motherbrain-primary: #cf6a6e;
     --node-motherbrain-secondary: #5a1d23;
     --node-motherbrain-highlight: #ff8a7a;
     --node-motherbrain-primary-rgb: 207, 106, 110;
+    --node-motherbrain-secondary-rgb: 90, 29, 35;
     --node-motherbrain-highlight-rgb: 255, 138, 122;
     --node-sektor-primary: #b5121b;
     --node-sektor-secondary: #343a40;
     --node-sektor-highlight: #ff4a1c;
     --node-sektor-primary-rgb: 181, 18, 27;
+    --node-sektor-secondary-rgb: 52, 58, 64;
     --node-sektor-highlight-rgb: 255, 74, 28;
     --node-ermac-primary: #8f1826;
     --node-ermac-secondary: #36e27b;
     --node-ermac-highlight: #9dffd0;
     --node-ermac-primary-rgb: 143, 24, 38;
+    --node-ermac-secondary-rgb: 54, 226, 123;
     --node-ermac-highlight-rgb: 157, 255, 208;
     --node-scorpion-primary: #f4c21f;
     --node-scorpion-secondary: #8a4f12;
     --node-scorpion-highlight: #ff8c1a;
     --node-scorpion-primary-rgb: 244, 194, 31;
+    --node-scorpion-secondary-rgb: 138, 79, 18;
     --node-scorpion-highlight-rgb: 255, 140, 26;
     --node-reptile-primary: #70e13b;
     --node-reptile-secondary: #6f8f16;
     --node-reptile-highlight: #b6ff2e;
     --node-reptile-primary-rgb: 112, 225, 59;
+    --node-reptile-secondary-rgb: 111, 143, 22;
     --node-reptile-highlight-rgb: 182, 255, 46;
     --node-subzero-primary: #4db7ff;
     --node-subzero-secondary: #2c5d7a;
     --node-subzero-highlight: #c8f4ff;
     --node-subzero-primary-rgb: 77, 183, 255;
+    --node-subzero-secondary-rgb: 44, 93, 122;
     --node-subzero-highlight-rgb: 200, 244, 255;
     --node-rain-primary: #7f4dff;
     --node-rain-secondary: #c7a64a;
     --node-rain-highlight: #c8a6ff;
     --node-rain-primary-rgb: 127, 77, 255;
+    --node-rain-secondary-rgb: 199, 166, 74;
     --node-rain-highlight-rgb: 200, 166, 255;
 }
 
@@ -59,6 +67,7 @@
     --node-secondary: var(--node-gateway-secondary);
     --node-highlight: var(--node-gateway-highlight);
     --node-rgb: var(--node-gateway-primary-rgb);
+    --node-secondary-rgb: var(--node-gateway-secondary-rgb);
     --node-highlight-rgb: var(--node-gateway-highlight-rgb);
 }
 
@@ -69,6 +78,7 @@
     --node-secondary: var(--node-motherbrain-secondary);
     --node-highlight: var(--node-motherbrain-highlight);
     --node-rgb: var(--node-motherbrain-primary-rgb);
+    --node-secondary-rgb: var(--node-motherbrain-secondary-rgb);
     --node-highlight-rgb: var(--node-motherbrain-highlight-rgb);
 }
 
@@ -78,6 +88,7 @@
     --node-secondary: var(--node-sektor-secondary);
     --node-highlight: var(--node-sektor-highlight);
     --node-rgb: var(--node-sektor-primary-rgb);
+    --node-secondary-rgb: var(--node-sektor-secondary-rgb);
     --node-highlight-rgb: var(--node-sektor-highlight-rgb);
 }
 
@@ -88,6 +99,7 @@
     --node-secondary: var(--node-ermac-secondary);
     --node-highlight: var(--node-ermac-highlight);
     --node-rgb: var(--node-ermac-primary-rgb);
+    --node-secondary-rgb: var(--node-ermac-secondary-rgb);
     --node-highlight-rgb: var(--node-ermac-highlight-rgb);
 }
 
@@ -97,6 +109,7 @@
     --node-secondary: var(--node-scorpion-secondary);
     --node-highlight: var(--node-scorpion-highlight);
     --node-rgb: var(--node-scorpion-primary-rgb);
+    --node-secondary-rgb: var(--node-scorpion-secondary-rgb);
     --node-highlight-rgb: var(--node-scorpion-highlight-rgb);
 }
 
@@ -106,6 +119,7 @@
     --node-secondary: var(--node-reptile-secondary);
     --node-highlight: var(--node-reptile-highlight);
     --node-rgb: var(--node-reptile-primary-rgb);
+    --node-secondary-rgb: var(--node-reptile-secondary-rgb);
     --node-highlight-rgb: var(--node-reptile-highlight-rgb);
 }
 
@@ -115,6 +129,7 @@
     --node-secondary: var(--node-subzero-secondary);
     --node-highlight: var(--node-subzero-highlight);
     --node-rgb: var(--node-subzero-primary-rgb);
+    --node-secondary-rgb: var(--node-subzero-secondary-rgb);
     --node-highlight-rgb: var(--node-subzero-highlight-rgb);
 }
 
@@ -124,7 +139,55 @@
     --node-secondary: var(--node-rain-secondary);
     --node-highlight: var(--node-rain-highlight);
     --node-rgb: var(--node-rain-primary-rgb);
+    --node-secondary-rgb: var(--node-rain-secondary-rgb);
     --node-highlight-rgb: var(--node-rain-highlight-rgb);
+}
+
+.blueprint-public,
+.blueprint-auth {
+    --node-primary: var(--node-gateway-primary);
+    --node-secondary: var(--node-gateway-secondary);
+    --node-highlight: var(--node-gateway-highlight);
+    --node-rgb: var(--node-gateway-primary-rgb);
+    --node-secondary-rgb: var(--node-gateway-secondary-rgb);
+    --node-highlight-rgb: var(--node-gateway-highlight-rgb);
+}
+
+.blueprint-neomotherbrain,
+.blueprint-auth.motherbrain-fixed-header {
+    --node-primary: var(--node-motherbrain-primary);
+    --node-secondary: var(--node-motherbrain-secondary);
+    --node-highlight: var(--node-motherbrain-highlight);
+    --node-rgb: var(--node-motherbrain-primary-rgb);
+    --node-secondary-rgb: var(--node-motherbrain-secondary-rgb);
+    --node-highlight-rgb: var(--node-motherbrain-highlight-rgb);
+}
+
+.blueprint-neoermac {
+    --node-primary: var(--node-ermac-primary);
+    --node-secondary: var(--node-ermac-secondary);
+    --node-highlight: var(--node-ermac-highlight);
+    --node-rgb: var(--node-ermac-primary-rgb);
+    --node-secondary-rgb: var(--node-ermac-secondary-rgb);
+    --node-highlight-rgb: var(--node-ermac-highlight-rgb);
+}
+
+.blueprint-neosektor {
+    --node-primary: var(--node-sektor-primary);
+    --node-secondary: var(--node-sektor-secondary);
+    --node-highlight: var(--node-sektor-highlight);
+    --node-rgb: var(--node-sektor-primary-rgb);
+    --node-secondary-rgb: var(--node-sektor-secondary-rgb);
+    --node-highlight-rgb: var(--node-sektor-highlight-rgb);
+}
+
+.rfd-hub-page {
+    --node-primary: var(--node-gateway-primary);
+    --node-secondary: var(--node-gateway-secondary);
+    --node-highlight: var(--node-gateway-highlight);
+    --node-rgb: var(--node-gateway-primary-rgb);
+    --node-secondary-rgb: var(--node-gateway-secondary-rgb);
+    --node-highlight-rgb: var(--node-gateway-highlight-rgb);
 }
 
 .neo-node-name {
@@ -427,7 +490,7 @@ a {
     width: 82px;
     height: 82px;
     filter:
-        drop-shadow(0 0 14px rgba(255, 31, 55, 0.34))
+        drop-shadow(0 0 14px rgba(var(--node-rgb), 0.34))
         drop-shadow(0 0 10px rgba(54, 226, 123, 0.12));
 }
 
@@ -500,10 +563,10 @@ a {
 
 .motherbrain-fixed-header .nav a.is-active,
 .motherbrain-fixed-header .nav a[aria-current="page"] {
-    border-color: rgba(255, 59, 70, 0.78);
+    border-color: rgba(var(--node-highlight-rgb), 0.78);
     color: var(--text);
     background:
-        linear-gradient(180deg, rgba(255, 59, 70, 0.22), rgba(122, 15, 22, 0.24)),
+        linear-gradient(180deg, rgba(var(--node-highlight-rgb), 0.22), rgba(var(--node-secondary-rgb), 0.24)),
         linear-gradient(180deg, rgba(26, 28, 34, 0.94), rgba(5, 5, 6, 0.9));
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.12),
@@ -936,7 +999,7 @@ a {
         rgba(3, 4, 6, 0.42);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        0 0 20px rgba(216, 32, 42, 0.08);
+        0 0 20px rgba(var(--node-rgb), 0.08);
 }
 
 .permission-rule-group-heading {
@@ -996,14 +1059,14 @@ a {
     border: 1px solid rgba(201, 208, 214, 0.28);
     border-radius: 6px;
     background:
-        radial-gradient(circle at 50% 0%, rgba(255, 31, 55, 0.18), transparent 22rem),
+        radial-gradient(circle at 50% 0%, rgba(var(--node-rgb), 0.18), transparent 22rem),
         radial-gradient(circle at 80% 18%, rgba(50, 255, 126, 0.1), transparent 18rem),
         linear-gradient(145deg, rgba(238, 246, 255, 0.07), transparent 30%),
         linear-gradient(180deg, rgba(16, 18, 22, 0.96), rgba(4, 5, 7, 0.96));
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.1),
-        inset 0 -1px 0 rgba(255, 31, 55, 0.26),
-        0 0 34px rgba(255, 31, 55, 0.14),
+        inset 0 -1px 0 rgba(var(--node-rgb), 0.26),
+        0 0 34px rgba(var(--node-rgb), 0.14),
         0 20px 60px rgba(0, 0, 0, 0.42);
     text-align: center;
 }
@@ -1031,7 +1094,7 @@ a {
     letter-spacing: 0.08em;
     text-transform: uppercase;
     text-shadow:
-        0 0 18px rgba(255, 31, 55, 0.46),
+        0 0 18px rgba(var(--node-rgb), 0.46),
         0 2px 0 rgba(0, 0, 0, 0.8);
 }
 
@@ -1062,11 +1125,11 @@ a {
     color: #eef6ff;
     background:
         linear-gradient(135deg, rgba(238, 246, 255, 0.16), transparent 32%),
-        linear-gradient(180deg, rgba(216, 32, 42, 0.78), rgba(88, 8, 16, 0.84)),
+        linear-gradient(180deg, rgba(var(--node-rgb), 0.78), rgba(88, 8, 16, 0.84)),
         linear-gradient(180deg, rgba(32, 35, 41, 0.94), rgba(17, 19, 24, 0.94));
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.18),
-        0 0 22px rgba(255, 31, 55, 0.22);
+        0 0 22px rgba(var(--node-rgb), 0.22);
     font-size: 0.86rem;
     font-weight: 950;
     letter-spacing: 0.06em;
@@ -1081,7 +1144,7 @@ a {
     color: #ffffff;
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.2),
-        0 0 26px rgba(255, 31, 55, 0.3),
+        0 0 26px rgba(var(--node-rgb), 0.3),
         0 0 18px rgba(54, 226, 123, 0.18);
 }
 
@@ -1126,7 +1189,7 @@ a {
     object-fit: contain;
     filter:
         drop-shadow(0 18px 30px rgba(0, 0, 0, 0.72))
-        drop-shadow(0 0 24px rgba(255, 31, 55, 0.3));
+        drop-shadow(0 0 24px rgba(var(--node-rgb), 0.3));
 }
 
 .neoermac-overview-panel {
@@ -1137,12 +1200,12 @@ a {
     border: 1px solid rgba(201, 208, 214, 0.22);
     border-radius: 6px;
     background:
-        radial-gradient(circle at 18% 0%, rgba(255, 31, 55, 0.14), transparent 18rem),
+        radial-gradient(circle at 18% 0%, rgba(var(--node-rgb), 0.14), transparent 18rem),
         linear-gradient(135deg, rgba(54, 226, 123, 0.07), transparent 34%),
         linear-gradient(180deg, rgba(16, 18, 22, 0.9), rgba(4, 5, 7, 0.92));
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.1),
-        0 0 28px rgba(255, 31, 55, 0.1);
+        0 0 28px rgba(var(--node-rgb), 0.1);
     text-align: center;
 }
 
@@ -1188,7 +1251,7 @@ a {
     outline: none;
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.12),
-        0 0 22px rgba(255, 31, 55, 0.18),
+        0 0 22px rgba(var(--node-rgb), 0.18),
         0 0 16px rgba(54, 226, 123, 0.14);
 }
 
@@ -1238,13 +1301,13 @@ a {
     border: 1px solid rgba(201, 208, 214, 0.24);
     border-radius: 6px;
     background:
-        radial-gradient(circle at 10% 0%, rgba(255, 31, 55, 0.14), transparent 16rem),
+        radial-gradient(circle at 10% 0%, rgba(var(--node-rgb), 0.14), transparent 16rem),
         radial-gradient(circle at 92% 12%, rgba(54, 226, 123, 0.08), transparent 12rem),
         linear-gradient(135deg, rgba(238, 246, 255, 0.08), transparent 34%),
         rgba(5, 6, 9, 0.76);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        0 0 22px rgba(255, 31, 55, 0.1);
+        0 0 22px rgba(var(--node-rgb), 0.1);
     text-align: left;
 }
 
@@ -1259,7 +1322,7 @@ a {
     font-size: clamp(1rem, 2vw, 1.28rem);
     font-weight: 950;
     letter-spacing: 0.08em;
-    text-shadow: 0 0 14px rgba(255, 31, 55, 0.34);
+    text-shadow: 0 0 14px rgba(var(--node-rgb), 0.34);
 }
 
 .neoermac-runout-slots {
@@ -1309,7 +1372,7 @@ a {
     outline: none;
     box-shadow:
         0 0 0 3px rgba(54, 226, 123, 0.1),
-        0 0 18px rgba(255, 31, 55, 0.16);
+        0 0 18px rgba(var(--node-rgb), 0.16);
 }
 
 .neoermac-destination-select:disabled {
@@ -1336,14 +1399,14 @@ a {
     .neoermac-runout-list {
         gap: 6px;
         padding: 12px;
-        border: 1px solid rgba(255, 31, 55, 0.34);
+        border: 1px solid rgba(var(--node-rgb), 0.34);
         border-radius: 8px;
         background:
-            linear-gradient(90deg, rgba(255, 31, 55, 0.08), transparent 14% 86%, rgba(255, 31, 55, 0.08)),
+            linear-gradient(90deg, rgba(var(--node-rgb), 0.08), transparent 14% 86%, rgba(var(--node-rgb), 0.08)),
             linear-gradient(180deg, rgba(22, 8, 12, 0.72), rgba(4, 5, 7, 0.9));
         box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.09),
-            0 0 30px rgba(255, 31, 55, 0.12);
+            0 0 30px rgba(var(--node-rgb), 0.12);
     }
 
     .neoermac-runout-card {
@@ -1351,7 +1414,7 @@ a {
         gap: 0;
         overflow: hidden;
         padding: 0;
-        border-color: rgba(255, 31, 55, 0.34);
+        border-color: rgba(var(--node-rgb), 0.34);
         border-radius: 5px;
         background: rgba(10, 3, 6, 0.72);
         box-shadow: none;
@@ -1365,7 +1428,7 @@ a {
         border-right: 1px solid rgba(255, 224, 229, 0.28);
         background:
             linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 22%),
-            linear-gradient(180deg, #c83342 0%, #8f1420 46%, #52070d 100%);
+            linear-gradient(180deg, color-mix(in srgb, var(--node-primary), white 24%) 0%, var(--node-primary) 46%, color-mix(in srgb, var(--node-primary), black 44%) 100%);
         color: #fff7f8;
         font-size: clamp(0.82rem, 1.2vw, 1.05rem);
         line-height: 1.05;
@@ -1382,7 +1445,7 @@ a {
         box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.08),
             0 0 24px rgba(54, 226, 123, 0.12),
-            0 0 22px rgba(255, 31, 55, 0.1);
+            0 0 22px rgba(var(--node-rgb), 0.1);
     }
 
     .neoermac-runout-slots {
@@ -1423,7 +1486,7 @@ a {
         border-radius: 0;
         background:
             linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 20%),
-            linear-gradient(180deg, #de3344 0%, #9f1624 44%, #5a0810 100%);
+            linear-gradient(180deg, color-mix(in srgb, var(--node-primary), white 28%) 0%, var(--node-primary) 44%, color-mix(in srgb, var(--node-primary), black 46%) 100%);
         color: #fff5f7;
         font-size: 0.58rem;
         font-weight: 950;
@@ -1608,7 +1671,7 @@ a {
     letter-spacing: 0.06em;
     line-height: 0.95;
     text-shadow:
-        0 0 20px rgba(255, 31, 55, 0.38),
+        0 0 20px rgba(var(--node-rgb), 0.38),
         0 0 18px rgba(54, 226, 123, 0.18);
 }
 
@@ -1624,7 +1687,7 @@ a {
         rgba(5, 6, 9, 0.68);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        0 0 18px rgba(255, 31, 55, 0.1);
+        0 0 18px rgba(var(--node-rgb), 0.1);
 }
 
 .neoermac-door-destination-list {
@@ -1640,7 +1703,7 @@ a {
     border: 1px solid rgba(143, 24, 38, 0.5);
     border-radius: 6px;
     background:
-        radial-gradient(circle at 10% 0%, rgba(255, 31, 55, 0.14), transparent 12rem),
+        radial-gradient(circle at 10% 0%, rgba(var(--node-rgb), 0.14), transparent 12rem),
         linear-gradient(180deg, rgba(17, 19, 23, 0.94), rgba(5, 6, 9, 0.94));
 }
 
@@ -2148,7 +2211,7 @@ a {
     border: 1px solid rgba(143, 24, 38, 0.5);
     border-radius: 6px;
     background:
-        radial-gradient(circle at 10% 0%, rgba(255, 31, 55, 0.13), transparent 12rem),
+        radial-gradient(circle at 10% 0%, rgba(var(--node-rgb), 0.13), transparent 12rem),
         linear-gradient(180deg, rgba(17, 19, 23, 0.94), rgba(5, 6, 9, 0.94));
 }
 
@@ -2664,7 +2727,7 @@ h2 {
         rgba(3, 4, 6, 0.46);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        0 0 24px rgba(216, 32, 42, 0.1);
+        0 0 24px rgba(var(--node-rgb), 0.1);
 }
 
 .motherbrain-current-sort-overview .section-heading {
@@ -2690,7 +2753,7 @@ h2 {
     gap: 5px;
     min-height: 88px;
     padding: 13px 12px;
-    border: 1px solid rgba(216, 32, 42, 0.5);
+    border: 1px solid rgba(var(--node-rgb), 0.5);
     border-radius: 5px;
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 30%),
@@ -2703,15 +2766,15 @@ h2 {
 
 .current-sort-overview-card:hover,
 .current-sort-overview-card:focus-visible {
-    border-color: #ff3b46;
+    border-color: var(--node-highlight);
     outline: none;
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.14),
-        0 0 22px rgba(216, 32, 42, 0.22);
+        0 0 22px rgba(var(--node-rgb), 0.22);
 }
 
 .current-sort-overview-card span {
-    color: var(--red-hot);
+    color: var(--node-highlight);
     font-size: 0.78rem;
     font-weight: 900;
     text-transform: uppercase;
@@ -2752,7 +2815,7 @@ h2 {
 
 .motherbrain-dashboard-card:hover,
 .motherbrain-dashboard-card:focus-visible {
-    border-color: rgba(255, 59, 70, 0.78);
+    border-color: rgba(var(--node-highlight-rgb), 0.78);
     outline: none;
     transform: translateY(-1px);
     box-shadow:
@@ -2902,11 +2965,11 @@ h2 {
     justify-content: center;
     min-height: 42px;
     padding: 10px 14px;
-    border: 1px solid #d8202a;
+    border: 1px solid var(--node-primary);
     border-radius: 4px;
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 24%),
-        linear-gradient(180deg, #ff3b46 0%, #d8202a 44%, #7a0f16 100%);
+        linear-gradient(180deg, var(--node-highlight) 0%, var(--node-primary) 44%, var(--node-secondary) 100%);
     color: var(--text);
     cursor: pointer;
     font: inherit;
@@ -2917,7 +2980,7 @@ h2 {
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.22),
         inset 0 -12px 22px rgba(17, 19, 24, 0.34),
-        0 0 18px rgba(216, 32, 42, 0.2);
+        0 0 18px rgba(var(--node-rgb), 0.2);
     transition:
         border-color 140ms ease,
         background 140ms ease,
@@ -2928,14 +2991,14 @@ h2 {
 
 .action-button:hover,
 .operation-form button:hover {
-    border-color: #ff3b46;
+    border-color: var(--node-highlight);
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.26), transparent 24%),
-        linear-gradient(180deg, #ff3b46 0%, #d8202a 38%, #7a0f16 100%);
+        linear-gradient(180deg, var(--node-highlight) 0%, var(--node-primary) 38%, var(--node-secondary) 100%);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.26),
         inset 0 -12px 22px rgba(17, 19, 24, 0.28),
-        0 0 26px rgba(255, 59, 70, 0.34);
+        0 0 26px rgba(var(--node-highlight-rgb), 0.34);
     transform: translateY(-1px);
 }
 
@@ -2943,28 +3006,28 @@ h2 {
 .operation-form button:active {
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 24%),
-        linear-gradient(180deg, #7a0f16 0%, #d8202a 55%, #ff3b46 100%);
+        linear-gradient(180deg, var(--node-secondary) 0%, var(--node-primary) 55%, var(--node-highlight) 100%);
     box-shadow:
         inset 0 2px 10px rgba(17, 19, 24, 0.62),
-        0 0 14px rgba(216, 32, 42, 0.22);
+        0 0 14px rgba(var(--node-rgb), 0.22);
     transform: translateY(0);
 }
 
 .action-button:focus-visible,
 .operation-form button:focus-visible {
-    outline: 2px solid #ff3b46;
+    outline: 2px solid var(--node-highlight);
     outline-offset: 3px;
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.24),
-        0 0 0 4px rgba(216, 32, 42, 0.22),
-        0 0 28px rgba(255, 59, 70, 0.34);
+        0 0 0 4px rgba(var(--node-rgb), 0.22),
+        0 0 28px rgba(var(--node-highlight-rgb), 0.34);
 }
 
 .action-button:disabled,
 .operation-form button:disabled,
 .action-button[aria-disabled="true"],
 .operation-form button[aria-disabled="true"] {
-    border-color: rgba(216, 32, 42, 0.28);
+    border-color: rgba(var(--node-rgb), 0.28);
     background:
         linear-gradient(180deg, rgba(32, 35, 41, 0.86), rgba(17, 19, 24, 0.86));
     color: rgba(238, 246, 255, 0.42);
@@ -2974,17 +3037,17 @@ h2 {
 }
 
 .action-button-secondary {
-    border-color: rgba(216, 32, 42, 0.64);
+    border-color: rgba(var(--node-rgb), 0.64);
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 28%),
         linear-gradient(180deg, #202329 0%, #111318 100%);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.14),
-        0 0 16px rgba(216, 32, 42, 0.18);
+        0 0 16px rgba(var(--node-rgb), 0.18);
 }
 
 .action-button-secondary:hover {
-    border-color: #ff3b46;
+    border-color: var(--node-highlight);
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 28%),
         linear-gradient(180deg, #2a1518 0%, #111318 100%);
@@ -2994,34 +3057,34 @@ h2 {
 .inline-button-form[action*="deny"] button,
 .inline-button-form[action*="toggle-active"] .action-button,
 .table-row-button {
-    border-color: #d8202a;
+    border-color: var(--node-primary);
     background:
-        linear-gradient(180deg, rgba(255, 59, 70, 0.16), transparent 28%),
-        linear-gradient(180deg, #7a0f16 0%, #2a1518 100%);
+        linear-gradient(180deg, rgba(var(--node-highlight-rgb), 0.16), transparent 28%),
+        linear-gradient(180deg, var(--node-secondary) 0%, #2a1518 100%);
     color: var(--text);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.12),
-        0 0 16px rgba(216, 32, 42, 0.18);
+        0 0 16px rgba(var(--node-rgb), 0.18);
 }
 
 .inline-button-form[action*="delete"] .action-button:hover,
 .inline-button-form[action*="deny"] button:hover,
 .inline-button-form[action*="toggle-active"] .action-button:hover {
-    border-color: #ff3b46;
+    border-color: var(--node-highlight);
     background:
-        linear-gradient(180deg, rgba(255, 59, 70, 0.22), transparent 28%),
-        linear-gradient(180deg, #d8202a 0%, #7a0f16 100%);
+        linear-gradient(180deg, rgba(var(--node-highlight-rgb), 0.22), transparent 28%),
+        linear-gradient(180deg, var(--node-primary) 0%, var(--node-secondary) 100%);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.14),
-        0 0 22px rgba(255, 59, 70, 0.3);
+        0 0 22px rgba(var(--node-highlight-rgb), 0.3);
 }
 
 .inline-button-form[action*="delete"] .action-button:active,
 .inline-button-form[action*="deny"] button:active,
 .inline-button-form[action*="toggle-active"] .action-button:active {
     background:
-        linear-gradient(180deg, rgba(255, 59, 70, 0.1), transparent 28%),
-        linear-gradient(180deg, #2a1518 0%, #7a0f16 100%);
+        linear-gradient(180deg, rgba(var(--node-highlight-rgb), 0.1), transparent 28%),
+        linear-gradient(180deg, #2a1518 0%, var(--node-secondary) 100%);
 }
 
 .metric-grid {
@@ -3102,7 +3165,7 @@ select {
     background-image:
         linear-gradient(45deg, transparent 50%, #eef6ff 50%),
         linear-gradient(135deg, #eef6ff 50%, transparent 50%),
-        linear-gradient(180deg, rgba(216, 32, 42, 0.18), rgba(17, 19, 24, 0.08));
+        linear-gradient(180deg, rgba(var(--node-rgb), 0.18), rgba(17, 19, 24, 0.08));
     background-position:
         calc(100% - 18px) 50%,
         calc(100% - 12px) 50%,
@@ -3230,13 +3293,13 @@ select::-ms-expand {
     right: 14px;
     width: 9px;
     height: 9px;
-    border-right: 2px solid #ff3b46;
-    border-bottom: 2px solid #ff3b46;
+    border-right: 2px solid var(--node-highlight);
+    border-bottom: 2px solid var(--node-highlight);
     pointer-events: none;
     transform: translateY(-68%) rotate(45deg);
     filter:
-        drop-shadow(0 0 4px rgba(255, 59, 70, 0.85))
-        drop-shadow(0 0 9px rgba(216, 32, 42, 0.46));
+        drop-shadow(0 0 4px rgba(var(--node-highlight-rgb), 0.85))
+        drop-shadow(0 0 9px rgba(var(--node-rgb), 0.46));
 }
 
 .user-edit-role-field select,
@@ -3249,7 +3312,7 @@ select::-ms-expand {
     cursor: pointer;
     text-align: center;
     text-align-last: center;
-    background-image: linear-gradient(180deg, rgba(216, 32, 42, 0.14), rgba(17, 19, 24, 0.08));
+    background-image: linear-gradient(180deg, rgba(var(--node-rgb), 0.14), rgba(17, 19, 24, 0.08));
     background-position: 100% 0;
     background-size: 46px 100%;
     background-repeat: no-repeat;
@@ -3293,8 +3356,8 @@ select::-ms-expand {
 }
 
 .military-time-select input:focus {
-    border-color: rgba(255, 59, 70, 0.78);
-    box-shadow: 0 0 0 3px rgba(216, 32, 42, 0.12);
+    border-color: rgba(var(--node-highlight-rgb), 0.78);
+    box-shadow: 0 0 0 3px rgba(var(--node-rgb), 0.12);
 }
 
 .military-time-separator {
@@ -3335,7 +3398,7 @@ select::-ms-expand {
     min-height: 64px;
     display: grid;
     place-items: center;
-    border: 1px solid rgba(216, 32, 42, 0.72);
+    border: 1px solid rgba(var(--node-rgb), 0.72);
     border-radius: 4px;
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 28%),
@@ -3350,26 +3413,26 @@ select::-ms-expand {
     text-transform: uppercase;
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.14),
-        0 0 18px rgba(216, 32, 42, 0.18);
+        0 0 18px rgba(var(--node-rgb), 0.18);
 }
 
 .master-mode-tab[aria-selected="true"] {
-    border-color: #ff3b46;
+    border-color: var(--node-highlight);
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 24%),
-        linear-gradient(180deg, #ff3b46 0%, #d8202a 44%, #7a0f16 100%);
+        linear-gradient(180deg, var(--node-highlight) 0%, var(--node-primary) 44%, var(--node-secondary) 100%);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.22),
-        0 0 28px rgba(255, 59, 70, 0.28);
+        0 0 28px rgba(var(--node-highlight-rgb), 0.28);
 }
 
 .master-mode-tab:hover,
 .master-mode-tab:focus-visible {
-    border-color: #ff3b46;
+    border-color: var(--node-highlight);
     outline: none;
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.16),
-        0 0 26px rgba(255, 59, 70, 0.28);
+        0 0 26px rgba(var(--node-highlight-rgb), 0.28);
 }
 
 .master-active-check {
@@ -3434,21 +3497,21 @@ select::-ms-expand {
 
 .master-schedule-entry-grid input:focus,
 .master-schedule-entry-grid select:focus {
-    border-color: rgba(255, 59, 70, 0.78);
-    box-shadow: 0 0 0 3px rgba(216, 32, 42, 0.12);
+    border-color: rgba(var(--node-highlight-rgb), 0.78);
+    box-shadow: 0 0 0 3px rgba(var(--node-rgb), 0.12);
 }
 
 .master-schedule-entry-grid input[readonly],
 .schedule-form-table input[readonly] {
-    border-color: rgba(255, 59, 70, 0.38);
+    border-color: rgba(var(--node-highlight-rgb), 0.38);
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(216, 32, 42, 0.1)),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(var(--node-rgb), 0.1)),
         rgba(17, 19, 24, 0.92);
     color: rgba(238, 246, 255, 0.78);
     cursor: not-allowed;
     box-shadow:
-        inset 0 0 16px rgba(216, 32, 42, 0.08),
-        0 0 12px rgba(216, 32, 42, 0.08);
+        inset 0 0 16px rgba(var(--node-rgb), 0.08),
+        0 0 12px rgba(var(--node-rgb), 0.08);
 }
 
 .master-schedule-entry-grid .military-time-select input {
@@ -3571,9 +3634,9 @@ select::-ms-expand {
 
 .master-schedule-section + .master-schedule-section {
     padding-left: 24px;
-    border-left: 1px solid rgba(255, 59, 70, 0.4);
+    border-left: 1px solid rgba(var(--node-highlight-rgb), 0.4);
     box-shadow:
-        -12px 0 24px -22px rgba(216, 32, 42, 0.8),
+        -12px 0 24px -22px rgba(var(--node-rgb), 0.8),
         inset 1px 0 0 rgba(235, 241, 246, 0.08);
 }
 
@@ -3610,7 +3673,7 @@ select::-ms-expand {
     min-width: 0;
     min-height: 30px;
     padding: 5px 5px;
-    border: 1px solid rgba(255, 59, 70, 0.3);
+    border: 1px solid rgba(var(--node-highlight-rgb), 0.3);
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 36%),
         #090b0f;
@@ -3646,11 +3709,11 @@ select::-ms-expand {
 
 .master-board-table input:focus,
 .master-board-table select:focus {
-    border-color: #ff3b46;
+    border-color: var(--node-highlight);
     outline: none;
     box-shadow:
-        0 0 0 2px rgba(255, 59, 70, 0.24),
-        0 0 18px rgba(216, 32, 42, 0.24),
+        0 0 0 2px rgba(var(--node-highlight-rgb), 0.24),
+        0 0 18px rgba(var(--node-rgb), 0.24),
         inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
@@ -3752,7 +3815,7 @@ select::-ms-expand {
 #master-departures .master-board-table th:nth-child(6),
 #master-departures .master-board-table td.master-cell-pure-pull {
     padding-left: 8px;
-    border-left: 1px solid rgba(255, 59, 70, 0.3);
+    border-left: 1px solid rgba(var(--node-highlight-rgb), 0.3);
 }
 
 .master-board-table .table-row-button {
@@ -3771,7 +3834,7 @@ select::-ms-expand {
     width: 28px;
     min-height: 28px;
     padding: 0;
-    border-color: rgba(255, 59, 70, 0.72);
+    border-color: rgba(var(--node-highlight-rgb), 0.72);
     border-radius: 50%;
     color: #fff;
     font-size: 1.05rem;
@@ -3780,7 +3843,7 @@ select::-ms-expand {
 }
 
 .master-board-add-row td {
-    background: rgba(216, 32, 42, 0.05);
+    background: rgba(var(--node-rgb), 0.05);
 }
 
 .master-board-actions {
@@ -3833,9 +3896,9 @@ select::-ms-expand {
     letter-spacing: 0.03em;
     text-transform: uppercase;
     background:
-        linear-gradient(90deg, rgba(255, 59, 70, 0.15), rgba(3, 4, 6, 0.7)),
+        linear-gradient(90deg, rgba(var(--node-highlight-rgb), 0.15), rgba(3, 4, 6, 0.7)),
         rgba(3, 4, 6, 0.72);
-    border-color: rgba(255, 59, 70, 0.28);
+    border-color: rgba(var(--node-highlight-rgb), 0.28);
 }
 
 .matrix-toggle {
@@ -3860,22 +3923,22 @@ select::-ms-expand {
 }
 
 .matrix-toggle:has(input:checked) {
-    border-color: rgba(255, 59, 70, 0.72);
+    border-color: rgba(var(--node-highlight-rgb), 0.72);
     background:
-        linear-gradient(180deg, rgba(255, 59, 70, 0.18), rgba(122, 15, 22, 0.22)),
+        linear-gradient(180deg, rgba(var(--node-highlight-rgb), 0.18), rgba(var(--node-secondary-rgb), 0.22)),
         rgba(17, 19, 24, 0.9);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.12),
-        0 0 18px rgba(216, 32, 42, 0.18);
+        0 0 18px rgba(var(--node-rgb), 0.18);
 }
 
 .table-row-button {
     min-height: 34px;
-    border: 1px solid #d8202a;
+    border: 1px solid var(--node-primary);
     border-radius: 4px;
     background:
-        linear-gradient(180deg, rgba(255, 59, 70, 0.16), transparent 28%),
-        linear-gradient(180deg, #7a0f16 0%, #2a1518 100%);
+        linear-gradient(180deg, rgba(var(--node-highlight-rgb), 0.16), transparent 28%),
+        linear-gradient(180deg, var(--node-secondary) 0%, #2a1518 100%);
     color: var(--text);
     cursor: pointer;
     font: inherit;
@@ -3884,7 +3947,7 @@ select::-ms-expand {
     text-transform: uppercase;
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.12),
-        0 0 16px rgba(216, 32, 42, 0.18);
+        0 0 16px rgba(var(--node-rgb), 0.18);
     transition:
         border-color 140ms ease,
         background 140ms ease,
@@ -3893,14 +3956,14 @@ select::-ms-expand {
 }
 
 .table-row-button:hover {
-    border-color: #ff3b46;
+    border-color: var(--node-highlight);
     background:
-        linear-gradient(180deg, rgba(255, 59, 70, 0.22), transparent 28%),
-        linear-gradient(180deg, #d8202a 0%, #7a0f16 100%);
+        linear-gradient(180deg, rgba(var(--node-highlight-rgb), 0.22), transparent 28%),
+        linear-gradient(180deg, var(--node-primary) 0%, var(--node-secondary) 100%);
     color: var(--text);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.14),
-        0 0 20px rgba(255, 59, 70, 0.28);
+        0 0 20px rgba(var(--node-highlight-rgb), 0.28);
     transform: translateY(-1px);
 }
 
@@ -3909,13 +3972,13 @@ select::-ms-expand {
 }
 
 .table-row-button:focus-visible {
-    outline: 2px solid #ff3b46;
+    outline: 2px solid var(--node-highlight);
     outline-offset: 3px;
 }
 
 .table-row-button:disabled,
 .table-row-button[aria-disabled="true"] {
-    border-color: rgba(216, 32, 42, 0.28);
+    border-color: rgba(var(--node-rgb), 0.28);
     background: linear-gradient(180deg, #202329 0%, #111318 100%);
     color: rgba(238, 246, 255, 0.42);
     cursor: not-allowed;
@@ -4077,7 +4140,7 @@ select::-ms-expand {
     justify-content: center;
     min-height: 32px;
     padding: 7px 10px;
-    border: 1px solid rgba(216, 32, 42, 0.64);
+    border: 1px solid rgba(var(--node-rgb), 0.64);
     border-radius: 4px;
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 28%),
@@ -4090,7 +4153,7 @@ select::-ms-expand {
     text-transform: uppercase;
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.12),
-        0 0 14px rgba(216, 32, 42, 0.16);
+        0 0 14px rgba(var(--node-rgb), 0.16);
     transition:
         border-color 140ms ease,
         background 140ms ease,
@@ -4101,14 +4164,14 @@ select::-ms-expand {
 
 .table-actions a:hover,
 .table-actions .inline-button-form button:hover {
-    border-color: #ff3b46;
+    border-color: var(--node-highlight);
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 28%),
         linear-gradient(180deg, #2a1518 0%, #111318 100%);
     color: var(--text);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.14),
-        0 0 20px rgba(255, 59, 70, 0.24);
+        0 0 20px rgba(var(--node-highlight-rgb), 0.24);
     transform: translateY(-1px);
 }
 
@@ -4119,14 +4182,14 @@ select::-ms-expand {
 
 .table-actions a:focus-visible,
 .table-actions .inline-button-form button:focus-visible {
-    outline: 2px solid #ff3b46;
+    outline: 2px solid var(--node-highlight);
     outline-offset: 3px;
 }
 
 .table-actions a[aria-disabled="true"],
 .table-actions .inline-button-form button:disabled,
 .table-actions .inline-button-form button[aria-disabled="true"] {
-    border-color: rgba(216, 32, 42, 0.28);
+    border-color: rgba(var(--node-rgb), 0.28);
     background: linear-gradient(180deg, #202329 0%, #111318 100%);
     color: rgba(238, 246, 255, 0.42);
     cursor: not-allowed;
@@ -4137,19 +4200,19 @@ select::-ms-expand {
 .table-actions .inline-button-form[action*="delete"] button,
 .table-actions .inline-button-form[action*="deny"] button,
 .table-actions .inline-button-form[action*="toggle-active"] button {
-    border-color: #d8202a;
+    border-color: var(--node-primary);
     background:
-        linear-gradient(180deg, rgba(255, 59, 70, 0.16), transparent 28%),
-        linear-gradient(180deg, #7a0f16 0%, #2a1518 100%);
+        linear-gradient(180deg, rgba(var(--node-highlight-rgb), 0.16), transparent 28%),
+        linear-gradient(180deg, var(--node-secondary) 0%, #2a1518 100%);
 }
 
 .table-actions .inline-button-form[action*="delete"] button:hover,
 .table-actions .inline-button-form[action*="deny"] button:hover,
 .table-actions .inline-button-form[action*="toggle-active"] button:hover {
-    border-color: #ff3b46;
+    border-color: var(--node-highlight);
     background:
-        linear-gradient(180deg, rgba(255, 59, 70, 0.22), transparent 28%),
-        linear-gradient(180deg, #d8202a 0%, #7a0f16 100%);
+        linear-gradient(180deg, rgba(var(--node-highlight-rgb), 0.22), transparent 28%),
+        linear-gradient(180deg, var(--node-primary) 0%, var(--node-secondary) 100%);
 }
 
 .flash-stack {
@@ -4460,7 +4523,7 @@ select::-ms-expand {
     .motherbrain-menu-button:hover,
     .motherbrain-menu-button:focus-visible,
     .topbar.is-menu-open .motherbrain-menu-button {
-        border-color: rgba(255, 59, 70, 0.82);
+        border-color: rgba(var(--node-highlight-rgb), 0.82);
         outline: none;
         box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.12),
@@ -4825,14 +4888,14 @@ select::-ms-expand {
 
     .gateway-matrix-row + .gateway-matrix-row {
         padding-top: 12px;
-        border-top: 1px solid rgba(255, 59, 70, 0.18);
+        border-top: 1px solid rgba(var(--node-highlight-rgb), 0.18);
     }
 
     .gateway-matrix-row strong {
         justify-content: center;
         min-height: 48px;
         padding: 11px 14px;
-        border-color: rgba(255, 59, 70, 0.58);
+        border-color: rgba(var(--node-highlight-rgb), 0.58);
         border-left-width: 4px;
         border-right-width: 4px;
         border-radius: 6px;
@@ -4842,7 +4905,7 @@ select::-ms-expand {
         letter-spacing: 0.08em;
         text-align: center;
         background:
-            linear-gradient(90deg, rgba(255, 59, 70, 0.36), transparent 18%, transparent 82%, rgba(255, 59, 70, 0.28)),
+            linear-gradient(90deg, rgba(var(--node-highlight-rgb), 0.36), transparent 18%, transparent 82%, rgba(var(--node-highlight-rgb), 0.28)),
             linear-gradient(180deg, rgba(40, 10, 14, 0.96), rgba(8, 9, 13, 0.94));
         box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.14),
@@ -4855,11 +4918,11 @@ select::-ms-expand {
         flex: 1 1 18px;
         max-width: 58px;
         height: 1px;
-        background: linear-gradient(90deg, transparent, rgba(255, 59, 70, 0.74));
+        background: linear-gradient(90deg, transparent, rgba(var(--node-highlight-rgb), 0.74));
     }
 
     .gateway-matrix-row strong::after {
-        background: linear-gradient(90deg, rgba(255, 59, 70, 0.74), transparent);
+        background: linear-gradient(90deg, rgba(var(--node-highlight-rgb), 0.74), transparent);
     }
 
     .matrix-toggle {
@@ -4895,10 +4958,10 @@ select::-ms-expand {
     .blueprint-auth .pending-users-table tr {
         margin-bottom: 14px;
         padding: 12px;
-        border: 1px solid rgba(216, 32, 42, 0.28);
+        border: 1px solid rgba(var(--node-rgb), 0.28);
         border-radius: 6px;
         background:
-            linear-gradient(180deg, rgba(255, 59, 70, 0.06), rgba(17, 19, 24, 0.9)),
+            linear-gradient(180deg, rgba(var(--node-highlight-rgb), 0.06), rgba(17, 19, 24, 0.9)),
             rgba(3, 4, 6, 0.72);
     }
 
@@ -4957,7 +5020,7 @@ select::-ms-expand {
         padding-top: 14px;
         border-left: 0;
         border-top: 1px solid rgba(235, 241, 246, 0.14);
-        box-shadow: 0 -10px 18px -20px rgba(216, 32, 42, 0.55);
+        box-shadow: 0 -10px 18px -20px rgba(var(--node-rgb), 0.55);
     }
 
     .blueprint-neomotherbrain .master-flight-table,
@@ -4979,10 +5042,10 @@ select::-ms-expand {
     .blueprint-neomotherbrain .master-flight-table tr {
         margin-bottom: 14px;
         padding: 12px;
-        border: 1px solid rgba(216, 32, 42, 0.28);
+        border: 1px solid rgba(var(--node-rgb), 0.28);
         border-radius: 6px;
         background:
-            linear-gradient(180deg, rgba(255, 59, 70, 0.06), rgba(17, 19, 24, 0.9)),
+            linear-gradient(180deg, rgba(var(--node-highlight-rgb), 0.06), rgba(17, 19, 24, 0.9)),
             rgba(3, 4, 6, 0.72);
     }
 
@@ -5288,14 +5351,14 @@ select::-ms-expand {
     .blueprint-neomotherbrain .schedule-form-table tr {
         margin-bottom: 16px;
         padding: 14px;
-        border: 1px solid rgba(216, 32, 42, 0.34);
+        border: 1px solid rgba(var(--node-rgb), 0.34);
         border-radius: 6px;
         background:
-            linear-gradient(180deg, rgba(255, 59, 70, 0.08), rgba(17, 19, 24, 0.92)),
+            linear-gradient(180deg, rgba(var(--node-highlight-rgb), 0.08), rgba(17, 19, 24, 0.92)),
             rgba(3, 4, 6, 0.76);
         box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.08),
-            0 0 18px rgba(216, 32, 42, 0.12);
+            0 0 18px rgba(var(--node-rgb), 0.12);
     }
 
     .blueprint-neomotherbrain .schedule-form-table td {
@@ -5383,7 +5446,7 @@ select::-ms-expand {
         grid-template-columns: 1fr;
         gap: 7px;
         padding: 12px;
-        border: 1px solid rgba(216, 32, 42, 0.28);
+        border: 1px solid rgba(var(--node-rgb), 0.28);
         border-radius: 6px;
         background: rgba(3, 4, 6, 0.46);
     }
@@ -5414,13 +5477,13 @@ select::-ms-expand {
     gap: 0;
     overflow: hidden;
     padding: 0;
-    border: 1px solid rgba(255, 31, 55, 0.34);
+    border: 1px solid rgba(var(--node-rgb), 0.34);
     border-radius: 6px;
     background:
         linear-gradient(180deg, rgba(22, 8, 12, 0.82), rgba(5, 6, 9, 0.94));
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        0 0 22px rgba(255, 31, 55, 0.11);
+        0 0 22px rgba(var(--node-rgb), 0.11);
 }
 
 .neoermac-runout-card.neoermac-belt-group .neoermac-door-bar {
@@ -5433,7 +5496,7 @@ select::-ms-expand {
     border-bottom: 1px solid rgba(255, 225, 230, 0.32);
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.15), transparent 26%),
-        linear-gradient(180deg, #d73343 0%, #991725 52%, #5d0810 100%);
+        linear-gradient(180deg, color-mix(in srgb, var(--node-primary), white 24%) 0%, var(--node-primary) 52%, color-mix(in srgb, var(--node-primary), black 46%) 100%);
     color: #fff8f9;
     font-size: clamp(1.02rem, 2vw, 1.34rem);
     font-weight: 950;
@@ -5452,7 +5515,7 @@ select::-ms-expand {
     max-width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
-    scrollbar-color: rgba(255, 31, 55, 0.72) rgba(5, 6, 9, 0.7);
+    scrollbar-color: rgba(var(--node-rgb), 0.72) rgba(5, 6, 9, 0.7);
 }
 
 .neoermac-belt-grid {
@@ -5476,7 +5539,7 @@ select::-ms-expand {
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 34%),
         linear-gradient(180deg, #f4c8d0 0%, #e6929f 100%);
-    color: #52070d;
+    color: color-mix(in srgb, var(--node-primary), black 44%);
     font-size: 1rem;
     font-weight: 950;
     letter-spacing: 0.08em;
@@ -5604,7 +5667,7 @@ select::-ms-expand {
     border-radius: 6px;
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.15), transparent 26%),
-        linear-gradient(180deg, #d73343 0%, #991725 52%, #5d0810 100%);
+        linear-gradient(180deg, color-mix(in srgb, var(--node-primary), white 24%) 0%, var(--node-primary) 52%, color-mix(in srgb, var(--node-primary), black 46%) 100%);
     color: #fff8f9;
     font-size: clamp(1.08rem, 2.1vw, 1.42rem);
     font-weight: 950;
@@ -5623,7 +5686,7 @@ select::-ms-expand {
     padding: 5px 10px;
     border-bottom: 1px solid rgba(255, 225, 230, 0.18);
     background:
-        linear-gradient(90deg, rgba(255, 31, 55, 0.14), rgba(54, 226, 123, 0.07), rgba(255, 31, 55, 0.14)),
+        linear-gradient(90deg, rgba(var(--node-rgb), 0.14), rgba(54, 226, 123, 0.07), rgba(var(--node-rgb), 0.14)),
         rgba(7, 8, 11, 0.82);
     color: rgba(238, 246, 255, 0.82);
     font-size: 0.66rem;
@@ -5650,7 +5713,7 @@ select::-ms-expand {
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 34%),
         linear-gradient(180deg, #f4c8d0 0%, #e6929f 100%);
-    color: #52070d;
+    color: color-mix(in srgb, var(--node-primary), black 44%);
     text-align: center;
 }
 
@@ -5754,7 +5817,7 @@ select::-ms-expand {
 .neoermac-belt-block .neoermac-destination-select:focus {
     box-shadow:
         0 0 0 2px rgba(54, 226, 123, 0.22),
-        0 0 14px rgba(255, 31, 55, 0.16);
+        0 0 14px rgba(var(--node-rgb), 0.16);
 }
 
 .neoermac-belt-block .neoermac-belt-name {
@@ -5854,11 +5917,11 @@ select::-ms-expand {
     border-radius: 7px;
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 28%),
-        linear-gradient(180deg, #ef3145 0%, #a11322 50%, #50070d 100%);
+        linear-gradient(180deg, color-mix(in srgb, var(--node-primary), white 32%) 0%, var(--node-primary) 50%, color-mix(in srgb, var(--node-primary), black 48%) 100%);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.28),
         inset 0 -1px 0 rgba(0, 0, 0, 0.62),
-        0 0 18px rgba(255, 31, 55, 0.22);
+        0 0 18px rgba(var(--node-rgb), 0.22);
     color: #fff9fb;
     letter-spacing: 0.16em;
 }
@@ -5879,12 +5942,12 @@ select::-ms-expand {
     border: 1px solid rgba(214, 224, 232, 0.24);
     border-radius: 7px;
     background:
-        radial-gradient(circle at 18% 0%, rgba(255, 31, 55, 0.16), transparent 9rem),
+        radial-gradient(circle at 18% 0%, rgba(var(--node-rgb), 0.16), transparent 9rem),
         linear-gradient(135deg, rgba(238, 246, 255, 0.08), transparent 34%),
         linear-gradient(180deg, rgba(26, 29, 35, 0.94), rgba(5, 6, 9, 0.96));
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.1),
-        0 0 18px rgba(255, 31, 55, 0.12);
+        0 0 18px rgba(var(--node-rgb), 0.12);
 }
 
 .neoermac-belt-destination-row {
@@ -5905,7 +5968,7 @@ select::-ms-expand {
     text-transform: uppercase;
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        0 0 0 1px rgba(255, 31, 55, 0.08);
+        0 0 0 1px rgba(var(--node-rgb), 0.08);
 }
 
 .neoermac-runout-slots .neoermac-belt-block .neoermac-destination-select {
@@ -5918,7 +5981,7 @@ select::-ms-expand {
     text-transform: uppercase;
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        0 0 0 1px rgba(255, 31, 55, 0.08);
+        0 0 0 1px rgba(var(--node-rgb), 0.08);
 }
 
 .neoermac-belt-block .neoermac-destination-select:disabled {
@@ -5933,7 +5996,7 @@ select::-ms-expand {
     outline: none;
     box-shadow:
         0 0 0 2px rgba(54, 226, 123, 0.14),
-        0 0 18px rgba(255, 31, 55, 0.2);
+        0 0 18px rgba(var(--node-rgb), 0.2);
 }
 
 .neoermac-belt-block .neoermac-belt-name {
@@ -7051,37 +7114,6 @@ select::-ms-expand {
     text-align: right;
 }
 
-.neosektor-tunnel-delta-controls {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(48px, 1fr));
-    gap: 8px;
-}
-
-.neosektor-tunnel-delta-controls button {
-    min-height: 42px;
-    border: 1px solid rgba(244, 246, 248, 0.24);
-    border-radius: 6px;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 40%),
-        linear-gradient(180deg, var(--node-sektor-primary), #4e060c);
-    color: #fff;
-    font-size: 0.76rem;
-    font-weight: 950;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-}
-
-.neosektor-tunnel-delta-controls button:not(:disabled):hover,
-.neosektor-tunnel-delta-controls button:not(:disabled):focus-visible {
-    border-color: rgba(var(--node-sektor-highlight-rgb), 0.72);
-    box-shadow: 0 0 14px rgba(var(--node-sektor-highlight-rgb), 0.22);
-}
-
-.neosektor-tunnel-delta-controls button:disabled {
-    cursor: not-allowed;
-    opacity: 0.52;
-}
-
 .neosektor-driver-shell {
     width: min(100%, 760px);
     gap: 10px;
@@ -7564,11 +7596,6 @@ select::-ms-expand {
 
     .neosektor-tunnel-wave-readout strong {
         text-align: center;
-    }
-
-    .neosektor-tunnel-delta-controls {
-        grid-template-columns: repeat(4, minmax(42px, 1fr));
-        gap: 6px;
     }
 
     .neosektor-driver-offset-control {

@@ -241,37 +241,6 @@ def adjust_tunnel_wave_arrivals(gateway, wave, delta, sort_date=None, sort_name=
     return driver_routing_state_payload(gateway, sort_date, sort_name)
 
 
-def adjust_tunnel_count(gateway, side, wave, delta, sort_date=None, sort_name=None):
-    normalized_side = normalize_ballmat_side(side)
-    wave_key, wave_name = normalize_wave_key(wave)
-    if not normalized_side or not wave_name:
-        raise ValueError("Invalid side or wave.")
-
-    sort_date = sort_date or date.today()
-    sort_name = normalize_sort_name(sort_name)
-    sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
-
-    ballmat_wave_counts = _get_or_create_ballmat_wave_counts(sort_state)
-    waves = _get_or_create_waves(sort_state)
-    ballmats = _get_or_create_ballmats(sort_state)
-
-    side_label = side_display_label(normalized_side)
-    target_row = next(
-        row
-        for row in ballmat_wave_counts
-        if row.side == side_label and row.wave_name == wave_name
-    )
-    target_row.count = max((target_row.count or 0) + _clean_delta(delta), 0)
-    if target_row.count == 0:
-        target_row.status = "Empty"
-    elif _status(target_row.status) == "Empty":
-        target_row.status = "Light"
-
-    _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats)
-    db.session.flush()
-    return driver_routing_state_payload(gateway, sort_date, sort_name)
-
-
 def get_or_create_sort_state(gateway, sort_date, sort_name):
     sort_state = NeoSektorSortState.query.filter_by(
         gateway_id=gateway.id,
