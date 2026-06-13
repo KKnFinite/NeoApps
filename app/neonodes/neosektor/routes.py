@@ -7,6 +7,7 @@ from app.services.access_control import get_current_gateway
 from app.services.neosektor_live_counts import (
     TUNNEL_CONDUCTOR_EDIT_PERMISSION,
     TUNNEL_CONDUCTOR_VIEW_PERMISSION,
+    adjust_tunnel_wave_arrivals,
     adjust_tunnel_count,
     ballmat_operations_context,
     ballmat_state_payload,
@@ -15,7 +16,7 @@ from app.services.neosektor_live_counts import (
     live_counts_context,
     normalize_ballmat_side,
     tunnel_conductor_context,
-    update_driver_routing_settings,
+    update_tunnel_driver_offset,
     update_ballmat_side,
 )
 from app.services.permission_rules import user_can
@@ -126,7 +127,47 @@ def tunnel_conductor_state():
     if not access["can_view"]:
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
-    state = ballmat_state_payload(get_current_gateway())
+    state = driver_routing_state_payload(get_current_gateway())
+    db.session.commit()
+    return jsonify({"ok": True, "state": state})
+
+
+@bp.route("/tunnel-conductor/wave", methods=["POST"])
+@gateway_node_required("sektor")
+def tunnel_conductor_wave():
+    access = _neosektor_access(
+        TUNNEL_CONDUCTOR_VIEW_PERMISSION,
+        TUNNEL_CONDUCTOR_EDIT_PERMISSION,
+    )
+    if not access["can_edit"]:
+        return jsonify({"ok": False, "error": "Edit access denied."}), 403
+
+    payload = request.get_json(silent=True) or request.form
+    try:
+        state = adjust_tunnel_wave_arrivals(
+            get_current_gateway(),
+            payload.get("wave"),
+            payload.get("delta"),
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    db.session.commit()
+    return jsonify({"ok": True, "state": state})
+
+
+@bp.route("/tunnel-conductor/offset", methods=["POST"])
+@gateway_node_required("sektor")
+def tunnel_conductor_offset():
+    access = _neosektor_access(
+        TUNNEL_CONDUCTOR_VIEW_PERMISSION,
+        TUNNEL_CONDUCTOR_EDIT_PERMISSION,
+    )
+    if not access["can_edit"]:
+        return jsonify({"ok": False, "error": "Edit access denied."}), 403
+
+    payload = request.get_json(silent=True) or request.form
+    state = update_tunnel_driver_offset(get_current_gateway(), payload)
     db.session.commit()
     return jsonify({"ok": True, "state": state})
 
@@ -346,20 +387,6 @@ def driver_routing_state():
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
     state = driver_routing_state_payload(get_current_gateway())
-    db.session.commit()
-    return jsonify({"ok": True, "state": state})
-
-
-@bp.route("/driver-routing/update", methods=["POST"])
-@gateway_node_required("sektor")
-def driver_routing_update():
-    page = _page_by_title("DRIVER ROUTING")
-    access = _neosektor_access(page["view_permission"], page["edit_permission"])
-    if not access["can_edit"]:
-        return jsonify({"ok": False, "error": "Edit access denied."}), 403
-
-    payload = request.get_json(silent=True) or request.form
-    state = update_driver_routing_settings(get_current_gateway(), payload)
     db.session.commit()
     return jsonify({"ok": True, "state": state})
 

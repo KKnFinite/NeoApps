@@ -184,7 +184,7 @@ def update_ballmat_side(gateway, selected_side, payload, sort_date=None, sort_na
 
 def tunnel_conductor_context(gateway, sort_date=None, sort_name=None):
     return {
-        "state": ballmat_state_payload(gateway, sort_date, sort_name),
+        "state": driver_routing_state_payload(gateway, sort_date, sort_name),
         "status_labels": STATUS_LABELS,
     }
 
@@ -221,6 +221,26 @@ def update_driver_routing_settings(gateway, payload, sort_date=None, sort_name=N
     return driver_routing_state_payload(gateway, sort_date, sort_name)
 
 
+def update_tunnel_driver_offset(gateway, payload, sort_date=None, sort_name=None):
+    return update_driver_routing_settings(gateway, payload, sort_date, sort_name)
+
+
+def adjust_tunnel_wave_arrivals(gateway, wave, delta, sort_date=None, sort_name=None):
+    _wave_key, wave_name = normalize_wave_key(wave)
+    if not wave_name:
+        raise ValueError("Invalid wave.")
+
+    sort_date = sort_date or date.today()
+    sort_name = normalize_sort_name(sort_name)
+    sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
+    waves = _get_or_create_waves(sort_state)
+
+    target_row = next(row for row in waves if row.wave_name == wave_name)
+    target_row.planned_count = max((target_row.planned_count or 0) + _clean_delta(delta), 0)
+    db.session.flush()
+    return driver_routing_state_payload(gateway, sort_date, sort_name)
+
+
 def adjust_tunnel_count(gateway, side, wave, delta, sort_date=None, sort_name=None):
     normalized_side = normalize_ballmat_side(side)
     wave_key, wave_name = normalize_wave_key(wave)
@@ -249,7 +269,7 @@ def adjust_tunnel_count(gateway, side, wave, delta, sort_date=None, sort_name=No
 
     _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats)
     db.session.flush()
-    return ballmat_state_payload(gateway, sort_date, sort_name)
+    return driver_routing_state_payload(gateway, sort_date, sort_name)
 
 
 def get_or_create_sort_state(gateway, sort_date, sort_name):

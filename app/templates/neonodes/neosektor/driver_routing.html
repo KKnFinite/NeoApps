@@ -7,9 +7,7 @@
     class="neosektor-standalone-page neosektor-driver-shell driver-body"
     aria-labelledby="neosektor-driver-title"
     data-driver-routing
-    data-can-edit="{{ 'true' if can_edit else 'false' }}"
     data-state-url="{{ url_for('neosektor.driver_routing_state') }}"
-    data-update-url="{{ url_for('neosektor.driver_routing_update') }}"
 >
     <h1 id="neosektor-driver-title" class="visually-hidden">Driver Routing</h1>
     <span class="visually-hidden">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
@@ -49,27 +47,6 @@
             </article>
             {% endfor %}
         </section>
-
-        <section class="neosektor-driver-offset-panel" aria-label="West route offset">
-            <div>
-                <span>West Offset</span>
-                <strong data-driver-offset-display>{{ state.routing.west_offset }}</strong>
-            </div>
-            <div class="neosektor-driver-offset-control">
-                <button type="button" data-driver-offset-step="-1" {% if not can_edit %}disabled{% endif %}>-</button>
-                <input
-                    type="number"
-                    inputmode="numeric"
-                    min="0"
-                    max="999"
-                    value="{{ state.routing.west_offset }}"
-                    data-driver-offset-input
-                    aria-label="West route offset"
-                    {% if not can_edit %}disabled{% endif %}
-                >
-                <button type="button" data-driver-offset-step="1" {% if not can_edit %}disabled{% endif %}>+</button>
-            </div>
-        </section>
     </main>
 </section>
 
@@ -81,14 +58,6 @@
     }
 
     const stateUrl = root.dataset.stateUrl;
-    const updateUrl = root.dataset.updateUrl;
-    const canEdit = root.dataset.canEdit === "true";
-    const offsetInput = root.querySelector("[data-driver-offset-input]");
-
-    const readOffset = () => {
-        const value = Number.parseInt(offsetInput.value, 10);
-        return Number.isFinite(value) ? Math.min(Math.max(value, 0), 999) : 0;
-    };
 
     const applyRoute = (waveKey, route) => {
         const panel = root.querySelector(`[data-driver-wave="${waveKey}"]`);
@@ -118,10 +87,6 @@
         const routing = state.routing || {};
         applyRoute("first", (routing.routes || {}).first);
         applyRoute("second", (routing.routes || {}).second);
-        root.querySelector("[data-driver-offset-display]").textContent = routing.west_offset ?? 0;
-        if (offsetInput && document.activeElement !== offsetInput) {
-            offsetInput.value = routing.west_offset ?? 0;
-        }
         applyBayPriority(routing.bay_priority);
     };
 
@@ -137,44 +102,6 @@
             }
         } catch (_error) {}
     };
-
-    const saveOffset = async () => {
-        if (!canEdit || !offsetInput) {
-            return;
-        }
-
-        try {
-            const response = await fetch(updateUrl, {
-                method: "POST",
-                cache: "no-store",
-                credentials: "same-origin",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ west_offset: readOffset() }),
-            });
-            if (!response.ok) {
-                return;
-            }
-            const payload = await response.json();
-            if (payload.ok) {
-                applyState(payload.state);
-            }
-        } catch (_error) {}
-    };
-
-    root.addEventListener("click", (event) => {
-        const step = event.target.closest("[data-driver-offset-step]");
-        if (!step || step.disabled || !offsetInput) {
-            return;
-        }
-        offsetInput.value = readOffset() + Number.parseInt(step.dataset.driverOffsetStep, 10);
-        saveOffset();
-    });
-
-    root.addEventListener("change", (event) => {
-        if (event.target.matches("[data-driver-offset-input]") && !event.target.disabled) {
-            saveOffset();
-        }
-    });
 
     window.setInterval(refreshState, 3000);
 })();

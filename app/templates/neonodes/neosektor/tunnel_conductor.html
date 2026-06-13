@@ -4,47 +4,63 @@
 
 {% block content %}
 <section
-    class="neosektor-standalone-page neosektor-tunnel-shell tunnel-body"
+    class="neosektor-standalone-page neosektor-tunnel-shell tunnel-body mode-view"
     aria-labelledby="neosektor-tunnel-title"
     data-tunnel-conductor
     data-can-edit="{{ 'true' if can_edit else 'false' }}"
     data-state-url="{{ url_for('neosektor.tunnel_conductor_state') }}"
-    data-delta-url="{{ url_for('neosektor.tunnel_conductor_delta') }}"
+    data-wave-url="{{ url_for('neosektor.tunnel_conductor_wave') }}"
+    data-offset-url="{{ url_for('neosektor.tunnel_conductor_offset') }}"
 >
     <header class="app-header tunnel-header neosektor-standalone-header">
         <div class="header-title">
             <p>NeoSektor</p>
             <h1 id="neosektor-tunnel-title">Tunnel Conductor</h1>
         </div>
-        <span class="header-link header-link-static">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
+        <a class="header-link" href="{{ url_for('auth.logout') }}">Logout</a>
+        <span class="visually-hidden">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
     </header>
 
     <main class="tunnel-wrap">
         <section class="tunnel-wave-grid" aria-label="Wave summary">
             {% for wave_key, wave in [("first", state.waves[0]), ("second", state.waves[1])] %}
-            <article class="tunnel-panel">
+            <article class="tunnel-panel tunnel-wave-panel" data-tunnel-wave-key="{{ wave_key }}">
                 <h2>{{ wave.name }}</h2>
-                <div class="tunnel-metric">
+                <div class="tunnel-metric tunnel-arrive-control tunnel-editable">
                     <span>Left to Arrive</span>
-                    <strong data-wave-summary="{{ wave_key }}" data-metric="left_to_arrive">{{ wave.planned }}</strong>
+                    <div class="counter-control tunnel-control" aria-label="{{ wave.name }} left to arrive controls">
+                        <button type="button" data-tunnel-wave-delta="-1" {% if not can_edit %}disabled{% endif %}>-</button>
+                        <strong class="counter-number" data-wave-summary="{{ wave_key }}" data-metric="left_to_arrive">{{ wave.planned }}</strong>
+                        <button type="button" data-tunnel-wave-delta="1" {% if not can_edit %}disabled{% endif %}>+</button>
+                    </div>
                 </div>
-                <div class="tunnel-metric">
+                <div class="tunnel-metric tunnel-unload-metric">
                     <span>Left to Unload</span>
                     <strong data-wave-summary="{{ wave_key }}" data-metric="left_to_unload">{{ wave.left }}</strong>
                 </div>
             </article>
             {% endfor %}
-            <article class="tunnel-panel tunnel-offset-panel">
-                <h2>Live Flow</h2>
-                <div class="tunnel-metric">
-                    <span>Active Wave</span>
-                    <strong data-summary-active-wave>{{ state.summary.active_wave }}</strong>
+        </section>
+
+        <section class="tunnel-panel tunnel-offset-panel" aria-label="Driver route offset">
+            <h2>Driver Route Offset</h2>
+            <div class="tunnel-offset-control-card">
+                <span>West Offset</span>
+                <div class="neosektor-driver-offset-control">
+                    <button type="button" data-tunnel-offset-step="-1" {% if not can_edit %}disabled{% endif %}>-</button>
+                    <input
+                        type="number"
+                        inputmode="numeric"
+                        min="0"
+                        max="999"
+                        value="{{ state.routing.west_offset }}"
+                        data-tunnel-offset-input
+                        aria-label="West route offset"
+                        {% if not can_edit %}disabled{% endif %}
+                    >
+                    <button type="button" data-tunnel-offset-step="1" {% if not can_edit %}disabled{% endif %}>+</button>
                 </div>
-                <div class="tunnel-metric">
-                    <span>Unloaded</span>
-                    <strong data-summary-unloaded>{{ state.summary.unloaded_total }}</strong>
-                </div>
-            </article>
+            </div>
         </section>
 
         <section class="tunnel-panel tunnel-counts-panel" aria-label="Ballmat counts">
@@ -54,23 +70,16 @@
                 {% set side = state.sides[side_key] %}
                 <section class="tunnel-ballmat-column" data-tunnel-side="{{ side.key }}">
                     <h3>{{ side.label.title() }} Ballmat</h3>
-                    <article class="tunnel-readonly-card">
-                        <span>Total</span>
-                        <strong data-total-count>{{ side.total_count }}</strong>
-                        <em class="neosektor-status neosektor-status-{{ side.status|lower }}" data-total-status>{{ side.status }}</em>
-                    </article>
                     {% for wave in side.waves %}
-                    <article class="tunnel-readonly-card tunnel-count-control-card" data-wave="{{ wave.key }}">
+                    <article class="tunnel-readonly-card" data-wave="{{ wave.key }}">
                         <span>{{ wave.name }}</span>
                         <strong data-wave-count="{{ wave.key }}">{{ wave.count }}</strong>
-                        <em class="neosektor-status neosektor-status-{{ wave.status|lower }}" data-wave-status="{{ wave.key }}">{{ wave.status }}</em>
-                        <div class="counter-control tunnel-control" aria-label="{{ side.label }} {{ wave.name }} count controls">
-                            <button type="button" data-tunnel-delta="-1" {% if not can_edit %}disabled{% endif %}>-</button>
-                            <span class="counter-number" aria-hidden="true">{{ wave.count }}</span>
-                            <button type="button" data-tunnel-delta="1" {% if not can_edit %}disabled{% endif %}>+</button>
-                        </div>
                     </article>
                     {% endfor %}
+                    <article class="tunnel-readonly-card">
+                        <span>Open Bays</span>
+                        <strong data-open-bays-value>{{ side.open_bays }}</strong>
+                    </article>
                 </section>
                 {% endfor %}
             </div>
@@ -100,8 +109,10 @@
     }
 
     const stateUrl = root.dataset.stateUrl;
-    const deltaUrl = root.dataset.deltaUrl;
+    const waveUrl = root.dataset.waveUrl;
+    const offsetUrl = root.dataset.offsetUrl;
     const canEdit = root.dataset.canEdit === "true";
+    const offsetInput = root.querySelector("[data-tunnel-offset-input]");
 
     const setText = (selector, value) => {
         const element = root.querySelector(selector);
@@ -110,25 +121,27 @@
         }
     };
 
-    const updateStatusClass = (element, status) => {
-        if (!element) {
-            return;
-        }
-        element.textContent = status;
-        element.className = `neosektor-status neosektor-status-${String(status).toLowerCase()}`;
+    const readNumber = (input) => {
+        const value = Number.parseInt(input?.value, 10);
+        return Number.isFinite(value) && value > 0 ? value : 0;
+    };
+
+    const readOffset = () => {
+        const value = readNumber(offsetInput);
+        return Math.min(value, 999);
     };
 
     const applyState = (state) => {
-        const summary = state.summary || {};
-        setText("[data-summary-active-wave]", summary.active_wave || "");
-        setText("[data-summary-unloaded]", summary.unloaded_total ?? 0);
-        setText("[data-summary-left]", summary.left_to_unload ?? 0);
-
         (state.waves || []).forEach((wave) => {
             const waveKey = wave.name === "1ST WAVE" ? "first" : "second";
             setText(`[data-wave-summary="${waveKey}"][data-metric="left_to_arrive"]`, wave.planned ?? 0);
             setText(`[data-wave-summary="${waveKey}"][data-metric="left_to_unload"]`, wave.left ?? 0);
         });
+
+        const routing = state.routing || {};
+        if (offsetInput && document.activeElement !== offsetInput) {
+            offsetInput.value = routing.west_offset ?? 0;
+        }
 
         Object.entries(state.sides || {}).forEach(([sideKey, side]) => {
             const panel = root.querySelector(`[data-tunnel-side="${sideKey}"]`);
@@ -136,20 +149,17 @@
                 return;
             }
 
-            setText(`[data-tunnel-side="${sideKey}"] [data-total-count]`, side.total_count);
-            updateStatusClass(panel.querySelector("[data-total-status]"), side.status);
-
             side.waves.forEach((wave) => {
                 const count = panel.querySelector(`[data-wave-count="${wave.key}"]`);
                 if (count) {
                     count.textContent = wave.count;
                 }
-                const numberReadout = panel.querySelector(`[data-wave="${wave.key}"] .counter-number`);
-                if (numberReadout) {
-                    numberReadout.textContent = wave.count;
-                }
-                updateStatusClass(panel.querySelector(`[data-wave-status="${wave.key}"]`), wave.status);
             });
+
+            const openBaysValue = panel.querySelector("[data-open-bays-value]");
+            if (openBaysValue) {
+                openBaysValue.textContent = side.open_bays;
+            }
 
             (side.bays || []).forEach((bay) => {
                 const card = root.querySelector(`[data-tunnel-bay="${bay.bay_name}"]`);
@@ -174,18 +184,41 @@
         } catch (_error) {}
     };
 
-    const applyDelta = async (side, wave, delta) => {
+    const applyWaveDelta = async (wave, delta) => {
         if (!canEdit) {
             return;
         }
 
         try {
-            const response = await fetch(deltaUrl, {
+            const response = await fetch(waveUrl, {
                 method: "POST",
                 cache: "no-store",
                 credentials: "same-origin",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ side, wave, delta }),
+                body: JSON.stringify({ wave, delta }),
+            });
+            if (!response.ok) {
+                return;
+            }
+            const payload = await response.json();
+            if (payload.ok) {
+                applyState(payload.state);
+            }
+        } catch (_error) {}
+    };
+
+    const saveOffset = async () => {
+        if (!canEdit || !offsetInput) {
+            return;
+        }
+
+        try {
+            const response = await fetch(offsetUrl, {
+                method: "POST",
+                cache: "no-store",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ west_offset: readOffset() }),
             });
             if (!response.ok) {
                 return;
@@ -198,22 +231,33 @@
     };
 
     root.addEventListener("click", (event) => {
-        const button = event.target.closest("[data-tunnel-delta]");
-        if (!button || button.disabled) {
+        const waveButton = event.target.closest("[data-tunnel-wave-delta]");
+        if (waveButton && !waveButton.disabled) {
+            const wavePanel = waveButton.closest("[data-tunnel-wave-key]");
+            if (wavePanel) {
+                applyWaveDelta(
+                    wavePanel.dataset.tunnelWaveKey,
+                    Number.parseInt(waveButton.dataset.tunnelWaveDelta, 10),
+                );
+            }
             return;
         }
 
-        const sidePanel = button.closest("[data-tunnel-side]");
-        const wavePanel = button.closest("[data-wave]");
-        if (!sidePanel || !wavePanel) {
+        const offsetButton = event.target.closest("[data-tunnel-offset-step]");
+        if (!offsetButton || offsetButton.disabled || !offsetInput) {
             return;
         }
-
-        applyDelta(
-            sidePanel.dataset.tunnelSide,
-            wavePanel.dataset.wave,
-            Number.parseInt(button.dataset.tunnelDelta, 10),
+        offsetInput.value = Math.min(
+            Math.max(readOffset() + Number.parseInt(offsetButton.dataset.tunnelOffsetStep, 10), 0),
+            999,
         );
+        saveOffset();
+    });
+
+    root.addEventListener("change", (event) => {
+        if (event.target.matches("[data-tunnel-offset-input]") && !event.target.disabled) {
+            saveOffset();
+        }
     });
 
     window.setInterval(refreshState, 3000);

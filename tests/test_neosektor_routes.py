@@ -144,7 +144,6 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         for path in (
             "/neosektor/live-counts",
-            "/neosektor/tunnel-conductor",
             "/neosektor/driver-routing",
             "/neosektor/discharge",
         ):
@@ -409,8 +408,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"driver-wave", response.data)
         self.assertIn(b"driver-bay-priority", response.data)
         self.assertIn(b"data-driver-routing", response.data)
-        self.assertIn(b"data-can-edit=\"false\"", response.data)
         self.assertIn(b"VIEW ONLY", response.data)
+        self.assertNotIn(b"data-driver-offset-input", response.data)
+        self.assertNotIn(b"West Offset", response.data)
         self.assertNotIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
 
     def test_driver_routing_blocks_user_without_view_permission(self):
@@ -430,7 +430,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.location, "/neosektor")
 
-    def test_view_only_driver_routing_user_cannot_update_settings(self):
+    def test_driver_routing_no_longer_updates_offset(self):
         self._login_approved_user(role="watcher")
 
         response = self.client.post(
@@ -438,14 +438,14 @@ class NeoSektorRoutesTest(unittest.TestCase):
             json={"west_offset": 4},
         )
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
         self.assertEqual(NeoSektorDriverRouteSetting.query.count(), 0)
 
-    def test_edit_authorized_user_can_update_driver_route_offset(self):
-        self._login_approved_user(role="operator")
+    def test_edit_authorized_tunnel_conductor_user_can_update_driver_route_offset(self):
+        self._login_approved_user(role="simulator")
 
         response = self.client.post(
-            "/neosektor/driver-routing/update",
+            "/neosektor/tunnel-conductor/offset",
             json={"west_offset": 4},
         )
 
@@ -460,11 +460,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
             "4",
         )
 
-    def test_driver_route_offset_clamps_to_non_negative_standalone_behavior(self):
-        self._login_approved_user(role="operator")
+    def test_tunnel_conductor_route_offset_clamps_to_non_negative_standalone_behavior(self):
+        self._login_approved_user(role="simulator")
 
         response = self.client.post(
-            "/neosektor/driver-routing/update",
+            "/neosektor/tunnel-conductor/offset",
             json={"west_offset": -5},
         )
 
@@ -480,7 +480,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
 
     def test_driver_routing_reflects_shared_neosektor_state(self):
-        self._login_approved_user(role="operator")
+        self._login_approved_user(role="simulator")
         self.client.get("/neosektor/ebm")
         self.client.post(
             "/neosektor/ballmat/update?side=east",
@@ -495,7 +495,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             },
         )
         self.client.post(
-            "/neosektor/driver-routing/update",
+            "/neosektor/tunnel-conductor/offset",
             json={"west_offset": 3},
         )
 
@@ -552,7 +552,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(routing["routes"]["second"]["target"], "West Ballmat Stay Left")
 
     def test_driver_routing_west_offset_changes_standalone_threshold_output(self):
-        self._login_approved_user(role="operator")
+        self._login_approved_user(role="simulator")
         self.client.post(
             "/neosektor/ballmat/update?side=east",
             json={
@@ -579,7 +579,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
 
         before_offset = self.client.get("/neosektor/driver-routing/state").get_json()
-        self.client.post("/neosektor/driver-routing/update", json={"west_offset": 2})
+        self.client.post("/neosektor/tunnel-conductor/offset", json={"west_offset": 2})
         after_offset = self.client.get("/neosektor/driver-routing/state").get_json()
 
         self.assertEqual(
@@ -653,6 +653,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"TUNNEL CONDUCTOR", response.data)
         self.assertIn(b"Ballmat Counts", response.data)
+        self.assertIn(b"Driver Route Offset", response.data)
+        self.assertIn(b"data-tunnel-offset-input", response.data)
+        self.assertIn(b'href="/logout"', response.data)
+        self.assertNotIn(b'aria-label="BACK TO NeoSektor MENU"', response.data)
+        self.assertNotIn(b"motherbrain-header-nav", response.data)
         self.assertIn(b"data-tunnel-conductor", response.data)
         self.assertIn(b"data-can-edit=\"true\"", response.data)
         self.assertNotIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
@@ -680,6 +685,35 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 0)
+
+        wave_response = self.client.post(
+            "/neosektor/tunnel-conductor/wave",
+            json={"wave": "first", "delta": 1},
+        )
+        offset_response = self.client.post(
+            "/neosektor/tunnel-conductor/offset",
+            json={"west_offset": 4},
+        )
+
+        self.assertEqual(wave_response.status_code, 403)
+        self.assertEqual(offset_response.status_code, 403)
+        self.assertEqual(NeoSektorDriverRouteSetting.query.count(), 0)
+
+    def test_tunnel_conductor_wave_delta_updates_left_to_arrive(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/wave",
+            json={"wave": "first", "delta": 6},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["state"]["waves"][0]["planned"], 6)
+        self.assertEqual(
+            NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one().planned_count,
+            6,
+        )
 
     def test_tunnel_conductor_delta_updates_east_first_wave(self):
         self._login_approved_user(role="simulator")
@@ -796,8 +830,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(dashboard.status_code, 200)
         self.assertIn(b'href="/neosektor/tunnel-conductor"', dashboard.data)
         self.assertEqual(tunnel.status_code, 200)
-        self.assertIn(b'href="/neosektor/tunnel-conductor"', tunnel.data)
-        self.assertIn(b'aria-current="page"', tunnel.data)
+        self.assertIn(b"neosektor-tunnel-operator-page", tunnel.data)
+        self.assertIn(b"data-wave-url=\"/neosektor/tunnel-conductor/wave\"", tunnel.data)
+        self.assertIn(b"data-offset-url=\"/neosektor/tunnel-conductor/offset\"", tunnel.data)
 
     def test_ebm_and_wbm_open_shared_ballmat_operations_screen(self):
         self._login_approved_user(role="operator")
