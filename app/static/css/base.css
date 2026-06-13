@@ -5790,20 +5790,20 @@ select::-ms-expand {
 .neoermac-belt-block .neoermac-belt-name,
 .neoermac-belt-block:nth-child(2) .neoermac-belt-name,
 .neoermac-belt-block:nth-child(3) .neoermac-belt-name {
-    border: 1px solid rgba(238, 246, 255, 0.48);
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.08) 28%, rgba(0, 0, 0, 0.18) 100%),
-        linear-gradient(135deg, #f6f9fb 0%, #aeb8c1 34%, #555e67 64%, #22272d 100%);
-    color: #ff3145;
-    text-shadow:
-        0 0 12px rgba(255, 31, 55, 0.42),
-        0 1px 0 rgba(255, 255, 255, 0.36),
-        0 2px 0 rgba(0, 0, 0, 0.44);
+    border: 1px solid rgba(244, 247, 251, 0.86);
+    background: var(--neo-silver);
+    color: #15191f;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.46);
     text-transform: none;
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.58),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.42),
-        0 0 14px rgba(255, 31, 55, 0.14);
+        inset 0 1px 0 rgba(255, 255, 255, 0.66),
+        inset 0 -1px 0 rgba(22, 28, 34, 0.12),
+        0 5px 14px rgba(0, 0, 0, 0.24),
+        0 0 10px rgba(244, 247, 251, 0.12);
+}
+
+.neoermac-belt-pull-strip {
+    display: none;
 }
 
 @media (min-width: 761px) {
@@ -5827,41 +5827,73 @@ select::-ms-expand {
         min-height: 112px;
         align-content: center;
         justify-items: center;
-        gap: 2px;
+        gap: 3px;
         padding: 8px 6px;
-        border: 1px solid rgba(238, 246, 255, 0.28);
+        border: 1px solid rgba(244, 247, 251, 0.82);
         border-radius: 6px;
-        background:
-            linear-gradient(180deg, rgba(238, 246, 255, 0.08), rgba(255, 31, 55, 0.05)),
-            linear-gradient(180deg, #15181d, #07080b);
+        background: var(--neo-silver);
         box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.09),
-            0 0 12px rgba(255, 31, 55, 0.1);
-        color: rgba(238, 246, 255, 0.8);
+            inset 0 1px 0 rgba(255, 255, 255, 0.64),
+            inset 0 -1px 0 rgba(22, 28, 34, 0.12),
+            0 5px 12px rgba(0, 0, 0, 0.22);
+        color: #15191f;
         text-align: center;
     }
 
     .neoermac-pull-edge span {
-        color: rgba(238, 246, 255, 0.58);
-        font-size: 0.52rem;
+        color: #2a3038;
+        font-size: 0.62rem;
         font-weight: 900;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.06em;
         line-height: 1;
         text-transform: uppercase;
     }
 
     .neoermac-pull-edge strong {
-        color: #eef6ff;
-        font-size: 0.68rem;
+        color: #081018;
+        font-size: 0.86rem;
         font-weight: 950;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.02em;
         line-height: 1.1;
-        text-shadow: 0 0 8px rgba(255, 31, 55, 0.18);
+        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
     }
 
     .neoermac-belt-block .neoermac-destination-select option {
         background: #f7f8fa;
         color: #111318;
+    }
+}
+
+@media (max-width: 760px) {
+    .neoermac-belt-pull-strip {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px;
+        padding: 6px;
+        border: 1px solid rgba(244, 247, 251, 0.72);
+        border-radius: 5px;
+        background: var(--neo-silver);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.62),
+            0 4px 10px rgba(0, 0, 0, 0.2);
+    }
+
+    .neoermac-belt-pull-strip span {
+        display: grid;
+        gap: 2px;
+        color: #2a3038;
+        font-size: 0.54rem;
+        font-weight: 950;
+        letter-spacing: 0.04em;
+        line-height: 1;
+        text-align: center;
+        text-transform: uppercase;
+    }
+
+    .neoermac-belt-pull-strip strong {
+        color: #081018;
+        font-size: 0.78rem;
+        letter-spacing: 0.02em;
     }
 }
 

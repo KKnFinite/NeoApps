@@ -1,7 +1,13 @@
 from sqlalchemy import or_
 
 from app.extensions import db
-from app.models import MasterFlightSchedule, NeoErmacBuildingLineup
+from app.models import (
+    MasterFlightSchedule,
+    NeoErmacBuildingLineup,
+    SortDateMission,
+    SortDateOperation,
+)
+from app.services.sort_date_operations import mission_display_timing_data
 
 
 OUTBOUND_DOOR_OPTIONS = (
@@ -107,6 +113,8 @@ def get_departure_destination_choices(gateway):
 
 
 def get_departure_destination_pull_times(gateway):
+    pull_times = _current_sort_destination_pull_times(gateway)
+
     rows = (
         MasterFlightSchedule.query.filter(
             MasterFlightSchedule.mission_type == "departure",
@@ -120,7 +128,6 @@ def get_departure_destination_pull_times(gateway):
         .all()
     )
 
-    pull_times = {}
     for row in rows:
         destination = normalize_destination(row.destination)
         if not destination:
@@ -168,12 +175,10 @@ def apply_belt_display_metadata(row, start_door, end_door, belt_names):
             "top_field": "east_destination_2",
             "bottom_field": "west_destination_2",
             "top_slots": (
-                {"field": "east_destination_2", "placeholder": "DEST 1"},
-                {"field": None, "placeholder": "DEST 2"},
+                {"field": "east_destination_2", "placeholder": "DEST 2"},
             ),
             "bottom_slots": (
-                {"field": "west_destination_2", "placeholder": "DEST 1"},
-                {"field": None, "placeholder": "DEST 2"},
+                {"field": "west_destination_2", "placeholder": "DEST 2"},
             ),
         },
         {
@@ -182,11 +187,9 @@ def apply_belt_display_metadata(row, start_door, end_door, belt_names):
             "bottom_field": "west_destination_1",
             "top_slots": (
                 {"field": "east_destination_1", "placeholder": "DEST 1"},
-                {"field": None, "placeholder": "DEST 2"},
             ),
             "bottom_slots": (
                 {"field": "west_destination_1", "placeholder": "DEST 1"},
-                {"field": None, "placeholder": "DEST 2"},
             ),
         },
     )
@@ -205,6 +208,64 @@ def normalize_destination(destination):
 def display_belt_label(belt_name):
     parts = str(belt_name or "").split("/")
     return "/".join(BELT_COLOR_LABELS.get(part, part.title()) for part in parts)
+
+
+def _current_sort_destination_pull_times(gateway):
+    operation = (
+        SortDateOperation.query.filter(
+            SortDateOperation.archived_at_utc.is_(None),
+            or_(
+                SortDateOperation.gateway_id == gateway.id,
+                SortDateOperation.gateway_code == gateway.code,
+            ),
+        )
+        .order_by(
+            SortDateOperation.sort_date.desc(),
+            SortDateOperation.generated_at_utc.desc(),
+            SortDateOperation.id.desc(),
+        )
+        .first()
+    )
+    if not operation:
+        return {}
+
+    missions = (
+        SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id,
+            mission_type="departure",
+        )
+        .order_by(SortDateMission.planned_datetime_utc.asc(), SortDateMission.id.asc())
+        .all()
+    )
+
+    pull_times = {}
+    for mission in missions:
+        destination = normalize_destination(mission.destination)
+        if not destination:
+            continue
+
+        timing_data = mission_display_timing_data(mission, operation)
+        destination_times = pull_times.setdefault(
+            destination,
+            {"pure": "--", "first_mix": "--", "final_mix": "--"},
+        )
+        _fill_pull_time(
+            destination_times,
+            "pure",
+            timing_data.get("base_pure_pull_time") or mission.pure_pull_time_local,
+        )
+        _fill_pull_time(
+            destination_times,
+            "first_mix",
+            timing_data.get("base_first_mix_pull_time") or mission.first_mix_pull_time_local,
+        )
+        _fill_pull_time(
+            destination_times,
+            "final_mix",
+            timing_data.get("base_final_mix_pull_time") or mission.final_mix_pull_time_local,
+        )
+
+    return pull_times
 
 
 def _fill_pull_time(destination_times, key, value):

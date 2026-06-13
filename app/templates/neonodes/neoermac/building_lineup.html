@@ -37,6 +37,8 @@
                             <strong>{{ left_pull_times.get("final_mix", "--") }}</strong>
                         </div>
                         {% for block in row.belt_blocks %}
+                        {% set block_destination = (row|attr(block.top_field)) or (row|attr(block.bottom_field)) %}
+                        {% set block_pull_times = pull_time_lookup.get(block_destination, {}) %}
                         <div class="neoermac-belt-block">
                             <div class="neoermac-belt-destination-row">
                                 {% for slot in block.top_slots %}
@@ -54,6 +56,11 @@
                                 {% endfor %}
                             </div>
                             <div class="neoermac-belt-name">{{ block.label }}</div>
+                            <div class="neoermac-belt-pull-strip" aria-label="{{ block.label }} planned pull times">
+                                <span>Pure <strong>{{ block_pull_times.get("pure", "--") }}</strong></span>
+                                <span>1st <strong>{{ block_pull_times.get("first_mix", "--") }}</strong></span>
+                                <span>2nd <strong>{{ block_pull_times.get("final_mix", "--") }}</strong></span>
+                            </div>
                             <div class="neoermac-belt-destination-row">
                                 {% for slot in block.bottom_slots %}
                                 {% set selected_value = row|attr(slot.field) if slot.field else "" %}

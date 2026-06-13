@@ -516,6 +516,25 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"01:25", response.data)
         self.assertIn(b"01:40", response.data)
 
+    def test_building_lineup_displays_current_sort_mission_pull_times(self):
+        self._assign_lineup_destination("green_runout", "east_destination_2", "SDF")
+        self._add_operation_departure(
+            "UPS205",
+            "SDF",
+            pure_pull_time_local=time(0, 55),
+            first_mix_pull_time_local=time(1, 10),
+            final_mix_pull_time_local=time(1, 25),
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/building-lineup")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"00:55", response.data)
+        self.assertIn(b"01:10", response.data)
+        self.assertIn(b"01:25", response.data)
+
     def test_building_lineup_destination_options_come_from_master_departures(self):
         self._add_master_departure("UPS101", "sdf")
         self._add_master_departure("UPS102", "ont")
@@ -533,6 +552,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
     def test_user_with_building_lineup_edit_can_save_destinations(self):
         self._add_master_departure("UPS301", "sdf")
         self._add_master_departure("UPS302", "ont")
+        self._add_master_departure("UPS303", "phx")
+        self._add_master_departure("UPS304", "lax")
         db.session.commit()
         self._login_approved_user(role="simulator")
 
@@ -540,9 +561,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "/neoermac/building-lineup",
             data={
                 "lineup_green_runout_east_destination_1": "sdf",
-                "lineup_green_runout_east_destination_2": "",
+                "lineup_green_runout_east_destination_2": "phx",
                 "lineup_green_runout_west_destination_1": "ont",
-                "lineup_green_runout_west_destination_2": "",
+                "lineup_green_runout_west_destination_2": "lax",
             },
             follow_redirects=False,
         )
@@ -553,11 +574,34 @@ class NeoErmacRoutesTest(unittest.TestCase):
         ).one()
         self.assertEqual(response.status_code, 302)
         self.assertEqual(saved.east_destination_1, "SDF")
+        self.assertEqual(saved.east_destination_2, "PHX")
         self.assertEqual(saved.west_destination_1, "ONT")
+        self.assertEqual(saved.west_destination_2, "LAX")
 
         reload_response = self.client.get("/neoermac/building-lineup")
         self.assertIn(b'<option value="SDF" selected', reload_response.data)
+        self.assertIn(b'<option value="PHX" selected', reload_response.data)
         self.assertIn(b'<option value="ONT" selected', reload_response.data)
+        self.assertIn(b'<option value="LAX" selected', reload_response.data)
+
+    def test_building_lineup_destination_two_controls_are_editable(self):
+        self._add_master_departure("UPS311", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neoermac/building-lineup")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'name="lineup_green_runout_east_destination_2"', response.data)
+        self.assertIn(b'name="lineup_green_runout_west_destination_2"', response.data)
+        self.assertNotIn(
+            b'name="lineup_green_runout_east_destination_2" disabled',
+            response.data,
+        )
+        self.assertNotIn(
+            b'name="lineup_green_runout_west_destination_2" disabled',
+            response.data,
+        )
 
     def test_building_lineup_save_allows_blank_slots_and_clears_destinations(self):
         self._add_master_departure("UPS351", "SDF")
