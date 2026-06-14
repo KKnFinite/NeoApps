@@ -1,0 +1,18 @@
+{% set internal_menu_items = neosektor_internal_menu_items() %}
+{% if internal_menu_items %}
+<details class="neosektor-internal-menu {{ neosektor_internal_menu_modifier|default('') }}" data-neosektor-internal-menu>
+    <summary class="neosektor-internal-menu-trigger" aria-label="Open NeoSektor menu">
+        <span>Menu</span>
+        <span class="neosektor-hamburger" aria-hidden="true"><span></span><span></span><span></span></span>
+    </summary>
+    <nav class="neosektor-internal-menu-panel" aria-label="NeoSektor menu">
+        {% for item in internal_menu_items %}
+        <a
+            class="neosektor-internal-menu-link{% if item.active %} is-active{% endif %}"
+            href="{{ url_for(item.endpoint) }}"
+            {% if item.active %}aria-current="page"{% endif %}
+        >{{ item.label }}</a>
+        {% endfor %}
+    </nav>
+</details>
+{% endif %}

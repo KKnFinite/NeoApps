@@ -9,7 +9,15 @@
     data-driver-routing
     data-state-url="{{ url_for('neosektor.driver_routing_state') }}"
 >
-    <h1 id="neosektor-driver-title" class="visually-hidden">Driver Routing</h1>
+    <header class="app-header neosektor-standalone-header">
+        <div class="header-title">
+            <p>NeoSektor</p>
+            <h1 id="neosektor-driver-title">Driver Routing</h1>
+        </div>
+        {% set neosektor_internal_menu_modifier = "neosektor-internal-menu-standalone" %}
+        {% include "neonodes/neosektor/_internal_menu.html" %}
+        <span class="header-link header-link-static">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
+    </header>
     <span class="visually-hidden">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
     <main class="driver-routing neosektor-driver-board" aria-label="Driver routing">
         {% for wave_key in ["first", "second"] %}

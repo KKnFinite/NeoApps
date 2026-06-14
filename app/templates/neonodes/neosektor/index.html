@@ -9,6 +9,8 @@
             <p>NeoSektor</p>
             <h1>Operations Menu</h1>
         </div>
+        {% set neosektor_internal_menu_modifier = "neosektor-internal-menu-standalone" %}
+        {% include "neonodes/neosektor/_internal_menu.html" %}
         <span class="header-link header-link-static">{{ gateway.code }}</span>
     </header>
 
@@ -46,7 +48,7 @@
             </article>
         </section>
 
-        <nav class="neosektor-menu" aria-label="NeoSektor menu">
+        <nav class="neosektor-menu" aria-label="NeoSektor screen shortcuts">
             {% for label, endpoint, _view_permission, _edit_permission, _description in menu_items %}
             <a class="neosektor-menu-link" href="{{ url_for(endpoint) }}">{{ label }}</a>
             {% endfor %}

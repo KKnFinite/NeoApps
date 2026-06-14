@@ -18,6 +18,8 @@
             <p>NeoSektor</p>
             <h1 id="neosektor-tunnel-title">Tunnel Conductor</h1>
         </div>
+        {% set neosektor_internal_menu_modifier = "neosektor-internal-menu-standalone" %}
+        {% include "neonodes/neosektor/_internal_menu.html" %}
         {% set character_switcher_modifier = "character-switcher-standalone" %}
         {% include "_change_characters.html" %}
         <a class="header-link" href="{{ url_for('auth.logout') }}">Logout</a>

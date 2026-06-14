@@ -76,6 +76,23 @@ NEOSEKTOR_PAGES = (
     ),
 )
 
+NEOSEKTOR_INTERNAL_MENU = (
+    ("NeoSektor Menu", "neosektor.index", None),
+    ("Live Counts", "neosektor.live_counts", None),
+    ("Tunnel Conductor", "neosektor.tunnel_conductor", TUNNEL_CONDUCTOR_VIEW_PERMISSION),
+    ("East Ballmat", "neosektor.ebm", EBM_VIEW_PERMISSION),
+    ("West Ballmat", "neosektor.wbm", WBM_VIEW_PERMISSION),
+    ("Driver Routing", "neosektor.driver_routing", "neosektor.driver_routing.view"),
+    ("Discharge", "neosektor.discharge", "neosektor.discharge.view"),
+)
+
+
+@bp.context_processor
+def inject_neosektor_navigation():
+    return {
+        "neosektor_internal_menu_items": _visible_neosektor_menu_items,
+    }
+
 
 @bp.route("")
 @gateway_node_required("sektor")
@@ -83,7 +100,7 @@ def index():
     return render_template(
         "neonodes/neosektor/index.html",
         gateway=get_current_gateway(),
-        menu_items=NEOSEKTOR_PAGES,
+        menu_items=_visible_neosektor_page_items(),
     )
 
 
@@ -402,6 +419,30 @@ def _page_by_title(title):
                 "description": description,
             }
     raise ValueError(f"Unknown NeoSektor page: {title}")
+
+
+def _visible_neosektor_menu_items():
+    items = []
+    for label, endpoint, view_permission in NEOSEKTOR_INTERNAL_MENU:
+        if view_permission and not user_can(view_permission):
+            continue
+        items.append(
+            {
+                "label": label,
+                "endpoint": endpoint,
+                "active": request.endpoint == endpoint,
+            }
+        )
+    return items
+
+
+def _visible_neosektor_page_items():
+    items = []
+    for label, endpoint, view_permission, edit_permission, description in NEOSEKTOR_PAGES:
+        if view_permission and not user_can(view_permission):
+            continue
+        items.append((label, endpoint, view_permission, edit_permission, description))
+    return items
 
 
 def _selected_ballmat_side():

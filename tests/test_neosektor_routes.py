@@ -68,7 +68,6 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoSektor", response.data)
         for label in (
-            b"TUNNEL CONDUCTOR",
             b"EBM",
             b"WBM",
             b"DISCHARGE",
@@ -76,6 +75,117 @@ class NeoSektorRoutesTest(unittest.TestCase):
             b"DRIVER ROUTING",
         ):
             self.assertIn(label, response.data)
+        self.assertNotIn(b"Tunnel Conductor</a>", response.data)
+        self.assertIn(b"data-neosektor-internal-menu", response.data)
+
+    def test_neosektor_internal_menu_filters_links_by_role(self):
+        expectations = {
+            "watcher": {
+                b'href="/neosektor"',
+                b'href="/neosektor/live-counts"',
+                b'href="/neosektor/driver-routing"',
+            },
+            "operator": {
+                b'href="/neosektor"',
+                b'href="/neosektor/live-counts"',
+                b'href="/neosektor/ebm"',
+                b'href="/neosektor/wbm"',
+                b'href="/neosektor/driver-routing"',
+                b'href="/neosektor/discharge"',
+            },
+            "simulator": {
+                b'href="/neosektor"',
+                b'href="/neosektor/live-counts"',
+                b'href="/neosektor/tunnel-conductor"',
+                b'href="/neosektor/ebm"',
+                b'href="/neosektor/wbm"',
+                b'href="/neosektor/driver-routing"',
+                b'href="/neosektor/discharge"',
+            },
+        }
+        expected_labels = {
+            "watcher": (b"NeoSektor Menu", b"Live Counts", b"Driver Routing"),
+            "operator": (
+                b"NeoSektor Menu",
+                b"Live Counts",
+                b"East Ballmat",
+                b"West Ballmat",
+                b"Driver Routing",
+                b"Discharge",
+            ),
+            "simulator": (
+                b"NeoSektor Menu",
+                b"Live Counts",
+                b"Tunnel Conductor",
+                b"East Ballmat",
+                b"West Ballmat",
+                b"Driver Routing",
+                b"Discharge",
+            ),
+        }
+        blocked = {
+            "watcher": (
+                b'href="/neosektor/tunnel-conductor"',
+                b'href="/neosektor/ebm"',
+                b'href="/neosektor/wbm"',
+                b'href="/neosektor/discharge"',
+            ),
+            "operator": (b'href="/neosektor/tunnel-conductor"',),
+            "simulator": (),
+        }
+
+        for role, expected_links in expectations.items():
+            with self.subTest(role=role):
+                self._login_approved_user(role=role)
+                response = self.client.get("/neosektor")
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b"data-neosektor-internal-menu", response.data)
+                for label in expected_labels[role]:
+                    self.assertIn(label, response.data)
+                for link in expected_links:
+                    self.assertIn(link, response.data)
+                for link in blocked[role]:
+                    self.assertNotIn(link, response.data)
+
+    def test_neosektor_internal_menu_appears_on_all_screens(self):
+        self._login_approved_user(role="simulator")
+
+        for path in (
+            "/neosektor",
+            "/neosektor/live-counts",
+            "/neosektor/tunnel-conductor",
+            "/neosektor/ebm",
+            "/neosektor/wbm",
+            "/neosektor/driver-routing",
+            "/neosektor/discharge",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.data.count(b"data-neosektor-internal-menu"), 1)
+                self.assertIn(b"neosektor-internal-menu-trigger", response.data)
+                for label in (
+                    b"NeoSektor Menu",
+                    b"Live Counts",
+                    b"Tunnel Conductor",
+                    b"East Ballmat",
+                    b"West Ballmat",
+                    b"Driver Routing",
+                    b"Discharge",
+                ):
+                    self.assertIn(label, response.data)
+                for href in (
+                    b'href="/neosektor"',
+                    b'href="/neosektor/live-counts"',
+                    b'href="/neosektor/tunnel-conductor"',
+                    b'href="/neosektor/ebm"',
+                    b'href="/neosektor/wbm"',
+                    b'href="/neosektor/driver-routing"',
+                    b'href="/neosektor/discharge"',
+                ):
+                    self.assertIn(href, response.data)
 
     def test_neosektor_role_access_matrix_matches_permission_defaults(self):
         expectations = {
