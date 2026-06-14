@@ -171,6 +171,32 @@ def tunnel_conductor_offset():
     return jsonify({"ok": True, "state": state})
 
 
+@bp.route("/tunnel-conductor/ballmat", methods=["POST"])
+@gateway_node_required("sektor")
+def tunnel_conductor_ballmat():
+    access = _neosektor_access(
+        TUNNEL_CONDUCTOR_VIEW_PERMISSION,
+        TUNNEL_CONDUCTOR_EDIT_PERMISSION,
+    )
+    if not access["can_edit"]:
+        return jsonify({"ok": False, "error": "Edit access denied."}), 403
+
+    payload = request.get_json(silent=True) or request.form
+    side = normalize_ballmat_side((payload or {}).get("side"))
+    if not side:
+        return jsonify({"ok": False, "error": "Invalid side."}), 400
+
+    try:
+        gateway = get_current_gateway()
+        update_ballmat_side(gateway, side, payload)
+        state = driver_routing_state_payload(gateway)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    db.session.commit()
+    return jsonify({"ok": True, "state": state})
+
+
 @bp.route("/ebm")
 @gateway_node_required("sektor")
 def ebm():

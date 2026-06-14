@@ -709,6 +709,18 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(wave_response.status_code, 403)
         self.assertEqual(offset_response.status_code, 403)
         self.assertEqual(NeoSektorDriverRouteSetting.query.count(), 0)
+        ballmat_response = self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "east",
+                "waves": {"first": {"count": 6}},
+                "open_bays": 2,
+                "bay_statuses": {},
+            },
+        )
+
+        self.assertEqual(ballmat_response.status_code, 403)
+        self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 0)
 
     def test_tunnel_conductor_wave_delta_updates_left_to_arrive(self):
         self._login_approved_user(role="simulator")
@@ -725,6 +737,137 @@ class NeoSektorRoutesTest(unittest.TestCase):
             NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one().planned_count,
             6,
         )
+
+    def test_tunnel_conductor_can_update_shared_ballmat_counts(self):
+        self._login_approved_user(role="simulator")
+
+        east_response = self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "east",
+                "waves": {
+                    "first": {"count": 4},
+                    "second": {"count": 2},
+                },
+                "open_bays": 3,
+                "bay_statuses": {},
+            },
+        )
+        west_response = self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "west",
+                "waves": {
+                    "first": {"count": 7},
+                    "second": {"count": 1},
+                },
+                "open_bays": 2,
+                "bay_statuses": {},
+            },
+        )
+
+        self.assertEqual(east_response.status_code, 200)
+        self.assertEqual(west_response.status_code, 200)
+        state = west_response.get_json()["state"]
+        self.assertEqual(state["sides"]["east"]["waves"][0]["count"], 4)
+        self.assertEqual(state["sides"]["east"]["waves"][1]["count"], 2)
+        self.assertEqual(state["sides"]["east"]["open_bays"], 3)
+        self.assertEqual(state["sides"]["west"]["waves"][0]["count"], 7)
+        self.assertEqual(state["sides"]["west"]["waves"][1]["count"], 1)
+        self.assertEqual(state["sides"]["west"]["open_bays"], 2)
+        self.assertEqual(
+            NeoSektorBallmatWaveCount.query.filter_by(
+                side="EAST",
+                wave_name="1ST WAVE",
+            ).one().count,
+            4,
+        )
+        self.assertEqual(
+            NeoSektorOpenBayState.query.filter_by(side="WEST").one().open_count,
+            2,
+        )
+
+    def test_ebm_and_wbm_updates_propagate_to_tunnel_conductor(self):
+        self._login_approved_user(role="simulator")
+        self.client.post(
+            "/neosektor/ballmat/update?side=east",
+            json={
+                "side": "east",
+                "waves": {
+                    "first": {"count": 5, "status": "Light"},
+                    "second": {"count": 6, "status": "Moderate"},
+                },
+                "open_bays": 4,
+                "bay_statuses": {},
+            },
+        )
+        self.client.post(
+            "/neosektor/ballmat/update?side=west",
+            json={
+                "side": "west",
+                "waves": {
+                    "first": {"count": 8, "status": "Moderate"},
+                    "second": {"count": 9, "status": "Full"},
+                },
+                "open_bays": 1,
+                "bay_statuses": {},
+            },
+        )
+
+        response = self.client.get("/neosektor/tunnel-conductor/state")
+
+        self.assertEqual(response.status_code, 200)
+        state = response.get_json()["state"]
+        self.assertEqual(state["sides"]["east"]["waves"][0]["count"], 5)
+        self.assertEqual(state["sides"]["east"]["waves"][1]["count"], 6)
+        self.assertEqual(state["sides"]["east"]["open_bays"], 4)
+        self.assertEqual(state["sides"]["west"]["waves"][0]["count"], 8)
+        self.assertEqual(state["sides"]["west"]["waves"][1]["count"], 9)
+        self.assertEqual(state["sides"]["west"]["open_bays"], 1)
+
+    def test_tunnel_conductor_updates_propagate_to_ballmat_live_counts_and_driver_routing(self):
+        self._login_approved_user(role="simulator")
+        self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "east",
+                "waves": {
+                    "first": {"count": 11},
+                    "second": {"count": 3},
+                },
+                "open_bays": 0,
+                "bay_statuses": {},
+            },
+        )
+        self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "west",
+                "waves": {
+                    "first": {"count": 6},
+                    "second": {"count": 4},
+                },
+                "open_bays": 2,
+                "bay_statuses": {},
+            },
+        )
+
+        ballmat_state = self.client.get("/neosektor/ballmat/state").get_json()["state"]
+        live_counts = self.client.get("/neosektor/live-counts")
+        driver_state = self.client.get("/neosektor/driver-routing/state").get_json()["state"]
+        ebm_page = self.client.get("/neosektor/ebm")
+        wbm_page = self.client.get("/neosektor/wbm")
+
+        self.assertEqual(ballmat_state["sides"]["east"]["waves"][0]["count"], 11)
+        self.assertEqual(ballmat_state["sides"]["west"]["waves"][0]["count"], 6)
+        self.assertEqual(ballmat_state["waves"][0]["unloaded"], 17)
+        self.assertEqual(live_counts.status_code, 200)
+        self.assertIn(b">11<", live_counts.data)
+        self.assertIn(b">6<", live_counts.data)
+        self.assertEqual(driver_state["routing"]["routes"]["first"]["east_count"], 11)
+        self.assertEqual(driver_state["routing"]["routes"]["first"]["west_count"], 6)
+        self.assertIn(b'value="11"', ebm_page.data)
+        self.assertIn(b'value="6"', wbm_page.data)
 
     def test_tunnel_conductor_no_longer_exposes_ballmat_count_delta_endpoint(self):
         self._login_approved_user(role="simulator")

@@ -2014,6 +2014,20 @@ a {
     min-height: clamp(94px, 15svh, 132px);
 }
 
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card {
+    min-height: clamp(62px, 8svh, 78px);
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card .counter-number,
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card .tunnel-count-control button {
+    min-height: 38px;
+    font-size: 1.28rem;
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-bay-card {
+    min-height: clamp(66px, 8.8svh, 82px);
+}
+
 .blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-bay-grid {
     grid-template-columns: repeat(5, minmax(0, 1fr));
 }
@@ -2030,6 +2044,16 @@ a {
 
     .blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-panel {
         padding: 7px;
+    }
+
+    .blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card {
+        min-height: 58px;
+    }
+
+    .blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card .counter-number,
+    .blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card .tunnel-count-control button {
+        min-height: 34px;
+        font-size: 1.24rem;
     }
 
     .blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wave-panel .counter-control,
@@ -8267,8 +8291,40 @@ select::-ms-expand {
     margin-top: 0;
 }
 
+.blueprint-neosektor .tunnel-ballmat-card {
+    gap: 4px;
+    min-height: 48px;
+    padding: 5px;
+}
+
+.blueprint-neosektor .tunnel-ballmat-card strong {
+    color: var(--node-sektor-highlight);
+    font-size: clamp(1.65rem, 4vw, 2.75rem);
+}
+
+.blueprint-neosektor .tunnel-ballmat-card .tunnel-count-control {
+    grid-template-columns: 34px minmax(44px, 1fr) 34px;
+    gap: 4px;
+    margin-top: 0;
+}
+
+.blueprint-neosektor .tunnel-ballmat-card .counter-number {
+    min-height: 36px;
+    color: var(--node-sektor-highlight);
+    font-size: clamp(1.15rem, 2.8vw, 1.65rem);
+}
+
 .blueprint-neosektor .tunnel-bay-grid {
     grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.blueprint-neosektor .tunnel-bay-panel {
+    gap: 8px;
+}
+
+.blueprint-neosektor .tunnel-bay-card {
+    min-height: 64px;
+    padding: 8px 5px;
 }
 
 .blueprint-neosektor .tunnel-bay-card strong {
@@ -8837,8 +8893,13 @@ select::-ms-expand {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .blueprint-neosektor .tunnel-ballmat-column {
+        gap: 4px;
+    }
+
     .blueprint-neosektor .tunnel-bay-grid {
         grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 5px;
     }
 
     .blueprint-neosektor .tunnel-metric,
@@ -8847,13 +8908,42 @@ select::-ms-expand {
         padding: 5px;
     }
 
+    .blueprint-neosektor .tunnel-ballmat-card {
+        gap: 3px;
+        min-height: 42px;
+        padding: 4px;
+    }
+
+    .blueprint-neosektor .tunnel-ballmat-card .tunnel-count-control {
+        grid-template-columns: 30px minmax(34px, 1fr) 30px;
+        gap: 3px;
+    }
+
+    .blueprint-neosektor .tunnel-ballmat-card .counter-number,
+    .blueprint-neosektor .tunnel-ballmat-card .tunnel-count-control button {
+        min-height: 30px;
+        font-size: 1rem;
+    }
+
     .blueprint-neosektor .tunnel-metric strong,
     .blueprint-neosektor .tunnel-readonly-card strong {
         font-size: 1.14rem;
     }
 
+    .blueprint-neosektor .tunnel-ballmat-card strong {
+        font-size: 1.55rem;
+    }
+
+    .blueprint-neosektor .tunnel-bay-card {
+        min-height: 60px;
+        padding: 7px 4px;
+    }
+
     .blueprint-neosektor .tunnel-bay-card strong {
-        font-size: 0.64rem;
+        font-size: clamp(0.66rem, 2.35vw, 0.82rem);
+        overflow-wrap: anywhere;
+        text-overflow: clip;
+        white-space: normal;
     }
 
     .blueprint-neosektor .driver-wave {
