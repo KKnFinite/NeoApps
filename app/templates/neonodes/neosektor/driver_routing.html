@@ -39,10 +39,6 @@
                 </strong>
                 <span class="driver-arrow" data-driver-arrow aria-hidden="true">{% if route.arrow == "right" %}&rarr;{% else %}&larr;{% endif %}</span>
             </div>
-            <dl class="driver-wave-context neosektor-driver-wave-context" aria-label="{{ route.wave_label }} count context">
-                <div><dt>East</dt><dd data-driver-east-count>{{ route.east_count }}</dd></div>
-                <div><dt>West</dt><dd data-driver-west-count>{{ route.west_count }}</dd></div>
-            </dl>
         </section>
         {% endfor %}
 
@@ -75,8 +71,6 @@
         panel.dataset.direction = route.direction;
         panel.querySelector("[data-driver-target]").textContent = route.target;
         panel.querySelector("[data-driver-arrow]").textContent = route.arrow === "right" ? "\u2192" : "\u2190";
-        panel.querySelector("[data-driver-east-count]").textContent = route.east_count;
-        panel.querySelector("[data-driver-west-count]").textContent = route.west_count;
     };
 
     const applyBayPriority = (bays) => {

@@ -542,6 +542,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"driver-bay-priority", response.data)
         self.assertIn(b"data-driver-routing", response.data)
         self.assertIn(b"VIEW ONLY", response.data)
+        self.assertNotIn(b"driver-wave-context", response.data)
+        self.assertNotIn(b"data-driver-east-count", response.data)
+        self.assertNotIn(b"data-driver-west-count", response.data)
         self.assertNotIn(b"data-driver-offset-input", response.data)
         self.assertNotIn(b"West Offset", response.data)
         self.assertNotIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
@@ -636,6 +639,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"West Ballmat Stay Left", page.data)
         self.assertIn(b"East Ballmat Stay Right", page.data)
         self.assertEqual(payload["state"]["routing"]["west_offset"], 3)
+        self.assertEqual(payload["state"]["routing"]["routes"]["first"]["east_count"], 7)
+        self.assertEqual(payload["state"]["routing"]["routes"]["second"]["east_count"], 2)
         self.assertEqual(
             payload["state"]["routing"]["routes"]["first"]["target"],
             "West Ballmat Stay Left",
