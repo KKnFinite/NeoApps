@@ -535,6 +535,61 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"01:10", response.data)
         self.assertIn(b"01:25", response.data)
 
+    def test_building_lineup_renders_pull_times_for_each_destination_side(self):
+        self._add_master_departure("UPS210", "SDF")
+        self._add_master_departure("UPS211", "ONT")
+        self._assign_lineup_destination("green_runout", "east_destination_2", "SDF")
+        self._assign_lineup_destination("green_runout", "west_destination_2", "ONT")
+        self._add_operation_departure(
+            "UPS210",
+            "SDF",
+            pure_pull_time_local=time(0, 55),
+            first_mix_pull_time_local=time(1, 10),
+            final_mix_pull_time_local=time(1, 25),
+        )
+        self._add_operation_departure(
+            "UPS211",
+            "ONT",
+            pure_pull_time_local=time(2, 5),
+            first_mix_pull_time_local=time(2, 20),
+            final_mix_pull_time_local=time(2, 35),
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/building-lineup")
+        html = response.data.decode()
+        upper_card = html.split('name="lineup_green_runout_east_destination_2"', 1)[
+            1
+        ].split("</label>", 1)[0]
+        lower_card = html.split('name="lineup_green_runout_west_destination_2"', 1)[
+            1
+        ].split("</label>", 1)[0]
+
+        self.assertEqual(response.status_code, 200)
+        for expected_time in ("00:55", "01:10", "01:25"):
+            self.assertIn(expected_time, upper_card)
+            self.assertNotIn(expected_time, lower_card)
+        for expected_time in ("02:05", "02:20", "02:35"):
+            self.assertIn(expected_time, lower_card)
+            self.assertNotIn(expected_time, upper_card)
+
+    def test_building_lineup_missing_pull_times_show_clean_blanks(self):
+        self._add_master_departure("UPS212", "PHX")
+        self._assign_lineup_destination("green_runout", "east_destination_1", "PHX")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/building-lineup")
+        html = response.data.decode()
+        card = html.split('name="lineup_green_runout_east_destination_1"', 1)[1].split(
+            "</label>",
+            1,
+        )[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(card.count("<strong>--</strong>"), 3)
+
     def test_building_lineup_destination_options_come_from_master_departures(self):
         self._add_master_departure("UPS101", "sdf")
         self._add_master_departure("UPS102", "ont")
