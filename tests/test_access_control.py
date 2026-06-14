@@ -241,7 +241,7 @@ class AccessControlTest(unittest.TestCase):
             data={"username": "watcher_character_user", "password": "TestPassword123!"},
         )
 
-        response = client.get("/rfd")
+        response = client.get("/neoermac")
         switcher = self._character_switcher_html(response)
 
         self.assertIn("Change Characters", switcher)
@@ -284,13 +284,13 @@ class AccessControlTest(unittest.TestCase):
             },
         )
 
-        response = client.get("/rfd")
+        response = client.get("/neoermac")
         switcher = self._character_switcher_html(response)
 
         self.assertIn('href="/motherbrain"', switcher)
         self.assertIn("MotherBrain", switcher)
 
-    def test_change_characters_appears_on_authenticated_node_pages(self):
+    def test_change_characters_appears_on_authenticated_node_pages_not_rfd_hub(self):
         self._approved_user("ermac_character_user")
         db.session.commit()
         client = self.app.test_client()
@@ -299,7 +299,12 @@ class AccessControlTest(unittest.TestCase):
             data={"username": "ermac_character_user", "password": "TestPassword123!"},
         )
 
-        for path in ("/rfd", "/neoermac", "/neosektor"):
+        rfd_response = client.get("/rfd")
+        self.assertEqual(rfd_response.status_code, 200)
+        self.assertNotIn(b"Change Characters", rfd_response.data)
+        self.assertNotIn(b"data-character-switcher", rfd_response.data)
+
+        for path in ("/neoermac", "/neosektor"):
             with self.subTest(path=path):
                 response = client.get(path)
                 self.assertEqual(response.status_code, 200)

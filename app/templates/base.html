@@ -115,7 +115,7 @@
                     <span>Logged in</span>
                     <strong>{{ current_user.display_name }}</strong>
                 </div>
-                {% if not is_neosektor_standalone_operator_page %}
+                {% if not is_rfd_hub_page and not is_neosektor_standalone_operator_page %}
                 {% set character_switcher_modifier = "character-switcher-header" %}
                 {% include "_change_characters.html" %}
                 {% endif %}
@@ -189,6 +189,7 @@
     })();
     </script>
     {% endif %}
+    {% if is_authenticated_app and not is_rfd_hub_page %}
     <script>
     (() => {
         const switchers = Array.from(document.querySelectorAll("[data-character-switcher]"));
@@ -218,6 +219,7 @@
         });
     })();
     </script>
+    {% endif %}
     <script>
     (() => {
         if (!("serviceWorker" in navigator)) {
