@@ -12,32 +12,7 @@
         </picture>
     </div>
 
-    <section class="neoermac-overview-panel" aria-label="NeoErmac operational overview">
-        <h2>OPERATIONAL OVERVIEW</h2>
-        <div class="neoermac-overview-grid">
-            <div>
-                <span>ACTIVE GATEWAY</span>
-                <strong>{{ gateway.code }}</strong>
-            </div>
-            <a class="neoermac-overview-link" href="{{ url_for('neoermac.building_lineup') }}">
-                <span>BUILDING LINEUP</span>
-                <strong>
-                    {% if lineup_summary.assigned_slots %}
-                    {{ lineup_summary.assigned_slots }} SLOT{{ "" if lineup_summary.assigned_slots == 1 else "S" }} SET
-                    {% else %}
-                    READY
-                    {% endif %}
-                </strong>
-            </a>
-            <a class="neoermac-overview-link" href="{{ url_for('neoermac.view_outbound') }}">
-                <span>OUTBOUND</span>
-                <strong>SUMMARY</strong>
-            </a>
-            <a class="neoermac-overview-link" href="{{ url_for('neoermac.door_view') }}">
-                <span>DOOR VIEW</span>
-                <strong>OPEN</strong>
-            </a>
-        </div>
+    <section class="neoermac-dashboard-panel" aria-label="NeoErmac current sort dashboard">
         <section class="neoermac-upcoming-board" aria-label="Upcoming outbound pulls">
             <h3>UPCOMING OUTBOUND PULLS</h3>
             {% if not dashboard_context.has_current_sort %}
