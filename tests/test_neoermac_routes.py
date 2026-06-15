@@ -358,18 +358,34 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"SDF", response.data)
         self.assertIn(b"ONT", response.data)
         self.assertIn(b"UPS301", response.data)
-        self.assertIn(b"LIVE SORT", response.data)
+        self.assertIn(b"Scheduled", response.data)
+        self.assertNotIn(b"LIVE SORT", response.data)
         self.assertIn(b"NO FLIGHT DATA", response.data)
         self.assertIn(b"N123UP", response.data)
         self.assertIn(b"A12", response.data)
         self.assertIn(b"OUTBOUND PULLS", response.data)
         self.assertNotIn(b"DESTINATION PULLS", response.data)
+        self.assertNotIn(b"neoermac-door-belt-list", response.data)
+        self.assertNotIn(b"EAST BLU/BLU BELT", response.data)
+        self.assertNotIn(b"WEST BRN/WHT BELT", response.data)
         self.assertIn(b"PLANNED Pure", response.data)
         self.assertIn(b"WINDOW TBD", response.data)
         self.assertIn(b"01:20", response.data)
         self.assertLess(response.data.index(b"UPS301"), response.data.index(b"ONT"))
         self.assertIn(b"No tugs assigned yet.", response.data)
         self.assertIn(b"No active on-the-way events.", response.data)
+
+    def test_door_view_renders_actual_flight_status(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._add_operation_departure("UPS402", "SDF", departure_status="blocked_out")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Blocked Out", response.data)
+        self.assertNotIn(b"LIVE SORT", response.data)
 
     def test_door_view_displays_window_adjusted_planned_pull_times(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
@@ -381,8 +397,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"UPS401", response.data)
-        self.assertIn(b"WINDOW Pure", response.data)
+        self.assertIn(b"PLANNED Pure", response.data)
         self.assertIn(b"WINDOW 20 MIN", response.data)
+        self.assertEqual(response.data.count(b"WINDOW 20 MIN"), 1)
         self.assertIn(b"01:40", response.data)
         self.assertIn(b"BASE 01:20 +20 MIN", response.data)
         self.assertIn(b"02:00", response.data)

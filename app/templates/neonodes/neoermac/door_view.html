@@ -77,19 +77,16 @@
                         </div>
                     </div>
 
-                    <div class="neoermac-door-belt-list">
-                        {% for slot_label in card.slot_labels %}
-                        <span>{{ slot_label }}</span>
-                        {% endfor %}
+                    <div class="neoermac-door-window-row">
+                        <span class="neoermac-door-window">WINDOW {{ card.window_minutes ~ " MIN" if card.window_minutes else "TBD" }}</span>
                     </div>
 
                     <div class="neoermac-door-pull-grid">
                         {% for pull in pull_fields %}
                         <section class="neoermac-door-pull-row">
                             <div class="neoermac-door-planned">
-                                <span>{% if card.window_minutes %}WINDOW{% else %}PLANNED{% endif %} {{ pull.label }}</span>
+                                <span>PLANNED {{ pull.label }}</span>
                                 <strong>{{ card.planned[pull.key] or "-" }}</strong>
-                                <span class="neoermac-door-window">WINDOW {{ card.window_minutes ~ " MIN" if card.window_minutes else "TBD" }}</span>
                                 {% if card.window_minutes and card.base_planned[pull.key] and card.base_planned[pull.key] != card.planned[pull.key] %}
                                 <em>BASE {{ card.base_planned[pull.key] }} +{{ card.window_minutes }} MIN</em>
                                 {% endif %}

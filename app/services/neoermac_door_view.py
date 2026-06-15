@@ -406,7 +406,7 @@ def _flight_number_for_card(mission, master):
 def _status_for_card(mission, master):
     if mission:
         status = str(getattr(mission, "departure_status", "") or "").strip()
-        return _labelize(status) if status else "LIVE SORT"
+        return _labelize(status) if status else "Scheduled"
     if master:
         return "MASTER SCHEDULE"
     return "NO FLIGHT DATA"
