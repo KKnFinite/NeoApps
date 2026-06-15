@@ -91,6 +91,7 @@
                             <div class="neoermac-door-planned">
                                 <span>{% if card.window_minutes %}WINDOW{% else %}PLANNED{% endif %} {{ pull.label }}</span>
                                 <strong>{{ card.planned[pull.key] or "-" }}</strong>
+                                <span class="neoermac-door-window">WINDOW {{ card.window_minutes ~ " MIN" if card.window_minutes else "TBD" }}</span>
                                 {% if card.window_minutes and card.base_planned[pull.key] and card.base_planned[pull.key] != card.planned[pull.key] %}
                                 <em>BASE {{ card.base_planned[pull.key] }} +{{ card.window_minutes }} MIN</em>
                                 {% endif %}

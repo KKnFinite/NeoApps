@@ -2200,6 +2200,20 @@ a {
     font-size: 0.78rem;
 }
 
+.neoermac-door-planned .neoermac-door-window {
+    justify-self: center;
+    width: max-content;
+    max-width: 100%;
+    padding: 2px 6px;
+    border: 1px solid rgba(54, 226, 123, 0.24);
+    border-radius: 999px;
+    color: var(--node-ermac-secondary);
+    background: rgba(54, 226, 123, 0.08);
+    font-size: 0.52rem;
+    line-height: 1;
+    white-space: nowrap;
+}
+
 .neoermac-door-planned em {
     color: var(--steel);
     font-size: 0.54rem;
@@ -2725,6 +2739,11 @@ a {
     .neoermac-door-planned em {
         font-size: 0.45rem;
         line-height: 1;
+    }
+
+    .neoermac-door-planned .neoermac-door-window {
+        padding: 2px 4px;
+        font-size: 0.44rem;
     }
 
     .neoermac-door-actual input {
