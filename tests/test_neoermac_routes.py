@@ -147,11 +147,51 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertLess(response.data.index(b"West upcoming pulls"), response.data.index(b"East upcoming pulls"))
         self.assertIn(b"UPS702 / SDF", west_html)
-        self.assertIn(b"D32-D34 WEST BRN/WHT BELT", west_html)
+        self.assertIn(b"D32-D34 BRN/WHT BELT", west_html)
+        self.assertNotIn(b"D32-D34 WEST BRN/WHT BELT", west_html)
         self.assertNotIn(b"UPS701 / BOS", west_html)
         self.assertIn(b"UPS701 / BOS", east_html)
-        self.assertIn(b"D13-D17 EAST BRN/ORG BELT", east_html)
+        self.assertIn(b"D13-D17 BRN/ORG BELT", east_html)
+        self.assertNotIn(b"D13-D17 EAST BRN/ORG BELT", east_html)
         self.assertNotIn(b"UPS702 / SDF", east_html)
+
+    def test_neoermac_menu_combines_duplicate_belt_side_entries(self):
+        self._assign_lineup_destination("runout_3", "east_destination_2", "DEN")
+        self._assign_lineup_destination("runout_3", "west_destination_2", "DEN")
+        self._add_operation_departure(
+            "UPS810",
+            "DEN",
+            pure_pull_time_local=time(1, 49),
+            first_mix_pull_time_local=time(2, 0),
+            final_mix_pull_time_local=time(2, 11),
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac")
+
+        east_html = self._upcoming_side_html(response, "East")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(east_html.count(b"UPS810 / DEN"), 3)
+        self.assertEqual(east_html.count(b"D9-D13 BRN/WHT BELT"), 3)
+        self.assertNotIn(b"D9-D13 EAST BRN/WHT BELT", east_html)
+        self.assertNotIn(b"D9-D13 WEST BRN/WHT BELT", east_html)
+
+    def test_neoermac_menu_keeps_different_destinations_on_same_belt(self):
+        self._assign_lineup_destination("runout_3", "east_destination_2", "DEN")
+        self._assign_lineup_destination("runout_3", "west_destination_2", "OMA")
+        self._add_operation_departure("UPS811", "DEN")
+        self._add_operation_departure("UPS812", "OMA")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac")
+
+        east_html = self._upcoming_side_html(response, "East")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"UPS811 / DEN", east_html)
+        self.assertIn(b"UPS812 / OMA", east_html)
+        self.assertEqual(east_html.count(b"D9-D13 BRN/WHT BELT"), 5)
 
     def test_neoermac_menu_removes_actual_and_no_pull_items(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")

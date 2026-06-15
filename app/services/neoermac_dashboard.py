@@ -77,6 +77,7 @@ def neoermac_dashboard_context(gateway):
 
 def _lineup_assignments_by_destination(gateway):
     assignments_by_destination = {}
+    seen_assignments = set()
     real_doors = get_outbound_door_options()
     real_door_numbers = {door: _door_number(door) for door in real_doors}
 
@@ -103,16 +104,28 @@ def _lineup_assignments_by_destination(gateway):
                 continue
 
             slot_label = row.slot_labels.get(field_name, field_name.replace("_", " ").upper())
+            location = f"{row.belt_group_label} {_dashboard_belt_label(slot_label)}"
+            assignment_key = (destination, side, location)
+            if assignment_key in seen_assignments:
+                continue
+            seen_assignments.add(assignment_key)
             assignments_by_destination.setdefault(destination, []).append(
                 {
                     "door": row.belt_group_label,
-                    "location": f"{row.belt_group_label} {slot_label}",
+                    "location": location,
                     "side": side,
                     "candidate_doors": candidate_doors,
                 }
             )
 
     return assignments_by_destination
+
+
+def _dashboard_belt_label(slot_label):
+    parts = str(slot_label or "").strip().upper().split()
+    if parts and parts[0] in {"EAST", "WEST"}:
+        parts = parts[1:]
+    return " ".join(parts)
 
 
 def _door_pulls_by_destination(gateway, operation):
