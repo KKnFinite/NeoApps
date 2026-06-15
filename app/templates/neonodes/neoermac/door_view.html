@@ -12,9 +12,8 @@
     {% endif %}
 >
     <div class="neoermac-hero neoermac-door-hero">
-        <span class="neoermac-kicker"><span class="neo-node-name neo-node-ermac node-ermac" aria-label="NeoErmac"><span class="neo-word">Neo</span><span class="node-word">Ermac</span></span></span>
         <h1 id="neoermac-door-title">DOOR VIEW</h1>
-        <p>{{ gateway.code }} DOOR OPERATIONS</p>
+        <p>SHIFT OUTBOUND</p>
     </div>
 
     {% if can_view and not can_edit %}
@@ -22,7 +21,6 @@
     {% endif %}
 
     <form class="neoermac-door-selector" method="get" action="{{ url_for('neoermac.door_view') }}">
-        <label for="door-select">DOOR</label>
         <div class="neoermac-door-selector-row">
             <select id="door-select" class="neoermac-destination-select" name="door" data-canonical-doors='{{ canonical_door_options|tojson }}'>
                 <option value="">Select a door</option>
@@ -43,7 +41,7 @@
     </header>
 
     <section class="neoermac-door-panel" aria-label="Door pull operations">
-        <h2>DESTINATION PULLS</h2>
+        <h2>OUTBOUND PULLS</h2>
 
         {% if destinations %}
         <form method="post" class="neoermac-door-pull-form">

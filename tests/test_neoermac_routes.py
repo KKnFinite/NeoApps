@@ -287,10 +287,14 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"DOOR VIEW", response.data)
+        self.assertIn(b"SHIFT OUTBOUND", response.data)
         self.assertIn(b"Select a door.", response.data)
         self.assertIn(b'<option value="D34"', response.data)
         self.assertIn(b'class="neoermac-door-selector"', response.data)
         self.assertIn("no-store", response.headers["Cache-Control"])
+        self.assertNotIn(b"RFD DOOR OPERATIONS", response.data)
+        self.assertNotIn(b"DOOR OPERATIONS", response.data)
+        self.assertNotIn(b'<label for="door-select">DOOR</label>', response.data)
         self.assertNotIn(b"PLACEHOLDER SHELL", response.data)
         self.assertNotIn(b"OPERATIONAL LOGIC WILL BE ADDED IN A LATER PASS.", response.data)
 
@@ -358,6 +362,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"NO FLIGHT DATA", response.data)
         self.assertIn(b"N123UP", response.data)
         self.assertIn(b"A12", response.data)
+        self.assertIn(b"OUTBOUND PULLS", response.data)
+        self.assertNotIn(b"DESTINATION PULLS", response.data)
         self.assertIn(b"PLANNED Pure", response.data)
         self.assertIn(b"WINDOW TBD", response.data)
         self.assertIn(b"01:20", response.data)
