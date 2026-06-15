@@ -1430,7 +1430,7 @@ a {
     white-space: nowrap;
 }
 
-.neoermac-upcoming-flight {
+.neoermac-upcoming-detail {
     min-width: 0;
     overflow: hidden;
     color: #eef6ff;
@@ -5301,7 +5301,7 @@ select::-ms-expand {
         font-size: 0.6rem;
     }
 
-    .neoermac-upcoming-flight {
+    .neoermac-upcoming-detail {
         font-size: 0.72rem;
     }
 

@@ -30,7 +30,7 @@
                         <li class="neoermac-upcoming-row">
                             <span class="neoermac-upcoming-time">{{ pull.planned_time }}</span>
                             <span class="neoermac-upcoming-type">{{ pull.pull_type }}</span>
-                            <span class="neoermac-upcoming-flight">{{ pull.flight_number }} / {{ pull.destination }}</span>
+                            <span class="neoermac-upcoming-detail">{{ pull.destination }} / {{ pull.tail }} / {{ pull.parking }}</span>
                             <span class="neoermac-upcoming-location">{{ pull.location }}</span>
                         </li>
                         {% endfor %}
@@ -50,7 +50,7 @@
                         <li class="neoermac-upcoming-row">
                             <span class="neoermac-upcoming-time">{{ pull.planned_time }}</span>
                             <span class="neoermac-upcoming-type">{{ pull.pull_type }}</span>
-                            <span class="neoermac-upcoming-flight">{{ pull.flight_number }} / {{ pull.destination }}</span>
+                            <span class="neoermac-upcoming-detail">{{ pull.destination }} / {{ pull.tail }} / {{ pull.parking }}</span>
                             <span class="neoermac-upcoming-location">{{ pull.location }}</span>
                         </li>
                         {% endfor %}
