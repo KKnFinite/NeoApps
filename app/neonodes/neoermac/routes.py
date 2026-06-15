@@ -20,6 +20,7 @@ from app.services.neoermac_door_view import (
     save_door_pulls,
     save_uld_request,
 )
+from app.services.neoermac_dashboard import neoermac_dashboard_context
 from app.services.neoermac_view_outbound import view_outbound_context
 from app.services.permission_rules import permission_access
 
@@ -44,10 +45,13 @@ NEOERMAC_PAGES = (
 def index():
     gateway = get_current_gateway()
     lineup_summary = _building_lineup_summary(gateway)
+    dashboard_context = neoermac_dashboard_context(gateway)
+    db.session.commit()
     return render_template(
         "neonodes/neoermac/index.html",
         gateway=gateway,
         lineup_summary=lineup_summary,
+        dashboard_context=dashboard_context,
         menu_items=NEOERMAC_PAGES,
     )
 

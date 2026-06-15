@@ -109,6 +109,111 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertGreaterEqual(response.data.count(b'href="/neoermac/tug-assignments"'), 2)
         self.assertIn(b'href="/rfd"', response.data)
 
+    def test_neoermac_menu_shows_no_current_sort_state_without_operation(self):
+        self._login_approved_user()
+
+        response = self.client.get("/neoermac")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"No current sort operation", response.data)
+        self.assertNotIn(b"neoermac-upcoming-row", response.data)
+
+    def test_neoermac_menu_shows_west_and_east_upcoming_pull_lists(self):
+        self._assign_lineup_destination("runout_4", "east_destination_1", "BOS")
+        self._assign_lineup_destination("runout_10", "west_destination_2", "SDF")
+        self._add_operation_departure(
+            "UPS701",
+            "BOS",
+            pure_pull_time_local=time(1, 10),
+            first_mix_pull_time_local=time(1, 20),
+            final_mix_pull_time_local=time(1, 30),
+        )
+        self._add_operation_departure(
+            "UPS702",
+            "SDF",
+            pure_pull_time_local=time(1, 15),
+            first_mix_pull_time_local=time(1, 25),
+            final_mix_pull_time_local=time(1, 35),
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac")
+
+        west_html = self._upcoming_side_html(response, "West")
+        east_html = self._upcoming_side_html(response, "East")
+        self.assertEqual(response.status_code, 200)
+        self.assertLess(response.data.index(b"West upcoming pulls"), response.data.index(b"East upcoming pulls"))
+        self.assertIn(b"UPS702 / SDF", west_html)
+        self.assertIn(b"D32-D34 WEST BRN/WHT BELT", west_html)
+        self.assertNotIn(b"UPS701 / BOS", west_html)
+        self.assertIn(b"UPS701 / BOS", east_html)
+        self.assertIn(b"D13-D17 EAST BRN/ORG BELT", east_html)
+        self.assertNotIn(b"UPS702 / SDF", east_html)
+
+    def test_neoermac_menu_removes_actual_and_no_pull_items(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._add_operation_departure(
+            "UPS703",
+            "SDF",
+            pure_pull_time_local=time(1, 20),
+            first_mix_pull_time_local=time(1, 40),
+            final_mix_pull_time_local=time(1, 55),
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        save_response = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "save_pulls",
+                "destination_count": "1",
+                "destination_0": "SDF",
+                "actual_pure_0": "01:25",
+                "no_first_mix_0": "on",
+            },
+            follow_redirects=False,
+        )
+        response = self.client.get("/neoermac")
+
+        west_html = self._upcoming_side_html(response, "West")
+        self.assertEqual(save_response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"01:20", west_html)
+        self.assertNotIn(b"Pure", west_html)
+        self.assertNotIn(b"01:40", west_html)
+        self.assertNotIn(b"1st Mix", west_html)
+        self.assertIn(b"01:55", west_html)
+        self.assertIn(b"2nd Mix", west_html)
+
+    def test_neoermac_menu_sorts_upcoming_pulls_and_limits_each_side(self):
+        assignments = (
+            ("runout_10", "east_destination_1", "AAA"),
+            ("runout_10", "east_destination_2", "BBB"),
+            ("runout_11", "west_destination_1", "CCC"),
+        )
+        for index, (_runout_key, _field_name, destination) in enumerate(assignments):
+            self._assign_lineup_destination(_runout_key, _field_name, destination)
+            self._add_operation_departure(
+                f"UPS71{index}",
+                destination,
+                pure_pull_time_local=time(1, 20 + index),
+                first_mix_pull_time_local=time(1, 40 + index),
+                final_mix_pull_time_local=time(1, 55 + index),
+            )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac")
+
+        west_html = self._upcoming_side_html(response, "West")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(west_html.count(b"neoermac-upcoming-row"), 5)
+        self.assertLess(west_html.index(b"01:20"), west_html.index(b"01:21"))
+        self.assertLess(west_html.index(b"01:21"), west_html.index(b"01:22"))
+        self.assertNotIn(b"01:57", west_html)
+
     def test_placeholder_pages_render(self):
         self._login_approved_user()
         expected_pages = {
@@ -1022,6 +1127,15 @@ class NeoErmacRoutesTest(unittest.TestCase):
         match = re.search(rb'<select id="door-select".*?</select>', response.data, re.S)
         self.assertIsNotNone(match)
         return match.group(0)
+
+    def _upcoming_side_html(self, response, side_name):
+        side_label = f'aria-label="{side_name} upcoming pulls"'.encode()
+        start = response.data.index(side_label)
+        if side_name == "West":
+            end = response.data.index(b'aria-label="East upcoming pulls"', start)
+        else:
+            end = response.data.index(b'<div class="neoermac-menu', start)
+        return response.data[start:end]
 
 
 if __name__ == "__main__":
