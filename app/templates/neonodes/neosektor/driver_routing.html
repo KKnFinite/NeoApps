@@ -11,12 +11,11 @@
 >
     <header class="app-header neosektor-standalone-header">
         <div class="header-title">
-            <p>NeoSektor</p>
+            <p><span class="neo-node-name node-sektor" aria-label="NeoSektor"><span class="neo-word">Neo</span><span class="node-word">Sektor</span></span></p>
             <h1 id="neosektor-driver-title">Driver Routing</h1>
         </div>
-        <span class="header-link header-link-static">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
+        <a class="header-link neosektor-driver-back" href="{{ url_for('neosektor.index') }}">Back</a>
     </header>
-    <span class="visually-hidden">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
     <main class="driver-routing neosektor-driver-board" aria-label="Driver routing">
         {% for wave_key in ["first", "second"] %}
         {% set route = state.routing.routes[wave_key] %}

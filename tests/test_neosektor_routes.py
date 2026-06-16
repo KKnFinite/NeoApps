@@ -162,6 +162,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
             "/neosektor/ebm",
             "/neosektor/wbm",
         }
+        fullscreen_paths = {
+            "/neosektor/driver-routing",
+        }
 
         for path in (
             "/neosektor",
@@ -179,6 +182,13 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 if path in standalone_menu_paths:
                     self.assertEqual(response.data.count(b"data-neosektor-internal-menu"), 1)
                     self.assertIn(b"neosektor-internal-menu-trigger", response.data)
+                elif path in fullscreen_paths:
+                    self.assertEqual(response.data.count(b"data-neosektor-internal-menu"), 0)
+                    self.assertNotIn(b"motherbrain-header-nav", response.data)
+                    self.assertIn(b'href="/neosektor"', response.data)
+                    self.assertIn(b"Back", response.data)
+                    self.assertNotIn(b"Change Characters", response.data)
+                    continue
                 else:
                     self.assertEqual(response.data.count(b"data-neosektor-internal-menu"), 0)
                     self.assertIn(b"motherbrain-header-nav", response.data)
@@ -566,7 +576,16 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"driver-wave", response.data)
         self.assertIn(b"driver-bay-priority", response.data)
         self.assertIn(b"data-driver-routing", response.data)
-        self.assertIn(b"VIEW ONLY", response.data)
+        self.assertIn(b"neosektor-driver-page", response.data)
+        self.assertIn(b'href="/neosektor"', response.data)
+        self.assertIn(b"Back", response.data)
+        self.assertNotIn(b"Change Characters", response.data)
+        self.assertNotIn(b"Logged in", response.data)
+        self.assertNotIn(b"Logout", response.data)
+        self.assertNotIn(b"data-neosektor-internal-menu", response.data)
+        self.assertNotIn(b"motherbrain-header-nav", response.data)
+        self.assertNotIn(b"VIEW ONLY", response.data)
+        self.assertNotIn(b"EDIT ENABLED", response.data)
         self.assertNotIn(b"driver-wave-context", response.data)
         self.assertNotIn(b"data-driver-east-count", response.data)
         self.assertNotIn(b"data-driver-west-count", response.data)
@@ -801,8 +820,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(dashboard.status_code, 200)
         self.assertIn(b'href="/neosektor/driver-routing"', dashboard.data)
         self.assertEqual(driver_routing.status_code, 200)
-        self.assertIn(b'href="/neosektor/driver-routing"', driver_routing.data)
-        self.assertIn(b'aria-current="page"', driver_routing.data)
+        self.assertIn(b'href="/neosektor"', driver_routing.data)
+        self.assertIn(b"Back", driver_routing.data)
+        self.assertNotIn(b'href="/neosektor/driver-routing"', driver_routing.data)
+        self.assertNotIn(b'aria-current="page"', driver_routing.data)
 
     def test_tunnel_conductor_loads_for_view_authorized_user(self):
         self._login_approved_user(role="simulator")
@@ -1348,6 +1369,52 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("font-size: clamp(0.92rem, 1.12vw, 1.62rem);", bay_status_block)
         self.assertNotIn("overflow-wrap: anywhere;", bay_status_block)
         self.assertIn("text-transform: none;", bay_status_block)
+
+    def test_neosektor_mobile_header_css_uses_compact_text_controls(self):
+        css = Path("app/static/css/base.css").read_text()
+        topbar_block = css.rsplit(
+            "body.blueprint-neosektor.neosektor-fixed-header .topbar {",
+            1,
+        )[1].split("}", 1)[0]
+        logo_block = css.rsplit(
+            "body.blueprint-neosektor.neosektor-fixed-header "
+            ".motherbrain-header-logo-link {",
+            1,
+        )[1].split("}", 1)[0]
+        switcher_block = css.rsplit(
+            "body.blueprint-neosektor.neosektor-fixed-header .character-switcher {",
+            1,
+        )[1].split("}", 1)[0]
+        logout_block = css.rsplit(
+            "body.blueprint-neosektor.neosektor-fixed-header .logout-link {",
+            1,
+        )[1].split("}", 1)[0]
+        menu_button_block = css.rsplit(
+            "body.blueprint-neosektor.neosektor-fixed-header .motherbrain-menu-button {",
+            1,
+        )[1].split("}", 1)[0]
+        operator_header_block = css.split(
+            "body.blueprint-neosektor.neosektor-ballmat-operator-page "
+            ".neosektor-standalone-header.app-header,",
+            1,
+        )[1].split("}", 1)[0]
+        operator_switcher_block = css.split(
+            "body.blueprint-neosektor.neosektor-ballmat-operator-page "
+            ".character-switcher-standalone .character-switcher-trigger,",
+            1,
+        )[1].split("}", 1)[0]
+
+        self.assertIn("grid-template-rows: auto;", topbar_block)
+        self.assertIn("display: none;", logo_block)
+        self.assertIn("grid-column: 3;", switcher_block)
+        self.assertIn("grid-row: 1;", switcher_block)
+        self.assertIn("width: auto;", switcher_block)
+        self.assertIn("grid-column: 4;", logout_block)
+        self.assertIn("grid-column: 5;", menu_button_block)
+        self.assertIn("display: grid;", operator_header_block)
+        self.assertIn("grid-template-columns: minmax(72px, 1fr)", operator_header_block)
+        self.assertIn("grid-column: 3;", css)
+        self.assertIn("white-space: nowrap;", operator_switcher_block)
 
     def test_neosektor_dashboard_and_header_link_to_real_live_counts(self):
         self._login_approved_user(role="operator")

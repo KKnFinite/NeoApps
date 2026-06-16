@@ -37,23 +37,31 @@
 {% set is_neosektor_wbm_page = request.path.startswith("/neosektor/wbm") or (request.path.startswith("/neosektor/ballmat") and neosektor_ballmat_side == "west") %}
 {% set is_neosektor_ballmat_operator_page = is_neosektor_ebm_page or is_neosektor_wbm_page %}
 {% set is_neosektor_tunnel_operator_page = is_neosektor_page and request.path.startswith("/neosektor/tunnel-conductor") %}
+{% set is_neosektor_driver_page = is_neosektor_page and request.path.startswith("/neosektor/driver-routing") %}
 {% set is_neosektor_standalone_operator_page = is_neosektor_ballmat_operator_page or is_neosektor_tunnel_operator_page %}
-{% set uses_node_header = uses_motherbrain_header or is_neoermac_page or (is_neosektor_page and not is_neosektor_standalone_operator_page) %}
+{% set uses_node_header = uses_motherbrain_header or is_neoermac_page or (is_neosektor_page and not is_neosektor_standalone_operator_page and not is_neosektor_driver_page) %}
 {% set neosektor_current_label = "TUNNEL CONDUCTOR" if request.path.startswith("/neosektor/tunnel-conductor") else ("EBM" if is_neosektor_ebm_page else ("WBM" if is_neosektor_wbm_page else ("DISCHARGE" if request.path.startswith("/neosektor/discharge") else ("VIEW LIVE COUNTS" if request.path.startswith("/neosektor/live-counts") else ("DRIVER ROUTING" if request.path.startswith("/neosektor/driver-routing") else "DASHBOARD"))))) %}
 {% set node_home_endpoint = "neosektor.index" if is_neosektor_page else ("neoermac.index" if is_neoermac_page else "neomotherbrain.motherbrain") %}
 {% set node_header_logo = "images/neosektor_logo1.png" if is_neosektor_page else ("images/neoermac_logo1_small.png" if is_neoermac_page else "images/motherbrain_logo1.png") %}
 {% set node_header_alt = "NeoSektor logo" if is_neosektor_page else ("NeoErmac logo" if is_neoermac_page else "MotherBrain logo") %}
 {% set node_header_name = "NeoSektor" if is_neosektor_page else ("NeoErmac" if is_neoermac_page else "MotherBrain") %}
 {% set node_current_label = neosektor_current_label if is_neosektor_page else (neoermac_current_label if is_neoermac_page else motherbrain_current_label) %}
-<body class="blueprint-{{ request.blueprint or 'public' }}{% if is_rfd_hub_page %} rfd-hub-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_standalone_operator_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}">
+<body class="blueprint-{{ request.blueprint or 'public' }}{% if is_rfd_hub_page %} rfd-hub-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_standalone_operator_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}">
     <div class="shell">
+        {% if not is_neosektor_driver_page %}
         <header class="topbar">
             {% if uses_node_header %}
             <a class="motherbrain-header-logo-link" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">
                 <img class="motherbrain-header-logo{% if is_neoermac_page %} neoermac-header-logo{% endif %}{% if is_neosektor_page %} neosektor-header-logo{% endif %}" src="{{ url_for('static', filename=node_header_logo) }}" alt="{{ node_header_alt }}">
             </a>
             <div class="motherbrain-header-identity" aria-label="{{ node_header_name }} current area">
-                <span>{{ node_header_name }}</span>
+                <span>
+                    {% if is_neosektor_page %}
+                    <span class="neo-node-name node-sektor" aria-label="NeoSektor"><span class="neo-word">Neo</span><span class="node-word">Sektor</span></span>
+                    {% else %}
+                    {{ node_header_name }}
+                    {% endif %}
+                </span>
                 <strong>{{ node_current_label }}</strong>
             </div>
             {% else %}
@@ -123,6 +131,7 @@
                 {% endif %}
             </div>
         </header>
+        {% endif %}
 
         <main class="content">
             {% with messages = get_flashed_messages(with_categories=true) %}

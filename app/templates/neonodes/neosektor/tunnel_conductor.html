@@ -15,18 +15,18 @@
 >
     <header class="app-header tunnel-header neosektor-standalone-header">
         <div class="header-title">
-            <p>NeoSektor</p>
+            <p><span class="neo-node-name node-sektor" aria-label="NeoSektor"><span class="neo-word">Neo</span><span class="node-word">Sektor</span></span></p>
             <h1 id="neosektor-tunnel-title">Tunnel Conductor</h1>
         </div>
-        {% set character_switcher_modifier = "character-switcher-standalone" %}
-        {% include "_change_characters.html" %}
-        {% set neosektor_internal_menu_modifier = "neosektor-internal-menu-standalone" %}
-        {% include "neonodes/neosektor/_internal_menu.html" %}
         <div class="user-chip" aria-label="Logged in user">
             <span>Logged in</span>
             <strong>{{ current_user.display_name }}</strong>
         </div>
+        {% set character_switcher_modifier = "character-switcher-standalone" %}
+        {% include "_change_characters.html" %}
         <a class="header-link" href="{{ url_for('auth.logout') }}">Logout</a>
+        {% set neosektor_internal_menu_modifier = "neosektor-internal-menu-standalone" %}
+        {% include "neonodes/neosektor/_internal_menu.html" %}
         <span class="visually-hidden">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
     </header>
 
