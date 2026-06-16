@@ -158,6 +158,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="simulator")
 
         standalone_menu_paths = {
+            "/neosektor/live-counts",
             "/neosektor/tunnel-conductor",
             "/neosektor/ebm",
             "/neosektor/wbm",
@@ -1331,12 +1332,21 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"VIEW LIVE COUNTS", response.data)
         self.assertIn(b"Live Ballmat Counts", response.data)
+        self.assertIn(b"data-live-counts", response.data)
+        self.assertIn(b"ALL IN", response.data)
+        self.assertIn(b"DOWN", response.data)
         self.assertIn(b"Left to Unload", response.data)
         self.assertIn(b"1ST WAVE", response.data)
         self.assertIn(b"2ND WAVE", response.data)
         self.assertIn(b"East Ballmat", response.data)
         self.assertIn(b"West Ballmat", response.data)
+        self.assertIn(b"East Bays", response.data)
+        self.assertIn(b"West Bays", response.data)
         self.assertIn(b"Empty", response.data)
+        self.assertIn(b'href="/logout"', response.data)
+        self.assertIn(b'data-state-url="/neosektor/live-counts/state"', response.data)
+        self.assertNotIn(b"view-bay-dashboard", response.data)
+        self.assertNotIn(b"header-link-static", response.data)
         self.assertNotIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
         self.assertEqual(NeoSektorSortState.query.count(), 1)
         self.assertEqual(NeoSektorWaveState.query.count(), 2)
@@ -1346,28 +1356,20 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(NeoSektorBayStatus.query.count(), 5)
         self.assertEqual(NeoSektorDriverRouteSetting.query.count(), 3)
 
+    def test_live_counts_state_endpoint_is_available_to_watcher(self):
+        self._login_approved_user(role="watcher")
+
+        response = self.client.get("/neosektor/live-counts/state")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertIn("waves", payload["state"])
+        self.assertIn("sides", payload["state"])
+        self.assertEqual(payload["state"]["sides"]["east"]["bays"][0]["bay_name"], "Bay 1")
+
     def test_live_counts_css_keeps_bay_status_cards_readable(self):
         css = Path("app/static/css/base.css").read_text()
-        desktop_bay_css = css.split(
-            ".blueprint-neosektor .neosektor-live-bay-row {",
-            1,
-        )[1].split(
-            ".blueprint-neosektor .neosektor-status",
-            1,
-        )[0]
-        bay_grid_block = desktop_bay_css.split(
-            ".blueprint-neosektor .neosektor-live-counts-grid "
-            ".neosektor-live-bay-row .view-bay-grid",
-            1,
-        )[1].split("}", 1)[0]
-        bay_card_block = desktop_bay_css.rsplit(
-            ".blueprint-neosektor .neosektor-live-bay-row .view-bay-card {",
-            1,
-        )[1].split("}", 1)[0]
-        bay_status_block = desktop_bay_css.rsplit(
-            ".blueprint-neosektor .neosektor-live-bay-row .view-bay-card strong",
-            1,
-        )[1].split("}", 1)[0]
         wave_metric_block = css.split(
             ".blueprint-neosektor .neosektor-live-wave-row .wave-metrics div {",
             1,
@@ -1376,12 +1378,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
             ".blueprint-neosektor .neosektor-live-ballmat-row .counter-card > span,",
             1,
         )[1].split("}", 1)[0]
-        live_value_block = css.split(
-            ".blueprint-neosektor .neosektor-live-ballmat-row .readonly-count,",
-            1,
-        )[1].split("}", 1)[0]
         ballmat_column_block = css.split(
-            ".blueprint-neosektor .neosektor-live-ballmat-row .ops-column {",
+            ".blueprint-neosektor .neosektor-live-ballmat-row .ops-column {\n"
+            "    display: grid;",
             1,
         )[1].split("}", 1)[0]
         ballmat_card_block = css.split(
@@ -1392,42 +1391,47 @@ class NeoSektorRoutesTest(unittest.TestCase):
             ".blueprint-neosektor .neosektor-live-ballmat-row .readonly-count {",
             1,
         )[1].split("}", 1)[0]
+        column_bays_block = css.split(
+            ".blueprint-neosektor .neosektor-live-column-bays {",
+            1,
+        )[1].split("}", 1)[0]
+        bay_card_block = css.split(
+            ".blueprint-neosektor .neosektor-live-column-bays .bay-card {\n"
+            "    box-sizing: border-box;",
+            1,
+        )[1].split("}", 1)[0]
+        bay_status_block = css.split(
+            ".blueprint-neosektor .neosektor-live-column-bays .bay-card strong {",
+            1,
+        )[1].split("}", 1)[0]
 
-        self.assertIn("--neosektor-live-board-width: 1920px;", css)
+        self.assertIn("--neosektor-live-board-width: 590px;", css)
         self.assertIn("width: min(100%, var(--neosektor-live-board-width));", css)
-        self.assertIn("height: clamp(740px, calc(100vh - 410px), 800px);", css)
+        self.assertIn("grid-template-rows: auto minmax(0, 1fr);", css)
+        self.assertIn("min-height: calc(100svh - 84px);", css)
         self.assertIn(
             ".blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong",
             css,
         )
-        self.assertIn("font-size: clamp(2.15rem, 3.4vw, 3.8rem);", css)
-        self.assertIn(
-            ".blueprint-neosektor .neosektor-live-counts-grid "
-            ".neosektor-live-bay-row .view-bay-grid",
-            css,
-        )
-        self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr));", css)
         self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", css)
-        self.assertIn("grid-template-columns: 1fr;", css)
-        self.assertIn("justify-items: stretch;", bay_grid_block)
-        self.assertIn("justify-content: stretch;", bay_grid_block)
-        self.assertIn("width: 100%;", bay_grid_block)
-        self.assertIn("grid-template-rows: auto repeat(3, minmax(104px, 1fr));", ballmat_column_block)
-        self.assertIn("min-height: 104px;", ballmat_card_block)
-        self.assertIn("line-height: 0.92;", ballmat_count_block)
+        self.assertNotIn("neosektor-live-bay-row", css)
+        self.assertIn("grid-template-rows: auto repeat(3, minmax(56px, auto)) minmax(0, 1fr);", ballmat_column_block)
+        self.assertIn("min-height: 58px;", ballmat_card_block)
+        self.assertIn("line-height: 0.9;", ballmat_count_block)
         self.assertIn("display: flex;", wave_metric_block)
+        self.assertIn("flex-direction: row;", wave_metric_block)
         self.assertIn("align-items: center;", wave_metric_block)
-        self.assertIn("justify-content: center;", wave_metric_block)
+        self.assertIn("justify-content: space-between;", wave_metric_block)
         self.assertIn("width: 100%;", bay_card_block)
-        self.assertIn("overflow: visible;", bay_card_block)
-        self.assertNotIn("overflow: hidden;", bay_card_block)
-        self.assertIn("width: 100%;", live_label_block)
-        self.assertIn("text-align: center;", live_label_block)
-        self.assertIn("width: 100%;", live_value_block)
-        self.assertIn("text-align: center;", live_value_block)
+        self.assertIn("overflow: hidden;", bay_card_block)
+        self.assertIn("align-content: start;", column_bays_block)
+        self.assertIn("width: 100%;", column_bays_block)
+        self.assertIn("color: var(--neo-silver);", live_label_block)
+        self.assertIn("width: 100%;", ballmat_count_block)
+        self.assertIn("text-align: center;", ballmat_count_block)
         self.assertIn("white-space: nowrap;", bay_status_block)
         self.assertIn("overflow-wrap: normal;", bay_status_block)
-        self.assertIn("font-size: clamp(0.92rem, 1.12vw, 1.62rem);", bay_status_block)
+        self.assertIn("font-size: clamp(0.72rem, 1.8vw, 0.96rem);", bay_status_block)
         self.assertNotIn("overflow-wrap: anywhere;", bay_status_block)
         self.assertIn("text-transform: none;", bay_status_block)
 

@@ -374,6 +374,14 @@ def live_counts():
     )
 
 
+@bp.route("/live-counts/state")
+@gateway_node_required("sektor")
+def live_counts_state():
+    state = ballmat_state_payload(get_current_gateway())
+    db.session.commit()
+    return jsonify({"ok": True, "state": state})
+
+
 @bp.route("/driver-routing")
 @gateway_node_required("sektor")
 def driver_routing():

@@ -3,13 +3,20 @@
 {% block title %}VIEW LIVE COUNTS | NeoSektor{% endblock %}
 
 {% block content %}
-<section class="neosektor-standalone-page neosektor-live-shell mode-view" aria-labelledby="neosektor-live-title">
+<section
+    class="neosektor-standalone-page neosektor-live-shell mode-view"
+    aria-labelledby="neosektor-live-title"
+    data-live-counts
+    data-state-url="{{ url_for('neosektor.live_counts_state') }}"
+>
     <header class="app-header neosektor-standalone-header neosektor-live-status-strip">
         <div class="header-title">
             <p><span class="neo-node-name node-sektor" aria-label="NeoSektor"><span class="neo-word">Neo</span><span class="node-word">Sektor</span></span></p>
             <h1 id="neosektor-live-title">Live Ballmat Counts</h1>
         </div>
-        <span class="header-link header-link-static">{{ summary.sort_name }} | {{ summary.sort_date.strftime("%m/%d/%Y") }}</span>
+        <a class="header-link" href="{{ url_for('auth.logout') }}">Logout</a>
+        {% set neosektor_internal_menu_modifier = "neosektor-internal-menu-standalone" %}
+        {% include "neonodes/neosektor/_internal_menu.html" %}
     </header>
 
     <main class="counts-wrap neosektor-live-counts-grid">
@@ -20,11 +27,11 @@
                 <div class="wave-metrics">
                     <div>
                         <span>Left to Arrive</span>
-                        <strong data-wave="{{ wave_key }}" data-metric="left_to_arrive">{{ wave.planned }}</strong>
+                        <strong data-wave="{{ wave_key }}" data-metric="left_to_arrive">{{ "ALL IN" if wave.planned == 0 else wave.planned }}</strong>
                     </div>
                     <div>
                         <span>Left to Unload</span>
-                        <strong data-wave="{{ wave_key }}" data-metric="left_to_unload">{{ wave.left }}</strong>
+                        <strong data-wave="{{ wave_key }}" data-metric="left_to_unload">{{ "DOWN" if wave.left == 0 else wave.left }}</strong>
                     </div>
                 </div>
             </article>
@@ -34,7 +41,7 @@
         <section class="ops-grid mode-view neosektor-live-ballmat-row" aria-label="Live ballmat counts">
             {% for side_key in ["east", "west"] %}
             {% set side = sides[side_key] %}
-            <section class="ops-column {{ side.key }}-column" aria-label="{{ side.label }} Ballmat">
+            <section class="ops-column {{ side.key }}-column" data-live-side="{{ side.key }}" aria-label="{{ side.label }} Ballmat">
                 <h2>{{ side.label.title() }} Ballmat</h2>
 
                 {% for wave in side.waves %}
@@ -48,26 +55,109 @@
                     <span>Open Bays</span>
                     <strong class="readonly-count" data-open-bays-value>{{ side.open_bays }}</strong>
                 </article>
-            </section>
-            {% endfor %}
-        </section>
 
-        <section class="view-bay-dashboard neosektor-live-bay-row" aria-label="Bay status dashboard">
-            {% for side_key in ["east", "west"] %}
-            {% set side = sides[side_key] %}
-            <section>
-                <h2>{{ side.label.title() }} Bays</h2>
-                <div class="view-bay-grid">
+                <section class="column-bays neosektor-live-column-bays" aria-label="{{ side.label }} bays">
+                    <div class="column-bay-title">
+                        <h3>{{ side.label.title() }} Bays</h3>
+                    </div>
                     {% for bay in side.bays %}
-                    <article class="view-bay-card">
-                        <span>{{ bay.bay_name }}</span>
-                        <strong data-bay-field="{{ bay.bay_name }}">{{ bay.status }}</strong>
+                    <article class="bay-card neosektor-live-bay-card" data-live-bay="{{ bay.bay_name }}">
+                        <div class="bay-heading">
+                            <span>{{ bay.bay_name }}</span>
+                            <strong data-bay-field="{{ bay.bay_name }}">{{ bay.status }}</strong>
+                        </div>
                     </article>
                     {% endfor %}
-                </div>
+                </section>
             </section>
             {% endfor %}
         </section>
     </main>
 </section>
+
+<script>
+(() => {
+    const root = document.querySelector("[data-live-counts]");
+    if (!root) {
+        return;
+    }
+
+    const stateUrl = root.dataset.stateUrl;
+
+    const formatWaveMetric = (metric, value) => {
+        const count = Number.parseInt(value, 10);
+        const normalized = Number.isFinite(count) && count > 0 ? count : 0;
+        if (metric === "left_to_arrive" && normalized === 0) {
+            return "ALL IN";
+        }
+        if (metric === "left_to_unload" && normalized === 0) {
+            return "DOWN";
+        }
+        return String(normalized);
+    };
+
+    const setText = (selector, value) => {
+        const element = root.querySelector(selector);
+        if (element) {
+            element.textContent = value;
+            element.classList.toggle("is-word", Number.isNaN(Number(value)));
+        }
+    };
+
+    const waveKey = (name) => String(name || "").startsWith("1ST") ? "first" : "second";
+
+    const applyState = (state) => {
+        (state.waves || []).forEach((wave) => {
+            const key = waveKey(wave.name);
+            ["left_to_arrive", "left_to_unload"].forEach((metric) => {
+                const value = metric === "left_to_arrive" ? wave.planned : wave.left;
+                setText(
+                    `[data-wave="${key}"][data-metric="${metric}"]`,
+                    formatWaveMetric(metric, value)
+                );
+            });
+        });
+
+        Object.entries(state.sides || {}).forEach(([sideKey, side]) => {
+            const panel = root.querySelector(`[data-live-side="${sideKey}"]`);
+            if (!panel) {
+                return;
+            }
+
+            (side.waves || []).forEach((wave) => {
+                setText(`[data-count-field="${side.key}_${wave.key}_wave"]`, wave.count ?? 0);
+            });
+
+            const openBays = panel.querySelector("[data-open-bays-value]");
+            if (openBays) {
+                openBays.textContent = side.open_bays ?? 0;
+            }
+
+            (side.bays || []).forEach((bay) => {
+                setText(`[data-bay-field="${bay.bay_name}"]`, bay.status || "Empty");
+            });
+        });
+    };
+
+    const refreshState = async () => {
+        try {
+            const response = await fetch(stateUrl, {
+                headers: {"Accept": "application/json"},
+                cache: "no-store",
+            });
+            if (!response.ok) {
+                return;
+            }
+            const payload = await response.json();
+            if (payload.ok && payload.state) {
+                applyState(payload.state);
+            }
+        } catch (error) {
+            return;
+        }
+    };
+
+    window.setInterval(refreshState, 3000);
+})();
+</script>
 {% endblock %}
