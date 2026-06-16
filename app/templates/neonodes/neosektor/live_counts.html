@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}VIEW LIVE COUNTS | NeoSektor{% endblock %}
+{% block title %}Live Ballmat Counts | NeoSektor{% endblock %}
 
 {% block content %}
 <section
@@ -14,6 +14,12 @@
             <p><span class="neo-node-name node-sektor" aria-label="NeoSektor"><span class="neo-word">Neo</span><span class="node-word">Sektor</span></span></p>
             <h1 id="neosektor-live-title">Live Ballmat Counts</h1>
         </div>
+        <div class="user-chip" aria-label="Logged in user">
+            <span>Logged in</span>
+            <strong>{{ current_user.display_name }}</strong>
+        </div>
+        {% set character_switcher_modifier = "character-switcher-standalone" %}
+        {% include "_change_characters.html" %}
         <a class="header-link mobile-banner-logout" href="{{ url_for('auth.logout') }}">Logout</a>
         {% set neosektor_internal_menu_modifier = "neosektor-internal-menu-standalone" %}
         {% include "neonodes/neosektor/_internal_menu.html" %}
