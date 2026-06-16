@@ -190,6 +190,10 @@
     --node-highlight-rgb: var(--node-gateway-highlight-rgb);
 }
 
+.rfd-hub-page .shell {
+    width: min(1968px, calc(100% - 32px));
+}
+
 .neo-node-name {
     display: inline-flex;
     align-items: baseline;
@@ -2755,11 +2759,14 @@ a {
 }
 
 .rfd-node-menu {
+    --rfd-node-tile-width: clamp(340px, 24vw, 520px);
+    --rfd-logo-width: clamp(500px, 34vw, 740px);
+    --rfd-hub-gap: clamp(44px, 4.8vw, 94px);
     display: grid;
     align-content: center;
     justify-items: center;
-    gap: clamp(22px, 3vw, 44px);
-    width: min(100%, 1680px);
+    gap: clamp(20px, 2.6vw, 38px);
+    width: min(100%, 1968px);
     min-width: 0;
 }
 
@@ -2768,18 +2775,20 @@ a {
     align-items: center;
     justify-content: center;
     grid-template-columns:
-        minmax(300px, clamp(330px, 25vw, 460px))
-        minmax(500px, clamp(540px, 40vw, 820px))
-        minmax(300px, clamp(330px, 25vw, 460px));
-    gap: clamp(24px, 2.2vw, 48px);
-    width: min(100%, 1680px);
+        var(--rfd-node-tile-width)
+        minmax(0, var(--rfd-logo-width))
+        var(--rfd-node-tile-width);
+    gap: var(--rfd-hub-gap);
+    width: min(100%, 1968px);
 }
 
 .rfd-node-column {
     display: grid;
     align-content: center;
-    gap: clamp(20px, 2.35vw, 34px);
+    justify-items: center;
+    gap: clamp(22px, 2.4vw, 40px);
     min-width: 0;
+    width: var(--rfd-node-tile-width);
 }
 
 .rfd-hub-logo {
@@ -2794,8 +2803,8 @@ a {
 
 .rfd-hub-logo .gateway-logo {
     display: block;
-    width: clamp(600px, 44vw, 820px);
-    max-width: none;
+    width: var(--rfd-logo-width);
+    max-width: 100%;
     max-height: min(68vh, 760px);
     object-fit: contain;
     filter:
@@ -2815,8 +2824,8 @@ a {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 100%;
-    max-width: 460px;
+    width: min(100%, var(--rfd-node-tile-width));
+    max-width: none;
     aspect-ratio: 216 / 72;
     padding: 0 42px;
     border: 0;
@@ -2833,7 +2842,7 @@ a {
 }
 
 .rfd-node-column .rfd-node-tile {
-    max-width: none;
+    width: 100%;
 }
 
 .rfd-node-tile::before,
@@ -2925,16 +2934,22 @@ a {
 }
 
 @media (max-width: 1180px) and (min-width: 761px) {
+    .rfd-node-menu {
+        --rfd-node-tile-width: clamp(200px, 25vw, 300px);
+        --rfd-logo-width: clamp(300px, 39vw, 500px);
+        --rfd-hub-gap: clamp(16px, 2vw, 28px);
+    }
+
     .rfd-node-grid {
         grid-template-columns:
-            minmax(230px, 300px)
-            minmax(440px, 560px)
-            minmax(230px, 300px);
-        gap: clamp(18px, 2vw, 28px);
+            var(--rfd-node-tile-width)
+            minmax(0, var(--rfd-logo-width))
+            var(--rfd-node-tile-width);
+        gap: var(--rfd-hub-gap);
     }
 
     .rfd-hub-logo .gateway-logo {
-        width: clamp(480px, 43vw, 560px);
+        width: var(--rfd-logo-width);
     }
 
     .rfd-node-name {
@@ -2956,7 +2971,7 @@ a {
 }
 
 .rfd-motherbrain-launch {
-    width: min(100%, 560px);
+    width: min(100%, var(--rfd-node-tile-width));
 }
 
 .rfd-node-sektor {
