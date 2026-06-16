@@ -4,7 +4,7 @@
 
 {% block content %}
 <section class="neosektor-standalone-page neosektor-live-shell mode-view" aria-labelledby="neosektor-live-title">
-    <header class="app-header neosektor-standalone-header">
+    <header class="app-header neosektor-standalone-header neosektor-live-status-strip">
         <div class="header-title">
             <p>NeoSektor</p>
             <h1 id="neosektor-live-title">Live Ballmat Counts</h1>
@@ -14,8 +14,8 @@
         <span class="header-link header-link-static">{{ summary.sort_name }} | {{ summary.sort_date.strftime("%m/%d/%Y") }}</span>
     </header>
 
-    <main class="counts-wrap">
-        <section class="wave-strip" aria-label="Wave summary">
+    <main class="counts-wrap neosektor-live-counts-grid">
+        <section class="wave-strip neosektor-live-wave-row" aria-label="Wave summary">
             {% for wave_key, wave in [("first", waves[0]), ("second", waves[1])] %}
             <article class="wave-card">
                 <h2>{{ wave.name }}</h2>
@@ -33,7 +33,7 @@
             {% endfor %}
         </section>
 
-        <section class="ops-grid mode-view" aria-label="Live counts">
+        <section class="ops-grid mode-view neosektor-live-ballmat-row" aria-label="Live ballmat counts">
             {% for side_key in ["east", "west"] %}
             {% set side = sides[side_key] %}
             <section class="ops-column {{ side.key }}-column" aria-label="{{ side.label }} Ballmat">
@@ -50,25 +50,11 @@
                     <span>Open Bays</span>
                     <strong class="readonly-count" data-open-bays-value>{{ side.open_bays }}</strong>
                 </article>
-
-                <section class="column-bays">
-                    <div class="column-bay-title">
-                        <h3>{{ side.label.title() }} Bays</h3>
-                    </div>
-                    {% for bay in side.bays %}
-                    <article class="bay-card">
-                        <div class="bay-heading">
-                            <span>{{ bay.bay_name }}</span>
-                            <strong data-bay-field="{{ bay.bay_name }}">{{ bay.status }}</strong>
-                        </div>
-                    </article>
-                    {% endfor %}
-                </section>
             </section>
             {% endfor %}
         </section>
 
-        <section class="view-bay-dashboard" aria-label="Bay status dashboard">
+        <section class="view-bay-dashboard neosektor-live-bay-row" aria-label="Bay status dashboard">
             {% for side_key in ["east", "west"] %}
             {% set side = sides[side_key] %}
             <section>
