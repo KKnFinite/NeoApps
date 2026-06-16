@@ -1286,6 +1286,18 @@ class NeoSektorRoutesTest(unittest.TestCase):
             ".blueprint-neosektor .neosektor-live-bay-row .view-bay-card strong",
             1,
         )[1].split("}", 1)[0]
+        wave_metric_block = css.split(
+            ".blueprint-neosektor .neosektor-live-wave-row .wave-metrics div {",
+            1,
+        )[1].split("}", 1)[0]
+        live_label_block = css.split(
+            ".blueprint-neosektor .neosektor-live-ballmat-row .counter-card > span,",
+            1,
+        )[1].split("}", 1)[0]
+        live_value_block = css.split(
+            ".blueprint-neosektor .neosektor-live-ballmat-row .readonly-count,",
+            1,
+        )[1].split("}", 1)[0]
 
         self.assertIn("--neosektor-live-board-width: 1920px;", css)
         self.assertIn("width: min(100%, var(--neosektor-live-board-width));", css)
@@ -1301,9 +1313,16 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("justify-items: stretch;", bay_grid_block)
         self.assertIn("justify-content: stretch;", bay_grid_block)
         self.assertIn("width: 100%;", bay_grid_block)
+        self.assertIn("display: flex;", wave_metric_block)
+        self.assertIn("align-items: center;", wave_metric_block)
+        self.assertIn("justify-content: center;", wave_metric_block)
         self.assertIn("width: 100%;", bay_card_block)
         self.assertIn("overflow: visible;", bay_card_block)
         self.assertNotIn("overflow: hidden;", bay_card_block)
+        self.assertIn("width: 100%;", live_label_block)
+        self.assertIn("text-align: center;", live_label_block)
+        self.assertIn("width: 100%;", live_value_block)
+        self.assertIn("text-align: center;", live_value_block)
         self.assertIn("white-space: nowrap;", bay_status_block)
         self.assertIn("overflow-wrap: normal;", bay_status_block)
         self.assertNotIn("overflow-wrap: anywhere;", bay_status_block)

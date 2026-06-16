@@ -8900,11 +8900,13 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 }
 
 .blueprint-neosektor .neosektor-live-wave-row .wave-metrics div {
-    display: grid;
-    align-content: center;
-    justify-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     min-height: 0;
     padding: 10px 12px;
+    text-align: center;
 }
 
 .blueprint-neosektor .neosektor-live-ballmat-row .ops-column {
@@ -8923,24 +8925,32 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 }
 
 .blueprint-neosektor .neosektor-live-ballmat-row .counter-card {
-    display: grid;
-    align-content: center;
-    justify-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     min-height: 0;
     padding: 12px 10px;
+    text-align: center;
 }
 
 .blueprint-neosektor .neosektor-live-ballmat-row .counter-card > span,
 .blueprint-neosektor .neosektor-live-bay-row .view-bay-card span,
 .blueprint-neosektor .neosektor-live-wave-row .wave-metrics span {
+    display: block;
+    width: 100%;
     color: #aeb7c0;
     letter-spacing: 0.08em;
+    text-align: center;
 }
 
 .blueprint-neosektor .neosektor-live-ballmat-row .readonly-count,
 .blueprint-neosektor .neosektor-live-bay-row .view-bay-card strong,
 .blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong {
+    display: block;
+    width: 100%;
     color: #ffffff;
+    text-align: center;
     text-shadow: 0 0 12px rgba(255, 255, 255, 0.16);
 }
 
