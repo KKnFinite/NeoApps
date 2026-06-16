@@ -597,6 +597,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b'<span class="driver-target-node">', response.data)
         self.assertNotIn(b"East Ballmat <span", response.data)
         self.assertNotIn(b"West Ballmat <span", response.data)
+        self.assertIn(b"targetNode.textContent = targetLabel;", response.data)
+        self.assertIn(b"instruction.textContent = instructionLabel;", response.data)
+        self.assertNotIn(b"targetNode.textContent = route.target;", response.data)
 
     def test_driver_routing_css_uses_wide_arrows_without_sidebars(self):
         css = Path("app/static/css/base.css").read_text()

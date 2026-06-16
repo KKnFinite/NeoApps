@@ -89,14 +89,16 @@
         }
         panel.dataset.direction = route.direction;
         const target = panel.querySelector("[data-driver-target]");
+        const targetLabel = route.direction === "east" ? "East Ballmat" : "West Ballmat";
+        const instructionLabel = route.direction === "east" ? "Stay Right" : "Stay Left";
         const targetNode = document.createElement("span");
         targetNode.className = "driver-target-node";
-        targetNode.textContent = route.target;
+        targetNode.textContent = targetLabel;
         const instruction = document.createElement("span");
         instruction.className = "driver-instruction";
-        instruction.textContent = route.direction === "east" ? "Stay Right" : "Stay Left";
+        instruction.textContent = instructionLabel;
         target.replaceChildren(targetNode, instruction);
-        target.setAttribute("aria-label", route.target);
+        target.setAttribute("aria-label", `${targetLabel} ${instructionLabel}`);
         panel.querySelector("[data-driver-arrow]").textContent = route.arrow === "right" ? "\u2192" : "\u2190";
     };
 
