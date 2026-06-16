@@ -593,6 +593,41 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn(b"West Offset", response.data)
         self.assertNotIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
 
+    def test_driver_routing_css_uses_wide_arrows_without_sidebars(self):
+        css = Path("app/static/css/base.css").read_text()
+        legacy_card_bar_block = css.split(
+            ".neosektor-driver-wave-card::before {",
+            1,
+        )[1].split("}", 1)[0]
+        wave_bar_block = css.split(
+            ".blueprint-neosektor .driver-wave::before {",
+            1,
+        )[1].split("}", 1)[0]
+        arrow_block = css.split(
+            ".blueprint-neosektor .driver-arrow {",
+            1,
+        )[1].split("}", 1)[0]
+        shaft_block = css.split(
+            ".blueprint-neosektor .driver-arrow::before {",
+            1,
+        )[1].split("}", 1)[0]
+        head_block = css.rsplit(
+            ".blueprint-neosektor .driver-arrow::after {",
+            1,
+        )[1].split("}", 1)[0]
+        mobile_arrow_block = css.rsplit(
+            ".blueprint-neosektor .driver-arrow {",
+            1,
+        )[1].split("}", 1)[0]
+
+        self.assertIn("content: none;", legacy_card_bar_block)
+        self.assertIn("content: none;", wave_bar_block)
+        self.assertIn("width: min(96%, 700px);", arrow_block)
+        self.assertIn("font-size: 0;", arrow_block)
+        self.assertIn("right: clamp(38px, 7vw, 78px);", shaft_block)
+        self.assertIn("border-right:", head_block)
+        self.assertIn("width: 98%;", mobile_arrow_block)
+
     def test_driver_routing_blocks_user_without_view_permission(self):
         view_rule = PermissionRule.query.filter_by(
             permission_key="neosektor.driver_routing.view"
