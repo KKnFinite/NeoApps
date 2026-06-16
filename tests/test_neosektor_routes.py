@@ -1298,10 +1298,22 @@ class NeoSektorRoutesTest(unittest.TestCase):
             ".blueprint-neosektor .neosektor-live-ballmat-row .readonly-count,",
             1,
         )[1].split("}", 1)[0]
+        ballmat_column_block = css.split(
+            ".blueprint-neosektor .neosektor-live-ballmat-row .ops-column {",
+            1,
+        )[1].split("}", 1)[0]
+        ballmat_card_block = css.split(
+            ".blueprint-neosektor .neosektor-live-ballmat-row .counter-card {",
+            1,
+        )[1].split("}", 1)[0]
+        ballmat_count_block = css.split(
+            ".blueprint-neosektor .neosektor-live-ballmat-row .readonly-count {",
+            1,
+        )[1].split("}", 1)[0]
 
         self.assertIn("--neosektor-live-board-width: 1920px;", css)
         self.assertIn("width: min(100%, var(--neosektor-live-board-width));", css)
-        self.assertIn("height: clamp(430px, calc(100vh - 350px), 900px);", css)
+        self.assertIn("height: clamp(740px, calc(100vh - 410px), 800px);", css)
         self.assertIn(
             ".blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong",
             css,
@@ -1318,6 +1330,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("justify-items: stretch;", bay_grid_block)
         self.assertIn("justify-content: stretch;", bay_grid_block)
         self.assertIn("width: 100%;", bay_grid_block)
+        self.assertIn("grid-template-rows: auto repeat(3, minmax(104px, 1fr));", ballmat_column_block)
+        self.assertIn("min-height: 104px;", ballmat_card_block)
+        self.assertIn("line-height: 0.92;", ballmat_count_block)
         self.assertIn("display: flex;", wave_metric_block)
         self.assertIn("align-items: center;", wave_metric_block)
         self.assertIn("justify-content: center;", wave_metric_block)
