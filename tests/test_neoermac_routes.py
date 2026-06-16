@@ -94,8 +94,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"OUTBOUND</span>", response.data)
         self.assertNotIn(b'<strong>OPEN</strong>', response.data)
         self.assertNotIn(b"COMING SOON", response.data)
-        self.assertIn(b"BACK TO", response.data)
-        self.assertIn(b'class="brand-inline-name neo-node-name node-gateway"', response.data)
+        self.assertIn(b"Change Characters", response.data)
+        self.assertNotIn(b"BACK TO NeoGateway", response.data)
         self.assertNotIn(b"RFD NEONODE", response.data)
         self.assertNotIn(b'<nav class="neoermac-menu"', response.data)
 
@@ -109,7 +109,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertGreaterEqual(response.data.count(b'href="/neoermac/view-outbound"'), 1)
         self.assertGreaterEqual(response.data.count(b'href="/neoermac/door-view"'), 1)
         self.assertGreaterEqual(response.data.count(b'href="/neoermac/tug-assignments"'), 1)
-        self.assertIn(b'href="/rfd"', response.data)
+        self.assertNotIn(b"BACK TO NeoGateway", response.data)
 
     def test_neoermac_menu_shows_no_current_sort_state_without_operation(self):
         self._login_approved_user()

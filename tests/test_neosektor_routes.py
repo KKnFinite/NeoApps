@@ -76,7 +76,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         ):
             self.assertIn(label, response.data)
         self.assertNotIn(b"Tunnel Conductor</a>", response.data)
-        self.assertIn(b"data-neosektor-internal-menu", response.data)
+        self.assertIn(b"motherbrain-header-nav", response.data)
+        self.assertNotIn(b"data-neosektor-internal-menu", response.data)
 
     def test_neosektor_internal_menu_filters_links_by_role(self):
         expectations = {
@@ -140,9 +141,13 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 response = self.client.get("/neosektor")
 
                 self.assertEqual(response.status_code, 200)
-                self.assertIn(b"data-neosektor-internal-menu", response.data)
+                self.assertIn(b"motherbrain-header-nav", response.data)
+                self.assertNotIn(b"data-neosektor-internal-menu", response.data)
                 for label in expected_labels[role]:
-                    self.assertIn(label, response.data)
+                    if label == b"NeoSektor Menu":
+                        self.assertIn(b'aria-label="NeoSektor menu"', response.data)
+                    else:
+                        self.assertIn(label.upper(), response.data)
                 for link in expected_links:
                     self.assertIn(link, response.data)
                 for link in blocked[role]:
@@ -150,6 +155,12 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_neosektor_internal_menu_appears_on_all_screens(self):
         self._login_approved_user(role="simulator")
+
+        standalone_menu_paths = {
+            "/neosektor/tunnel-conductor",
+            "/neosektor/ebm",
+            "/neosektor/wbm",
+        }
 
         for path in (
             "/neosektor",
@@ -164,8 +175,12 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 response = self.client.get(path)
 
                 self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.data.count(b"data-neosektor-internal-menu"), 1)
-                self.assertIn(b"neosektor-internal-menu-trigger", response.data)
+                if path in standalone_menu_paths:
+                    self.assertEqual(response.data.count(b"data-neosektor-internal-menu"), 1)
+                    self.assertIn(b"neosektor-internal-menu-trigger", response.data)
+                else:
+                    self.assertEqual(response.data.count(b"data-neosektor-internal-menu"), 0)
+                    self.assertIn(b"motherbrain-header-nav", response.data)
                 for label in (
                     b"NeoSektor Menu",
                     b"Live Counts",
@@ -175,7 +190,15 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     b"Driver Routing",
                     b"Discharge",
                 ):
-                    self.assertIn(label, response.data)
+                    if label == b"NeoSektor Menu":
+                        if path in standalone_menu_paths:
+                            self.assertIn(label, response.data)
+                        else:
+                            self.assertIn(b'aria-label="NeoSektor menu"', response.data)
+                    elif path in standalone_menu_paths:
+                        self.assertIn(label, response.data)
+                    else:
+                        self.assertIn(label.upper(), response.data)
                 for href in (
                     b'href="/neosektor"',
                     b'href="/neosektor/live-counts"',
@@ -186,6 +209,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     b'href="/neosektor/discharge"',
                 ):
                     self.assertIn(href, response.data)
+                self.assertNotIn(b"BACK TO NeoGateway", response.data)
 
     def test_neosektor_role_access_matrix_matches_permission_defaults(self):
         expectations = {

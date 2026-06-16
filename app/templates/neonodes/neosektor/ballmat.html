@@ -17,10 +17,14 @@
             <p>NeoSektor</p>
             <h1 id="neosektor-ballmat-title">Live Ballmat Counts</h1>
         </div>
-        {% set neosektor_internal_menu_modifier = "neosektor-internal-menu-standalone" %}
-        {% include "neonodes/neosektor/_internal_menu.html" %}
         {% set character_switcher_modifier = "character-switcher-standalone" %}
         {% include "_change_characters.html" %}
+        {% set neosektor_internal_menu_modifier = "neosektor-internal-menu-standalone" %}
+        {% include "neonodes/neosektor/_internal_menu.html" %}
+        <div class="user-chip" aria-label="Logged in user">
+            <span>Logged in</span>
+            <strong>{{ current_user.display_name }}</strong>
+        </div>
         <a class="header-link" href="{{ url_for('auth.logout') }}">Logout</a>
         <span class="visually-hidden">{{ selected_manager_label }} | {{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
     </header>

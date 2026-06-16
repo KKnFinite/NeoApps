@@ -75,13 +75,13 @@
             <div class="topbar-actions">
                 {% if is_authenticated_app %}
                 {% if uses_node_header %}
+                {% set character_switcher_modifier = "character-switcher-header" %}
+                {% include "_change_characters.html" %}
                 <div class="topbar-user-row">
                     <div class="user-chip" aria-label="Logged in user">
                         <span>Logged in</span>
                         <strong>{{ current_user.display_name }}</strong>
                     </div>
-                    {% set character_switcher_modifier = "character-switcher-header" %}
-                    {% include "_change_characters.html" %}
                     <a class="logout-link" href="{{ url_for('auth.logout') }}">Logout</a>
                 </div>
                 <button class="motherbrain-menu-button" type="button" aria-expanded="false" aria-controls="motherbrain-mobile-menu" data-motherbrain-menu-button>
@@ -90,18 +90,15 @@
                 </button>
                 <nav class="nav motherbrain-header-nav" id="motherbrain-mobile-menu" aria-label="Primary" data-motherbrain-menu-panel>
                     {% if is_neosektor_page %}
-                    <a class="motherbrain-nav-link motherbrain-nav-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="BACK TO NeoGateway">BACK TO <span class="brand-inline-name neo-node-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span></a>
                     {% for item in neosektor_internal_menu_items() %}
                     <a class="motherbrain-nav-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" {% if item.active %}aria-current="page"{% endif %}{% if item.endpoint == "neosektor.index" %} aria-label="NeoSektor menu"{% endif %}>{% if item.endpoint == "neosektor.index" %}<span class="brand-inline-name neo-node-name node-sektor"><span class="neo-word">Neo</span><span class="node-word">Sektor</span></span> MENU{% else %}{{ item.label|upper }}{% endif %}</a>
                     {% endfor %}
                     {% elif is_neoermac_page %}
-                    <a class="motherbrain-nav-link motherbrain-nav-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="BACK TO NeoGateway">BACK TO <span class="brand-inline-name neo-node-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span></a>
                     <a class="motherbrain-nav-link{% if request.path.startswith('/neoermac/building-lineup') %} is-active{% endif %}" href="{{ url_for('neoermac.building_lineup') }}" {% if request.path.startswith('/neoermac/building-lineup') %}aria-current="page"{% endif %}>BUILDING LINEUP</a>
                     <a class="motherbrain-nav-link{% if request.path.startswith('/neoermac/door-view') %} is-active{% endif %}" href="{{ url_for('neoermac.door_view') }}" {% if request.path.startswith('/neoermac/door-view') %}aria-current="page"{% endif %}>DOOR VIEW</a>
                     <a class="motherbrain-nav-link{% if is_neoermac_view_outbound_page %} is-active{% endif %}" href="{{ url_for('neoermac.view_outbound') }}" {% if is_neoermac_view_outbound_page %}aria-current="page"{% endif %}>VIEW OUTBOUND</a>
                     <a class="motherbrain-nav-link{% if request.path.startswith('/neoermac/tug-assignments') %} is-active{% endif %}" href="{{ url_for('neoermac.tug_assignments') }}" {% if request.path.startswith('/neoermac/tug-assignments') %}aria-current="page"{% endif %}>TUG ASSIGNMENTS</a>
                     {% else %}
-                    <a class="motherbrain-nav-link motherbrain-nav-link-secondary" href="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="BACK TO NeoGateway">BACK TO <span class="brand-inline-name neo-node-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span></a>
                     <a class="motherbrain-nav-link{% if is_manage_sort_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.manage_sort') }}" {% if is_manage_sort_page %}aria-current="page"{% endif %}>MANAGE SORT</a>
                     <a class="motherbrain-nav-link{% if is_master_schedule_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule') }}" {% if is_master_schedule_page %}aria-current="page"{% endif %}>MASTER SCHEDULE</a>
                     <a class="motherbrain-nav-link{% if is_gateway_matrix_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.gateway_matrix') }}" {% if is_gateway_matrix_page %}aria-current="page"{% endif %}>GATEWAY MATRIX</a>
@@ -111,14 +108,14 @@
                     {% endif %}
                 </nav>
                 {% else %}
-                <div class="user-chip" aria-label="Logged in user">
-                    <span>Logged in</span>
-                    <strong>{{ current_user.display_name }}</strong>
-                </div>
                 {% if not is_rfd_hub_page and not is_neosektor_standalone_operator_page %}
                 {% set character_switcher_modifier = "character-switcher-header" %}
                 {% include "_change_characters.html" %}
                 {% endif %}
+                <div class="user-chip" aria-label="Logged in user">
+                    <span>Logged in</span>
+                    <strong>{{ current_user.display_name }}</strong>
+                </div>
                 <nav class="nav" aria-label="Primary">
                     <a href="{{ url_for('auth.logout') }}">Logout</a>
                 </nav>
