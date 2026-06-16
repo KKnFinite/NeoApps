@@ -140,11 +140,6 @@
                 <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}" aria-label="BACK TO NeoMotherBrain MAIN MENU">BACK TO <span class="neo-node-name neo-node-motherbrain node-motherbrain"><span class="neo-word">Neo</span><span class="node-word">MotherBrain</span></span> MAIN MENU</a>
             </div>
             {% endif %}
-            {% if is_neosektor_page and not is_neosektor_landing and not is_neosektor_standalone_operator_page %}
-            <div class="motherbrain-main-menu-return node-main-menu-return">
-                <a class="action-button action-button-secondary" href="{{ url_for('neosektor.index') }}" aria-label="BACK TO NeoSektor MENU">BACK TO <span class="neo-node-name neo-node-sektor node-sektor"><span class="neo-word">Neo</span><span class="node-word">Sektor</span></span> MENU</a>
-            </div>
-            {% endif %}
         </main>
     </div>
     {% if uses_node_header %}

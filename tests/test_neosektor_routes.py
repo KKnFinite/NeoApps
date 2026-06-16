@@ -274,7 +274,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     if expected_status == 302:
                         self.assertEqual(response.location, "/neosektor")
 
-    def test_neosektor_subpages_include_consistent_menu_return_navigation(self):
+    def test_neosektor_subpages_use_header_navigation_without_bottom_return(self):
         self._login_approved_user(role="simulator")
 
         for path in (
@@ -286,7 +286,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(b'href="/neosektor"', response.data)
-                self.assertIn(b'aria-label="BACK TO NeoSektor MENU"', response.data)
+                self.assertNotIn(b'aria-label="BACK TO NeoSektor MENU"', response.data)
 
     def test_standalone_operator_pages_include_change_characters_control(self):
         self._login_approved_user(role="simulator")
@@ -1301,7 +1301,12 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertIn("--neosektor-live-board-width: 1920px;", css)
         self.assertIn("width: min(100%, var(--neosektor-live-board-width));", css)
-        self.assertIn("height: clamp(650px, calc(100vh - 175px), 1120px);", css)
+        self.assertIn("height: clamp(430px, calc(100vh - 350px), 900px);", css)
+        self.assertIn(
+            ".blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong",
+            css,
+        )
+        self.assertIn("font-size: clamp(2.15rem, 3.4vw, 3.8rem);", css)
         self.assertIn(
             ".blueprint-neosektor .neosektor-live-counts-grid "
             ".neosektor-live-bay-row .view-bay-grid",
@@ -1325,6 +1330,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("text-align: center;", live_value_block)
         self.assertIn("white-space: nowrap;", bay_status_block)
         self.assertIn("overflow-wrap: normal;", bay_status_block)
+        self.assertIn("font-size: clamp(0.92rem, 1.12vw, 1.62rem);", bay_status_block)
         self.assertNotIn("overflow-wrap: anywhere;", bay_status_block)
         self.assertIn("text-transform: none;", bay_status_block)
 

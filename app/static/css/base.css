@@ -8789,8 +8789,8 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     align-items: center;
     gap: 8px;
     width: min(100%, var(--neosektor-live-board-width));
-    min-height: 54px;
-    padding: 8px 10px;
+    min-height: 46px;
+    padding: 6px 8px;
     border: 1px solid rgba(var(--node-sektor-primary-rgb), 0.32);
     border-radius: 8px;
     background:
@@ -8830,11 +8830,11 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 }
 
 .blueprint-neosektor .neosektor-live-counts-grid {
-    grid-template-rows: minmax(150px, 0.78fr) minmax(330px, 1.85fr) minmax(170px, 0.82fr);
+    grid-template-rows: minmax(120px, 0.68fr) minmax(255px, 1.42fr) minmax(125px, 0.7fr);
     justify-items: stretch;
-    gap: 10px;
+    gap: 8px;
     width: min(100%, var(--neosektor-live-board-width));
-    height: clamp(650px, calc(100vh - 175px), 1120px);
+    height: clamp(430px, calc(100vh - 350px), 900px);
     min-height: 0;
     padding: 0;
     overflow: visible;
@@ -8847,7 +8847,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     justify-content: center;
     justify-items: stretch;
-    gap: 10px;
+    gap: 8px;
 }
 
 .blueprint-neosektor .neosektor-live-wave-row .wave-card,
@@ -8868,9 +8868,9 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .blueprint-neosektor .neosektor-live-wave-row .wave-card {
     display: grid;
     align-items: stretch;
-    gap: 10px;
+    gap: 8px;
     min-height: 0;
-    padding: 14px 20px;
+    padding: 10px 18px;
 }
 
 .blueprint-neosektor .neosektor-live-wave-row .wave-card h2 {
@@ -8881,7 +8881,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .blueprint-neosektor .neosektor-live-wave-row .wave-metrics {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: 8px;
     height: 100%;
     margin: 0;
 }
@@ -8905,16 +8905,16 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     align-items: center;
     justify-content: center;
     min-height: 0;
-    padding: 10px 12px;
+    padding: 8px 12px;
     text-align: center;
 }
 
 .blueprint-neosektor .neosektor-live-ballmat-row .ops-column {
     display: grid;
     grid-template-rows: auto repeat(3, minmax(0, 1fr));
-    gap: 10px;
+    gap: 8px;
     min-height: 0;
-    padding: 16px 20px;
+    padding: 12px 16px;
     border-color: rgba(var(--node-sektor-primary-rgb), 0.34);
 }
 
@@ -8930,7 +8930,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     align-items: center;
     justify-content: center;
     min-height: 0;
-    padding: 12px 10px;
+    padding: 8px 10px;
     text-align: center;
 }
 
@@ -8954,6 +8954,10 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     text-shadow: 0 0 12px rgba(255, 255, 255, 0.16);
 }
 
+.blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong {
+    font-size: clamp(2.15rem, 3.4vw, 3.8rem);
+}
+
 .blueprint-neosektor .neosektor-live-ballmat-row .readonly-count {
     font-size: clamp(2.35rem, 5.1vw, 3.5rem);
 }
@@ -8966,8 +8970,8 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .blueprint-neosektor .neosektor-live-bay-row > section {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
-    gap: 12px;
-    padding: 16px 20px;
+    gap: 8px;
+    padding: 10px 14px;
     min-width: 0;
     width: 100%;
 }
@@ -8979,7 +8983,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     align-content: start;
     justify-content: stretch;
     justify-items: stretch;
-    gap: 12px;
+    gap: 10px;
     min-width: 0;
     width: 100%;
 }
@@ -8992,9 +8996,9 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     box-sizing: border-box;
     display: grid;
     place-items: center;
-    gap: 8px;
-    min-height: 112px;
-    padding: 12px 14px;
+    gap: 5px;
+    min-height: 78px;
+    padding: 8px 10px;
     min-width: 0;
     overflow: visible;
     text-align: center;
@@ -9006,7 +9010,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     max-width: 100%;
     min-width: 0;
     width: 100%;
-    font-size: clamp(1.15rem, 1.55vw, 2.3rem);
+    font-size: clamp(0.92rem, 1.12vw, 1.62rem);
     letter-spacing: 0.01em;
     line-height: 1.05;
     overflow-wrap: normal;
