@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from app import create_app
 from app.extensions import db
@@ -1262,6 +1263,19 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(NeoSektorOpenBayState.query.count(), 2)
         self.assertEqual(NeoSektorBayStatus.query.count(), 5)
         self.assertEqual(NeoSektorDriverRouteSetting.query.count(), 3)
+
+    def test_live_counts_css_keeps_bay_status_cards_readable(self):
+        css = Path("app/static/css/base.css").read_text()
+        bay_status_block = css.rsplit(
+            ".blueprint-neosektor .neosektor-live-bay-row .view-bay-card strong",
+            1,
+        )[1].split("}", 1)[0]
+
+        self.assertIn("grid-template-columns: repeat(3, minmax(118px, 1fr));", css)
+        self.assertIn("grid-template-columns: repeat(2, minmax(132px, 1fr));", css)
+        self.assertIn("white-space: nowrap;", bay_status_block)
+        self.assertIn("overflow-wrap: normal;", bay_status_block)
+        self.assertNotIn("overflow-wrap: anywhere;", bay_status_block)
 
     def test_neosektor_dashboard_and_header_link_to_real_live_counts(self):
         self._login_approved_user(role="operator")
