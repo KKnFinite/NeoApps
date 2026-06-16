@@ -183,6 +183,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 if path in standalone_menu_paths:
                     self.assertEqual(response.data.count(b"data-neosektor-internal-menu"), 1)
                     self.assertIn(b"neosektor-internal-menu-trigger", response.data)
+                    self.assertNotIn(b"motherbrain-header-nav", response.data)
+                    self.assertNotIn(b"NeoGateway - RFD", response.data)
                 elif path in fullscreen_paths:
                     self.assertEqual(response.data.count(b"data-neosektor-internal-menu"), 0)
                     self.assertNotIn(b"motherbrain-header-nav", response.data)
@@ -1474,11 +1476,14 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("grid-column: 3;", switcher_block)
         self.assertIn("grid-row: 1;", switcher_block)
         self.assertIn("width: auto;", switcher_block)
-        self.assertIn("grid-column: 4;", logout_block)
-        self.assertIn("grid-column: 5;", menu_button_block)
+        self.assertIn("display: none;", logout_block)
+        self.assertIn("grid-column: 4;", menu_button_block)
+        self.assertIn("height: var(--mobile-node-banner-button-height);", menu_button_block)
         self.assertIn("display: grid;", operator_header_block)
-        self.assertIn("grid-template-columns: minmax(72px, 1fr)", operator_header_block)
+        self.assertIn("grid-template-columns: minmax(94px, 1fr)", operator_header_block)
+        self.assertIn("minmax(86px, auto) auto;", operator_header_block)
         self.assertIn("grid-column: 3;", css)
+        self.assertIn(".mobile-banner-logout {\n        display: none !important;", css)
         self.assertIn("white-space: nowrap;", operator_switcher_block)
 
     def test_neosektor_dashboard_and_header_link_to_real_live_counts(self):
