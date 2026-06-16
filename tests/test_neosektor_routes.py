@@ -607,8 +607,20 @@ class NeoSektorRoutesTest(unittest.TestCase):
             ".blueprint-neosektor .driver-arrow {",
             1,
         )[1].split("}", 1)[0]
+        target_block = css.split(
+            ".blueprint-neosektor .driver-target strong {",
+            1,
+        )[1].split("}", 1)[0]
+        instruction_block = css.split(
+            ".blueprint-neosektor .driver-instruction {",
+            1,
+        )[1].split("}", 1)[0]
         shaft_block = css.split(
             ".blueprint-neosektor .driver-arrow::before {",
+            1,
+        )[1].split("}", 1)[0]
+        arrow_shared_block = css.split(
+            ".blueprint-neosektor .driver-arrow::before,",
             1,
         )[1].split("}", 1)[0]
         head_block = css.rsplit(
@@ -624,8 +636,16 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("content: none;", wave_bar_block)
         self.assertIn("width: min(96%, 700px);", arrow_block)
         self.assertIn("font-size: 0;", arrow_block)
+        self.assertIn("order: 1;", arrow_block)
+        self.assertIn("order: 2;", target_block)
+        self.assertIn("font-size: 0.72em;", instruction_block)
+        self.assertIn("background: linear-gradient(180deg, var(--node-sektor-highlight)", arrow_shared_block)
         self.assertIn("right: clamp(38px, 7vw, 78px);", shaft_block)
         self.assertIn("border-right:", head_block)
+        self.assertIn("var(--node-sektor-primary)", head_block)
+        self.assertIn("font-size: clamp(1rem, 3.4vw, 1.7rem);", css)
+        self.assertIn("font-size: clamp(1.4rem, 4.4vw, 2.65rem);", css)
+        self.assertIn("font-size: 0.86rem;", css)
         self.assertIn("width: 98%;", mobile_arrow_block)
 
     def test_driver_routing_blocks_user_without_view_permission(self):

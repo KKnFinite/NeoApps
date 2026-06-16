@@ -66,7 +66,12 @@
             return;
         }
         panel.dataset.direction = route.direction;
-        panel.querySelector("[data-driver-target]").textContent = route.target;
+        const target = panel.querySelector("[data-driver-target]");
+        const instruction = document.createElement("span");
+        instruction.className = "driver-instruction";
+        instruction.textContent = route.direction === "east" ? "Stay Right" : "Stay Left";
+        target.replaceChildren(document.createTextNode(route.target), instruction);
+        target.setAttribute("aria-label", route.target);
         panel.querySelector("[data-driver-arrow]").textContent = route.arrow === "right" ? "\u2192" : "\u2190";
     };
 
