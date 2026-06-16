@@ -592,6 +592,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn(b"data-driver-offset-input", response.data)
         self.assertNotIn(b"West Offset", response.data)
         self.assertNotIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
+        self.assertLess(response.data.index(b"driver-wave-first"), response.data.index(b"driver-bay-priority"))
+        self.assertLess(response.data.index(b"driver-bay-priority"), response.data.index(b"driver-wave-second"))
+        self.assertIn(b'<span class="driver-target-node">', response.data)
+        self.assertNotIn(b"East Ballmat <span", response.data)
+        self.assertNotIn(b"West Ballmat <span", response.data)
 
     def test_driver_routing_css_uses_wide_arrows_without_sidebars(self):
         css = Path("app/static/css/base.css").read_text()
@@ -619,10 +624,6 @@ class NeoSektorRoutesTest(unittest.TestCase):
             ".blueprint-neosektor .driver-arrow::before {",
             1,
         )[1].split("}", 1)[0]
-        arrow_shared_block = css.split(
-            ".blueprint-neosektor .driver-arrow::before,",
-            1,
-        )[1].split("}", 1)[0]
         head_block = css.rsplit(
             ".blueprint-neosektor .driver-arrow::after {",
             1,
@@ -639,13 +640,15 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("order: 1;", arrow_block)
         self.assertIn("order: 2;", target_block)
         self.assertIn("font-size: 0.72em;", instruction_block)
-        self.assertIn("background: linear-gradient(180deg, var(--node-sektor-highlight)", arrow_shared_block)
-        self.assertIn("right: clamp(38px, 7vw, 78px);", shaft_block)
-        self.assertIn("border-right:", head_block)
-        self.assertIn("var(--node-sektor-primary)", head_block)
-        self.assertIn("font-size: clamp(1rem, 3.4vw, 1.7rem);", css)
-        self.assertIn("font-size: clamp(1.4rem, 4.4vw, 2.65rem);", css)
-        self.assertIn("font-size: 0.86rem;", css)
+        self.assertIn("width: 100%;", shaft_block)
+        self.assertIn("clip-path: polygon", shaft_block)
+        self.assertIn("linear-gradient(90deg, #720812", shaft_block)
+        self.assertIn("content: none;", head_block)
+        self.assertNotIn("border-right:", head_block)
+        self.assertIn("scaleX(-1)", css)
+        self.assertIn("font-size: clamp(1.08rem, 3.55vw, 1.82rem);", css)
+        self.assertIn("font-size: clamp(1.52rem, 4.65vw, 2.85rem);", css)
+        self.assertIn("font-size: 0.92rem;", css)
         self.assertIn("width: 98%;", mobile_arrow_block)
 
     def test_driver_routing_blocks_user_without_view_permission(self):

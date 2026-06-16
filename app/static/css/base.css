@@ -9281,20 +9281,18 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
         drop-shadow(0 16px 28px rgba(0, 0, 0, 0.7));
 }
 
-.blueprint-neosektor .driver-arrow::before,
-.blueprint-neosektor .driver-arrow::after {
+.blueprint-neosektor .driver-arrow::before {
     content: "";
     position: absolute;
-    top: 50%;
     display: block;
-    background: linear-gradient(180deg, var(--node-sektor-highlight), var(--node-sektor-primary) 54%, #6f0710);
-}
-
-.blueprint-neosektor .driver-arrow::before {
+    top: 50%;
     left: 0;
-    right: clamp(38px, 7vw, 78px);
-    height: clamp(16px, 2.2svh, 28px);
-    border-radius: 999px;
+    width: 100%;
+    height: clamp(54px, 7.8svh, 96px);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.26), transparent 34%, rgba(0, 0, 0, 0.24) 100%),
+        linear-gradient(90deg, #720812 0%, var(--node-sektor-primary) 42%, var(--node-sektor-highlight) 100%);
+    clip-path: polygon(0 38%, 74% 38%, 74% 14%, 100% 50%, 74% 86%, 74% 62%, 0 62%);
     transform: translateY(-50%);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.42),
@@ -9304,28 +9302,11 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 }
 
 .blueprint-neosektor .driver-arrow::after {
-    right: 2px;
-    width: clamp(52px, 10vw, 96px);
-    height: clamp(52px, 10vw, 96px);
-    background: transparent;
-    border-top: clamp(16px, 2.2svh, 28px) solid var(--node-sektor-highlight);
-    border-right: clamp(16px, 2.2svh, 28px) solid var(--node-sektor-primary);
-    transform: translateY(-50%) rotate(45deg);
-    transform-origin: center;
-    filter: drop-shadow(0 0 12px rgba(var(--node-sektor-primary-rgb), 0.62));
+    content: none;
 }
 
 .blueprint-neosektor .driver-wave[data-direction="west"] .driver-arrow::before {
-    right: 0;
-    left: clamp(38px, 7vw, 78px);
-}
-
-.blueprint-neosektor .driver-wave[data-direction="west"] .driver-arrow::after {
-    right: auto;
-    left: 2px;
-    border-right: 0;
-    border-left: clamp(16px, 2.2svh, 28px) solid var(--node-sektor-primary);
-    transform: translateY(-50%) rotate(-45deg);
+    transform: translateY(-50%) scaleX(-1);
 }
 
 .blueprint-neosektor .neosektor-driver-offset-panel span,
@@ -9350,8 +9331,9 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: clamp(5px, 1vw, 9px);
     min-height: 0;
-    padding: 9px;
+    padding: 11px;
     border-top: 1px solid rgba(var(--node-sektor-primary-rgb), 0.44);
+    border-bottom: 1px solid rgba(var(--node-sektor-primary-rgb), 0.36);
     background:
         linear-gradient(135deg, rgba(244, 246, 248, 0.08), transparent 32%),
         linear-gradient(180deg, rgba(18, 26, 36, 0.98), rgba(5, 7, 11, 0.96));
@@ -9366,10 +9348,10 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 
 .blueprint-neosektor .driver-priority-rank {
     width: 100%;
-    padding: 5px 2px;
+    padding: 6px 2px;
     background: rgba(244, 246, 248, 0.9);
     color: var(--node-sektor-primary);
-    font-size: clamp(1rem, 3.4vw, 1.7rem);
+    font-size: clamp(1.08rem, 3.55vw, 1.82rem);
     line-height: 1;
     text-align: center;
 }
@@ -9377,8 +9359,8 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .blueprint-neosektor .driver-priority-card strong {
     max-width: 100%;
     overflow: hidden;
-    padding: 9px 4px;
-    font-size: clamp(1.4rem, 4.4vw, 2.65rem);
+    padding: 10px 4px;
+    font-size: clamp(1.52rem, 4.65vw, 2.85rem);
     text-align: center;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -9940,16 +9922,16 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     .blueprint-neosektor .driver-bay-priority {
         grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 4px;
-        padding: 6px;
+        padding: 8px 6px;
     }
 
     .blueprint-neosektor .driver-priority-rank {
-        font-size: 0.86rem;
+        font-size: 0.92rem;
     }
 
     .blueprint-neosektor .driver-priority-card strong {
-        padding: 7px 2px;
-        font-size: clamp(1rem, 4.6vw, 1.38rem);
+        padding: 8px 2px;
+        font-size: clamp(1.08rem, 4.85vw, 1.48rem);
     }
 
     .blueprint-neosektor .neosektor-driver-offset-panel {

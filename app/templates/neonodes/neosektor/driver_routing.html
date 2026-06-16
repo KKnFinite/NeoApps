@@ -17,7 +17,7 @@
         <a class="header-link neosektor-driver-back" href="{{ url_for('neosektor.index') }}">Back</a>
     </header>
     <main class="driver-routing neosektor-driver-board" aria-label="Driver routing">
-        {% for wave_key in ["first", "second"] %}
+        {% for wave_key in ["first"] %}
         {% set route = state.routing.routes[wave_key] %}
         <section
             class="driver-wave driver-wave-{{ wave_key }} neosektor-driver-wave-card"
@@ -29,9 +29,9 @@
             <div class="driver-target neosektor-driver-target">
                 <strong data-driver-target aria-label="{{ route.target }}">
                     {% if route.direction == "east" %}
-                    East Ballmat <span class="driver-instruction">Stay Right</span>
+                    <span class="driver-target-node">East Ballmat</span><span class="driver-instruction">Stay Right</span>
                     {% else %}
-                    West Ballmat <span class="driver-instruction">Stay Left</span>
+                    <span class="driver-target-node">West Ballmat</span><span class="driver-instruction">Stay Left</span>
                     {% endif %}
                 </strong>
                 <span class="driver-arrow" data-driver-arrow aria-hidden="true">{% if route.arrow == "right" %}&rarr;{% else %}&larr;{% endif %}</span>
@@ -48,6 +48,28 @@
             </article>
             {% endfor %}
         </section>
+
+        {% for wave_key in ["second"] %}
+        {% set route = state.routing.routes[wave_key] %}
+        <section
+            class="driver-wave driver-wave-{{ wave_key }} neosektor-driver-wave-card"
+            data-driver-wave="{{ wave_key }}"
+            data-direction="{{ route.direction }}"
+            aria-label="{{ route.wave_label }} route"
+        >
+            <h2 class="driver-wave-label">{{ route.wave_label }}</h2>
+            <div class="driver-target neosektor-driver-target">
+                <strong data-driver-target aria-label="{{ route.target }}">
+                    {% if route.direction == "east" %}
+                    <span class="driver-target-node">East Ballmat</span><span class="driver-instruction">Stay Right</span>
+                    {% else %}
+                    <span class="driver-target-node">West Ballmat</span><span class="driver-instruction">Stay Left</span>
+                    {% endif %}
+                </strong>
+                <span class="driver-arrow" data-driver-arrow aria-hidden="true">{% if route.arrow == "right" %}&rarr;{% else %}&larr;{% endif %}</span>
+            </div>
+        </section>
+        {% endfor %}
     </main>
 </section>
 
@@ -67,10 +89,13 @@
         }
         panel.dataset.direction = route.direction;
         const target = panel.querySelector("[data-driver-target]");
+        const targetNode = document.createElement("span");
+        targetNode.className = "driver-target-node";
+        targetNode.textContent = route.target;
         const instruction = document.createElement("span");
         instruction.className = "driver-instruction";
         instruction.textContent = route.direction === "east" ? "Stay Right" : "Stay Left";
-        target.replaceChildren(document.createTextNode(route.target), instruction);
+        target.replaceChildren(targetNode, instruction);
         target.setAttribute("aria-label", route.target);
         panel.querySelector("[data-driver-arrow]").textContent = route.arrow === "right" ? "\u2192" : "\u2190";
     };
