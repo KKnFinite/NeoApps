@@ -1266,7 +1266,22 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_live_counts_css_keeps_bay_status_cards_readable(self):
         css = Path("app/static/css/base.css").read_text()
-        bay_status_block = css.rsplit(
+        desktop_bay_css = css.split(
+            ".blueprint-neosektor .neosektor-live-bay-row {",
+            1,
+        )[1].split(
+            ".blueprint-neosektor .neosektor-status",
+            1,
+        )[0]
+        bay_grid_block = desktop_bay_css.split(
+            ".blueprint-neosektor .neosektor-live-bay-row .view-bay-grid",
+            1,
+        )[1].split("}", 1)[0]
+        bay_card_block = desktop_bay_css.rsplit(
+            ".blueprint-neosektor .neosektor-live-bay-row .view-bay-card {",
+            1,
+        )[1].split("}", 1)[0]
+        bay_status_block = desktop_bay_css.rsplit(
             ".blueprint-neosektor .neosektor-live-bay-row .view-bay-card strong",
             1,
         )[1].split("}", 1)[0]
@@ -1276,6 +1291,12 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr));", css)
         self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", css)
         self.assertIn("grid-template-columns: 1fr;", css)
+        self.assertIn("justify-items: stretch;", bay_grid_block)
+        self.assertIn("justify-content: stretch;", bay_grid_block)
+        self.assertIn("width: 100%;", bay_grid_block)
+        self.assertIn("width: 100%;", bay_card_block)
+        self.assertIn("overflow: visible;", bay_card_block)
+        self.assertNotIn("overflow: hidden;", bay_card_block)
         self.assertIn("white-space: nowrap;", bay_status_block)
         self.assertIn("overflow-wrap: normal;", bay_status_block)
         self.assertNotIn("overflow-wrap: anywhere;", bay_status_block)

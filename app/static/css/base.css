@@ -8956,15 +8956,18 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     gap: 9px;
     padding: 13px;
     min-width: 0;
+    width: 100%;
 }
 
 .blueprint-neosektor .neosektor-live-bay-row .view-bay-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: stretch;
-    justify-content: center;
+    justify-content: stretch;
+    justify-items: stretch;
     gap: 10px;
     min-width: 0;
+    width: 100%;
 }
 
 .blueprint-neosektor .neosektor-live-bay-row > section:last-child .view-bay-grid {
@@ -8972,19 +8975,25 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 }
 
 .blueprint-neosektor .neosektor-live-bay-row .view-bay-card {
+    box-sizing: border-box;
     display: grid;
     place-items: center;
     gap: 5px;
     min-height: 78px;
     padding: 8px 10px;
     min-width: 0;
-    overflow: hidden;
+    overflow: visible;
     text-align: center;
+    width: 100%;
 }
 
 .blueprint-neosektor .neosektor-live-bay-row .view-bay-card strong {
+    display: block;
     max-width: 100%;
-    font-size: clamp(0.78rem, 0.92vw, 1rem);
+    min-width: 0;
+    width: 100%;
+    font-size: clamp(0.7rem, 0.78vw, 0.88rem);
+    letter-spacing: 0.01em;
     line-height: 1.05;
     overflow-wrap: normal;
     text-align: center;
