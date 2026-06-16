@@ -8764,96 +8764,100 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 }
 
 .blueprint-neosektor .neosektor-live-shell {
-    width: min(100%, 1440px);
+    width: min(100%, 620px);
 }
 
 .blueprint-neosektor .neosektor-live-status-strip.app-header {
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 10px;
-    width: min(100%, 1320px);
+    gap: 8px;
+    width: min(100%, 590px);
     min-height: 54px;
-    padding: 8px 12px;
-    border: 1px solid rgba(var(--node-sektor-primary-rgb), 0.3);
+    padding: 8px 10px;
+    border: 1px solid rgba(var(--node-sektor-primary-rgb), 0.32);
     border-radius: 8px;
     background:
-        linear-gradient(135deg, rgba(238, 246, 255, 0.07), transparent 28%),
-        linear-gradient(180deg, rgba(18, 22, 28, 0.92), rgba(5, 7, 10, 0.96));
+        linear-gradient(135deg, rgba(244, 246, 248, 0.08), transparent 30%),
+        linear-gradient(180deg, rgba(18, 25, 33, 0.95), rgba(6, 9, 13, 0.98));
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.09),
-        0 10px 28px rgba(0, 0, 0, 0.24),
-        0 0 18px rgba(var(--node-sektor-primary-rgb), 0.1);
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 14px 28px rgba(0, 0, 0, 0.28),
+        0 0 18px rgba(var(--node-sektor-primary-rgb), 0.08);
 }
 
 .blueprint-neosektor .neosektor-live-status-strip .header-title {
     display: grid;
     gap: 2px;
+    min-width: 0;
 }
 
 .blueprint-neosektor .neosektor-live-status-strip .header-title p {
-    color: var(--node-sektor-highlight);
+    color: var(--neo-silver);
 }
 
 .blueprint-neosektor .neosektor-live-status-strip .neosektor-internal-menu-standalone {
+    grid-column: 1 / -1;
+    width: 100%;
     margin-left: 0;
 }
 
 .blueprint-neosektor .neosektor-live-status-strip .header-link-static {
     min-height: 32px;
-    border-color: rgba(var(--node-sektor-highlight-rgb), 0.35);
+    padding-inline: 9px;
+    border-color: rgba(216, 220, 224, 0.22);
     background:
-        linear-gradient(180deg, rgba(238, 246, 255, 0.09), transparent 42%),
-        linear-gradient(180deg, rgba(24, 27, 34, 0.96), rgba(6, 8, 11, 0.94));
-    color: var(--neo-bright-silver);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        0 0 14px rgba(var(--node-sektor-primary-rgb), 0.12);
+        linear-gradient(180deg, rgba(244, 246, 248, 0.1), transparent 42%),
+        linear-gradient(180deg, rgba(30, 36, 44, 0.96), rgba(8, 11, 15, 0.96));
+    color: #ffffff;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .blueprint-neosektor .neosektor-live-counts-grid {
-    grid-template-rows: minmax(140px, 0.72fr) minmax(260px, 1.18fr) minmax(190px, 0.9fr);
-    gap: 10px;
-    width: min(100%, 1320px);
-    min-height: min(760px, calc(100svh - 220px));
+    grid-template-rows: auto auto auto;
+    gap: 8px;
+    width: min(100%, 590px);
+    min-height: 0;
     padding: 0;
-    overflow-x: clip;
+    overflow: visible;
 }
 
 .blueprint-neosektor .neosektor-live-wave-row,
 .blueprint-neosektor .neosektor-live-ballmat-row,
 .blueprint-neosektor .neosektor-live-bay-row {
-    gap: 10px;
+    gap: 8px;
 }
 
 .blueprint-neosektor .neosektor-live-wave-row .wave-card,
 .blueprint-neosektor .neosektor-live-ballmat-row .ops-column,
 .blueprint-neosektor .neosektor-live-bay-row > section {
     min-width: 0;
-    border: 1px solid rgba(var(--node-sektor-primary-rgb), 0.38);
-    border-radius: 10px;
+    border: 1px solid rgba(216, 220, 224, 0.25);
+    border-radius: 8px;
     background:
-        radial-gradient(circle at 50% 0%, rgba(var(--node-sektor-primary-rgb), 0.13), transparent 16rem),
-        linear-gradient(135deg, rgba(238, 246, 255, 0.06), transparent 32%),
-        linear-gradient(180deg, rgba(20, 24, 31, 0.95), rgba(5, 7, 10, 0.97));
+        linear-gradient(135deg, rgba(244, 246, 248, 0.07), transparent 26%),
+        linear-gradient(180deg, rgba(18, 26, 36, 0.95), rgba(8, 12, 18, 0.97));
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.1),
-        0 16px 34px rgba(0, 0, 0, 0.28),
-        0 0 22px rgba(var(--node-sektor-primary-rgb), 0.12);
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 14px 32px rgba(0, 0, 0, 0.28);
 }
 
 .blueprint-neosektor .neosektor-live-wave-row .wave-card {
     display: grid;
-    align-content: stretch;
-    gap: 14px;
-    min-height: 140px;
-    padding: 16px;
+    gap: 9px;
+    min-height: 116px;
+    padding: 10px 16px;
+}
+
+.blueprint-neosektor .neosektor-live-wave-row .wave-card h2 {
+    font-size: 1rem;
+    letter-spacing: 0.1em;
 }
 
 .blueprint-neosektor .neosektor-live-wave-row .wave-metrics {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: 8px;
     height: 100%;
     margin: 0;
 }
@@ -8861,30 +8865,37 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .blueprint-neosektor .neosektor-live-wave-row .wave-metrics div,
 .blueprint-neosektor .neosektor-live-ballmat-row .counter-card,
 .blueprint-neosektor .neosektor-live-bay-row .view-bay-card {
-    border: 1px solid rgba(var(--node-sektor-primary-rgb), 0.34);
+    border: 1px solid rgba(var(--node-sektor-primary-rgb), 0.28);
     border-radius: 8px;
     background:
-        linear-gradient(180deg, rgba(244, 246, 248, 0.06), transparent 38%),
-        linear-gradient(180deg, rgba(61, 13, 18, 0.88), rgba(18, 6, 9, 0.94));
+        linear-gradient(135deg, rgba(244, 246, 248, 0.05), transparent 28%),
+        linear-gradient(180deg, rgba(58, 11, 18, 0.76), rgba(14, 5, 8, 0.94));
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        0 0 16px rgba(var(--node-sektor-primary-rgb), 0.1);
+        inset 0 1px 0 rgba(255, 255, 255, 0.07),
+        0 0 14px rgba(var(--node-sektor-primary-rgb), 0.08);
 }
 
 .blueprint-neosektor .neosektor-live-wave-row .wave-metrics div {
     display: grid;
     align-content: center;
     justify-items: center;
-    min-height: 80px;
-    padding: 10px;
+    min-height: 68px;
+    padding: 8px;
 }
 
 .blueprint-neosektor .neosektor-live-ballmat-row .ops-column {
     display: grid;
-    grid-template-rows: auto repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    min-height: 260px;
-    padding: 16px;
+    grid-template-rows: auto repeat(3, minmax(72px, 1fr));
+    gap: 6px;
+    min-height: 278px;
+    padding: 12px;
+    border-color: rgba(var(--node-sektor-primary-rgb), 0.34);
+}
+
+.blueprint-neosektor .neosektor-live-ballmat-row .ops-column h2,
+.blueprint-neosektor .neosektor-live-bay-row h2 {
+    font-size: 1.05rem;
+    letter-spacing: 0.09em;
 }
 
 .blueprint-neosektor .neosektor-live-ballmat-row .counter-card {
@@ -8892,25 +8903,25 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     align-content: center;
     justify-items: center;
     min-height: 0;
-    padding: 14px 12px;
+    padding: 9px 8px;
 }
 
 .blueprint-neosektor .neosektor-live-ballmat-row .counter-card > span,
 .blueprint-neosektor .neosektor-live-bay-row .view-bay-card span,
 .blueprint-neosektor .neosektor-live-wave-row .wave-metrics span {
-    color: rgba(238, 246, 255, 0.72);
+    color: #aeb7c0;
     letter-spacing: 0.08em;
 }
 
 .blueprint-neosektor .neosektor-live-ballmat-row .readonly-count,
 .blueprint-neosektor .neosektor-live-bay-row .view-bay-card strong,
 .blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong {
-    color: var(--node-sektor-highlight);
-    text-shadow: 0 0 16px rgba(var(--node-sektor-highlight-rgb), 0.18);
+    color: #ffffff;
+    text-shadow: 0 0 12px rgba(255, 255, 255, 0.16);
 }
 
 .blueprint-neosektor .neosektor-live-ballmat-row .readonly-count {
-    font-size: clamp(2.05rem, 5vw, 3.4rem);
+    font-size: clamp(2.2rem, 7.2vw, 3.2rem);
 }
 
 .blueprint-neosektor .neosektor-live-bay-row {
@@ -8921,25 +8932,29 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .blueprint-neosektor .neosektor-live-bay-row > section {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
-    gap: 10px;
-    padding: 14px;
+    gap: 8px;
+    padding: 12px;
 }
 
 .blueprint-neosektor .neosektor-live-bay-row .view-bay-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: stretch;
     gap: 8px;
 }
 
+.blueprint-neosektor .neosektor-live-bay-row > section:last-child .view-bay-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .blueprint-neosektor .neosektor-live-bay-row .view-bay-card {
-    min-height: 76px;
-    padding: 10px 8px;
+    min-height: 70px;
+    padding: 8px;
 }
 
 .blueprint-neosektor .neosektor-live-bay-row .view-bay-card strong {
     overflow-wrap: anywhere;
-    font-size: clamp(0.92rem, 1.55vw, 1.22rem);
+    font-size: clamp(1.15rem, 2.5vw, 1.72rem);
 }
 
 .blueprint-neosektor .neosektor-status {

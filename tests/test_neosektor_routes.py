@@ -283,7 +283,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     1,
                 )[0]
                 self.assertNotIn(b'href="/rfd"', switcher)
-                self.assertIn(b'href="/neosektor"', response.data)
+                self.assertNotIn(b'href="/neosektor"', switcher)
                 self.assertNotIn(b"Placeholder Shell", response.data)
 
     def test_discharge_page_loads_for_operator(self):

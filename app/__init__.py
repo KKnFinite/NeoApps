@@ -194,15 +194,18 @@ def register_template_helpers(app):
                 minimum_role=spec["minimum_role"],
             ):
                 continue
+            is_current = any(
+                request.path.startswith(prefix) for prefix in spec["path_prefixes"]
+            )
+            if is_current:
+                continue
             targets.append(
                 {
                     "key": spec["key"],
                     "node_word": spec["node_word"],
                     "suffix": "",
                     "href": url_for(spec["endpoint"]),
-                    "is_current": any(
-                        request.path.startswith(prefix) for prefix in spec["path_prefixes"]
-                    ),
+                    "is_current": False,
                 }
             )
 

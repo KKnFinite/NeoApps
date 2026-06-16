@@ -251,8 +251,8 @@ class AccessControlTest(unittest.TestCase):
         self.assertNotIn("RFD Hub", switcher)
         self.assertIn('href="/neosektor"', switcher)
         self.assertIn("Sektor", switcher)
-        self.assertIn('href="/neoermac"', switcher)
-        self.assertIn("Ermac", switcher)
+        self.assertNotIn('href="/neoermac"', switcher)
+        self.assertNotIn("Ermac", switcher)
         self.assertNotIn('href="/motherbrain"', switcher)
         self.assertNotIn("MotherBrain", switcher)
         for unavailable_node in (
@@ -310,6 +310,7 @@ class AccessControlTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 switcher = self._character_switcher_html(response)
                 self.assertIn("Change Characters", switcher)
+                self.assertNotIn(f'href="{path}"', switcher)
 
     def test_simulator_or_higher_can_enter_motherbrain(self):
         user, membership = self._approved_user("simulator_motherbrain_user")
