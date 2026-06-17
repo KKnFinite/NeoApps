@@ -3790,16 +3790,14 @@ h2 {
 }
 
 .sort-timeline-checkbox,
-.sort-timeline-day-toggle,
-.sort-timeline-delete-row {
+.sort-timeline-day-toggle {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
 .sort-timeline-checkbox input,
-.sort-timeline-day-toggle input,
-.sort-timeline-delete-row input {
+.sort-timeline-day-toggle input {
     width: auto;
 }
 
@@ -3854,9 +3852,57 @@ h2 {
 
 .sort-timeline-special-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(124px, 170px) 28px;
     align-items: center;
     gap: 10px;
+    justify-content: start;
+}
+
+.sort-timeline-special-row input[type="time"] {
+    min-width: 0;
+}
+
+.operation-form .sort-timeline-delete-row {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    justify-self: start;
+    width: 28px;
+    height: 28px;
+    min-height: 28px;
+    padding: 0;
+    border-color: rgba(var(--node-highlight-rgb), 0.72);
+    border-radius: 50%;
+    color: #fff;
+    font-size: 1.05rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.sort-timeline-delete-checkbox {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.sort-timeline-delete-row span {
+    pointer-events: none;
+}
+
+.sort-timeline-delete-row:has(input:checked) {
+    border-color: var(--node-highlight);
+    background:
+        linear-gradient(180deg, rgba(var(--node-highlight-rgb), 0.28), transparent 30%),
+        linear-gradient(180deg, var(--node-primary) 0%, var(--node-secondary) 100%);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.16),
+        0 0 18px rgba(var(--node-highlight-rgb), 0.32);
 }
 
 .sort-timeline-add-special {

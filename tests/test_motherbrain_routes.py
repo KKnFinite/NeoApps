@@ -506,6 +506,25 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(context["summary"]["auto_interval_poll_count"], 2)
         self.assertEqual(context["summary"]["total_scheduled_polls"], 4)
 
+    def test_sort_timeline_special_poll_delete_control_is_compact_x(self):
+        self._add_matrix_cell("monday", "night")
+        self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                provider_enabled="1",
+                api_enabled_night_monday="1",
+                night_special_poll_time=["01:00"],
+            ),
+        )
+
+        response = self.client.get("/motherbrain/sort-timeline?month=2026-06")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"sort-timeline-delete-row", response.data)
+        self.assertIn(b"sort-timeline-delete-checkbox", response.data)
+        self.assertIn(b"&times;", response.data)
+        self.assertNotIn(b"<span>Delete</span>", response.data)
+
     def test_sort_timeline_too_many_special_polls_clamp_auto_polls_to_zero(self):
         self._add_matrix_cell("monday", "night")
         self.client.post(

@@ -201,9 +201,9 @@
                         {% for special_time in sort_setting.special_poll_times %}
                         <div class="sort-timeline-special-row">
                             <input type="time" name="{{ sort_name }}_special_poll_time" value="{{ format_timeline_time(special_time.poll_time_local) }}">
-                            <label class="sort-timeline-delete-row">
-                                <input type="checkbox" name="{{ sort_name }}_delete_special_poll_time" value="{{ format_timeline_time(special_time.poll_time_local) }}">
-                                <span>Delete</span>
+                            <label class="table-row-button table-row-delete-button sort-timeline-delete-row" aria-label="Delete {{ sort_preview.sort_label }} special poll at {{ format_timeline_time(special_time.poll_time_local) }}">
+                                <input class="sort-timeline-delete-checkbox" type="checkbox" name="{{ sort_name }}_delete_special_poll_time" value="{{ format_timeline_time(special_time.poll_time_local) }}">
+                                <span aria-hidden="true">&times;</span>
                             </label>
                         </div>
                         {% endfor %}
