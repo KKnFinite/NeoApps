@@ -22,8 +22,12 @@
                     <input type="month" name="month_key" value="{{ month_key }}">
                 </label>
                 <label>
-                    <span>Monthly API Limit</span>
-                    <input type="number" name="monthly_api_limit" min="0" step="1" value="{{ settings.monthly_api_limit }}">
+                    <span>Monthly API Units</span>
+                    <input type="number" name="monthly_api_units" min="0" step="1" value="{{ settings.monthly_api_units }}">
+                </label>
+                <label>
+                    <span>Units Per Poll</span>
+                    <input type="number" name="units_per_poll" min="1" step="1" value="{{ settings.units_per_poll }}">
                 </label>
                 <label class="sort-timeline-checkbox">
                     <input type="checkbox" name="provider_enabled" value="1" {% if settings.provider_enabled %}checked{% endif %}>
@@ -66,28 +70,24 @@
             <h2 id="timeline-preview">PREVIEW</h2>
             <div class="metric-grid sort-timeline-preview-grid">
                 <article class="metric-tile">
-                    <span>Monthly Limit</span>
-                    <strong>{{ settings.monthly_api_limit }}</strong>
+                    <span>Monthly API Units</span>
+                    <strong>{{ summary.monthly_api_units }}</strong>
                 </article>
                 <article class="metric-tile">
-                    <span>Operating Days This Month</span>
+                    <span>Units Per Poll</span>
+                    <strong>{{ summary.units_per_poll }}</strong>
+                </article>
+                <article class="metric-tile">
+                    <span>Monthly Poll Limit</span>
+                    <strong>{{ summary.monthly_poll_limit }}</strong>
+                </article>
+                <article class="metric-tile">
+                    <span>Operating Days</span>
                     <strong>{{ summary.operating_days }}</strong>
                 </article>
                 <article class="metric-tile">
                     <span>Daily Poll Cap</span>
                     <strong>{{ summary.daily_poll_cap }}</strong>
-                </article>
-                <article class="metric-tile">
-                    <span>Special Poll Count</span>
-                    <strong>{{ summary.special_poll_count }}</strong>
-                </article>
-                <article class="metric-tile">
-                    <span>Auto Interval Poll Count</span>
-                    <strong>{{ summary.auto_interval_poll_count }}</strong>
-                </article>
-                <article class="metric-tile">
-                    <span>Total Scheduled Polls</span>
-                    <strong>{{ summary.total_scheduled_polls }}</strong>
                 </article>
                 <article class="metric-tile">
                     <span>Next Poll Time</span>
@@ -139,12 +139,20 @@
                     </div>
                     <div class="metric-grid sort-timeline-sort-preview">
                         <article class="metric-tile">
-                            <span>Special</span>
+                            <span>Daily Cap</span>
+                            <strong>{{ sort_preview.daily_poll_cap }}</strong>
+                        </article>
+                        <article class="metric-tile">
+                            <span>Special Polls</span>
                             <strong>{{ sort_preview.special_poll_count }}</strong>
                         </article>
                         <article class="metric-tile">
-                            <span>Auto</span>
+                            <span>Auto Interval Polls</span>
                             <strong>{{ sort_preview.auto_interval_poll_count }}</strong>
+                        </article>
+                        <article class="metric-tile">
+                            <span>Total Scheduled Polls</span>
+                            <strong>{{ sort_preview.total_scheduled_polls }}</strong>
                         </article>
                         <article class="metric-tile">
                             <span>Next</span>

@@ -211,7 +211,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         response = self.client.post(
             "/motherbrain/sort-timeline",
             data=self._sort_timeline_form_data(
-                monthly_api_limit="750",
+                monthly_api_units="750",
+                units_per_poll="3",
                 provider_enabled="1",
                 provider_name="AeroDataBox",
                 api_key_env_var_name="aerodatabox_api_key",
@@ -222,7 +223,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         settings = SortTimelineSettings.query.filter_by(gateway_id=self.rfd_gateway.id).one()
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(settings.monthly_api_limit, 750)
+        self.assertEqual(settings.monthly_api_units, 750)
+        self.assertEqual(settings.units_per_poll, 3)
         self.assertTrue(settings.provider_enabled)
         self.assertEqual(settings.provider_name, "AeroDataBox")
         self.assertEqual(settings.api_key_env_var_name, "AERODATABOX_API_KEY")
@@ -237,13 +239,17 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
 
         self.assertEqual(context["summary"]["operating_days"], 22)
-        self.assertEqual(context["summary"]["daily_poll_cap"], 27)
+        self.assertEqual(context["summary"]["monthly_api_units"], 600)
+        self.assertEqual(context["summary"]["units_per_poll"], 2)
+        self.assertEqual(context["summary"]["monthly_poll_limit"], 300)
+        self.assertEqual(context["summary"]["daily_poll_cap"], 13)
 
     def test_sort_timeline_monthly_add_subtract_adjustments(self):
         self.client.post(
             "/motherbrain/sort-timeline",
             data=self._sort_timeline_form_data(
-                monthly_api_limit="600",
+                monthly_api_units="600",
+                units_per_poll="2",
                 added_operating_days="2026-06-06\n2026-06-07",
                 removed_operating_days="2026-06-01",
             ),
@@ -255,7 +261,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         ).all()
 
         self.assertEqual(context["summary"]["operating_days"], 23)
-        self.assertEqual(context["summary"]["daily_poll_cap"], 26)
+        self.assertEqual(context["summary"]["monthly_poll_limit"], 300)
+        self.assertEqual(context["summary"]["daily_poll_cap"], 13)
         self.assertEqual(
             {(row.local_date, row.adjustment_type) for row in adjustments},
             {
@@ -269,7 +276,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.client.post(
             "/motherbrain/sort-timeline",
             data=self._sort_timeline_form_data(
-                monthly_api_limit="44",
+                monthly_api_units="44",
+                units_per_poll="2",
                 operating_weekdays=["monday"],
                 night_polling_start="01:00",
                 night_polling_end="03:00",
@@ -280,16 +288,18 @@ class MotherBrainRoutesTest(unittest.TestCase):
         night_preview = context["preview_by_sort"]["night"]
 
         self.assertEqual(context["summary"]["operating_days"], 5)
-        self.assertEqual(night_preview["daily_poll_cap"], 8)
+        self.assertEqual(night_preview["monthly_poll_limit"], 22)
+        self.assertEqual(night_preview["daily_poll_cap"], 4)
         self.assertEqual(night_preview["special_poll_count"], 2)
-        self.assertEqual(night_preview["auto_interval_poll_count"], 6)
-        self.assertEqual(night_preview["total_scheduled_polls"], 8)
+        self.assertEqual(night_preview["auto_interval_poll_count"], 2)
+        self.assertEqual(night_preview["total_scheduled_polls"], 4)
 
     def test_sort_timeline_too_many_special_polls_clamp_auto_polls_to_zero(self):
         self.client.post(
             "/motherbrain/sort-timeline",
             data=self._sort_timeline_form_data(
-                monthly_api_limit="5",
+                monthly_api_units="10",
+                units_per_poll="2",
                 operating_weekdays=["monday"],
                 night_polling_start="01:00",
                 night_polling_end="03:00",
@@ -2353,7 +2363,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
     def _sort_timeline_form_data(self, **overrides):
         values = {
             "month_key": "2026-06",
-            "monthly_api_limit": "600",
+            "monthly_api_units": "600",
+            "units_per_poll": "2",
             "provider_name": "",
             "api_key_env_var_name": "",
             "operating_weekdays": [

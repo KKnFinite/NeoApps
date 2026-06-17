@@ -50,6 +50,9 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "aircraft_type": "VARCHAR(16)",
         "wave": "VARCHAR(16)",
     },
+    "sort_timeline_settings": {
+        "units_per_poll": "INTEGER DEFAULT 2",
+    },
 }
 
 POSTGRES_OPTIONAL_COLUMNS = {
@@ -71,6 +74,9 @@ POSTGRES_OPTIONAL_COLUMNS = {
     "master_flight_schedules": {
         "aircraft_type": "VARCHAR(16)",
         "wave": "VARCHAR(16)",
+    },
+    "sort_timeline_settings": {
+        "units_per_poll": "INTEGER DEFAULT 2",
     },
 }
 

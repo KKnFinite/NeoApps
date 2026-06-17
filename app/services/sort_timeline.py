@@ -13,7 +13,8 @@ from app.models import (
 from app.services.gateway_matrix import DAY_OPTIONS, SORT_OPTIONS, gateway_timezone
 
 
-DEFAULT_MONTHLY_API_LIMIT = 600
+DEFAULT_MONTHLY_API_UNITS = 600
+DEFAULT_UNITS_PER_POLL = 2
 DEFAULT_OPERATING_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday")
 DAY_VALUES = {day for day, _label in DAY_OPTIONS}
 SORT_VALUES = {sort_name for sort_name, _label in SORT_OPTIONS}
@@ -25,15 +26,18 @@ def ensure_sort_timeline_settings(gateway):
         settings = SortTimelineSettings(
             gateway_id=gateway.id,
             gateway_code=gateway.code,
-            monthly_api_limit=DEFAULT_MONTHLY_API_LIMIT,
+            monthly_api_units=DEFAULT_MONTHLY_API_UNITS,
+            units_per_poll=DEFAULT_UNITS_PER_POLL,
             operating_weekdays=_weekday_csv(DEFAULT_OPERATING_WEEKDAYS),
         )
         db.session.add(settings)
         db.session.flush()
     else:
         settings.gateway_code = gateway.code
-        if not settings.monthly_api_limit:
-            settings.monthly_api_limit = DEFAULT_MONTHLY_API_LIMIT
+        if settings.monthly_api_units is None:
+            settings.monthly_api_units = DEFAULT_MONTHLY_API_UNITS
+        if not settings.units_per_poll:
+            settings.units_per_poll = DEFAULT_UNITS_PER_POLL
         if not settings.operating_weekdays:
             settings.operating_weekdays = _weekday_csv(DEFAULT_OPERATING_WEEKDAYS)
 
@@ -89,9 +93,13 @@ def save_sort_timeline_from_form(gateway, form):
         gateway,
     )
 
-    settings.monthly_api_limit = _nonnegative_int(
-        form.get("monthly_api_limit"),
-        default=DEFAULT_MONTHLY_API_LIMIT,
+    settings.monthly_api_units = _nonnegative_int(
+        form.get("monthly_api_units", form.get("monthly_api_limit")),
+        default=DEFAULT_MONTHLY_API_UNITS,
+    )
+    settings.units_per_poll = _positive_int(
+        form.get("units_per_poll"),
+        default=DEFAULT_UNITS_PER_POLL,
     )
     settings.provider_enabled = form.get("provider_enabled") == "1"
     settings.provider_name = _clean_text(form.get("provider_name"), max_length=120)
@@ -116,7 +124,8 @@ def sort_timeline_previews(settings, adjustments, selected_month, gateway, now=N
         adjustments["added_dates"],
         adjustments["removed_dates"],
     )
-    daily_cap = daily_poll_cap(settings.monthly_api_limit, operating_days)
+    monthly_poll_count = monthly_poll_limit(settings.monthly_api_units, settings.units_per_poll)
+    daily_cap = daily_poll_cap(monthly_poll_count, operating_days)
     previews = []
     sort_settings = {
         sort_setting.sort_name: sort_setting
@@ -134,6 +143,9 @@ def sort_timeline_previews(settings, adjustments, selected_month, gateway, now=N
                 "sort_label": sort_label,
                 "sort_setting": sort_setting,
                 "operating_days": operating_days,
+                "monthly_api_units": settings.monthly_api_units,
+                "units_per_poll": settings.units_per_poll,
+                "monthly_poll_limit": monthly_poll_count,
                 "daily_poll_cap": daily_cap,
                 "special_poll_count": special_count,
                 "auto_interval_poll_count": auto_count,
@@ -149,6 +161,9 @@ def aggregate_preview(previews):
     if not previews:
         return {
             "operating_days": 0,
+            "monthly_api_units": 0,
+            "units_per_poll": DEFAULT_UNITS_PER_POLL,
+            "monthly_poll_limit": 0,
             "daily_poll_cap": 0,
             "special_poll_count": 0,
             "auto_interval_poll_count": 0,
@@ -159,6 +174,9 @@ def aggregate_preview(previews):
     next_times = [preview["next_poll_time"] for preview in previews if preview["next_poll_time"]]
     return {
         "operating_days": previews[0]["operating_days"],
+        "monthly_api_units": previews[0]["monthly_api_units"],
+        "units_per_poll": previews[0]["units_per_poll"],
+        "monthly_poll_limit": previews[0]["monthly_poll_limit"],
         "daily_poll_cap": previews[0]["daily_poll_cap"],
         "special_poll_count": sum(preview["special_poll_count"] for preview in previews),
         "auto_interval_poll_count": sum(preview["auto_interval_poll_count"] for preview in previews),
@@ -211,10 +229,15 @@ def operating_days_for_month(month_start, weekday_values, added_dates=(), remove
     return max(0, enabled_weekday_count + added_count - removed_count)
 
 
-def daily_poll_cap(monthly_api_limit, operating_days):
+def monthly_poll_limit(monthly_api_units, units_per_poll):
+    units_per_poll = max(1, int(units_per_poll or DEFAULT_UNITS_PER_POLL))
+    return max(0, int(monthly_api_units or 0) // units_per_poll)
+
+
+def daily_poll_cap(monthly_poll_count, operating_days):
     if operating_days <= 0:
         return 0
-    return max(0, int(monthly_api_limit or 0) // operating_days)
+    return max(0, int(monthly_poll_count or 0) // operating_days)
 
 
 def auto_interval_poll_count(daily_cap, special_poll_count):
@@ -516,3 +539,11 @@ def _nonnegative_int(value, default=0):
     except (TypeError, ValueError):
         return default
     return max(0, number)
+
+
+def _positive_int(value, default=1):
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(1, number)
