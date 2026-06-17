@@ -68,7 +68,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoSektor", response.data)
-        self.assertIn(b"Live Ballmat Counts", response.data)
+        self.assertIn(b"Live Counts", response.data)
         self.assertIn(b"data-live-counts", response.data)
         self.assertNotIn(b"Operations Menu", response.data)
         self.assertNotIn(b"neosektor-menu-link", response.data)
@@ -1115,7 +1115,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         west_compat = self.client.get("/neosektor/ballmat?side=west", follow_redirects=False)
 
         self.assertEqual(ebm.status_code, 200)
-        self.assertIn(b"Live Ballmat Counts", ebm.data)
+        self.assertIn(b"Live Counts", ebm.data)
         self.assertIn(b"EBM | EDIT ENABLED", ebm.data)
         self.assertIn(b"data-selected-side=\"east\"", ebm.data)
         self.assertIn(b"East Ballmat", ebm.data)
@@ -1320,7 +1320,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         response = self.client.get("/neosektor")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Live Ballmat Counts", response.data)
+        self.assertIn(b"Live Counts", response.data)
         self.assertIn(b"data-live-counts", response.data)
         self.assertIn(b"ALL IN", response.data)
         self.assertIn(b"DOWN", response.data)
@@ -1529,7 +1529,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         live_counts = self.client.get("/neosektor/live-counts", follow_redirects=False)
 
         self.assertEqual(dashboard.status_code, 200)
-        self.assertIn(b"Live Ballmat Counts", dashboard.data)
+        self.assertIn(b"Live Counts", dashboard.data)
         self.assertIn(b"data-live-counts", dashboard.data)
         self.assertIn(b'href="/neosektor"', dashboard.data)
         self.assertIn(b'aria-current="page"', dashboard.data)
