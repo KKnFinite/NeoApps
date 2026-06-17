@@ -45,6 +45,13 @@ from app.services.gateway_matrix import (
     save_gateway_matrix,
 )
 from app.services.night_sorting import master_schedule_sort_key, mission_board_sort_key
+from app.services.sort_timeline import (
+    DAY_OPTIONS as TIMELINE_DAY_OPTIONS,
+    SORT_OPTIONS as TIMELINE_SORT_OPTIONS,
+    format_time as format_timeline_time,
+    save_sort_timeline_from_form,
+    sort_timeline_context,
+)
 
 ACTIVE_DAY_OPTIONS = (
     ("monday", "Monday"),
@@ -168,6 +175,29 @@ def gateway_matrix():
         day_options=MATRIX_DAY_OPTIONS,
         sort_options=MATRIX_SORT_OPTIONS,
         matrix=matrix_state_for_gateway(gateway),
+    )
+
+
+@bp.route("/motherbrain/sort-timeline", methods=["GET", "POST"])
+@gateway_node_required("motherbrain", minimum_role="grandmaster")
+def sort_timeline():
+    gateway = get_current_gateway()
+    month_key = request.args.get("month", "")
+
+    if request.method == "POST":
+        _settings, month_key = save_sort_timeline_from_form(gateway, request.form)
+        db.session.commit()
+        flash("Sort Timeline settings saved.", "info")
+        return redirect(url_for("neomotherbrain.sort_timeline", month=month_key))
+
+    context = sort_timeline_context(gateway, month_key)
+    return render_template(
+        "neomotherbrain/sort_timeline.html",
+        gateway=gateway,
+        day_options=TIMELINE_DAY_OPTIONS,
+        sort_options=TIMELINE_SORT_OPTIONS,
+        format_timeline_time=format_timeline_time,
+        **context,
     )
 
 

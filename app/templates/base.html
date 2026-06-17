@@ -33,7 +33,8 @@
 {% set is_gateway_matrix_page = is_motherbrain_page and request.path.startswith("/motherbrain/gateway-matrix") %}
 {% set is_master_schedule_page = is_motherbrain_page and request.path.startswith("/motherbrain/master-schedule") %}
 {% set is_manage_sort_page = is_motherbrain_page and (request.path.startswith("/motherbrain/manage-sort") or request.path.startswith("/motherbrain/operations")) %}
-{% set motherbrain_current_label = "PERMISSION RULES" if is_permission_management_page else ("USER MANAGEMENT" if is_user_management_page else ("GATEWAY MATRIX" if is_gateway_matrix_page else ("MASTER SCHEDULE" if is_master_schedule_page else ("MANAGE SORT" if is_manage_sort_page else "DASHBOARD")))) %}
+{% set is_sort_timeline_page = is_motherbrain_page and request.path.startswith("/motherbrain/sort-timeline") %}
+{% set motherbrain_current_label = "PERMISSION RULES" if is_permission_management_page else ("USER MANAGEMENT" if is_user_management_page else ("SORT TIMELINE" if is_sort_timeline_page else ("GATEWAY MATRIX" if is_gateway_matrix_page else ("MASTER SCHEDULE" if is_master_schedule_page else ("MANAGE SORT" if is_manage_sort_page else "DASHBOARD"))))) %}
 {% set is_neoermac_view_outbound_page = request.path.startswith("/neoermac/view-outbound") or request.path.startswith("/neoermac/outbound") %}
 {% set neoermac_current_label = "BUILDING LINEUP" if request.path.startswith("/neoermac/building-lineup") else ("DOOR VIEW" if request.path.startswith("/neoermac/door-view") else ("VIEW OUTBOUND" if is_neoermac_view_outbound_page else ("TUG ASSIGNMENTS" if request.path.startswith("/neoermac/tug-assignments") else "DASHBOARD"))) %}
 {% set neosektor_ballmat_side = request.args.get("side", "")|lower %}
@@ -111,6 +112,9 @@
                     <a class="motherbrain-nav-link{% if request.path.startswith('/neoermac/tug-assignments') %} is-active{% endif %}" href="{{ url_for('neoermac.tug_assignments') }}" {% if request.path.startswith('/neoermac/tug-assignments') %}aria-current="page"{% endif %}>TUG ASSIGNMENTS</a>
                     {% else %}
                     <a class="motherbrain-nav-link{% if is_manage_sort_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.manage_sort') }}" {% if is_manage_sort_page %}aria-current="page"{% endif %}>MANAGE SORT</a>
+                    {% if can_manage_system(current_user) %}
+                    <a class="motherbrain-nav-link{% if is_sort_timeline_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.sort_timeline') }}" {% if is_sort_timeline_page %}aria-current="page"{% endif %}>SORT TIMELINE</a>
+                    {% endif %}
                     <a class="motherbrain-nav-link{% if is_master_schedule_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule') }}" {% if is_master_schedule_page %}aria-current="page"{% endif %}>MASTER SCHEDULE</a>
                     <a class="motherbrain-nav-link{% if is_gateway_matrix_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.gateway_matrix') }}" {% if is_gateway_matrix_page %}aria-current="page"{% endif %}>GATEWAY MATRIX</a>
                     {% if can_manage_system(current_user) %}

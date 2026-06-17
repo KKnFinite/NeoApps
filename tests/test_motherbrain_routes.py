@@ -1,4 +1,4 @@
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 import unittest
 
 from app import create_app
@@ -8,6 +8,9 @@ from app.models import (
     GatewayMembership,
     GatewaySortMatrix,
     MasterFlightSchedule,
+    SortTimelineMonthlyAdjustment,
+    SortTimelineSettings,
+    SortTimelineUsageCounter,
     SortDateCrewAssignment,
     SortDateMission,
     SortDateOperation,
@@ -17,6 +20,10 @@ from app.models import (
 from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.gateway_matrix import current_gateway_local_date
 from app.services.night_sorting import night_sort_time_key
+from app.services.sort_timeline import (
+    record_sort_timeline_api_attempt,
+    sort_timeline_context,
+)
 
 
 class MotherBrainRoutesTest(unittest.TestCase):
@@ -137,6 +144,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "/motherbrain/gateway-matrix": b'href="/motherbrain/gateway-matrix" aria-current="page"',
             "/motherbrain/master-schedule": b'href="/motherbrain/master-schedule" aria-current="page"',
             "/motherbrain/manage-sort": b'href="/motherbrain/manage-sort" aria-current="page"',
+            "/motherbrain/sort-timeline": b'href="/motherbrain/sort-timeline" aria-current="page"',
         }
 
         for path, active_link in routes.items():
@@ -162,6 +170,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertIn(b"GATEWAY MATRIX", response.data)
                 self.assertIn(b"MASTER SCHEDULE", response.data)
                 self.assertIn(b"MANAGE SORT", response.data)
+                self.assertIn(b"SORT TIMELINE", response.data)
                 self.assertIn(b'href="/motherbrain"', response.data)
                 self.assertIn(b"BACK TO NeoMotherBrain MAIN MENU", response.data)
                 self.assertIn(b"motherbrain-main-menu-return", response.data)
@@ -186,6 +195,135 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         logout_response = self.client.get("/logout", follow_redirects=False)
         self.assertEqual(logout_response.status_code, 302)
+
+    def test_sort_timeline_is_grandmaster_only(self):
+        response = self.client.get("/motherbrain/sort-timeline?month=2026-06")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"SORT TIMELINE", response.data)
+        self.assertIn(b"API PLANNING SETTINGS", response.data)
+
+        self._login_motherbrain_role("timeline_master", "master")
+        blocked = self.client.get("/motherbrain/sort-timeline", follow_redirects=False)
+        self.assertEqual(blocked.status_code, 302)
+        self.assertEqual(blocked.location, "/rfd")
+
+    def test_sort_timeline_monthly_limit_and_provider_settings_save_without_key(self):
+        response = self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                monthly_api_limit="750",
+                provider_enabled="1",
+                provider_name="AeroDataBox",
+                api_key_env_var_name="aerodatabox_api_key",
+                api_key="SHOULD_NOT_BE_STORED",
+            ),
+            follow_redirects=True,
+        )
+        settings = SortTimelineSettings.query.filter_by(gateway_id=self.rfd_gateway.id).one()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(settings.monthly_api_limit, 750)
+        self.assertTrue(settings.provider_enabled)
+        self.assertEqual(settings.provider_name, "AeroDataBox")
+        self.assertEqual(settings.api_key_env_var_name, "AERODATABOX_API_KEY")
+        self.assertNotIn("SHOULD_NOT_BE_STORED", settings.api_key_env_var_name)
+        self.assertNotIn(b"SHOULD_NOT_BE_STORED", response.data)
+
+    def test_sort_timeline_default_weekday_calculation(self):
+        context = sort_timeline_context(
+            self.rfd_gateway,
+            "2026-06",
+            now=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(context["summary"]["operating_days"], 22)
+        self.assertEqual(context["summary"]["daily_poll_cap"], 27)
+
+    def test_sort_timeline_monthly_add_subtract_adjustments(self):
+        self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                monthly_api_limit="600",
+                added_operating_days="2026-06-06\n2026-06-07",
+                removed_operating_days="2026-06-01",
+            ),
+        )
+        context = sort_timeline_context(self.rfd_gateway, "2026-06")
+        adjustments = SortTimelineMonthlyAdjustment.query.filter_by(
+            gateway_id=self.rfd_gateway.id,
+            month_key="2026-06",
+        ).all()
+
+        self.assertEqual(context["summary"]["operating_days"], 23)
+        self.assertEqual(context["summary"]["daily_poll_cap"], 26)
+        self.assertEqual(
+            {(row.local_date, row.adjustment_type) for row in adjustments},
+            {
+                (date(2026, 6, 6), "add"),
+                (date(2026, 6, 7), "add"),
+                (date(2026, 6, 1), "remove"),
+            },
+        )
+
+    def test_sort_timeline_special_polls_reduce_auto_polls_and_count_outside_window(self):
+        self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                monthly_api_limit="44",
+                operating_weekdays=["monday"],
+                night_polling_start="01:00",
+                night_polling_end="03:00",
+                night_special_poll_time=["00:30", "04:30"],
+            ),
+        )
+        context = sort_timeline_context(self.rfd_gateway, "2026-06")
+        night_preview = context["preview_by_sort"]["night"]
+
+        self.assertEqual(context["summary"]["operating_days"], 5)
+        self.assertEqual(night_preview["daily_poll_cap"], 8)
+        self.assertEqual(night_preview["special_poll_count"], 2)
+        self.assertEqual(night_preview["auto_interval_poll_count"], 6)
+        self.assertEqual(night_preview["total_scheduled_polls"], 8)
+
+    def test_sort_timeline_too_many_special_polls_clamp_auto_polls_to_zero(self):
+        self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                monthly_api_limit="5",
+                operating_weekdays=["monday"],
+                night_polling_start="01:00",
+                night_polling_end="03:00",
+                night_special_poll_time=["00:30", "01:30"],
+            ),
+        )
+        context = sort_timeline_context(self.rfd_gateway, "2026-06")
+        night_preview = context["preview_by_sort"]["night"]
+
+        self.assertEqual(night_preview["daily_poll_cap"], 1)
+        self.assertEqual(night_preview["special_poll_count"], 2)
+        self.assertEqual(night_preview["auto_interval_poll_count"], 0)
+
+    def test_sort_timeline_usage_counter_uses_rfd_local_month_boundary(self):
+        before_local_midnight = record_sort_timeline_api_attempt(
+            self.rfd_gateway,
+            datetime(2026, 7, 1, 4, 30, tzinfo=timezone.utc),
+        )
+        after_local_midnight = record_sort_timeline_api_attempt(
+            self.rfd_gateway,
+            datetime(2026, 7, 1, 5, 30, tzinfo=timezone.utc),
+        )
+        db.session.commit()
+
+        self.assertEqual(before_local_midnight.month_key, "2026-06")
+        self.assertEqual(after_local_midnight.month_key, "2026-07")
+        self.assertEqual(
+            SortTimelineUsageCounter.query.filter_by(month_key="2026-06").one().attempted_call_count,
+            1,
+        )
+        self.assertEqual(
+            SortTimelineUsageCounter.query.filter_by(month_key="2026-07").one().attempted_call_count,
+            1,
+        )
 
     def test_motherbrain_main_menu_footer_link_routes_home_without_logout(self):
         response = self.client.get("/motherbrain/master-schedule")
@@ -2211,6 +2349,52 @@ class MotherBrainRoutesTest(unittest.TestCase):
         if active:
             values["active"] = "1"
         return values
+
+    def _sort_timeline_form_data(self, **overrides):
+        values = {
+            "month_key": "2026-06",
+            "monthly_api_limit": "600",
+            "provider_name": "",
+            "api_key_env_var_name": "",
+            "operating_weekdays": [
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday",
+            ],
+            "added_operating_days": "",
+            "removed_operating_days": "",
+        }
+        for sort_name in ("sunrise", "day", "twilight", "night"):
+            values.update(
+                {
+                    f"{sort_name}_sort_start": "",
+                    f"{sort_name}_sort_end": "",
+                    f"{sort_name}_ops_start": "",
+                    f"{sort_name}_ops_end": "",
+                    f"{sort_name}_polling_start": "",
+                    f"{sort_name}_polling_end": "",
+                    f"{sort_name}_special_poll_time": [],
+                    f"{sort_name}_delete_special_poll_time": [],
+                }
+            )
+        values.update(overrides)
+        return values
+
+    def _login_motherbrain_role(self, username, role):
+        self.client.get("/logout")
+        user = User(username=username, role=role)
+        user.set_password("TestPassword123!")
+        db.session.add(user)
+        db.session.flush()
+        backfill_default_gateway_node_roles(user, role=role)
+        db.session.commit()
+        self.client.post(
+            "/login",
+            data={"username": username, "password": "TestPassword123!"},
+        )
+        return user
 
     def _bulk_master_schedule_form_data(self, *rows):
         data = {"row_indexes": [str(index) for index in range(len(rows))]}

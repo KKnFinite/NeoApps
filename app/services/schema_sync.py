@@ -82,6 +82,9 @@ def sync_local_sqlite_schema(app):
 
     inspector = inspect(db.engine)
     table_names = set(inspector.get_table_names())
+    _create_missing_application_tables(table_names)
+    inspector = inspect(db.engine)
+    table_names = set(inspector.get_table_names())
 
     for table_name, column_name in LOCAL_SQLITE_GATEWAY_COLUMNS.items():
         if table_name not in table_names:
@@ -117,6 +120,9 @@ def sync_database_schema(app):
 
     inspector = inspect(db.engine)
     table_names = set(inspector.get_table_names())
+    _create_missing_application_tables(table_names)
+    inspector = inspect(db.engine)
+    table_names = set(inspector.get_table_names())
 
     for table_name, columns in POSTGRES_OPTIONAL_COLUMNS.items():
         if table_name not in table_names:
@@ -135,3 +141,24 @@ def sync_database_schema(app):
             )
 
     db.session.flush()
+
+
+def _create_missing_application_tables(existing_table_names):
+    from app.models import (
+        SortTimelineMonthlyAdjustment,
+        SortTimelineSettings,
+        SortTimelineSortSetting,
+        SortTimelineSpecialPollTime,
+        SortTimelineUsageCounter,
+    )
+
+    for model in (
+        SortTimelineSettings,
+        SortTimelineMonthlyAdjustment,
+        SortTimelineSortSetting,
+        SortTimelineSpecialPollTime,
+        SortTimelineUsageCounter,
+    ):
+        if model.__tablename__ in existing_table_names:
+            continue
+        model.__table__.create(bind=db.engine, checkfirst=True)

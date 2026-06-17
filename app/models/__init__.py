@@ -21,6 +21,13 @@ from app.models.sort_date_crew_assignment import SortDateCrewAssignment
 from app.models.sort_date_mission import SortDateMission
 from app.models.sort_date_operation import SortDateOperation
 from app.models.sort_date_tail_state import SortDateTailState
+from app.models.sort_timeline_settings import (
+    SortTimelineMonthlyAdjustment,
+    SortTimelineSettings,
+    SortTimelineSortSetting,
+    SortTimelineSpecialPollTime,
+    SortTimelineUsageCounter,
+)
 from app.models.user import User
 from app.models.user_token import UserToken
 
@@ -48,6 +55,11 @@ __all__ = [
     "SortDateOperation",
     "SortDateMission",
     "SortDateTailState",
+    "SortTimelineSettings",
+    "SortTimelineMonthlyAdjustment",
+    "SortTimelineSortSetting",
+    "SortTimelineSpecialPollTime",
+    "SortTimelineUsageCounter",
     "Crew",
     "SortDateCrewAssignment",
 ]

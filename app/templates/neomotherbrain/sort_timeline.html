@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}Sort Timeline | NeoApps{% endblock %}
+
+{% macro time_input(name, value) -%}
+<input type="time" name="{{ name }}" value="{{ format_timeline_time(value) if value else '' }}" autocomplete="off">
+{%- endmacro %}
+
+{% block content %}
+<section class="panel centered-command-page sort-timeline-page" aria-labelledby="sort-timeline-title">
+    <div class="section-heading">
+        <h1 id="sort-timeline-title">SORT TIMELINE</h1>
+        <p class="muted">{{ gateway.code }} API PLANNING SETTINGS. NO EXTERNAL API CALLS ARE MADE FROM THIS SCREEN.</p>
+    </div>
+
+    <form class="operation-form sort-timeline-form" method="post">
+        <section class="sort-timeline-section" aria-labelledby="timeline-global-settings">
+            <h2 id="timeline-global-settings">API LIMITS AND PROVIDER</h2>
+            <div class="sort-timeline-grid">
+                <label>
+                    <span>Month</span>
+                    <input type="month" name="month_key" value="{{ month_key }}">
+                </label>
+                <label>
+                    <span>Monthly API Limit</span>
+                    <input type="number" name="monthly_api_limit" min="0" step="1" value="{{ settings.monthly_api_limit }}">
+                </label>
+                <label class="sort-timeline-checkbox">
+                    <input type="checkbox" name="provider_enabled" value="1" {% if settings.provider_enabled %}checked{% endif %}>
+                    <span>API Provider Enabled</span>
+                </label>
+                <label>
+                    <span>Provider Name</span>
+                    <input type="text" name="provider_name" value="{{ settings.provider_name }}" placeholder="AeroDataBox">
+                </label>
+                <label>
+                    <span>API Key Env Var Name</span>
+                    <input type="text" name="api_key_env_var_name" value="{{ settings.api_key_env_var_name }}" placeholder="AERODATABOX_API_KEY" autocomplete="off">
+                </label>
+            </div>
+        </section>
+
+        <section class="sort-timeline-section" aria-labelledby="timeline-operating-days">
+            <h2 id="timeline-operating-days">OPERATING DAYS</h2>
+            <div class="sort-timeline-weekday-grid" aria-label="Default operating weekdays">
+                {% for day, day_label in day_options %}
+                <label class="matrix-toggle sort-timeline-day-toggle">
+                    <input type="checkbox" name="operating_weekdays" value="{{ day }}" {% if day in operating_weekdays %}checked{% endif %}>
+                    <span>{{ day_label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <div class="sort-timeline-grid sort-timeline-adjustments">
+                <label>
+                    <span>Added Operating Days</span>
+                    <textarea name="added_operating_days" rows="4" placeholder="{{ month_key }}-01">{{ adjustments.added_text }}</textarea>
+                </label>
+                <label>
+                    <span>Removed Operating Days</span>
+                    <textarea name="removed_operating_days" rows="4" placeholder="{{ month_key }}-01">{{ adjustments.removed_text }}</textarea>
+                </label>
+            </div>
+        </section>
+
+        <section class="sort-timeline-section" aria-labelledby="timeline-preview">
+            <h2 id="timeline-preview">PREVIEW</h2>
+            <div class="metric-grid sort-timeline-preview-grid">
+                <article class="metric-tile">
+                    <span>Monthly Limit</span>
+                    <strong>{{ settings.monthly_api_limit }}</strong>
+                </article>
+                <article class="metric-tile">
+                    <span>Operating Days This Month</span>
+                    <strong>{{ summary.operating_days }}</strong>
+                </article>
+                <article class="metric-tile">
+                    <span>Daily Poll Cap</span>
+                    <strong>{{ summary.daily_poll_cap }}</strong>
+                </article>
+                <article class="metric-tile">
+                    <span>Special Poll Count</span>
+                    <strong>{{ summary.special_poll_count }}</strong>
+                </article>
+                <article class="metric-tile">
+                    <span>Auto Interval Poll Count</span>
+                    <strong>{{ summary.auto_interval_poll_count }}</strong>
+                </article>
+                <article class="metric-tile">
+                    <span>Total Scheduled Polls</span>
+                    <strong>{{ summary.total_scheduled_polls }}</strong>
+                </article>
+                <article class="metric-tile">
+                    <span>Next Poll Time</span>
+                    <strong>{{ format_timeline_time(summary.next_poll_time) }}</strong>
+                </article>
+                <article class="metric-tile">
+                    <span>Actual Usage This Month</span>
+                    <strong>{{ usage_count }}</strong>
+                </article>
+            </div>
+        </section>
+
+        <section class="sort-timeline-section" aria-labelledby="timeline-sort-settings">
+            <h2 id="timeline-sort-settings">SORT WINDOWS</h2>
+            <div class="sort-timeline-sort-grid">
+                {% for sort_name, sort_label in sort_options %}
+                {% set sort_setting = preview_by_sort[sort_name].sort_setting %}
+                {% set sort_preview = preview_by_sort[sort_name] %}
+                <article class="sort-timeline-sort-card" data-sort-timeline-card="{{ sort_name }}">
+                    <div class="sort-timeline-card-heading">
+                        <h3>{{ sort_label|upper }}</h3>
+                        <span>{{ sort_preview.total_scheduled_polls }} SCHEDULED</span>
+                    </div>
+                    <div class="sort-timeline-window-grid">
+                        <label>
+                            <span>Sort Start</span>
+                            {{ time_input(sort_name ~ "_sort_start", sort_setting.sort_window_start_local) }}
+                        </label>
+                        <label>
+                            <span>Sort End</span>
+                            {{ time_input(sort_name ~ "_sort_end", sort_setting.sort_window_end_local) }}
+                        </label>
+                        <label>
+                            <span>Ops Start</span>
+                            {{ time_input(sort_name ~ "_ops_start", sort_setting.ops_window_start_local) }}
+                        </label>
+                        <label>
+                            <span>Ops End</span>
+                            {{ time_input(sort_name ~ "_ops_end", sort_setting.ops_window_end_local) }}
+                        </label>
+                        <label>
+                            <span>Polling Start</span>
+                            {{ time_input(sort_name ~ "_polling_start", sort_setting.polling_start_local) }}
+                        </label>
+                        <label>
+                            <span>Polling End</span>
+                            {{ time_input(sort_name ~ "_polling_end", sort_setting.polling_end_local) }}
+                        </label>
+                    </div>
+                    <div class="metric-grid sort-timeline-sort-preview">
+                        <article class="metric-tile">
+                            <span>Special</span>
+                            <strong>{{ sort_preview.special_poll_count }}</strong>
+                        </article>
+                        <article class="metric-tile">
+                            <span>Auto</span>
+                            <strong>{{ sort_preview.auto_interval_poll_count }}</strong>
+                        </article>
+                        <article class="metric-tile">
+                            <span>Next</span>
+                            <strong>{{ format_timeline_time(sort_preview.next_poll_time) }}</strong>
+                        </article>
+                    </div>
+                    <div class="sort-timeline-special-polls" data-special-poll-list="{{ sort_name }}">
+                        <span class="sort-timeline-field-label">Special Poll Times</span>
+                        {% for special_time in sort_setting.special_poll_times %}
+                        <div class="sort-timeline-special-row">
+                            <input type="time" name="{{ sort_name }}_special_poll_time" value="{{ format_timeline_time(special_time.poll_time_local) }}">
+                            <label class="sort-timeline-delete-row">
+                                <input type="checkbox" name="{{ sort_name }}_delete_special_poll_time" value="{{ format_timeline_time(special_time.poll_time_local) }}">
+                                <span>Delete</span>
+                            </label>
+                        </div>
+                        {% endfor %}
+                        <div class="sort-timeline-special-row">
+                            <input type="time" name="{{ sort_name }}_special_poll_time" value="" aria-label="{{ sort_label }} special poll time">
+                            <span class="muted">New row</span>
+                        </div>
+                    </div>
+                    <button class="action-button action-button-secondary sort-timeline-add-special" type="button" data-add-special-poll="{{ sort_name }}">ADD SPECIAL POLL TIME ROW</button>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+
+        <div class="action-row">
+            <button class="action-button" type="submit">SAVE SORT TIMELINE SETTINGS</button>
+        </div>
+    </form>
+</section>
+
+<script>
+(() => {
+    document.querySelectorAll("[data-add-special-poll]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const sortName = button.dataset.addSpecialPoll;
+            const list = document.querySelector(`[data-special-poll-list="${sortName}"]`);
+            if (!list) {
+                return;
+            }
+            const row = document.createElement("div");
+            row.className = "sort-timeline-special-row";
+            row.innerHTML = `
+                <input type="time" name="${sortName}_special_poll_time" value="" aria-label="${sortName} special poll time">
+                <span class="muted">New row</span>
+            `;
+            list.appendChild(row);
+        });
+    });
+})();
+</script>
+{% endblock %}

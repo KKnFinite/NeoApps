@@ -32,6 +32,11 @@
             <a class="motherbrain-dashboard-card" href="{{ url_for('neomotherbrain.manage_sort') }}">
                 <strong>MANAGE SORT</strong>
             </a>
+            {% if can_manage_system(current_user) %}
+            <a class="motherbrain-dashboard-card" href="{{ url_for('neomotherbrain.sort_timeline') }}">
+                <strong>SORT TIMELINE</strong>
+            </a>
+            {% endif %}
             <a class="motherbrain-dashboard-card" href="{{ url_for('neomotherbrain.master_schedule') }}">
                 <strong>MASTER SCHEDULE</strong>
             </a>
