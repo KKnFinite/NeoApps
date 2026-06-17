@@ -70,7 +70,7 @@ NEOSEKTOR_PAGES = (
 )
 
 NEOSEKTOR_INTERNAL_MENU = (
-    ("NeoSektor Menu", "neosektor.index", None),
+    ("Live Counts", "neosektor.index", None),
     ("Tunnel Conductor", "neosektor.tunnel_conductor", TUNNEL_CONDUCTOR_VIEW_PERMISSION),
     ("East Ballmat", "neosektor.ebm", EBM_VIEW_PERMISSION),
     ("West Ballmat", "neosektor.wbm", WBM_VIEW_PERMISSION),

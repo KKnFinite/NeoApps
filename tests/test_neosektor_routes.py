@@ -100,16 +100,16 @@ class NeoSektorRoutesTest(unittest.TestCase):
             },
         }
         expected_labels = {
-            "watcher": (b"NeoSektor Menu", b"Driver Routing"),
+            "watcher": (b"Live Counts", b"Driver Routing"),
             "operator": (
-                b"NeoSektor Menu",
+                b"Live Counts",
                 b"East Ballmat",
                 b"West Ballmat",
                 b"Driver Routing",
                 b"Discharge",
             ),
             "simulator": (
-                b"NeoSektor Menu",
+                b"Live Counts",
                 b"Tunnel Conductor",
                 b"East Ballmat",
                 b"West Ballmat",
@@ -141,7 +141,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 for link in expected_links:
                     self.assertIn(link, response.data)
                 self.assertNotIn(b'href="/neosektor/live-counts"', response.data)
-                self.assertNotIn(b"Live Counts", response.data)
+                self.assertNotIn(b"NeoSektor Menu", response.data)
                 for link in blocked[role]:
                     self.assertNotIn(link, response.data)
 
@@ -186,14 +186,14 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     self.assertEqual(response.data.count(b"data-neosektor-internal-menu"), 0)
                     self.assertIn(b"motherbrain-header-nav", response.data)
                 for label in (
-                    b"NeoSektor Menu",
+                    b"Live Counts",
                     b"Tunnel Conductor",
                     b"East Ballmat",
                     b"West Ballmat",
                     b"Driver Routing",
                     b"Discharge",
                 ):
-                    if label == b"NeoSektor Menu":
+                    if label == b"Live Counts":
                         if path in standalone_menu_paths:
                             self.assertIn(label, response.data)
                         else:
