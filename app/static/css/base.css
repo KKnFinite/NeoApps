@@ -1996,6 +1996,12 @@ a {
     display: none;
 }
 
+.blueprint-neosektor.neosektor-ballmat-operator-page {
+    --neosektor-ballmat-count-card-height: 92px;
+    --neosektor-ballmat-count-control-height: 58px;
+    --neosektor-ballmat-count-size: clamp(1.82rem, 6vw, 2.42rem);
+}
+
 .neosektor-ballmat-operator-page .shell,
 .neosektor-ballmat-operator-page .content,
 .neosektor-tunnel-operator-page .shell,
@@ -2052,15 +2058,34 @@ a {
     min-height: 100%;
 }
 
+.blueprint-neosektor.neosektor-ballmat-operator-page .counter-card {
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: var(--neosektor-ballmat-count-card-height);
+}
+
 .blueprint-neosektor.neosektor-ballmat-operator-page .counter-control {
     grid-template-columns: 44px minmax(0, 1fr) 44px;
+    align-self: stretch;
     margin-top: 0;
+    min-height: var(--neosektor-ballmat-count-control-height);
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-open-bay-control .counter-control {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
 }
 
 .blueprint-neosektor.neosektor-ballmat-operator-page .counter-control button,
 .blueprint-neosektor.neosektor-ballmat-operator-page .counter-number,
-.blueprint-neosektor.neosektor-ballmat-operator-page .readonly-count {
-    min-height: 52px;
+.blueprint-neosektor.neosektor-ballmat-operator-page .readonly-count,
+.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-open-bay-control .readonly-count {
+    min-height: var(--neosektor-ballmat-count-control-height);
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .counter-number,
+.blueprint-neosektor.neosektor-ballmat-operator-page .readonly-count,
+.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-open-bay-control .readonly-count {
+    font-size: var(--neosektor-ballmat-count-size);
+    line-height: 0.9;
 }
 
 .blueprint-neosektor.neosektor-ballmat-operator-page .readonly-count {
@@ -2085,6 +2110,10 @@ a {
     }
 
     .blueprint-neosektor.neosektor-ballmat-operator-page .counter-control {
+        grid-template-columns: 43px minmax(0, 1fr) 43px;
+    }
+
+    .blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-open-bay-control .counter-control {
         grid-template-columns: 43px minmax(0, 1fr) 43px;
     }
 }

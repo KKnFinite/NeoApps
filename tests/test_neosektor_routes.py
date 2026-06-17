@@ -1476,6 +1476,52 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(".mobile-banner-logout {\n        display: none !important;", css)
         self.assertIn("white-space: nowrap;", operator_switcher_block)
 
+    def test_ballmat_operator_css_keeps_open_bays_equal_to_wave_rows(self):
+        css = Path("app/static/css/base.css").read_text()
+        variables_block = css.split(
+            ".blueprint-neosektor.neosektor-ballmat-operator-page {",
+            1,
+        )[1].split("}", 1)[0]
+        counter_card_block = css.split(
+            ".blueprint-neosektor.neosektor-ballmat-operator-page .counter-card {",
+            1,
+        )[1].split("}", 1)[0]
+        counter_control_block = css.split(
+            ".blueprint-neosektor.neosektor-ballmat-operator-page .counter-control {",
+            1,
+        )[1].split("}", 1)[0]
+        open_bay_control_block = css.split(
+            ".blueprint-neosektor.neosektor-ballmat-operator-page "
+            ".neosektor-open-bay-control .counter-control {",
+            1,
+        )[1].split("}", 1)[0]
+        count_height_block = css.split(
+            ".blueprint-neosektor.neosektor-ballmat-operator-page .counter-control button,\n"
+            ".blueprint-neosektor.neosektor-ballmat-operator-page .counter-number,\n"
+            ".blueprint-neosektor.neosektor-ballmat-operator-page .readonly-count,\n"
+            ".blueprint-neosektor.neosektor-ballmat-operator-page "
+            ".neosektor-open-bay-control .readonly-count {",
+            1,
+        )[1].split("}", 1)[0]
+        count_size_block = css.rsplit(
+            ".blueprint-neosektor.neosektor-ballmat-operator-page .counter-number,\n"
+            ".blueprint-neosektor.neosektor-ballmat-operator-page .readonly-count,\n"
+            ".blueprint-neosektor.neosektor-ballmat-operator-page "
+            ".neosektor-open-bay-control .readonly-count {",
+            1,
+        )[1].split("}", 1)[0]
+
+        self.assertIn("--neosektor-ballmat-count-card-height: 92px;", variables_block)
+        self.assertIn("--neosektor-ballmat-count-control-height: 58px;", variables_block)
+        self.assertIn("--neosektor-ballmat-count-size: clamp(1.82rem, 6vw, 2.42rem);", variables_block)
+        self.assertIn("grid-template-rows: auto minmax(0, 1fr);", counter_card_block)
+        self.assertIn("min-height: var(--neosektor-ballmat-count-card-height);", counter_card_block)
+        self.assertIn("min-height: var(--neosektor-ballmat-count-control-height);", counter_control_block)
+        self.assertIn("min-height: var(--neosektor-ballmat-count-control-height);", count_height_block)
+        self.assertIn("grid-template-columns: 44px minmax(0, 1fr) 44px;", open_bay_control_block)
+        self.assertIn("font-size: var(--neosektor-ballmat-count-size);", count_size_block)
+        self.assertIn("line-height: 0.9;", count_size_block)
+
     def test_neosektor_index_is_live_counts_and_compat_route_redirects(self):
         self._login_approved_user(role="operator")
 
