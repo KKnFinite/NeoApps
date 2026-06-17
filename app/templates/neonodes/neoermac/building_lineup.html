@@ -8,6 +8,26 @@
 </div>
 {%- endmacro %}
 
+{% macro mobile_pull_strip(left_destination, left_pull_times, right_destination, right_pull_times, strip_key) -%}
+<div class="neoermac-mobile-pull-strip" data-mobile-pull-strip="{{ strip_key }}" aria-label="{{ left_destination or 'Left unassigned' }} and {{ right_destination or 'Right unassigned' }} planned pull times">
+    <div class="neoermac-mobile-pull-row" data-pull-kind="pure">
+        <span>PURE</span>
+        <strong data-pull-side="left">{{ left_pull_times.get("pure", "--") }}</strong>
+        <strong data-pull-side="right">{{ right_pull_times.get("pure", "--") }}</strong>
+    </div>
+    <div class="neoermac-mobile-pull-row" data-pull-kind="first">
+        <span>1ST</span>
+        <strong data-pull-side="left">{{ left_pull_times.get("first_mix", "--") }}</strong>
+        <strong data-pull-side="right">{{ right_pull_times.get("first_mix", "--") }}</strong>
+    </div>
+    <div class="neoermac-mobile-pull-row" data-pull-kind="second">
+        <span>2ND</span>
+        <strong data-pull-side="left">{{ left_pull_times.get("final_mix", "--") }}</strong>
+        <strong data-pull-side="right">{{ right_pull_times.get("final_mix", "--") }}</strong>
+    </div>
+</div>
+{%- endmacro %}
+
 {% block title %}BUILDING LINEUP | NeoErmac{% endblock %}
 
 {% block content %}
@@ -41,6 +61,10 @@
                             {{ pull_times_display(left_bottom_destination, pull_time_lookup.get(left_bottom_destination, {}), "neoermac-pull-edge-side") }}
                         </div>
                         {% for block in row.belt_blocks %}
+                        {% set top_destination = row|attr(block.top_field) %}
+                        {% set bottom_destination = row|attr(block.bottom_field) %}
+                        {% set top_pull_times = pull_time_lookup.get(top_destination, {}) %}
+                        {% set bottom_pull_times = pull_time_lookup.get(bottom_destination, {}) %}
                         <div class="neoermac-belt-block">
                             <div class="neoermac-belt-destination-row">
                                 {% for slot in block.top_slots %}
@@ -54,10 +78,12 @@
                                         {% endfor %}
                                         {% endif %}
                                     </select>
+                                    <span class="neoermac-mobile-slot-belt-name">{{ block.label }}</span>
                                     {{ pull_times_display(selected_value, pull_time_lookup.get(selected_value, {})) }}
                                 </label>
                                 {% endfor %}
                             </div>
+                            {{ mobile_pull_strip(top_destination, top_pull_times, bottom_destination, bottom_pull_times, block.top_field ~ "-" ~ block.bottom_field) }}
                             <div class="neoermac-belt-name">{{ block.label }}</div>
                             <div class="neoermac-belt-destination-row">
                                 {% for slot in block.bottom_slots %}
@@ -71,6 +97,7 @@
                                         {% endfor %}
                                         {% endif %}
                                     </select>
+                                    <span class="neoermac-mobile-slot-belt-name">{{ block.label }}</span>
                                     {{ pull_times_display(selected_value, pull_time_lookup.get(selected_value, {})) }}
                                 </label>
                                 {% endfor %}

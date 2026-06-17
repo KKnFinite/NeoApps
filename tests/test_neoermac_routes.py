@@ -755,6 +755,48 @@ class NeoErmacRoutesTest(unittest.TestCase):
             self.assertIn(expected_time, lower_card)
             self.assertNotIn(expected_time, upper_card)
 
+    def test_building_lineup_mobile_center_strip_pairs_left_and_right_pull_times(self):
+        self._add_master_departure("UPS213", "SDF")
+        self._add_master_departure("UPS214", "ONT")
+        self._assign_lineup_destination("green_runout", "east_destination_1", "SDF")
+        self._assign_lineup_destination("green_runout", "west_destination_1", "ONT")
+        self._add_operation_departure(
+            "UPS213",
+            "SDF",
+            pure_pull_time_local=time(0, 45),
+            first_mix_pull_time_local=time(1, 0),
+            final_mix_pull_time_local=time(1, 15),
+        )
+        self._add_operation_departure(
+            "UPS214",
+            "ONT",
+            pure_pull_time_local=time(2, 5),
+            first_mix_pull_time_local=time(2, 20),
+            final_mix_pull_time_local=time(2, 35),
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/building-lineup")
+        html = response.data.decode()
+        strip = html.split(
+            'data-mobile-pull-strip="east_destination_1-west_destination_1"',
+            1,
+        )[1].split("</div>\n                            <div class=\"neoermac-belt-name\"", 1)[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("neoermac-mobile-pull-strip", response.data.decode())
+        self.assertIn("<span>PURE</span>", strip)
+        self.assertIn('<strong data-pull-side="left">00:45</strong>', strip)
+        self.assertIn('<strong data-pull-side="right">02:05</strong>', strip)
+        self.assertIn("<span>1ST</span>", strip)
+        self.assertIn('<strong data-pull-side="left">01:00</strong>', strip)
+        self.assertIn('<strong data-pull-side="right">02:20</strong>', strip)
+        self.assertIn("<span>2ND</span>", strip)
+        self.assertIn('<strong data-pull-side="left">01:15</strong>', strip)
+        self.assertIn('<strong data-pull-side="right">02:35</strong>', strip)
+        self.assertIn("neoermac-mobile-slot-belt-name", html)
+
     def test_building_lineup_missing_pull_times_show_clean_blanks(self):
         self._add_master_departure("UPS212", "PHX")
         self._assign_lineup_destination("green_runout", "east_destination_1", "PHX")
