@@ -755,7 +755,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             self.assertIn(expected_time, lower_card)
             self.assertNotIn(expected_time, upper_card)
 
-    def test_building_lineup_mobile_center_strip_pairs_left_and_right_pull_times(self):
+    def test_building_lineup_mobile_stacked_pull_table_pairs_left_and_right_times(self):
         self._add_master_departure("UPS213", "SDF")
         self._add_master_departure("UPS214", "ONT")
         self._assign_lineup_destination("green_runout", "east_destination_1", "SDF")
@@ -786,13 +786,16 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("neoermac-mobile-pull-strip", response.data.decode())
+        self.assertIn("neoermac-mobile-belt-topline", html)
+        self.assertIn('data-mobile-destination-slot="1"', html)
+        self.assertIn('data-mobile-destination-slot="2"', html)
         self.assertIn("<span>PURE</span>", strip)
         self.assertIn('<strong data-pull-side="left">00:45</strong>', strip)
         self.assertIn('<strong data-pull-side="right">02:05</strong>', strip)
-        self.assertIn("<span>1ST</span>", strip)
+        self.assertIn("<span>1ST MIX</span>", strip)
         self.assertIn('<strong data-pull-side="left">01:00</strong>', strip)
         self.assertIn('<strong data-pull-side="right">02:20</strong>', strip)
-        self.assertIn("<span>2ND</span>", strip)
+        self.assertIn("<span>2ND MIX</span>", strip)
         self.assertIn('<strong data-pull-side="left">01:15</strong>', strip)
         self.assertIn('<strong data-pull-side="right">02:35</strong>', strip)
         self.assertIn("neoermac-mobile-slot-belt-name", html)

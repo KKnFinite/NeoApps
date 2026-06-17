@@ -6688,6 +6688,10 @@ select::-ms-expand {
     display: none;
 }
 
+.neoermac-mobile-belt-topline {
+    display: contents;
+}
+
 .neoermac-runout-slots .neoermac-belt-block .neoermac-belt-cell {
     display: grid;
     gap: 5px;
@@ -6800,17 +6804,35 @@ select::-ms-expand {
 @media (max-width: 760px) {
     .neoermac-belt-group .neoermac-belt-grid {
         grid-template-columns: minmax(0, 1fr);
-        gap: 8px;
-        padding: 2px 0 7px;
+        gap: 9px;
+        padding: 3px 0 8px;
     }
 
     .neoermac-belt-block {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(90px, 0.92fr) minmax(0, 1fr);
-        grid-template-areas: "left strip right";
+        grid-template-columns: minmax(0, 1fr);
+        gap: 7px;
+        width: 100%;
+        padding: 8px;
+    }
+
+    .neoermac-belt-block[data-mobile-destination-slot="1"] {
+        order: 1;
+    }
+
+    .neoermac-belt-block[data-mobile-destination-slot="2"] {
+        order: 2;
+    }
+
+    .neoermac-mobile-belt-topline {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(86px, 0.72fr) minmax(0, 1fr);
+        grid-template-areas:
+            "left label right"
+            "strip strip strip";
         align-items: stretch;
         gap: 6px;
-        padding: 7px;
+        min-width: 0;
     }
 
     .neoermac-belt-block .neoermac-belt-destination-row {
@@ -6839,18 +6861,22 @@ select::-ms-expand {
 
     .neoermac-mobile-slot-belt-name {
         display: grid;
+        grid-area: label;
         place-items: center;
-        min-height: 29px;
-        padding: 4px 5px;
+        min-width: 0;
+        min-height: 34px;
+        padding: 5px 6px;
         border: 1px solid rgba(244, 247, 251, 0.86);
         border-radius: 5px;
         background: var(--neo-silver);
         color: #15191f;
-        font-size: clamp(0.58rem, 2.3vw, 0.72rem);
+        font-size: clamp(0.68rem, 2.6vw, 0.84rem);
         font-weight: 950;
         letter-spacing: 0;
         line-height: 1.05;
         text-align: center;
+        overflow-wrap: anywhere;
+        white-space: normal;
         text-shadow: 0 1px 0 rgba(255, 255, 255, 0.46);
         box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.66),
@@ -6861,10 +6887,10 @@ select::-ms-expand {
     .neoermac-mobile-pull-strip {
         grid-area: strip;
         display: grid;
-        align-content: center;
-        gap: 4px;
+        gap: 5px;
         min-width: 0;
-        padding: 6px 5px;
+        width: 100%;
+        padding: 7px 8px;
         border: 1px solid rgba(244, 247, 251, 0.82);
         border-radius: 5px;
         background: var(--neo-silver);
@@ -6876,9 +6902,9 @@ select::-ms-expand {
 
     .neoermac-mobile-pull-row {
         display: grid;
-        grid-template-columns: minmax(26px, 0.7fr) minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-columns: minmax(64px, 0.84fr) minmax(0, 1fr) minmax(0, 1fr);
         align-items: center;
-        gap: 3px;
+        gap: 7px;
         min-width: 0;
     }
 
@@ -6895,12 +6921,13 @@ select::-ms-expand {
 
     .neoermac-mobile-pull-row span {
         color: #2a3038;
-        font-size: clamp(0.5rem, 2vw, 0.6rem);
-        letter-spacing: 0.02em;
+        font-size: clamp(0.58rem, 2.2vw, 0.72rem);
+        letter-spacing: 0.01em;
+        text-align: left;
     }
 
     .neoermac-mobile-pull-row strong {
-        font-size: clamp(0.62rem, 2.5vw, 0.78rem);
+        font-size: clamp(0.76rem, 3vw, 0.94rem);
         letter-spacing: 0;
     }
 
