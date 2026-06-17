@@ -8,7 +8,7 @@ from app.models import (
     GatewayMembership,
     GatewaySortMatrix,
     MasterFlightSchedule,
-    SortTimelineMonthlyAdjustment,
+    SortTimelineMonthVariance,
     SortTimelineSettings,
     SortTimelineUsageCounter,
     SortDateCrewAssignment,
@@ -244,33 +244,96 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(context["summary"]["monthly_poll_limit"], 300)
         self.assertEqual(context["summary"]["daily_poll_cap"], 13)
 
-    def test_sort_timeline_monthly_add_subtract_adjustments(self):
+    def test_sort_timeline_month_variance_positive_increases_ops_days(self):
         self.client.post(
             "/motherbrain/sort-timeline",
             data=self._sort_timeline_form_data(
                 monthly_api_units="600",
                 units_per_poll="2",
-                added_operating_days="2026-06-06\n2026-06-07",
-                removed_operating_days="2026-06-01",
+                month_variance_6="2",
             ),
         )
         context = sort_timeline_context(self.rfd_gateway, "2026-06")
-        adjustments = SortTimelineMonthlyAdjustment.query.filter_by(
-            gateway_id=self.rfd_gateway.id,
-            month_key="2026-06",
-        ).all()
 
-        self.assertEqual(context["summary"]["operating_days"], 23)
+        self.assertEqual(context["summary"]["base_operating_days"], 22)
+        self.assertEqual(context["summary"]["month_variance"], 2)
+        self.assertEqual(context["summary"]["operating_days"], 24)
         self.assertEqual(context["summary"]["monthly_poll_limit"], 300)
-        self.assertEqual(context["summary"]["daily_poll_cap"], 13)
-        self.assertEqual(
-            {(row.local_date, row.adjustment_type) for row in adjustments},
-            {
-                (date(2026, 6, 6), "add"),
-                (date(2026, 6, 7), "add"),
-                (date(2026, 6, 1), "remove"),
-            },
+        self.assertEqual(context["summary"]["daily_poll_cap"], 12)
+
+    def test_sort_timeline_month_variance_negative_decreases_ops_days(self):
+        self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                monthly_api_units="600",
+                units_per_poll="2",
+                month_variance_6="-1",
+            ),
         )
+        context = sort_timeline_context(self.rfd_gateway, "2026-06")
+
+        self.assertEqual(context["summary"]["base_operating_days"], 22)
+        self.assertEqual(context["summary"]["month_variance"], -1)
+        self.assertEqual(context["summary"]["operating_days"], 21)
+        self.assertEqual(context["summary"]["daily_poll_cap"], 14)
+
+    def test_sort_timeline_month_variance_persists_by_month_across_years(self):
+        self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                month_key="2026-01",
+                month_variance_1="2",
+            ),
+        )
+        jan_2026 = sort_timeline_context(self.rfd_gateway, "2026-01")
+        jan_2027 = sort_timeline_context(self.rfd_gateway, "2027-01")
+        variance = SortTimelineMonthVariance.query.filter_by(
+            gateway_id=self.rfd_gateway.id,
+            month_number=1,
+        ).one()
+
+        self.assertEqual(variance.variance, 2)
+        self.assertEqual(
+            jan_2026["summary"]["operating_days"],
+            jan_2026["summary"]["base_operating_days"] + 2,
+        )
+        self.assertEqual(
+            jan_2027["summary"]["operating_days"],
+            jan_2027["summary"]["base_operating_days"] + 2,
+        )
+
+    def test_sort_timeline_month_variance_clamps_adjusted_ops_days_to_zero(self):
+        self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                monthly_api_units="600",
+                units_per_poll="2",
+                month_variance_6="-100",
+            ),
+        )
+        context = sort_timeline_context(self.rfd_gateway, "2026-06")
+
+        self.assertEqual(context["summary"]["base_operating_days"], 22)
+        self.assertEqual(context["summary"]["month_variance"], -100)
+        self.assertEqual(context["summary"]["operating_days"], 0)
+        self.assertEqual(context["summary"]["daily_poll_cap"], 0)
+
+    def test_sort_timeline_old_added_removed_fields_do_not_drive_calculation(self):
+        response = self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                added_operating_days="2026-06-06\n2026-06-07",
+                removed_operating_days="2026-06-01",
+            ),
+            follow_redirects=True,
+        )
+        context = sort_timeline_context(self.rfd_gateway, "2026-06")
+
+        self.assertEqual(context["summary"]["base_operating_days"], 22)
+        self.assertEqual(context["summary"]["month_variance"], 0)
+        self.assertEqual(context["summary"]["operating_days"], 22)
+        self.assertNotIn(b"Added Operating Days", response.data)
+        self.assertNotIn(b"Removed Operating Days", response.data)
 
     def test_sort_timeline_special_polls_reduce_auto_polls_and_count_outside_window(self):
         self.client.post(
@@ -2374,9 +2437,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "thursday",
                 "friday",
             ],
-            "added_operating_days": "",
-            "removed_operating_days": "",
         }
+        for month_number in range(1, 13):
+            values[f"month_variance_{month_number}"] = "0"
         for sort_name in ("sunrise", "day", "twilight", "night"):
             values.update(
                 {

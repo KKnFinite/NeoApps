@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.extensions import db
 from app.models import (
-    SortTimelineMonthlyAdjustment,
+    SortTimelineMonthVariance,
     SortTimelineSettings,
     SortTimelineSortSetting,
     SortTimelineSpecialPollTime,
@@ -18,6 +18,7 @@ DEFAULT_UNITS_PER_POLL = 2
 DEFAULT_OPERATING_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday")
 DAY_VALUES = {day for day, _label in DAY_OPTIONS}
 SORT_VALUES = {sort_name for sort_name, _label in SORT_OPTIONS}
+MONTH_OPTIONS = tuple((month_number, calendar.month_name[month_number]) for month_number in range(1, 13))
 
 
 def ensure_sort_timeline_settings(gateway):
@@ -68,14 +69,23 @@ def sort_timeline_context(gateway, month_key=None, now=None):
     settings = ensure_sort_timeline_settings(gateway)
     month_key = normalize_month_key(month_key) or month_key_for_gateway_datetime(now, gateway)
     selected_month = month_start_from_key(month_key)
-    adjustments = monthly_adjustments_for_gateway(gateway, month_key)
-    previews = sort_timeline_previews(settings, adjustments, selected_month, gateway, now=now)
+    month_variances = month_variances_for_gateway(gateway)
+    selected_month_variance = month_variances[selected_month.month]
+    previews = sort_timeline_previews(
+        settings,
+        selected_month_variance,
+        selected_month,
+        gateway,
+        now=now,
+    )
     return {
         "settings": settings,
         "month_key": month_key,
         "selected_month": selected_month,
         "operating_weekdays": operating_weekday_set(settings.operating_weekdays),
-        "adjustments": adjustments,
+        "month_options": MONTH_OPTIONS,
+        "month_variances": month_variances,
+        "selected_month_variance": selected_month_variance,
         "previews": previews,
         "preview_by_sort": {
             preview["sort_name"]: preview
@@ -105,25 +115,18 @@ def save_sort_timeline_from_form(gateway, form):
     settings.provider_name = _clean_text(form.get("provider_name"), max_length=120)
     settings.api_key_env_var_name = _clean_env_var_name(form.get("api_key_env_var_name"))
     settings.operating_weekdays = _weekday_csv(form.getlist("operating_weekdays"))
-
-    _replace_monthly_adjustments(
-        gateway,
-        month_key,
-        form.get("added_operating_days", ""),
-        form.get("removed_operating_days", ""),
-    )
+    save_month_variances(gateway, form)
     _save_sort_settings(settings, gateway, form)
     db.session.flush()
     return settings, month_key
 
 
-def sort_timeline_previews(settings, adjustments, selected_month, gateway, now=None):
-    operating_days = operating_days_for_month(
+def sort_timeline_previews(settings, selected_month_variance, selected_month, gateway, now=None):
+    base_operating_days = base_operating_days_for_month(
         selected_month,
         operating_weekday_set(settings.operating_weekdays),
-        adjustments["added_dates"],
-        adjustments["removed_dates"],
     )
+    operating_days = adjusted_operating_days(base_operating_days, selected_month_variance)
     monthly_poll_count = monthly_poll_limit(settings.monthly_api_units, settings.units_per_poll)
     daily_cap = daily_poll_cap(monthly_poll_count, operating_days)
     previews = []
@@ -142,6 +145,8 @@ def sort_timeline_previews(settings, adjustments, selected_month, gateway, now=N
                 "sort_name": sort_name,
                 "sort_label": sort_label,
                 "sort_setting": sort_setting,
+                "base_operating_days": base_operating_days,
+                "month_variance": selected_month_variance,
                 "operating_days": operating_days,
                 "monthly_api_units": settings.monthly_api_units,
                 "units_per_poll": settings.units_per_poll,
@@ -161,6 +166,8 @@ def aggregate_preview(previews):
     if not previews:
         return {
             "operating_days": 0,
+            "base_operating_days": 0,
+            "month_variance": 0,
             "monthly_api_units": 0,
             "units_per_poll": DEFAULT_UNITS_PER_POLL,
             "monthly_poll_limit": 0,
@@ -174,6 +181,8 @@ def aggregate_preview(previews):
     next_times = [preview["next_poll_time"] for preview in previews if preview["next_poll_time"]]
     return {
         "operating_days": previews[0]["operating_days"],
+        "base_operating_days": previews[0]["base_operating_days"],
+        "month_variance": previews[0]["month_variance"],
         "monthly_api_units": previews[0]["monthly_api_units"],
         "units_per_poll": previews[0]["units_per_poll"],
         "monthly_poll_limit": previews[0]["monthly_poll_limit"],
@@ -185,37 +194,54 @@ def aggregate_preview(previews):
     }
 
 
-def monthly_adjustments_for_gateway(gateway, month_key):
-    rows = (
-        SortTimelineMonthlyAdjustment.query.filter_by(
-            gateway_id=gateway.id,
-            month_key=month_key,
-        )
-        .order_by(
-            SortTimelineMonthlyAdjustment.local_date.asc(),
-            SortTimelineMonthlyAdjustment.adjustment_type.asc(),
-        )
-        .all()
-    )
-    added_dates = [
-        adjustment.local_date
-        for adjustment in rows
-        if adjustment.adjustment_type == "add"
-    ]
-    removed_dates = [
-        adjustment.local_date
-        for adjustment in rows
-        if adjustment.adjustment_type == "remove"
-    ]
-    return {
-        "added_dates": added_dates,
-        "removed_dates": removed_dates,
-        "added_text": "\n".join(day.isoformat() for day in added_dates),
-        "removed_text": "\n".join(day.isoformat() for day in removed_dates),
+def month_variances_for_gateway(gateway):
+    ensure_month_variances(gateway)
+    rows = SortTimelineMonthVariance.query.filter_by(gateway_id=gateway.id).all()
+    values = {month_number: 0 for month_number, _month_label in MONTH_OPTIONS}
+    for row in rows:
+        if 1 <= row.month_number <= 12:
+            row.gateway_code = gateway.code
+            values[row.month_number] = int(row.variance or 0)
+    db.session.flush()
+    return values
+
+
+def ensure_month_variances(gateway):
+    existing = {
+        row.month_number: row
+        for row in SortTimelineMonthVariance.query.filter_by(gateway_id=gateway.id).all()
     }
+    for month_number, _month_label in MONTH_OPTIONS:
+        row = existing.get(month_number)
+        if row:
+            row.gateway_code = gateway.code
+            continue
+
+        db.session.add(
+            SortTimelineMonthVariance(
+                gateway_id=gateway.id,
+                gateway_code=gateway.code,
+                month_number=month_number,
+                variance=0,
+            )
+        )
+    db.session.flush()
 
 
-def operating_days_for_month(month_start, weekday_values, added_dates=(), removed_dates=()):
+def save_month_variances(gateway, form):
+    ensure_month_variances(gateway)
+    rows = {
+        row.month_number: row
+        for row in SortTimelineMonthVariance.query.filter_by(gateway_id=gateway.id).all()
+    }
+    for month_number, _month_label in MONTH_OPTIONS:
+        row = rows[month_number]
+        row.gateway_code = gateway.code
+        row.variance = _integer(form.get(f"month_variance_{month_number}"), default=0)
+    db.session.flush()
+
+
+def base_operating_days_for_month(month_start, weekday_values):
     weekday_values = set(weekday_values or ())
     _, day_count = calendar.monthrange(month_start.year, month_start.month)
     enabled_weekday_count = 0
@@ -224,9 +250,11 @@ def operating_days_for_month(month_start, weekday_values, added_dates=(), remove
         if candidate.strftime("%A").lower() in weekday_values:
             enabled_weekday_count += 1
 
-    added_count = len(set(added_dates or ()))
-    removed_count = len(set(removed_dates or ()))
-    return max(0, enabled_weekday_count + added_count - removed_count)
+    return enabled_weekday_count
+
+
+def adjusted_operating_days(base_operating_days, month_variance):
+    return max(0, int(base_operating_days or 0) + int(month_variance or 0))
 
 
 def monthly_poll_limit(monthly_api_units, units_per_poll):
@@ -425,41 +453,6 @@ def format_time(value):
     return value.strftime("%H:%M")
 
 
-def _replace_monthly_adjustments(gateway, month_key, added_text, removed_text):
-    SortTimelineMonthlyAdjustment.query.filter_by(
-        gateway_id=gateway.id,
-        month_key=month_key,
-    ).delete(synchronize_session=False)
-
-    selected_month = month_start_from_key(month_key)
-    for adjustment_type, raw_text in (("add", added_text), ("remove", removed_text)):
-        for local_date in _parse_adjustment_dates(raw_text, selected_month):
-            db.session.add(
-                SortTimelineMonthlyAdjustment(
-                    gateway_id=gateway.id,
-                    gateway_code=gateway.code,
-                    month_key=month_key,
-                    local_date=local_date,
-                    adjustment_type=adjustment_type,
-                )
-            )
-
-
-def _parse_adjustment_dates(raw_text, selected_month):
-    dates = set()
-    for token in str(raw_text or "").replace(",", "\n").splitlines():
-        token = token.strip()
-        if not token:
-            continue
-        try:
-            parsed = datetime.strptime(token, "%Y-%m-%d").date()
-        except ValueError:
-            continue
-        if parsed.year == selected_month.year and parsed.month == selected_month.month:
-            dates.add(parsed)
-    return sorted(dates)
-
-
 def _save_sort_settings(settings, gateway, form):
     sort_settings = {
         sort_setting.sort_name: sort_setting
@@ -539,6 +532,13 @@ def _nonnegative_int(value, default=0):
     except (TypeError, ValueError):
         return default
     return max(0, number)
+
+
+def _integer(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _positive_int(value, default=1):

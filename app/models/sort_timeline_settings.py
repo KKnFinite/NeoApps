@@ -34,28 +34,25 @@ class SortTimelineSettings(db.Model):
     )
 
 
-class SortTimelineMonthlyAdjustment(db.Model):
-    __tablename__ = "sort_timeline_monthly_adjustments"
+class SortTimelineMonthVariance(db.Model):
+    __tablename__ = "sort_timeline_month_variances"
     __table_args__ = (
         db.UniqueConstraint(
             "gateway_id",
-            "month_key",
-            "local_date",
-            "adjustment_type",
-            name="uq_sort_timeline_monthly_adjustment",
+            "month_number",
+            name="uq_sort_timeline_month_variance",
         ),
         db.CheckConstraint(
-            "adjustment_type IN ('add', 'remove')",
-            name="ck_sort_timeline_monthly_adjustment_type",
+            "month_number >= 1 AND month_number <= 12",
+            name="ck_sort_timeline_month_variance_month_number",
         ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
     gateway_id = db.Column(db.Integer, db.ForeignKey("gateways.id"), nullable=False, index=True)
     gateway_code = db.Column(db.String(8), nullable=False, index=True)
-    month_key = db.Column(db.String(7), nullable=False, index=True)
-    local_date = db.Column(db.Date, nullable=False, index=True)
-    adjustment_type = db.Column(db.String(16), nullable=False)
+    month_number = db.Column(db.Integer, nullable=False, index=True)
+    variance = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

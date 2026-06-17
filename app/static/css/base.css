@@ -3693,6 +3693,17 @@ h2 {
     gap: 10px;
 }
 
+.sort-timeline-variance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    gap: 10px;
+}
+
+.sort-timeline-variance-grid label {
+    display: grid;
+    gap: 6px;
+}
+
 .sort-timeline-checkbox,
 .sort-timeline-day-toggle,
 .sort-timeline-delete-row {

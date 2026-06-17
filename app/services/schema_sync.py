@@ -151,7 +151,7 @@ def sync_database_schema(app):
 
 def _create_missing_application_tables(existing_table_names):
     from app.models import (
-        SortTimelineMonthlyAdjustment,
+        SortTimelineMonthVariance,
         SortTimelineSettings,
         SortTimelineSortSetting,
         SortTimelineSpecialPollTime,
@@ -160,7 +160,7 @@ def _create_missing_application_tables(existing_table_names):
 
     for model in (
         SortTimelineSettings,
-        SortTimelineMonthlyAdjustment,
+        SortTimelineMonthVariance,
         SortTimelineSortSetting,
         SortTimelineSpecialPollTime,
         SortTimelineUsageCounter,

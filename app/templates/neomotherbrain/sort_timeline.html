@@ -54,15 +54,13 @@
                 </label>
                 {% endfor %}
             </div>
-            <div class="sort-timeline-grid sort-timeline-adjustments">
+            <div class="sort-timeline-variance-grid" aria-label="Monthly operating day variance">
+                {% for month_number, month_label in month_options %}
                 <label>
-                    <span>Added Operating Days</span>
-                    <textarea name="added_operating_days" rows="4" placeholder="{{ month_key }}-01">{{ adjustments.added_text }}</textarea>
+                    <span>{{ month_label }}</span>
+                    <input type="number" name="month_variance_{{ month_number }}" step="1" value="{{ month_variances[month_number] }}">
                 </label>
-                <label>
-                    <span>Removed Operating Days</span>
-                    <textarea name="removed_operating_days" rows="4" placeholder="{{ month_key }}-01">{{ adjustments.removed_text }}</textarea>
-                </label>
+                {% endfor %}
             </div>
         </section>
 
@@ -82,7 +80,15 @@
                     <strong>{{ summary.monthly_poll_limit }}</strong>
                 </article>
                 <article class="metric-tile">
-                    <span>Operating Days</span>
+                    <span>Base Operating Days</span>
+                    <strong>{{ summary.base_operating_days }}</strong>
+                </article>
+                <article class="metric-tile">
+                    <span>Operating Day Variance</span>
+                    <strong>{{ "%+d"|format(summary.month_variance) }}</strong>
+                </article>
+                <article class="metric-tile">
+                    <span>Adjusted Operating Days</span>
                     <strong>{{ summary.operating_days }}</strong>
                 </article>
                 <article class="metric-tile">

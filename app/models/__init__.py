@@ -22,7 +22,7 @@ from app.models.sort_date_mission import SortDateMission
 from app.models.sort_date_operation import SortDateOperation
 from app.models.sort_date_tail_state import SortDateTailState
 from app.models.sort_timeline_settings import (
-    SortTimelineMonthlyAdjustment,
+    SortTimelineMonthVariance,
     SortTimelineSettings,
     SortTimelineSortSetting,
     SortTimelineSpecialPollTime,
@@ -56,7 +56,7 @@ __all__ = [
     "SortDateMission",
     "SortDateTailState",
     "SortTimelineSettings",
-    "SortTimelineMonthlyAdjustment",
+    "SortTimelineMonthVariance",
     "SortTimelineSortSetting",
     "SortTimelineSpecialPollTime",
     "SortTimelineUsageCounter",
