@@ -1324,6 +1324,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"data-live-counts", response.data)
         self.assertIn(b"ALL IN", response.data)
         self.assertIn(b"DOWN", response.data)
+        self.assertEqual(response.data.count(b'class="is-word"'), 4)
         self.assertIn(b"Left to Unload", response.data)
         self.assertIn(b"1ST WAVE", response.data)
         self.assertIn(b"2ND WAVE", response.data)

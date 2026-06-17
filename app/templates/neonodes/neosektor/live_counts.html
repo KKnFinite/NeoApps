@@ -33,11 +33,11 @@
                 <div class="wave-metrics">
                     <div>
                         <span>Left to Arrive</span>
-                        <strong data-wave="{{ wave_key }}" data-metric="left_to_arrive">{{ "ALL IN" if wave.planned == 0 else wave.planned }}</strong>
+                        <strong class="{% if wave.planned == 0 %}is-word{% endif %}" data-wave="{{ wave_key }}" data-metric="left_to_arrive">{{ "ALL IN" if wave.planned == 0 else wave.planned }}</strong>
                     </div>
                     <div>
                         <span>Left to Unload</span>
-                        <strong data-wave="{{ wave_key }}" data-metric="left_to_unload">{{ "DOWN" if wave.left == 0 else wave.left }}</strong>
+                        <strong class="{% if wave.left == 0 %}is-word{% endif %}" data-wave="{{ wave_key }}" data-metric="left_to_unload">{{ "DOWN" if wave.left == 0 else wave.left }}</strong>
                     </div>
                 </div>
             </article>
