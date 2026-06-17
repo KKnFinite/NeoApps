@@ -3699,9 +3699,94 @@ h2 {
     gap: 10px;
 }
 
-.sort-timeline-variance-grid label {
+.sort-timeline-variance-control {
     display: grid;
     gap: 6px;
+    padding: 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.22);
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+
+.sort-timeline-variance-control > span {
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.sort-timeline-variance-control > div {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr) 38px;
+    gap: 6px;
+    align-items: center;
+}
+
+.sort-timeline-variance-control input {
+    text-align: center;
+}
+
+.sort-timeline-step {
+    min-height: 38px;
+    padding: 6px 8px;
+}
+
+.sort-timeline-provider-toggle {
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 10px;
+    text-align: center;
+}
+
+.sort-timeline-provider-toggle input {
+    width: 24px;
+    height: 24px;
+}
+
+.sort-timeline-preview-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.sort-timeline-preview-heading span {
+    color: var(--node-primary);
+    font-size: 0.78rem;
+    font-weight: 950;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.sort-timeline-warning {
+    margin: 0;
+    padding: 10px 12px;
+    color: var(--steel);
+    border: 1px solid rgba(var(--node-rgb), 0.48);
+    background: rgba(var(--node-rgb), 0.16);
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+}
+
+.sort-timeline-api-days {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+    gap: 8px;
+}
+
+.sort-timeline-api-day-toggle {
+    justify-content: center;
+    text-align: center;
+}
+
+.sort-timeline-api-day-toggle input {
+    width: 18px;
+    height: 18px;
 }
 
 .sort-timeline-checkbox,

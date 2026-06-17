@@ -6,6 +6,79 @@
 <input type="time" name="{{ name }}" value="{{ format_timeline_time(value) if value else '' }}" autocomplete="off">
 {%- endmacro %}
 
+{% macro budget_preview(title, preview) -%}
+<section class="sort-timeline-section" aria-labelledby="{{ title|lower|replace(' ', '-') }}">
+    <div class="sort-timeline-preview-heading">
+        <h2 id="{{ title|lower|replace(' ', '-') }}">{{ title }}</h2>
+        <span>{{ preview.month_label }}</span>
+    </div>
+    {% if preview.provider_disabled %}
+    <p class="sort-timeline-warning">API PROVIDER IS OFF. NO POLLING, IMPORTS, OR SCHEDULED API USAGE WILL RUN.</p>
+    {% elif preview.budget_exhausted %}
+    <p class="sort-timeline-warning">API BUDGET EXHAUSTED. SCHEDULED POLLS ARE BLOCKED FOR THIS MONTH.</p>
+    {% endif %}
+    <div class="metric-grid sort-timeline-preview-grid">
+        <article class="metric-tile">
+            <span>Monthly API Units</span>
+            <strong>{{ preview.monthly_api_units }}</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Units Per Poll</span>
+            <strong>{{ preview.units_per_poll }}</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Monthly Poll Limit</span>
+            <strong>{{ preview.monthly_poll_limit }}</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Units Used</span>
+            <strong>{{ preview.units_used }}</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Units Remaining</span>
+            <strong>{{ preview.units_remaining }}</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Polls Used</span>
+            <strong>{{ preview.polls_used }}</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Polls Remaining</span>
+            <strong>{{ preview.polls_remaining }}</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Operating Days</span>
+            <strong>{{ preview.operating_days }}</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Original Daily Poll Cap</span>
+            <strong>{{ preview.original_daily_poll_cap }}</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Adjusted Daily Poll Cap</span>
+            <strong>{{ preview.adjusted_daily_poll_cap }}</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Effective Daily Poll Cap</span>
+            <strong>{{ preview.effective_daily_poll_cap }}</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Special Poll Count</span>
+            <strong>{{ preview.special_poll_count }}</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Auto Interval Poll Count</span>
+            <strong>{{ preview.auto_interval_poll_count }}</strong>
+        </article>
+        <article class="metric-tile">
+            <span>Total Scheduled Polls</span>
+            <strong>{{ preview.total_scheduled_polls }}</strong>
+        </article>
+    </div>
+    <p class="muted">Scheduled poll totals are daily totals across API-enabled Gateway Matrix sort/day combinations.</p>
+</section>
+{%- endmacro %}
+
 {% block content %}
 <section class="panel centered-command-page sort-timeline-page" aria-labelledby="sort-timeline-title">
     <div class="section-heading">
@@ -14,12 +87,14 @@
     </div>
 
     <form class="operation-form sort-timeline-form" method="post">
+        <input type="hidden" name="month_key" value="{{ current_month_key }}">
+
         <section class="sort-timeline-section" aria-labelledby="timeline-global-settings">
             <h2 id="timeline-global-settings">API LIMITS AND PROVIDER</h2>
             <div class="sort-timeline-grid">
-                <label>
-                    <span>Month</span>
-                    <input type="month" name="month_key" value="{{ month_key }}">
+                <label class="sort-timeline-provider-toggle">
+                    <span>Provider Enabled</span>
+                    <input type="checkbox" name="provider_enabled" value="1" {% if settings.provider_enabled %}checked{% endif %}>
                 </label>
                 <label>
                     <span>Monthly API Units</span>
@@ -28,10 +103,6 @@
                 <label>
                     <span>Units Per Poll</span>
                     <input type="number" name="units_per_poll" min="1" step="1" value="{{ settings.units_per_poll }}">
-                </label>
-                <label class="sort-timeline-checkbox">
-                    <input type="checkbox" name="provider_enabled" value="1" {% if settings.provider_enabled %}checked{% endif %}>
-                    <span>API Provider Enabled</span>
                 </label>
                 <label>
                     <span>Provider Name</span>
@@ -44,78 +115,46 @@
             </div>
         </section>
 
-        <section class="sort-timeline-section" aria-labelledby="timeline-operating-days">
-            <h2 id="timeline-operating-days">OPERATING DAYS</h2>
-            <div class="sort-timeline-weekday-grid" aria-label="Default operating weekdays">
-                {% for day, day_label in day_options %}
-                <label class="matrix-toggle sort-timeline-day-toggle">
-                    <input type="checkbox" name="operating_weekdays" value="{{ day }}" {% if day in operating_weekdays %}checked{% endif %}>
-                    <span>{{ day_label }}</span>
-                </label>
-                {% endfor %}
-            </div>
-            <div class="sort-timeline-variance-grid" aria-label="Monthly operating day variance">
+        <section class="sort-timeline-section" aria-labelledby="timeline-operating-offset">
+            <h2 id="timeline-operating-offset">OPERATING DAY OFFSET</h2>
+            <div class="sort-timeline-variance-grid" aria-label="Operating day offset by month">
                 {% for month_number, month_label in month_options %}
-                <label>
+                <div class="sort-timeline-variance-control">
                     <span>{{ month_label }}</span>
-                    <input type="number" name="month_variance_{{ month_number }}" step="1" value="{{ month_variances[month_number] }}">
-                </label>
+                    <div>
+                        <button class="action-button action-button-secondary sort-timeline-step" type="button" data-variance-step="-1" aria-label="Decrease {{ month_label }} offset">-</button>
+                        <input type="number" name="month_variance_{{ month_number }}" step="1" value="{{ month_variances[month_number] }}" aria-label="{{ month_label }} operating day offset">
+                        <button class="action-button action-button-secondary sort-timeline-step" type="button" data-variance-step="1" aria-label="Increase {{ month_label }} offset">+</button>
+                    </div>
+                </div>
                 {% endfor %}
             </div>
         </section>
 
-        <section class="sort-timeline-section" aria-labelledby="timeline-preview">
-            <h2 id="timeline-preview">PREVIEW</h2>
-            <div class="metric-grid sort-timeline-preview-grid">
-                <article class="metric-tile">
-                    <span>Monthly API Units</span>
-                    <strong>{{ summary.monthly_api_units }}</strong>
-                </article>
-                <article class="metric-tile">
-                    <span>Units Per Poll</span>
-                    <strong>{{ summary.units_per_poll }}</strong>
-                </article>
-                <article class="metric-tile">
-                    <span>Monthly Poll Limit</span>
-                    <strong>{{ summary.monthly_poll_limit }}</strong>
-                </article>
-                <article class="metric-tile">
-                    <span>Base Operating Days</span>
-                    <strong>{{ summary.base_operating_days }}</strong>
-                </article>
-                <article class="metric-tile">
-                    <span>Operating Day Variance</span>
-                    <strong>{{ "%+d"|format(summary.month_variance) }}</strong>
-                </article>
-                <article class="metric-tile">
-                    <span>Adjusted Operating Days</span>
-                    <strong>{{ summary.operating_days }}</strong>
-                </article>
-                <article class="metric-tile">
-                    <span>Daily Poll Cap</span>
-                    <strong>{{ summary.daily_poll_cap }}</strong>
-                </article>
-                <article class="metric-tile">
-                    <span>Next Poll Time</span>
-                    <strong>{{ format_timeline_time(summary.next_poll_time) }}</strong>
-                </article>
-                <article class="metric-tile">
-                    <span>Actual Usage This Month</span>
-                    <strong>{{ usage_count }}</strong>
-                </article>
-            </div>
-        </section>
+        {{ budget_preview("Current Month Preview", current_preview) }}
+        {{ budget_preview("Next Month Preview", next_preview) }}
 
-        <section class="sort-timeline-section" aria-labelledby="timeline-sort-settings">
-            <h2 id="timeline-sort-settings">SORT WINDOWS</h2>
+        <section class="sort-timeline-section" aria-labelledby="timeline-api-schedule">
+            <h2 id="timeline-api-schedule">GATEWAY MATRIX API SCHEDULE</h2>
+            {% if not api_schedule.has_configured_cells %}
+            <p class="muted">No Gateway Matrix sort/day combinations are configured yet.</p>
+            {% endif %}
             <div class="sort-timeline-sort-grid">
-                {% for sort_name, sort_label in sort_options %}
-                {% set sort_setting = preview_by_sort[sort_name].sort_setting %}
-                {% set sort_preview = preview_by_sort[sort_name] %}
+                {% for sort_preview in current_preview.sort_previews %}
+                {% set sort_name = sort_preview.sort_name %}
+                {% set sort_setting = sort_preview.sort_setting %}
                 <article class="sort-timeline-sort-card" data-sort-timeline-card="{{ sort_name }}">
                     <div class="sort-timeline-card-heading">
-                        <h3>{{ sort_label|upper }}</h3>
-                        <span>{{ sort_preview.total_scheduled_polls }} SCHEDULED</span>
+                        <h3>{{ sort_preview.sort_label|upper }}</h3>
+                        <span>{{ sort_preview.api_day_count }} API DAYS THIS MONTH</span>
+                    </div>
+                    <div class="sort-timeline-api-days">
+                        {% for day_info in sort_preview.configured_days %}
+                        <label class="matrix-toggle sort-timeline-api-day-toggle">
+                            <input type="checkbox" name="{{ day_info.field_name }}" value="1" {% if day_info.is_enabled %}checked{% endif %}>
+                            <span>{{ day_info.day_label }}</span>
+                        </label>
+                        {% endfor %}
                     </div>
                     <div class="sort-timeline-window-grid">
                         <label>
@@ -135,30 +174,22 @@
                             {{ time_input(sort_name ~ "_ops_end", sort_setting.ops_window_end_local) }}
                         </label>
                         <label>
-                            <span>Polling Start</span>
+                            <span>API Poll Start</span>
                             {{ time_input(sort_name ~ "_polling_start", sort_setting.polling_start_local) }}
                         </label>
                         <label>
-                            <span>Polling End</span>
+                            <span>API Poll End</span>
                             {{ time_input(sort_name ~ "_polling_end", sort_setting.polling_end_local) }}
                         </label>
                     </div>
                     <div class="metric-grid sort-timeline-sort-preview">
                         <article class="metric-tile">
-                            <span>Daily Cap</span>
-                            <strong>{{ sort_preview.daily_poll_cap }}</strong>
+                            <span>API Days</span>
+                            <strong>{{ sort_preview.api_day_count }}</strong>
                         </article>
                         <article class="metric-tile">
                             <span>Special Polls</span>
                             <strong>{{ sort_preview.special_poll_count }}</strong>
-                        </article>
-                        <article class="metric-tile">
-                            <span>Auto Interval Polls</span>
-                            <strong>{{ sort_preview.auto_interval_poll_count }}</strong>
-                        </article>
-                        <article class="metric-tile">
-                            <span>Total Scheduled Polls</span>
-                            <strong>{{ sort_preview.total_scheduled_polls }}</strong>
                         </article>
                         <article class="metric-tile">
                             <span>Next</span>
@@ -177,7 +208,7 @@
                         </div>
                         {% endfor %}
                         <div class="sort-timeline-special-row">
-                            <input type="time" name="{{ sort_name }}_special_poll_time" value="" aria-label="{{ sort_label }} special poll time">
+                            <input type="time" name="{{ sort_name }}_special_poll_time" value="" aria-label="{{ sort_preview.sort_label }} special poll time">
                             <span class="muted">New row</span>
                         </div>
                     </div>
@@ -209,6 +240,18 @@
                 <span class="muted">New row</span>
             `;
             list.appendChild(row);
+        });
+    });
+
+    document.querySelectorAll("[data-variance-step]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const input = button.parentElement ? button.parentElement.querySelector("input[type='number']") : null;
+            if (!input) {
+                return;
+            }
+            const step = Number.parseInt(button.dataset.varianceStep || "0", 10);
+            const current = Number.parseInt(input.value || "0", 10);
+            input.value = String(current + step);
         });
     });
 })();

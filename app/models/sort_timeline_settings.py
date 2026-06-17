@@ -17,7 +17,7 @@ class SortTimelineSettings(db.Model):
     provider_enabled = db.Column(db.Boolean, nullable=False, default=False)
     provider_name = db.Column(db.String(120), nullable=False, default="")
     api_key_env_var_name = db.Column(db.String(120), nullable=False, default="")
-    operating_weekdays = db.Column(db.String(120), nullable=False, default="monday,tuesday,wednesday,thursday,friday")
+    _legacy_operating_weekdays = db.Column("operating_weekdays", db.String(120), nullable=False, default="")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
@@ -53,6 +53,42 @@ class SortTimelineMonthVariance(db.Model):
     gateway_code = db.Column(db.String(8), nullable=False, index=True)
     month_number = db.Column(db.Integer, nullable=False, index=True)
     variance = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    gateway = db.relationship("Gateway")
+
+
+class SortTimelineApiParticipation(db.Model):
+    __tablename__ = "sort_timeline_api_participation"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "gateway_id",
+            "day_of_week",
+            "sort_name",
+            name="uq_sort_timeline_api_participation",
+        ),
+        db.CheckConstraint(
+            "day_of_week IN ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')",
+            name="ck_sort_timeline_api_participation_day",
+        ),
+        db.CheckConstraint(
+            "sort_name IN ('twilight', 'night', 'sunrise', 'day')",
+            name="ck_sort_timeline_api_participation_sort",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    gateway_id = db.Column(db.Integer, db.ForeignKey("gateways.id"), nullable=False, index=True)
+    gateway_code = db.Column(db.String(8), nullable=False, index=True)
+    day_of_week = db.Column(db.String(16), nullable=False, index=True)
+    sort_name = db.Column(db.String(32), nullable=False, index=True)
+    is_enabled = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
