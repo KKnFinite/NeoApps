@@ -7,6 +7,7 @@
 {%- endmacro %}
 
 {% block content %}
+{% set api_window = import_result if import_result and import_result.window_start_local else selected_api_window %}
 <section class="panel centered-command-page flight-api-test-page" aria-labelledby="flight-api-test-title">
     <div class="section-heading">
         <h1 id="flight-api-test-title">FLIGHT API TEST</h1>
@@ -32,12 +33,61 @@
     <p class="muted centered-empty-message">No current sort operation is available.</p>
     {% endif %}
 
-    {% if import_result %}
+    {% if selected_operation or import_result %}
     <section class="status-grid" aria-label="Flight API import result">
         <article class="status-card">
-            <span>PROVIDER</span>
-            <strong>{{ "ENABLED" if import_result.provider_enabled else "DISABLED" }}</strong>
+            <span>CURRENT SORT</span>
+            <strong>
+                {% if selected_operation %}
+                {{ selected_operation.sort_name|upper }} {{ selected_operation.sort_date }}
+                {% else %}
+                -
+                {% endif %}
+            </strong>
         </article>
+        <article class="status-card">
+            <span>ATTEMPTED POLL</span>
+            <strong>
+                {% if import_result and import_result.attempted %}
+                    {% if import_result.provider_error %}FAILED{% else %}YES{% endif %}
+                {% elif import_result %}
+                    SKIPPED
+                {% else %}
+                    NOT RUN
+                {% endif %}
+            </strong>
+        </article>
+        <article class="status-card">
+            <span>PROVIDER</span>
+            <strong>
+                {% if import_result %}
+                {{ "ENABLED" if import_result.provider_enabled else "DISABLED" }}
+                {% else %}
+                READY
+                {% endif %}
+            </strong>
+        </article>
+        <article class="status-card">
+            <span>API WINDOW LOCAL</span>
+            <strong>
+                {% if api_window %}
+                {{ dt(api_window.window_start_local) }} - {{ dt(api_window.window_end_local) }} {{ api_window.window_timezone }}
+                {% else %}
+                -
+                {% endif %}
+            </strong>
+        </article>
+        <article class="status-card">
+            <span>API WINDOW UTC</span>
+            <strong>
+                {% if api_window %}
+                {{ dt(api_window.window_start_utc) }} - {{ dt(api_window.window_end_utc) }} UTC
+                {% else %}
+                -
+                {% endif %}
+            </strong>
+        </article>
+        {% if import_result %}
         <article class="status-card">
             <span>MATCHED UPS</span>
             <strong>{{ import_result.matched|length }}</strong>
@@ -51,12 +101,17 @@
             <strong>{{ import_result.ignored_count }}</strong>
         </article>
         <article class="status-card">
+            <span>NON-UPS IGNORED</span>
+            <strong>{{ import_result.non_ups_ignored }}</strong>
+        </article>
+        <article class="status-card">
             <span>UNITS CONSUMED</span>
             <strong>{{ import_result.usage_units_consumed }}</strong>
         </article>
+        {% endif %}
     </section>
     {% if import_result.message %}
-    <p class="muted centered-empty-message">{{ import_result.message }}</p>
+    <p class="{% if import_result.provider_error %}sort-timeline-warning{% else %}muted centered-empty-message{% endif %}">{{ import_result.message }}</p>
     {% endif %}
     {% endif %}
 

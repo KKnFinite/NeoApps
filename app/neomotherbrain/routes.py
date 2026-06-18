@@ -24,6 +24,7 @@ from app.services.flight_rules import (
 from app.services.flight_api import (
     FlightApiConfigurationError,
     accept_review_item,
+    api_window_snapshot,
     ignore_review_item,
     pending_review_items_for_operation,
     review_item_or_404,
@@ -56,6 +57,7 @@ from app.services.night_sorting import master_schedule_sort_key, mission_board_s
 from app.services.sort_timeline import (
     DAY_OPTIONS as TIMELINE_DAY_OPTIONS,
     SORT_OPTIONS as TIMELINE_SORT_OPTIONS,
+    ensure_sort_timeline_settings,
     format_time as format_timeline_time,
     save_sort_timeline_from_form,
     sort_timeline_context,
@@ -221,6 +223,7 @@ def flight_api_test():
     operations = operations_for_gateway_date(gateway, sort_date)
     selected_operation = _selected_current_operation(operations)
     import_result = None
+    selected_api_window = None
 
     if request.method == "POST" and request.form.get("flight_api_action") == "pull":
         selected_operation = _selected_current_operation(
@@ -234,12 +237,21 @@ def flight_api_test():
             )
             db.session.commit()
             if import_result.get("attempted"):
-                flash("Flight API test import completed.", "info")
+                if import_result.get("provider_error"):
+                    flash(import_result.get("message", "Flight API provider error."), "error")
+                else:
+                    flash("Flight API test import completed.", "info")
             else:
                 flash(import_result.get("message", "Flight API import skipped."), "info")
         except FlightApiConfigurationError as error:
             db.session.rollback()
             flash(f"Flight API import failed: {error}", "error")
+
+    if selected_operation:
+        selected_api_window = api_window_snapshot(
+            selected_operation,
+            ensure_sort_timeline_settings(gateway),
+        )
 
     pending_items = pending_review_items_for_operation(selected_operation)
     return render_template(
@@ -248,6 +260,7 @@ def flight_api_test():
         sort_date=sort_date,
         operations=operations,
         selected_operation=selected_operation,
+        selected_api_window=selected_api_window,
         import_result=import_result,
         pending_review_items=pending_items,
     )

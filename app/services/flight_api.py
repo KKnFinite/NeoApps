@@ -43,10 +43,14 @@ class FlightApiConfigurationError(RuntimeError):
     pass
 
 
+class FlightApiProviderError(FlightApiConfigurationError):
+    pass
+
+
 class RapidApiFlightClient:
-    def fetch_fids(self, gateway_code, start_utc, end_utc, api_key):
-        start_value = _format_provider_datetime(start_utc)
-        end_value = _format_provider_datetime(end_utc)
+    def fetch_fids(self, gateway_code, start_local, end_local, api_key):
+        start_value = _format_provider_datetime(start_local)
+        end_value = _format_provider_datetime(end_local)
         query = urlencode(
             {
                 "direction": "Both",
@@ -72,8 +76,14 @@ class RapidApiFlightClient:
         try:
             with urlopen(request, timeout=20) as response:
                 return json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
-            raise FlightApiConfigurationError(str(error)) from error
+        except HTTPError as error:
+            raise FlightApiProviderError(
+                f"Provider returned {error.code} {error.reason or 'error'}."
+            ) from error
+        except (URLError, TimeoutError) as error:
+            raise FlightApiProviderError(f"Provider request failed: {error}") from error
+        except json.JSONDecodeError as error:
+            raise FlightApiProviderError("Provider returned invalid JSON.") from error
 
 
 def run_flight_api_import(gateway, operation=None, client=None, now=None):
@@ -95,17 +105,25 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
             message="No current sort operation is available.",
         )
 
-    api_key_env_var = settings.api_key_env_var_name or DEFAULT_API_KEY_ENV_VAR
+    window = api_window_snapshot(operation, settings)
+    api_key_env_var = DEFAULT_API_KEY_ENV_VAR
     api_key = os.environ.get(api_key_env_var)
     if not api_key and client is None:
-        return _empty_result(
+        result = _empty_result(
             gateway,
             operation,
             provider_enabled=True,
             message=f"API key env var {api_key_env_var} is not set.",
         )
+        result.update(
+            {
+                "provider_error": True,
+                "api_key_env_var": api_key_env_var,
+                **window,
+            }
+        )
+        return result
 
-    start_utc, end_utc = api_window_for_operation(operation, settings)
     attempted_at = _utc_naive(now)
     usage_units_consumed = int(settings.units_per_poll or 2)
     usage_counter = record_sort_timeline_api_attempt(
@@ -113,12 +131,33 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
         attempted_at,
         units_consumed=usage_units_consumed,
     )
-    payload = (client or RapidApiFlightClient()).fetch_fids(
-        gateway.code,
-        start_utc,
-        end_utc,
-        api_key,
-    )
+    try:
+        payload = (client or RapidApiFlightClient()).fetch_fids(
+            gateway.code,
+            window["window_start_local"],
+            window["window_end_local"],
+            api_key,
+        )
+    except FlightApiConfigurationError as error:
+        result = _empty_result(
+            gateway,
+            operation,
+            provider_enabled=True,
+            message=f"Flight API provider error: {error}",
+        )
+        result.update(
+            {
+                "attempted": True,
+                "provider_error": True,
+                "api_key_env_var": api_key_env_var,
+                "usage_units_consumed": usage_units_consumed,
+                "usage_polls_used": usage_counter.attempted_call_count,
+                **window,
+            }
+        )
+        db.session.flush()
+        return result
+
     api_flights = extract_api_flights(payload, gateway)
     result = import_api_flights_for_operation(
         gateway,
@@ -134,8 +173,7 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
             "api_key_env_var": api_key_env_var,
             "usage_units_consumed": usage_units_consumed,
             "usage_polls_used": usage_counter.attempted_call_count,
-            "window_start_utc": start_utc,
-            "window_end_utc": end_utc,
+            **window,
         }
     )
     db.session.flush()
@@ -243,16 +281,24 @@ def api_window_for_operation(operation, settings):
     end_local = datetime.combine(operation.sort_date, end_time)
     if end_local <= start_local:
         end_local += timedelta(days=1)
+    return start_local, end_local
+
+
+def api_window_snapshot(operation, settings):
+    start_local, end_local = api_window_for_operation(operation, settings)
     timezone_name = gateway_timezone(operation.gateway)
-    return (
-        _local_datetime_to_utc_naive(start_local, timezone_name),
-        _local_datetime_to_utc_naive(end_local, timezone_name),
-    )
+    return {
+        "window_start_local": start_local,
+        "window_end_local": end_local,
+        "window_start_utc": _local_datetime_to_utc_naive(start_local, timezone_name),
+        "window_end_utc": _local_datetime_to_utc_naive(end_local, timezone_name),
+        "window_timezone": timezone_name,
+    }
 
 
 def extract_api_flights(payload, gateway=None):
     if isinstance(payload, list):
-        return payload
+        return [item for item in payload if isinstance(item, dict)]
     if not isinstance(payload, dict):
         return []
     flights = []
@@ -270,12 +316,21 @@ def extract_api_flights(payload, gateway=None):
                     item = dict(item)
                     item.setdefault("_mission_type", mission_type)
                     flights.append(item)
+    for key in ("flights", "items"):
+        for item in payload.get(key) or []:
+            if isinstance(item, dict):
+                flights.append(dict(item))
+    for key in ("data", "result", "response"):
+        nested = payload.get(key)
+        if nested is payload:
+            continue
+        flights.extend(extract_api_flights(nested, gateway))
     return flights
 
 
 def is_ups_flight(api_flight):
-    airline = api_flight.get("airline") or {}
-    call_sign = str(api_flight.get("callSign") or api_flight.get("callsign") or "").upper()
+    airline = _airline_info(api_flight)
+    call_sign = _api_call_sign(api_flight)
     return (
         str(airline.get("icao") or "").upper() == "UPS"
         or str(airline.get("iata") or "").upper() == "5X"
@@ -286,9 +341,9 @@ def is_ups_flight(api_flight):
 def normalize_api_flight(api_flight, operation=None, gateway=None):
     mission_type = _mission_type(api_flight)
     flight_number = _api_flight_number(api_flight)
-    call_sign = _clean_upper(api_flight.get("callSign") or api_flight.get("callsign"))
-    departure = api_flight.get("departure") or {}
-    arrival = api_flight.get("arrival") or {}
+    call_sign = _api_call_sign(api_flight)
+    departure = _as_dict(api_flight.get("departure"))
+    arrival = _as_dict(api_flight.get("arrival"))
     origin = _airport_code(departure.get("airport")) or (AIRPORT_CODE if mission_type == "departure" else "")
     destination = _airport_code(arrival.get("airport")) or (AIRPORT_CODE if mission_type == "arrival" else "")
     revised_time_local = _leg_time(arrival if mission_type == "arrival" else departure, "revisedTime")
@@ -298,7 +353,7 @@ def normalize_api_flight(api_flight, operation=None, gateway=None):
     revised_time_utc = _parse_provider_datetime(revised_time_local, timezone_name)
     scheduled_time_utc = _parse_provider_datetime(scheduled_time_local, timezone_name)
     runway_time_utc = _parse_provider_datetime(runway_time_local, timezone_name)
-    aircraft = api_flight.get("aircraft") or {}
+    aircraft = _as_dict(api_flight.get("aircraft"))
     status = _clean_text(api_flight.get("status"))
 
     return {
@@ -313,10 +368,18 @@ def normalize_api_flight(api_flight, operation=None, gateway=None):
         "scheduled_time_utc": scheduled_time_utc,
         "runway_time_utc": runway_time_utc,
         "tail_number": _clean_upper(
-            aircraft.get("reg") or aircraft.get("registration") or api_flight.get("reg")
+            aircraft.get("reg")
+            or aircraft.get("registration")
+            or aircraft.get("regNumber")
+            or api_flight.get("reg")
+            or api_flight.get("aircraftRegistration")
         ),
         "aircraft_model": _clean_text(
-            aircraft.get("model") or aircraft.get("type") or aircraft.get("icao")
+            aircraft.get("model")
+            or aircraft.get("type")
+            or aircraft.get("icao")
+            or aircraft.get("icaoCode")
+            or aircraft.get("modelCode")
         ),
         "api_status_raw": status,
         "review_key": _review_key(mission_type, flight_number, call_sign, origin, destination),
@@ -499,22 +562,62 @@ def _empty_result(gateway, operation, provider_enabled, message):
         "non_ups_ignored": 0,
         "usage_units_consumed": 0,
         "usage_polls_used": None,
+        "provider_error": False,
         "message": message,
     }
 
 
 def _mission_type(api_flight):
-    value = str(api_flight.get("_mission_type") or api_flight.get("direction") or "").lower()
+    value = str(
+        api_flight.get("_mission_type")
+        or api_flight.get("direction")
+        or api_flight.get("type")
+        or ""
+    ).lower()
     if "dep" in value:
         return "departure"
     return "arrival"
 
 
 def _api_flight_number(api_flight):
-    flight = api_flight.get("flight") or {}
-    number = api_flight.get("number") or flight.get("number") or api_flight.get("flightNumber")
-    call_sign = api_flight.get("callSign") or api_flight.get("callsign")
+    flight = _as_dict(api_flight.get("flight"))
+    number = (
+        api_flight.get("number")
+        or api_flight.get("flightNumber")
+        or api_flight.get("iataNumber")
+        or api_flight.get("icaoNumber")
+        or flight.get("number")
+        or flight.get("iataNumber")
+        or flight.get("icaoNumber")
+        or flight.get("iata")
+        or flight.get("icao")
+    )
+    call_sign = _api_call_sign(api_flight)
     return _clean_flight_number(number or call_sign)
+
+
+def _api_call_sign(api_flight):
+    flight = _as_dict(api_flight.get("flight"))
+    return _clean_upper(
+        api_flight.get("callSign")
+        or api_flight.get("callsign")
+        or api_flight.get("call_sign")
+        or flight.get("callSign")
+        or flight.get("callsign")
+        or flight.get("call_sign")
+        or flight.get("icaoNumber")
+        or flight.get("icao")
+    )
+
+
+def _airline_info(api_flight):
+    airline = _as_dict(api_flight.get("airline"))
+    flight = _as_dict(api_flight.get("flight"))
+    flight_airline = _as_dict(flight.get("airline"))
+    return {
+        "icao": airline.get("icao") or flight_airline.get("icao") or api_flight.get("airlineIcao"),
+        "iata": airline.get("iata") or flight_airline.get("iata") or api_flight.get("airlineIata"),
+    }
 
 
 def _flight_number_variants(flight_number, call_sign):
@@ -548,15 +651,48 @@ def _review_key(mission_type, flight_number, call_sign, origin, destination):
 
 
 def _airport_code(airport):
+    if isinstance(airport, str):
+        return _clean_upper(airport)
     if not isinstance(airport, dict):
         return ""
-    return _clean_upper(airport.get("iata") or airport.get("icao") or airport.get("code"))
+    return _clean_upper(
+        airport.get("iata")
+        or airport.get("icao")
+        or airport.get("code")
+        or airport.get("localCode")
+    )
 
 
 def _leg_time(leg, field_name):
     field = leg.get(field_name) or {}
     if isinstance(field, dict):
-        return field.get("local") or field.get("utc")
+        value = field.get("local") or field.get("utc")
+        if value:
+            return value
+    if field:
+        return field
+    local_key = f"{field_name}Local"
+    utc_key = f"{field_name}Utc"
+    snake_key = _camel_to_snake(field_name)
+    return (
+        leg.get(local_key)
+        or leg.get(utc_key)
+        or leg.get(f"{snake_key}_local")
+        or leg.get(f"{snake_key}_utc")
+    )
+
+
+def _as_dict(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _camel_to_snake(value):
+    output = []
+    for character in str(value or ""):
+        if character.isupper() and output:
+            output.append("_")
+        output.append(character.lower())
+    return "".join(output)
     return field
 
 

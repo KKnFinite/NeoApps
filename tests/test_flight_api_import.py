@@ -1,4 +1,5 @@
 from datetime import date, datetime, time, timezone
+import os
 import unittest
 
 from app import create_app
@@ -15,11 +16,14 @@ from app.models import (
     User,
 )
 from app.services.access_control import backfill_default_gateway_node_roles
+from app.services import flight_api as flight_api_service
 from app.services.flight_api import (
     API_STATUS_ASSUMED_ARRIVED,
     API_STATUS_IN_AIR,
     API_STATUS_ON_GROUND,
     API_STATUS_SCHEDULED,
+    FlightApiConfigurationError,
+    RapidApiFlightClient,
     accept_review_item,
     ignore_review_item,
     import_api_flights_for_operation,
@@ -34,16 +38,33 @@ class FakeFlightClient:
         self.payload = payload
         self.calls = []
 
-    def fetch_fids(self, gateway_code, start_utc, end_utc, api_key):
+    def fetch_fids(self, gateway_code, start_local, end_local, api_key):
         self.calls.append(
             {
                 "gateway_code": gateway_code,
-                "start_utc": start_utc,
-                "end_utc": end_utc,
+                "start_local": start_local,
+                "end_local": end_local,
                 "api_key": api_key,
             }
         )
         return self.payload
+
+
+class ErrorFlightClient:
+    def __init__(self, message="Provider returned 429 Too Many Requests."):
+        self.message = message
+        self.calls = []
+
+    def fetch_fids(self, gateway_code, start_local, end_local, api_key):
+        self.calls.append(
+            {
+                "gateway_code": gateway_code,
+                "start_local": start_local,
+                "end_local": end_local,
+                "api_key": api_key,
+            }
+        )
+        raise FlightApiConfigurationError(self.message)
 
 
 class FlightApiImportTest(unittest.TestCase):
@@ -91,6 +112,87 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(client.calls, [])
         self.assertEqual(SortTimelineUsageCounter.query.count(), 0)
 
+    def test_missing_api_key_returns_safe_failure_without_usage(self):
+        previous = os.environ.pop("AERODATABOX_API_KEY", None)
+        try:
+            result = run_flight_api_import(self.gateway, self.operation)
+        finally:
+            if previous is not None:
+                os.environ["AERODATABOX_API_KEY"] = previous
+
+        self.assertFalse(result["attempted"])
+        self.assertTrue(result["provider_error"])
+        self.assertIn("AERODATABOX_API_KEY", result["message"])
+        self.assertEqual(SortTimelineUsageCounter.query.count(), 0)
+        self.assertEqual(SortDateMission.query.count(), 0)
+
+    def test_rapidapi_client_builds_fids_request_shape(self):
+        captured = {}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, _exc_type, _exc, _tb):
+                return False
+
+            def read(self):
+                return b'{"arrivals": [], "departures": []}'
+
+        def fake_urlopen(request, timeout):
+            captured["url"] = request.full_url
+            captured["headers"] = {
+                key.lower(): value for key, value in request.header_items()
+            }
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+        original_urlopen = flight_api_service.urlopen
+        flight_api_service.urlopen = fake_urlopen
+        try:
+            payload = RapidApiFlightClient().fetch_fids(
+                "RFD",
+                datetime(2026, 6, 1, 1, 15),
+                datetime(2026, 6, 1, 3, 45),
+                "RAPIDAPI-KEY",
+            )
+        finally:
+            flight_api_service.urlopen = original_urlopen
+
+        self.assertEqual(payload, {"arrivals": [], "departures": []})
+        self.assertIn(
+            "/flights/airports/icao/RFD/2026-06-01T01:15/2026-06-01T03:45",
+            captured["url"],
+        )
+        self.assertIn("direction=Both", captured["url"])
+        self.assertIn("withLeg=true", captured["url"])
+        self.assertEqual(captured["headers"]["x-rapidapi-key"], "RAPIDAPI-KEY")
+        self.assertEqual(captured["headers"]["x-rapidapi-host"], "aerodatabox.p.rapidapi.com")
+        self.assertEqual(captured["timeout"], 20)
+
+    def test_provider_error_returns_safe_failure_and_records_usage(self):
+        mission = self._mission("arrival", "5X123", eta_datetime_utc=datetime(2026, 6, 1, 7, 5))
+        db.session.add(mission)
+        db.session.commit()
+        client = ErrorFlightClient("Provider returned 429 Too Many Requests.")
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=client,
+            now=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertTrue(result["attempted"])
+        self.assertTrue(result["provider_error"])
+        self.assertIn("429", result["message"])
+        self.assertEqual(result["usage_units_consumed"], 2)
+        self.assertEqual(len(result["matched"]), 0)
+        self.assertEqual(len(result["review_items"]), 0)
+        self.assertEqual(SortDateMission.query.count(), 1)
+        self.assertEqual(mission.eta_datetime_utc, datetime(2026, 6, 1, 7, 5))
+        self.assertEqual(SortTimelineUsageCounter.query.one().units_consumed, 2)
+
     def test_poll_uses_current_sort_api_window(self):
         night_setting = next(
             setting for setting in self.settings.sort_settings if setting.sort_name == "night"
@@ -104,8 +206,8 @@ class FlightApiImportTest(unittest.TestCase):
 
         self.assertEqual(len(client.calls), 1)
         self.assertEqual(client.calls[0]["gateway_code"], "RFD")
-        self.assertEqual(client.calls[0]["start_utc"], datetime(2026, 6, 1, 6, 15))
-        self.assertEqual(client.calls[0]["end_utc"], datetime(2026, 6, 1, 8, 45))
+        self.assertEqual(client.calls[0]["start_local"], datetime(2026, 6, 1, 1, 15))
+        self.assertEqual(client.calls[0]["end_local"], datetime(2026, 6, 1, 3, 45))
 
     def test_default_budget_preview_uses_tier_two_units_per_poll(self):
         context = sort_timeline_context(
@@ -134,6 +236,93 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(len(result["review_items"]), 1)
         self.assertEqual(FlightApiReviewItem.query.count(), 1)
         self.assertEqual(FlightApiReviewItem.query.first().flight_number, "5X999")
+
+    def test_empty_provider_response_is_safe(self):
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient({"arrivals": None, "departures": []}),
+        )
+
+        self.assertTrue(result["attempted"])
+        self.assertEqual(len(result["matched"]), 0)
+        self.assertEqual(len(result["review_items"]), 0)
+        self.assertEqual(result["non_ups_ignored"], 0)
+
+    def test_realish_nested_payload_shape_updates_matched_arrival(self):
+        mission = self._mission("arrival", "5X321")
+        db.session.add(mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "data": {
+                        "arrivals": [
+                            {
+                                "flight": {
+                                    "iataNumber": "5X321",
+                                    "icaoNumber": "UPS321",
+                                    "airline": {"icao": "UPS", "iata": "5X"},
+                                },
+                                "departure": {"airport": "SDF"},
+                                "arrival": {
+                                    "airport": "RFD",
+                                    "revisedTimeLocal": "2026-06-01 02:35",
+                                    "runwayTimeLocal": "2026-06-01T02:40:00",
+                                },
+                                "aircraft": {"registration": "N321UP", "modelCode": "B763"},
+                                "status": "Departed",
+                            }
+                        ]
+                    }
+                }
+            ),
+            now=datetime(2026, 6, 1, 7, 45, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(mission.eta_datetime_utc, datetime(2026, 6, 1, 7, 35))
+        self.assertEqual(mission.api_runway_time_utc, datetime(2026, 6, 1, 7, 40))
+        self.assertEqual(mission.api_status, API_STATUS_ON_GROUND)
+        self.assertEqual(mission.assigned_tail_number, "N321UP")
+        self.assertEqual(mission.api_aircraft_model, "B763")
+
+    def test_ups_filter_works_with_nested_flight_airline_shape(self):
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "flights": [
+                        {
+                            "direction": "Arrival",
+                            "flight": {
+                                "iataNumber": "5X555",
+                                "icaoNumber": "UPS555",
+                                "airline": {"icao": "UPS", "iata": "5X"},
+                            },
+                            "arrival": {"airport": "RFD", "revisedTimeLocal": "2026-06-01T02:25:00"},
+                            "departure": {"airport": "SDF"},
+                        },
+                        {
+                            "direction": "Departure",
+                            "flight": {
+                                "iataNumber": "AA123",
+                                "icaoNumber": "AAL123",
+                                "airline": {"icao": "AAL", "iata": "AA"},
+                            },
+                        },
+                    ]
+                }
+            ),
+        )
+
+        self.assertEqual(result["non_ups_ignored"], 1)
+        self.assertEqual(len(result["review_items"]), 1)
+        self.assertEqual(result["review_items"][0].flight_number, "5X555")
 
     def test_matched_arrival_updates_api_fields_without_overwriting_manual_truth(self):
         mission = self._mission(
@@ -447,6 +636,44 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"FLIGHT API TEST", response.data)
         self.assertIn(b"NO SCHEDULED POLLING IS ENABLED", response.data)
+
+    def test_flight_api_test_page_does_not_leak_api_key_value(self):
+        os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
+        try:
+            response = self.client.get("/motherbrain/flight-api-test")
+        finally:
+            os.environ.pop("AERODATABOX_API_KEY", None)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
+
+    def test_flight_api_test_page_shows_missing_key_without_crashing(self):
+        operation = SortDateOperation(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_date=date.today(),
+            sort_name="night",
+            window_minutes=0,
+        )
+        settings = ensure_sort_timeline_settings(self.gateway)
+        settings.provider_enabled = True
+        db.session.add(operation)
+        db.session.commit()
+        previous = os.environ.pop("AERODATABOX_API_KEY", None)
+        try:
+            response = self.client.post(
+                "/motherbrain/flight-api-test",
+                data={"flight_api_action": "pull", "operation_id": str(operation.id)},
+                follow_redirects=True,
+            )
+        finally:
+            if previous is not None:
+                os.environ["AERODATABOX_API_KEY"] = previous
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"API key env var AERODATABOX_API_KEY is not set.", response.data)
+        self.assertIn(b"SKIPPED", response.data)
+        self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
 
 
 if __name__ == "__main__":
