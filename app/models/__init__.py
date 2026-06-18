@@ -1,4 +1,5 @@
 from app.models.crew import Crew
+from app.models.flight_api_review_item import FlightApiReviewItem
 from app.models.gateway import Gateway
 from app.models.gateway_membership import GatewayMembership
 from app.models.gateway_node_role import GatewayNodeRole
@@ -35,6 +36,7 @@ from app.models.user_token import UserToken
 __all__ = [
     "User",
     "UserToken",
+    "FlightApiReviewItem",
     "Gateway",
     "GatewayMembership",
     "GatewayNodeRole",

@@ -41,6 +41,12 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "actual_pure_pull_time_local": "TIME",
         "actual_first_mix_pull_time_local": "TIME",
         "actual_second_mix_pull_time_local": "TIME",
+        "api_status": "VARCHAR(32)",
+        "api_runway_time_utc": "DATETIME",
+        "api_assumed_arrived_time_utc": "DATETIME",
+        "api_aircraft_model": "VARCHAR(120)",
+        "api_last_seen_at_utc": "DATETIME",
+        "api_added_current_sort_only": "BOOLEAN DEFAULT 0",
     },
     "sort_date_operations": {
         "first_wave_window_minutes": "INTEGER",
@@ -67,6 +73,12 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "actual_pure_pull_time_local": "TIME",
         "actual_first_mix_pull_time_local": "TIME",
         "actual_second_mix_pull_time_local": "TIME",
+        "api_status": "VARCHAR(32)",
+        "api_runway_time_utc": "TIMESTAMP",
+        "api_assumed_arrived_time_utc": "TIMESTAMP",
+        "api_aircraft_model": "VARCHAR(120)",
+        "api_last_seen_at_utc": "TIMESTAMP",
+        "api_added_current_sort_only": "BOOLEAN DEFAULT FALSE",
     },
     "sort_date_operations": {
         "first_wave_window_minutes": "INTEGER",
@@ -153,6 +165,7 @@ def sync_database_schema(app):
 
 def _create_missing_application_tables(existing_table_names):
     from app.models import (
+        FlightApiReviewItem,
         SortTimelineApiParticipation,
         SortTimelineMonthVariance,
         SortTimelineSettings,
@@ -162,6 +175,7 @@ def _create_missing_application_tables(existing_table_names):
     )
 
     for model in (
+        FlightApiReviewItem,
         SortTimelineSettings,
         SortTimelineApiParticipation,
         SortTimelineMonthVariance,

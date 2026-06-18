@@ -1,0 +1,647 @@
+import json
+import os
+from datetime import date, datetime, time, timedelta, timezone
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from app.extensions import db
+from app.models import (
+    FlightApiReviewItem,
+    SortDateMission,
+    SortDateOperation,
+    SortTimelineSettings,
+)
+from app.services.flight_rules import match_api_flight_number
+from app.services.gateway_matrix import gateway_timezone
+from app.services.sort_date_operations import (
+    create_default_crew_assignments_for_mission,
+    ensure_tail_state_for_mission,
+)
+from app.services.sort_timeline import (
+    ensure_sort_timeline_settings,
+    record_sort_timeline_api_attempt,
+    sort_settings_by_name,
+)
+
+
+AIRPORT_CODE = "RFD"
+DEFAULT_API_KEY_ENV_VAR = "AERODATABOX_API_KEY"
+RAPIDAPI_HOST = "aerodatabox.p.rapidapi.com"
+API_STATUS_SCHEDULED = "Scheduled"
+API_STATUS_IN_AIR = "In Air"
+API_STATUS_ON_GROUND = "On Ground"
+API_STATUS_ASSUMED_ARRIVED = "Assumed Arrived"
+
+
+class FlightApiDisabledError(RuntimeError):
+    pass
+
+
+class FlightApiConfigurationError(RuntimeError):
+    pass
+
+
+class RapidApiFlightClient:
+    def fetch_fids(self, gateway_code, start_utc, end_utc, api_key):
+        start_value = _format_provider_datetime(start_utc)
+        end_value = _format_provider_datetime(end_utc)
+        query = urlencode(
+            {
+                "direction": "Both",
+                "withLeg": "true",
+                "withCancelled": "false",
+                "withCodeshared": "false",
+                "withCargo": "true",
+                "withPrivate": "false",
+                "withLocation": "false",
+            }
+        )
+        url = (
+            f"https://{RAPIDAPI_HOST}/flights/airports/icao/"
+            f"{str(gateway_code or AIRPORT_CODE).upper()}/{start_value}/{end_value}?{query}"
+        )
+        request = Request(
+            url,
+            headers={
+                "X-RapidAPI-Key": api_key,
+                "X-RapidAPI-Host": RAPIDAPI_HOST,
+            },
+        )
+        try:
+            with urlopen(request, timeout=20) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
+            raise FlightApiConfigurationError(str(error)) from error
+
+
+def run_flight_api_import(gateway, operation=None, client=None, now=None):
+    settings = ensure_sort_timeline_settings(gateway)
+    if not settings.provider_enabled:
+        return _empty_result(
+            gateway,
+            operation,
+            provider_enabled=False,
+            message="Provider disabled. No polling or imports were attempted.",
+        )
+
+    operation = operation or current_sort_operation(gateway)
+    if not operation:
+        return _empty_result(
+            gateway,
+            operation,
+            provider_enabled=True,
+            message="No current sort operation is available.",
+        )
+
+    api_key_env_var = settings.api_key_env_var_name or DEFAULT_API_KEY_ENV_VAR
+    api_key = os.environ.get(api_key_env_var)
+    if not api_key and client is None:
+        return _empty_result(
+            gateway,
+            operation,
+            provider_enabled=True,
+            message=f"API key env var {api_key_env_var} is not set.",
+        )
+
+    start_utc, end_utc = api_window_for_operation(operation, settings)
+    attempted_at = _utc_naive(now)
+    usage_counter = record_sort_timeline_api_attempt(gateway, attempted_at)
+    payload = (client or RapidApiFlightClient()).fetch_fids(
+        gateway.code,
+        start_utc,
+        end_utc,
+        api_key,
+    )
+    api_flights = extract_api_flights(payload, gateway)
+    result = import_api_flights_for_operation(
+        gateway,
+        operation,
+        api_flights,
+        settings=settings,
+        now=now,
+    )
+    result.update(
+        {
+            "provider_enabled": True,
+            "attempted": True,
+            "api_key_env_var": api_key_env_var,
+            "usage_units_consumed": int(settings.units_per_poll or 2),
+            "usage_polls_used": usage_counter.attempted_call_count,
+            "window_start_utc": start_utc,
+            "window_end_utc": end_utc,
+        }
+    )
+    db.session.flush()
+    return result
+
+
+def import_api_flights_for_operation(gateway, operation, api_flights, settings=None, now=None):
+    settings = settings or ensure_sort_timeline_settings(gateway)
+    now_utc = _utc_naive(now)
+    missions = SortDateMission.query.filter_by(sort_date_operation_id=operation.id).all()
+    matched = []
+    review_items = []
+    ignored_count = 0
+    non_ups_ignored = 0
+
+    for api_flight in api_flights:
+        if not is_ups_flight(api_flight):
+            non_ups_ignored += 1
+            continue
+
+        normalized = normalize_api_flight(api_flight, operation, gateway)
+        mission = match_api_flight_to_mission(normalized, missions)
+        if mission:
+            apply_api_data_to_mission(mission, normalized, settings, now=now_utc)
+            matched.append({"mission": mission, "api_flight": normalized})
+            continue
+
+        review_item, was_ignored = upsert_review_item(gateway, operation, normalized)
+        if was_ignored:
+            ignored_count += 1
+        elif review_item:
+            review_items.append(review_item)
+
+    db.session.flush()
+    return {
+        "provider_enabled": bool(settings.provider_enabled),
+        "attempted": False,
+        "operation": operation,
+        "matched": matched,
+        "review_items": review_items,
+        "ignored_count": ignored_count,
+        "non_ups_ignored": non_ups_ignored,
+    }
+
+
+def accept_review_item(review_item, settings=None, now=None):
+    if review_item.review_status == "accepted" and review_item.accepted_mission:
+        return review_item.accepted_mission
+    if review_item.review_status == "ignored":
+        review_item.review_status = "pending"
+
+    operation = db.session.get(SortDateOperation, review_item.sort_date_operation_id)
+    if not operation:
+        raise ValueError("Sort operation not found for review item.")
+
+    settings = settings or SortTimelineSettings.query.filter_by(
+        gateway_id=review_item.gateway_id,
+    ).first()
+    payload = json.loads(review_item.raw_payload or "{}")
+    normalized = normalize_api_flight(payload, operation, operation.gateway or None)
+    mission = build_api_added_mission(operation, normalized)
+    db.session.add(mission)
+    db.session.flush()
+    if settings:
+        apply_api_data_to_mission(mission, normalized, settings, now=now)
+    tail_state = ensure_tail_state_for_mission(mission)
+    aircraft_type = (
+        getattr(tail_state, "aircraft_type", None)
+        or normalized.get("aircraft_model")
+        or "unknown"
+    )
+    create_default_crew_assignments_for_mission(mission, aircraft_type)
+    review_item.review_status = "accepted"
+    review_item.accepted_mission_id = mission.id
+    db.session.flush()
+    return mission
+
+
+def ignore_review_item(review_item):
+    review_item.review_status = "ignored"
+    db.session.flush()
+    return review_item
+
+
+def current_sort_operation(gateway, sort_date=None, sort_name=None):
+    sort_date = sort_date or _gateway_today(gateway)
+    query = SortDateOperation.query.filter_by(
+        gateway_code=gateway.code,
+        sort_date=sort_date,
+    ).filter(SortDateOperation.archived_at_utc.is_(None))
+    if sort_name:
+        query = query.filter_by(sort_name=str(sort_name).strip().lower())
+    return (
+        query.order_by(SortDateOperation.generated_at_utc.desc(), SortDateOperation.id.desc())
+        .first()
+    )
+
+
+def api_window_for_operation(operation, settings):
+    sort_settings = sort_settings_by_name(settings)
+    sort_setting = sort_settings.get(operation.sort_name)
+    start_time = getattr(sort_setting, "polling_start_local", None) or time(0, 0)
+    end_time = getattr(sort_setting, "polling_end_local", None) or time(23, 59)
+    start_local = datetime.combine(operation.sort_date, start_time)
+    end_local = datetime.combine(operation.sort_date, end_time)
+    if end_local <= start_local:
+        end_local += timedelta(days=1)
+    timezone_name = gateway_timezone(operation.gateway)
+    return (
+        _local_datetime_to_utc_naive(start_local, timezone_name),
+        _local_datetime_to_utc_naive(end_local, timezone_name),
+    )
+
+
+def extract_api_flights(payload, gateway=None):
+    if isinstance(payload, list):
+        return payload
+    if not isinstance(payload, dict):
+        return []
+    flights = []
+    for key, mission_type in (("arrivals", "arrival"), ("departures", "departure")):
+        for item in payload.get(key) or []:
+            if isinstance(item, dict):
+                item = dict(item)
+                item.setdefault("_mission_type", mission_type)
+                flights.append(item)
+    for key, mission_type in (("arrival", "arrival"), ("departure", "departure")):
+        nested = payload.get(key)
+        if isinstance(nested, list):
+            for item in nested:
+                if isinstance(item, dict):
+                    item = dict(item)
+                    item.setdefault("_mission_type", mission_type)
+                    flights.append(item)
+    return flights
+
+
+def is_ups_flight(api_flight):
+    airline = api_flight.get("airline") or {}
+    call_sign = str(api_flight.get("callSign") or api_flight.get("callsign") or "").upper()
+    return (
+        str(airline.get("icao") or "").upper() == "UPS"
+        or str(airline.get("iata") or "").upper() == "5X"
+        or call_sign.startswith("UPS")
+    )
+
+
+def normalize_api_flight(api_flight, operation=None, gateway=None):
+    mission_type = _mission_type(api_flight)
+    flight_number = _api_flight_number(api_flight)
+    call_sign = _clean_upper(api_flight.get("callSign") or api_flight.get("callsign"))
+    departure = api_flight.get("departure") or {}
+    arrival = api_flight.get("arrival") or {}
+    origin = _airport_code(departure.get("airport")) or (AIRPORT_CODE if mission_type == "departure" else "")
+    destination = _airport_code(arrival.get("airport")) or (AIRPORT_CODE if mission_type == "arrival" else "")
+    revised_time_local = _leg_time(arrival if mission_type == "arrival" else departure, "revisedTime")
+    scheduled_time_local = _leg_time(arrival if mission_type == "arrival" else departure, "scheduledTime")
+    runway_time_local = _leg_time(arrival if mission_type == "arrival" else departure, "runwayTime")
+    timezone_name = gateway_timezone(gateway) if gateway else "America/Chicago"
+    revised_time_utc = _parse_provider_datetime(revised_time_local, timezone_name)
+    scheduled_time_utc = _parse_provider_datetime(scheduled_time_local, timezone_name)
+    runway_time_utc = _parse_provider_datetime(runway_time_local, timezone_name)
+    aircraft = api_flight.get("aircraft") or {}
+    status = _clean_text(api_flight.get("status"))
+
+    return {
+        "raw": api_flight,
+        "mission_type": mission_type,
+        "flight_number": flight_number,
+        "flight_variants": _flight_number_variants(flight_number, call_sign),
+        "call_sign": call_sign,
+        "origin": origin,
+        "destination": destination,
+        "revised_time_utc": revised_time_utc,
+        "scheduled_time_utc": scheduled_time_utc,
+        "runway_time_utc": runway_time_utc,
+        "tail_number": _clean_upper(
+            aircraft.get("reg") or aircraft.get("registration") or api_flight.get("reg")
+        ),
+        "aircraft_model": _clean_text(
+            aircraft.get("model") or aircraft.get("type") or aircraft.get("icao")
+        ),
+        "api_status_raw": status,
+        "review_key": _review_key(mission_type, flight_number, call_sign, origin, destination),
+    }
+
+
+def match_api_flight_to_mission(normalized, missions):
+    mission_type = normalized["mission_type"]
+    candidates = [mission for mission in missions if mission.mission_type == mission_type]
+    stored_numbers = [mission.flight_number for mission in candidates]
+    for variant in normalized["flight_variants"]:
+        matched_number = match_api_flight_number(variant, stored_numbers)
+        if not matched_number:
+            continue
+        for mission in candidates:
+            if mission.flight_number == matched_number:
+                return mission
+    return None
+
+
+def apply_api_data_to_mission(mission, normalized, settings, now=None):
+    now_utc = _utc_naive(now)
+    mission.api_status = map_api_status(normalized, settings, now=now_utc)
+    mission.api_runway_time_utc = normalized["runway_time_utc"]
+    mission.api_assumed_arrived_time_utc = assumed_arrived_time(normalized, settings)
+    mission.api_aircraft_model = normalized["aircraft_model"] or mission.api_aircraft_model
+    mission.api_last_seen_at_utc = now_utc
+
+    if mission.mission_type == "arrival" and normalized["revised_time_utc"]:
+        mission.eta_datetime_utc = normalized["revised_time_utc"]
+        mission.eta_source = "api"
+
+    if normalized["tail_number"] and not mission.assigned_tail_number:
+        mission.assigned_tail_number = normalized["tail_number"]
+        mission.tail_source = "api"
+        mission.tail_updated_at = now_utc
+
+    tail_state = ensure_tail_state_for_mission(mission)
+    if tail_state and normalized["aircraft_model"] and tail_state.aircraft_type_source != "manual":
+        tail_state.aircraft_type = normalized["aircraft_model"]
+        tail_state.aircraft_type_source = "api"
+
+    return mission
+
+
+def map_api_status(normalized, settings, now=None):
+    runway_time = normalized.get("runway_time_utc")
+    if runway_time:
+        assumed_time = assumed_arrived_time(normalized, settings)
+        if assumed_time and _utc_naive(now) >= assumed_time:
+            return API_STATUS_ASSUMED_ARRIVED
+        return API_STATUS_ON_GROUND
+
+    raw = str(normalized.get("api_status_raw") or "").strip().lower().replace("_", " ")
+    if raw in {"expected", "scheduled", "expected/scheduled"}:
+        return API_STATUS_SCHEDULED
+    if "en route" in raw or "enroute" in raw or raw.startswith("departed"):
+        return API_STATUS_IN_AIR
+    return API_STATUS_SCHEDULED
+
+
+def assumed_arrived_time(normalized, settings):
+    runway_time = normalized.get("runway_time_utc")
+    if not runway_time:
+        return None
+    return runway_time + timedelta(minutes=int(getattr(settings, "taxi_to_ramp_minutes", 10) or 10))
+
+
+def upsert_review_item(gateway, operation, normalized):
+    existing = FlightApiReviewItem.query.filter_by(
+        sort_date_operation_id=operation.id,
+        review_key=normalized["review_key"],
+    ).first()
+    if existing and existing.review_status == "ignored":
+        return existing, True
+    if existing and existing.review_status == "accepted":
+        return existing, False
+
+    item = existing or FlightApiReviewItem(
+        sort_date_operation_id=operation.id,
+        gateway_id=gateway.id if gateway else operation.gateway_id,
+        gateway_code=operation.gateway_code,
+        sort_date=operation.sort_date,
+        sort_name=operation.sort_name,
+        mission_type=normalized["mission_type"],
+        review_key=normalized["review_key"],
+    )
+    item.gateway_id = gateway.id if gateway else operation.gateway_id
+    item.gateway_code = operation.gateway_code
+    item.sort_date = operation.sort_date
+    item.sort_name = operation.sort_name
+    item.review_status = "pending"
+    item.flight_number = normalized["flight_number"]
+    item.call_sign = normalized["call_sign"]
+    item.origin = normalized["origin"]
+    item.destination = normalized["destination"]
+    item.revised_time_utc = normalized["revised_time_utc"] or normalized["scheduled_time_utc"]
+    item.runway_time_utc = normalized["runway_time_utc"]
+    item.tail_number = normalized["tail_number"]
+    item.aircraft_model = normalized["aircraft_model"]
+    item.api_status = normalized["api_status_raw"]
+    item.raw_payload = json.dumps(normalized["raw"], sort_keys=True, default=str)
+    if not existing:
+        db.session.add(item)
+    return item, False
+
+
+def build_api_added_mission(operation, normalized):
+    timezone_name = gateway_timezone(operation.gateway)
+    planned_utc = (
+        normalized.get("revised_time_utc")
+        or normalized.get("scheduled_time_utc")
+        or _local_datetime_to_utc_naive(
+            datetime.combine(operation.sort_date, time(0, 0)),
+            timezone_name,
+        )
+    )
+    planned_local = _utc_to_local_naive(planned_utc, timezone_name)
+    mission = SortDateMission(
+        sort_date_operation=operation,
+        sort_date=operation.sort_date,
+        gateway_code=operation.gateway_code,
+        sort_name=operation.sort_name,
+        mission_type=normalized["mission_type"],
+        mission_source="api",
+        wave="1",
+        master_flight_schedule_id=None,
+        flight_number=normalized["flight_number"],
+        origin=normalized["origin"] or AIRPORT_CODE,
+        destination=normalized["destination"] or AIRPORT_CODE,
+        timezone=timezone_name,
+        planned_datetime_local=planned_local,
+        planned_datetime_utc=planned_utc,
+        planned_source="api",
+        assigned_tail_number=normalized["tail_number"] or None,
+        tail_source="api" if normalized["tail_number"] else "unknown",
+        tail_updated_at=datetime.utcnow() if normalized["tail_number"] else None,
+        api_added_current_sort_only=True,
+    )
+    if mission.mission_type == "arrival":
+        mission.arrival_status = "scheduled"
+    else:
+        mission.departure_status = "loading"
+    return mission
+
+
+def pending_review_items_for_operation(operation):
+    if not operation:
+        return []
+    return (
+        FlightApiReviewItem.query.filter_by(
+            sort_date_operation_id=operation.id,
+            review_status="pending",
+        )
+        .order_by(
+            FlightApiReviewItem.mission_type.asc(),
+            FlightApiReviewItem.revised_time_utc.asc(),
+            FlightApiReviewItem.id.asc(),
+        )
+        .all()
+    )
+
+
+def review_item_or_404(gateway, review_item_id):
+    return FlightApiReviewItem.query.filter_by(
+        id=review_item_id,
+        gateway_code=gateway.code,
+    ).first_or_404()
+
+
+def _empty_result(gateway, operation, provider_enabled, message):
+    return {
+        "provider_enabled": provider_enabled,
+        "attempted": False,
+        "gateway": gateway,
+        "operation": operation,
+        "matched": [],
+        "review_items": [],
+        "ignored_count": 0,
+        "non_ups_ignored": 0,
+        "usage_units_consumed": 0,
+        "usage_polls_used": None,
+        "message": message,
+    }
+
+
+def _mission_type(api_flight):
+    value = str(api_flight.get("_mission_type") or api_flight.get("direction") or "").lower()
+    if "dep" in value:
+        return "departure"
+    return "arrival"
+
+
+def _api_flight_number(api_flight):
+    flight = api_flight.get("flight") or {}
+    number = api_flight.get("number") or flight.get("number") or api_flight.get("flightNumber")
+    call_sign = api_flight.get("callSign") or api_flight.get("callsign")
+    return _clean_flight_number(number or call_sign)
+
+
+def _flight_number_variants(flight_number, call_sign):
+    variants = []
+    for value in (flight_number, call_sign):
+        cleaned = _clean_flight_number(value)
+        if cleaned and cleaned not in variants:
+            variants.append(cleaned)
+        if cleaned.startswith("UPS"):
+            converted = f"5X{cleaned[3:]}"
+            if converted not in variants:
+                variants.append(converted)
+        if cleaned.startswith("5X"):
+            converted = f"UPS{cleaned[2:]}"
+            if converted not in variants:
+                variants.append(converted)
+    return variants
+
+
+def _review_key(mission_type, flight_number, call_sign, origin, destination):
+    key_flight = _clean_flight_number(flight_number or call_sign)
+    return "|".join(
+        (
+            mission_type,
+            key_flight,
+            _clean_upper(call_sign),
+            _clean_upper(origin),
+            _clean_upper(destination),
+        )
+    )
+
+
+def _airport_code(airport):
+    if not isinstance(airport, dict):
+        return ""
+    return _clean_upper(airport.get("iata") or airport.get("icao") or airport.get("code"))
+
+
+def _leg_time(leg, field_name):
+    field = leg.get(field_name) or {}
+    if isinstance(field, dict):
+        return field.get("local") or field.get("utc")
+    return field
+
+
+def _parse_provider_datetime(value, timezone_name):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = str(value).strip().replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            try:
+                parsed = datetime.strptime(text, "%Y-%m-%d %H:%M")
+            except ValueError:
+                return None
+    if parsed.tzinfo:
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return _local_datetime_to_utc_naive(parsed, timezone_name)
+
+
+def _local_datetime_to_utc_naive(value, timezone_name=None):
+    timezone_name = timezone_name or "America/Chicago"
+    try:
+        localized = value.replace(tzinfo=ZoneInfo(timezone_name))
+        return localized.astimezone(timezone.utc).replace(tzinfo=None)
+    except ZoneInfoNotFoundError:
+        if timezone_name == "America/Chicago":
+            offset_hours = -5 if _is_us_central_daylight_time(value) else -6
+            return value - timedelta(hours=offset_hours)
+        return value
+
+
+def _utc_to_local_naive(value, timezone_name=None):
+    timezone_name = timezone_name or "America/Chicago"
+    try:
+        return value.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(timezone_name)).replace(tzinfo=None)
+    except ZoneInfoNotFoundError:
+        if timezone_name == "America/Chicago":
+            standard_local = value - timedelta(hours=6)
+            if _is_us_central_daylight_time(standard_local):
+                return value - timedelta(hours=5)
+        return value
+
+
+def _utc_naive(value=None):
+    if value is None:
+        return datetime.utcnow()
+    if value.tzinfo:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
+def _gateway_today(gateway):
+    try:
+        return datetime.now(ZoneInfo(gateway_timezone(gateway))).date()
+    except ZoneInfoNotFoundError:
+        if gateway_timezone(gateway) == "America/Chicago":
+            now_utc = datetime.utcnow()
+            standard_local = now_utc - timedelta(hours=6)
+            if _is_us_central_daylight_time(standard_local):
+                return (now_utc - timedelta(hours=5)).date()
+        return date.today()
+
+
+def _format_provider_datetime(value):
+    return value.replace(second=0, microsecond=0).isoformat(timespec="minutes")
+
+
+def _clean_upper(value):
+    return str(value or "").strip().upper()
+
+
+def _clean_text(value):
+    return str(value or "").strip()
+
+
+def _clean_flight_number(value):
+    return _clean_upper(value).replace(" ", "")
+
+
+def _is_us_central_daylight_time(local_datetime):
+    year = local_datetime.year
+    dst_start = _nth_weekday_of_month(year, 3, 6, 2).replace(hour=2)
+    dst_end = _nth_weekday_of_month(year, 11, 6, 1).replace(hour=2)
+    return dst_start <= local_datetime < dst_end
+
+
+def _nth_weekday_of_month(year, month, weekday, occurrence):
+    candidate = datetime(year, month, 1)
+    days_until_weekday = (weekday - candidate.weekday()) % 7
+    return candidate + timedelta(days=days_until_weekday + (occurrence - 1) * 7)

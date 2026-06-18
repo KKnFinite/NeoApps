@@ -21,6 +21,14 @@ from app.services.flight_rules import (
     derive_aircraft_type_from_tail_number,
     is_mission_crew_covered,
 )
+from app.services.flight_api import (
+    FlightApiConfigurationError,
+    accept_review_item,
+    ignore_review_item,
+    pending_review_items_for_operation,
+    review_item_or_404,
+    run_flight_api_import,
+)
 from app.services.access_control import (
     get_current_gateway,
     get_user_node_role,
@@ -201,6 +209,79 @@ def sort_timeline():
         sort_options=TIMELINE_SORT_OPTIONS,
         format_timeline_time=format_timeline_time,
         **context,
+    )
+
+
+@bp.route("/motherbrain/flight-api-test", methods=["GET", "POST"])
+@gateway_node_required("motherbrain", minimum_role="grandmaster")
+def flight_api_test():
+    gateway = get_current_gateway()
+    generation_result = _auto_generate_today_sorts(gateway)
+    sort_date = generation_result["sort_date"]
+    operations = operations_for_gateway_date(gateway, sort_date)
+    selected_operation = _selected_current_operation(operations)
+    import_result = None
+
+    if request.method == "POST" and request.form.get("flight_api_action") == "pull":
+        selected_operation = _selected_current_operation(
+            operations,
+            operation_id=request.form.get("operation_id"),
+        )
+        try:
+            import_result = run_flight_api_import(
+                gateway,
+                operation=selected_operation,
+            )
+            db.session.commit()
+            if import_result.get("attempted"):
+                flash("Flight API test import completed.", "info")
+            else:
+                flash(import_result.get("message", "Flight API import skipped."), "info")
+        except FlightApiConfigurationError as error:
+            db.session.rollback()
+            flash(f"Flight API import failed: {error}", "error")
+
+    pending_items = pending_review_items_for_operation(selected_operation)
+    return render_template(
+        "neomotherbrain/flight_api_test.html",
+        gateway=gateway,
+        sort_date=sort_date,
+        operations=operations,
+        selected_operation=selected_operation,
+        import_result=import_result,
+        pending_review_items=pending_items,
+    )
+
+
+@bp.route("/motherbrain/flight-api-review/<int:review_item_id>/add", methods=["POST"])
+@gateway_node_required("motherbrain", minimum_role="grandmaster")
+def add_flight_api_review_item(review_item_id):
+    gateway = get_current_gateway()
+    review_item = review_item_or_404(gateway, review_item_id)
+    accept_review_item(review_item)
+    db.session.commit()
+    flash("API flight added to current sort operation.", "info")
+    return redirect(
+        url_for(
+            "neomotherbrain.flight_api_test",
+            operation_id=review_item.sort_date_operation_id,
+        )
+    )
+
+
+@bp.route("/motherbrain/flight-api-review/<int:review_item_id>/ignore", methods=["POST"])
+@gateway_node_required("motherbrain", minimum_role="grandmaster")
+def ignore_flight_api_review_item(review_item_id):
+    gateway = get_current_gateway()
+    review_item = review_item_or_404(gateway, review_item_id)
+    ignore_review_item(review_item)
+    db.session.commit()
+    flash("API flight ignored for this sort operation.", "info")
+    return redirect(
+        url_for(
+            "neomotherbrain.flight_api_test",
+            operation_id=review_item.sort_date_operation_id,
+        )
     )
 
 
@@ -810,6 +891,32 @@ def _auto_generate_today_sorts(gateway):
     for error in result["errors"]:
         current_app.logger.warning("Gateway Matrix generation skipped: %s", error)
     return result
+
+
+def _selected_current_operation(operations, operation_id=None):
+    if operation_id:
+        try:
+            operation_id = int(operation_id)
+        except (TypeError, ValueError):
+            operation_id = None
+    if operation_id:
+        selected = next((operation for operation in operations if operation.id == operation_id), None)
+        if selected:
+            return selected
+    query_operation_id = request.args.get("operation_id")
+    if query_operation_id:
+        try:
+            query_operation_id = int(query_operation_id)
+        except (TypeError, ValueError):
+            query_operation_id = None
+        if query_operation_id:
+            selected = next(
+                (operation for operation in operations if operation.id == query_operation_id),
+                None,
+            )
+            if selected:
+                return selected
+    return operations[0] if operations else None
 
 
 def _sync_operation_with_master(operation):
