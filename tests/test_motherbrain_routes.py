@@ -249,8 +249,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
             month_number=6,
         ).one()
 
+        payload = response.get_json()
+
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json(), {"status": "saved", "month": "2026-06"})
+        self.assertEqual(payload["status"], "saved")
+        self.assertEqual(payload["month"], "2026-06")
+        self.assertIn("2026-06", payload["previews"])
+        self.assertEqual(payload["previews"]["2026-06"]["monthly_api_units"], 900)
+        self.assertEqual(payload["previews"]["2026-06"]["units_per_poll"], 3)
         self.assertEqual(settings.monthly_api_units, 900)
         self.assertEqual(settings.units_per_poll, 3)
         self.assertTrue(settings.provider_enabled)
@@ -678,6 +684,157 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(saved_times, ["01:00"])
 
+    def test_sort_timeline_blank_special_poll_row_not_counted_in_preview(self):
+        self._add_matrix_cell("monday", "night")
+        response = self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                provider_enabled="1",
+                monthly_api_units="44",
+                units_per_poll="2",
+                api_enabled_night_monday="1",
+                night_special_poll_time=["", "01:00", ""],
+            ),
+            headers={
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json",
+            },
+        )
+        payload = response.get_json()
+        context = sort_timeline_context(
+            self.rfd_gateway,
+            "2026-06",
+            now=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(payload["previews"]["2026-06"]["special_poll_count"], 1)
+        self.assertEqual(payload["sort_previews"]["night"]["special_poll_count"], 1)
+        self.assertEqual(context["summary"]["special_poll_count"], 1)
+
+    def test_sort_timeline_valid_special_poll_updates_preview_math(self):
+        self._add_matrix_cell("monday", "night")
+        response = self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                provider_enabled="1",
+                monthly_api_units="44",
+                units_per_poll="2",
+                api_enabled_night_monday="1",
+                night_special_poll_time=["01:00"],
+            ),
+            headers={
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json",
+            },
+        )
+        preview = response.get_json()["previews"]["2026-06"]
+
+        self.assertEqual(preview["effective_daily_poll_cap"], 4)
+        self.assertEqual(preview["special_poll_count"], 1)
+        self.assertEqual(preview["auto_interval_poll_count"], 3)
+        self.assertEqual(preview["total_scheduled_polls"], 4)
+
+    def test_sort_timeline_autosave_payload_includes_dynamic_special_poll_rows(self):
+        self._add_matrix_cell("monday", "night")
+        response = self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                provider_enabled="1",
+                monthly_api_units="44",
+                units_per_poll="2",
+                api_enabled_night_monday="1",
+                night_special_poll_time=["01:00", "02:00", ""],
+            ),
+            headers={
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json",
+            },
+        )
+        payload = response.get_json()
+        saved_times = sorted(
+            row.poll_time_local.strftime("%H:%M")
+            for row in SortTimelineSpecialPollTime.query.filter_by(
+                gateway_id=self.rfd_gateway.id,
+                sort_name="night",
+            ).all()
+        )
+
+        self.assertEqual(saved_times, ["01:00", "02:00"])
+        self.assertEqual(payload["sort_previews"]["night"]["special_poll_count"], 2)
+        self.assertEqual(payload["previews"]["2026-06"]["special_poll_count"], 2)
+
+    def test_sort_timeline_changing_special_poll_time_updates_count_without_duplicate(self):
+        self._add_matrix_cell("monday", "night")
+        self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                provider_enabled="1",
+                api_enabled_night_monday="1",
+                night_special_poll_time=["01:00"],
+            ),
+        )
+
+        response = self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                provider_enabled="1",
+                api_enabled_night_monday="1",
+                night_special_poll_time=["02:00"],
+                night_delete_special_poll_time=["01:00"],
+            ),
+            headers={
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json",
+            },
+        )
+        saved_times = [
+            row.poll_time_local.strftime("%H:%M")
+            for row in SortTimelineSpecialPollTime.query.filter_by(
+                gateway_id=self.rfd_gateway.id,
+                sort_name="night",
+            ).order_by(SortTimelineSpecialPollTime.poll_time_local.asc()).all()
+        ]
+        payload = response.get_json()
+
+        self.assertEqual(saved_times, ["02:00"])
+        self.assertEqual(payload["sort_previews"]["night"]["special_poll_count"], 1)
+        self.assertEqual(payload["previews"]["2026-06"]["special_poll_count"], 1)
+
+    def test_sort_timeline_deleted_special_poll_not_counted_after_reload(self):
+        self._add_matrix_cell("monday", "night")
+        self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                provider_enabled="1",
+                api_enabled_night_monday="1",
+                night_special_poll_time=["01:00", "02:00"],
+            ),
+        )
+        self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                provider_enabled="1",
+                api_enabled_night_monday="1",
+                night_special_poll_time=["02:00"],
+                night_delete_special_poll_time=["01:00"],
+            ),
+            headers={
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json",
+            },
+        )
+        context = sort_timeline_context(
+            self.rfd_gateway,
+            "2026-06",
+            now=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+        )
+        reload_response = self.client.get("/motherbrain/sort-timeline?month=2026-06")
+
+        self.assertEqual(context["summary"]["special_poll_count"], 1)
+        self.assertEqual(context["preview_by_sort"]["night"]["special_poll_count"], 1)
+        self.assertNotIn(b'value="01:00"', reload_response.data)
+        self.assertIn(b'value="02:00"', reload_response.data)
+
     def test_sort_timeline_too_many_special_polls_clamp_auto_polls_to_zero(self):
         self._add_matrix_cell("monday", "night")
         self.client.post(
@@ -702,7 +859,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(context["summary"]["effective_daily_poll_cap"], 1)
         self.assertEqual(night_preview["special_poll_count"], 2)
         self.assertEqual(context["summary"]["auto_interval_poll_count"], 0)
-        self.assertEqual(context["summary"]["total_scheduled_polls"], 1)
+        self.assertEqual(context["summary"]["total_scheduled_polls"], 2)
 
     def test_sort_timeline_adjusted_daily_cap_drops_when_usage_is_high(self):
         self._add_matrix_days("night", ["monday", "tuesday", "wednesday", "thursday", "friday"])

@@ -188,7 +188,8 @@ def sort_timeline():
         _settings, month_key = save_sort_timeline_from_form(gateway, request.form)
         db.session.commit()
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-            return jsonify({"status": "saved", "month": month_key})
+            context = sort_timeline_context(gateway, month_key)
+            return jsonify(_sort_timeline_autosave_payload(context))
         flash("Sort Timeline settings saved.", "info")
         return redirect(url_for("neomotherbrain.sort_timeline", month=month_key))
 
@@ -201,6 +202,47 @@ def sort_timeline():
         format_timeline_time=format_timeline_time,
         **context,
     )
+
+
+def _sort_timeline_autosave_payload(context):
+    current_preview = context["current_preview"]
+    next_preview = context["next_preview"]
+    return {
+        "status": "saved",
+        "month": context["month_key"],
+        "previews": {
+            current_preview["month_key"]: _sort_timeline_preview_payload(current_preview),
+            next_preview["month_key"]: _sort_timeline_preview_payload(next_preview),
+        },
+        "sort_previews": {
+            preview["sort_name"]: {
+                "api_day_count": preview["api_day_count"],
+                "api_day_label": f"{preview['api_day_count']} API DAYS THIS MONTH",
+                "special_poll_count": preview["special_poll_count"],
+                "next_poll_time": format_timeline_time(preview["next_poll_time"]),
+            }
+            for preview in current_preview["sort_previews"]
+        },
+    }
+
+
+def _sort_timeline_preview_payload(preview):
+    return {
+        "monthly_api_units": preview["monthly_api_units"],
+        "units_per_poll": preview["units_per_poll"],
+        "monthly_poll_limit": preview["monthly_poll_limit"],
+        "units_used": preview["units_used"],
+        "units_remaining": preview["units_remaining"],
+        "polls_used": preview["polls_used"],
+        "polls_remaining": preview["polls_remaining"],
+        "operating_days": preview["operating_days"],
+        "original_daily_poll_cap": preview["original_daily_poll_cap"],
+        "adjusted_daily_poll_cap": preview["adjusted_daily_poll_cap"],
+        "effective_daily_poll_cap": preview["effective_daily_poll_cap"],
+        "special_poll_count": preview["special_poll_count"],
+        "auto_interval_poll_count": preview["auto_interval_poll_count"],
+        "total_scheduled_polls": preview["total_scheduled_polls"],
+    }
 
 
 @bp.route("/motherbrain/manage-sort")

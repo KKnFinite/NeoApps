@@ -6,8 +6,15 @@
 <input type="time" name="{{ name }}" value="{{ format_timeline_time(value) if value else '' }}" autocomplete="off">
 {%- endmacro %}
 
+{% macro metric_tile(label, key, value) -%}
+<article class="metric-tile">
+    <span>{{ label }}</span>
+    <strong data-preview-metric="{{ key }}">{{ value }}</strong>
+</article>
+{%- endmacro %}
+
 {% macro budget_preview(title, preview) -%}
-<section class="sort-timeline-section" aria-labelledby="{{ title|lower|replace(' ', '-') }}">
+<section class="sort-timeline-section" aria-labelledby="{{ title|lower|replace(' ', '-') }}" data-sort-timeline-preview="{{ preview.month_key }}">
     <div class="sort-timeline-preview-heading">
         <h2 id="{{ title|lower|replace(' ', '-') }}">{{ title }}</h2>
         <span>{{ preview.month_label }}</span>
@@ -18,62 +25,20 @@
     <p class="sort-timeline-warning">API BUDGET EXHAUSTED. SCHEDULED POLLS ARE BLOCKED FOR THIS MONTH.</p>
     {% endif %}
     <div class="metric-grid sort-timeline-preview-grid">
-        <article class="metric-tile">
-            <span>Monthly API Units</span>
-            <strong>{{ preview.monthly_api_units }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>Units Per Poll</span>
-            <strong>{{ preview.units_per_poll }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>Monthly Poll Limit</span>
-            <strong>{{ preview.monthly_poll_limit }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>Units Used</span>
-            <strong>{{ preview.units_used }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>Units Remaining</span>
-            <strong>{{ preview.units_remaining }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>Polls Used</span>
-            <strong>{{ preview.polls_used }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>Polls Remaining</span>
-            <strong>{{ preview.polls_remaining }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>Operating Days</span>
-            <strong>{{ preview.operating_days }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>Original Daily Poll Cap</span>
-            <strong>{{ preview.original_daily_poll_cap }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>Adjusted Daily Poll Cap</span>
-            <strong>{{ preview.adjusted_daily_poll_cap }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>Effective Daily Poll Cap</span>
-            <strong>{{ preview.effective_daily_poll_cap }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>Special Poll Count</span>
-            <strong>{{ preview.special_poll_count }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>Auto Interval Poll Count</span>
-            <strong>{{ preview.auto_interval_poll_count }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>Total Scheduled Polls</span>
-            <strong>{{ preview.total_scheduled_polls }}</strong>
-        </article>
+        {{ metric_tile("Monthly API Units", "monthly_api_units", preview.monthly_api_units) }}
+        {{ metric_tile("Units Per Poll", "units_per_poll", preview.units_per_poll) }}
+        {{ metric_tile("Monthly Poll Limit", "monthly_poll_limit", preview.monthly_poll_limit) }}
+        {{ metric_tile("Units Used", "units_used", preview.units_used) }}
+        {{ metric_tile("Units Remaining", "units_remaining", preview.units_remaining) }}
+        {{ metric_tile("Polls Used", "polls_used", preview.polls_used) }}
+        {{ metric_tile("Polls Remaining", "polls_remaining", preview.polls_remaining) }}
+        {{ metric_tile("Operating Days", "operating_days", preview.operating_days) }}
+        {{ metric_tile("Original Daily Poll Cap", "original_daily_poll_cap", preview.original_daily_poll_cap) }}
+        {{ metric_tile("Adjusted Daily Poll Cap", "adjusted_daily_poll_cap", preview.adjusted_daily_poll_cap) }}
+        {{ metric_tile("Effective Daily Poll Cap", "effective_daily_poll_cap", preview.effective_daily_poll_cap) }}
+        {{ metric_tile("Special Poll Count", "special_poll_count", preview.special_poll_count) }}
+        {{ metric_tile("Auto Interval Poll Count", "auto_interval_poll_count", preview.auto_interval_poll_count) }}
+        {{ metric_tile("Total Scheduled Polls", "total_scheduled_polls", preview.total_scheduled_polls) }}
     </div>
     <p class="muted">Operating Days are Gateway Matrix operating days adjusted by month offset. API-enabled days only control polling for configured sort/day combinations.</p>
 </section>
@@ -146,7 +111,7 @@
                 <article class="sort-timeline-sort-card" data-sort-timeline-card="{{ sort_name }}">
                     <div class="sort-timeline-card-heading">
                         <h3>{{ sort_preview.sort_label|upper }}</h3>
-                        <span>{{ sort_preview.api_day_count }} API DAYS THIS MONTH</span>
+                        <span data-sort-preview-api-days>{{ sort_preview.api_day_count }} API DAYS THIS MONTH</span>
                     </div>
                     <div class="sort-timeline-api-days">
                         {% for day_info in sort_preview.configured_days %}
@@ -185,15 +150,15 @@
                     <div class="metric-grid sort-timeline-sort-preview">
                         <article class="metric-tile">
                             <span>API Days</span>
-                            <strong>{{ sort_preview.api_day_count }}</strong>
+                            <strong data-sort-preview-metric="api_day_count">{{ sort_preview.api_day_count }}</strong>
                         </article>
                         <article class="metric-tile">
                             <span>Special Polls</span>
-                            <strong>{{ sort_preview.special_poll_count }}</strong>
+                            <strong data-sort-preview-metric="special_poll_count">{{ sort_preview.special_poll_count }}</strong>
                         </article>
                         <article class="metric-tile">
                             <span>Next</span>
-                            <strong>{{ format_timeline_time(sort_preview.next_poll_time) }}</strong>
+                            <strong data-sort-preview-metric="next_poll_time">{{ format_timeline_time(sort_preview.next_poll_time) }}</strong>
                         </article>
                     </div>
                     <div class="sort-timeline-special-polls" data-special-poll-list="{{ sort_name }}">
@@ -263,7 +228,8 @@
             if (!response.ok) {
                 throw new Error("Auto-save failed");
             }
-            await response.json();
+            const payload = await response.json();
+            updatePreviewMetrics(payload);
             markSpecialRowsSaved();
             clearDeleteMarkers();
             setStatus("SAVED", "saved");
@@ -279,6 +245,40 @@
         window.clearTimeout(saveTimer);
         setStatus("SAVE PENDING...", "pending");
         saveTimer = window.setTimeout(saveSettings, delay);
+    };
+
+    const updatePreviewMetrics = (payload) => {
+        if (!payload) {
+            return;
+        }
+        Object.entries(payload.previews || {}).forEach(([monthKey, metrics]) => {
+            const preview = document.querySelector(`[data-sort-timeline-preview="${monthKey}"]`);
+            if (!preview) {
+                return;
+            }
+            Object.entries(metrics || {}).forEach(([key, value]) => {
+                const node = preview.querySelector(`[data-preview-metric="${key}"]`);
+                if (node) {
+                    node.textContent = value;
+                }
+            });
+        });
+        Object.entries(payload.sort_previews || {}).forEach(([sortName, preview]) => {
+            const card = document.querySelector(`[data-sort-timeline-card="${sortName}"]`);
+            if (!card) {
+                return;
+            }
+            const apiDayLabel = card.querySelector("[data-sort-preview-api-days]");
+            if (apiDayLabel) {
+                apiDayLabel.textContent = preview.api_day_label;
+            }
+            Object.entries(preview || {}).forEach(([key, value]) => {
+                const node = card.querySelector(`[data-sort-preview-metric="${key}"]`);
+                if (node) {
+                    node.textContent = value;
+                }
+            });
+        });
     };
 
     const sortNameFromInput = (input) => (input && input.name ? input.name.replace(/_special_poll_time$/, "") : "");
@@ -387,6 +387,7 @@
             if (input) {
                 input.focus();
             }
+            queueSave(100);
         });
     });
 

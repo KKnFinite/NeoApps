@@ -260,11 +260,11 @@ def month_budget_preview(settings, api_schedule, month_variances, month_start, g
     remaining_operating_days = adjusted_operating_days(remaining_base_days, month_variance)
     adjusted_daily_cap = daily_poll_cap(polls_remaining, remaining_operating_days) if provider_enabled else 0
     effective_daily_cap = min(original_daily_cap, adjusted_daily_cap) if provider_enabled else 0
+    budget_exhausted = provider_enabled and monthly_poll_count > 0 and polls_remaining <= 0
     sort_previews = sort_timeline_previews(settings, api_schedule, month_start, effective_daily_cap)
     special_count = sum(preview["special_poll_count"] for preview in sort_previews)
-    auto_count = max(0, effective_daily_cap - special_count) if provider_enabled else 0
-    total_scheduled_polls = min(effective_daily_cap, special_count + auto_count) if provider_enabled else 0
-    budget_exhausted = provider_enabled and monthly_poll_count > 0 and polls_remaining <= 0
+    auto_count = max(0, effective_daily_cap - special_count) if provider_enabled and not budget_exhausted else 0
+    total_scheduled_polls = special_count + auto_count if provider_enabled and not budget_exhausted else 0
 
     return {
         "month_key": month_key,
@@ -306,7 +306,7 @@ def sort_timeline_previews(settings, api_schedule, month_start, effective_daily_
             for day_info in sort_info["days"]
             if (day_info["day"], sort_name) in enabled_cells
         ]
-        special_count = len(sort_setting.special_poll_times) if sort_setting and enabled_days else 0
+        special_count = len(sort_setting.special_poll_times) if sort_setting else 0
         scheduled_times = scheduled_poll_times(sort_setting, effective_daily_cap)
         previews.append(
             {
