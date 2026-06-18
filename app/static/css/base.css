@@ -3644,7 +3644,17 @@ h2 {
 }
 
 .sort-timeline-page {
-    max-width: 1180px;
+    max-width: min(100%, 1180px);
+}
+
+.sort-timeline-page .sort-timeline-form {
+    width: 100%;
+    max-width: none;
+    justify-items: stretch;
+}
+
+.sort-timeline-page .operation-form label {
+    width: 100%;
 }
 
 .sort-timeline-section {
@@ -3730,6 +3740,32 @@ h2 {
 .sort-timeline-step {
     min-height: 38px;
     padding: 6px 8px;
+}
+
+@media (min-width: 980px) {
+    .sort-timeline-page {
+        max-width: min(96vw, 1520px);
+    }
+
+    .sort-timeline-variance-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
+    }
+
+    .sort-timeline-variance-control {
+        padding: 14px 16px;
+    }
+
+    .sort-timeline-variance-control > div {
+        grid-template-columns: minmax(58px, 0.85fr) minmax(72px, 1fr) minmax(58px, 0.85fr);
+        gap: 10px;
+    }
+
+    .sort-timeline-variance-control input,
+    .sort-timeline-step {
+        min-height: 54px;
+        font-size: 1.16rem;
+    }
 }
 
 .sort-timeline-provider-toggle {

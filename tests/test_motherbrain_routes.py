@@ -1,4 +1,5 @@
 from datetime import date, datetime, time, timezone
+from pathlib import Path
 import unittest
 
 from app import create_app
@@ -207,6 +208,15 @@ class MotherBrainRoutesTest(unittest.TestCase):
         blocked = self.client.get("/motherbrain/sort-timeline", follow_redirects=False)
         self.assertEqual(blocked.status_code, 302)
         self.assertEqual(blocked.location, "/rfd")
+
+    def test_sort_timeline_desktop_offset_grid_uses_wide_layout(self):
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertIn(".sort-timeline-page .sort-timeline-form", css)
+        self.assertIn("max-width: none;", css)
+        self.assertIn("@media (min-width: 980px)", css)
+        self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr));", css)
+        self.assertIn("min-height: 54px;", css)
 
     def test_sort_timeline_monthly_limit_and_provider_settings_save_without_key(self):
         response = self.client.post(
