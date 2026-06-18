@@ -230,6 +230,7 @@ def _sort_timeline_preview_payload(preview):
     return {
         "monthly_api_units": preview["monthly_api_units"],
         "units_per_poll": preview["units_per_poll"],
+        "taxi_to_ramp_minutes": preview["taxi_to_ramp_minutes"],
         "monthly_poll_limit": preview["monthly_poll_limit"],
         "units_used": preview["units_used"],
         "units_remaining": preview["units_remaining"],

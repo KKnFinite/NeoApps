@@ -234,6 +234,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             data=self._sort_timeline_form_data(
                 monthly_api_units="900",
                 units_per_poll="3",
+                taxi_to_ramp_minutes="14",
                 provider_enabled="1",
                 month_variance_6="2",
             ),
@@ -257,10 +258,47 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("2026-06", payload["previews"])
         self.assertEqual(payload["previews"]["2026-06"]["monthly_api_units"], 900)
         self.assertEqual(payload["previews"]["2026-06"]["units_per_poll"], 3)
+        self.assertEqual(payload["previews"]["2026-06"]["taxi_to_ramp_minutes"], 14)
         self.assertEqual(settings.monthly_api_units, 900)
         self.assertEqual(settings.units_per_poll, 3)
+        self.assertEqual(settings.taxi_to_ramp_minutes, 14)
         self.assertTrue(settings.provider_enabled)
         self.assertEqual(variance.variance, 2)
+
+    def test_sort_timeline_taxi_to_ramp_default_is_ten_minutes(self):
+        response = self.client.get("/motherbrain/sort-timeline?month=2026-06")
+        settings = SortTimelineSettings.query.filter_by(gateway_id=self.rfd_gateway.id).one()
+        context = sort_timeline_context(
+            self.rfd_gateway,
+            "2026-06",
+            now=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(settings.taxi_to_ramp_minutes, 10)
+        self.assertEqual(context["summary"]["taxi_to_ramp_minutes"], 10)
+        self.assertIn(b"Taxi-To-Ramp Minutes", response.data)
+        self.assertIn(b"Used to calculate Assumed Arrived from API runway time.", response.data)
+        self.assertIn(b"Scheduled / Expected -> In Air -> On Ground", response.data)
+
+    def test_sort_timeline_taxi_to_ramp_reload_preserves_value(self):
+        self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                provider_enabled="1",
+                taxi_to_ramp_minutes="18",
+            ),
+            headers={
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json",
+            },
+        )
+
+        response = self.client.get("/motherbrain/sort-timeline?month=2026-06")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'name="taxi_to_ramp_minutes" min="0" step="1" value="18"', response.data)
+        self.assertIn(b'<strong data-preview-metric="taxi_to_ramp_minutes">18</strong>', response.data)
 
     def test_sort_timeline_monthly_limit_and_provider_settings_save_without_key(self):
         response = self.client.post(
@@ -3116,6 +3154,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "month_key": "2026-06",
             "monthly_api_units": "600",
             "units_per_poll": "2",
+            "taxi_to_ramp_minutes": "10",
             "provider_name": "",
             "api_key_env_var_name": "",
         }

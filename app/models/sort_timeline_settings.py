@@ -14,6 +14,7 @@ class SortTimelineSettings(db.Model):
     gateway_code = db.Column(db.String(8), nullable=False, index=True)
     monthly_api_units = db.Column("monthly_api_limit", db.Integer, nullable=False, default=600)
     units_per_poll = db.Column(db.Integer, nullable=False, default=2)
+    taxi_to_ramp_minutes = db.Column(db.Integer, nullable=False, default=10)
     provider_enabled = db.Column(db.Boolean, nullable=False, default=False)
     provider_name = db.Column(db.String(120), nullable=False, default="")
     api_key_env_var_name = db.Column(db.String(120), nullable=False, default="")

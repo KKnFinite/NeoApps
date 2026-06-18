@@ -27,6 +27,7 @@
     <div class="metric-grid sort-timeline-preview-grid">
         {{ metric_tile("Monthly API Units", "monthly_api_units", preview.monthly_api_units) }}
         {{ metric_tile("Units Per Poll", "units_per_poll", preview.units_per_poll) }}
+        {{ metric_tile("Taxi-To-Ramp Minutes", "taxi_to_ramp_minutes", preview.taxi_to_ramp_minutes) }}
         {{ metric_tile("Monthly Poll Limit", "monthly_poll_limit", preview.monthly_poll_limit) }}
         {{ metric_tile("Units Used", "units_used", preview.units_used) }}
         {{ metric_tile("Units Remaining", "units_remaining", preview.units_remaining) }}
@@ -71,6 +72,11 @@
                     <input type="number" name="units_per_poll" min="1" step="1" value="{{ settings.units_per_poll }}">
                 </label>
                 <label>
+                    <span>Taxi-To-Ramp Minutes</span>
+                    <input type="number" name="taxi_to_ramp_minutes" min="0" step="1" value="{{ settings.taxi_to_ramp_minutes }}">
+                    <small class="muted">Used to calculate Assumed Arrived from API runway time.</small>
+                </label>
+                <label>
                     <span>Provider Name</span>
                     <input type="text" name="provider_name" value="{{ settings.provider_name }}" placeholder="AeroDataBox">
                 </label>
@@ -79,6 +85,7 @@
                     <input type="text" name="api_key_env_var_name" value="{{ settings.api_key_env_var_name }}" placeholder="AERODATABOX_API_KEY" autocomplete="off">
                 </label>
             </div>
+            <p class="muted">Future arrival flow: Scheduled / Expected -> In Air -> On Ground (API runway time) -> Assumed Arrived (runway time + taxi-to-ramp minutes) -> Arrived (manual operational status) -> Unloaded (manual operational status).</p>
         </section>
 
         <section class="sort-timeline-section" aria-labelledby="timeline-operating-offset">

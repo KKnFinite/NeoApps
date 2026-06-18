@@ -17,6 +17,7 @@ from app.services.gateway_matrix import DAY_OPTIONS, SORT_OPTIONS, gateway_timez
 
 DEFAULT_MONTHLY_API_UNITS = 600
 DEFAULT_UNITS_PER_POLL = 2
+DEFAULT_TAXI_TO_RAMP_MINUTES = 10
 DAY_VALUES = {day for day, _label in DAY_OPTIONS}
 SORT_VALUES = {sort_name for sort_name, _label in SORT_OPTIONS}
 MONTH_OPTIONS = tuple((month_number, calendar.month_name[month_number]) for month_number in range(1, 13))
@@ -30,6 +31,7 @@ def ensure_sort_timeline_settings(gateway):
             gateway_code=gateway.code,
             monthly_api_units=DEFAULT_MONTHLY_API_UNITS,
             units_per_poll=DEFAULT_UNITS_PER_POLL,
+            taxi_to_ramp_minutes=DEFAULT_TAXI_TO_RAMP_MINUTES,
         )
         db.session.add(settings)
         db.session.flush()
@@ -39,6 +41,8 @@ def ensure_sort_timeline_settings(gateway):
             settings.monthly_api_units = DEFAULT_MONTHLY_API_UNITS
         if not settings.units_per_poll:
             settings.units_per_poll = DEFAULT_UNITS_PER_POLL
+        if settings.taxi_to_ramp_minutes is None:
+            settings.taxi_to_ramp_minutes = DEFAULT_TAXI_TO_RAMP_MINUTES
 
     existing_sorts = {
         sort_setting.sort_name: sort_setting
@@ -126,6 +130,10 @@ def save_sort_timeline_from_form(gateway, form):
     settings.units_per_poll = _positive_int(
         form.get("units_per_poll"),
         default=DEFAULT_UNITS_PER_POLL,
+    )
+    settings.taxi_to_ramp_minutes = _nonnegative_int(
+        form.get("taxi_to_ramp_minutes"),
+        default=DEFAULT_TAXI_TO_RAMP_MINUTES,
     )
     settings.provider_enabled = form.get("provider_enabled") == "1"
     settings.provider_name = _clean_text(form.get("provider_name"), max_length=120)
@@ -287,6 +295,7 @@ def month_budget_preview(settings, api_schedule, month_variances, month_start, g
         "budget_exhausted": budget_exhausted,
         "monthly_api_units": settings.monthly_api_units,
         "units_per_poll": settings.units_per_poll,
+        "taxi_to_ramp_minutes": settings.taxi_to_ramp_minutes,
         "monthly_poll_limit": monthly_poll_count,
         "units_used": units_used,
         "units_remaining": units_remaining,
