@@ -3,7 +3,17 @@
 {% block title %}Sort Timeline | NeoApps{% endblock %}
 
 {% macro time_input(name, value) -%}
-<input type="time" name="{{ name }}" value="{{ format_timeline_time(value) if value else '' }}" autocomplete="off">
+<input
+    type="text"
+    name="{{ name }}"
+    value="{{ format_timeline_time(value) if value else '' }}"
+    inputmode="numeric"
+    pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$"
+    maxlength="5"
+    placeholder="HH:MM"
+    autocomplete="off"
+    data-military-time
+>
 {%- endmacro %}
 
 {% macro metric_tile(label, key, value) -%}
@@ -173,7 +183,17 @@
                         <span class="sort-timeline-field-label">Special Poll Times</span>
                         {% for special_time in sort_setting.special_poll_times %}
                         <div class="sort-timeline-special-row" data-special-poll-row>
-                            <input type="time" name="{{ sort_name }}_special_poll_time" value="{{ format_timeline_time(special_time.poll_time_local) }}">
+                            <input
+                                type="text"
+                                name="{{ sort_name }}_special_poll_time"
+                                value="{{ format_timeline_time(special_time.poll_time_local) }}"
+                                inputmode="numeric"
+                                pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                                maxlength="5"
+                                placeholder="HH:MM"
+                                autocomplete="off"
+                                data-military-time
+                            >
                             <button
                                 class="table-row-button table-row-delete-button sort-timeline-delete-row"
                                 type="button"
@@ -185,7 +205,18 @@
                         </div>
                         {% endfor %}
                         <div class="sort-timeline-special-row sort-timeline-special-new-row" data-special-poll-row data-special-new-row>
-                            <input type="time" name="{{ sort_name }}_special_poll_time" value="" aria-label="{{ sort_preview.sort_label }} special poll time">
+                            <input
+                                type="text"
+                                name="{{ sort_name }}_special_poll_time"
+                                value=""
+                                inputmode="numeric"
+                                pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                                maxlength="5"
+                                placeholder="HH:MM"
+                                autocomplete="off"
+                                data-military-time
+                                aria-label="{{ sort_preview.sort_label }} special poll time"
+                            >
                             <button class="table-row-button table-row-delete-button sort-timeline-delete-row" type="button" data-special-poll-delete aria-label="Clear {{ sort_preview.sort_label }} special poll row">&times;</button>
                         </div>
                     </div>
@@ -293,7 +324,18 @@
 
     const specialRowMarkup = (sortName) => `
         <div class="sort-timeline-special-row sort-timeline-special-new-row" data-special-poll-row data-special-new-row>
-            <input type="time" name="${sortName}_special_poll_time" value="" aria-label="${sortName} special poll time">
+            <input
+                type="text"
+                name="${sortName}_special_poll_time"
+                value=""
+                inputmode="numeric"
+                pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                maxlength="5"
+                placeholder="HH:MM"
+                autocomplete="off"
+                data-military-time
+                aria-label="${sortName} special poll time"
+            >
             <button class="table-row-button table-row-delete-button sort-timeline-delete-row" type="button" data-special-poll-delete aria-label="Clear ${sortName} special poll row">&times;</button>
         </div>
     `;
@@ -366,7 +408,7 @@
 
     if (form) {
         form.addEventListener("input", (event) => {
-            if (event.target.matches("input[type='number'], input[type='time']")) {
+            if (event.target.matches("input[type='number'], [data-military-time]")) {
                 queueSave(150);
             } else if (event.target.matches("input[type='text']")) {
                 queueSave(450);

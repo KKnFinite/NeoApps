@@ -190,6 +190,10 @@ class SortTimelineUsageCounter(db.Model):
             "attempted_call_count >= 0",
             name="ck_sort_timeline_usage_attempts_nonnegative",
         ),
+        db.CheckConstraint(
+            "units_consumed >= 0",
+            name="ck_sort_timeline_usage_units_nonnegative",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -197,6 +201,7 @@ class SortTimelineUsageCounter(db.Model):
     gateway_code = db.Column(db.String(8), nullable=False, index=True)
     month_key = db.Column(db.String(7), nullable=False, index=True)
     attempted_call_count = db.Column(db.Integer, nullable=False, default=0)
+    units_consumed = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

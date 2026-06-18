@@ -91,6 +91,33 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(client.calls, [])
         self.assertEqual(SortTimelineUsageCounter.query.count(), 0)
 
+    def test_poll_uses_current_sort_api_window(self):
+        night_setting = next(
+            setting for setting in self.settings.sort_settings if setting.sort_name == "night"
+        )
+        night_setting.polling_start_local = time(1, 15)
+        night_setting.polling_end_local = time(3, 45)
+        db.session.commit()
+        client = FakeFlightClient({"arrivals": []})
+
+        run_flight_api_import(self.gateway, self.operation, client=client)
+
+        self.assertEqual(len(client.calls), 1)
+        self.assertEqual(client.calls[0]["gateway_code"], "RFD")
+        self.assertEqual(client.calls[0]["start_utc"], datetime(2026, 6, 1, 6, 15))
+        self.assertEqual(client.calls[0]["end_utc"], datetime(2026, 6, 1, 8, 45))
+
+    def test_default_budget_preview_uses_tier_two_units_per_poll(self):
+        context = sort_timeline_context(
+            self.gateway,
+            "2026-06",
+            now=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(context["summary"]["monthly_api_units"], 600)
+        self.assertEqual(context["summary"]["units_per_poll"], 2)
+        self.assertEqual(context["summary"]["monthly_poll_limit"], 300)
+
     def test_ups_only_filter_ignores_non_ups_flights(self):
         client = FakeFlightClient(
             {
@@ -247,6 +274,15 @@ class FlightApiImportTest(unittest.TestCase):
             0,
         )
 
+        future_operation = self._operation()
+        future_operation.sort_date = date(2026, 6, 2)
+        db.session.add(future_operation)
+        db.session.commit()
+        future = run_flight_api_import(self.gateway, future_operation, client=FakeFlightClient(payload))
+
+        self.assertEqual(len(future["review_items"]), 1)
+        self.assertEqual(future["review_items"][0].sort_date_operation_id, future_operation.id)
+
     def test_accepted_review_item_adds_current_sort_only_mission_not_master_row(self):
         result = run_flight_api_import(
             self.gateway,
@@ -265,12 +301,17 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(review_item.accepted_mission_id, mission.id)
 
     def test_usage_tracking_increments_by_units_per_poll(self):
+        self.settings.units_per_poll = 3
+        db.session.commit()
+
         run_flight_api_import(
             self.gateway,
             self.operation,
             client=FakeFlightClient({"arrivals": [self._api_flight(number="5X999")]}),
             now=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
         )
+        self.settings.units_per_poll = 5
+        db.session.commit()
         context = sort_timeline_context(
             self.gateway,
             "2026-06",
@@ -279,8 +320,9 @@ class FlightApiImportTest(unittest.TestCase):
 
         counter = SortTimelineUsageCounter.query.one()
         self.assertEqual(counter.attempted_call_count, 1)
+        self.assertEqual(counter.units_consumed, 3)
         self.assertEqual(context["summary"]["polls_used"], 1)
-        self.assertEqual(context["summary"]["units_used"], 2)
+        self.assertEqual(context["summary"]["units_used"], 3)
 
     def _operation(self):
         return SortDateOperation(

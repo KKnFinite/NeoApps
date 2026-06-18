@@ -773,6 +773,29 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"<span>Delete</span>", response.data)
         self.assertNotIn(b"sort-timeline-delete-checkbox", response.data)
 
+    def test_sort_timeline_time_fields_use_military_text_inputs(self):
+        self._add_matrix_cell("monday", "night")
+        self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                provider_enabled="1",
+                api_enabled_night_monday="1",
+                night_sort_start="22:15",
+                night_polling_start="23:30",
+                night_special_poll_time=["01:00"],
+            ),
+        )
+
+        response = self.client.get("/motherbrain/sort-timeline?month=2026-06")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'data-military-time', response.data)
+        self.assertIn(b'placeholder="HH:MM"', response.data)
+        self.assertIn(b'name="night_sort_start"', response.data)
+        self.assertIn(b'value="22:15"', response.data)
+        self.assertIn(b'value="01:00"', response.data)
+        self.assertNotIn(b'type="time"', response.data)
+
     def test_sort_timeline_special_poll_delete_persists(self):
         self._add_matrix_cell("monday", "night")
         self.client.post(
@@ -1114,8 +1137,16 @@ class MotherBrainRoutesTest(unittest.TestCase):
             1,
         )
         self.assertEqual(
+            SortTimelineUsageCounter.query.filter_by(month_key="2026-06").one().units_consumed,
+            2,
+        )
+        self.assertEqual(
             SortTimelineUsageCounter.query.filter_by(month_key="2026-07").one().attempted_call_count,
             1,
+        )
+        self.assertEqual(
+            SortTimelineUsageCounter.query.filter_by(month_key="2026-07").one().units_consumed,
+            2,
         )
 
     def test_motherbrain_main_menu_footer_link_routes_home_without_logout(self):

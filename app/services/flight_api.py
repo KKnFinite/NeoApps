@@ -107,7 +107,12 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
 
     start_utc, end_utc = api_window_for_operation(operation, settings)
     attempted_at = _utc_naive(now)
-    usage_counter = record_sort_timeline_api_attempt(gateway, attempted_at)
+    usage_units_consumed = int(settings.units_per_poll or 2)
+    usage_counter = record_sort_timeline_api_attempt(
+        gateway,
+        attempted_at,
+        units_consumed=usage_units_consumed,
+    )
     payload = (client or RapidApiFlightClient()).fetch_fids(
         gateway.code,
         start_utc,
@@ -127,7 +132,7 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
             "provider_enabled": True,
             "attempted": True,
             "api_key_env_var": api_key_env_var,
-            "usage_units_consumed": int(settings.units_per_poll or 2),
+            "usage_units_consumed": usage_units_consumed,
             "usage_polls_used": usage_counter.attempted_call_count,
             "window_start_utc": start_utc,
             "window_end_utc": end_utc,

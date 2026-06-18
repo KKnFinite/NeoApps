@@ -257,7 +257,11 @@ def month_budget_preview(settings, api_schedule, month_variances, month_start, g
     provider_enabled = bool(settings.provider_enabled)
     original_daily_cap = daily_poll_cap(monthly_poll_count, api_polling_days) if provider_enabled else 0
     polls_used = usage_count_for_month(gateway, month_key) if include_usage else 0
-    units_used = polls_used * _safe_units_per_poll(settings.units_per_poll)
+    units_used = (
+        usage_units_for_month(gateway, month_key, settings.units_per_poll)
+        if include_usage
+        else 0
+    )
     units_remaining = max(0, int(settings.monthly_api_units or 0) - units_used)
     polls_remaining = max(0, monthly_poll_count - polls_used)
     remaining_base_days = remaining_api_operating_day_count(
@@ -560,7 +564,20 @@ def usage_count_for_month(gateway, month_key):
     return counter.attempted_call_count if counter else 0
 
 
-def record_sort_timeline_api_attempt(gateway, attempted_at_utc=None):
+def usage_units_for_month(gateway, month_key, units_per_poll=None):
+    counter = SortTimelineUsageCounter.query.filter_by(
+        gateway_id=gateway.id,
+        month_key=month_key,
+    ).first()
+    if not counter:
+        return 0
+    stored_units = int(getattr(counter, "units_consumed", 0) or 0)
+    if stored_units:
+        return stored_units
+    return int(counter.attempted_call_count or 0) * _safe_units_per_poll(units_per_poll)
+
+
+def record_sort_timeline_api_attempt(gateway, attempted_at_utc=None, units_consumed=None):
     month_key = month_key_for_gateway_datetime(attempted_at_utc, gateway)
     counter = SortTimelineUsageCounter.query.filter_by(
         gateway_id=gateway.id,
@@ -577,8 +594,17 @@ def record_sort_timeline_api_attempt(gateway, attempted_at_utc=None):
 
     counter.gateway_code = gateway.code
     counter.attempted_call_count += 1
+    counter.units_consumed = int(counter.units_consumed or 0) + _usage_units(units_consumed)
     db.session.flush()
     return counter
+
+
+def _usage_units(units_consumed=None):
+    try:
+        units = int(units_consumed if units_consumed is not None else DEFAULT_UNITS_PER_POLL)
+    except (TypeError, ValueError):
+        units = DEFAULT_UNITS_PER_POLL
+    return max(0, units)
 
 
 def month_key_for_gateway_datetime(moment=None, gateway=None):
