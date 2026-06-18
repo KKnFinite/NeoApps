@@ -86,7 +86,7 @@
         <p class="muted">{{ gateway.code }} API PLANNING SETTINGS. NO EXTERNAL API CALLS ARE MADE FROM THIS SCREEN.</p>
     </div>
 
-    <form class="operation-form sort-timeline-form" method="post">
+    <form class="operation-form sort-timeline-form" method="post" data-sort-timeline-autosave>
         <input type="hidden" name="month_key" value="{{ current_month_key }}">
 
         <section class="sort-timeline-section" aria-labelledby="timeline-global-settings">
@@ -218,14 +218,82 @@
             </div>
         </section>
 
-        <div class="action-row">
-            <button class="action-button" type="submit">SAVE SORT TIMELINE SETTINGS</button>
-        </div>
+        <p class="sort-timeline-autosave-status" data-sort-timeline-save-status aria-live="polite">AUTO-SAVE READY</p>
     </form>
 </section>
 
 <script>
 (() => {
+    const form = document.querySelector("[data-sort-timeline-autosave]");
+    const status = document.querySelector("[data-sort-timeline-save-status]");
+    let saveTimer = null;
+    let saveController = null;
+
+    const setStatus = (message, state) => {
+        if (!status) {
+            return;
+        }
+        status.textContent = message;
+        status.dataset.state = state || "";
+    };
+
+    const saveSettings = async () => {
+        if (!form) {
+            return;
+        }
+        if (saveController) {
+            saveController.abort();
+        }
+        saveController = new AbortController();
+        setStatus("SAVING...", "saving");
+        try {
+            const response = await fetch(window.location.href, {
+                method: "POST",
+                body: new FormData(form),
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Accept": "application/json",
+                },
+                signal: saveController.signal,
+            });
+            if (!response.ok) {
+                throw new Error("Auto-save failed");
+            }
+            await response.json();
+            setStatus("SAVED", "saved");
+        } catch (error) {
+            if (error.name === "AbortError") {
+                return;
+            }
+            setStatus("SAVE FAILED", "error");
+        }
+    };
+
+    const queueSave = (delay = 450) => {
+        window.clearTimeout(saveTimer);
+        setStatus("SAVE PENDING...", "pending");
+        saveTimer = window.setTimeout(saveSettings, delay);
+    };
+
+    if (form) {
+        form.addEventListener("input", (event) => {
+            if (event.target.matches("input[type='text'], input[type='number'], input[type='time']")) {
+                queueSave(650);
+            }
+        });
+
+        form.addEventListener("change", (event) => {
+            if (event.target.matches("input, select, textarea")) {
+                queueSave(150);
+            }
+        });
+
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            queueSave(0);
+        });
+    }
+
     document.querySelectorAll("[data-add-special-poll]").forEach((button) => {
         button.addEventListener("click", () => {
             const sortName = button.dataset.addSpecialPoll;
@@ -240,6 +308,10 @@
                 <span class="muted">New row</span>
             `;
             list.appendChild(row);
+            const input = row.querySelector("input");
+            if (input) {
+                input.focus();
+            }
         });
     });
 
@@ -252,6 +324,7 @@
             const step = Number.parseInt(button.dataset.varianceStep || "0", 10);
             const current = Number.parseInt(input.value || "0", 10);
             input.value = String(current + step);
+            queueSave(150);
         });
     });
 })();

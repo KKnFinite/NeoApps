@@ -1,7 +1,7 @@
 from datetime import date, datetime
 import re
 
-from flask import current_app, flash, redirect, render_template, request, url_for
+from flask import current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import func
 
@@ -187,6 +187,8 @@ def sort_timeline():
     if request.method == "POST":
         _settings, month_key = save_sort_timeline_from_form(gateway, request.form)
         db.session.commit()
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"status": "saved", "month": month_key})
         flash("Sort Timeline settings saved.", "info")
         return redirect(url_for("neomotherbrain.sort_timeline", month=month_key))
 

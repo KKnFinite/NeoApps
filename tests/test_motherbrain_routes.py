@@ -218,6 +218,43 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr));", css)
         self.assertIn("min-height: 54px;", css)
 
+    def test_sort_timeline_renders_autosave_without_save_button(self):
+        response = self.client.get("/motherbrain/sort-timeline?month=2026-06")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"data-sort-timeline-autosave", response.data)
+        self.assertIn(b"data-sort-timeline-save-status", response.data)
+        self.assertIn(b"AUTO-SAVE READY", response.data)
+        self.assertNotIn(b"SAVE SORT TIMELINE SETTINGS", response.data)
+
+    def test_sort_timeline_autosave_post_returns_json_and_saves(self):
+        response = self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                monthly_api_units="900",
+                units_per_poll="3",
+                provider_enabled="1",
+                month_variance_6="2",
+            ),
+            headers={
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json",
+            },
+        )
+
+        settings = SortTimelineSettings.query.filter_by(gateway_id=self.rfd_gateway.id).one()
+        variance = SortTimelineMonthVariance.query.filter_by(
+            gateway_id=self.rfd_gateway.id,
+            month_number=6,
+        ).one()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {"status": "saved", "month": "2026-06"})
+        self.assertEqual(settings.monthly_api_units, 900)
+        self.assertEqual(settings.units_per_poll, 3)
+        self.assertTrue(settings.provider_enabled)
+        self.assertEqual(variance.variance, 2)
+
     def test_sort_timeline_monthly_limit_and_provider_settings_save_without_key(self):
         response = self.client.post(
             "/motherbrain/sort-timeline",

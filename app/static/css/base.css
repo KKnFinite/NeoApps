@@ -3809,6 +3809,31 @@ h2 {
     letter-spacing: 0.06em;
 }
 
+.sort-timeline-autosave-status {
+    justify-self: center;
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 950;
+    letter-spacing: 0.12em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.sort-timeline-autosave-status[data-state="saving"],
+.sort-timeline-autosave-status[data-state="pending"] {
+    color: var(--steel);
+}
+
+.sort-timeline-autosave-status[data-state="saved"] {
+    color: var(--node-highlight);
+    text-shadow: 0 0 14px rgba(var(--node-rgb), 0.35);
+}
+
+.sort-timeline-autosave-status[data-state="error"] {
+    color: var(--red);
+}
+
 .sort-timeline-api-days {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
