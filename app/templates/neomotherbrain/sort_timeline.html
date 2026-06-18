@@ -33,6 +33,7 @@
         {{ metric_tile("Polls Used", "polls_used", preview.polls_used) }}
         {{ metric_tile("Polls Remaining", "polls_remaining", preview.polls_remaining) }}
         {{ metric_tile("Operating Days", "operating_days", preview.operating_days) }}
+        {{ metric_tile("API Polling Days", "api_polling_days", preview.api_polling_days) }}
         {{ metric_tile("Original Daily Poll Cap", "original_daily_poll_cap", preview.original_daily_poll_cap) }}
         {{ metric_tile("Adjusted Daily Poll Cap", "adjusted_daily_poll_cap", preview.adjusted_daily_poll_cap) }}
         {{ metric_tile("Effective Daily Poll Cap", "effective_daily_poll_cap", preview.effective_daily_poll_cap) }}
@@ -40,7 +41,7 @@
         {{ metric_tile("Auto Interval Poll Count", "auto_interval_poll_count", preview.auto_interval_poll_count) }}
         {{ metric_tile("Total Scheduled Polls", "total_scheduled_polls", preview.total_scheduled_polls) }}
     </div>
-    <p class="muted">Operating Days are Gateway Matrix operating days adjusted by month offset. API-enabled days only control polling for configured sort/day combinations.</p>
+    <p class="muted">Operating Days are Gateway Matrix sort/day occurrences adjusted by month offset. API Polling Days are API-enabled sort/day occurrences used for daily API caps.</p>
 </section>
 {%- endmacro %}
 
@@ -358,14 +359,16 @@
 
     if (form) {
         form.addEventListener("input", (event) => {
-            if (event.target.matches("input[type='text'], input[type='number'], input[type='time']")) {
-                queueSave(650);
+            if (event.target.matches("input[type='number'], input[type='time']")) {
+                queueSave(150);
+            } else if (event.target.matches("input[type='text']")) {
+                queueSave(450);
             }
         });
 
         form.addEventListener("change", (event) => {
             if (event.target.matches("input, select, textarea")) {
-                queueSave(150);
+                queueSave(0);
             }
         });
 
@@ -387,7 +390,7 @@
             if (input) {
                 input.focus();
             }
-            queueSave(100);
+            queueSave(0);
         });
     });
 
@@ -408,7 +411,7 @@
             row.remove();
         }
         ensureSingleBlankSpecialRow(list);
-        queueSave(100);
+        queueSave(0);
     });
 
     document.querySelectorAll("[data-variance-step]").forEach((button) => {
@@ -420,7 +423,7 @@
             const step = Number.parseInt(button.dataset.varianceStep || "0", 10);
             const current = Number.parseInt(input.value || "0", 10);
             input.value = String(current + step);
-            queueSave(150);
+            queueSave(0);
         });
     });
 })();

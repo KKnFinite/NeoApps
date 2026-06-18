@@ -236,6 +236,7 @@ def _sort_timeline_preview_payload(preview):
         "polls_used": preview["polls_used"],
         "polls_remaining": preview["polls_remaining"],
         "operating_days": preview["operating_days"],
+        "api_polling_days": preview["api_polling_days"],
         "original_daily_poll_cap": preview["original_daily_poll_cap"],
         "adjusted_daily_poll_cap": preview["adjusted_daily_poll_cap"],
         "effective_daily_poll_cap": preview["effective_daily_poll_cap"],

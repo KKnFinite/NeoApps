@@ -386,6 +386,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertTrue(tuesday_matrix.is_active)
         self.assertEqual(context["summary"]["base_operating_days"], 10)
         self.assertEqual(context["summary"]["operating_days"], 10)
+        self.assertEqual(context["summary"]["api_polling_days"], 5)
         self.assertEqual(context["preview_by_sort"]["night"]["api_day_count"], 5)
 
     def test_sort_timeline_api_enabled_toggle_does_not_change_operating_days(self):
@@ -426,10 +427,118 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(tuesday_disabled["summary"]["base_operating_days"], 10)
         self.assertEqual(all_enabled["summary"]["operating_days"], 10)
         self.assertEqual(tuesday_disabled["summary"]["operating_days"], 10)
+        self.assertEqual(all_enabled["summary"]["api_polling_days"], 10)
+        self.assertEqual(tuesday_disabled["summary"]["api_polling_days"], 5)
         self.assertEqual(all_enabled["summary"]["original_daily_poll_cap"], 30)
-        self.assertEqual(tuesday_disabled["summary"]["original_daily_poll_cap"], 30)
+        self.assertEqual(tuesday_disabled["summary"]["original_daily_poll_cap"], 60)
         self.assertEqual(all_enabled["preview_by_sort"]["night"]["api_day_count"], 10)
         self.assertEqual(tuesday_disabled["preview_by_sort"]["night"]["api_day_count"], 5)
+
+    def test_sort_timeline_ajax_preview_api_day_toggle_changes_api_polling_days_only(self):
+        self._add_matrix_cell("monday", "night")
+        self._add_matrix_cell("tuesday", "night")
+        all_enabled = self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                provider_enabled="1",
+                monthly_api_units="600",
+                units_per_poll="2",
+                api_enabled_night_monday="1",
+                api_enabled_night_tuesday="1",
+            ),
+            headers={
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json",
+            },
+        ).get_json()["previews"]["2026-06"]
+
+        tuesday_disabled = self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                provider_enabled="1",
+                monthly_api_units="600",
+                units_per_poll="2",
+                api_enabled_night_monday="1",
+            ),
+            headers={
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json",
+            },
+        ).get_json()["previews"]["2026-06"]
+
+        self.assertEqual(all_enabled["operating_days"], 10)
+        self.assertEqual(tuesday_disabled["operating_days"], 10)
+        self.assertEqual(all_enabled["api_polling_days"], 10)
+        self.assertEqual(tuesday_disabled["api_polling_days"], 5)
+        self.assertEqual(tuesday_disabled["original_daily_poll_cap"], 60)
+
+    def test_sort_timeline_daily_cap_uses_api_polling_days(self):
+        self._add_matrix_cell("monday", "night")
+        self._add_matrix_cell("tuesday", "night")
+        self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                provider_enabled="1",
+                monthly_api_units="600",
+                units_per_poll="2",
+                api_enabled_night_monday="1",
+            ),
+        )
+        context = sort_timeline_context(
+            self.rfd_gateway,
+            "2026-06",
+            now=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(context["summary"]["monthly_poll_limit"], 300)
+        self.assertEqual(context["summary"]["operating_days"], 10)
+        self.assertEqual(context["summary"]["api_polling_days"], 5)
+        self.assertEqual(context["summary"]["original_daily_poll_cap"], 60)
+
+    def test_sort_timeline_gateway_matrix_changes_update_source_days(self):
+        self._add_matrix_cell("monday", "night")
+        one_sort = sort_timeline_context(
+            self.rfd_gateway,
+            "2026-06",
+            now=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+        )
+
+        self._add_matrix_cell("monday", "day")
+        two_sorts = sort_timeline_context(
+            self.rfd_gateway,
+            "2026-06",
+            now=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(one_sort["summary"]["operating_days"], 5)
+        self.assertEqual(one_sort["summary"]["api_polling_days"], 5)
+        self.assertEqual(two_sorts["summary"]["operating_days"], 10)
+        self.assertEqual(two_sorts["summary"]["api_polling_days"], 10)
+        self.assertIn("night", two_sorts["preview_by_sort"])
+        self.assertIn("day", two_sorts["preview_by_sort"])
+
+    def test_sort_timeline_month_offset_changes_api_polling_preview(self):
+        self._add_matrix_cell("monday", "night")
+        self._add_matrix_cell("tuesday", "night")
+        response = self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                provider_enabled="1",
+                monthly_api_units="600",
+                units_per_poll="2",
+                month_variance_6="2",
+                api_enabled_night_monday="1",
+            ),
+            headers={
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json",
+            },
+        )
+        preview = response.get_json()["previews"]["2026-06"]
+
+        self.assertEqual(preview["operating_days"], 12)
+        self.assertEqual(preview["api_polling_days"], 7)
+        self.assertEqual(preview["original_daily_poll_cap"], 42)
 
     def test_sort_timeline_month_variance_positive_increases_ops_days(self):
         self._add_matrix_days("night", ["monday", "tuesday", "wednesday", "thursday", "friday"])
@@ -946,6 +1055,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Monthly API Units", response.data)
         self.assertIn(b"Units Used", response.data)
         self.assertIn(b"Polls Remaining", response.data)
+        self.assertIn(b"API Polling Days", response.data)
         self.assertIn(b"Effective Daily Poll Cap", response.data)
 
     def test_sort_timeline_usage_counter_uses_rfd_local_month_boundary(self):

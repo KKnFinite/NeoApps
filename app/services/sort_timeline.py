@@ -244,8 +244,10 @@ def month_budget_preview(settings, api_schedule, month_variances, month_start, g
     month_variance = month_variances.get(month_start.month, 0)
     base_operating_days = api_operating_day_count(month_start, api_schedule["configured_cells"])
     operating_days = adjusted_operating_days(base_operating_days, month_variance)
+    base_api_polling_days = api_operating_day_count(month_start, api_schedule["enabled_cells"])
+    api_polling_days = adjusted_api_polling_days(base_api_polling_days, month_variance)
     provider_enabled = bool(settings.provider_enabled)
-    original_daily_cap = daily_poll_cap(monthly_poll_count, operating_days) if provider_enabled else 0
+    original_daily_cap = daily_poll_cap(monthly_poll_count, api_polling_days) if provider_enabled else 0
     polls_used = usage_count_for_month(gateway, month_key) if include_usage else 0
     units_used = polls_used * _safe_units_per_poll(settings.units_per_poll)
     units_remaining = max(0, int(settings.monthly_api_units or 0) - units_used)
@@ -258,7 +260,18 @@ def month_budget_preview(settings, api_schedule, month_variances, month_start, g
         now=now,
     ) if include_usage else base_operating_days
     remaining_operating_days = adjusted_operating_days(remaining_base_days, month_variance)
-    adjusted_daily_cap = daily_poll_cap(polls_remaining, remaining_operating_days) if provider_enabled else 0
+    remaining_base_api_polling_days = remaining_api_operating_day_count(
+        month_start,
+        api_schedule["enabled_cells"],
+        sort_settings_by_name(settings),
+        gateway,
+        now=now,
+    ) if include_usage else base_api_polling_days
+    remaining_api_polling_days = adjusted_api_polling_days(
+        remaining_base_api_polling_days,
+        month_variance,
+    )
+    adjusted_daily_cap = daily_poll_cap(polls_remaining, remaining_api_polling_days) if provider_enabled else 0
     effective_daily_cap = min(original_daily_cap, adjusted_daily_cap) if provider_enabled else 0
     budget_exhausted = provider_enabled and monthly_poll_count > 0 and polls_remaining <= 0
     sort_previews = sort_timeline_previews(settings, api_schedule, month_start, effective_daily_cap)
@@ -282,7 +295,10 @@ def month_budget_preview(settings, api_schedule, month_variances, month_start, g
         "base_operating_days": base_operating_days,
         "month_variance": month_variance,
         "operating_days": operating_days,
+        "base_api_polling_days": base_api_polling_days,
+        "api_polling_days": api_polling_days,
         "remaining_operating_days": remaining_operating_days,
+        "remaining_api_polling_days": remaining_api_polling_days,
         "original_daily_poll_cap": original_daily_cap,
         "adjusted_daily_poll_cap": adjusted_daily_cap,
         "effective_daily_poll_cap": effective_daily_cap,
@@ -332,7 +348,7 @@ def sort_settings_by_name(settings):
 
 
 def api_operating_day_count(month_start, enabled_cells):
-    return len(api_operating_dates_for_month(month_start, enabled_cells))
+    return len(api_operating_occurrences_for_month(month_start, enabled_cells))
 
 
 def api_sort_day_count(month_start, sort_name, enabled_cells):
@@ -346,38 +362,35 @@ def api_sort_day_count(month_start, sort_name, enabled_cells):
     return total
 
 
-def api_operating_dates_for_month(month_start, enabled_cells):
+def api_operating_occurrences_for_month(month_start, enabled_cells):
     _, day_count = calendar.monthrange(month_start.year, month_start.month)
-    operating_dates = []
-    enabled_days = {day for day, _sort_name in enabled_cells}
+    operating_occurrences = []
     for day_number in range(1, day_count + 1):
         candidate = date(month_start.year, month_start.month, day_number)
-        if candidate.strftime("%A").lower() in enabled_days:
-            operating_dates.append(candidate)
-    return operating_dates
+        day_name = candidate.strftime("%A").lower()
+        for enabled_day, sort_name in enabled_cells:
+            if day_name == enabled_day:
+                operating_occurrences.append((candidate, sort_name))
+    return operating_occurrences
 
 
 def remaining_api_operating_day_count(month_start, enabled_cells, sort_settings, gateway, now=None):
     local_now = gateway_local_datetime(gateway, now)
     selected_month = month_start_from_key(month_start.strftime("%Y-%m"))
     local_month = date(local_now.year, local_now.month, 1)
-    operating_dates = api_operating_dates_for_month(month_start, enabled_cells)
+    operating_occurrences = api_operating_occurrences_for_month(month_start, enabled_cells)
 
     if selected_month < local_month:
         return 0
     if selected_month > local_month:
-        return len(operating_dates)
+        return len(operating_occurrences)
 
     remaining = 0
     today = local_now.date()
-    for operating_date in operating_dates:
+    for operating_date, sort_name in operating_occurrences:
         if operating_date > today:
             remaining += 1
-        elif operating_date == today and today_api_window_still_active(
-            enabled_cells,
-            sort_settings,
-            local_now,
-        ):
+        elif operating_date == today and sort_api_window_still_active(sort_name, sort_settings, local_now):
             remaining += 1
     return remaining
 
@@ -398,6 +411,18 @@ def today_api_window_still_active(enabled_cells, sort_settings, local_now):
         ):
             return True
     return False
+
+
+def sort_api_window_still_active(sort_name, sort_settings, local_now):
+    current_time = local_now.time().replace(second=0, microsecond=0)
+    sort_setting = sort_settings.get(sort_name)
+    if not sort_setting or not sort_setting.polling_end_local:
+        return True
+    return _time_window_still_active(
+        current_time,
+        sort_setting.polling_start_local,
+        sort_setting.polling_end_local,
+    )
 
 
 def _time_window_still_active(current_time, start_time, end_time):
@@ -457,6 +482,12 @@ def save_month_variances(gateway, form):
 
 def adjusted_operating_days(base_operating_days, month_variance):
     return max(0, int(base_operating_days or 0) + int(month_variance or 0))
+
+
+def adjusted_api_polling_days(base_api_polling_days, month_variance):
+    if int(base_api_polling_days or 0) <= 0:
+        return 0
+    return adjusted_operating_days(base_api_polling_days, month_variance)
 
 
 def monthly_poll_limit(monthly_api_units, units_per_poll):
