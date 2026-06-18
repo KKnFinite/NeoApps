@@ -75,7 +75,7 @@
             <strong>{{ preview.total_scheduled_polls }}</strong>
         </article>
     </div>
-    <p class="muted">Scheduled poll totals are daily totals across API-enabled Gateway Matrix sort/day combinations.</p>
+    <p class="muted">Operating Days are Gateway Matrix operating days adjusted by month offset. API-enabled days only control polling for configured sort/day combinations.</p>
 </section>
 {%- endmacro %}
 
@@ -199,17 +199,21 @@
                     <div class="sort-timeline-special-polls" data-special-poll-list="{{ sort_name }}">
                         <span class="sort-timeline-field-label">Special Poll Times</span>
                         {% for special_time in sort_setting.special_poll_times %}
-                        <div class="sort-timeline-special-row">
+                        <div class="sort-timeline-special-row" data-special-poll-row>
                             <input type="time" name="{{ sort_name }}_special_poll_time" value="{{ format_timeline_time(special_time.poll_time_local) }}">
-                            <label class="table-row-button table-row-delete-button sort-timeline-delete-row" aria-label="Delete {{ sort_preview.sort_label }} special poll at {{ format_timeline_time(special_time.poll_time_local) }}">
-                                <input class="sort-timeline-delete-checkbox" type="checkbox" name="{{ sort_name }}_delete_special_poll_time" value="{{ format_timeline_time(special_time.poll_time_local) }}">
-                                <span aria-hidden="true">&times;</span>
-                            </label>
+                            <button
+                                class="table-row-button table-row-delete-button sort-timeline-delete-row"
+                                type="button"
+                                data-special-poll-delete
+                                data-delete-name="{{ sort_name }}_delete_special_poll_time"
+                                data-delete-value="{{ format_timeline_time(special_time.poll_time_local) }}"
+                                aria-label="Delete {{ sort_preview.sort_label }} special poll at {{ format_timeline_time(special_time.poll_time_local) }}"
+                            >&times;</button>
                         </div>
                         {% endfor %}
-                        <div class="sort-timeline-special-row">
+                        <div class="sort-timeline-special-row sort-timeline-special-new-row" data-special-poll-row data-special-new-row>
                             <input type="time" name="{{ sort_name }}_special_poll_time" value="" aria-label="{{ sort_preview.sort_label }} special poll time">
-                            <span class="muted">New row</span>
+                            <button class="table-row-button table-row-delete-button sort-timeline-delete-row" type="button" data-special-poll-delete aria-label="Clear {{ sort_preview.sort_label }} special poll row">&times;</button>
                         </div>
                     </div>
                     <button class="action-button action-button-secondary sort-timeline-add-special" type="button" data-add-special-poll="{{ sort_name }}">ADD SPECIAL POLL TIME ROW</button>
@@ -260,6 +264,8 @@
                 throw new Error("Auto-save failed");
             }
             await response.json();
+            markSpecialRowsSaved();
+            clearDeleteMarkers();
             setStatus("SAVED", "saved");
         } catch (error) {
             if (error.name === "AbortError") {
@@ -273,6 +279,81 @@
         window.clearTimeout(saveTimer);
         setStatus("SAVE PENDING...", "pending");
         saveTimer = window.setTimeout(saveSettings, delay);
+    };
+
+    const sortNameFromInput = (input) => (input && input.name ? input.name.replace(/_special_poll_time$/, "") : "");
+
+    const specialRowMarkup = (sortName) => `
+        <div class="sort-timeline-special-row sort-timeline-special-new-row" data-special-poll-row data-special-new-row>
+            <input type="time" name="${sortName}_special_poll_time" value="" aria-label="${sortName} special poll time">
+            <button class="table-row-button table-row-delete-button sort-timeline-delete-row" type="button" data-special-poll-delete aria-label="Clear ${sortName} special poll row">&times;</button>
+        </div>
+    `;
+
+    const ensureSingleBlankSpecialRow = (list) => {
+        if (!list) {
+            return null;
+        }
+        const sortName = list.dataset.specialPollList;
+        const rows = [...list.querySelectorAll("[data-special-poll-row]")];
+        const blankRows = rows.filter((row) => {
+            const input = row.querySelector("input[name$='_special_poll_time']");
+            return input && !input.value;
+        });
+        blankRows.slice(1).forEach((row) => row.remove());
+        if (blankRows[0]) {
+            blankRows[0].dataset.specialNewRow = "true";
+            blankRows[0].classList.add("sort-timeline-special-new-row");
+            return blankRows[0];
+        }
+        list.insertAdjacentHTML("beforeend", specialRowMarkup(sortName));
+        return list.querySelector("[data-special-new-row]:last-child");
+    };
+
+    const ensureAllSpecialPollListsHaveBlankRow = () => {
+        document.querySelectorAll("[data-special-poll-list]").forEach(ensureSingleBlankSpecialRow);
+    };
+
+    const addDeleteMarker = (name, value) => {
+        if (!form || !name || !value) {
+            return;
+        }
+        const existing = form.querySelector(`[data-special-delete-marker][name="${name}"][value="${value}"]`);
+        if (existing) {
+            return;
+        }
+        const marker = document.createElement("input");
+        marker.type = "hidden";
+        marker.name = name;
+        marker.value = value;
+        marker.dataset.specialDeleteMarker = "true";
+        form.appendChild(marker);
+    };
+
+    const clearDeleteMarkers = () => {
+        if (!form) {
+            return;
+        }
+        form.querySelectorAll("[data-special-delete-marker]").forEach((marker) => marker.remove());
+    };
+
+    const markSpecialRowsSaved = () => {
+        document.querySelectorAll("[data-special-poll-list]").forEach((list) => {
+            list.querySelectorAll("[data-special-poll-row]").forEach((row) => {
+                const input = row.querySelector("input[name$='_special_poll_time']");
+                const button = row.querySelector("[data-special-poll-delete]");
+                if (!input || !button || !input.value) {
+                    return;
+                }
+                const sortName = sortNameFromInput(input);
+                row.classList.remove("sort-timeline-special-new-row");
+                delete row.dataset.specialNewRow;
+                button.dataset.deleteName = `${sortName}_delete_special_poll_time`;
+                button.dataset.deleteValue = input.value;
+                button.setAttribute("aria-label", `Delete ${sortName} special poll at ${input.value}`);
+            });
+            ensureSingleBlankSpecialRow(list);
+        });
     };
 
     if (form) {
@@ -301,18 +382,32 @@
             if (!list) {
                 return;
             }
-            const row = document.createElement("div");
-            row.className = "sort-timeline-special-row";
-            row.innerHTML = `
-                <input type="time" name="${sortName}_special_poll_time" value="" aria-label="${sortName} special poll time">
-                <span class="muted">New row</span>
-            `;
-            list.appendChild(row);
+            const row = ensureSingleBlankSpecialRow(list);
             const input = row.querySelector("input");
             if (input) {
                 input.focus();
             }
         });
+    });
+
+    document.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-special-poll-delete]");
+        if (!button) {
+            return;
+        }
+        const row = button.closest("[data-special-poll-row]");
+        const list = button.closest("[data-special-poll-list]");
+        const input = row ? row.querySelector("input[name$='_special_poll_time']") : null;
+        const deleteName = button.dataset.deleteName;
+        const deleteValue = button.dataset.deleteValue || (input ? input.value : "");
+        if (deleteName && deleteValue) {
+            addDeleteMarker(deleteName, deleteValue);
+        }
+        if (row) {
+            row.remove();
+        }
+        ensureSingleBlankSpecialRow(list);
+        queueSave(100);
     });
 
     document.querySelectorAll("[data-variance-step]").forEach((button) => {

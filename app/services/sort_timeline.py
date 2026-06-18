@@ -242,7 +242,7 @@ def month_budget_preview(settings, api_schedule, month_variances, month_start, g
     monthly_poll_count = monthly_poll_limit(settings.monthly_api_units, settings.units_per_poll)
     month_key = month_start.strftime("%Y-%m")
     month_variance = month_variances.get(month_start.month, 0)
-    base_operating_days = api_operating_day_count(month_start, api_schedule["enabled_cells"])
+    base_operating_days = api_operating_day_count(month_start, api_schedule["configured_cells"])
     operating_days = adjusted_operating_days(base_operating_days, month_variance)
     provider_enabled = bool(settings.provider_enabled)
     original_daily_cap = daily_poll_cap(monthly_poll_count, operating_days) if provider_enabled else 0
@@ -252,7 +252,7 @@ def month_budget_preview(settings, api_schedule, month_variances, month_start, g
     polls_remaining = max(0, monthly_poll_count - polls_used)
     remaining_base_days = remaining_api_operating_day_count(
         month_start,
-        api_schedule["enabled_cells"],
+        api_schedule["configured_cells"],
         sort_settings_by_name(settings),
         gateway,
         now=now,
