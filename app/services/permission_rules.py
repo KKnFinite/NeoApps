@@ -31,6 +31,16 @@ DEFAULT_PERMISSION_RULES = (
         "View NeoMotherBrain Gateway Matrix screens.",
     ),
     (
+        "neomotherbrain.flight_api_review.view",
+        "simulator",
+        "View unmatched UPS Flight API review queue.",
+    ),
+    (
+        "neomotherbrain.flight_api_review.edit",
+        "simulator",
+        "Add or ignore unmatched UPS Flight API review items.",
+    ),
+    (
         "neoermac.building_lineup.view",
         "operator",
         "View NeoErmac Building Lineup screens.",

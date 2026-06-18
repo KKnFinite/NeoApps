@@ -234,6 +234,7 @@ def accept_review_item(review_item, settings=None, now=None):
     ).first()
     payload = json.loads(review_item.raw_payload or "{}")
     normalized = normalize_api_flight(payload, operation, operation.gateway or None)
+    _fill_normalized_from_review_item(normalized, review_item)
     mission = build_api_added_mission(operation, normalized)
     db.session.add(mission)
     db.session.flush()
@@ -250,6 +251,26 @@ def accept_review_item(review_item, settings=None, now=None):
     review_item.accepted_mission_id = mission.id
     db.session.flush()
     return mission
+
+
+def _fill_normalized_from_review_item(normalized, review_item):
+    fallback_values = {
+        "mission_type": review_item.mission_type,
+        "review_key": review_item.review_key,
+        "flight_number": review_item.flight_number,
+        "call_sign": review_item.call_sign,
+        "origin": review_item.origin,
+        "destination": review_item.destination,
+        "revised_time_utc": review_item.revised_time_utc,
+        "scheduled_time_utc": review_item.revised_time_utc,
+        "runway_time_utc": review_item.runway_time_utc,
+        "tail_number": review_item.tail_number,
+        "aircraft_model": review_item.aircraft_model,
+        "api_status_raw": review_item.api_status,
+    }
+    for key, value in fallback_values.items():
+        if not normalized.get(key) and value is not None:
+            normalized[key] = value
 
 
 def ignore_review_item(review_item):
@@ -517,6 +538,8 @@ def build_api_added_mission(operation, normalized):
         assigned_tail_number=normalized["tail_number"] or None,
         tail_source="api" if normalized["tail_number"] else "unknown",
         tail_updated_at=datetime.utcnow() if normalized["tail_number"] else None,
+        api_status=normalized.get("api_status_raw") or None,
+        api_aircraft_model=normalized["aircraft_model"] or None,
         api_added_current_sort_only=True,
     )
     if mission.mission_type == "arrival":

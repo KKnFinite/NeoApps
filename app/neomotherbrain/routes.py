@@ -54,6 +54,7 @@ from app.services.gateway_matrix import (
     save_gateway_matrix,
 )
 from app.services.night_sorting import master_schedule_sort_key, mission_board_sort_key
+from app.services.permission_rules import permission_access, user_can
 from app.services.sort_timeline import (
     DAY_OPTIONS as TIMELINE_DAY_OPTIONS,
     SORT_OPTIONS as TIMELINE_SORT_OPTIONS,
@@ -72,6 +73,9 @@ ACTIVE_DAY_OPTIONS = (
     ("saturday", "Saturday"),
     ("sunday", "Sunday"),
 )
+
+FLIGHT_API_REVIEW_VIEW_PERMISSION = "neomotherbrain.flight_api_review.view"
+FLIGHT_API_REVIEW_EDIT_PERMISSION = "neomotherbrain.flight_api_review.edit"
 
 SORT_NAME_OPTIONS = (
     ("night", "Night"),
@@ -266,33 +270,81 @@ def flight_api_test():
     )
 
 
+@bp.route("/motherbrain/flight-api-review")
+@login_required
+def flight_api_review():
+    gateway = get_current_gateway()
+    access = permission_access(
+        FLIGHT_API_REVIEW_VIEW_PERMISSION,
+        FLIGHT_API_REVIEW_EDIT_PERMISSION,
+    )
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neomotherbrain.rfd_hub"))
+
+    generation_result = _auto_generate_today_sorts(gateway)
+    sort_date = generation_result["sort_date"]
+    operations = operations_for_gateway_date(gateway, sort_date)
+    selected_operation = _selected_current_operation(operations)
+    pending_items = pending_review_items_for_operation(selected_operation)
+    return render_template(
+        "neomotherbrain/flight_api_review.html",
+        gateway=gateway,
+        sort_date=sort_date,
+        operations=operations,
+        selected_operation=selected_operation,
+        pending_review_items=pending_items,
+        can_edit=access["can_edit"],
+    )
+
+
 @bp.route("/motherbrain/flight-api-review/<int:review_item_id>/add", methods=["POST"])
-@gateway_node_required("motherbrain", minimum_role="grandmaster")
+@login_required
 def add_flight_api_review_item(review_item_id):
+    if not user_can(FLIGHT_API_REVIEW_EDIT_PERMISSION):
+        db.session.rollback()
+        flash("Access denied.", "error")
+        return redirect(url_for("neomotherbrain.rfd_hub"))
+
     gateway = get_current_gateway()
     review_item = review_item_or_404(gateway, review_item_id)
+    if not _review_item_matches_selected_operation(gateway, review_item):
+        db.session.rollback()
+        flash("Review item is not part of the selected current sort operation.", "error")
+        return redirect(url_for("neomotherbrain.flight_api_review"))
+
     accept_review_item(review_item)
     db.session.commit()
     flash("API flight added to current sort operation.", "info")
     return redirect(
         url_for(
-            "neomotherbrain.flight_api_test",
+            "neomotherbrain.flight_api_review",
             operation_id=review_item.sort_date_operation_id,
         )
     )
 
 
 @bp.route("/motherbrain/flight-api-review/<int:review_item_id>/ignore", methods=["POST"])
-@gateway_node_required("motherbrain", minimum_role="grandmaster")
+@login_required
 def ignore_flight_api_review_item(review_item_id):
+    if not user_can(FLIGHT_API_REVIEW_EDIT_PERMISSION):
+        db.session.rollback()
+        flash("Access denied.", "error")
+        return redirect(url_for("neomotherbrain.rfd_hub"))
+
     gateway = get_current_gateway()
     review_item = review_item_or_404(gateway, review_item_id)
+    if not _review_item_matches_selected_operation(gateway, review_item):
+        db.session.rollback()
+        flash("Review item is not part of the selected current sort operation.", "error")
+        return redirect(url_for("neomotherbrain.flight_api_review"))
+
     ignore_review_item(review_item)
     db.session.commit()
     flash("API flight ignored for this sort operation.", "info")
     return redirect(
         url_for(
-            "neomotherbrain.flight_api_test",
+            "neomotherbrain.flight_api_review",
             operation_id=review_item.sort_date_operation_id,
         )
     )
@@ -930,6 +982,19 @@ def _selected_current_operation(operations, operation_id=None):
             if selected:
                 return selected
     return operations[0] if operations else None
+
+
+def _review_item_matches_selected_operation(gateway, review_item):
+    generation_result = _auto_generate_today_sorts(gateway)
+    operations = operations_for_gateway_date(gateway, generation_result["sort_date"])
+    selected_operation = _selected_current_operation(
+        operations,
+        operation_id=request.form.get("operation_id"),
+    )
+    return bool(
+        selected_operation
+        and selected_operation.id == review_item.sort_date_operation_id
+    )
 
 
 def _sync_operation_with_master(operation):

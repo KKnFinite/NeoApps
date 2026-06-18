@@ -37,6 +37,11 @@
                 <strong>SORT TIMELINE</strong>
             </a>
             {% endif %}
+            {% if user_can("neomotherbrain.flight_api_review.view") %}
+            <a class="motherbrain-dashboard-card" href="{{ url_for('neomotherbrain.flight_api_review') }}">
+                <strong>FLIGHT API REVIEW</strong>
+            </a>
+            {% endif %}
             <a class="motherbrain-dashboard-card" href="{{ url_for('neomotherbrain.master_schedule') }}">
                 <strong>MASTER SCHEDULE</strong>
             </a>

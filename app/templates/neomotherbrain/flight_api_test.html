@@ -180,9 +180,11 @@
                     <td>{{ item.api_status or "-" }}</td>
                     <td class="table-actions">
                         <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.add_flight_api_review_item', review_item_id=item.id) }}">
+                            <input type="hidden" name="operation_id" value="{{ selected_operation.id }}">
                             <button class="table-row-button" type="submit">ADD</button>
                         </form>
                         <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.ignore_flight_api_review_item', review_item_id=item.id) }}">
+                            <input type="hidden" name="operation_id" value="{{ selected_operation.id }}">
                             <button class="table-row-button table-row-delete-button" type="submit" aria-label="Ignore {{ item.flight_number }}">&times;</button>
                         </form>
                     </td>

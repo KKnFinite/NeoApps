@@ -90,6 +90,8 @@ class DatabaseBootstrapTest(unittest.TestCase):
             },
             {
                 "neomotherbrain.dashboard.view": "operator",
+                "neomotherbrain.flight_api_review.edit": "simulator",
+                "neomotherbrain.flight_api_review.view": "simulator",
                 "neomotherbrain.gateway_matrix.view": "operator",
                 "neomotherbrain.manage_sort.view": "operator",
                 "neomotherbrain.master_schedule.view": "operator",
@@ -154,7 +156,7 @@ class DatabaseBootstrapTest(unittest.TestCase):
         self.assertFalse(second_result["password_applied"])
         self.assertEqual(Gateway.query.filter_by(code="RFD").count(), 1)
         self.assertEqual(NeoNode.query.count(), len(DEFAULT_NEONODES))
-        self.assertEqual(PermissionRule.query.count(), 19)
+        self.assertEqual(PermissionRule.query.count(), 21)
         self.assertEqual(User.query.filter_by(username="Kessler").count(), 1)
         self.assertEqual(GatewayMembership.query.filter_by(user_id=user.id).count(), 1)
         self.assertEqual(

@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 import os
 import unittest
 
@@ -9,6 +9,7 @@ from app.models import (
     Gateway,
     GatewayMembership,
     MasterFlightSchedule,
+    PermissionRule,
     SortDateMission,
     SortDateOperation,
     SortTimelineSettings,
@@ -16,6 +17,7 @@ from app.models import (
     User,
 )
 from app.services.access_control import backfill_default_gateway_node_roles
+from app.services.permission_rules import ensure_default_permission_rules
 from app.services import flight_api as flight_api_service
 from app.services.flight_api import (
     API_STATUS_ASSUMED_ARRIVED,
@@ -28,6 +30,7 @@ from app.services.flight_api import (
     ignore_review_item,
     import_api_flights_for_operation,
     map_api_status,
+    pending_review_items_for_operation,
     run_flight_api_import,
 )
 from app.services.sort_timeline import ensure_sort_timeline_settings, sort_timeline_context
@@ -612,6 +615,7 @@ class FlightApiTestPageTest(unittest.TestCase):
         db.session.add(user)
         db.session.flush()
         backfill_default_gateway_node_roles(user, role="grandmaster")
+        ensure_default_permission_rules()
         membership = GatewayMembership.query.filter_by(
             user_id=user.id,
             gateway_id=self.gateway.id,
@@ -696,6 +700,268 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"API key env var AERODATABOX_API_KEY is not set.", response.data)
         self.assertIn(b"SKIPPED", response.data)
         self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
+
+    def test_flight_api_review_page_link_visible_for_view_permission(self):
+        self._login_motherbrain_role("review_simulator_link", "simulator")
+
+        response = self.client.get("/motherbrain")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'href="/motherbrain/flight-api-review"', response.data)
+        self.assertIn(b"FLIGHT API REVIEW", response.data)
+
+    def test_flight_api_review_page_permission_can_block_link_and_page(self):
+        view_rule = PermissionRule.query.filter_by(
+            permission_key="neomotherbrain.flight_api_review.view"
+        ).one()
+        edit_rule = PermissionRule.query.filter_by(
+            permission_key="neomotherbrain.flight_api_review.edit"
+        ).one()
+        view_rule.minimum_role = "master"
+        edit_rule.minimum_role = "master"
+        db.session.commit()
+        self._login_motherbrain_role("review_blocked_simulator", "simulator")
+
+        home_response = self.client.get("/motherbrain")
+        blocked_response = self.client.get(
+            "/motherbrain/flight-api-review",
+            follow_redirects=False,
+        )
+
+        self.assertEqual(home_response.status_code, 200)
+        self.assertNotIn(b'href="/motherbrain/flight-api-review"', home_response.data)
+        self.assertEqual(blocked_response.status_code, 302)
+        self.assertEqual(blocked_response.location, "/rfd")
+
+    def test_flight_api_review_page_renders_unmatched_items_for_simulator(self):
+        operation = self._review_operation()
+        self._review_item(operation, flight_number="5X555", call_sign="UPS555")
+        self._login_motherbrain_role("review_simulator", "simulator")
+
+        response = self.client.get(
+            f"/motherbrain/flight-api-review?operation_id={operation.id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"FLIGHT API REVIEW", response.data)
+        self.assertIn(b"5X555", response.data)
+        self.assertIn(b"UPS555", response.data)
+        self.assertIn(b"SDF / RFD", response.data)
+        self.assertIn(b"N555UP", response.data)
+        self.assertIn(b"A300", response.data)
+        self.assertIn(b"Expected", response.data)
+        self.assertIn(b">ADD</button>", response.data)
+
+    def test_flight_api_review_page_does_not_leak_api_key_value(self):
+        operation = self._review_operation()
+        self._review_item(operation)
+        self._login_motherbrain_role("review_key_simulator", "simulator")
+        os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
+        try:
+            response = self.client.get(
+                f"/motherbrain/flight-api-review?operation_id={operation.id}"
+            )
+        finally:
+            os.environ.pop("AERODATABOX_API_KEY", None)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
+
+    def test_flight_api_review_edit_permission_controls_actions(self):
+        edit_rule = PermissionRule.query.filter_by(
+            permission_key="neomotherbrain.flight_api_review.edit"
+        ).one()
+        edit_rule.minimum_role = "master"
+        operation = self._review_operation()
+        review_item = self._review_item(operation)
+        db.session.commit()
+        self._login_motherbrain_role("review_view_only_simulator", "simulator")
+
+        page_response = self.client.get(
+            f"/motherbrain/flight-api-review?operation_id={operation.id}"
+        )
+        add_response = self.client.post(
+            f"/motherbrain/flight-api-review/{review_item.id}/add",
+            data={"operation_id": str(operation.id)},
+            follow_redirects=False,
+        )
+
+        db.session.refresh(review_item)
+        self.assertEqual(page_response.status_code, 200)
+        self.assertIn(b"VIEW ONLY", page_response.data)
+        self.assertNotIn(b">ADD</button>", page_response.data)
+        self.assertEqual(add_response.status_code, 302)
+        self.assertEqual(add_response.location, "/rfd")
+        self.assertEqual(review_item.review_status, "pending")
+        self.assertEqual(SortDateMission.query.count(), 0)
+
+    def test_flight_api_review_add_creates_current_sort_only_mission_not_master_row(self):
+        operation = self._review_operation()
+        review_item = self._review_item(
+            operation,
+            flight_number="5X777",
+            call_sign="UPS777",
+            tail_number="N777UP",
+        )
+        master_row = MasterFlightSchedule(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_name=operation.sort_name,
+            mission_type="arrival",
+            wave="1",
+            flight_number="5X111",
+            aircraft_type="A300",
+            origin="SDF",
+            destination="RFD",
+            active_days="monday",
+            planned_time_local=time(2, 0),
+            timezone="America/Chicago",
+            active=True,
+        )
+        manual_mission = self._mission_for_operation(
+            operation,
+            flight_number="5X999",
+            arrival_status="arrived",
+        )
+        db.session.add_all([master_row, manual_mission])
+        db.session.commit()
+        self._login_motherbrain_role("review_add_simulator", "simulator")
+
+        response = self.client.post(
+            f"/motherbrain/flight-api-review/{review_item.id}/add",
+            data={"operation_id": str(operation.id)},
+            follow_redirects=False,
+        )
+
+        mission = SortDateMission.query.filter_by(flight_number="5X777").one()
+        db.session.refresh(review_item)
+        db.session.refresh(manual_mission)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/motherbrain/flight-api-review", response.location)
+        self.assertEqual(mission.sort_date_operation_id, operation.id)
+        self.assertEqual(mission.mission_source, "api")
+        self.assertTrue(mission.api_added_current_sort_only)
+        self.assertIsNone(mission.master_flight_schedule_id)
+        self.assertEqual(mission.assigned_tail_number, "N777UP")
+        self.assertEqual(review_item.review_status, "accepted")
+        self.assertEqual(review_item.accepted_mission_id, mission.id)
+        self.assertEqual(MasterFlightSchedule.query.count(), 1)
+        self.assertEqual(manual_mission.arrival_status, "arrived")
+
+    def test_flight_api_review_add_rejects_item_outside_selected_operation(self):
+        selected_operation = self._review_operation(sort_name="night")
+        other_operation = self._review_operation(sort_name="day")
+        review_item = self._review_item(other_operation, flight_number="5X888")
+        db.session.commit()
+        self._login_motherbrain_role("review_wrong_op_simulator", "simulator")
+
+        response = self.client.post(
+            f"/motherbrain/flight-api-review/{review_item.id}/add",
+            data={"operation_id": str(selected_operation.id)},
+            follow_redirects=False,
+        )
+
+        db.session.refresh(review_item)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(review_item.review_status, "pending")
+        self.assertEqual(SortDateMission.query.count(), 0)
+
+    def test_flight_api_review_ignore_hides_same_operation_not_future_operation(self):
+        operation = self._review_operation()
+        future_operation = self._review_operation(
+            sort_name="night",
+            sort_date=date.today() + timedelta(days=1),
+        )
+        current_item = self._review_item(
+            operation,
+            flight_number="5X444",
+            review_key="arrival:ups444",
+        )
+        future_item = self._review_item(
+            future_operation,
+            flight_number="5X444",
+            review_key="arrival:ups444",
+        )
+        db.session.commit()
+        self._login_motherbrain_role("review_ignore_simulator", "simulator")
+
+        response = self.client.post(
+            f"/motherbrain/flight-api-review/{current_item.id}/ignore",
+            data={"operation_id": str(operation.id)},
+            follow_redirects=False,
+        )
+
+        db.session.refresh(current_item)
+        db.session.refresh(future_item)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(current_item.review_status, "ignored")
+        self.assertEqual(future_item.review_status, "pending")
+        self.assertEqual(pending_review_items_for_operation(operation), [])
+        self.assertEqual(pending_review_items_for_operation(future_operation), [future_item])
+
+    def _review_operation(self, sort_name="night", sort_date=None):
+        operation = SortDateOperation(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_date=sort_date or date.today(),
+            sort_name=sort_name,
+            window_minutes=0,
+        )
+        db.session.add(operation)
+        db.session.commit()
+        return operation
+
+    def _review_item(
+        self,
+        operation,
+        mission_type="arrival",
+        flight_number="5X555",
+        call_sign="UPS555",
+        review_key=None,
+        tail_number="N555UP",
+    ):
+        item = FlightApiReviewItem(
+            sort_date_operation_id=operation.id,
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_date=operation.sort_date,
+            sort_name=operation.sort_name,
+            mission_type=mission_type,
+            review_key=review_key or f"{mission_type}:{flight_number}:{operation.id}",
+            review_status="pending",
+            flight_number=flight_number,
+            call_sign=call_sign,
+            origin="SDF" if mission_type == "arrival" else "RFD",
+            destination="RFD" if mission_type == "arrival" else "SDF",
+            revised_time_utc=datetime(2026, 6, 1, 7, 25),
+            tail_number=tail_number,
+            aircraft_model="A300",
+            api_status="Expected",
+        )
+        db.session.add(item)
+        db.session.commit()
+        return item
+
+    def _mission_for_operation(self, operation, flight_number="5X999", **overrides):
+        values = {
+            "sort_date_operation": operation,
+            "sort_date": operation.sort_date,
+            "gateway_code": operation.gateway_code,
+            "sort_name": operation.sort_name,
+            "mission_type": "arrival",
+            "mission_source": "manual",
+            "wave": "1",
+            "flight_number": flight_number,
+            "origin": "SDF",
+            "destination": "RFD",
+            "timezone": "America/Chicago",
+            "planned_datetime_local": datetime.combine(operation.sort_date, time(2, 0)),
+            "planned_datetime_utc": datetime.combine(operation.sort_date, time(7, 0)),
+            "planned_source": "manual",
+            "arrival_status": "scheduled",
+        }
+        values.update(overrides)
+        return SortDateMission(**values)
 
 
 if __name__ == "__main__":

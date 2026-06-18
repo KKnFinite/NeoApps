@@ -34,7 +34,8 @@
 {% set is_master_schedule_page = is_motherbrain_page and request.path.startswith("/motherbrain/master-schedule") %}
 {% set is_manage_sort_page = is_motherbrain_page and (request.path.startswith("/motherbrain/manage-sort") or request.path.startswith("/motherbrain/operations")) %}
 {% set is_sort_timeline_page = is_motherbrain_page and request.path.startswith("/motherbrain/sort-timeline") %}
-{% set motherbrain_current_label = "PERMISSION RULES" if is_permission_management_page else ("USER MANAGEMENT" if is_user_management_page else ("SORT TIMELINE" if is_sort_timeline_page else ("GATEWAY MATRIX" if is_gateway_matrix_page else ("MASTER SCHEDULE" if is_master_schedule_page else ("MANAGE SORT" if is_manage_sort_page else "DASHBOARD"))))) %}
+{% set is_flight_api_review_page = is_motherbrain_page and request.path.startswith("/motherbrain/flight-api-review") %}
+{% set motherbrain_current_label = "PERMISSION RULES" if is_permission_management_page else ("USER MANAGEMENT" if is_user_management_page else ("FLIGHT API REVIEW" if is_flight_api_review_page else ("SORT TIMELINE" if is_sort_timeline_page else ("GATEWAY MATRIX" if is_gateway_matrix_page else ("MASTER SCHEDULE" if is_master_schedule_page else ("MANAGE SORT" if is_manage_sort_page else "DASHBOARD")))))) %}
 {% set is_neoermac_view_outbound_page = request.path.startswith("/neoermac/view-outbound") or request.path.startswith("/neoermac/outbound") %}
 {% set neoermac_current_label = "BUILDING LINEUP" if request.path.startswith("/neoermac/building-lineup") else ("DOOR VIEW" if request.path.startswith("/neoermac/door-view") else ("VIEW OUTBOUND" if is_neoermac_view_outbound_page else ("TUG ASSIGNMENTS" if request.path.startswith("/neoermac/tug-assignments") else "DASHBOARD"))) %}
 {% set neosektor_ballmat_side = request.args.get("side", "")|lower %}

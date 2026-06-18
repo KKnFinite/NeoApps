@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Flight API Review | NeoApps{% endblock %}
+
+{% macro dt(value) -%}
+{{ value.strftime("%Y-%m-%d %H:%M") if value else "-" }}
+{%- endmacro %}
+
+{% block content %}
+<section class="panel centered-command-page flight-api-review-page" aria-labelledby="flight-api-review-title">
+    <div class="section-heading">
+        <h1 id="flight-api-review-title">FLIGHT API REVIEW</h1>
+        <p class="muted">UNMATCHED UPS FLIGHTS FOR THE CURRENT SORT OPERATION.</p>
+    </div>
+
+    <form class="operation-form inline-operation-form" method="get">
+        <label>
+            <span>Current Sort Operation</span>
+            <select name="operation_id">
+                {% for operation in operations %}
+                <option value="{{ operation.id }}" {% if selected_operation and selected_operation.id == operation.id %}selected{% endif %}>
+                    {{ operation.sort_name|upper }} {{ operation.sort_date }}
+                </option>
+                {% endfor %}
+            </select>
+        </label>
+        <button class="action-button" type="submit" {% if not operations %}disabled{% endif %}>OPEN REVIEW QUEUE</button>
+    </form>
+
+    {% if selected_operation %}
+    <section class="status-grid" aria-label="Flight API review queue status">
+        <article class="status-card">
+            <span>CURRENT SORT</span>
+            <strong>{{ selected_operation.sort_name|upper }} {{ selected_operation.sort_date }}</strong>
+        </article>
+        <article class="status-card">
+            <span>PENDING UNMATCHED UPS</span>
+            <strong>{{ pending_review_items|length }}</strong>
+        </article>
+        <article class="status-card">
+            <span>REVIEW ACTIONS</span>
+            <strong>{{ "ENABLED" if can_edit else "VIEW ONLY" }}</strong>
+        </article>
+    </section>
+    {% else %}
+    <p class="muted centered-empty-message">No current sort operation is available.</p>
+    {% endif %}
+
+    <section class="table-wrap" aria-labelledby="flight-api-review-table-title">
+        <h2 id="flight-api-review-table-title">UNMATCHED UPS REVIEW QUEUE</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>TYPE</th>
+                    <th>FLIGHT / CALLSIGN</th>
+                    <th>ORIGIN / DEST</th>
+                    <th>ETA / STD</th>
+                    <th>TAIL</th>
+                    <th>AC TYPE</th>
+                    <th>PROVIDER STATUS</th>
+                    <th>ACTIONS</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in pending_review_items %}
+                <tr>
+                    <td>{{ item.mission_type|upper }}</td>
+                    <td>
+                        <strong>{{ item.flight_number|upper }}</strong>
+                        <br>
+                        <span class="muted">{{ item.call_sign or "-" }}</span>
+                    </td>
+                    <td>{{ item.origin or "-" }} / {{ item.destination or "-" }}</td>
+                    <td>{{ dt(item.revised_time_utc) }} UTC</td>
+                    <td>{{ item.tail_number or "-" }}</td>
+                    <td>{{ item.aircraft_model or "-" }}</td>
+                    <td>{{ item.api_status or "-" }}</td>
+                    <td class="table-actions">
+                        {% if can_edit %}
+                        <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.add_flight_api_review_item', review_item_id=item.id) }}">
+                            <input type="hidden" name="operation_id" value="{{ selected_operation.id }}">
+                            <button class="table-row-button" type="submit">ADD</button>
+                        </form>
+                        <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.ignore_flight_api_review_item', review_item_id=item.id) }}">
+                            <input type="hidden" name="operation_id" value="{{ selected_operation.id }}">
+                            <button class="table-row-button table-row-delete-button" type="submit" aria-label="Ignore {{ item.flight_number }}">&times;</button>
+                        </form>
+                        {% else %}
+                        <span class="muted">VIEW ONLY</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8">NO UNMATCHED UPS FLIGHTS ARE PENDING REVIEW.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+</section>
+{% endblock %}
