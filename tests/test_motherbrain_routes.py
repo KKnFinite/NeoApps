@@ -204,6 +204,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"SORT TIMELINE", response.data)
         self.assertIn(b"API PLANNING SETTINGS", response.data)
+        self.assertIn(b'href="/motherbrain/flight-api-test"', response.data)
+        self.assertIn(b"FLIGHT API TEST", response.data)
 
         self._login_motherbrain_role("timeline_master", "master")
         blocked = self.client.get("/motherbrain/sort-timeline", follow_redirects=False)

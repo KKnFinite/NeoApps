@@ -630,12 +630,34 @@ class FlightApiTestPageTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
+    def _login_motherbrain_role(self, username, role):
+        self.client.get("/logout")
+        user = User(username=username, role=role)
+        user.set_password("TestPassword123!")
+        db.session.add(user)
+        db.session.flush()
+        backfill_default_gateway_node_roles(user, role=role)
+        db.session.commit()
+        self.client.post(
+            "/login",
+            data={"username": username, "password": "TestPassword123!"},
+        )
+        return user
+
     def test_flight_api_test_page_loads_for_grandmaster(self):
         response = self.client.get("/motherbrain/flight-api-test")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"FLIGHT API TEST", response.data)
         self.assertIn(b"NO SCHEDULED POLLING IS ENABLED", response.data)
+
+    def test_flight_api_test_page_is_grandmaster_only(self):
+        self._login_motherbrain_role("api_master", "master")
+
+        response = self.client.get("/motherbrain/flight-api-test", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/rfd")
 
     def test_flight_api_test_page_does_not_leak_api_key_value(self):
         os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
