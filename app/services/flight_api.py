@@ -295,8 +295,10 @@ def import_api_flights_for_operation(gateway, operation, api_flights, settings=N
     matched = []
     review_items = []
     ignored_count = 0
+    suppressed_review_count = 0
     non_ups_ignored = 0
     diagnostics = _empty_import_count_diagnostics()
+    replaced_review_count = replace_active_review_queue_for_operation(operation)
 
     for api_flight in api_flights:
         mission_type = _mission_type(api_flight)
@@ -322,7 +324,9 @@ def import_api_flights_for_operation(gateway, operation, api_flights, settings=N
         normalized["unmatched_reason"] = unmatched_reason
         review_item, was_ignored = upsert_review_item(gateway, operation, normalized)
         if was_ignored:
-            ignored_count += 1
+            suppressed_review_count += 1
+            if review_item and review_item.review_status == "ignored":
+                ignored_count += 1
         elif review_item:
             review_items.append(review_item)
             _increment_count(diagnostics, "unmatched", normalized_type)
@@ -335,7 +339,10 @@ def import_api_flights_for_operation(gateway, operation, api_flights, settings=N
         "matched": matched,
         "review_items": review_items,
         "ignored_count": ignored_count,
+        "suppressed_review_count": suppressed_review_count,
         "non_ups_ignored": non_ups_ignored,
+        "review_queue_replaced": True,
+        "replaced_review_count": replaced_review_count,
         **diagnostics,
     }
 
@@ -696,10 +703,8 @@ def upsert_review_item(gateway, operation, normalized):
         sort_date_operation_id=operation.id,
         review_key=normalized["review_key"],
     ).first()
-    if existing and existing.review_status == "ignored":
+    if existing and existing.review_status in {"ignored", "accepted"}:
         return existing, True
-    if existing and existing.review_status == "accepted":
-        return existing, False
 
     item = existing or FlightApiReviewItem(
         sort_date_operation_id=operation.id,
@@ -732,6 +737,20 @@ def upsert_review_item(gateway, operation, normalized):
     if not existing:
         db.session.add(item)
     return item, False
+
+
+def replace_active_review_queue_for_operation(operation):
+    if not operation:
+        return 0
+    deleted = (
+        FlightApiReviewItem.query.filter_by(
+            sort_date_operation_id=operation.id,
+            review_status="pending",
+        )
+        .delete(synchronize_session=False)
+    )
+    db.session.flush()
+    return int(deleted or 0)
 
 
 def build_api_added_mission(operation, normalized):
@@ -844,7 +863,10 @@ def _empty_result(gateway, operation, provider_enabled, message):
         "matched": [],
         "review_items": [],
         "ignored_count": 0,
+        "suppressed_review_count": 0,
         "non_ups_ignored": 0,
+        "review_queue_replaced": False,
+        "replaced_review_count": 0,
         "usage_units_consumed": 0,
         "usage_polls_used": None,
         "provider_error": False,

@@ -1081,6 +1081,120 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(len(future["review_items"]), 1)
         self.assertEqual(future["review_items"][0].sort_date_operation_id, future_operation.id)
 
+    def test_successful_poll_replaces_current_sort_active_unmatched_queue(self):
+        self._review_item(flight_number="5X111", call_sign="UPS111")
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {"arrivals": [self._api_flight(number="5X222", call_sign="UPS222")]}
+            ),
+        )
+
+        self.assertTrue(result["review_queue_replaced"])
+        self.assertEqual(result["replaced_review_count"], 1)
+        pending_items = pending_review_items_for_operation(self.operation)
+        self.assertEqual(len(pending_items), 1)
+        self.assertEqual(pending_items[0].flight_number, "5X222")
+        self.assertEqual(
+            FlightApiReviewItem.query.filter_by(
+                sort_date_operation_id=self.operation.id,
+                flight_number="5X111",
+                review_status="pending",
+            ).count(),
+            0,
+        )
+
+    def test_stale_unmatched_item_removed_when_later_matches(self):
+        mission = self._mission("arrival", "UPS1075")
+        self._review_item(flight_number="5X1075", call_sign="UPS1085")
+        db.session.add(mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {"arrivals": [self._api_flight(number="5X1075", call_sign="UPS1085")]}
+            ),
+        )
+
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(result["matched"][0]["mission"].id, mission.id)
+        self.assertEqual(len(result["review_items"]), 0)
+        self.assertEqual(pending_review_items_for_operation(self.operation), [])
+
+    def test_ignored_item_stays_suppressed_after_successful_queue_refresh(self):
+        payload = {"arrivals": [self._api_flight(number="5X888", call_sign="UPS888")]}
+        review_item = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(payload),
+        )["review_items"][0]
+        ignore_review_item(review_item)
+        db.session.commit()
+
+        result = run_flight_api_import(self.gateway, self.operation, client=FakeFlightClient(payload))
+
+        self.assertEqual(result["ignored_count"], 1)
+        self.assertEqual(result["suppressed_review_count"], 1)
+        self.assertEqual(len(result["review_items"]), 0)
+        db.session.refresh(review_item)
+        self.assertEqual(review_item.review_status, "ignored")
+        self.assertEqual(pending_review_items_for_operation(self.operation), [])
+
+    def test_failed_provider_poll_does_not_wipe_existing_review_queue(self):
+        existing_item = self._review_item(flight_number="5X333", call_sign="UPS333")
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=ErrorFlightClient("Provider returned 403 Forbidden."),
+        )
+
+        self.assertTrue(result["provider_error"])
+        self.assertEqual(db.session.get(FlightApiReviewItem, existing_item.id).review_status, "pending")
+        self.assertEqual(pending_review_items_for_operation(self.operation)[0].flight_number, "5X333")
+
+    def test_provider_flight_number_match_with_callsign_difference_creates_no_review(self):
+        mission = self._mission("arrival", "UPS1075")
+        db.session.add(mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {"arrivals": [self._api_flight(number="5X1075", call_sign="UPS1085")]}
+            ),
+        )
+
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(result["matched"][0]["mission"].id, mission.id)
+        self.assertEqual(len(result["review_items"]), 0)
+        self.assertEqual(pending_review_items_for_operation(self.operation), [])
+
+    def test_provider_flight_number_616_matches_zero_padded_mission_despite_callsign(self):
+        mission = self._mission("arrival", "UPS0616")
+        db.session.add(mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {"arrivals": [self._api_flight(number="5X616", call_sign="UPS612")]}
+            ),
+        )
+
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(result["matched"][0]["mission"].id, mission.id)
+        self.assertEqual(len(result["review_items"]), 0)
+        self.assertEqual(pending_review_items_for_operation(self.operation), [])
+
     def test_accepted_review_item_adds_current_sort_only_mission_not_master_row(self):
         result = run_flight_api_import(
             self.gateway,
@@ -1121,6 +1235,34 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(counter.units_consumed, 3)
         self.assertEqual(context["summary"]["polls_used"], 1)
         self.assertEqual(context["summary"]["units_used"], 3)
+
+    def _review_item(
+        self,
+        mission_type="arrival",
+        flight_number="5X555",
+        call_sign="UPS555",
+        review_key=None,
+    ):
+        item = FlightApiReviewItem(
+            sort_date_operation_id=self.operation.id,
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_date=self.operation.sort_date,
+            sort_name=self.operation.sort_name,
+            mission_type=mission_type,
+            review_key=review_key or f"{mission_type}:{flight_number}:{call_sign}",
+            review_status="pending",
+            flight_number=flight_number,
+            call_sign=call_sign,
+            origin="SDF" if mission_type == "arrival" else "RFD",
+            destination="RFD" if mission_type == "arrival" else "SDF",
+            revised_time_utc=datetime(2026, 6, 1, 7, 25),
+            tail_number="N555UP",
+            aircraft_model="A300",
+            api_status="Expected",
+        )
+        db.session.add(item)
+        return item
 
     def _operation(self):
         return SortDateOperation(
@@ -1459,6 +1601,10 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"UPS DEPARTURES", response.data)
         self.assertIn(b"UNMATCHED ARRIVALS", response.data)
         self.assertIn(b"UNMATCHED DEPARTURES", response.data)
+        self.assertIn(b"REVIEW QUEUE", response.data)
+        self.assertIn(b"LATEST POLL", response.data)
+        self.assertIn(b"STALE REMOVED", response.data)
+        self.assertIn(b"SUPPRESSED REVIEW", response.data)
         self.assertIn(b"NON-UPS IGNORED ARRIVALS", response.data)
         self.assertIn(b"NON-UPS IGNORED DEPARTURES", response.data)
         self.assertIn(b"CORES TRIED", response.data)
@@ -1516,6 +1662,8 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"A300", response.data)
         self.assertIn(b"Expected", response.data)
         self.assertIn(b">ADD</button>", response.data)
+        self.assertIn(b"Ignore 5X555 for this sort operation", response.data)
+        self.assertIn(b"&times; IGNORE", response.data)
 
     def test_flight_api_review_page_does_not_leak_api_key_value(self):
         operation = self._review_operation()
