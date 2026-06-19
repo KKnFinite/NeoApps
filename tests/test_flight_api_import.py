@@ -1,6 +1,8 @@
 from datetime import date, datetime, time, timedelta, timezone
 import os
 import unittest
+from urllib.error import HTTPError
+from urllib.parse import parse_qsl, urlparse
 
 from app import create_app
 from app.extensions import db
@@ -25,6 +27,8 @@ from app.services.flight_api import (
     API_STATUS_ON_GROUND,
     API_STATUS_SCHEDULED,
     FlightApiConfigurationError,
+    FlightApiProviderError,
+    RAPIDAPI_QUERY_PARAMS,
     RapidApiFlightClient,
     accept_review_item,
     ignore_review_item,
@@ -163,15 +167,51 @@ class FlightApiImportTest(unittest.TestCase):
             flight_api_service.urlopen = original_urlopen
 
         self.assertEqual(payload, {"arrivals": [], "departures": []})
+        parsed_url = urlparse(captured["url"])
+        query_params = parse_qsl(parsed_url.query)
+        self.assertEqual(parsed_url.netloc, "aerodatabox.p.rapidapi.com")
         self.assertIn(
-            "/flights/airports/icao/RFD/2026-06-01T01:15/2026-06-01T03:45",
-            captured["url"],
+            "/flights/airports/iata/RFD/2026-06-01T01:15/2026-06-01T03:45",
+            parsed_url.path,
         )
-        self.assertIn("direction=Both", captured["url"])
-        self.assertIn("withLeg=true", captured["url"])
+        self.assertEqual(query_params, list(RAPIDAPI_QUERY_PARAMS))
         self.assertEqual(captured["headers"]["x-rapidapi-key"], "RAPIDAPI-KEY")
         self.assertEqual(captured["headers"]["x-rapidapi-host"], "aerodatabox.p.rapidapi.com")
         self.assertEqual(captured["timeout"], 20)
+
+    def test_rapidapi_client_403_has_safe_diagnostics(self):
+        captured = {}
+
+        def fake_urlopen(request, timeout):
+            captured["url"] = request.full_url
+            captured["headers"] = {
+                key.lower(): value for key, value in request.header_items()
+            }
+            raise HTTPError(request.full_url, 403, "Forbidden", hdrs=None, fp=None)
+
+        original_urlopen = flight_api_service.urlopen
+        flight_api_service.urlopen = fake_urlopen
+        try:
+            with self.assertRaises(FlightApiProviderError) as raised:
+                RapidApiFlightClient().fetch_fids(
+                    "RFD",
+                    datetime(2026, 6, 1, 1, 15),
+                    datetime(2026, 6, 1, 3, 45),
+                    "SUPER-SECRET-RAPIDAPI-KEY",
+                )
+        finally:
+            flight_api_service.urlopen = original_urlopen
+
+        error = raised.exception
+        self.assertIn("Provider returned 403 Forbidden", str(error))
+        self.assertIn("RapidAPI playground may work", str(error))
+        self.assertEqual(error.diagnostics["provider_status_code"], 403)
+        self.assertEqual(error.diagnostics["request_host"], "aerodatabox.p.rapidapi.com")
+        self.assertIn("/flights/airports/iata/RFD/", error.diagnostics["request_path_query"])
+        self.assertTrue(error.diagnostics["api_key_present"])
+        self.assertNotIn("SUPER-SECRET-RAPIDAPI-KEY", str(error))
+        self.assertNotIn("SUPER-SECRET-RAPIDAPI-KEY", str(error.diagnostics))
+        self.assertEqual(captured["headers"]["x-rapidapi-key"], "SUPER-SECRET-RAPIDAPI-KEY")
 
     def test_provider_error_returns_safe_failure_and_records_usage(self):
         mission = self._mission("arrival", "5X123", eta_datetime_utc=datetime(2026, 6, 1, 7, 5))
@@ -699,6 +739,51 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"API key env var AERODATABOX_API_KEY is not set.", response.data)
         self.assertIn(b"SKIPPED", response.data)
+        self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
+
+    def test_flight_api_test_page_shows_safe_403_diagnostics(self):
+        operation = SortDateOperation(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_date=date.today(),
+            sort_name="night",
+            window_minutes=0,
+        )
+        settings = ensure_sort_timeline_settings(self.gateway)
+        settings.provider_enabled = True
+        db.session.add(operation)
+        db.session.commit()
+
+        def fake_urlopen(request, timeout):
+            raise HTTPError(request.full_url, 403, "Forbidden", hdrs=None, fp=None)
+
+        original_urlopen = flight_api_service.urlopen
+        previous = os.environ.get("AERODATABOX_API_KEY")
+        os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
+        flight_api_service.urlopen = fake_urlopen
+        try:
+            response = self.client.post(
+                "/motherbrain/flight-api-test",
+                data={"flight_api_action": "pull", "operation_id": str(operation.id)},
+                follow_redirects=True,
+            )
+        finally:
+            flight_api_service.urlopen = original_urlopen
+            if previous is None:
+                os.environ.pop("AERODATABOX_API_KEY", None)
+            else:
+                os.environ["AERODATABOX_API_KEY"] = previous
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Provider returned 403 Forbidden", response.data)
+        self.assertIn(b"RapidAPI playground may work", response.data)
+        self.assertIn(b"PROVIDER STATUS", response.data)
+        self.assertIn(b"403", response.data)
+        self.assertIn(b"REQUEST HOST", response.data)
+        self.assertIn(b"aerodatabox.p.rapidapi.com", response.data)
+        self.assertIn(b"/flights/airports/iata/RFD/", response.data)
+        self.assertIn(b"API KEY PRESENT", response.data)
+        self.assertIn(b"YES", response.data)
         self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
 
     def test_flight_api_review_page_link_visible_for_view_permission(self):

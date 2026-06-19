@@ -113,6 +113,26 @@
     {% if import_result.message %}
     <p class="{% if import_result.provider_error %}sort-timeline-warning{% else %}muted centered-empty-message{% endif %}">{{ import_result.message }}</p>
     {% endif %}
+    {% if import_result and import_result.provider_error %}
+    <section class="status-grid" aria-label="Flight API request diagnostics">
+        <article class="status-card">
+            <span>PROVIDER STATUS</span>
+            <strong>{{ import_result.provider_status_code or "-" }}</strong>
+        </article>
+        <article class="status-card">
+            <span>REQUEST HOST</span>
+            <strong>{{ import_result.request_host or "-" }}</strong>
+        </article>
+        <article class="status-card">
+            <span>REQUEST PATH/QUERY</span>
+            <strong class="diagnostic-path">{{ import_result.request_path_query or "-" }}</strong>
+        </article>
+        <article class="status-card">
+            <span>API KEY PRESENT</span>
+            <strong>{{ "YES" if import_result.api_key_present else "NO" }}</strong>
+        </article>
+    </section>
+    {% endif %}
     {% endif %}
 
     {% if import_result and import_result.matched %}

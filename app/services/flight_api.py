@@ -29,6 +29,15 @@ from app.services.sort_timeline import (
 AIRPORT_CODE = "RFD"
 DEFAULT_API_KEY_ENV_VAR = "AERODATABOX_API_KEY"
 RAPIDAPI_HOST = "aerodatabox.p.rapidapi.com"
+RAPIDAPI_QUERY_PARAMS = (
+    ("withLeg", "true"),
+    ("direction", "Both"),
+    ("withCancelled", "true"),
+    ("withCodeshared", "true"),
+    ("withCargo", "true"),
+    ("withPrivate", "true"),
+    ("withLocation", "false"),
+)
 API_STATUS_SCHEDULED = "Scheduled"
 API_STATUS_IN_AIR = "In Air"
 API_STATUS_ON_GROUND = "On Ground"
@@ -44,46 +53,79 @@ class FlightApiConfigurationError(RuntimeError):
 
 
 class FlightApiProviderError(FlightApiConfigurationError):
-    pass
+    def __init__(self, message, diagnostics=None):
+        super().__init__(message)
+        self.diagnostics = diagnostics or {}
 
 
 class RapidApiFlightClient:
     def fetch_fids(self, gateway_code, start_local, end_local, api_key):
-        start_value = _format_provider_datetime(start_local)
-        end_value = _format_provider_datetime(end_local)
-        query = urlencode(
-            {
-                "direction": "Both",
-                "withLeg": "true",
-                "withCancelled": "false",
-                "withCodeshared": "false",
-                "withCargo": "true",
-                "withPrivate": "false",
-                "withLocation": "false",
-            }
-        )
-        url = (
-            f"https://{RAPIDAPI_HOST}/flights/airports/icao/"
-            f"{str(gateway_code or AIRPORT_CODE).upper()}/{start_value}/{end_value}?{query}"
-        )
-        request = Request(
-            url,
-            headers={
-                "X-RapidAPI-Key": api_key,
-                "X-RapidAPI-Host": RAPIDAPI_HOST,
-            },
+        request, diagnostics = build_rapidapi_request(
+            gateway_code,
+            start_local,
+            end_local,
+            api_key,
         )
         try:
             with urlopen(request, timeout=20) as response:
                 return json.loads(response.read().decode("utf-8"))
         except HTTPError as error:
+            diagnostics["provider_status_code"] = error.code
+            message = f"Provider returned {error.code} {error.reason or 'error'}."
+            if error.code == 403:
+                message += (
+                    " RapidAPI playground may work while the app request is rejected "
+                    "if host/header/path/query differ or Render is using stale env/deploy."
+                )
             raise FlightApiProviderError(
-                f"Provider returned {error.code} {error.reason or 'error'}."
+                message,
+                diagnostics=diagnostics,
             ) from error
         except (URLError, TimeoutError) as error:
-            raise FlightApiProviderError(f"Provider request failed: {error}") from error
+            raise FlightApiProviderError(
+                f"Provider request failed: {error}",
+                diagnostics=diagnostics,
+            ) from error
         except json.JSONDecodeError as error:
-            raise FlightApiProviderError("Provider returned invalid JSON.") from error
+            raise FlightApiProviderError(
+                "Provider returned invalid JSON.",
+                diagnostics=diagnostics,
+            ) from error
+
+
+def build_rapidapi_request(gateway_code, start_local, end_local, api_key):
+    details = rapidapi_request_details(gateway_code, start_local, end_local)
+    request = Request(
+        details["url"],
+        headers={
+            "X-RapidAPI-Key": api_key or "",
+            "X-RapidAPI-Host": RAPIDAPI_HOST,
+        },
+    )
+    diagnostics = {
+        "provider_status_code": None,
+        "request_host": details["host"],
+        "request_path_query": details["path_query"],
+        "api_key_present": bool(api_key),
+    }
+    return request, diagnostics
+
+
+def rapidapi_request_details(gateway_code, start_local, end_local):
+    start_value = _format_provider_datetime(start_local)
+    end_value = _format_provider_datetime(end_local)
+    path = (
+        f"/flights/airports/iata/"
+        f"{str(gateway_code or AIRPORT_CODE).upper()}/{start_value}/{end_value}"
+    )
+    query = urlencode(RAPIDAPI_QUERY_PARAMS)
+    return {
+        "host": RAPIDAPI_HOST,
+        "path": path,
+        "query": query,
+        "path_query": f"{path}?{query}",
+        "url": f"https://{RAPIDAPI_HOST}{path}?{query}",
+    }
 
 
 def run_flight_api_import(gateway, operation=None, client=None, now=None):
@@ -109,6 +151,12 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
     api_key_env_var = DEFAULT_API_KEY_ENV_VAR
     api_key = os.environ.get(api_key_env_var)
     if not api_key and client is None:
+        request_diagnostics = _safe_request_diagnostics(
+            gateway.code,
+            window["window_start_local"],
+            window["window_end_local"],
+            api_key,
+        )
         result = _empty_result(
             gateway,
             operation,
@@ -119,6 +167,7 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
             {
                 "provider_error": True,
                 "api_key_env_var": api_key_env_var,
+                **request_diagnostics,
                 **window,
             }
         )
@@ -139,6 +188,7 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
             api_key,
         )
     except FlightApiConfigurationError as error:
+        request_diagnostics = getattr(error, "diagnostics", {})
         result = _empty_result(
             gateway,
             operation,
@@ -152,6 +202,10 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
                 "api_key_env_var": api_key_env_var,
                 "usage_units_consumed": usage_units_consumed,
                 "usage_polls_used": usage_counter.attempted_call_count,
+                "provider_status_code": request_diagnostics.get("provider_status_code"),
+                "request_host": request_diagnostics.get("request_host"),
+                "request_path_query": request_diagnostics.get("request_path_query"),
+                "api_key_present": request_diagnostics.get("api_key_present"),
                 **window,
             }
         )
@@ -587,6 +641,16 @@ def _empty_result(gateway, operation, provider_enabled, message):
         "usage_polls_used": None,
         "provider_error": False,
         "message": message,
+    }
+
+
+def _safe_request_diagnostics(gateway_code, start_local, end_local, api_key):
+    details = rapidapi_request_details(gateway_code, start_local, end_local)
+    return {
+        "provider_status_code": None,
+        "request_host": details["host"],
+        "request_path_query": details["path_query"],
+        "api_key_present": bool(api_key),
     }
 
 
