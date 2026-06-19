@@ -310,13 +310,17 @@ def import_api_flights_for_operation(gateway, operation, api_flights, settings=N
         _increment_count(diagnostics, "ups", mission_type)
         normalized = normalize_api_flight(api_flight, operation, gateway)
         normalized_type = normalized.get("mission_type") or mission_type
-        mission = match_api_flight_to_mission(normalized, missions)
+        mission, unmatched_reason = match_api_flight_to_mission_with_reason(
+            normalized,
+            missions,
+        )
         if mission:
             apply_api_data_to_mission(mission, normalized, settings, now=now_utc)
             matched.append({"mission": mission, "api_flight": normalized})
             _increment_count(diagnostics, "matched", normalized_type)
             continue
 
+        normalized["unmatched_reason"] = unmatched_reason
         review_item, was_ignored = upsert_review_item(gateway, operation, normalized)
         if was_ignored:
             ignored_count += 1
@@ -604,17 +608,54 @@ def normalize_api_flight(api_flight, operation=None, gateway=None):
 
 
 def match_api_flight_to_mission(normalized, missions):
+    mission, _reason = match_api_flight_to_mission_with_reason(normalized, missions)
+    return mission
+
+
+def match_api_flight_to_mission_with_reason(normalized, missions):
     mission_type = normalized["mission_type"]
     candidates = [mission for mission in missions if mission.mission_type == mission_type]
+    api_cores = _ups_numeric_cores_from_values(
+        normalized.get("flight_number"),
+        normalized.get("call_sign"),
+    )
+    core_matches_by_id = {}
+    if api_cores:
+        for api_core in api_cores:
+            core_matches = [
+                mission
+                for mission in candidates
+                if _ups_numeric_core_from_values(mission.flight_number) == api_core
+            ]
+            if len(core_matches) > 1:
+                return None, "ambiguous normalized match"
+            if len(core_matches) == 1:
+                matched_mission = core_matches[0]
+                mission_key = (
+                    matched_mission.id
+                    if matched_mission.id is not None
+                    else id(matched_mission)
+                )
+                core_matches_by_id[mission_key] = matched_mission
+        if len(core_matches_by_id) > 1:
+            return None, "ambiguous normalized match"
+
     stored_numbers = [mission.flight_number for mission in candidates]
     for variant in normalized["flight_variants"]:
         matched_number = match_api_flight_number(variant, stored_numbers)
         if not matched_number:
             continue
         for mission in candidates:
-            if mission.flight_number == matched_number:
-                return mission
-    return None
+            if _clean_flight_number(mission.flight_number) == _clean_flight_number(matched_number):
+                return mission, None
+
+    if len(core_matches_by_id) == 1:
+        return next(iter(core_matches_by_id.values())), None
+
+    if not api_cores:
+        return None, "unsupported/blank flight identity"
+
+    return None, "no matching mission"
 
 
 def apply_api_data_to_mission(mission, normalized, settings, now=None):
@@ -699,6 +740,7 @@ def upsert_review_item(gateway, operation, normalized):
     item.aircraft_model = normalized["aircraft_model"]
     item.api_status = normalized["api_status_raw"]
     item.raw_payload = json.dumps(normalized["raw"], sort_keys=True, default=str)
+    item.review_reason = normalized.get("unmatched_reason") or "no matching mission"
     if not existing:
         db.session.add(item)
     return item, False
@@ -748,7 +790,7 @@ def build_api_added_mission(operation, normalized):
 def pending_review_items_for_operation(operation):
     if not operation:
         return []
-    return (
+    items = (
         FlightApiReviewItem.query.filter_by(
             sort_date_operation_id=operation.id,
             review_status="pending",
@@ -760,6 +802,24 @@ def pending_review_items_for_operation(operation):
         )
         .all()
     )
+    missions = SortDateMission.query.filter_by(sort_date_operation_id=operation.id).all()
+    for item in items:
+        item.review_reason = review_reason_for_item(item, missions)
+    return items
+
+
+def review_reason_for_item(review_item, missions):
+    normalized = {
+        "mission_type": review_item.mission_type,
+        "flight_number": review_item.flight_number,
+        "call_sign": review_item.call_sign,
+        "flight_variants": _flight_number_variants(
+            review_item.flight_number,
+            review_item.call_sign,
+        ),
+    }
+    _mission, reason = match_api_flight_to_mission_with_reason(normalized, missions)
+    return reason or "no matching mission"
 
 
 def review_item_or_404(gateway, review_item_id):
@@ -924,6 +984,31 @@ def _flight_number_variants(flight_number, call_sign):
             if converted not in variants:
                 variants.append(converted)
     return variants
+
+
+def _ups_numeric_core_from_values(*values):
+    cores = _ups_numeric_cores_from_values(*values)
+    return cores[0] if cores else None
+
+
+def _ups_numeric_cores_from_values(*values):
+    cores = []
+    for value in values:
+        core = _ups_numeric_core(value)
+        if core and core not in cores:
+            cores.append(core)
+    return cores
+
+
+def _ups_numeric_core(value):
+    cleaned = _clean_flight_number(value)
+    if not cleaned:
+        return None
+    match = re.fullmatch(r"(?:UPS|5X)?0*(\d+)", cleaned)
+    if not match:
+        return None
+    core = match.group(1).lstrip("0")
+    return core or "0"
 
 
 def _review_key(mission_type, flight_number, call_sign, origin, destination):

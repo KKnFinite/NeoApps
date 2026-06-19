@@ -58,6 +58,7 @@
                     <th>TAIL</th>
                     <th>AC TYPE</th>
                     <th>PROVIDER STATUS</th>
+                    <th>REASON</th>
                     <th>ACTIONS</th>
                 </tr>
             </thead>
@@ -75,6 +76,7 @@
                     <td>{{ item.tail_number or "-" }}</td>
                     <td>{{ item.aircraft_model or "-" }}</td>
                     <td>{{ item.api_status or "-" }}</td>
+                    <td>{{ item.review_reason|default("-", true) }}</td>
                     <td class="table-actions">
                         {% if can_edit %}
                         <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.add_flight_api_review_item', review_item_id=item.id) }}">
@@ -92,7 +94,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8">NO UNMATCHED UPS FLIGHTS ARE PENDING REVIEW.</td>
+                    <td colspan="9">NO UNMATCHED UPS FLIGHTS ARE PENDING REVIEW.</td>
                 </tr>
                 {% endfor %}
             </tbody>
