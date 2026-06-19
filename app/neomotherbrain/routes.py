@@ -314,6 +314,7 @@ def flight_api_test():
         pending_review_items=pending_items,
         replay_payload=replay_payload,
         auto_poll_status=auto_poll_status,
+        can_trigger_auto_poll=user_can(FLIGHT_API_AUTO_POLL_TRIGGER_PERMISSION),
         sort_timeline_settings=settings,
         flight_api_operational_time=flight_api_operational_time_utc,
         flight_api_provider_time=flight_api_provider_time_utc,

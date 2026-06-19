@@ -2,6 +2,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from io import BytesIO
 import json
 import os
+from pathlib import Path
 import unittest
 from urllib.error import HTTPError
 from urllib.parse import parse_qsl, urlparse
@@ -2135,6 +2136,34 @@ class FlightApiTestPageTest(unittest.TestCase):
         flight_api_service.urlopen = fake_urlopen
         return original_urlopen, calls
 
+    def _assert_auto_poll_payload_shape(self, payload):
+        expected_keys = {
+            "eligible",
+            "skipped",
+            "reason",
+            "current_operation_id",
+            "current_operation_name",
+            "sort_date",
+            "last_attempted_poll",
+            "last_successful_poll",
+            "last_failed_poll",
+            "next_auto_poll_eligible_at",
+            "actual_auto_poll_interval_minutes",
+            "units_consumed",
+            "matched_arrivals",
+            "matched_departures",
+            "unmatched_arrivals",
+            "unmatched_departures",
+            "non_ups_ignored_arrivals",
+            "non_ups_ignored_departures",
+            "review_added",
+            "stale_removed",
+            "suppressed_review",
+            "provider_status",
+            "safe_error_text",
+        }
+        self.assertTrue(expected_keys.issubset(payload.keys()))
+
     def test_flight_api_test_page_loads_for_grandmaster(self):
         response = self.client.get("/motherbrain/flight-api-test")
 
@@ -2147,13 +2176,48 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"Automatic API polling may run only during this window.", response.data)
         self.assertIn(b"Ops / Node Online Window", response.data)
         self.assertIn(b"Nodes and live screens auto-refresh only during this window.", response.data)
-        self.assertIn(b"AUTO POLL READINESS", response.data)
+        self.assertIn(b"AUTO POLL TRIGGER ENDPOINT", response.data)
+        self.assertIn(b"Passive only. Scheduled/page-timer polling is not active yet.", response.data)
         self.assertIn(
             b"Scheduled auto polling is not active yet. This shows when the next automatic poll would be eligible once scheduling is enabled.",
             response.data,
         )
+        self.assertIn(b"TEST AUTO POLL TRIGGER ONCE", response.data)
+        self.assertIn(b"data-auto-poll-result", response.data)
+        self.assertIn(b'data-auto-poll-field="eligible"', response.data)
+        self.assertIn(b'data-auto-poll-field="review_added"', response.data)
+        self.assertIn(b'data-auto-poll-field="safe_error_text"', response.data)
         self.assertIn(b"NEXT AUTO POLL ELIGIBLE AT", response.data)
-        self.assertIn(b"ELIGIBILITY STATUS", response.data)
+        self.assertIn(b"CURRENT ELIGIBILITY STATUS", response.data)
+
+    def test_flight_api_test_page_trigger_button_respects_permission_context(self):
+        original_user_can = neomotherbrain_routes.user_can
+
+        def deny_auto_poll_trigger(permission_key, *args, **kwargs):
+            if permission_key == neomotherbrain_routes.FLIGHT_API_AUTO_POLL_TRIGGER_PERMISSION:
+                return False
+            return original_user_can(permission_key, *args, **kwargs)
+
+        neomotherbrain_routes.user_can = deny_auto_poll_trigger
+        try:
+            response = self.client.get("/motherbrain/flight-api-test")
+        finally:
+            neomotherbrain_routes.user_can = original_user_can
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"TEST AUTO POLL TRIGGER ONCE", response.data)
+        self.assertIn(
+            b"Your current permissions do not allow triggering the passive auto-poll check.",
+            response.data,
+        )
+
+    def test_flight_api_test_page_trigger_script_has_no_automatic_timer(self):
+        template = Path("app/templates/neomotherbrain/flight_api_test.html").read_text()
+
+        self.assertIn("data-auto-poll-trigger", template)
+        self.assertIn('method: "POST"', template)
+        self.assertNotIn("setInterval", template)
+        self.assertNotIn("setTimeout", template)
 
     def test_sort_timeline_page_explains_window_meanings(self):
         response = self.client.get("/motherbrain/sort-timeline")
@@ -2528,6 +2592,7 @@ class FlightApiTestPageTest(unittest.TestCase):
             else:
                 os.environ["AERODATABOX_API_KEY"] = previous
 
+        db.session.refresh(operation)
         db.session.refresh(mission)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"REPLAY PROVIDER PAYLOAD", response.data)
@@ -2544,6 +2609,10 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
         self.assertEqual(SortTimelineUsageCounter.query.count(), 0)
         self.assertEqual(FlightApiReviewItem.query.count(), 0)
+        self.assertIsNone(operation.flight_api_last_attempted_poll_at_utc)
+        self.assertIsNone(operation.flight_api_last_successful_poll_at_utc)
+        self.assertIsNone(operation.flight_api_last_failed_poll_at_utc)
+        self.assertIsNone(operation.flight_api_next_auto_poll_eligible_at_utc)
         self.assertEqual(mission.eta_datetime_utc, datetime(2026, 6, 19, 5, 20))
         self.assertEqual(mission.arrival_status, "arrived")
         self.assertIsNone(mission.assigned_tail_number)
@@ -2608,6 +2677,7 @@ class FlightApiTestPageTest(unittest.TestCase):
             flight_api_service.urlopen = original_urlopen
 
         payload = response.get_json()
+        self._assert_auto_poll_payload_shape(payload)
         self.assertEqual(response.status_code, 200)
         self.assertFalse(payload["eligible"])
         self.assertTrue(payload["skipped"])
@@ -2652,6 +2722,7 @@ class FlightApiTestPageTest(unittest.TestCase):
 
         db.session.refresh(operation)
         result = response.get_json()
+        self._assert_auto_poll_payload_shape(result)
         self.assertEqual(response.status_code, 200)
         self.assertTrue(result["eligible"])
         self.assertFalse(result["skipped"])
@@ -2690,6 +2761,7 @@ class FlightApiTestPageTest(unittest.TestCase):
             neomotherbrain_routes.run_flight_api_import = original_run_import
 
         payload = response.get_json()
+        self._assert_auto_poll_payload_shape(payload)
         self.assertFalse(payload["eligible"])
         self.assertTrue(payload["skipped"])
         self.assertIn(payload["reason"], {"before API Polling Window", "outside API Polling Window"})
@@ -2709,6 +2781,7 @@ class FlightApiTestPageTest(unittest.TestCase):
             neomotherbrain_routes.run_flight_api_import = original_run_import
 
         payload = response.get_json()
+        self._assert_auto_poll_payload_shape(payload)
         self.assertFalse(payload["eligible"])
         self.assertTrue(payload["skipped"])
         self.assertEqual(payload["reason"], "waiting for auto poll interval")
@@ -2738,6 +2811,7 @@ class FlightApiTestPageTest(unittest.TestCase):
             neomotherbrain_routes.run_flight_api_import = original_run_import
 
         payload = response.get_json()
+        self._assert_auto_poll_payload_shape(payload)
         self.assertFalse(payload["eligible"])
         self.assertTrue(payload["skipped"])
         self.assertEqual(payload["reason"], "monthly API budget exhausted")
@@ -2758,6 +2832,7 @@ class FlightApiTestPageTest(unittest.TestCase):
             neomotherbrain_routes.run_flight_api_import = original_run_import
 
         payload = response.get_json()
+        self._assert_auto_poll_payload_shape(payload)
         self.assertFalse(payload["eligible"])
         self.assertTrue(payload["skipped"])
         self.assertEqual(payload["reason"], "poll already in progress")
@@ -2791,6 +2866,8 @@ class FlightApiTestPageTest(unittest.TestCase):
         db.session.refresh(operation)
         first_payload = first.get_json()
         second_payload = second.get_json()
+        self._assert_auto_poll_payload_shape(first_payload)
+        self._assert_auto_poll_payload_shape(second_payload)
         self.assertEqual(first.status_code, 200)
         self.assertEqual(len(calls), 1)
         self.assertTrue(first_payload["eligible"])

@@ -24,9 +24,9 @@
     </div>
 
     <section class="helper-copy" aria-labelledby="auto-poll-readiness-title">
-        <h2 id="auto-poll-readiness-title">AUTO POLL READINESS</h2>
+        <h2 id="auto-poll-readiness-title">AUTO POLL TRIGGER ENDPOINT</h2>
         <p class="muted">Scheduled auto polling is not active yet. This shows when the next automatic poll would be eligible once scheduling is enabled.</p>
-        <p class="muted"><strong>Auto Poll Trigger Endpoint:</strong> POST /motherbrain/flight-api-auto-poll/check. This endpoint is passive. Scheduled/page-timer polling is not active yet.</p>
+        <p class="muted"><strong>Auto Poll Trigger Endpoint:</strong> POST /motherbrain/flight-api-auto-poll/check. Passive only. Scheduled/page-timer polling is not active yet.</p>
         <div class="status-grid" aria-label="Flight API auto poll readiness">
             <article class="status-card">
                 <span>AUTO POLLING</span>
@@ -67,7 +67,7 @@
                 <strong>{{ auto_poll_status.polls_remaining if auto_poll_status else 0 }}</strong>
             </article>
             <article class="status-card">
-                <span>ELIGIBILITY STATUS</span>
+                <span>CURRENT ELIGIBILITY STATUS</span>
                 <strong>{{ auto_poll_status.reason|upper if auto_poll_status and auto_poll_status.reason else "-" }}</strong>
             </article>
             <article class="status-card">
@@ -78,6 +78,48 @@
                 {% endif %}
             </article>
         </div>
+        <div class="auto-poll-trigger-controls">
+            {% if can_trigger_auto_poll %}
+            <button
+                class="action-button"
+                type="button"
+                data-auto-poll-trigger
+                data-endpoint="{{ url_for('neomotherbrain.flight_api_auto_poll_check') }}"
+                {% if not selected_operation %}disabled{% endif %}
+            >TEST AUTO POLL TRIGGER ONCE</button>
+            {% else %}
+            <p class="muted">Your current permissions do not allow triggering the passive auto-poll check.</p>
+            {% endif %}
+            <p class="muted">This sends exactly one POST when clicked. No automatic timer is installed on this page.</p>
+        </div>
+        <section class="auto-poll-trigger-result" data-auto-poll-result hidden aria-live="polite" aria-labelledby="auto-poll-result-title">
+            <h3 id="auto-poll-result-title">AUTO POLL TRIGGER RESULT</h3>
+            <p class="muted" data-auto-poll-message>Waiting for manual trigger.</p>
+            <div class="status-grid" aria-label="Auto poll trigger returned status">
+                <article class="status-card"><span>ELIGIBLE</span><strong data-auto-poll-field="eligible">-</strong></article>
+                <article class="status-card"><span>SKIPPED</span><strong data-auto-poll-field="skipped">-</strong></article>
+                <article class="status-card"><span>REASON</span><strong data-auto-poll-field="reason">-</strong></article>
+                <article class="status-card"><span>CURRENT OPERATION</span><strong data-auto-poll-field="current_operation">-</strong></article>
+                <article class="status-card"><span>LAST ATTEMPTED</span><strong data-auto-poll-field="last_attempted_poll">-</strong></article>
+                <article class="status-card"><span>LAST SUCCESSFUL</span><strong data-auto-poll-field="last_successful_poll">-</strong></article>
+                <article class="status-card"><span>LAST FAILED</span><strong data-auto-poll-field="last_failed_poll">-</strong></article>
+                <article class="status-card"><span>NEXT ELIGIBLE</span><strong data-auto-poll-field="next_auto_poll_eligible_at">-</strong></article>
+                <article class="status-card"><span>ACTUAL AUTO POLL INTERVAL</span><strong data-auto-poll-field="actual_auto_poll_interval_minutes">-</strong></article>
+                <article class="status-card"><span>UNITS CONSUMED</span><strong data-auto-poll-field="units_consumed">-</strong></article>
+                <article class="status-card"><span>MATCHED ARRIVALS</span><strong data-auto-poll-field="matched_arrivals">-</strong></article>
+                <article class="status-card"><span>MATCHED DEPARTURES</span><strong data-auto-poll-field="matched_departures">-</strong></article>
+                <article class="status-card"><span>UNMATCHED ARRIVALS</span><strong data-auto-poll-field="unmatched_arrivals">-</strong></article>
+                <article class="status-card"><span>UNMATCHED DEPARTURES</span><strong data-auto-poll-field="unmatched_departures">-</strong></article>
+                <article class="status-card"><span>NON-UPS IGNORED ARRIVALS</span><strong data-auto-poll-field="non_ups_ignored_arrivals">-</strong></article>
+                <article class="status-card"><span>NON-UPS IGNORED DEPARTURES</span><strong data-auto-poll-field="non_ups_ignored_departures">-</strong></article>
+                <article class="status-card"><span>REVIEW ADDED</span><strong data-auto-poll-field="review_added">-</strong></article>
+                <article class="status-card"><span>STALE REMOVED</span><strong data-auto-poll-field="stale_removed">-</strong></article>
+                <article class="status-card"><span>SUPPRESSED REVIEW</span><strong data-auto-poll-field="suppressed_review">-</strong></article>
+                <article class="status-card"><span>PROVIDER STATUS</span><strong data-auto-poll-field="provider_status">-</strong></article>
+                <article class="status-card"><span>SAFE ERROR</span><strong data-auto-poll-field="safe_error_text">-</strong></article>
+            </div>
+            <pre class="auto-poll-json-output" data-auto-poll-json></pre>
+        </section>
     </section>
 
     <form class="operation-form inline-operation-form" method="post">
@@ -456,4 +498,100 @@
         </table>
     </section>
 </section>
+
+<script>
+(() => {
+    const trigger = document.querySelector("[data-auto-poll-trigger]");
+    const resultPanel = document.querySelector("[data-auto-poll-result]");
+    if (!trigger || !resultPanel) {
+        return;
+    }
+
+    const message = resultPanel.querySelector("[data-auto-poll-message]");
+    const jsonOutput = resultPanel.querySelector("[data-auto-poll-json]");
+
+    const redactedJson = (value) => JSON.stringify(value, (key, item) => {
+        if (/key|secret|token|header/i.test(key)) {
+            return "[redacted]";
+        }
+        return item;
+    }, 2);
+
+    const formatValue = (value) => {
+        if (value === null || value === undefined || value === "") {
+            return "-";
+        }
+        if (typeof value === "boolean") {
+            return value ? "YES" : "NO";
+        }
+        if (typeof value === "object") {
+            return value.local || value.utc || JSON.stringify(value);
+        }
+        return String(value);
+    };
+
+    const setField = (name, value) => {
+        const field = resultPanel.querySelector(`[data-auto-poll-field="${name}"]`);
+        if (field) {
+            field.textContent = formatValue(value);
+        }
+    };
+
+    const renderPayload = (payload, responseOk) => {
+        const operation = payload.current_operation_id
+            ? `#${payload.current_operation_id} ${(payload.current_operation_name || "").toUpperCase()} ${payload.sort_date || ""}`.trim()
+            : "-";
+
+        resultPanel.hidden = false;
+        message.textContent = responseOk ? "Passive trigger check completed." : "Passive trigger check returned an error response.";
+        setField("eligible", payload.eligible);
+        setField("skipped", payload.skipped);
+        setField("reason", payload.reason);
+        setField("current_operation", operation);
+        setField("last_attempted_poll", payload.last_attempted_poll);
+        setField("last_successful_poll", payload.last_successful_poll);
+        setField("last_failed_poll", payload.last_failed_poll);
+        setField("next_auto_poll_eligible_at", payload.next_auto_poll_eligible_at);
+        setField("actual_auto_poll_interval_minutes", payload.actual_auto_poll_interval_minutes ? `${payload.actual_auto_poll_interval_minutes} MIN` : "-");
+        setField("units_consumed", payload.units_consumed);
+        setField("matched_arrivals", payload.matched_arrivals);
+        setField("matched_departures", payload.matched_departures);
+        setField("unmatched_arrivals", payload.unmatched_arrivals);
+        setField("unmatched_departures", payload.unmatched_departures);
+        setField("non_ups_ignored_arrivals", payload.non_ups_ignored_arrivals);
+        setField("non_ups_ignored_departures", payload.non_ups_ignored_departures);
+        setField("review_added", payload.review_added);
+        setField("stale_removed", payload.stale_removed);
+        setField("suppressed_review", payload.suppressed_review);
+        setField("provider_status", payload.provider_status);
+        setField("safe_error_text", payload.safe_error_text);
+        jsonOutput.textContent = redactedJson(payload);
+    };
+
+    trigger.addEventListener("click", async () => {
+        trigger.disabled = true;
+        const originalText = trigger.textContent;
+        trigger.textContent = "TESTING...";
+        try {
+            const response = await fetch(trigger.dataset.endpoint, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    "Accept": "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+            });
+            const payload = await response.json();
+            renderPayload(payload, response.ok);
+        } catch (error) {
+            resultPanel.hidden = false;
+            message.textContent = "Passive trigger check failed before a JSON response was received.";
+            jsonOutput.textContent = redactedJson({ error: String(error) });
+        } finally {
+            trigger.textContent = originalText;
+            trigger.disabled = false;
+        }
+    });
+})();
+</script>
 {% endblock %}

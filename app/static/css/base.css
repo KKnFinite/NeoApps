@@ -3163,6 +3163,33 @@ h2 {
     color: var(--steel);
 }
 
+.auto-poll-trigger-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.auto-poll-trigger-result {
+    display: grid;
+    gap: 14px;
+    margin-top: 18px;
+}
+
+.auto-poll-json-output {
+    max-height: 320px;
+    overflow: auto;
+    margin: 0;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    color: var(--steel);
+    background: rgba(5, 6, 9, 0.86);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 .node-strip {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
