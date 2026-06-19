@@ -33,6 +33,7 @@ from app.services.flight_api import (
     pending_review_items_for_operation,
     review_item_or_404,
     run_flight_api_import,
+    run_flight_api_replay,
     sort_flight_lookup_window_snapshot,
 )
 from app.services.access_control import (
@@ -237,6 +238,7 @@ def flight_api_test():
     selected_polling_window = None
     selected_ops_window = None
     settings = ensure_sort_timeline_settings(gateway)
+    replay_payload = ""
 
     if request.method == "POST" and request.form.get("flight_api_action") == "pull":
         selected_operation = _selected_current_operation(
@@ -259,6 +261,21 @@ def flight_api_test():
         except FlightApiConfigurationError as error:
             db.session.rollback()
             flash(f"Flight API import failed: {error}", "error")
+    elif request.method == "POST" and request.form.get("flight_api_action") == "replay":
+        selected_operation = _selected_current_operation(
+            operations,
+            operation_id=request.form.get("operation_id"),
+        )
+        replay_payload = request.form.get("replay_payload", "")
+        import_result = run_flight_api_replay(
+            gateway,
+            operation=selected_operation,
+            payload_text=replay_payload,
+        )
+        if import_result.get("provider_error"):
+            flash(import_result.get("message", "Flight API replay failed."), "error")
+        else:
+            flash("Flight API replay preview completed.", "info")
 
     if selected_operation:
         selected_lookup_window = sort_flight_lookup_window_snapshot(
@@ -286,6 +303,7 @@ def flight_api_test():
         selected_ops_window=selected_ops_window,
         import_result=import_result,
         pending_review_items=pending_items,
+        replay_payload=replay_payload,
         sort_timeline_settings=settings,
         flight_api_operational_time=flight_api_operational_time_utc,
         flight_api_provider_time=flight_api_provider_time_utc,

@@ -10,6 +10,7 @@
 {% set lookup_window = import_result if import_result and import_result.lookup_window_start_local else selected_lookup_window %}
 {% set polling_window = import_result if import_result and import_result.polling_window_start_local else selected_polling_window %}
 {% set ops_window = import_result if import_result and import_result.ops_window_start_local else selected_ops_window %}
+{% set review_rows = import_result.review_items if import_result and import_result.replay_preview else pending_review_items %}
 <section class="panel centered-command-page flight-api-test-page" aria-labelledby="flight-api-test-title">
     <div class="section-heading">
         <h1 id="flight-api-test-title">FLIGHT API TEST</h1>
@@ -37,6 +38,29 @@
         <button class="action-button" type="submit" {% if not selected_operation %}disabled{% endif %}>PULL RFD API NOW</button>
     </form>
 
+    <section class="helper-copy" aria-labelledby="flight-api-replay-title">
+        <h2 id="flight-api-replay-title">REPLAY PROVIDER PAYLOAD</h2>
+        <p class="muted">Replay mode runs pasted provider JSON through the same parser and matcher without calling AeroDataBox, consuming units, logging provider usage, or changing the review queue.</p>
+        <form class="operation-form" method="post">
+            <input type="hidden" name="flight_api_action" value="replay">
+            <label>
+                <span>Current Sort Operation</span>
+                <select name="operation_id">
+                    {% for operation in operations %}
+                    <option value="{{ operation.id }}" {% if selected_operation and selected_operation.id == operation.id %}selected{% endif %}>
+                        {{ operation.sort_name|upper }} {{ operation.sort_date }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                <span>AeroDataBox JSON</span>
+                <textarea name="replay_payload" rows="10" spellcheck="false" placeholder='{"arrivals": [], "departures": []}'>{{ replay_payload or "" }}</textarea>
+            </label>
+            <button class="action-button action-button-secondary" type="submit" {% if not selected_operation %}disabled{% endif %}>RUN REPLAY</button>
+        </form>
+    </section>
+
     {% if not selected_operation %}
     <p class="muted centered-empty-message">No current sort operation is available.</p>
     {% endif %}
@@ -57,7 +81,7 @@
             <span>ATTEMPTED POLL</span>
             <strong>
                 {% if import_result and import_result.attempted %}
-                    {% if import_result.provider_error %}FAILED{% else %}YES{% endif %}
+                    {% if import_result.provider_error %}FAILED{% elif import_result.replay_preview %}REPLAY{% else %}YES{% endif %}
                 {% elif import_result %}
                     SKIPPED
                 {% else %}
@@ -69,7 +93,7 @@
             <span>PROVIDER</span>
             <strong>
                 {% if import_result %}
-                {{ "ENABLED" if import_result.provider_enabled else "DISABLED" }}
+                {% if import_result.replay_preview %}REPLAY{% else %}{{ "ENABLED" if import_result.provider_enabled else "DISABLED" }}{% endif %}
                 {% else %}
                 READY
                 {% endif %}
@@ -164,7 +188,7 @@
         </article>
         <article class="status-card">
             <span>UNMATCHED UPS</span>
-            <strong>{{ import_result.review_items|length }}</strong>
+            <strong>{{ review_rows|length }}</strong>
         </article>
         <article class="status-card">
             <span>UNMATCHED ARRIVALS</span>
@@ -180,7 +204,7 @@
         </article>
         <article class="status-card">
             <span>REVIEW QUEUE</span>
-            <strong>{{ "LATEST POLL" if import_result.review_queue_replaced else "EXISTING" }}</strong>
+            <strong>{% if import_result.replay_preview %}PREVIEW ONLY{% else %}{{ "LATEST POLL" if import_result.review_queue_replaced else "EXISTING" }}{% endif %}</strong>
         </article>
         <article class="status-card">
             <span>STALE REMOVED</span>
@@ -268,13 +292,16 @@
             <thead>
                 <tr>
                     <th>TYPE</th>
-                    <th>FLIGHT</th>
+                    <th>MISSION FLIGHT</th>
+                    <th>PROVIDER FLIGHT</th>
                     <th>CALLSIGN</th>
+                    <th>CORES TRIED</th>
                     <th>ORIGIN/DEST</th>
                     <th>OPERATIONAL TIME</th>
                     <th>TAIL</th>
                     <th>MODEL</th>
                     <th>API STATUS</th>
+                    <th>MATCH REASON</th>
                 </tr>
             </thead>
             <tbody>
@@ -286,7 +313,9 @@
                 <tr>
                     <td>{{ mission.mission_type|upper }}</td>
                     <td>{{ mission.flight_number|upper }}</td>
+                    <td>{{ api.provider_flight_number or api.flight_number or "-" }}</td>
                     <td>{{ api.call_sign or "-" }}</td>
+                    <td>{{ api.normalized_cores_tried|join(", ") if api.normalized_cores_tried else "-" }}</td>
                     <td>{{ api.origin or "-" }} / {{ api.destination or "-" }}</td>
                     <td>
                         <strong>{{ format_flight_api_time(operational_time, gateway) }}</strong>
@@ -297,9 +326,10 @@
                         <br><span class="muted">{{ row.match_diagnostic|upper }}</span>
                         {% endif %}
                     </td>
-                    <td>{{ mission.assigned_tail_number or "-" }}</td>
-                    <td>{{ mission.api_aircraft_model or "-" }}</td>
-                    <td>{{ mission.api_status or "-" }}</td>
+                    <td>{{ row.display_tail or "-" }}</td>
+                    <td>{{ row.display_model or "-" }}</td>
+                    <td>{{ row.display_status or "-" }}</td>
+                    <td>{{ row.match_reason or "-" }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -308,7 +338,7 @@
     {% endif %}
 
     <section class="table-wrap" aria-labelledby="api-review-title">
-        <h2 id="api-review-title">UNMATCHED UPS REVIEW QUEUE</h2>
+        <h2 id="api-review-title">{% if import_result and import_result.replay_preview %}UNMATCHED UPS REVIEW PREVIEW{% else %}UNMATCHED UPS REVIEW QUEUE{% endif %}</h2>
         <table class="data-table">
             <thead>
                 <tr>
@@ -326,7 +356,7 @@
                 </tr>
             </thead>
             <tbody>
-                {% for item in pending_review_items %}
+                {% for item in review_rows %}
                 {% set operational_time = flight_api_operational_time(item, sort_timeline_settings) %}
                 {% set provider_time = flight_api_provider_time(item) %}
                 <tr>
@@ -346,6 +376,9 @@
                     <td>{{ item.api_status or "-" }}</td>
                     <td>{{ item.review_reason|default("-", true) }}</td>
                     <td class="table-actions">
+                        {% if import_result and import_result.replay_preview %}
+                        <span class="muted">PREVIEW ONLY</span>
+                        {% else %}
                         <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.add_flight_api_review_item', review_item_id=item.id) }}">
                             <input type="hidden" name="operation_id" value="{{ selected_operation.id }}">
                             <button class="table-row-button" type="submit">ADD</button>
@@ -354,6 +387,7 @@
                             <input type="hidden" name="operation_id" value="{{ selected_operation.id }}">
                             <button class="table-row-button table-row-delete-button" type="submit" aria-label="Ignore {{ item.flight_number }} for this sort operation" title="Ignore {{ item.flight_number }} for this sort operation">&times; IGNORE</button>
                         </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% else %}

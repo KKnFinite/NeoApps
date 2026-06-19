@@ -43,6 +43,7 @@ from app.services.flight_api import (
     map_api_status,
     pending_review_items_for_operation,
     run_flight_api_import,
+    run_flight_api_replay,
 )
 from app.services.sort_timeline import ensure_sort_timeline_settings, sort_timeline_context
 
@@ -1368,6 +1369,125 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(len(result["review_items"]), 0)
         self.assertEqual(pending_review_items_for_operation(self.operation), [])
 
+    def test_replay_preview_uses_live_matching_without_provider_usage_or_mutation(self):
+        self.operation.sort_date = date(2026, 6, 18)
+        self.settings.taxi_to_ramp_minutes = 12
+        provider_1075 = self._mission("arrival", "UPS1075")
+        callsign_1085 = self._mission(
+            "arrival",
+            "UPS1085",
+            eta_datetime_utc=datetime(2026, 6, 19, 4, 0),
+            arrival_status="arrived",
+        )
+        provider_616 = self._mission("arrival", "UPS0616")
+        callsign_612 = self._mission("arrival", "UPS0612")
+        provider_755 = self._mission("arrival", "UPS0755")
+        callsign_753 = self._mission("arrival", "UPS0753")
+        departure = self._mission("departure", "UPS0900")
+        existing_review = self._review_item(flight_number="5X333", call_sign="UPS333")
+        master_row = MasterFlightSchedule(
+            gateway_id=self.gateway.id,
+            gateway_code="RFD",
+            sort_name="night",
+            mission_type="arrival",
+            wave="1",
+            flight_number="UPS1085",
+            origin="EWR",
+            destination="RFD",
+            active=True,
+            active_days="thursday",
+            planned_time_local=time(0, 30),
+            timezone="America/Chicago",
+        )
+        db.session.add_all(
+            [
+                provider_1075,
+                callsign_1085,
+                provider_616,
+                callsign_612,
+                provider_755,
+                callsign_753,
+                departure,
+                master_row,
+            ]
+        )
+        db.session.commit()
+
+        def fail_urlopen(_request, _timeout):
+            raise AssertionError("Replay mode must not call the external provider")
+
+        original_urlopen = flight_api_service.urlopen
+        previous = os.environ.get("AERODATABOX_API_KEY")
+        os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
+        flight_api_service.urlopen = fail_urlopen
+        try:
+            result = run_flight_api_replay(
+                self.gateway,
+                self.operation,
+                payload_text=json.dumps(self._replay_payload()),
+                now=datetime(2026, 6, 19, 6, 30, tzinfo=timezone.utc),
+            )
+        finally:
+            flight_api_service.urlopen = original_urlopen
+            if previous is None:
+                os.environ.pop("AERODATABOX_API_KEY", None)
+            else:
+                os.environ["AERODATABOX_API_KEY"] = previous
+
+        matched_ids = {row["mission"].id for row in result["matched"]}
+        self.assertIn(callsign_1085.id, matched_ids)
+        self.assertIn(callsign_612.id, matched_ids)
+        self.assertIn(callsign_753.id, matched_ids)
+        self.assertIn(departure.id, matched_ids)
+        self.assertNotIn(provider_1075.id, matched_ids)
+        self.assertNotIn(provider_616.id, matched_ids)
+        self.assertNotIn(provider_755.id, matched_ids)
+        self.assertEqual(result["raw_arrivals_count"], 7)
+        self.assertEqual(result["raw_departures_count"], 1)
+        self.assertEqual(result["ups_arrivals_count"], 6)
+        self.assertEqual(result["ups_departures_count"], 1)
+        self.assertEqual(result["matched_arrivals_count"], 3)
+        self.assertEqual(result["matched_departures_count"], 1)
+        self.assertEqual(result["unmatched_arrivals_count"], 3)
+        self.assertEqual(result["non_ups_ignored_arrivals_count"], 1)
+        self.assertEqual(result["usage_units_consumed"], 0)
+        self.assertEqual(SortTimelineUsageCounter.query.count(), 0)
+        self.assertFalse(result["review_queue_replaced"])
+        self.assertEqual(result["request_path_query"], "Replay mode: no external request")
+        self.assertEqual(FlightApiReviewItem.query.count(), 1)
+        self.assertEqual(
+            db.session.get(FlightApiReviewItem, existing_review.id).review_status,
+            "pending",
+        )
+        db.session.refresh(callsign_1085)
+        db.session.refresh(master_row)
+        self.assertEqual(callsign_1085.eta_datetime_utc, datetime(2026, 6, 19, 4, 0))
+        self.assertEqual(callsign_1085.arrival_status, "arrived")
+        self.assertIsNone(callsign_1085.assigned_tail_number)
+        self.assertEqual(master_row.flight_number, "UPS1085")
+        replay_1085 = next(
+            row for row in result["matched"] if row["mission"].id == callsign_1085.id
+        )
+        self.assertEqual(replay_1085["match_reason"], "matched by callsign")
+        self.assertEqual(
+            flight_api_operational_time_utc(replay_1085["api_flight"], self.settings),
+            datetime(2026, 6, 19, 5, 16),
+        )
+
+    def test_replay_invalid_json_is_safe_and_does_not_log_usage(self):
+        result = run_flight_api_replay(
+            self.gateway,
+            self.operation,
+            payload_text="{not-json",
+            now=datetime(2026, 6, 19, 6, 30, tzinfo=timezone.utc),
+        )
+
+        self.assertTrue(result["provider_error"])
+        self.assertIn("Replay JSON parse error", result["message"])
+        self.assertEqual(result["usage_units_consumed"], 0)
+        self.assertEqual(SortTimelineUsageCounter.query.count(), 0)
+        self.assertEqual(SortDateMission.query.count(), 0)
+
     def test_accepted_review_item_adds_current_sort_only_mission_not_master_row(self):
         result = run_flight_api_import(
             self.gateway,
@@ -1508,6 +1628,88 @@ class FlightApiImportTest(unittest.TestCase):
         if runway_time:
             flight["arrival"]["runwayTime"] = {"local": runway_time}
         return flight
+
+    def _replay_payload(self):
+        return {
+            "arrivals": [
+                self._api_flight(
+                    number="5X1075",
+                    call_sign="UPS1085",
+                    origin="EWR",
+                    destination="RFD",
+                    revised_time="2026-06-19T00:52:00",
+                    runway_time="2026-06-19T00:04:00",
+                    status="Arrived",
+                    tail="N1085U",
+                ),
+                self._api_flight(
+                    number="5X616",
+                    call_sign="UPS612",
+                    origin="SDF",
+                    destination="RFD",
+                    revised_time="2026-06-18T23:28:00",
+                    runway_time="2026-06-18T23:04:00",
+                    status="Arrived",
+                    tail="N612UP",
+                ),
+                self._api_flight(
+                    number="5X613",
+                    call_sign="UPS613",
+                    origin="SDF",
+                    destination="RFD",
+                    revised_time="2026-06-18T23:39:00",
+                    runway_time="2026-06-18T23:14:00",
+                    status="Arrived",
+                ),
+                self._api_flight(
+                    number="5X755",
+                    call_sign="UPS753",
+                    origin="DFW",
+                    destination="RFD",
+                    revised_time="2026-06-19T00:39:00",
+                    runway_time="2026-06-19T00:15:00",
+                    status="Arrived",
+                    tail="N753UP",
+                ),
+                self._api_flight(
+                    number="5X754",
+                    call_sign="UPS754",
+                    origin="DFW",
+                    destination="RFD",
+                    revised_time="2026-06-19T00:49:00",
+                    runway_time="2026-06-19T00:20:00",
+                    status="Arrived",
+                ),
+                self._api_flight(
+                    number="5X601",
+                    call_sign="UPS601",
+                    origin="SDF",
+                    destination="RFD",
+                    revised_time="2026-06-18T23:50:00",
+                    status="En Route",
+                ),
+                self._api_flight(
+                    number="AA123",
+                    call_sign="AAL123",
+                    airline_icao="AAL",
+                    airline_iata="AA",
+                    origin="ORD",
+                    destination="RFD",
+                    revised_time="2026-06-19T00:05:00",
+                ),
+            ],
+            "departures": [
+                self._api_flight(
+                    mission_type="departure",
+                    number="5X900",
+                    call_sign="UPS900",
+                    origin="RFD",
+                    destination="SDF",
+                    revised_time="2026-06-19T02:30:00",
+                    status="Expected",
+                )
+            ],
+        }
 
 
 class FlightApiTestPageTest(unittest.TestCase):
@@ -1870,6 +2072,142 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"02:50 Local Jun 1", response.data)
         self.assertIn(b"PROVIDER 02:40 Local Jun 1", response.data)
         self.assertNotIn(b"2026-06-01 07:40 UTC", response.data)
+
+    def test_flight_api_test_page_replay_preview_does_not_call_provider_or_mutate(self):
+        operation = SortDateOperation(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_date=date.today(),
+            sort_name="night",
+            window_minutes=0,
+        )
+        settings = ensure_sort_timeline_settings(self.gateway)
+        settings.provider_enabled = True
+        mission = SortDateMission(
+            sort_date_operation=operation,
+            gateway_code=self.gateway.code,
+            sort_date=operation.sort_date,
+            sort_name=operation.sort_name,
+            mission_type="arrival",
+            mission_source="master",
+            wave="1",
+            flight_number="UPS1085",
+            origin="EWR",
+            destination="RFD",
+            timezone="America/Chicago",
+            planned_datetime_local=datetime(2026, 6, 19, 0, 30),
+            planned_datetime_utc=datetime(2026, 6, 19, 5, 30),
+            eta_datetime_utc=datetime(2026, 6, 19, 5, 20),
+            arrival_status="arrived",
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+        payload = {
+            "arrivals": [
+                {
+                    "number": "5X1075",
+                    "callSign": "UPS1085",
+                    "airline": {"icao": "UPS", "iata": "5X"},
+                    "departure": {"airport": {"iata": "EWR"}},
+                    "arrival": {
+                        "airport": {"iata": "RFD"},
+                        "revisedTime": {"local": "2026-06-19T00:52:00"},
+                        "runwayTime": {"local": "2026-06-19T00:04:00"},
+                    },
+                    "aircraft": {"reg": "N1085U", "model": "B763"},
+                    "status": "Arrived",
+                },
+                {
+                    "number": "5X999",
+                    "callSign": "UPS999",
+                    "airline": {"icao": "UPS", "iata": "5X"},
+                    "departure": {"airport": {"iata": "SDF"}},
+                    "arrival": {"airport": {"iata": "RFD"}, "revisedTime": {"local": "2026-06-19T01:00:00"}},
+                    "status": "Expected",
+                },
+                {
+                    "number": "AA123",
+                    "callSign": "AAL123",
+                    "airline": {"icao": "AAL", "iata": "AA"},
+                },
+            ],
+        }
+
+        def fail_urlopen(_request, _timeout):
+            raise AssertionError("Replay page must not call the external provider")
+
+        original_urlopen = flight_api_service.urlopen
+        previous = os.environ.get("AERODATABOX_API_KEY")
+        os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
+        flight_api_service.urlopen = fail_urlopen
+        try:
+            response = self.client.post(
+                "/motherbrain/flight-api-test",
+                data={
+                    "flight_api_action": "replay",
+                    "operation_id": str(operation.id),
+                    "replay_payload": json.dumps(payload),
+                },
+                follow_redirects=True,
+            )
+        finally:
+            flight_api_service.urlopen = original_urlopen
+            if previous is None:
+                os.environ.pop("AERODATABOX_API_KEY", None)
+            else:
+                os.environ["AERODATABOX_API_KEY"] = previous
+
+        db.session.refresh(mission)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"REPLAY PROVIDER PAYLOAD", response.data)
+        self.assertIn(b"Replay mode preview completed", response.data)
+        self.assertIn(b"Replay mode: no external request", response.data)
+        self.assertIn(b"PREVIEW ONLY", response.data)
+        self.assertIn(b"UPS1085", response.data)
+        self.assertIn(b"5X1075", response.data)
+        self.assertIn(b"matched by callsign", response.data)
+        self.assertIn(b"00:14 Local Jun 19", response.data)
+        self.assertIn(b"PROVIDER 00:04 Local Jun 19", response.data)
+        self.assertIn(b"UPS999", response.data)
+        self.assertNotIn(b">ADD</button>", response.data)
+        self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
+        self.assertEqual(SortTimelineUsageCounter.query.count(), 0)
+        self.assertEqual(FlightApiReviewItem.query.count(), 0)
+        self.assertEqual(mission.eta_datetime_utc, datetime(2026, 6, 19, 5, 20))
+        self.assertEqual(mission.arrival_status, "arrived")
+        self.assertIsNone(mission.assigned_tail_number)
+
+    def test_flight_api_test_page_replay_invalid_json_is_safe(self):
+        operation = SortDateOperation(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_date=date.today(),
+            sort_name="night",
+            window_minutes=0,
+        )
+        ensure_sort_timeline_settings(self.gateway).provider_enabled = True
+        db.session.add(operation)
+        db.session.commit()
+        os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
+        try:
+            response = self.client.post(
+                "/motherbrain/flight-api-test",
+                data={
+                    "flight_api_action": "replay",
+                    "operation_id": str(operation.id),
+                    "replay_payload": "{not-json",
+                },
+                follow_redirects=True,
+            )
+        finally:
+            os.environ.pop("AERODATABOX_API_KEY", None)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Replay JSON parse error", response.data)
+        self.assertIn(b"Replay mode: no external request", response.data)
+        self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
+        self.assertEqual(SortTimelineUsageCounter.query.count(), 0)
+        self.assertEqual(SortDateMission.query.count(), 0)
 
     def test_flight_api_review_page_link_visible_for_view_permission(self):
         self._login_motherbrain_role("review_simulator_link", "simulator")

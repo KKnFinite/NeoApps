@@ -218,11 +218,11 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
         units_consumed=usage_units_consumed,
     )
     try:
-        payload = (client or RapidApiFlightClient()).fetch_fids(
-            gateway.code,
-            lookup_window["lookup_window_start_local"],
-            lookup_window["lookup_window_end_local"],
+        payload = fetch_live_provider_payload(
+            gateway,
+            lookup_window,
             api_key,
+            client=client,
         )
     except FlightApiConfigurationError as error:
         request_diagnostics = {
@@ -269,12 +269,13 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
         db.session.flush()
         return result
 
-    api_flights = extract_api_flights(payload, gateway)
-    result = import_api_flights_for_operation(
+    result = process_provider_payload(
+        payload,
         gateway,
         operation,
-        api_flights,
         settings=settings,
+        apply=True,
+        source="live",
         now=now,
     )
     result.update(
@@ -295,7 +296,107 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
     return result
 
 
+def fetch_live_provider_payload(gateway, lookup_window, api_key, client=None):
+    return (client or RapidApiFlightClient()).fetch_fids(
+        gateway.code,
+        lookup_window["lookup_window_start_local"],
+        lookup_window["lookup_window_end_local"],
+        api_key,
+    )
+
+
+def run_flight_api_replay(gateway, operation=None, payload_text="", now=None):
+    settings = ensure_sort_timeline_settings(gateway)
+    operation = operation or current_sort_operation(gateway)
+    if not operation:
+        return _replay_result(
+            _empty_result(
+                gateway,
+                operation,
+                provider_enabled=bool(settings.provider_enabled),
+                message="No current sort operation is available.",
+            ),
+            gateway,
+            operation,
+            settings,
+            now,
+            provider_error=True,
+        )
+
+    try:
+        payload = json.loads(payload_text or "")
+    except json.JSONDecodeError as error:
+        return _replay_result(
+            _empty_result(
+                gateway,
+                operation,
+                provider_enabled=bool(settings.provider_enabled),
+                message=f"Replay JSON parse error: {error.msg} at line {error.lineno}, column {error.colno}.",
+            ),
+            gateway,
+            operation,
+            settings,
+            now,
+            provider_error=True,
+        )
+
+    result = process_provider_payload(
+        payload,
+        gateway,
+        operation,
+        settings=settings,
+        apply=False,
+        source="replay",
+        now=now,
+    )
+    result["message"] = (
+        "Replay mode preview completed. No external request was made and no data was changed."
+    )
+    return _replay_result(result, gateway, operation, settings, now)
+
+
+def process_provider_payload(
+    payload,
+    gateway,
+    operation,
+    settings=None,
+    apply=False,
+    source="replay",
+    now=None,
+):
+    api_flights = extract_api_flights(payload, gateway)
+    return process_api_flights_for_operation(
+        gateway,
+        operation,
+        api_flights,
+        settings=settings,
+        apply=apply,
+        source=source,
+        now=now,
+    )
+
+
 def import_api_flights_for_operation(gateway, operation, api_flights, settings=None, now=None):
+    return process_api_flights_for_operation(
+        gateway,
+        operation,
+        api_flights,
+        settings=settings,
+        apply=True,
+        source="live",
+        now=now,
+    )
+
+
+def process_api_flights_for_operation(
+    gateway,
+    operation,
+    api_flights,
+    settings=None,
+    apply=False,
+    source="replay",
+    now=None,
+):
     settings = settings or ensure_sort_timeline_settings(gateway)
     now_utc = _utc_naive(now)
     missions = SortDateMission.query.filter_by(sort_date_operation_id=operation.id).all()
@@ -305,7 +406,7 @@ def import_api_flights_for_operation(gateway, operation, api_flights, settings=N
     suppressed_review_count = 0
     non_ups_ignored = 0
     diagnostics = _empty_import_count_diagnostics()
-    replaced_review_count = replace_active_review_queue_for_operation(operation)
+    replaced_review_count = replace_active_review_queue_for_operation(operation) if apply else 0
 
     for api_flight in api_flights:
         mission_type = _mission_type(api_flight)
@@ -324,24 +425,45 @@ def import_api_flights_for_operation(gateway, operation, api_flights, settings=N
             missions,
         )
         if mission:
-            apply_api_data_to_mission(mission, normalized, settings, now=now_utc)
             if match_detail:
                 normalized["match_diagnostic"] = match_detail
+            if apply:
+                apply_api_data_to_mission(mission, normalized, settings, now=now_utc)
             matched.append(
                 {
                     "mission": mission,
                     "api_flight": normalized,
                     "match_diagnostic": match_detail,
+                    "match_reason": match_detail or "matched",
+                    "display_tail": (
+                        mission.assigned_tail_number
+                        or normalized.get("tail_number")
+                    ),
+                    "display_model": (
+                        mission.api_aircraft_model
+                        or normalized.get("aircraft_model")
+                    ),
+                    "display_status": (
+                        mission.api_status
+                        or map_api_status(normalized, settings, now=now_utc)
+                    ),
                 }
             )
             _increment_count(diagnostics, "matched", normalized_type)
             continue
 
         normalized["unmatched_reason"] = match_detail
-        review_item, was_ignored = upsert_review_item(gateway, operation, normalized)
+        if apply:
+            review_item, was_ignored = upsert_review_item(gateway, operation, normalized)
+        else:
+            review_item, was_ignored = preview_review_item_for_normalized(
+                gateway,
+                operation,
+                normalized,
+            )
         if was_ignored:
             suppressed_review_count += 1
-            if review_item and review_item.review_status == "ignored":
+            if review_item and _record_value(review_item, "review_status") == "ignored":
                 ignored_count += 1
         elif review_item:
             review_items.append(review_item)
@@ -357,8 +479,10 @@ def import_api_flights_for_operation(gateway, operation, api_flights, settings=N
         "ignored_count": ignored_count,
         "suppressed_review_count": suppressed_review_count,
         "non_ups_ignored": non_ups_ignored,
-        "review_queue_replaced": True,
+        "review_queue_replaced": bool(apply),
         "replaced_review_count": replaced_review_count,
+        "source": source,
+        "replay_preview": source == "replay",
         **diagnostics,
     }
 
@@ -665,7 +789,7 @@ def match_api_flight_to_mission_with_reason(normalized, missions):
         if len(call_sign_matches) > 1:
             return None, "ambiguous callsign match"
         if len(call_sign_matches) == 1:
-            return call_sign_matches[0], None
+            return call_sign_matches[0], "matched by callsign"
 
     if provider_key:
         provider_matches = _missions_matching_ups_key(candidates, provider_key)
@@ -674,14 +798,14 @@ def match_api_flight_to_mission_with_reason(normalized, missions):
         if len(provider_matches) == 1:
             if call_sign_key and call_sign_key != provider_key:
                 return provider_matches[0], "matched by provider flight fallback"
-            return provider_matches[0], None
+            return provider_matches[0], "matched by provider flight"
 
     if not call_sign_is_ups and call_sign_key:
         call_sign_matches = _missions_matching_ups_key(candidates, call_sign_key)
         if len(call_sign_matches) > 1:
             return None, "ambiguous callsign match"
         if len(call_sign_matches) == 1:
-            return call_sign_matches[0], None
+            return call_sign_matches[0], "matched by callsign"
 
     return None, "no matching mission"
 
@@ -811,6 +935,39 @@ def upsert_review_item(gateway, operation, normalized):
     if not existing:
         db.session.add(item)
     return item, False
+
+
+def preview_review_item_for_normalized(gateway, operation, normalized):
+    existing = FlightApiReviewItem.query.filter_by(
+        sort_date_operation_id=operation.id,
+        review_key=normalized["review_key"],
+    ).first()
+    if existing and existing.review_status in {"ignored", "accepted"}:
+        return existing, True
+    return {
+        "sort_date_operation_id": operation.id,
+        "gateway_id": gateway.id if gateway else operation.gateway_id,
+        "gateway_code": operation.gateway_code,
+        "sort_date": operation.sort_date,
+        "sort_name": operation.sort_name,
+        "mission_type": normalized["mission_type"],
+        "review_key": normalized["review_key"],
+        "review_status": "preview",
+        "flight_number": normalized["flight_number"],
+        "call_sign": normalized["call_sign"],
+        "origin": normalized["origin"],
+        "destination": normalized["destination"],
+        "revised_time_utc": normalized["revised_time_utc"] or normalized["scheduled_time_utc"],
+        "scheduled_time_utc": normalized["scheduled_time_utc"],
+        "runway_time_utc": normalized["runway_time_utc"],
+        "tail_number": normalized["tail_number"],
+        "aircraft_model": normalized["aircraft_model"],
+        "api_status": normalized["api_status_raw"],
+        "review_reason": normalized.get("unmatched_reason") or "no matching mission",
+        "normalized_cores_tried": normalized_cores_display(
+            normalized.get("normalized_cores_tried")
+        ),
+    }, False
 
 
 def replace_active_review_queue_for_operation(operation):
@@ -957,6 +1114,8 @@ def _empty_result(gateway, operation, provider_enabled, message):
         "provider_response_snippet": None,
         "poll_rfd_local_time": None,
         "poll_utc_time": None,
+        "source": "live",
+        "replay_preview": False,
         "message": message,
         **_empty_import_count_diagnostics(),
     }
@@ -976,6 +1135,48 @@ def _increment_count(diagnostics, prefix, mission_type):
     type_key = "departures" if mission_type == "departure" else "arrivals"
     key = f"{prefix}_{type_key}_count"
     diagnostics[key] = int(diagnostics.get(key, 0) or 0) + 1
+
+
+def _replay_result(
+    result,
+    gateway,
+    operation,
+    settings,
+    now=None,
+    provider_error=False,
+):
+    attempted_at = _utc_naive(now)
+    windows = {}
+    if operation:
+        windows.update(sort_flight_lookup_window_snapshot(operation, settings))
+        windows.update(api_polling_window_snapshot(operation, settings))
+        windows.update(ops_node_online_window_snapshot(operation, settings))
+    result.update(
+        {
+            "provider_enabled": bool(settings.provider_enabled),
+            "attempted": True,
+            "provider_error": provider_error,
+            "api_key_env_var": DEFAULT_API_KEY_ENV_VAR,
+            "usage_units_consumed": 0,
+            "usage_polls_used": None,
+            "provider_status_code": None,
+            "request_host": None,
+            "request_path_query": "Replay mode: no external request",
+            "user_agent_sent": False,
+            "accept_header_sent": False,
+            "api_key_present": None,
+            "api_key_normalized": None,
+            "api_key_appears_quoted": None,
+            "provider_response_snippet": None,
+            "review_queue_replaced": False,
+            "replaced_review_count": 0,
+            "source": "replay",
+            "replay_preview": True,
+            **windows,
+            **_poll_time_diagnostics(gateway, attempted_at),
+        }
+    )
+    return result
 
 
 def _track_provider_departure_time(diagnostics, normalized):
