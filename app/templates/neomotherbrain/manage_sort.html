@@ -31,7 +31,7 @@
         <article>
             <span class="node-light"></span>
             <h2>{{ selected_operation.gateway_code }} {{ selected_operation.sort_name|title }}</h2>
-            <p>{{ selected_operation.missions|length }} MISSION(S), {{ selected_operation.window_minutes }} MINUTE WINDOW.</p>
+            <p>SORT DATE {{ selected_operation.sort_date }}. {{ selected_operation.missions|length }} MISSION(S), {{ selected_operation.window_minutes }} MINUTE WINDOW.</p>
             <div class="action-row">
                 <a class="action-button" href="{{ url_for('neomotherbrain.operation_detail', operation_id=selected_operation.id) }}">OPEN SORT OPERATION</a>
                 <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=selected_operation.id) }}">ADD SPECIAL FLIGHT</a>
@@ -47,6 +47,7 @@
             <thead>
                 <tr>
                     <th>SORT</th>
+                    <th>SORT DATE</th>
                     <th>WINDOW</th>
                     <th>MISSIONS</th>
                     <th>LINKS</th>
@@ -56,6 +57,7 @@
                 {% for operation in operations %}
                 <tr>
                     <td>{{ operation.sort_name|upper }}</td>
+                    <td>{{ operation.sort_date }}</td>
                     <td>{{ operation.window_minutes }} MIN</td>
                     <td>{{ operation.missions|length }}</td>
                     <td class="table-actions">

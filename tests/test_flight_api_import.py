@@ -35,6 +35,7 @@ from app.services.flight_api import (
     RAPIDAPI_USER_AGENT,
     RapidApiFlightClient,
     accept_review_item,
+    current_sort_operation,
     ignore_review_item,
     import_api_flights_for_operation,
     map_api_status,
@@ -350,6 +351,38 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(client.calls[0]["gateway_code"], "RFD")
         self.assertEqual(client.calls[0]["start_local"], datetime(2026, 6, 1, 22, 15))
         self.assertEqual(client.calls[0]["end_local"], datetime(2026, 6, 2, 4, 30))
+
+    def test_current_operation_resolver_returns_previous_day_overnight_sort_after_midnight(self):
+        self.operation.sort_date = date(2026, 6, 18)
+        night_setting = next(
+            setting for setting in self.settings.sort_settings if setting.sort_name == "night"
+        )
+        night_setting.sort_window_start_local = time(22, 0)
+        night_setting.sort_window_end_local = time(4, 0)
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 19, 0, 30)
+        db.session.commit()
+
+        selected_operation = current_sort_operation(self.gateway)
+
+        self.assertEqual(selected_operation.id, self.operation.id)
+        self.assertEqual(selected_operation.sort_date, date(2026, 6, 18))
+
+    def test_flight_api_default_selection_uses_active_overnight_sort_after_midnight(self):
+        self.operation.sort_date = date(2026, 6, 18)
+        night_setting = next(
+            setting for setting in self.settings.sort_settings if setting.sort_name == "night"
+        )
+        night_setting.sort_window_start_local = time(22, 0)
+        night_setting.sort_window_end_local = time(4, 0)
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 19, 0, 30)
+        db.session.commit()
+        client = FakeFlightClient({"arrivals": []})
+
+        result = run_flight_api_import(self.gateway, client=client)
+
+        self.assertEqual(result["operation"].id, self.operation.id)
+        self.assertEqual(client.calls[0]["start_local"], datetime(2026, 6, 18, 22, 0))
+        self.assertEqual(client.calls[0]["end_local"], datetime(2026, 6, 19, 4, 0))
 
     def test_rapidapi_path_uses_local_sort_lookup_window_not_utc(self):
         self.operation.sort_date = date(2026, 6, 18)

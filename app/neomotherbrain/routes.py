@@ -50,6 +50,7 @@ from app.services.sort_date_operations import (
 from app.services.gateway_matrix import (
     DAY_OPTIONS as MATRIX_DAY_OPTIONS,
     SORT_OPTIONS as MATRIX_SORT_OPTIONS,
+    current_operations_for_gateway,
     ensure_sort_operations_for_gateway_date,
     matrix_state_for_gateway,
     operations_for_gateway_date,
@@ -155,7 +156,7 @@ def motherbrain():
     gateway = get_current_gateway()
     generation_result = _auto_generate_today_sorts(gateway)
     sort_date = generation_result["sort_date"]
-    current_sort_operations = operations_for_gateway_date(gateway, sort_date)
+    current_sort_operations = current_operations_for_gateway(gateway)
     operation_count = SortDateOperation.query.filter_by(gateway_code=gateway.code).count()
     master_schedule_count = MasterFlightSchedule.query.filter_by(
         gateway_code=gateway.code
@@ -226,7 +227,7 @@ def flight_api_test():
     gateway = get_current_gateway()
     generation_result = _auto_generate_today_sorts(gateway)
     sort_date = generation_result["sort_date"]
-    operations = operations_for_gateway_date(gateway, sort_date)
+    operations = current_operations_for_gateway(gateway)
     selected_operation = _selected_current_operation(operations)
     import_result = None
     selected_lookup_window = None
@@ -414,14 +415,14 @@ def manage_sort():
     gateway = get_current_gateway()
     generation_result = _auto_generate_today_sorts(gateway)
     sort_date = generation_result["sort_date"]
-    operations = operations_for_gateway_date(gateway, sort_date)
+    operations = current_operations_for_gateway(gateway)
     sync_results = [_sync_operation_with_master(operation) for operation in operations]
     if any(
         result["added"] or result["updated"]
         for result in sync_results
     ):
         db.session.commit()
-        operations = operations_for_gateway_date(gateway, sort_date)
+        operations = current_operations_for_gateway(gateway)
     selected_sort_name = request.args.get("sort", "").strip().lower()
     selected_operation = next(
         (
@@ -1001,7 +1002,7 @@ def _selected_current_operation(operations, operation_id=None):
 
 def _review_item_matches_selected_operation(gateway, review_item):
     generation_result = _auto_generate_today_sorts(gateway)
-    operations = operations_for_gateway_date(gateway, generation_result["sort_date"])
+    operations = current_operations_for_gateway(gateway)
     selected_operation = _selected_current_operation(
         operations,
         operation_id=request.form.get("operation_id"),

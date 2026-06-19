@@ -1,10 +1,10 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import current_app
 
 from app.extensions import db
-from app.models import GatewaySortMatrix, SortDateOperation
+from app.models import GatewaySortMatrix, SortDateOperation, SortTimelineSettings
 from app.services.sort_date_operations import generate_sort_date_operation_from_master
 
 
@@ -34,12 +34,25 @@ def gateway_timezone(gateway=None):
     return current_app.config.get("DEFAULT_GATEWAY_TIMEZONE", "America/Chicago")
 
 
-def current_gateway_local_date(gateway=None):
+def current_gateway_local_datetime(gateway=None, now=None):
+    if now is None:
+        now = current_app.config.get("CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE")
     timezone = gateway_timezone(gateway)
+    if now is not None:
+        if now.tzinfo:
+            try:
+                return now.astimezone(ZoneInfo(timezone)).replace(tzinfo=None)
+            except ZoneInfoNotFoundError:
+                return now.replace(tzinfo=None)
+        return now
     try:
-        return datetime.now(ZoneInfo(timezone)).date()
+        return datetime.now(ZoneInfo(timezone)).replace(tzinfo=None)
     except ZoneInfoNotFoundError:
-        return _fallback_gateway_now(timezone).date()
+        return _fallback_gateway_now(timezone)
+
+
+def current_gateway_local_date(gateway=None, now=None):
+    return current_gateway_local_datetime(gateway, now=now).date()
 
 
 def matrix_entries_for_gateway(gateway):
@@ -113,13 +126,18 @@ def ensure_sort_operations_for_gateway_date(
     gateway,
     sort_date=None,
     generated_by_user_id=None,
+    now=None,
 ):
-    sort_date = sort_date or current_gateway_local_date(gateway)
+    local_now = current_gateway_local_datetime(gateway, now=now)
+    sort_date = sort_date or local_now.date()
+    active_previous_sort_names = previous_day_active_sort_names(gateway, sort_date, local_now)
     created_operations = []
     existing_operations = []
     errors = []
 
     for sort_name in active_sorts_for_gateway_date(gateway, sort_date):
+        if sort_name in active_previous_sort_names:
+            continue
         existing_operation = SortDateOperation.query.filter_by(
             sort_date=sort_date,
             gateway_code=gateway.code,
@@ -147,6 +165,88 @@ def ensure_sort_operations_for_gateway_date(
         "existing": existing_operations,
         "errors": errors,
     }
+
+
+def current_operations_for_gateway(gateway, now=None):
+    local_now = current_gateway_local_datetime(gateway, now=now)
+    current_date = local_now.date()
+    previous_date = current_date - timedelta(days=1)
+    operations = (
+        SortDateOperation.query.filter(
+            SortDateOperation.gateway_code == gateway.code,
+            SortDateOperation.archived_at_utc.is_(None),
+            SortDateOperation.sort_date.in_((current_date, previous_date)),
+        )
+        .all()
+    )
+    visible_operations = [
+        operation
+        for operation in operations
+        if operation.sort_date == current_date
+        or operation_is_active_at(operation, local_now, gateway)
+    ]
+    return sorted(
+        visible_operations,
+        key=lambda operation: (
+            0 if operation_is_active_at(operation, local_now, gateway) else 1,
+            operation.sort_date,
+            SORT_ORDER.get(operation.sort_name, len(SORT_ORDER)),
+        ),
+    )
+
+
+def previous_day_active_sort_names(gateway, sort_date, local_now):
+    previous_date = sort_date - timedelta(days=1)
+    previous_operations = (
+        SortDateOperation.query.filter_by(
+            gateway_code=gateway.code,
+            sort_date=previous_date,
+        )
+        .filter(SortDateOperation.archived_at_utc.is_(None))
+        .all()
+    )
+    return {
+        operation.sort_name
+        for operation in previous_operations
+        if operation_is_active_at(operation, local_now, gateway)
+    }
+
+
+def operation_is_active_at(operation, local_now, gateway=None):
+    if not operation or not local_now:
+        return False
+    start_local, end_local = sort_lookup_window_for_operation(operation, gateway)
+    return bool(start_local and end_local and start_local <= local_now < end_local)
+
+
+def sort_lookup_window_for_operation(operation, gateway=None):
+    sort_setting = _sort_timeline_sort_setting(gateway or operation.gateway, operation.sort_name)
+    start_time = sort_setting.sort_window_start_local if sort_setting else None
+    end_time = sort_setting.sort_window_end_local if sort_setting else None
+    start_time = start_time or time(0, 0)
+    end_time = end_time or time(23, 59)
+    start_local = datetime.combine(operation.sort_date, start_time)
+    end_local = datetime.combine(operation.sort_date, end_time)
+    if end_local <= start_local:
+        end_local += timedelta(days=1)
+    return start_local, end_local
+
+
+def _sort_timeline_sort_setting(gateway, sort_name):
+    if not gateway:
+        return None
+    settings = SortTimelineSettings.query.filter_by(gateway_id=gateway.id).first()
+    if not settings:
+        return None
+    sort_name = str(sort_name or "").strip().lower()
+    return next(
+        (
+            sort_setting
+            for sort_setting in settings.sort_settings
+            if sort_setting.sort_name == sort_name
+        ),
+        None,
+    )
 
 
 def operations_for_gateway_date(gateway, sort_date):

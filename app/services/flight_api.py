@@ -14,7 +14,7 @@ from app.models import (
     SortDateOperation,
     SortTimelineSettings,
 )
-from app.services.gateway_matrix import gateway_timezone
+from app.services.gateway_matrix import current_operations_for_gateway, gateway_timezone
 from app.services.sort_date_operations import (
     create_default_crew_assignments_for_mission,
     ensure_tail_state_for_mission,
@@ -408,7 +408,17 @@ def ignore_review_item(review_item):
 
 
 def current_sort_operation(gateway, sort_date=None, sort_name=None):
-    sort_date = sort_date or _gateway_today(gateway)
+    if sort_date is None:
+        operations = current_operations_for_gateway(gateway)
+        if sort_name:
+            sort_name = str(sort_name).strip().lower()
+            operations = [
+                operation
+                for operation in operations
+                if operation.sort_name == sort_name
+            ]
+        return operations[0] if operations else None
+
     query = SortDateOperation.query.filter_by(
         gateway_code=gateway.code,
         sort_date=sort_date,

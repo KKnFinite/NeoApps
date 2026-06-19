@@ -22,8 +22,10 @@ from app.models import (
 )
 from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.gateway_matrix import current_gateway_local_date
+from app.services.gateway_matrix import current_operations_for_gateway
 from app.services.night_sorting import night_sort_time_key
 from app.services.sort_timeline import (
+    ensure_sort_timeline_settings,
     record_sort_timeline_api_attempt,
     sort_timeline_context,
 )
@@ -1282,6 +1284,65 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn('class="motherbrain-main-menu-return"', main_html)
         self.assertIn('href="/motherbrain"', main_html)
         self.assertIn('aria-label="BACK TO NeoMotherBrain MAIN MENU"', main_html)
+
+    def test_manage_sort_after_midnight_shows_previous_day_active_night_sort(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 19, 0, 30)
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        previous_operation = self._operation(
+            gateway_id=self.rfd_gateway.id,
+            sort_date=date(2026, 6, 18),
+            sort_name="night",
+        )
+        db.session.add(previous_operation)
+        db.session.commit()
+
+        response = self.client.get("/motherbrain/manage-sort")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"MANAGE SORT", response.data)
+        self.assertIn(b"2026-06-18", response.data)
+        self.assertIn(b"NIGHT", response.data)
+        self.assertNotIn(b"No active sorts today.", response.data)
+
+    def test_current_operations_drop_previous_day_night_after_sort_end(self):
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        previous_operation = self._operation(
+            gateway_id=self.rfd_gateway.id,
+            sort_date=date(2026, 6, 18),
+            sort_name="night",
+        )
+        db.session.add(previous_operation)
+        db.session.commit()
+
+        operations = current_operations_for_gateway(
+            self.rfd_gateway,
+            now=datetime(2026, 6, 19, 4, 0),
+        )
+
+        self.assertNotIn(previous_operation, operations)
+
+    def test_manage_sort_does_not_create_current_day_duplicate_while_prior_night_active(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 19, 0, 30)
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        self._add_matrix_cell("friday", "night")
+        previous_operation = self._operation(
+            gateway_id=self.rfd_gateway.id,
+            sort_date=date(2026, 6, 18),
+            sort_name="night",
+        )
+        db.session.add(previous_operation)
+        db.session.commit()
+
+        response = self.client.get("/motherbrain/manage-sort")
+
+        current_day_operations = SortDateOperation.query.filter_by(
+            gateway_code="RFD",
+            sort_date=date(2026, 6, 19),
+            sort_name="night",
+        ).all()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(current_day_operations, [])
+        self.assertIn(b"2026-06-18", response.data)
 
     def test_manage_sort_syncs_new_master_rows_into_existing_operation(self):
         sort_date = current_gateway_local_date(self.rfd_gateway)
@@ -3273,11 +3334,23 @@ class MotherBrainRoutesTest(unittest.TestCase):
     def _operation(self, **overrides):
         values = {
             "sort_date": date(2026, 6, 1),
+            "gateway_id": self.rfd_gateway.id,
             "gateway_code": "RFD",
             "sort_name": "night",
         }
         values.update(overrides)
         return SortDateOperation(**values)
+
+    def _set_sort_window(self, sort_name, start_time, end_time):
+        settings = ensure_sort_timeline_settings(self.rfd_gateway)
+        sort_setting = next(
+            setting
+            for setting in settings.sort_settings
+            if setting.sort_name == sort_name
+        )
+        sort_setting.sort_window_start_local = start_time
+        sort_setting.sort_window_end_local = end_time
+        db.session.flush()
 
     def _operation_with_missions(self):
         operation = self._operation()
