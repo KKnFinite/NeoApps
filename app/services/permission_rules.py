@@ -41,6 +41,11 @@ DEFAULT_PERMISSION_RULES = (
         "Add or ignore unmatched UPS Flight API review items.",
     ),
     (
+        "neomotherbrain.flight_api_auto_poll.trigger",
+        "simulator",
+        "Trigger one passive Flight API auto-poll eligibility check.",
+    ),
+    (
         "neoermac.building_lineup.view",
         "operator",
         "View NeoErmac Building Lineup screens.",

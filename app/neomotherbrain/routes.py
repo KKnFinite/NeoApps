@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 import re
 
 from flask import current_app, flash, jsonify, redirect, render_template, request, url_for
@@ -24,6 +24,7 @@ from app.services.flight_rules import (
 from app.services.flight_api import (
     FlightApiConfigurationError,
     accept_review_item,
+    acquire_flight_api_auto_poll_lock,
     api_polling_window_snapshot,
     flight_api_auto_poll_status,
     flight_api_operational_time_utc,
@@ -32,6 +33,7 @@ from app.services.flight_api import (
     ignore_review_item,
     ops_node_online_window_snapshot,
     pending_review_items_for_operation,
+    release_flight_api_auto_poll_lock,
     review_item_or_404,
     run_flight_api_import,
     run_flight_api_replay,
@@ -84,6 +86,7 @@ ACTIVE_DAY_OPTIONS = (
 
 FLIGHT_API_REVIEW_VIEW_PERMISSION = "neomotherbrain.flight_api_review.view"
 FLIGHT_API_REVIEW_EDIT_PERMISSION = "neomotherbrain.flight_api_review.edit"
+FLIGHT_API_AUTO_POLL_TRIGGER_PERMISSION = "neomotherbrain.flight_api_auto_poll.trigger"
 
 SORT_NAME_OPTIONS = (
     ("night", "Night"),
@@ -318,6 +321,68 @@ def flight_api_test():
     )
 
 
+@bp.route("/motherbrain/flight-api-auto-poll/check", methods=["POST"])
+@login_required
+def flight_api_auto_poll_check():
+    if not user_can(FLIGHT_API_AUTO_POLL_TRIGGER_PERMISSION):
+        return jsonify(
+            {
+                "ok": False,
+                "eligible": False,
+                "skipped": True,
+                "reason": "Access denied.",
+            }
+        ), 403
+
+    gateway = get_current_gateway()
+    _auto_generate_today_sorts(gateway)
+    db.session.commit()
+    status = flight_api_auto_poll_status(gateway)
+    operation = status.get("operation")
+    if not status.get("eligible"):
+        return jsonify(_flight_api_auto_poll_payload(gateway, status, skipped=True))
+
+    lock_token = acquire_flight_api_auto_poll_lock(operation)
+    if not lock_token:
+        db.session.rollback()
+        status["eligible"] = False
+        status["reason"] = "poll already in progress"
+        return jsonify(_flight_api_auto_poll_payload(gateway, status, skipped=True))
+
+    db.session.commit()
+    try:
+        import_result = run_flight_api_import(gateway, operation=operation)
+        release_flight_api_auto_poll_lock(operation, lock_token)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        operation = db.session.get(SortDateOperation, operation.id)
+        release_flight_api_auto_poll_lock(operation, lock_token)
+        db.session.commit()
+        status = flight_api_auto_poll_status(gateway, operation=operation)
+        payload = _flight_api_auto_poll_payload(
+            gateway,
+            status,
+            skipped=False,
+            import_result={
+                "provider_error": True,
+                "message": "Flight API auto poll failed safely.",
+            },
+        )
+        return jsonify(payload), 500
+
+    refreshed_status = flight_api_auto_poll_status(gateway, operation=operation)
+    return jsonify(
+        _flight_api_auto_poll_payload(
+            gateway,
+            refreshed_status,
+            skipped=not bool(import_result.get("attempted")),
+            import_result=import_result,
+            initial_eligible=True,
+        )
+    )
+
+
 @bp.route("/motherbrain/flight-api-review")
 @login_required
 def flight_api_review():
@@ -401,6 +466,73 @@ def ignore_flight_api_review_item(review_item_id):
             operation_id=review_item.sort_date_operation_id,
         )
     )
+
+
+def _flight_api_auto_poll_payload(
+    gateway,
+    status,
+    skipped=False,
+    import_result=None,
+    initial_eligible=None,
+):
+    import_result = import_result or {}
+    operation = status.get("operation")
+    eligible = bool(status.get("eligible")) if initial_eligible is None else bool(initial_eligible)
+    provider_error = bool(import_result.get("provider_error"))
+    message = import_result.get("message") or status.get("reason") or ""
+    return {
+        "ok": not provider_error,
+        "eligible": eligible,
+        "skipped": bool(skipped),
+        "reason": status.get("reason") or message,
+        "current_operation_id": operation.id if operation else status.get("operation_id"),
+        "current_operation_name": (
+            operation.sort_name if operation else status.get("operation_sort_name")
+        ),
+        "sort_date": str(operation.sort_date if operation else status.get("operation_sort_date") or ""),
+        "last_attempted_poll": _flight_api_json_time(
+            status.get("last_attempted_poll_utc"),
+            gateway,
+        ),
+        "last_successful_poll": _flight_api_json_time(
+            status.get("last_successful_poll_utc"),
+            gateway,
+        ),
+        "last_failed_poll": _flight_api_json_time(
+            status.get("last_failed_poll_utc"),
+            gateway,
+        ),
+        "next_auto_poll_eligible_at": _flight_api_json_time(
+            status.get("next_eligible_time_utc"),
+            gateway,
+        ),
+        "actual_auto_poll_interval_minutes": status.get("actual_interval_minutes"),
+        "remaining_polls": status.get("polls_remaining", 0),
+        "units_consumed": import_result.get("usage_units_consumed", 0),
+        "matched_arrivals": import_result.get("matched_arrivals_count", 0),
+        "matched_departures": import_result.get("matched_departures_count", 0),
+        "unmatched_arrivals": import_result.get("unmatched_arrivals_count", 0),
+        "unmatched_departures": import_result.get("unmatched_departures_count", 0),
+        "non_ups_ignored_arrivals": import_result.get("non_ups_ignored_arrivals_count", 0),
+        "non_ups_ignored_departures": import_result.get("non_ups_ignored_departures_count", 0),
+        "review_added": len(import_result.get("review_items") or []),
+        "stale_removed": import_result.get("replaced_review_count", 0),
+        "suppressed_review": import_result.get("suppressed_review_count", 0),
+        "provider_status": import_result.get("provider_status_code"),
+        "safe_error_text": message if provider_error else "",
+        "attempted": bool(import_result.get("attempted")),
+    }
+
+
+def _flight_api_json_time(value, gateway):
+    if not value:
+        return None
+    if value.tzinfo:
+        value = value.astimezone(timezone.utc).replace(tzinfo=None)
+    return {
+        "utc": f"{value.isoformat(timespec='seconds')}Z",
+        "local": format_flight_api_local_time(value, gateway),
+    }
 
 
 def _sort_timeline_autosave_payload(context):

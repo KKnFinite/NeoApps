@@ -23,7 +23,9 @@ from app.models import (
 )
 from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.permission_rules import ensure_default_permission_rules
+from app.services.gateway_matrix import current_gateway_local_datetime
 from app.services import flight_api as flight_api_service
+from app.neomotherbrain import routes as neomotherbrain_routes
 from app.services.flight_api import (
     API_STATUS_ASSUMED_ARRIVED,
     API_STATUS_IN_AIR,
@@ -2025,6 +2027,114 @@ class FlightApiTestPageTest(unittest.TestCase):
         )
         return user
 
+    def _setup_auto_poll_operation(
+        self,
+        provider_enabled=True,
+        sort_name="night",
+        sort_start=time(0, 0),
+        sort_end=time(23, 59),
+        poll_start=time(0, 0),
+        poll_end=time(23, 59),
+        minimum_interval=10,
+    ):
+        local_now = current_gateway_local_datetime(self.gateway)
+        sort_date = local_now.date()
+        day_name = sort_date.strftime("%A").lower()
+        settings = ensure_sort_timeline_settings(self.gateway)
+        settings.provider_enabled = provider_enabled
+        settings.monthly_api_units = 600
+        settings.units_per_poll = 2
+        settings.minimum_auto_poll_interval_minutes = minimum_interval
+        sort_setting = next(
+            setting for setting in settings.sort_settings if setting.sort_name == sort_name
+        )
+        sort_setting.sort_window_start_local = sort_start
+        sort_setting.sort_window_end_local = sort_end
+        sort_setting.polling_start_local = poll_start
+        sort_setting.polling_end_local = poll_end
+        matrix_entry = GatewaySortMatrix.query.filter_by(
+            gateway_id=self.gateway.id,
+            day_of_week=day_name,
+            sort_name=sort_name,
+        ).first()
+        if not matrix_entry:
+            matrix_entry = GatewaySortMatrix(
+                gateway_id=self.gateway.id,
+                gateway_code=self.gateway.code,
+                day_of_week=day_name,
+                sort_name=sort_name,
+            )
+            db.session.add(matrix_entry)
+        matrix_entry.gateway_code = self.gateway.code
+        matrix_entry.is_active = True
+        operation = SortDateOperation(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_date=sort_date,
+            sort_name=sort_name,
+            window_minutes=0,
+        )
+        db.session.add(operation)
+        db.session.commit()
+        return operation, settings
+
+    def _provider_flight(
+        self,
+        mission_type,
+        number,
+        call_sign,
+        sort_date,
+        airline_icao="UPS",
+        airline_iata="5X",
+    ):
+        local_time = f"{sort_date.isoformat()}T02:25:00"
+        if mission_type == "departure":
+            return {
+                "number": number,
+                "callSign": call_sign,
+                "airline": {"icao": airline_icao, "iata": airline_iata},
+                "departure": {
+                    "airport": {"iata": "RFD"},
+                    "revisedTime": {"local": local_time},
+                    "scheduledTime": {"local": local_time},
+                },
+                "arrival": {"airport": {"iata": "SDF"}},
+                "status": "Expected",
+            }
+        return {
+            "number": number,
+            "callSign": call_sign,
+            "airline": {"icao": airline_icao, "iata": airline_iata},
+            "departure": {"airport": {"iata": "SDF"}},
+            "arrival": {
+                "airport": {"iata": "RFD"},
+                "revisedTime": {"local": local_time},
+                "scheduledTime": {"local": local_time},
+            },
+            "status": "Expected",
+        }
+
+    def _install_provider_payload(self, payload):
+        calls = []
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, _exc_type, _exc, _tb):
+                return False
+
+            def read(self):
+                return json.dumps(payload).encode("utf-8")
+
+        def fake_urlopen(request, timeout):
+            calls.append({"request": request, "timeout": timeout})
+            return FakeResponse()
+
+        original_urlopen = flight_api_service.urlopen
+        flight_api_service.urlopen = fake_urlopen
+        return original_urlopen, calls
+
     def test_flight_api_test_page_loads_for_grandmaster(self):
         response = self.client.get("/motherbrain/flight-api-test")
 
@@ -2469,6 +2579,283 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
         self.assertEqual(SortTimelineUsageCounter.query.count(), 0)
         self.assertEqual(SortDateMission.query.count(), 0)
+
+    def test_flight_api_auto_poll_endpoint_requires_trigger_permission(self):
+        self._login_motherbrain_role("auto_poll_operator", "operator")
+
+        response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+
+        self.assertEqual(response.status_code, 403)
+        payload = response.get_json()
+        self.assertFalse(payload["eligible"])
+        self.assertTrue(payload["skipped"])
+        self.assertEqual(payload["reason"], "Access denied.")
+
+    def test_flight_api_auto_poll_not_eligible_does_not_call_provider(self):
+        operation, settings = self._setup_auto_poll_operation(provider_enabled=False)
+        calls = []
+
+        def fail_urlopen(_request, _timeout):
+            calls.append("called")
+            raise AssertionError("Provider should not be called when disabled")
+
+        original_urlopen = flight_api_service.urlopen
+        flight_api_service.urlopen = fail_urlopen
+        self._login_motherbrain_role("auto_disabled_simulator", "simulator")
+        try:
+            response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+        finally:
+            flight_api_service.urlopen = original_urlopen
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(payload["eligible"])
+        self.assertTrue(payload["skipped"])
+        self.assertEqual(payload["reason"], "provider disabled")
+        self.assertEqual(payload["current_operation_id"], operation.id)
+        self.assertEqual(calls, [])
+        self.assertEqual(SortTimelineUsageCounter.query.count(), 0)
+
+    def test_flight_api_auto_poll_eligible_calls_provider_once_and_returns_counts(self):
+        operation, _settings = self._setup_auto_poll_operation()
+        mission = self._mission_for_operation(operation, flight_number="UPS0123")
+        db.session.add(mission)
+        db.session.commit()
+        payload = {
+            "arrivals": [
+                self._provider_flight("arrival", "5X123", "UPS123", operation.sort_date),
+                self._provider_flight(
+                    "arrival",
+                    "AA123",
+                    "AAL123",
+                    operation.sort_date,
+                    airline_icao="AAL",
+                    airline_iata="AA",
+                ),
+            ],
+            "departures": [
+                self._provider_flight("departure", "5X456", "UPS456", operation.sort_date),
+            ],
+        }
+        original_urlopen, calls = self._install_provider_payload(payload)
+        previous = os.environ.get("AERODATABOX_API_KEY")
+        os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
+        self._login_motherbrain_role("auto_success_simulator", "simulator")
+        try:
+            response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+        finally:
+            flight_api_service.urlopen = original_urlopen
+            if previous is None:
+                os.environ.pop("AERODATABOX_API_KEY", None)
+            else:
+                os.environ["AERODATABOX_API_KEY"] = previous
+
+        db.session.refresh(operation)
+        result = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(result["eligible"])
+        self.assertFalse(result["skipped"])
+        self.assertTrue(result["attempted"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(result["units_consumed"], 2)
+        self.assertEqual(result["matched_arrivals"], 1)
+        self.assertEqual(result["matched_departures"], 0)
+        self.assertEqual(result["unmatched_arrivals"], 0)
+        self.assertEqual(result["unmatched_departures"], 1)
+        self.assertEqual(result["non_ups_ignored_arrivals"], 1)
+        self.assertEqual(result["review_added"], 1)
+        self.assertEqual(result["stale_removed"], 0)
+        self.assertIsNotNone(result["last_attempted_poll"])
+        self.assertIsNotNone(result["last_successful_poll"])
+        self.assertIsNotNone(result["next_auto_poll_eligible_at"])
+        self.assertEqual(operation.flight_api_last_poll_status, "success")
+        self.assertIsNone(operation.flight_api_auto_poll_in_progress_at_utc)
+        self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
+
+    def test_flight_api_auto_poll_outside_window_returns_not_eligible(self):
+        local_now = current_gateway_local_datetime(self.gateway)
+        if local_now.hour < 12:
+            poll_start, poll_end = time(20, 0), time(21, 0)
+        else:
+            poll_start, poll_end = time(0, 0), time(1, 0)
+        self._setup_auto_poll_operation(poll_start=poll_start, poll_end=poll_end)
+        original_run_import = neomotherbrain_routes.run_flight_api_import
+        neomotherbrain_routes.run_flight_api_import = lambda *_args, **_kwargs: self.fail(
+            "Provider import should not run outside polling window"
+        )
+        self._login_motherbrain_role("auto_window_simulator", "simulator")
+        try:
+            response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+        finally:
+            neomotherbrain_routes.run_flight_api_import = original_run_import
+
+        payload = response.get_json()
+        self.assertFalse(payload["eligible"])
+        self.assertTrue(payload["skipped"])
+        self.assertIn(payload["reason"], {"before API Polling Window", "outside API Polling Window"})
+
+    def test_flight_api_auto_poll_minimum_interval_not_elapsed_returns_not_eligible(self):
+        operation, _settings = self._setup_auto_poll_operation(minimum_interval=30)
+        operation.flight_api_last_attempted_poll_at_utc = datetime.utcnow()
+        db.session.commit()
+        original_run_import = neomotherbrain_routes.run_flight_api_import
+        neomotherbrain_routes.run_flight_api_import = lambda *_args, **_kwargs: self.fail(
+            "Provider import should not run before interval elapses"
+        )
+        self._login_motherbrain_role("auto_interval_simulator", "simulator")
+        try:
+            response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+        finally:
+            neomotherbrain_routes.run_flight_api_import = original_run_import
+
+        payload = response.get_json()
+        self.assertFalse(payload["eligible"])
+        self.assertTrue(payload["skipped"])
+        self.assertEqual(payload["reason"], "waiting for auto poll interval")
+        self.assertIsNotNone(payload["next_auto_poll_eligible_at"])
+
+    def test_flight_api_auto_poll_monthly_units_exhausted_returns_not_eligible(self):
+        self._setup_auto_poll_operation()
+        month_key = current_gateway_local_datetime(self.gateway).strftime("%Y-%m")
+        db.session.add(
+            SortTimelineUsageCounter(
+                gateway_id=self.gateway.id,
+                gateway_code=self.gateway.code,
+                month_key=month_key,
+                attempted_call_count=300,
+                units_consumed=600,
+            )
+        )
+        db.session.commit()
+        original_run_import = neomotherbrain_routes.run_flight_api_import
+        neomotherbrain_routes.run_flight_api_import = lambda *_args, **_kwargs: self.fail(
+            "Provider import should not run when budget is exhausted"
+        )
+        self._login_motherbrain_role("auto_budget_simulator", "simulator")
+        try:
+            response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+        finally:
+            neomotherbrain_routes.run_flight_api_import = original_run_import
+
+        payload = response.get_json()
+        self.assertFalse(payload["eligible"])
+        self.assertTrue(payload["skipped"])
+        self.assertEqual(payload["reason"], "monthly API budget exhausted")
+
+    def test_flight_api_auto_poll_in_progress_guard_skips_duplicate_request(self):
+        operation, _settings = self._setup_auto_poll_operation()
+        operation.flight_api_auto_poll_in_progress_at_utc = datetime.utcnow()
+        operation.flight_api_auto_poll_lock_token = "active-lock"
+        db.session.commit()
+        original_run_import = neomotherbrain_routes.run_flight_api_import
+        neomotherbrain_routes.run_flight_api_import = lambda *_args, **_kwargs: self.fail(
+            "Provider import should not run while another poll is in progress"
+        )
+        self._login_motherbrain_role("auto_lock_simulator", "simulator")
+        try:
+            response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+        finally:
+            neomotherbrain_routes.run_flight_api_import = original_run_import
+
+        payload = response.get_json()
+        self.assertFalse(payload["eligible"])
+        self.assertTrue(payload["skipped"])
+        self.assertEqual(payload["reason"], "poll already in progress")
+        db.session.refresh(operation)
+        self.assertEqual(operation.flight_api_auto_poll_lock_token, "active-lock")
+
+    def test_flight_api_auto_poll_provider_failure_clears_lock_and_throttles_retry(self):
+        operation, _settings = self._setup_auto_poll_operation()
+        calls = []
+
+        def fake_urlopen(request, timeout=20):
+            calls.append(request)
+            body = BytesIO(b'{"message":"rate limit"}')
+            raise HTTPError(request.full_url, 429, "Too Many Requests", hdrs=None, fp=body)
+
+        original_urlopen = flight_api_service.urlopen
+        previous = os.environ.get("AERODATABOX_API_KEY")
+        os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
+        flight_api_service.urlopen = fake_urlopen
+        self._login_motherbrain_role("auto_failure_simulator", "simulator")
+        try:
+            first = self.client.post("/motherbrain/flight-api-auto-poll/check")
+            second = self.client.post("/motherbrain/flight-api-auto-poll/check")
+        finally:
+            flight_api_service.urlopen = original_urlopen
+            if previous is None:
+                os.environ.pop("AERODATABOX_API_KEY", None)
+            else:
+                os.environ["AERODATABOX_API_KEY"] = previous
+
+        db.session.refresh(operation)
+        first_payload = first.get_json()
+        second_payload = second.get_json()
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(first_payload["eligible"])
+        self.assertFalse(first_payload["skipped"])
+        self.assertEqual(first_payload["provider_status"], 429)
+        self.assertIn("429", first_payload["safe_error_text"])
+        self.assertEqual(operation.flight_api_last_poll_status, "failed")
+        self.assertIsNotNone(operation.flight_api_last_attempted_poll_at_utc)
+        self.assertIsNotNone(operation.flight_api_last_failed_poll_at_utc)
+        self.assertIsNotNone(operation.flight_api_next_auto_poll_eligible_at_utc)
+        self.assertIsNone(operation.flight_api_auto_poll_in_progress_at_utc)
+        self.assertEqual(operation.flight_api_auto_poll_lock_token, "")
+        self.assertEqual(second.status_code, 200)
+        self.assertFalse(second_payload["eligible"])
+        self.assertTrue(second_payload["skipped"])
+        self.assertEqual(second_payload["reason"], "waiting for auto poll interval")
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", first.data)
+
+    def test_flight_api_auto_poll_does_not_mutate_master_or_manual_truth(self):
+        operation, _settings = self._setup_auto_poll_operation()
+        mission = self._mission_for_operation(
+            operation,
+            flight_number="UPS0999",
+            eta_datetime_utc=datetime(2026, 6, 1, 7, 5),
+            arrival_status="arrived",
+        )
+        master_row = MasterFlightSchedule(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_name=operation.sort_name,
+            mission_type="arrival",
+            wave="1",
+            flight_number="UPS0999",
+            origin="SDF",
+            destination="RFD",
+            active_days=operation.sort_date.strftime("%A").lower(),
+            planned_time_local=time(2, 0),
+        )
+        db.session.add_all([mission, master_row])
+        db.session.commit()
+        provider_payload = {
+            "arrivals": [
+                self._provider_flight("arrival", "5X999", "UPS999", operation.sort_date)
+            ]
+        }
+        original_urlopen, _calls = self._install_provider_payload(provider_payload)
+        previous = os.environ.get("AERODATABOX_API_KEY")
+        os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
+        self._login_motherbrain_role("auto_manual_truth_simulator", "simulator")
+        try:
+            response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+        finally:
+            flight_api_service.urlopen = original_urlopen
+            if previous is None:
+                os.environ.pop("AERODATABOX_API_KEY", None)
+            else:
+                os.environ["AERODATABOX_API_KEY"] = previous
+
+        db.session.refresh(mission)
+        db.session.refresh(master_row)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mission.arrival_status, "arrived")
+        self.assertEqual(MasterFlightSchedule.query.count(), 1)
+        self.assertEqual(master_row.planned_time_local, time(2, 0))
 
     def test_flight_api_review_page_link_visible_for_view_permission(self):
         self._login_motherbrain_role("review_simulator_link", "simulator")

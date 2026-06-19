@@ -1,11 +1,14 @@
 import json
 import os
 import re
+import uuid
 from datetime import date, datetime, time, timedelta, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from sqlalchemy import or_
 
 from app.extensions import db
 from app.models import (
@@ -30,6 +33,7 @@ from app.services.sort_timeline import (
 
 AIRPORT_CODE = "RFD"
 DEFAULT_API_KEY_ENV_VAR = "AERODATABOX_API_KEY"
+AUTO_POLL_LOCK_STALE_AFTER_MINUTES = 30
 RAPIDAPI_HOST = "aerodatabox.p.rapidapi.com"
 RAPIDAPI_USER_AGENT = "NeoGateway/1.0"
 RAPIDAPI_ACCEPT = "application/json"
@@ -680,6 +684,57 @@ def record_flight_api_poll_state(
         operation.flight_api_last_failed_poll_at_utc = attempted_at_utc
     db.session.flush()
     return operation
+
+
+def acquire_flight_api_auto_poll_lock(operation, now=None):
+    if not operation:
+        return None
+    now_utc = _utc_naive(now)
+    lock_token = uuid.uuid4().hex
+    stale_before = now_utc - timedelta(minutes=AUTO_POLL_LOCK_STALE_AFTER_MINUTES)
+    updated_count = (
+        SortDateOperation.query.filter(
+            SortDateOperation.id == operation.id,
+            or_(
+                SortDateOperation.flight_api_auto_poll_in_progress_at_utc.is_(None),
+                SortDateOperation.flight_api_auto_poll_in_progress_at_utc < stale_before,
+            ),
+        )
+        .update(
+            {
+                SortDateOperation.flight_api_auto_poll_in_progress_at_utc: now_utc,
+                SortDateOperation.flight_api_auto_poll_lock_token: lock_token,
+            },
+            synchronize_session=False,
+        )
+    )
+    db.session.flush()
+    if not updated_count:
+        return None
+
+    operation.flight_api_auto_poll_in_progress_at_utc = now_utc
+    operation.flight_api_auto_poll_lock_token = lock_token
+    return lock_token
+
+
+def release_flight_api_auto_poll_lock(operation, lock_token=None):
+    if not operation:
+        return False
+    query = SortDateOperation.query.filter(SortDateOperation.id == operation.id)
+    if lock_token:
+        query = query.filter(SortDateOperation.flight_api_auto_poll_lock_token == lock_token)
+    updated_count = query.update(
+        {
+            SortDateOperation.flight_api_auto_poll_in_progress_at_utc: None,
+            SortDateOperation.flight_api_auto_poll_lock_token: "",
+        },
+        synchronize_session=False,
+    )
+    db.session.flush()
+    if updated_count:
+        operation.flight_api_auto_poll_in_progress_at_utc = None
+        operation.flight_api_auto_poll_lock_token = ""
+    return bool(updated_count)
 
 
 def _base_auto_poll_status(gateway, operation, settings, now_utc, local_now):

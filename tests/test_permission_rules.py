@@ -44,6 +44,7 @@ class PermissionRulesTest(unittest.TestCase):
             rules,
             {
                 "neomotherbrain.dashboard.view": "operator",
+                "neomotherbrain.flight_api_auto_poll.trigger": "simulator",
                 "neomotherbrain.flight_api_review.edit": "simulator",
                 "neomotherbrain.flight_api_review.view": "simulator",
                 "neomotherbrain.gateway_matrix.view": "operator",
@@ -173,6 +174,13 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertFalse(user_can("neomotherbrain.flight_api_review.edit", operator))
         self.assertTrue(user_can("neomotherbrain.flight_api_review.view", simulator))
         self.assertTrue(user_can("neomotherbrain.flight_api_review.edit", simulator))
+
+    def test_flight_api_auto_poll_trigger_defaults_to_simulator(self):
+        operator = self._user_with_node_role("motherbrain_auto_operator", "motherbrain", "operator")
+        simulator = self._user_with_node_role("motherbrain_auto_simulator", "motherbrain", "simulator")
+
+        self.assertFalse(user_can("neomotherbrain.flight_api_auto_poll.trigger", operator))
+        self.assertTrue(user_can("neomotherbrain.flight_api_auto_poll.trigger", simulator))
 
     def test_neosektor_rules_are_grouped_and_use_existing_role_order(self):
         watcher = self._user_with_node_role("sektor_watcher", "sektor", "watcher")
