@@ -482,6 +482,13 @@ def remaining_api_operating_day_count(month_start, enabled_cells, sort_settings,
             local_now,
         ):
             remaining += 1
+        elif operating_date < today and sort_api_window_still_active_on_date(
+            sort_name,
+            sort_settings,
+            operating_date,
+            local_now,
+        ):
+            remaining += 1
     return remaining
 
 

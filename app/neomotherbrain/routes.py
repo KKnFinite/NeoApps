@@ -25,6 +25,7 @@ from app.services.flight_api import (
     FlightApiConfigurationError,
     accept_review_item,
     api_polling_window_snapshot,
+    flight_api_auto_poll_status,
     flight_api_operational_time_utc,
     flight_api_provider_time_utc,
     format_flight_api_local_time,
@@ -239,6 +240,7 @@ def flight_api_test():
     selected_ops_window = None
     settings = ensure_sort_timeline_settings(gateway)
     replay_payload = ""
+    auto_poll_status = None
 
     if request.method == "POST" and request.form.get("flight_api_action") == "pull":
         selected_operation = _selected_current_operation(
@@ -290,6 +292,10 @@ def flight_api_test():
             selected_operation,
             settings,
         )
+        auto_poll_status = flight_api_auto_poll_status(
+            gateway,
+            operation=selected_operation,
+        )
 
     pending_items = pending_review_items_for_operation(selected_operation)
     return render_template(
@@ -304,6 +310,7 @@ def flight_api_test():
         import_result=import_result,
         pending_review_items=pending_items,
         replay_payload=replay_payload,
+        auto_poll_status=auto_poll_status,
         sort_timeline_settings=settings,
         flight_api_operational_time=flight_api_operational_time_utc,
         flight_api_provider_time=flight_api_provider_time_utc,

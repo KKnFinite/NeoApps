@@ -51,6 +51,12 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "sort_date_operations": {
         "first_wave_window_minutes": "INTEGER",
         "second_wave_window_minutes": "INTEGER",
+        "flight_api_last_attempted_poll_at_utc": "DATETIME",
+        "flight_api_last_successful_poll_at_utc": "DATETIME",
+        "flight_api_last_failed_poll_at_utc": "DATETIME",
+        "flight_api_last_poll_status": "VARCHAR(32) DEFAULT ''",
+        "flight_api_last_poll_summary": "VARCHAR(255) DEFAULT ''",
+        "flight_api_next_auto_poll_eligible_at_utc": "DATETIME",
     },
     "master_flight_schedules": {
         "aircraft_type": "VARCHAR(16)",
@@ -87,6 +93,12 @@ POSTGRES_OPTIONAL_COLUMNS = {
     "sort_date_operations": {
         "first_wave_window_minutes": "INTEGER",
         "second_wave_window_minutes": "INTEGER",
+        "flight_api_last_attempted_poll_at_utc": "TIMESTAMP",
+        "flight_api_last_successful_poll_at_utc": "TIMESTAMP",
+        "flight_api_last_failed_poll_at_utc": "TIMESTAMP",
+        "flight_api_last_poll_status": "VARCHAR(32) DEFAULT ''",
+        "flight_api_last_poll_summary": "VARCHAR(255) DEFAULT ''",
+        "flight_api_next_auto_poll_eligible_at_utc": "TIMESTAMP",
     },
     "master_flight_schedules": {
         "aircraft_type": "VARCHAR(16)",

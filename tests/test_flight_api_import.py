@@ -12,6 +12,7 @@ from app.models import (
     FlightApiReviewItem,
     Gateway,
     GatewayMembership,
+    GatewaySortMatrix,
     MasterFlightSchedule,
     PermissionRule,
     SortDateMission,
@@ -36,6 +37,7 @@ from app.services.flight_api import (
     RapidApiFlightClient,
     accept_review_item,
     current_sort_operation,
+    flight_api_auto_poll_status,
     flight_api_operational_time_utc,
     format_flight_api_local_time,
     ignore_review_item,
@@ -336,6 +338,219 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(SortDateMission.query.count(), 1)
         self.assertEqual(mission.eta_datetime_utc, datetime(2026, 6, 1, 7, 5))
         self.assertEqual(SortTimelineUsageCounter.query.one().units_consumed, 2)
+        self.assertEqual(
+            self.operation.flight_api_last_attempted_poll_at_utc,
+            datetime(2026, 6, 1, 12, 0),
+        )
+        self.assertEqual(
+            self.operation.flight_api_last_failed_poll_at_utc,
+            datetime(2026, 6, 1, 12, 0),
+        )
+        self.assertEqual(self.operation.flight_api_last_poll_status, "failed")
+        self.assertIn("429", self.operation.flight_api_last_poll_summary)
+
+    def test_successful_manual_poll_tracks_poll_state(self):
+        client = FakeFlightClient({"arrivals": [], "departures": []})
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=client,
+            now=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertTrue(result["attempted"])
+        self.assertFalse(result.get("provider_error", False))
+        self.assertEqual(
+            self.operation.flight_api_last_attempted_poll_at_utc,
+            datetime(2026, 6, 1, 12, 0),
+        )
+        self.assertEqual(
+            self.operation.flight_api_last_successful_poll_at_utc,
+            datetime(2026, 6, 1, 12, 0),
+        )
+        self.assertIsNone(self.operation.flight_api_last_failed_poll_at_utc)
+        self.assertEqual(self.operation.flight_api_last_poll_status, "success")
+        self.assertEqual(
+            self.operation.flight_api_next_auto_poll_eligible_at_utc,
+            datetime(2026, 6, 1, 12, 10),
+        )
+
+    def test_replay_mode_does_not_update_poll_state(self):
+        result = run_flight_api_replay(
+            self.gateway,
+            self.operation,
+            payload_text=json.dumps({"arrivals": [], "departures": []}),
+            now=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertTrue(result["replay_preview"])
+        self.assertIsNone(self.operation.flight_api_last_attempted_poll_at_utc)
+        self.assertIsNone(self.operation.flight_api_last_successful_poll_at_utc)
+        self.assertIsNone(self.operation.flight_api_last_failed_poll_at_utc)
+        self.assertIsNone(self.operation.flight_api_next_auto_poll_eligible_at_utc)
+        self.assertEqual(SortTimelineUsageCounter.query.count(), 0)
+
+    def test_auto_poll_status_is_eligible_inside_window_without_previous_attempt(self):
+        self._configure_api_ready_sort()
+
+        status = flight_api_auto_poll_status(
+            self.gateway,
+            operation=self.operation,
+            now=datetime(2026, 6, 1, 19, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertTrue(status["eligible"])
+        self.assertEqual(status["reason"], "eligible")
+        self.assertEqual(status["actual_interval_minutes"], 10)
+        self.assertEqual(status["next_eligible_time_utc"], datetime(2026, 6, 1, 19, 0))
+        self.assertEqual(status["operation_id"], self.operation.id)
+
+    def test_auto_poll_minimum_interval_blocks_until_enough_time_passes(self):
+        self._configure_api_ready_sort(minimum_interval=15)
+        self.operation.flight_api_last_attempted_poll_at_utc = datetime(2026, 6, 1, 18, 50)
+        db.session.commit()
+
+        blocked = flight_api_auto_poll_status(
+            self.gateway,
+            operation=self.operation,
+            now=datetime(2026, 6, 1, 19, 0, tzinfo=timezone.utc),
+        )
+        allowed = flight_api_auto_poll_status(
+            self.gateway,
+            operation=self.operation,
+            now=datetime(2026, 6, 1, 19, 5, tzinfo=timezone.utc),
+        )
+
+        self.assertFalse(blocked["eligible"])
+        self.assertEqual(blocked["reason"], "waiting for auto poll interval")
+        self.assertEqual(blocked["next_eligible_time_utc"], datetime(2026, 6, 1, 19, 5))
+        self.assertTrue(allowed["eligible"])
+
+    def test_failed_attempt_also_blocks_immediate_auto_poll_retry(self):
+        self._configure_api_ready_sort(minimum_interval=20)
+        self.operation.flight_api_last_attempted_poll_at_utc = datetime(2026, 6, 1, 18, 50)
+        self.operation.flight_api_last_failed_poll_at_utc = datetime(2026, 6, 1, 18, 50)
+        self.operation.flight_api_last_poll_status = "failed"
+        db.session.commit()
+
+        status = flight_api_auto_poll_status(
+            self.gateway,
+            operation=self.operation,
+            now=datetime(2026, 6, 1, 19, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertFalse(status["eligible"])
+        self.assertEqual(status["reason"], "waiting for auto poll interval")
+        self.assertEqual(status["next_eligible_time_utc"], datetime(2026, 6, 1, 19, 10))
+
+    def test_auto_poll_without_previous_attempt_waits_for_polling_window_start(self):
+        self._configure_api_ready_sort()
+
+        status = flight_api_auto_poll_status(
+            self.gateway,
+            operation=self.operation,
+            now=datetime(2026, 6, 1, 12, 30, tzinfo=timezone.utc),
+        )
+
+        self.assertFalse(status["eligible"])
+        self.assertEqual(status["reason"], "before API Polling Window")
+        self.assertEqual(status["next_eligible_time_utc"], datetime(2026, 6, 1, 13, 0))
+
+    def test_auto_poll_outside_polling_window_is_not_eligible(self):
+        self._configure_api_ready_sort()
+
+        status = flight_api_auto_poll_status(
+            self.gateway,
+            operation=self.operation,
+            now=datetime(2026, 6, 1, 22, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertFalse(status["eligible"])
+        self.assertEqual(status["reason"], "outside API Polling Window")
+
+    def test_auto_poll_disabled_provider_or_api_schedule_is_not_eligible(self):
+        self._configure_api_ready_sort()
+        self.settings.provider_enabled = False
+        db.session.commit()
+
+        provider_disabled = flight_api_auto_poll_status(
+            self.gateway,
+            operation=self.operation,
+            now=datetime(2026, 6, 1, 19, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertFalse(provider_disabled["eligible"])
+        self.assertEqual(provider_disabled["reason"], "provider disabled")
+
+        db.session.query(GatewaySortMatrix).delete()
+        self.settings.provider_enabled = True
+        db.session.commit()
+        schedule_disabled = flight_api_auto_poll_status(
+            self.gateway,
+            operation=self.operation,
+            now=datetime(2026, 6, 1, 19, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertFalse(schedule_disabled["eligible"])
+        self.assertEqual(schedule_disabled["reason"], "API polling disabled for this sort/day")
+
+    def test_auto_poll_no_monthly_units_remaining_is_not_eligible(self):
+        self._configure_api_ready_sort()
+        db.session.add(
+            SortTimelineUsageCounter(
+                gateway_id=self.gateway.id,
+                gateway_code=self.gateway.code,
+                month_key="2026-06",
+                attempted_call_count=300,
+                units_consumed=600,
+            )
+        )
+        db.session.commit()
+
+        status = flight_api_auto_poll_status(
+            self.gateway,
+            operation=self.operation,
+            now=datetime(2026, 6, 1, 19, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertFalse(status["eligible"])
+        self.assertEqual(status["reason"], "monthly API budget exhausted")
+        self.assertEqual(status["polls_remaining"], 0)
+
+    def test_auto_poll_overnight_operation_remains_eligible_after_midnight(self):
+        self.operation.sort_date = date(2026, 6, 18)
+        self._configure_api_ready_sort(
+            schedule_day="thursday",
+            sort_start=time(22, 0),
+            sort_end=time(4, 0),
+            poll_start=time(22, 30),
+            poll_end=time(3, 30),
+        )
+
+        status = flight_api_auto_poll_status(
+            self.gateway,
+            operation=self.operation,
+            now=datetime(2026, 6, 19, 5, 30, tzinfo=timezone.utc),
+        )
+
+        self.assertTrue(status["eligible"])
+        self.assertEqual(status["reason"], "eligible")
+        self.assertEqual(status["polling_window_start_local"], datetime(2026, 6, 18, 22, 30))
+        self.assertEqual(status["polling_window_end_local"], datetime(2026, 6, 19, 3, 30))
+
+    def test_auto_poll_readiness_helper_does_not_call_provider_or_log_usage(self):
+        self._configure_api_ready_sort()
+
+        status = flight_api_auto_poll_status(
+            self.gateway,
+            operation=self.operation,
+            now=datetime(2026, 6, 1, 19, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertTrue(status["eligible"])
+        self.assertEqual(SortTimelineUsageCounter.query.count(), 0)
+        self.assertIsNone(self.operation.flight_api_last_attempted_poll_at_utc)
 
     def test_provider_request_uses_sort_lookup_window_not_polling_window(self):
         night_setting = next(
@@ -1557,6 +1772,45 @@ class FlightApiImportTest(unittest.TestCase):
         db.session.add(item)
         return item
 
+    def _configure_api_ready_sort(
+        self,
+        schedule_day="monday",
+        sort_name="night",
+        sort_start=time(0, 0),
+        sort_end=time(23, 59),
+        poll_start=time(8, 0),
+        poll_end=time(16, 0),
+        minimum_interval=10,
+    ):
+        self.operation.sort_name = sort_name
+        self.settings.provider_enabled = True
+        self.settings.monthly_api_units = 600
+        self.settings.units_per_poll = 2
+        self.settings.minimum_auto_poll_interval_minutes = minimum_interval
+        sort_setting = next(
+            setting for setting in self.settings.sort_settings if setting.sort_name == sort_name
+        )
+        sort_setting.sort_window_start_local = sort_start
+        sort_setting.sort_window_end_local = sort_end
+        sort_setting.polling_start_local = poll_start
+        sort_setting.polling_end_local = poll_end
+        existing = GatewaySortMatrix.query.filter_by(
+            gateway_id=self.gateway.id,
+            day_of_week=schedule_day,
+            sort_name=sort_name,
+        ).first()
+        if not existing:
+            existing = GatewaySortMatrix(
+                gateway_id=self.gateway.id,
+                gateway_code=self.gateway.code,
+                day_of_week=schedule_day,
+                sort_name=sort_name,
+            )
+            db.session.add(existing)
+        existing.gateway_code = self.gateway.code
+        existing.is_active = True
+        db.session.commit()
+
     def _operation(self):
         return SortDateOperation(
             gateway_id=self.gateway.id,
@@ -1783,6 +2037,13 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"Automatic API polling may run only during this window.", response.data)
         self.assertIn(b"Ops / Node Online Window", response.data)
         self.assertIn(b"Nodes and live screens auto-refresh only during this window.", response.data)
+        self.assertIn(b"AUTO POLL READINESS", response.data)
+        self.assertIn(
+            b"Scheduled auto polling is not active yet. This shows when the next automatic poll would be eligible once scheduling is enabled.",
+            response.data,
+        )
+        self.assertIn(b"NEXT AUTO POLL ELIGIBLE AT", response.data)
+        self.assertIn(b"ELIGIBILITY STATUS", response.data)
 
     def test_sort_timeline_page_explains_window_meanings(self):
         response = self.client.get("/motherbrain/sort-timeline")

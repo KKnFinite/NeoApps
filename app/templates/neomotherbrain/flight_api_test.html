@@ -23,6 +23,62 @@
         <p class="muted"><strong>Ops / Node Online Window:</strong> Nodes and live screens auto-refresh only during this window. Outside it, refresh stops to help preserve Render instance time.</p>
     </div>
 
+    <section class="helper-copy" aria-labelledby="auto-poll-readiness-title">
+        <h2 id="auto-poll-readiness-title">AUTO POLL READINESS</h2>
+        <p class="muted">Scheduled auto polling is not active yet. This shows when the next automatic poll would be eligible once scheduling is enabled.</p>
+        <div class="status-grid" aria-label="Flight API auto poll readiness">
+            <article class="status-card">
+                <span>AUTO POLLING</span>
+                <strong>{{ "ENABLED" if auto_poll_status and auto_poll_status.provider_enabled and auto_poll_status.api_schedule_enabled else "DISABLED" }}</strong>
+            </article>
+            <article class="status-card">
+                <span>CURRENT OPERATION</span>
+                <strong>
+                    {% if auto_poll_status and auto_poll_status.operation_id %}
+                    #{{ auto_poll_status.operation_id }} {{ auto_poll_status.operation_sort_name|upper }} {{ auto_poll_status.operation_sort_date }}
+                    {% else %}
+                    -
+                    {% endif %}
+                </strong>
+            </article>
+            <article class="status-card">
+                <span>LAST ATTEMPTED POLL</span>
+                <strong>{{ dt(auto_poll_status.last_attempted_poll_local) if auto_poll_status else "-" }}</strong>
+            </article>
+            <article class="status-card">
+                <span>LAST SUCCESSFUL POLL</span>
+                <strong>{{ dt(auto_poll_status.last_successful_poll_local) if auto_poll_status else "-" }}</strong>
+            </article>
+            <article class="status-card">
+                <span>LAST FAILED POLL</span>
+                <strong>{{ dt(auto_poll_status.last_failed_poll_local) if auto_poll_status else "-" }}</strong>
+            </article>
+            <article class="status-card">
+                <span>ACTUAL AUTO POLL INTERVAL</span>
+                <strong>{% if auto_poll_status and auto_poll_status.actual_interval_minutes %}{{ auto_poll_status.actual_interval_minutes }} MIN{% else %}-{% endif %}</strong>
+            </article>
+            <article class="status-card">
+                <span>NEXT AUTO POLL ELIGIBLE AT</span>
+                <strong>{{ dt(auto_poll_status.next_eligible_time_local) if auto_poll_status else "-" }}</strong>
+            </article>
+            <article class="status-card">
+                <span>POLLS REMAINING</span>
+                <strong>{{ auto_poll_status.polls_remaining if auto_poll_status else 0 }}</strong>
+            </article>
+            <article class="status-card">
+                <span>ELIGIBILITY STATUS</span>
+                <strong>{{ auto_poll_status.reason|upper if auto_poll_status and auto_poll_status.reason else "-" }}</strong>
+            </article>
+            <article class="status-card">
+                <span>LAST POLL RESULT</span>
+                <strong>{{ auto_poll_status.last_poll_status|upper if auto_poll_status and auto_poll_status.last_poll_status else "-" }}</strong>
+                {% if auto_poll_status and auto_poll_status.last_poll_summary %}
+                <br><span class="muted">{{ auto_poll_status.last_poll_summary }}</span>
+                {% endif %}
+            </article>
+        </div>
+    </section>
+
     <form class="operation-form inline-operation-form" method="post">
         <input type="hidden" name="flight_api_action" value="pull">
         <label>

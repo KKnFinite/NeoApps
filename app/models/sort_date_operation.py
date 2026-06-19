@@ -40,6 +40,12 @@ class SortDateOperation(db.Model):
     generated_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     locked_at_utc = db.Column(db.DateTime, nullable=True)
     archived_at_utc = db.Column(db.DateTime, nullable=True)
+    flight_api_last_attempted_poll_at_utc = db.Column(db.DateTime, nullable=True)
+    flight_api_last_successful_poll_at_utc = db.Column(db.DateTime, nullable=True)
+    flight_api_last_failed_poll_at_utc = db.Column(db.DateTime, nullable=True)
+    flight_api_last_poll_status = db.Column(db.String(32), nullable=False, default="")
+    flight_api_last_poll_summary = db.Column(db.String(255), nullable=False, default="")
+    flight_api_next_auto_poll_eligible_at_utc = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

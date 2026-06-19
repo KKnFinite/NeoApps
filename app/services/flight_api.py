@@ -20,9 +20,11 @@ from app.services.sort_date_operations import (
     ensure_tail_state_for_mission,
 )
 from app.services.sort_timeline import (
+    api_schedule_for_gateway,
     ensure_sort_timeline_settings,
     record_sort_timeline_api_attempt,
     sort_settings_by_name,
+    sort_timeline_context,
 )
 
 
@@ -266,6 +268,14 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
                 **_poll_time_diagnostics(gateway, attempted_at),
             }
         )
+        record_flight_api_poll_state(
+            gateway,
+            operation,
+            attempted_at,
+            success=False,
+            summary=result["message"],
+            settings=settings,
+        )
         db.session.flush()
         return result
 
@@ -291,6 +301,14 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
             **ops_window,
             **_poll_time_diagnostics(gateway, attempted_at),
         }
+    )
+    record_flight_api_poll_state(
+        gateway,
+        operation,
+        attempted_at,
+        success=True,
+        summary="Flight API provider poll completed.",
+        settings=settings,
     )
     db.session.flush()
     return result
@@ -569,6 +587,210 @@ def current_sort_operation(gateway, sort_date=None, sort_name=None):
         query.order_by(SortDateOperation.generated_at_utc.desc(), SortDateOperation.id.desc())
         .first()
     )
+
+
+def flight_api_auto_poll_status(gateway, operation=None, now=None):
+    settings = ensure_sort_timeline_settings(gateway)
+    now_utc = _utc_naive(now)
+    timezone_name = gateway_timezone(gateway)
+    local_now = _utc_to_local_naive(now_utc, timezone_name)
+    operation = operation or current_sort_operation(gateway)
+    status = _base_auto_poll_status(gateway, operation, settings, now_utc, local_now)
+
+    if not settings.provider_enabled:
+        return _auto_poll_not_eligible(status, "provider disabled")
+    if not operation:
+        return _auto_poll_not_eligible(status, "no current sort operation")
+    if not _operation_is_active_for_local_time(operation, settings, local_now):
+        return _auto_poll_not_eligible(status, "operation is not current active operation")
+    api_schedule_enabled = _api_enabled_for_operation_day(gateway, operation)
+    status["api_schedule_enabled"] = api_schedule_enabled
+    if not api_schedule_enabled:
+        return _auto_poll_not_eligible(status, "API polling disabled for this sort/day")
+
+    polling_start_local, polling_end_local = api_polling_window_for_operation(operation, settings)
+    polling_start_utc = _local_datetime_to_utc_naive(polling_start_local, timezone_name)
+    polling_end_utc = _local_datetime_to_utc_naive(polling_end_local, timezone_name)
+    status["polling_window_start_utc"] = polling_start_utc
+    status["polling_window_end_utc"] = polling_end_utc
+    status["polling_window_start_local"] = polling_start_local
+    status["polling_window_end_local"] = polling_end_local
+
+    budget_summary = _auto_poll_budget_summary(gateway, operation, settings, now_utc)
+    status.update(budget_summary)
+
+    if int(status["polls_remaining"] or 0) <= 0 or int(status["units_remaining"] or 0) <= 0:
+        return _auto_poll_not_eligible(status, "monthly API budget exhausted")
+
+    actual_interval = status["actual_interval_minutes"]
+    if not actual_interval:
+        return _auto_poll_not_eligible(status, "auto poll interval unavailable")
+
+    next_eligible_utc = _next_auto_poll_eligible_utc(
+        operation,
+        now_utc,
+        polling_start_utc,
+        actual_interval,
+    )
+    status["next_eligible_time_utc"] = next_eligible_utc
+    status["next_eligible_time_local"] = _utc_to_local_naive(next_eligible_utc, timezone_name)
+
+    if local_now < polling_start_local:
+        return _auto_poll_not_eligible(status, "before API Polling Window")
+    if local_now > polling_end_local:
+        return _auto_poll_not_eligible(status, "outside API Polling Window")
+    if now_utc < next_eligible_utc:
+        return _auto_poll_not_eligible(status, "waiting for auto poll interval")
+
+    status["eligible"] = True
+    status["reason"] = "eligible"
+    return status
+
+
+def record_flight_api_poll_state(
+    gateway,
+    operation,
+    attempted_at_utc,
+    success,
+    summary="",
+    settings=None,
+):
+    if not operation:
+        return None
+    settings = settings or ensure_sort_timeline_settings(gateway)
+    attempted_at_utc = _utc_naive(attempted_at_utc)
+    interval_minutes = (
+        _actual_auto_poll_interval_minutes_for_operation(
+            gateway,
+            operation,
+            settings,
+            attempted_at_utc,
+        )
+        or int(getattr(settings, "minimum_auto_poll_interval_minutes", 10) or 10)
+    )
+    operation.flight_api_last_attempted_poll_at_utc = attempted_at_utc
+    operation.flight_api_next_auto_poll_eligible_at_utc = attempted_at_utc + timedelta(
+        minutes=interval_minutes,
+    )
+    operation.flight_api_last_poll_status = "success" if success else "failed"
+    operation.flight_api_last_poll_summary = str(summary or "")[:255]
+    if success:
+        operation.flight_api_last_successful_poll_at_utc = attempted_at_utc
+    else:
+        operation.flight_api_last_failed_poll_at_utc = attempted_at_utc
+    db.session.flush()
+    return operation
+
+
+def _base_auto_poll_status(gateway, operation, settings, now_utc, local_now):
+    timezone_name = gateway_timezone(gateway)
+    status = {
+        "eligible": False,
+        "reason": "",
+        "provider_enabled": bool(settings.provider_enabled),
+        "api_schedule_enabled": False,
+        "now_utc": now_utc,
+        "now_local": local_now,
+        "timezone": timezone_name,
+        "operation": operation,
+        "operation_id": operation.id if operation else None,
+        "operation_sort_name": operation.sort_name if operation else None,
+        "operation_sort_date": operation.sort_date if operation else None,
+        "last_attempted_poll_utc": None,
+        "last_attempted_poll_local": None,
+        "last_successful_poll_utc": None,
+        "last_successful_poll_local": None,
+        "last_failed_poll_utc": None,
+        "last_failed_poll_local": None,
+        "last_poll_status": "",
+        "last_poll_summary": "",
+        "next_eligible_time_utc": None,
+        "next_eligible_time_local": None,
+        "actual_interval_minutes": None,
+        "remaining_polls": 0,
+        "polls_remaining": 0,
+        "units_remaining": 0,
+    }
+    if not operation:
+        return status
+
+    for status_key, field_name in (
+        ("last_attempted_poll", "flight_api_last_attempted_poll_at_utc"),
+        ("last_successful_poll", "flight_api_last_successful_poll_at_utc"),
+        ("last_failed_poll", "flight_api_last_failed_poll_at_utc"),
+    ):
+        utc_value = getattr(operation, field_name, None)
+        status[f"{status_key}_utc"] = utc_value
+        status[f"{status_key}_local"] = (
+            _utc_to_local_naive(utc_value, timezone_name)
+            if utc_value
+            else None
+        )
+    status["last_poll_status"] = operation.flight_api_last_poll_status or ""
+    status["last_poll_summary"] = operation.flight_api_last_poll_summary or ""
+    if operation.flight_api_next_auto_poll_eligible_at_utc:
+        status["next_eligible_time_utc"] = operation.flight_api_next_auto_poll_eligible_at_utc
+        status["next_eligible_time_local"] = _utc_to_local_naive(
+            operation.flight_api_next_auto_poll_eligible_at_utc,
+            timezone_name,
+        )
+    return status
+
+
+def _auto_poll_not_eligible(status, reason):
+    status["eligible"] = False
+    status["reason"] = reason
+    return status
+
+
+def _auto_poll_budget_summary(gateway, operation, settings, now_utc):
+    local_now = _utc_to_local_naive(now_utc, gateway_timezone(gateway))
+    context = sort_timeline_context(
+        gateway,
+        local_now.strftime("%Y-%m"),
+        now=now_utc.replace(tzinfo=timezone.utc),
+    )
+    summary = context["summary"]
+    sort_preview = context["preview_by_sort"].get(operation.sort_name, {})
+    actual_interval = sort_preview.get("actual_auto_poll_interval_minutes")
+    if actual_interval is None:
+        actual_interval = summary.get("actual_auto_poll_interval_minutes")
+    return {
+        "actual_interval_minutes": actual_interval,
+        "remaining_polls": summary.get("polls_remaining", 0),
+        "polls_remaining": summary.get("polls_remaining", 0),
+        "units_remaining": summary.get("units_remaining", 0),
+        "monthly_poll_limit": summary.get("monthly_poll_limit", 0),
+        "adjusted_daily_poll_cap": summary.get("adjusted_daily_poll_cap", 0),
+    }
+
+
+def _actual_auto_poll_interval_minutes_for_operation(gateway, operation, settings, now_utc):
+    status = _auto_poll_budget_summary(gateway, operation, settings, now_utc)
+    return status.get("actual_interval_minutes")
+
+
+def _next_auto_poll_eligible_utc(operation, now_utc, polling_start_utc, actual_interval_minutes):
+    last_attempt = operation.flight_api_last_attempted_poll_at_utc
+    if last_attempt:
+        return max(
+            polling_start_utc,
+            _utc_naive(last_attempt) + timedelta(minutes=int(actual_interval_minutes)),
+        )
+    if now_utc >= polling_start_utc:
+        return now_utc
+    return polling_start_utc
+
+
+def _operation_is_active_for_local_time(operation, settings, local_now):
+    start_local, end_local = sort_flight_lookup_window_for_operation(operation, settings)
+    return bool(start_local and end_local and start_local <= local_now < end_local)
+
+
+def _api_enabled_for_operation_day(gateway, operation):
+    schedule = api_schedule_for_gateway(gateway)
+    operation_day = operation.sort_date.strftime("%A").lower()
+    return (operation_day, operation.sort_name) in schedule["enabled_cells"]
 
 
 def sort_flight_lookup_window_for_operation(operation, settings):
