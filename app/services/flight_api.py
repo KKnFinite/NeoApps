@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from datetime import date, datetime, time, timedelta, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -71,6 +72,10 @@ class RapidApiFlightClient:
                 return json.loads(response.read().decode("utf-8"))
         except HTTPError as error:
             diagnostics["provider_status_code"] = error.code
+            diagnostics["provider_response_snippet"] = _safe_provider_response_snippet(
+                error,
+                api_key,
+            )
             message = f"Provider returned {error.code} {error.reason or 'error'}."
             if error.code == 403:
                 message += (
@@ -95,10 +100,11 @@ class RapidApiFlightClient:
 
 def build_rapidapi_request(gateway_code, start_local, end_local, api_key):
     details = rapidapi_request_details(gateway_code, start_local, end_local)
+    normalized_key, key_diagnostics = normalize_api_key(api_key)
     request = Request(
         details["url"],
         headers={
-            "X-RapidAPI-Key": api_key or "",
+            "X-RapidAPI-Key": normalized_key,
             "X-RapidAPI-Host": RAPIDAPI_HOST,
         },
     )
@@ -106,9 +112,28 @@ def build_rapidapi_request(gateway_code, start_local, end_local, api_key):
         "provider_status_code": None,
         "request_host": details["host"],
         "request_path_query": details["path_query"],
-        "api_key_present": bool(api_key),
+        "provider_response_snippet": None,
+        **key_diagnostics,
     }
     return request, diagnostics
+
+
+def normalize_api_key(api_key):
+    if api_key is None:
+        raw_value = ""
+    else:
+        raw_value = str(api_key)
+    normalized_value = raw_value.strip()
+    appears_quoted = (
+        len(normalized_value) >= 2
+        and normalized_value[0] == normalized_value[-1]
+        and normalized_value[0] in ("'", '"')
+    )
+    return normalized_value, {
+        "api_key_present": bool(normalized_value),
+        "api_key_normalized": raw_value != normalized_value,
+        "api_key_appears_quoted": appears_quoted,
+    }
 
 
 def rapidapi_request_details(gateway_code, start_local, end_local):
@@ -149,13 +174,14 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
 
     window = api_window_snapshot(operation, settings)
     api_key_env_var = DEFAULT_API_KEY_ENV_VAR
-    api_key = os.environ.get(api_key_env_var)
+    raw_api_key = os.environ.get(api_key_env_var)
+    api_key, key_diagnostics = normalize_api_key(raw_api_key)
     if not api_key and client is None:
         request_diagnostics = _safe_request_diagnostics(
             gateway.code,
             window["window_start_local"],
             window["window_end_local"],
-            api_key,
+            raw_api_key,
         )
         result = _empty_result(
             gateway,
@@ -168,6 +194,7 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
                 "provider_error": True,
                 "api_key_env_var": api_key_env_var,
                 **request_diagnostics,
+                **key_diagnostics,
                 **window,
             }
         )
@@ -205,7 +232,19 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
                 "provider_status_code": request_diagnostics.get("provider_status_code"),
                 "request_host": request_diagnostics.get("request_host"),
                 "request_path_query": request_diagnostics.get("request_path_query"),
-                "api_key_present": request_diagnostics.get("api_key_present"),
+                "api_key_present": request_diagnostics.get(
+                    "api_key_present",
+                    key_diagnostics["api_key_present"],
+                ),
+                "api_key_normalized": bool(
+                    key_diagnostics["api_key_normalized"]
+                    or request_diagnostics.get("api_key_normalized")
+                ),
+                "api_key_appears_quoted": bool(
+                    key_diagnostics["api_key_appears_quoted"]
+                    or request_diagnostics.get("api_key_appears_quoted")
+                ),
+                "provider_response_snippet": request_diagnostics.get("provider_response_snippet"),
                 **window,
             }
         )
@@ -646,12 +685,55 @@ def _empty_result(gateway, operation, provider_enabled, message):
 
 def _safe_request_diagnostics(gateway_code, start_local, end_local, api_key):
     details = rapidapi_request_details(gateway_code, start_local, end_local)
+    _normalized_key, key_diagnostics = normalize_api_key(api_key)
     return {
         "provider_status_code": None,
         "request_host": details["host"],
         "request_path_query": details["path_query"],
-        "api_key_present": bool(api_key),
+        "provider_response_snippet": None,
+        **key_diagnostics,
     }
+
+
+def _safe_provider_response_snippet(error, api_key=None, limit=300):
+    raw_body = b""
+    fp = getattr(error, "fp", None)
+    if fp:
+        try:
+            raw_body = fp.read(limit * 4)
+        except Exception:
+            raw_body = b""
+    if isinstance(raw_body, bytes):
+        body = raw_body.decode("utf-8", errors="replace")
+    else:
+        body = str(raw_body or "")
+    body = " ".join(body.split())
+    if not body:
+        return None
+    body = _redact_provider_response(body, api_key)
+    if len(body) > limit:
+        body = f"{body[:limit].rstrip()}..."
+    return body
+
+
+def _redact_provider_response(body, api_key=None):
+    normalized_key, _diagnostics = normalize_api_key(api_key)
+    redacted = body
+    if normalized_key:
+        redacted = redacted.replace(normalized_key, "[redacted]")
+    redacted = re.sub(
+        r"(?i)(x-rapidapi-key|aerodatabox_api_key|rapidapi[_ -]?key|api[_ -]?key)"
+        r"(\s*[=:]\s*)"
+        r"([\"']?)[^\"'\s,;{}<>]+",
+        r"\1\2\3[redacted]",
+        redacted,
+    )
+    redacted = re.sub(
+        r"(?i)(authorization)(\s*[=:]\s*)([\"']?)(bearer\s+)?[^\"'\s,;{}<>]+",
+        r"\1\2\3\4[redacted]",
+        redacted,
+    )
+    return redacted
 
 
 def _mission_type(api_flight):

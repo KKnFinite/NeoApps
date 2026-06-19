@@ -131,6 +131,18 @@
             <span>API KEY PRESENT</span>
             <strong>{{ "YES" if import_result.api_key_present else "NO" }}</strong>
         </article>
+        <article class="status-card">
+            <span>API KEY NORMALIZED</span>
+            <strong>{{ "YES" if import_result.api_key_normalized else "NO" }}</strong>
+        </article>
+        <article class="status-card">
+            <span>API KEY APPEARS QUOTED</span>
+            <strong>{{ "YES" if import_result.api_key_appears_quoted else "NO" }}</strong>
+        </article>
+        <article class="status-card">
+            <span>PROVIDER RESPONSE</span>
+            <strong class="diagnostic-path">{{ import_result.provider_response_snippet or "-" }}</strong>
+        </article>
     </section>
     {% endif %}
     {% endif %}

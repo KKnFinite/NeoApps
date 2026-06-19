@@ -1,4 +1,5 @@
 from datetime import date, datetime, time, timedelta, timezone
+from io import BytesIO
 import os
 import unittest
 from urllib.error import HTTPError
@@ -212,6 +213,91 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertNotIn("SUPER-SECRET-RAPIDAPI-KEY", str(error))
         self.assertNotIn("SUPER-SECRET-RAPIDAPI-KEY", str(error.diagnostics))
         self.assertEqual(captured["headers"]["x-rapidapi-key"], "SUPER-SECRET-RAPIDAPI-KEY")
+
+    def test_rapidapi_client_strips_key_whitespace_before_sending(self):
+        captured = {}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, _exc_type, _exc, _tb):
+                return False
+
+            def read(self):
+                return b'{"arrivals": [], "departures": []}'
+
+        def fake_urlopen(request, timeout):
+            captured["headers"] = {
+                key.lower(): value for key, value in request.header_items()
+            }
+            return FakeResponse()
+
+        original_urlopen = flight_api_service.urlopen
+        flight_api_service.urlopen = fake_urlopen
+        try:
+            RapidApiFlightClient().fetch_fids(
+                "RFD",
+                datetime(2026, 6, 1, 1, 15),
+                datetime(2026, 6, 1, 3, 45),
+                "  RAPIDAPI-KEY\r\n",
+            )
+        finally:
+            flight_api_service.urlopen = original_urlopen
+
+        self.assertEqual(captured["headers"]["x-rapidapi-key"], "RAPIDAPI-KEY")
+
+    def test_rapidapi_client_reports_normalized_and_quoted_key_safely(self):
+        def fake_urlopen(request, timeout):
+            body = BytesIO(b'{"message":"invalid key"}')
+            raise HTTPError(request.full_url, 403, "Forbidden", hdrs=None, fp=body)
+
+        original_urlopen = flight_api_service.urlopen
+        flight_api_service.urlopen = fake_urlopen
+        try:
+            with self.assertRaises(FlightApiProviderError) as raised:
+                RapidApiFlightClient().fetch_fids(
+                    "RFD",
+                    datetime(2026, 6, 1, 1, 15),
+                    datetime(2026, 6, 1, 3, 45),
+                    ' "SUPER-SECRET-RAPIDAPI-KEY" \n',
+                )
+        finally:
+            flight_api_service.urlopen = original_urlopen
+
+        diagnostics = raised.exception.diagnostics
+        self.assertTrue(diagnostics["api_key_normalized"])
+        self.assertTrue(diagnostics["api_key_appears_quoted"])
+        self.assertNotIn("SUPER-SECRET-RAPIDAPI-KEY", str(diagnostics))
+
+    def test_provider_error_body_is_safely_truncated_and_redacted(self):
+        def fake_urlopen(request, timeout):
+            body = BytesIO(
+                (
+                    b'{"message":"bad key", "X-RapidAPI-Key":"SUPER-SECRET-RAPIDAPI-KEY", '
+                    b'"detail":"' + (b"x" * 500) + b'"}'
+                )
+            )
+            raise HTTPError(request.full_url, 403, "Forbidden", hdrs=None, fp=body)
+
+        original_urlopen = flight_api_service.urlopen
+        flight_api_service.urlopen = fake_urlopen
+        try:
+            with self.assertRaises(FlightApiProviderError) as raised:
+                RapidApiFlightClient().fetch_fids(
+                    "RFD",
+                    datetime(2026, 6, 1, 1, 15),
+                    datetime(2026, 6, 1, 3, 45),
+                    "SUPER-SECRET-RAPIDAPI-KEY",
+                )
+        finally:
+            flight_api_service.urlopen = original_urlopen
+
+        snippet = raised.exception.diagnostics["provider_response_snippet"]
+        self.assertIn("[redacted]", snippet)
+        self.assertLessEqual(len(snippet), 303)
+        self.assertTrue(snippet.endswith("..."))
+        self.assertNotIn("SUPER-SECRET-RAPIDAPI-KEY", snippet)
 
     def test_provider_error_returns_safe_failure_and_records_usage(self):
         mission = self._mission("arrival", "5X123", eta_datetime_utc=datetime(2026, 6, 1, 7, 5))
@@ -755,11 +841,15 @@ class FlightApiTestPageTest(unittest.TestCase):
         db.session.commit()
 
         def fake_urlopen(request, timeout):
-            raise HTTPError(request.full_url, 403, "Forbidden", hdrs=None, fp=None)
+            body = BytesIO(
+                b'{"message":"invalid subscription",'
+                b'"X-RapidAPI-Key":"SUPER-SECRET-RAPIDAPI-KEY"}'
+            )
+            raise HTTPError(request.full_url, 403, "Forbidden", hdrs=None, fp=body)
 
         original_urlopen = flight_api_service.urlopen
         previous = os.environ.get("AERODATABOX_API_KEY")
-        os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
+        os.environ["AERODATABOX_API_KEY"] = ' "SUPER-SECRET-RAPIDAPI-KEY" \n'
         flight_api_service.urlopen = fake_urlopen
         try:
             response = self.client.post(
@@ -784,7 +874,13 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"/flights/airports/iata/RFD/", response.data)
         self.assertIn(b"API KEY PRESENT", response.data)
         self.assertIn(b"YES", response.data)
+        self.assertIn(b"API KEY NORMALIZED", response.data)
+        self.assertIn(b"API KEY APPEARS QUOTED", response.data)
+        self.assertIn(b"PROVIDER RESPONSE", response.data)
+        self.assertIn(b"invalid subscription", response.data)
+        self.assertIn(b"[redacted]", response.data)
         self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
+        self.assertEqual(SortDateMission.query.count(), 0)
 
     def test_flight_api_review_page_link_visible_for_view_permission(self):
         self._login_motherbrain_role("review_simulator_link", "simulator")
