@@ -7,11 +7,19 @@
 {%- endmacro %}
 
 {% block content %}
-{% set api_window = import_result if import_result and import_result.window_start_local else selected_api_window %}
+{% set lookup_window = import_result if import_result and import_result.lookup_window_start_local else selected_lookup_window %}
+{% set polling_window = import_result if import_result and import_result.polling_window_start_local else selected_polling_window %}
+{% set ops_window = import_result if import_result and import_result.ops_window_start_local else selected_ops_window %}
 <section class="panel centered-command-page flight-api-test-page" aria-labelledby="flight-api-test-title">
     <div class="section-heading">
         <h1 id="flight-api-test-title">FLIGHT API TEST</h1>
         <p class="muted">{{ gateway.code }} API IMPORT FOUNDATION. NO SCHEDULED POLLING IS ENABLED.</p>
+    </div>
+
+    <div class="helper-copy">
+        <p class="muted"><strong>Sort Flight Lookup Window:</strong> Flight API requests pull arrivals/departures for the full sort start-to-end time. This is the flight data range.</p>
+        <p class="muted"><strong>API Polling Window:</strong> Automatic API polling may run only during this window. It controls when polls happen, not which flights are requested.</p>
+        <p class="muted"><strong>Ops / Node Online Window:</strong> Nodes and live screens auto-refresh only during this window. Outside it, refresh stops to help preserve Render instance time.</p>
     </div>
 
     <form class="operation-form inline-operation-form" method="post">
@@ -68,20 +76,50 @@
             </strong>
         </article>
         <article class="status-card">
-            <span>API WINDOW LOCAL</span>
+            <span>SORT FLIGHT LOOKUP WINDOW LOCAL</span>
             <strong>
-                {% if api_window %}
-                {{ dt(api_window.window_start_local) }} - {{ dt(api_window.window_end_local) }} {{ api_window.window_timezone }}
+                {% if lookup_window %}
+                {{ dt(lookup_window.lookup_window_start_local) }} - {{ dt(lookup_window.lookup_window_end_local) }} {{ lookup_window.lookup_window_timezone }}
                 {% else %}
                 -
                 {% endif %}
             </strong>
         </article>
         <article class="status-card">
-            <span>API WINDOW UTC</span>
+            <span>SORT FLIGHT LOOKUP WINDOW UTC</span>
             <strong>
-                {% if api_window %}
-                {{ dt(api_window.window_start_utc) }} - {{ dt(api_window.window_end_utc) }} UTC
+                {% if lookup_window %}
+                {{ dt(lookup_window.lookup_window_start_utc) }} - {{ dt(lookup_window.lookup_window_end_utc) }} UTC
+                {% else %}
+                -
+                {% endif %}
+            </strong>
+        </article>
+        <article class="status-card">
+            <span>API POLLING WINDOW LOCAL</span>
+            <strong>
+                {% if polling_window %}
+                {{ dt(polling_window.polling_window_start_local) }} - {{ dt(polling_window.polling_window_end_local) }} {{ polling_window.polling_window_timezone }}
+                {% else %}
+                -
+                {% endif %}
+            </strong>
+        </article>
+        <article class="status-card">
+            <span>API POLLING WINDOW UTC</span>
+            <strong>
+                {% if polling_window %}
+                {{ dt(polling_window.polling_window_start_utc) }} - {{ dt(polling_window.polling_window_end_utc) }} UTC
+                {% else %}
+                -
+                {% endif %}
+            </strong>
+        </article>
+        <article class="status-card">
+            <span>OPS / NODE ONLINE WINDOW LOCAL</span>
+            <strong>
+                {% if ops_window and ops_window.ops_window_start_local %}
+                {{ dt(ops_window.ops_window_start_local) }} - {{ dt(ops_window.ops_window_end_local) }} {{ ops_window.ops_window_timezone }}
                 {% else %}
                 -
                 {% endif %}
@@ -93,8 +131,40 @@
             <strong>{{ import_result.matched|length }}</strong>
         </article>
         <article class="status-card">
+            <span>RAW ARRIVALS</span>
+            <strong>{{ import_result.raw_arrivals_count }}</strong>
+        </article>
+        <article class="status-card">
+            <span>RAW DEPARTURES</span>
+            <strong>{{ import_result.raw_departures_count }}</strong>
+        </article>
+        <article class="status-card">
+            <span>UPS ARRIVALS</span>
+            <strong>{{ import_result.ups_arrivals_count }}</strong>
+        </article>
+        <article class="status-card">
+            <span>UPS DEPARTURES</span>
+            <strong>{{ import_result.ups_departures_count }}</strong>
+        </article>
+        <article class="status-card">
+            <span>MATCHED ARRIVALS</span>
+            <strong>{{ import_result.matched_arrivals_count }}</strong>
+        </article>
+        <article class="status-card">
+            <span>MATCHED DEPARTURES</span>
+            <strong>{{ import_result.matched_departures_count }}</strong>
+        </article>
+        <article class="status-card">
             <span>UNMATCHED UPS</span>
             <strong>{{ import_result.review_items|length }}</strong>
+        </article>
+        <article class="status-card">
+            <span>UNMATCHED ARRIVALS</span>
+            <strong>{{ import_result.unmatched_arrivals_count }}</strong>
+        </article>
+        <article class="status-card">
+            <span>UNMATCHED DEPARTURES</span>
+            <strong>{{ import_result.unmatched_departures_count }}</strong>
         </article>
         <article class="status-card">
             <span>IGNORED</span>
@@ -103,6 +173,14 @@
         <article class="status-card">
             <span>NON-UPS IGNORED</span>
             <strong>{{ import_result.non_ups_ignored }}</strong>
+        </article>
+        <article class="status-card">
+            <span>NON-UPS IGNORED ARRIVALS</span>
+            <strong>{{ import_result.non_ups_ignored_arrivals_count }}</strong>
+        </article>
+        <article class="status-card">
+            <span>NON-UPS IGNORED DEPARTURES</span>
+            <strong>{{ import_result.non_ups_ignored_departures_count }}</strong>
         </article>
         <article class="status-card">
             <span>UNITS CONSUMED</span>

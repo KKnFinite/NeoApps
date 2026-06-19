@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timedelta, timezone
 from io import BytesIO
+import json
 import os
 import unittest
 from urllib.error import HTTPError
@@ -332,10 +333,12 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(mission.eta_datetime_utc, datetime(2026, 6, 1, 7, 5))
         self.assertEqual(SortTimelineUsageCounter.query.one().units_consumed, 2)
 
-    def test_poll_uses_current_sort_api_window(self):
+    def test_provider_request_uses_sort_lookup_window_not_polling_window(self):
         night_setting = next(
             setting for setting in self.settings.sort_settings if setting.sort_name == "night"
         )
+        night_setting.sort_window_start_local = time(22, 15)
+        night_setting.sort_window_end_local = time(4, 30)
         night_setting.polling_start_local = time(1, 15)
         night_setting.polling_end_local = time(3, 45)
         db.session.commit()
@@ -345,8 +348,8 @@ class FlightApiImportTest(unittest.TestCase):
 
         self.assertEqual(len(client.calls), 1)
         self.assertEqual(client.calls[0]["gateway_code"], "RFD")
-        self.assertEqual(client.calls[0]["start_local"], datetime(2026, 6, 1, 1, 15))
-        self.assertEqual(client.calls[0]["end_local"], datetime(2026, 6, 1, 3, 45))
+        self.assertEqual(client.calls[0]["start_local"], datetime(2026, 6, 1, 22, 15))
+        self.assertEqual(client.calls[0]["end_local"], datetime(2026, 6, 2, 4, 30))
 
     def test_default_budget_preview_uses_tier_two_units_per_poll(self):
         context = sort_timeline_context(
@@ -375,6 +378,52 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(len(result["review_items"]), 1)
         self.assertEqual(FlightApiReviewItem.query.count(), 1)
         self.assertEqual(FlightApiReviewItem.query.first().flight_number, "5X999")
+
+    def test_import_result_includes_arrival_departure_count_diagnostics(self):
+        arrival_mission = self._mission("arrival", "5X123")
+        departure_mission = self._mission("departure", "5X456")
+        db.session.add_all([arrival_mission, departure_mission])
+        db.session.commit()
+        client = FakeFlightClient(
+            {
+                "arrivals": [
+                    self._api_flight(number="5X123", call_sign="UPS123"),
+                    self._api_flight(number="5X999", call_sign="UPS999"),
+                    self._api_flight(number="AA123", call_sign="AAL123", airline_icao="AAL", airline_iata="AA"),
+                ],
+                "departures": [
+                    self._api_flight(
+                        mission_type="departure",
+                        number="5X456",
+                        call_sign="UPS456",
+                        origin="RFD",
+                        destination="SDF",
+                    ),
+                    self._api_flight(
+                        mission_type="departure",
+                        number="DL456",
+                        call_sign="DAL456",
+                        airline_icao="DAL",
+                        airline_iata="DL",
+                        origin="RFD",
+                        destination="ATL",
+                    ),
+                ],
+            }
+        )
+
+        result = run_flight_api_import(self.gateway, self.operation, client=client)
+
+        self.assertEqual(result["raw_arrivals_count"], 3)
+        self.assertEqual(result["raw_departures_count"], 2)
+        self.assertEqual(result["ups_arrivals_count"], 2)
+        self.assertEqual(result["ups_departures_count"], 1)
+        self.assertEqual(result["matched_arrivals_count"], 1)
+        self.assertEqual(result["matched_departures_count"], 1)
+        self.assertEqual(result["unmatched_arrivals_count"], 1)
+        self.assertEqual(result["unmatched_departures_count"], 0)
+        self.assertEqual(result["non_ups_ignored_arrivals_count"], 1)
+        self.assertEqual(result["non_ups_ignored_departures_count"], 1)
 
     def test_empty_provider_response_is_safe(self):
         result = run_flight_api_import(
@@ -790,6 +839,23 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"FLIGHT API TEST", response.data)
         self.assertIn(b"NO SCHEDULED POLLING IS ENABLED", response.data)
+        self.assertIn(b"Sort Flight Lookup Window", response.data)
+        self.assertIn(b"Flight API requests pull arrivals/departures for the full sort start-to-end time.", response.data)
+        self.assertIn(b"API Polling Window", response.data)
+        self.assertIn(b"Automatic API polling may run only during this window.", response.data)
+        self.assertIn(b"Ops / Node Online Window", response.data)
+        self.assertIn(b"Nodes and live screens auto-refresh only during this window.", response.data)
+
+    def test_sort_timeline_page_explains_window_meanings(self):
+        response = self.client.get("/motherbrain/sort-timeline")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Sort Flight Lookup Window", response.data)
+        self.assertIn(b"Flight API requests pull arrivals/departures for the full sort start-to-end time.", response.data)
+        self.assertIn(b"API Polling Window", response.data)
+        self.assertIn(b"Automatic API polling may run only during this window.", response.data)
+        self.assertIn(b"Ops / Node Online Window", response.data)
+        self.assertIn(b"Nodes and live screens auto-refresh only during this window.", response.data)
 
     def test_flight_api_test_page_is_grandmaster_only(self):
         self._login_motherbrain_role("api_master", "master")
@@ -893,6 +959,88 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"[redacted]", response.data)
         self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
         self.assertEqual(SortDateMission.query.count(), 0)
+
+    def test_flight_api_test_page_renders_raw_count_diagnostics(self):
+        operation = SortDateOperation(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_date=date.today(),
+            sort_name="night",
+            window_minutes=0,
+        )
+        settings = ensure_sort_timeline_settings(self.gateway)
+        settings.provider_enabled = True
+        db.session.add(operation)
+        db.session.commit()
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, _exc_type, _exc, _tb):
+                return False
+
+            def read(self):
+                return json.dumps(
+                    {
+                        "arrivals": [
+                            {
+                                "number": "5X999",
+                                "callSign": "UPS999",
+                                "airline": {"icao": "UPS", "iata": "5X"},
+                                "departure": {"airport": {"iata": "SDF"}, "scheduledTime": {"local": "2026-06-01T02:00:00"}},
+                                "arrival": {"airport": {"iata": "RFD"}, "scheduledTime": {"local": "2026-06-01T02:00:00"}},
+                            },
+                            {
+                                "number": "AA123",
+                                "callSign": "AAL123",
+                                "airline": {"icao": "AAL", "iata": "AA"},
+                                "departure": {"airport": {"iata": "ORD"}, "scheduledTime": {"local": "2026-06-01T02:00:00"}},
+                                "arrival": {"airport": {"iata": "RFD"}, "scheduledTime": {"local": "2026-06-01T02:00:00"}},
+                            },
+                        ],
+                        "departures": [
+                            {
+                                "number": "5X456",
+                                "callSign": "UPS456",
+                                "airline": {"icao": "UPS", "iata": "5X"},
+                                "departure": {"airport": {"iata": "RFD"}, "scheduledTime": {"local": "2026-06-01T03:00:00"}},
+                                "arrival": {"airport": {"iata": "SDF"}, "scheduledTime": {"local": "2026-06-01T03:00:00"}},
+                            }
+                        ],
+                    }
+                ).encode("utf-8")
+
+        def fake_urlopen(request, timeout):
+            return FakeResponse()
+
+        original_urlopen = flight_api_service.urlopen
+        previous = os.environ.get("AERODATABOX_API_KEY")
+        os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
+        flight_api_service.urlopen = fake_urlopen
+        try:
+            response = self.client.post(
+                "/motherbrain/flight-api-test",
+                data={"flight_api_action": "pull", "operation_id": str(operation.id)},
+                follow_redirects=True,
+            )
+        finally:
+            flight_api_service.urlopen = original_urlopen
+            if previous is None:
+                os.environ.pop("AERODATABOX_API_KEY", None)
+            else:
+                os.environ["AERODATABOX_API_KEY"] = previous
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"RAW ARRIVALS", response.data)
+        self.assertIn(b"RAW DEPARTURES", response.data)
+        self.assertIn(b"UPS ARRIVALS", response.data)
+        self.assertIn(b"UPS DEPARTURES", response.data)
+        self.assertIn(b"UNMATCHED ARRIVALS", response.data)
+        self.assertIn(b"UNMATCHED DEPARTURES", response.data)
+        self.assertIn(b"NON-UPS IGNORED ARRIVALS", response.data)
+        self.assertIn(b"NON-UPS IGNORED DEPARTURES", response.data)
+        self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
 
     def test_flight_api_review_page_link_visible_for_view_permission(self):
         self._login_motherbrain_role("review_simulator_link", "simulator")

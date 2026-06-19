@@ -24,11 +24,13 @@ from app.services.flight_rules import (
 from app.services.flight_api import (
     FlightApiConfigurationError,
     accept_review_item,
-    api_window_snapshot,
+    api_polling_window_snapshot,
     ignore_review_item,
+    ops_node_online_window_snapshot,
     pending_review_items_for_operation,
     review_item_or_404,
     run_flight_api_import,
+    sort_flight_lookup_window_snapshot,
 )
 from app.services.access_control import (
     get_current_gateway,
@@ -227,7 +229,9 @@ def flight_api_test():
     operations = operations_for_gateway_date(gateway, sort_date)
     selected_operation = _selected_current_operation(operations)
     import_result = None
-    selected_api_window = None
+    selected_lookup_window = None
+    selected_polling_window = None
+    selected_ops_window = None
 
     if request.method == "POST" and request.form.get("flight_api_action") == "pull":
         selected_operation = _selected_current_operation(
@@ -252,9 +256,18 @@ def flight_api_test():
             flash(f"Flight API import failed: {error}", "error")
 
     if selected_operation:
-        selected_api_window = api_window_snapshot(
+        settings = ensure_sort_timeline_settings(gateway)
+        selected_lookup_window = sort_flight_lookup_window_snapshot(
             selected_operation,
-            ensure_sort_timeline_settings(gateway),
+            settings,
+        )
+        selected_polling_window = api_polling_window_snapshot(
+            selected_operation,
+            settings,
+        )
+        selected_ops_window = ops_node_online_window_snapshot(
+            selected_operation,
+            settings,
         )
 
     pending_items = pending_review_items_for_operation(selected_operation)
@@ -264,7 +277,9 @@ def flight_api_test():
         sort_date=sort_date,
         operations=operations,
         selected_operation=selected_operation,
-        selected_api_window=selected_api_window,
+        selected_lookup_window=selected_lookup_window,
+        selected_polling_window=selected_polling_window,
+        selected_ops_window=selected_ops_window,
         import_result=import_result,
         pending_review_items=pending_items,
     )

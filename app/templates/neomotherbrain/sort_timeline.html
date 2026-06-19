@@ -99,6 +99,13 @@
             <p class="muted">Future arrival flow: Scheduled / Expected -> In Air -> On Ground (API runway time) -> Assumed Arrived (runway time + taxi-to-ramp minutes) -> Arrived (manual operational status) -> Unloaded (manual operational status).</p>
         </section>
 
+        <section class="sort-timeline-section" aria-labelledby="timeline-window-meanings">
+            <h2 id="timeline-window-meanings">WINDOW DEFINITIONS</h2>
+            <p class="muted"><strong>Sort Flight Lookup Window:</strong> Flight API requests pull arrivals/departures for the full sort start-to-end time. This is the flight data range.</p>
+            <p class="muted"><strong>API Polling Window:</strong> Automatic API polling may run only during this window. It controls when polls happen, not which flights are requested.</p>
+            <p class="muted"><strong>Ops / Node Online Window:</strong> Nodes and live screens auto-refresh only during this window. Outside it, refresh stops to help preserve Render instance time.</p>
+        </section>
+
         <section class="sort-timeline-section" aria-labelledby="timeline-operating-offset">
             <h2 id="timeline-operating-offset">OPERATING DAY OFFSET</h2>
             <div class="sort-timeline-variance-grid" aria-label="Operating day offset by month">

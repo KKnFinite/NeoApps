@@ -178,15 +178,17 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
             message="No current sort operation is available.",
         )
 
-    window = api_window_snapshot(operation, settings)
+    lookup_window = sort_flight_lookup_window_snapshot(operation, settings)
+    polling_window = api_polling_window_snapshot(operation, settings)
+    ops_window = ops_node_online_window_snapshot(operation, settings)
     api_key_env_var = DEFAULT_API_KEY_ENV_VAR
     raw_api_key = os.environ.get(api_key_env_var)
     api_key, key_diagnostics = normalize_api_key(raw_api_key)
     if not api_key and client is None:
         request_diagnostics = _safe_request_diagnostics(
             gateway.code,
-            window["window_start_local"],
-            window["window_end_local"],
+            lookup_window["lookup_window_start_local"],
+            lookup_window["lookup_window_end_local"],
             raw_api_key,
         )
         result = _empty_result(
@@ -201,7 +203,9 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
                 "api_key_env_var": api_key_env_var,
                 **request_diagnostics,
                 **key_diagnostics,
-                **window,
+                **lookup_window,
+                **polling_window,
+                **ops_window,
             }
         )
         return result
@@ -216,8 +220,8 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
     try:
         payload = (client or RapidApiFlightClient()).fetch_fids(
             gateway.code,
-            window["window_start_local"],
-            window["window_end_local"],
+            lookup_window["lookup_window_start_local"],
+            lookup_window["lookup_window_end_local"],
             api_key,
         )
     except FlightApiConfigurationError as error:
@@ -253,7 +257,9 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
                     or request_diagnostics.get("api_key_appears_quoted")
                 ),
                 "provider_response_snippet": request_diagnostics.get("provider_response_snippet"),
-                **window,
+                **lookup_window,
+                **polling_window,
+                **ops_window,
             }
         )
         db.session.flush()
@@ -274,7 +280,9 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
             "api_key_env_var": api_key_env_var,
             "usage_units_consumed": usage_units_consumed,
             "usage_polls_used": usage_counter.attempted_call_count,
-            **window,
+            **lookup_window,
+            **polling_window,
+            **ops_window,
         }
     )
     db.session.flush()
@@ -289,17 +297,24 @@ def import_api_flights_for_operation(gateway, operation, api_flights, settings=N
     review_items = []
     ignored_count = 0
     non_ups_ignored = 0
+    diagnostics = _empty_import_count_diagnostics()
 
     for api_flight in api_flights:
+        mission_type = _mission_type(api_flight)
+        _increment_count(diagnostics, "raw", mission_type)
         if not is_ups_flight(api_flight):
+            _increment_count(diagnostics, "non_ups_ignored", mission_type)
             non_ups_ignored += 1
             continue
 
+        _increment_count(diagnostics, "ups", mission_type)
         normalized = normalize_api_flight(api_flight, operation, gateway)
+        normalized_type = normalized.get("mission_type") or mission_type
         mission = match_api_flight_to_mission(normalized, missions)
         if mission:
             apply_api_data_to_mission(mission, normalized, settings, now=now_utc)
             matched.append({"mission": mission, "api_flight": normalized})
+            _increment_count(diagnostics, "matched", normalized_type)
             continue
 
         review_item, was_ignored = upsert_review_item(gateway, operation, normalized)
@@ -307,6 +322,7 @@ def import_api_flights_for_operation(gateway, operation, api_flights, settings=N
             ignored_count += 1
         elif review_item:
             review_items.append(review_item)
+            _increment_count(diagnostics, "unmatched", normalized_type)
 
     db.session.flush()
     return {
@@ -317,6 +333,7 @@ def import_api_flights_for_operation(gateway, operation, api_flights, settings=N
         "review_items": review_items,
         "ignored_count": ignored_count,
         "non_ups_ignored": non_ups_ignored,
+        **diagnostics,
     }
 
 
@@ -394,11 +411,82 @@ def current_sort_operation(gateway, sort_date=None, sort_name=None):
     )
 
 
-def api_window_for_operation(operation, settings):
+def sort_flight_lookup_window_for_operation(operation, settings):
     sort_settings = sort_settings_by_name(settings)
     sort_setting = sort_settings.get(operation.sort_name)
-    start_time = getattr(sort_setting, "polling_start_local", None) or time(0, 0)
-    end_time = getattr(sort_setting, "polling_end_local", None) or time(23, 59)
+    return _window_for_operation(
+        operation,
+        sort_setting,
+        "sort_window_start_local",
+        "sort_window_end_local",
+        default_start=time(0, 0),
+        default_end=time(23, 59),
+    )
+
+
+def api_polling_window_for_operation(operation, settings):
+    sort_settings = sort_settings_by_name(settings)
+    sort_setting = sort_settings.get(operation.sort_name)
+    return _window_for_operation(
+        operation,
+        sort_setting,
+        "polling_start_local",
+        "polling_end_local",
+        default_start=time(0, 0),
+        default_end=time(23, 59),
+    )
+
+
+def ops_node_online_window_for_operation(operation, settings):
+    sort_settings = sort_settings_by_name(settings)
+    sort_setting = sort_settings.get(operation.sort_name)
+    return _window_for_operation(
+        operation,
+        sort_setting,
+        "ops_window_start_local",
+        "ops_window_end_local",
+        default_start=None,
+        default_end=None,
+    )
+
+
+def api_window_for_operation(operation, settings):
+    return api_polling_window_for_operation(operation, settings)
+
+
+def sort_flight_lookup_window_snapshot(operation, settings):
+    start_local, end_local = sort_flight_lookup_window_for_operation(operation, settings)
+    return _window_snapshot(operation, start_local, end_local, "lookup_window")
+
+
+def api_polling_window_snapshot(operation, settings):
+    start_local, end_local = api_polling_window_for_operation(operation, settings)
+    return _window_snapshot(operation, start_local, end_local, "polling_window")
+
+
+def ops_node_online_window_snapshot(operation, settings):
+    start_local, end_local = ops_node_online_window_for_operation(operation, settings)
+    return _window_snapshot(operation, start_local, end_local, "ops_window")
+
+
+def api_window_snapshot(operation, settings):
+    return api_polling_window_snapshot(operation, settings)
+
+
+def _window_for_operation(
+    operation,
+    sort_setting,
+    start_attr,
+    end_attr,
+    default_start=None,
+    default_end=None,
+):
+    start_time = getattr(sort_setting, start_attr, None) if sort_setting else None
+    end_time = getattr(sort_setting, end_attr, None) if sort_setting else None
+    start_time = start_time or default_start
+    end_time = end_time or default_end
+    if not start_time or not end_time:
+        return None, None
     start_local = datetime.combine(operation.sort_date, start_time)
     end_local = datetime.combine(operation.sort_date, end_time)
     if end_local <= start_local:
@@ -406,15 +494,22 @@ def api_window_for_operation(operation, settings):
     return start_local, end_local
 
 
-def api_window_snapshot(operation, settings):
-    start_local, end_local = api_window_for_operation(operation, settings)
+def _window_snapshot(operation, start_local, end_local, prefix):
     timezone_name = gateway_timezone(operation.gateway)
+    if not start_local or not end_local:
+        return {
+            f"{prefix}_start_local": None,
+            f"{prefix}_end_local": None,
+            f"{prefix}_start_utc": None,
+            f"{prefix}_end_utc": None,
+            f"{prefix}_timezone": timezone_name,
+        }
     return {
-        "window_start_local": start_local,
-        "window_end_local": end_local,
-        "window_start_utc": _local_datetime_to_utc_naive(start_local, timezone_name),
-        "window_end_utc": _local_datetime_to_utc_naive(end_local, timezone_name),
-        "window_timezone": timezone_name,
+        f"{prefix}_start_local": start_local,
+        f"{prefix}_end_local": end_local,
+        f"{prefix}_start_utc": _local_datetime_to_utc_naive(start_local, timezone_name),
+        f"{prefix}_end_utc": _local_datetime_to_utc_naive(end_local, timezone_name),
+        f"{prefix}_timezone": timezone_name,
     }
 
 
@@ -688,7 +783,22 @@ def _empty_result(gateway, operation, provider_enabled, message):
         "usage_polls_used": None,
         "provider_error": False,
         "message": message,
+        **_empty_import_count_diagnostics(),
     }
+
+
+def _empty_import_count_diagnostics():
+    diagnostics = {}
+    for prefix in ("raw", "ups", "matched", "unmatched", "non_ups_ignored"):
+        diagnostics[f"{prefix}_arrivals_count"] = 0
+        diagnostics[f"{prefix}_departures_count"] = 0
+    return diagnostics
+
+
+def _increment_count(diagnostics, prefix, mission_type):
+    type_key = "departures" if mission_type == "departure" else "arrivals"
+    key = f"{prefix}_{type_key}_count"
+    diagnostics[key] = int(diagnostics.get(key, 0) or 0) + 1
 
 
 def _safe_request_diagnostics(gateway_code, start_local, end_local, api_key):
