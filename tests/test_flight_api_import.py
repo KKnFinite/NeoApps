@@ -36,6 +36,8 @@ from app.services.flight_api import (
     RapidApiFlightClient,
     accept_review_item,
     current_sort_operation,
+    flight_api_operational_time_utc,
+    format_flight_api_local_time,
     ignore_review_item,
     import_api_flights_for_operation,
     map_api_status,
@@ -431,6 +433,37 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertNotIn("2026-06-19T03:00", parsed_url.path)
         self.assertNotIn("2026-06-19T09:00", parsed_url.path)
 
+    def test_repeated_manual_polls_use_same_full_sort_lookup_window(self):
+        self.operation.sort_date = date(2026, 6, 18)
+        night_setting = next(
+            setting for setting in self.settings.sort_settings if setting.sort_name == "night"
+        )
+        night_setting.sort_window_start_local = time(22, 0)
+        night_setting.sort_window_end_local = time(4, 0)
+        night_setting.polling_start_local = time(0, 30)
+        night_setting.polling_end_local = time(2, 0)
+        night_setting.ops_window_start_local = time(23, 0)
+        night_setting.ops_window_end_local = time(3, 0)
+        db.session.commit()
+        client = FakeFlightClient({"arrivals": [], "departures": []})
+
+        for poll_time in (
+            datetime(2026, 6, 19, 5, 30, tzinfo=timezone.utc),
+            datetime(2026, 6, 19, 6, 30, tzinfo=timezone.utc),
+            datetime(2026, 6, 19, 7, 30, tzinfo=timezone.utc),
+        ):
+            run_flight_api_import(
+                self.gateway,
+                self.operation,
+                client=client,
+                now=poll_time,
+            )
+
+        self.assertEqual(len(client.calls), 3)
+        for call in client.calls:
+            self.assertEqual(call["start_local"], datetime(2026, 6, 18, 22, 0))
+            self.assertEqual(call["end_local"], datetime(2026, 6, 19, 4, 0))
+
     def test_default_budget_preview_uses_tier_two_units_per_poll(self):
         context = sort_timeline_context(
             self.gateway,
@@ -600,7 +633,7 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(result["matched"][0]["mission"].id, mission.id)
         self.assertEqual(result["matched"][0]["api_flight"]["normalized_cores_tried"], ["0755", "0753"])
 
-    def test_provider_flight_number_wins_when_callsign_matches_other_mission(self):
+    def test_callsign_wins_when_provider_flight_number_matches_other_mission(self):
         provider_mission = self._mission("arrival", "0755")
         callsign_mission = self._mission("arrival", "UPS753")
         db.session.add_all([provider_mission, callsign_mission])
@@ -619,10 +652,10 @@ class FlightApiImportTest(unittest.TestCase):
         )
 
         self.assertEqual(len(result["matched"]), 1)
-        self.assertEqual(result["matched"][0]["mission"].id, provider_mission.id)
+        self.assertEqual(result["matched"][0]["mission"].id, callsign_mission.id)
         self.assertEqual(len(result["review_items"]), 0)
 
-    def test_provider_flight_number_priority_for_1075_when_callsign_differs(self):
+    def test_callsign_priority_for_1075_when_provider_flight_differs(self):
         provider_mission = self._mission("arrival", "1075")
         callsign_mission = self._mission("arrival", "UPS1085")
         db.session.add_all([provider_mission, callsign_mission])
@@ -641,10 +674,54 @@ class FlightApiImportTest(unittest.TestCase):
         )
 
         self.assertEqual(len(result["matched"]), 1)
-        self.assertEqual(result["matched"][0]["mission"].id, provider_mission.id)
+        self.assertEqual(result["matched"][0]["mission"].id, callsign_mission.id)
         self.assertEqual(len(result["review_items"]), 0)
 
-    def test_duplicate_provider_flight_key_stays_unmatched(self):
+    def test_callsign_priority_for_616_when_provider_flight_differs(self):
+        provider_mission = self._mission("arrival", "UPS0616")
+        callsign_mission = self._mission("arrival", "UPS0612")
+        db.session.add_all([provider_mission, callsign_mission])
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "arrivals": [
+                        self._api_flight(number="5X616", call_sign="UPS612")
+                    ]
+                }
+            ),
+        )
+
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(result["matched"][0]["mission"].id, callsign_mission.id)
+        self.assertEqual(len(result["review_items"]), 0)
+
+    def test_callsign_priority_for_755_when_provider_flight_differs(self):
+        provider_mission = self._mission("arrival", "UPS0755")
+        callsign_mission = self._mission("arrival", "UPS0753")
+        db.session.add_all([provider_mission, callsign_mission])
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "arrivals": [
+                        self._api_flight(number="5X755", call_sign="UPS753")
+                    ]
+                }
+            ),
+        )
+
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(result["matched"][0]["mission"].id, callsign_mission.id)
+        self.assertEqual(len(result["review_items"]), 0)
+
+    def test_duplicate_callsign_key_stays_unmatched(self):
         db.session.add_all(
             [
                 self._mission("arrival", "UPS0673"),
@@ -663,9 +740,9 @@ class FlightApiImportTest(unittest.TestCase):
 
         self.assertEqual(len(result["matched"]), 0)
         self.assertEqual(len(result["review_items"]), 1)
-        self.assertEqual(result["review_items"][0].review_reason, "ambiguous flight number match")
+        self.assertEqual(result["review_items"][0].review_reason, "ambiguous callsign match")
         pending_items = pending_review_items_for_operation(self.operation)
-        self.assertEqual(pending_items[0].review_reason, "ambiguous flight number match")
+        self.assertEqual(pending_items[0].review_reason, "ambiguous callsign match")
 
     def test_duplicate_callsign_fallback_key_stays_unmatched(self):
         db.session.add_all(
@@ -686,7 +763,7 @@ class FlightApiImportTest(unittest.TestCase):
 
         self.assertEqual(len(result["matched"]), 0)
         self.assertEqual(len(result["review_items"]), 1)
-        self.assertEqual(result["review_items"][0].review_reason, "ambiguous callsign fallback")
+        self.assertEqual(result["review_items"][0].review_reason, "ambiguous callsign match")
 
     def test_unsupported_blank_ups_identity_stays_unmatched_with_reason(self):
         result = run_flight_api_import(
@@ -1074,6 +1151,46 @@ class FlightApiImportTest(unittest.TestCase):
             API_STATUS_ASSUMED_ARRIVED,
         )
 
+    def test_block_in_estimate_uses_runway_time_plus_taxi_minutes(self):
+        self.settings.taxi_to_ramp_minutes = 12
+        normalized = {
+            "mission_type": "arrival",
+            "runway_time_utc": datetime(2026, 6, 1, 7, 30),
+            "revised_time_utc": datetime(2026, 6, 1, 7, 25),
+            "scheduled_time_utc": datetime(2026, 6, 1, 7, 0),
+            "api_status_raw": "Arrived",
+        }
+
+        self.assertEqual(
+            flight_api_operational_time_utc(normalized, self.settings),
+            datetime(2026, 6, 1, 7, 42),
+        )
+        self.assertEqual(
+            map_api_status(
+                normalized,
+                self.settings,
+                now=datetime(2026, 6, 1, 7, 41, tzinfo=timezone.utc),
+            ),
+            API_STATUS_ON_GROUND,
+        )
+        self.assertEqual(
+            map_api_status(
+                normalized,
+                self.settings,
+                now=datetime(2026, 6, 1, 7, 42, tzinfo=timezone.utc),
+            ),
+            API_STATUS_ASSUMED_ARRIVED,
+        )
+
+    def test_rfd_local_time_display_includes_overnight_date_context(self):
+        self.assertEqual(
+            format_flight_api_local_time(
+                datetime(2026, 6, 19, 4, 4),
+                self.gateway,
+            ),
+            "23:04 Local Jun 18",
+        )
+
     def test_manual_unloaded_is_not_overwritten(self):
         mission = self._mission("arrival", "5X123", arrival_status="unloaded")
         db.session.add(mission)
@@ -1178,6 +1295,25 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(review_item.review_status, "ignored")
         self.assertEqual(pending_review_items_for_operation(self.operation), [])
 
+    def test_accepted_item_stays_suppressed_after_successful_queue_refresh(self):
+        payload = {"arrivals": [self._api_flight(number="5X889", call_sign="UPS889")]}
+        review_item = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(payload),
+        )["review_items"][0]
+        accept_review_item(review_item, self.settings)
+        db.session.commit()
+
+        result = run_flight_api_import(self.gateway, self.operation, client=FakeFlightClient(payload))
+
+        self.assertEqual(result["ignored_count"], 0)
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(len(result["review_items"]), 0)
+        db.session.refresh(review_item)
+        self.assertEqual(review_item.review_status, "accepted")
+        self.assertEqual(pending_review_items_for_operation(self.operation), [])
+
     def test_failed_provider_poll_does_not_wipe_existing_review_queue(self):
         existing_item = self._review_item(flight_number="5X333", call_sign="UPS333")
         db.session.commit()
@@ -1192,7 +1328,7 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(db.session.get(FlightApiReviewItem, existing_item.id).review_status, "pending")
         self.assertEqual(pending_review_items_for_operation(self.operation)[0].flight_number, "5X333")
 
-    def test_provider_flight_number_match_with_callsign_difference_creates_no_review(self):
+    def test_provider_flight_fallback_only_when_callsign_has_no_match(self):
         mission = self._mission("arrival", "UPS1075")
         db.session.add(mission)
         db.session.commit()
@@ -1207,10 +1343,14 @@ class FlightApiImportTest(unittest.TestCase):
 
         self.assertEqual(len(result["matched"]), 1)
         self.assertEqual(result["matched"][0]["mission"].id, mission.id)
+        self.assertEqual(
+            result["matched"][0]["match_diagnostic"],
+            "matched by provider flight fallback",
+        )
         self.assertEqual(len(result["review_items"]), 0)
         self.assertEqual(pending_review_items_for_operation(self.operation), [])
 
-    def test_provider_flight_number_616_matches_zero_padded_mission_despite_callsign(self):
+    def test_provider_flight_number_fallback_with_blank_callsign(self):
         mission = self._mission("arrival", "UPS0616")
         db.session.add(mission)
         db.session.commit()
@@ -1219,7 +1359,7 @@ class FlightApiImportTest(unittest.TestCase):
             self.gateway,
             self.operation,
             client=FakeFlightClient(
-                {"arrivals": [self._api_flight(number="5X616", call_sign="UPS612")]}
+                {"arrivals": [self._api_flight(number="5X616", call_sign="")]}
             ),
         )
 
@@ -1638,12 +1778,98 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"LATEST POLL", response.data)
         self.assertIn(b"STALE REMOVED", response.data)
         self.assertIn(b"SUPPRESSED REVIEW", response.data)
+        self.assertIn(b"REQUEST PATH/QUERY", response.data)
+        self.assertIn(b"/flights/airports/iata/RFD/", response.data)
+        self.assertIn(b"FIRST PROVIDER DEPARTURE", response.data)
+        self.assertIn(b"LAST PROVIDER DEPARTURE", response.data)
+        self.assertIn(b"03:00 Local", response.data)
         self.assertIn(b"NON-UPS IGNORED ARRIVALS", response.data)
         self.assertIn(b"NON-UPS IGNORED DEPARTURES", response.data)
         self.assertIn(b"CORES TRIED", response.data)
         self.assertIn(b"999", response.data)
         self.assertIn(b"no matching mission", response.data)
         self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
+
+    def test_flight_api_test_page_matched_table_uses_local_block_in_time(self):
+        operation = SortDateOperation(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_date=date.today(),
+            sort_name="night",
+            window_minutes=0,
+        )
+        settings = ensure_sort_timeline_settings(self.gateway)
+        settings.provider_enabled = True
+        mission = SortDateMission(
+            sort_date_operation=operation,
+            gateway_code=self.gateway.code,
+            sort_date=operation.sort_date,
+            sort_name=operation.sort_name,
+            mission_type="arrival",
+            mission_source="master",
+            wave="1",
+            flight_number="5X555",
+            origin="SDF",
+            destination="RFD",
+            timezone="America/Chicago",
+            planned_datetime_local=datetime(2026, 6, 1, 2, 0),
+            planned_datetime_utc=datetime(2026, 6, 1, 7, 0),
+            arrival_status="scheduled",
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, _exc_type, _exc, _tb):
+                return False
+
+            def read(self):
+                return json.dumps(
+                    {
+                        "arrivals": [
+                            {
+                                "number": "5X555",
+                                "callSign": "UPS555",
+                                "airline": {"icao": "UPS", "iata": "5X"},
+                                "departure": {"airport": {"iata": "SDF"}},
+                                "arrival": {
+                                    "airport": {"iata": "RFD"},
+                                    "revisedTime": {"local": "2026-06-01T02:35:00"},
+                                    "runwayTime": {"local": "2026-06-01T02:40:00"},
+                                },
+                            }
+                        ],
+                    }
+                ).encode("utf-8")
+
+        def fake_urlopen(request, timeout):
+            return FakeResponse()
+
+        original_urlopen = flight_api_service.urlopen
+        previous = os.environ.get("AERODATABOX_API_KEY")
+        os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
+        flight_api_service.urlopen = fake_urlopen
+        try:
+            response = self.client.post(
+                "/motherbrain/flight-api-test",
+                data={"flight_api_action": "pull", "operation_id": str(operation.id)},
+                follow_redirects=True,
+            )
+        finally:
+            flight_api_service.urlopen = original_urlopen
+            if previous is None:
+                os.environ.pop("AERODATABOX_API_KEY", None)
+            else:
+                os.environ["AERODATABOX_API_KEY"] = previous
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"MATCHED UPS FLIGHTS", response.data)
+        self.assertIn(b"02:50 Local Jun 1", response.data)
+        self.assertIn(b"PROVIDER 02:40 Local Jun 1", response.data)
+        self.assertNotIn(b"2026-06-01 07:40 UTC", response.data)
 
     def test_flight_api_review_page_link_visible_for_view_permission(self):
         self._login_motherbrain_role("review_simulator_link", "simulator")
@@ -1691,6 +1917,8 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"5X555", response.data)
         self.assertIn(b"UPS555", response.data)
         self.assertIn(b"SDF / RFD", response.data)
+        self.assertIn(b"02:25 Local Jun 1", response.data)
+        self.assertNotIn(b"2026-06-01 07:25 UTC", response.data)
         self.assertIn(b"N555UP", response.data)
         self.assertIn(b"A300", response.data)
         self.assertIn(b"Expected", response.data)

@@ -55,7 +55,7 @@
                     <th>FLIGHT / CALLSIGN</th>
                     <th>CORES TRIED</th>
                     <th>ORIGIN / DEST</th>
-                    <th>ETA / STD</th>
+                    <th>OPERATIONAL TIME</th>
                     <th>TAIL</th>
                     <th>AC TYPE</th>
                     <th>PROVIDER STATUS</th>
@@ -65,6 +65,8 @@
             </thead>
             <tbody>
                 {% for item in pending_review_items %}
+                {% set operational_time = flight_api_operational_time(item, sort_timeline_settings) %}
+                {% set provider_time = flight_api_provider_time(item) %}
                 <tr>
                     <td>{{ item.mission_type|upper }}</td>
                     <td>
@@ -74,7 +76,12 @@
                     </td>
                     <td>{{ item.normalized_cores_tried|default("-", true) }}</td>
                     <td>{{ item.origin or "-" }} / {{ item.destination or "-" }}</td>
-                    <td>{{ dt(item.revised_time_utc) }} UTC</td>
+                    <td>
+                        <strong>{{ format_flight_api_time(operational_time, gateway) }}</strong>
+                        {% if item.mission_type == "arrival" and provider_time and provider_time != operational_time %}
+                        <br><span class="muted">PROVIDER {{ format_flight_api_time(provider_time, gateway) }}</span>
+                        {% endif %}
+                    </td>
                     <td>{{ item.tail_number or "-" }}</td>
                     <td>{{ item.aircraft_model or "-" }}</td>
                     <td>{{ item.api_status or "-" }}</td>

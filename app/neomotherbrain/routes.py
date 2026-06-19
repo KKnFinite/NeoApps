@@ -25,6 +25,9 @@ from app.services.flight_api import (
     FlightApiConfigurationError,
     accept_review_item,
     api_polling_window_snapshot,
+    flight_api_operational_time_utc,
+    flight_api_provider_time_utc,
+    format_flight_api_local_time,
     ignore_review_item,
     ops_node_online_window_snapshot,
     pending_review_items_for_operation,
@@ -233,6 +236,7 @@ def flight_api_test():
     selected_lookup_window = None
     selected_polling_window = None
     selected_ops_window = None
+    settings = ensure_sort_timeline_settings(gateway)
 
     if request.method == "POST" and request.form.get("flight_api_action") == "pull":
         selected_operation = _selected_current_operation(
@@ -257,7 +261,6 @@ def flight_api_test():
             flash(f"Flight API import failed: {error}", "error")
 
     if selected_operation:
-        settings = ensure_sort_timeline_settings(gateway)
         selected_lookup_window = sort_flight_lookup_window_snapshot(
             selected_operation,
             settings,
@@ -283,6 +286,10 @@ def flight_api_test():
         selected_ops_window=selected_ops_window,
         import_result=import_result,
         pending_review_items=pending_items,
+        sort_timeline_settings=settings,
+        flight_api_operational_time=flight_api_operational_time_utc,
+        flight_api_provider_time=flight_api_provider_time_utc,
+        format_flight_api_time=format_flight_api_local_time,
     )
 
 
@@ -303,6 +310,7 @@ def flight_api_review():
     operations = operations_for_gateway_date(gateway, sort_date)
     selected_operation = _selected_current_operation(operations)
     pending_items = pending_review_items_for_operation(selected_operation)
+    settings = ensure_sort_timeline_settings(gateway)
     return render_template(
         "neomotherbrain/flight_api_review.html",
         gateway=gateway,
@@ -311,6 +319,10 @@ def flight_api_review():
         selected_operation=selected_operation,
         pending_review_items=pending_items,
         can_edit=access["can_edit"],
+        sort_timeline_settings=settings,
+        flight_api_operational_time=flight_api_operational_time_utc,
+        flight_api_provider_time=flight_api_provider_time_utc,
+        format_flight_api_time=format_flight_api_local_time,
     )
 
 

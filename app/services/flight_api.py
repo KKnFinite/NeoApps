@@ -183,13 +183,13 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
     api_key_env_var = DEFAULT_API_KEY_ENV_VAR
     raw_api_key = os.environ.get(api_key_env_var)
     api_key, key_diagnostics = normalize_api_key(raw_api_key)
+    request_diagnostics = _safe_request_diagnostics(
+        gateway.code,
+        lookup_window["lookup_window_start_local"],
+        lookup_window["lookup_window_end_local"],
+        raw_api_key,
+    )
     if not api_key and client is None:
-        request_diagnostics = _safe_request_diagnostics(
-            gateway.code,
-            lookup_window["lookup_window_start_local"],
-            lookup_window["lookup_window_end_local"],
-            raw_api_key,
-        )
         result = _empty_result(
             gateway,
             operation,
@@ -205,6 +205,7 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
                 **lookup_window,
                 **polling_window,
                 **ops_window,
+                **_poll_time_diagnostics(gateway, _utc_naive(now)),
             }
         )
         return result
@@ -224,7 +225,10 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
             api_key,
         )
     except FlightApiConfigurationError as error:
-        request_diagnostics = getattr(error, "diagnostics", {})
+        request_diagnostics = {
+            **request_diagnostics,
+            **(getattr(error, "diagnostics", {}) or {}),
+        }
         result = _empty_result(
             gateway,
             operation,
@@ -259,6 +263,7 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
                 **lookup_window,
                 **polling_window,
                 **ops_window,
+                **_poll_time_diagnostics(gateway, attempted_at),
             }
         )
         db.session.flush()
@@ -279,9 +284,11 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
             "api_key_env_var": api_key_env_var,
             "usage_units_consumed": usage_units_consumed,
             "usage_polls_used": usage_counter.attempted_call_count,
+            **request_diagnostics,
             **lookup_window,
             **polling_window,
             **ops_window,
+            **_poll_time_diagnostics(gateway, attempted_at),
         }
     )
     db.session.flush()
@@ -303,25 +310,34 @@ def import_api_flights_for_operation(gateway, operation, api_flights, settings=N
     for api_flight in api_flights:
         mission_type = _mission_type(api_flight)
         _increment_count(diagnostics, "raw", mission_type)
+        normalized = normalize_api_flight(api_flight, operation, gateway)
+        _track_provider_departure_time(diagnostics, normalized)
         if not is_ups_flight(api_flight):
             _increment_count(diagnostics, "non_ups_ignored", mission_type)
             non_ups_ignored += 1
             continue
 
         _increment_count(diagnostics, "ups", mission_type)
-        normalized = normalize_api_flight(api_flight, operation, gateway)
         normalized_type = normalized.get("mission_type") or mission_type
-        mission, unmatched_reason = match_api_flight_to_mission_with_reason(
+        mission, match_detail = match_api_flight_to_mission_with_reason(
             normalized,
             missions,
         )
         if mission:
             apply_api_data_to_mission(mission, normalized, settings, now=now_utc)
-            matched.append({"mission": mission, "api_flight": normalized})
+            if match_detail:
+                normalized["match_diagnostic"] = match_detail
+            matched.append(
+                {
+                    "mission": mission,
+                    "api_flight": normalized,
+                    "match_diagnostic": match_detail,
+                }
+            )
             _increment_count(diagnostics, "matched", normalized_type)
             continue
 
-        normalized["unmatched_reason"] = unmatched_reason
+        normalized["unmatched_reason"] = match_detail
         review_item, was_ignored = upsert_review_item(gateway, operation, normalized)
         if was_ignored:
             suppressed_review_count += 1
@@ -639,21 +655,31 @@ def match_api_flight_to_mission_with_reason(normalized, missions):
     candidates = [mission for mission in missions if mission.mission_type == mission_type]
     provider_key = _ups_numeric_core(normalized.get("provider_flight_number"))
     call_sign_key = _ups_numeric_core(normalized.get("call_sign"))
+    call_sign_is_ups = _clean_flight_number(normalized.get("call_sign")).startswith("UPS")
 
     if not provider_key and not call_sign_key:
         return None, "unsupported/blank flight identity"
+
+    if call_sign_is_ups and call_sign_key:
+        call_sign_matches = _missions_matching_ups_key(candidates, call_sign_key)
+        if len(call_sign_matches) > 1:
+            return None, "ambiguous callsign match"
+        if len(call_sign_matches) == 1:
+            return call_sign_matches[0], None
 
     if provider_key:
         provider_matches = _missions_matching_ups_key(candidates, provider_key)
         if len(provider_matches) > 1:
             return None, "ambiguous flight number match"
         if len(provider_matches) == 1:
+            if call_sign_key and call_sign_key != provider_key:
+                return provider_matches[0], "matched by provider flight fallback"
             return provider_matches[0], None
 
-    if call_sign_key:
+    if not call_sign_is_ups and call_sign_key:
         call_sign_matches = _missions_matching_ups_key(candidates, call_sign_key)
         if len(call_sign_matches) > 1:
-            return None, "ambiguous callsign fallback"
+            return None, "ambiguous callsign match"
         if len(call_sign_matches) == 1:
             return call_sign_matches[0], None
 
@@ -705,7 +731,45 @@ def assumed_arrived_time(normalized, settings):
     runway_time = normalized.get("runway_time_utc")
     if not runway_time:
         return None
-    return runway_time + timedelta(minutes=int(getattr(settings, "taxi_to_ramp_minutes", 10) or 10))
+    return runway_time + timedelta(minutes=taxi_to_ramp_minutes(settings))
+
+
+def taxi_to_ramp_minutes(settings):
+    value = getattr(settings, "taxi_to_ramp_minutes", 10)
+    if value is None:
+        return 10
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 10
+
+
+def flight_api_operational_time_utc(record, settings):
+    mission_type = _record_value(record, "mission_type")
+    if mission_type == "arrival":
+        runway_time = _record_value(record, "runway_time_utc")
+        if runway_time:
+            return runway_time + timedelta(minutes=taxi_to_ramp_minutes(settings))
+    return (
+        _record_value(record, "revised_time_utc")
+        or _record_value(record, "scheduled_time_utc")
+    )
+
+
+def flight_api_provider_time_utc(record):
+    return (
+        _record_value(record, "runway_time_utc")
+        or _record_value(record, "revised_time_utc")
+        or _record_value(record, "scheduled_time_utc")
+    )
+
+
+def format_flight_api_local_time(value, gateway=None, timezone_name=None):
+    if not value:
+        return "-"
+    timezone_name = timezone_name or (gateway_timezone(gateway) if gateway else "America/Chicago")
+    local_value = _utc_to_local_naive(_utc_naive(value), timezone_name)
+    return f"{local_value:%H:%M Local %b} {local_value.day}"
 
 
 def upsert_review_item(gateway, operation, normalized):
@@ -841,6 +905,8 @@ def review_reason_for_item(review_item, missions):
         ),
     }
     _mission, reason = match_api_flight_to_mission_with_reason(normalized, missions)
+    if _mission:
+        return reason or "matching mission now exists"
     return reason or "no matching mission"
 
 
@@ -880,6 +946,17 @@ def _empty_result(gateway, operation, provider_enabled, message):
         "usage_units_consumed": 0,
         "usage_polls_used": None,
         "provider_error": False,
+        "provider_status_code": None,
+        "request_host": None,
+        "request_path_query": None,
+        "user_agent_sent": None,
+        "accept_header_sent": None,
+        "api_key_present": None,
+        "api_key_normalized": None,
+        "api_key_appears_quoted": None,
+        "provider_response_snippet": None,
+        "poll_rfd_local_time": None,
+        "poll_utc_time": None,
         "message": message,
         **_empty_import_count_diagnostics(),
     }
@@ -890,6 +967,8 @@ def _empty_import_count_diagnostics():
     for prefix in ("raw", "ups", "matched", "unmatched", "non_ups_ignored"):
         diagnostics[f"{prefix}_arrivals_count"] = 0
         diagnostics[f"{prefix}_departures_count"] = 0
+    diagnostics["first_provider_departure_time_utc"] = None
+    diagnostics["last_provider_departure_time_utc"] = None
     return diagnostics
 
 
@@ -897,6 +976,36 @@ def _increment_count(diagnostics, prefix, mission_type):
     type_key = "departures" if mission_type == "departure" else "arrivals"
     key = f"{prefix}_{type_key}_count"
     diagnostics[key] = int(diagnostics.get(key, 0) or 0) + 1
+
+
+def _track_provider_departure_time(diagnostics, normalized):
+    if normalized.get("mission_type") != "departure":
+        return
+    provider_time = flight_api_provider_time_utc(normalized)
+    if not provider_time:
+        return
+    first_time = diagnostics.get("first_provider_departure_time_utc")
+    last_time = diagnostics.get("last_provider_departure_time_utc")
+    if first_time is None or provider_time < first_time:
+        diagnostics["first_provider_departure_time_utc"] = provider_time
+    if last_time is None or provider_time > last_time:
+        diagnostics["last_provider_departure_time_utc"] = provider_time
+
+
+def _poll_time_diagnostics(gateway, attempted_at):
+    return {
+        "poll_utc_time": attempted_at,
+        "poll_rfd_local_time": _utc_to_local_naive(
+            attempted_at,
+            gateway_timezone(gateway) if gateway else "America/Chicago",
+        ),
+    }
+
+
+def _record_value(record, key):
+    if isinstance(record, dict):
+        return record.get(key)
+    return getattr(record, key, None)
 
 
 def _safe_request_diagnostics(gateway_code, start_local, end_local, api_key):

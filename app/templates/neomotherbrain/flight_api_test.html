@@ -47,7 +47,7 @@
             <span>CURRENT SORT</span>
             <strong>
                 {% if selected_operation %}
-                {{ selected_operation.sort_name|upper }} {{ selected_operation.sort_date }}
+                #{{ selected_operation.id }} {{ selected_operation.sort_name|upper }} {{ selected_operation.sort_date }}
                 {% else %}
                 -
                 {% endif %}
@@ -127,6 +127,14 @@
         </article>
         {% if import_result %}
         <article class="status-card">
+            <span>RFD LOCAL TIME AT POLL</span>
+            <strong>{{ dt(import_result.poll_rfd_local_time) if import_result.poll_rfd_local_time else "-" }}</strong>
+        </article>
+        <article class="status-card">
+            <span>REQUEST PATH/QUERY</span>
+            <strong class="diagnostic-path">{{ import_result.request_path_query or "-" }}</strong>
+        </article>
+        <article class="status-card">
             <span>MATCHED UPS</span>
             <strong>{{ import_result.matched|length }}</strong>
         </article>
@@ -195,6 +203,14 @@
             <strong>{{ import_result.non_ups_ignored_departures_count }}</strong>
         </article>
         <article class="status-card">
+            <span>FIRST PROVIDER DEPARTURE</span>
+            <strong>{{ format_flight_api_time(import_result.first_provider_departure_time_utc, gateway) }}</strong>
+        </article>
+        <article class="status-card">
+            <span>LAST PROVIDER DEPARTURE</span>
+            <strong>{{ format_flight_api_time(import_result.last_provider_departure_time_utc, gateway) }}</strong>
+        </article>
+        <article class="status-card">
             <span>UNITS CONSUMED</span>
             <strong>{{ import_result.usage_units_consumed }}</strong>
         </article>
@@ -255,7 +271,7 @@
                     <th>FLIGHT</th>
                     <th>CALLSIGN</th>
                     <th>ORIGIN/DEST</th>
-                    <th>ETA/REVISED</th>
+                    <th>OPERATIONAL TIME</th>
                     <th>TAIL</th>
                     <th>MODEL</th>
                     <th>API STATUS</th>
@@ -265,12 +281,22 @@
                 {% for row in import_result.matched %}
                 {% set mission = row.mission %}
                 {% set api = row.api_flight %}
+                {% set operational_time = flight_api_operational_time(api, sort_timeline_settings) %}
+                {% set provider_time = flight_api_provider_time(api) %}
                 <tr>
                     <td>{{ mission.mission_type|upper }}</td>
                     <td>{{ mission.flight_number|upper }}</td>
                     <td>{{ api.call_sign or "-" }}</td>
                     <td>{{ api.origin or "-" }} / {{ api.destination or "-" }}</td>
-                    <td>{{ dt(api.revised_time_utc or api.scheduled_time_utc) }} UTC</td>
+                    <td>
+                        <strong>{{ format_flight_api_time(operational_time, gateway) }}</strong>
+                        {% if api.mission_type == "arrival" and provider_time and provider_time != operational_time %}
+                        <br><span class="muted">PROVIDER {{ format_flight_api_time(provider_time, gateway) }}</span>
+                        {% endif %}
+                        {% if row.match_diagnostic %}
+                        <br><span class="muted">{{ row.match_diagnostic|upper }}</span>
+                        {% endif %}
+                    </td>
                     <td>{{ mission.assigned_tail_number or "-" }}</td>
                     <td>{{ mission.api_aircraft_model or "-" }}</td>
                     <td>{{ mission.api_status or "-" }}</td>
@@ -291,7 +317,7 @@
                     <th>CALLSIGN</th>
                     <th>CORES TRIED</th>
                     <th>ORIGIN/DEST</th>
-                    <th>ETA/REVISED</th>
+                    <th>OPERATIONAL TIME</th>
                     <th>TAIL</th>
                     <th>MODEL</th>
                     <th>API STATUS</th>
@@ -301,13 +327,20 @@
             </thead>
             <tbody>
                 {% for item in pending_review_items %}
+                {% set operational_time = flight_api_operational_time(item, sort_timeline_settings) %}
+                {% set provider_time = flight_api_provider_time(item) %}
                 <tr>
                     <td>{{ item.mission_type|upper }}</td>
                     <td>{{ item.flight_number|upper }}</td>
                     <td>{{ item.call_sign or "-" }}</td>
                     <td>{{ item.normalized_cores_tried|default("-", true) }}</td>
                     <td>{{ item.origin or "-" }} / {{ item.destination or "-" }}</td>
-                    <td>{{ dt(item.revised_time_utc) }} UTC</td>
+                    <td>
+                        <strong>{{ format_flight_api_time(operational_time, gateway) }}</strong>
+                        {% if item.mission_type == "arrival" and provider_time and provider_time != operational_time %}
+                        <br><span class="muted">PROVIDER {{ format_flight_api_time(provider_time, gateway) }}</span>
+                        {% endif %}
+                    </td>
                     <td>{{ item.tail_number or "-" }}</td>
                     <td>{{ item.aircraft_model or "-" }}</td>
                     <td>{{ item.api_status or "-" }}</td>
