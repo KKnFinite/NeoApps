@@ -151,6 +151,9 @@
                 </div>
                 {% endif %}
             {% endwith %}
+            {% if flight_api_auto_poll_timer %}
+            {% include "neomotherbrain/_flight_api_auto_poll_timer.html" %}
+            {% endif %}
             {% block content %}{% endblock %}
             {% if uses_motherbrain_header and not is_motherbrain_landing %}
             <div class="motherbrain-main-menu-return">

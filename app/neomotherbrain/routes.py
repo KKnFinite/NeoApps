@@ -176,6 +176,10 @@ def motherbrain():
         operation_count=operation_count,
         master_schedule_count=master_schedule_count,
         sort_date=sort_date,
+        **_flight_api_auto_poll_timer_context(
+            gateway,
+            operation=_selected_current_operation(current_sort_operations),
+        ),
     )
 
 
@@ -414,6 +418,7 @@ def flight_api_review():
         flight_api_operational_time=flight_api_operational_time_utc,
         flight_api_provider_time=flight_api_provider_time_utc,
         format_flight_api_time=format_flight_api_local_time,
+        **_flight_api_auto_poll_timer_context(gateway, operation=selected_operation),
     )
 
 
@@ -536,6 +541,36 @@ def _flight_api_json_time(value, gateway):
     }
 
 
+def _flight_api_auto_poll_timer_context(gateway, operation=None):
+    if not user_can(FLIGHT_API_AUTO_POLL_TRIGGER_PERMISSION):
+        return {"flight_api_auto_poll_timer": None}
+
+    status = flight_api_auto_poll_status(gateway, operation=operation)
+    operation = status.get("operation")
+    inactive_reasons = {
+        "no current sort operation",
+        "operation is not current active operation",
+    }
+    if (
+        not operation
+        or not status.get("provider_enabled")
+        or not status.get("api_schedule_enabled")
+        or status.get("reason") in inactive_reasons
+    ):
+        return {"flight_api_auto_poll_timer": None}
+
+    return {
+        "flight_api_auto_poll_timer": {
+            "endpoint": url_for("neomotherbrain.flight_api_auto_poll_check"),
+            "initial_status": _flight_api_auto_poll_payload(
+                gateway,
+                status,
+                skipped=not bool(status.get("eligible")),
+            ),
+        }
+    }
+
+
 def _sort_timeline_autosave_payload(context):
     current_preview = context["current_preview"]
     next_preview = context["next_preview"]
@@ -636,6 +671,7 @@ def manage_sort():
         selected_operation=selected_operation,
         created_count=len(generation_result["created"]),
         errors=generation_result["errors"],
+        **_flight_api_auto_poll_timer_context(gateway, operation=selected_operation),
     )
 
 
@@ -966,6 +1002,7 @@ def new_operation():
 @bp.route("/motherbrain/operations/<int:operation_id>")
 @gateway_node_required("motherbrain")
 def operation_detail(operation_id):
+    gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
     sync_result = _sync_operation_with_master(operation)
     if sync_result["added"] or sync_result["updated"]:
@@ -981,12 +1018,14 @@ def operation_detail(operation_id):
         departure_count=departure_count,
         mission_count=arrival_count + departure_count,
         rows=rows,
+        **_flight_api_auto_poll_timer_context(gateway, operation=operation),
     )
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>/arrivals")
 @gateway_node_required("motherbrain")
 def arrival_board(operation_id):
+    gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
     missions = _missions_for_operation(operation, "arrival")
     rows = [_arrival_row(mission) for mission in missions]
@@ -994,12 +1033,14 @@ def arrival_board(operation_id):
         "neomotherbrain/arrival_board.html",
         operation=operation,
         rows=rows,
+        **_flight_api_auto_poll_timer_context(gateway, operation=operation),
     )
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>/departures")
 @gateway_node_required("motherbrain")
 def departure_board(operation_id):
+    gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
     missions = _missions_for_operation(operation, "departure")
     rows = [_departure_row(mission, operation) for mission in missions]
@@ -1007,6 +1048,7 @@ def departure_board(operation_id):
         "neomotherbrain/departure_board.html",
         operation=operation,
         rows=rows,
+        **_flight_api_auto_poll_timer_context(gateway, operation=operation),
     )
 
 
@@ -1069,6 +1111,7 @@ def new_mission(operation_id):
 @bp.route("/motherbrain/operations/<int:operation_id>/missions/<int:mission_id>")
 @gateway_node_required("motherbrain")
 def mission_detail(operation_id, mission_id):
+    gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
     mission = _mission_or_404(operation, mission_id)
     return render_template(
@@ -1077,6 +1120,7 @@ def mission_detail(operation_id, mission_id):
         mission=mission,
         timing=mission_display_timing_data(mission, operation),
         crew_covered=is_mission_crew_covered(mission.crew_assignments),
+        **_flight_api_auto_poll_timer_context(gateway, operation=operation),
     )
 
 

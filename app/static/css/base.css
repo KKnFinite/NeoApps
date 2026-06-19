@@ -3190,6 +3190,57 @@ h2 {
     word-break: break-word;
 }
 
+.flight-api-auto-poll-widget {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    width: min(100%, 1120px);
+    margin: 0 auto 14px;
+    padding: 10px 12px;
+    border: 1px solid rgba(var(--node-rgb), 0.38);
+    border-radius: 6px;
+    background:
+        linear-gradient(145deg, rgba(var(--node-rgb), 0.18), rgba(8, 9, 12, 0.9) 38%),
+        rgba(3, 4, 6, 0.78);
+    box-shadow:
+        0 0 22px rgba(var(--node-rgb), 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.flight-api-auto-poll-widget div {
+    display: grid;
+    gap: 2px;
+}
+
+.flight-api-auto-poll-widget span,
+.flight-api-auto-poll-widget p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.flight-api-auto-poll-widget strong {
+    color: var(--node-primary);
+    font-size: 0.92rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-shadow: 0 0 14px rgba(var(--node-rgb), 0.22);
+}
+
+.flight-api-auto-poll-widget [data-flight-api-auto-poll-detail] {
+    justify-self: start;
+    color: var(--steel);
+}
+
+.flight-api-auto-poll-widget [data-flight-api-auto-poll-success] {
+    justify-self: end;
+    text-align: right;
+}
+
 .node-strip {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -5202,6 +5253,19 @@ select::-ms-expand {
         width: min(100% - 20px, 1440px);
         margin: 0 auto;
         padding: 32px 0;
+    }
+
+    .flight-api-auto-poll-widget {
+        grid-template-columns: 1fr;
+        gap: 5px;
+        margin-bottom: 10px;
+        padding: 9px 10px;
+    }
+
+    .flight-api-auto-poll-widget [data-flight-api-auto-poll-detail],
+    .flight-api-auto-poll-widget [data-flight-api-auto-poll-success] {
+        justify-self: stretch;
+        text-align: left;
     }
 
     .topbar,

@@ -2219,6 +2219,100 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertNotIn("setInterval", template)
         self.assertNotIn("setTimeout", template)
 
+    def test_auto_poll_page_timer_renders_on_active_motherbrain_pages(self):
+        operation, _settings = self._setup_auto_poll_operation()
+
+        responses = [
+            self.client.get("/motherbrain"),
+            self.client.get("/motherbrain/manage-sort"),
+            self.client.get("/motherbrain/flight-api-review"),
+            self.client.get(f"/motherbrain/operations/{operation.id}"),
+            self.client.get(f"/motherbrain/operations/{operation.id}/arrivals"),
+            self.client.get(f"/motherbrain/operations/{operation.id}/departures"),
+        ]
+
+        for response in responses:
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(b"data-flight-api-auto-poll-timer", response.data)
+            self.assertIn(b"/motherbrain/flight-api-auto-poll/check", response.data)
+            self.assertIn(b"AUTO POLL", response.data)
+
+    def test_auto_poll_page_timer_does_not_render_without_trigger_permission(self):
+        self._setup_auto_poll_operation()
+        original_user_can = neomotherbrain_routes.user_can
+
+        def deny_auto_poll_trigger(permission_key, *args, **kwargs):
+            if permission_key == neomotherbrain_routes.FLIGHT_API_AUTO_POLL_TRIGGER_PERMISSION:
+                return False
+            return original_user_can(permission_key, *args, **kwargs)
+
+        neomotherbrain_routes.user_can = deny_auto_poll_trigger
+        try:
+            response = self.client.get("/motherbrain")
+        finally:
+            neomotherbrain_routes.user_can = original_user_can
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"data-flight-api-auto-poll-timer", response.data)
+        self.assertNotIn(b"/motherbrain/flight-api-auto-poll/check", response.data)
+
+    def test_auto_poll_page_timer_stays_off_public_admin_and_settings_pages(self):
+        self._setup_auto_poll_operation()
+
+        login_response = self.client.get("/login")
+        sort_timeline_response = self.client.get("/motherbrain/sort-timeline")
+        api_test_response = self.client.get("/motherbrain/flight-api-test")
+        permission_response = self.client.get("/admin/permissions")
+
+        for response in (
+            login_response,
+            sort_timeline_response,
+            api_test_response,
+            permission_response,
+        ):
+            self.assertNotIn(b"data-flight-api-auto-poll-timer", response.data)
+
+        self.assertIn(b"data-auto-poll-trigger", api_test_response.data)
+
+    def test_auto_poll_timer_script_uses_only_passive_endpoint_and_no_secrets(self):
+        operation, _settings = self._setup_auto_poll_operation()
+        response = self.client.get(f"/motherbrain/operations/{operation.id}")
+        template = Path(
+            "app/templates/neomotherbrain/_flight_api_auto_poll_timer.html"
+        ).read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"/motherbrain/flight-api-auto-poll/check", response.data)
+        self.assertIn('method: "POST"', template)
+        self.assertNotIn("AeroDataBox", template)
+        self.assertNotIn("aerodatabox", template)
+        self.assertNotIn("AERODATABOX_API_KEY", response.get_data(as_text=True))
+        self.assertNotIn("rapidapi", template.lower())
+
+    def test_auto_poll_timer_is_self_scheduled_and_not_tight_interval(self):
+        template = Path(
+            "app/templates/neomotherbrain/_flight_api_auto_poll_timer.html"
+        ).read_text()
+
+        self.assertIn("window.setTimeout(runCheck", template)
+        self.assertNotIn("setInterval", template)
+        self.assertIn("const MIN_DELAY_MS = 60000", template)
+        self.assertIn("document.visibilityState === \"hidden\"", template)
+        self.assertIn("visibilitychange", template)
+        self.assertIn("localStorage", template)
+
+    def test_no_flight_api_background_scheduler_was_added(self):
+        paths = [
+            Path("app/neomotherbrain/routes.py"),
+            Path("app/services/flight_api.py"),
+        ]
+        combined = "\n".join(path.read_text() for path in paths)
+
+        self.assertNotIn("APScheduler", combined)
+        self.assertNotIn("BackgroundScheduler", combined)
+        self.assertNotIn("threading.Thread", combined)
+        self.assertNotIn("while True", combined)
+
     def test_sort_timeline_page_explains_window_meanings(self):
         response = self.client.get("/motherbrain/sort-timeline")
 
