@@ -411,6 +411,17 @@ def _sort_timeline_autosave_payload(context):
                 "api_day_count": preview["api_day_count"],
                 "api_day_label": f"{preview['api_day_count']} API DAYS THIS MONTH",
                 "special_poll_count": preview["special_poll_count"],
+                "budget_poll_interval_minutes": (
+                    preview["budget_poll_interval_minutes"]
+                    if preview["budget_poll_interval_minutes"] is not None
+                    else "NONE"
+                ),
+                "actual_auto_poll_interval_minutes": (
+                    preview["actual_auto_poll_interval_minutes"]
+                    if preview["actual_auto_poll_interval_minutes"] is not None
+                    else "NONE"
+                ),
+                "projected_polls_per_polling_day": preview["projected_polls_per_polling_day"],
                 "next_poll_time": format_timeline_time(preview["next_poll_time"]),
             }
             for preview in current_preview["sort_previews"]
@@ -423,6 +434,7 @@ def _sort_timeline_preview_payload(preview):
         "monthly_api_units": preview["monthly_api_units"],
         "units_per_poll": preview["units_per_poll"],
         "taxi_to_ramp_minutes": preview["taxi_to_ramp_minutes"],
+        "minimum_auto_poll_interval_minutes": preview["minimum_auto_poll_interval_minutes"],
         "monthly_poll_limit": preview["monthly_poll_limit"],
         "units_used": preview["units_used"],
         "units_remaining": preview["units_remaining"],
@@ -430,9 +442,22 @@ def _sort_timeline_preview_payload(preview):
         "polls_remaining": preview["polls_remaining"],
         "operating_days": preview["operating_days"],
         "api_polling_days": preview["api_polling_days"],
+        "full_month_api_polling_days": preview["full_month_api_polling_days"],
+        "remaining_api_polling_days": preview["remaining_api_polling_days"],
         "original_daily_poll_cap": preview["original_daily_poll_cap"],
         "adjusted_daily_poll_cap": preview["adjusted_daily_poll_cap"],
         "effective_daily_poll_cap": preview["effective_daily_poll_cap"],
+        "budget_poll_interval_minutes": (
+            preview["budget_poll_interval_minutes"]
+            if preview["budget_poll_interval_minutes"] is not None
+            else "NONE"
+        ),
+        "actual_auto_poll_interval_minutes": (
+            preview["actual_auto_poll_interval_minutes"]
+            if preview["actual_auto_poll_interval_minutes"] is not None
+            else "NONE"
+        ),
+        "projected_polls_per_polling_day": preview["projected_polls_per_polling_day"],
         "special_poll_count": preview["special_poll_count"],
         "auto_interval_poll_count": preview["auto_interval_poll_count"],
         "total_scheduled_polls": preview["total_scheduled_polls"],

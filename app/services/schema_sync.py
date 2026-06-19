@@ -59,6 +59,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "sort_timeline_settings": {
         "units_per_poll": "INTEGER DEFAULT 2",
         "taxi_to_ramp_minutes": "INTEGER DEFAULT 10",
+        "minimum_auto_poll_interval_minutes": "INTEGER DEFAULT 10",
     },
     "sort_timeline_usage_counters": {
         "units_consumed": "INTEGER DEFAULT 0",
@@ -94,6 +95,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
     "sort_timeline_settings": {
         "units_per_poll": "INTEGER DEFAULT 2",
         "taxi_to_ramp_minutes": "INTEGER DEFAULT 10",
+        "minimum_auto_poll_interval_minutes": "INTEGER DEFAULT 10",
     },
     "sort_timeline_usage_counters": {
         "units_consumed": "INTEGER DEFAULT 0",

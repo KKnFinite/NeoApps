@@ -44,15 +44,19 @@
         {{ metric_tile("Polls Used", "polls_used", preview.polls_used) }}
         {{ metric_tile("Polls Remaining", "polls_remaining", preview.polls_remaining) }}
         {{ metric_tile("Operating Days", "operating_days", preview.operating_days) }}
-        {{ metric_tile("API Polling Days", "api_polling_days", preview.api_polling_days) }}
+        {{ metric_tile("Full-Month API Polling Days", "full_month_api_polling_days", preview.full_month_api_polling_days) }}
+        {{ metric_tile("Remaining API Polling Days", "remaining_api_polling_days", preview.remaining_api_polling_days) }}
         {{ metric_tile("Original Daily Poll Cap", "original_daily_poll_cap", preview.original_daily_poll_cap) }}
         {{ metric_tile("Adjusted Daily Poll Cap", "adjusted_daily_poll_cap", preview.adjusted_daily_poll_cap) }}
-        {{ metric_tile("Effective Daily Poll Cap", "effective_daily_poll_cap", preview.effective_daily_poll_cap) }}
+        {{ metric_tile("Budget Poll Interval", "budget_poll_interval_minutes", preview.budget_poll_interval_minutes if preview.budget_poll_interval_minutes is not none else "NONE") }}
+        {{ metric_tile("Minimum Auto Poll Interval", "minimum_auto_poll_interval_minutes", preview.minimum_auto_poll_interval_minutes) }}
+        {{ metric_tile("Actual Auto Poll Interval", "actual_auto_poll_interval_minutes", preview.actual_auto_poll_interval_minutes if preview.actual_auto_poll_interval_minutes is not none else "NONE") }}
+        {{ metric_tile("Projected Polls Per Polling Day", "projected_polls_per_polling_day", preview.projected_polls_per_polling_day) }}
         {{ metric_tile("Special Poll Count", "special_poll_count", preview.special_poll_count) }}
         {{ metric_tile("Auto Interval Poll Count", "auto_interval_poll_count", preview.auto_interval_poll_count) }}
         {{ metric_tile("Total Scheduled Polls", "total_scheduled_polls", preview.total_scheduled_polls) }}
     </div>
-    <p class="muted">Operating Days are Gateway Matrix sort/day occurrences adjusted by month offset. API Polling Days are API-enabled sort/day occurrences used for daily API caps.</p>
+    <p class="muted">Operating Days are Gateway Matrix sort/day occurrences adjusted by month offset. Full-Month API Polling Days count API-enabled sort/day occurrences for the full month. Remaining API Polling Days use the current RFD local month and time.</p>
 </section>
 {%- endmacro %}
 
@@ -86,6 +90,11 @@
                     <span>Taxi-To-Ramp Minutes</span>
                     <input type="number" name="taxi_to_ramp_minutes" min="0" step="1" value="{{ settings.taxi_to_ramp_minutes }}">
                     <small class="muted">Used to calculate Assumed Arrived from API runway time.</small>
+                </label>
+                <label>
+                    <span>Minimum Auto Poll Interval Minutes</span>
+                    <input type="number" name="minimum_auto_poll_interval_minutes" min="1" step="1" value="{{ settings.minimum_auto_poll_interval_minutes }}">
+                    <small class="muted">Auto polling will never run more often than this interval, even if monthly budget math allows faster polling. This helps avoid burning unnecessary API polls.</small>
                 </label>
                 <label>
                     <span>Provider Name</span>
@@ -181,6 +190,18 @@
                         <article class="metric-tile">
                             <span>Special Polls</span>
                             <strong data-sort-preview-metric="special_poll_count">{{ sort_preview.special_poll_count }}</strong>
+                        </article>
+                        <article class="metric-tile">
+                            <span>Budget Interval</span>
+                            <strong data-sort-preview-metric="budget_poll_interval_minutes">{{ sort_preview.budget_poll_interval_minutes if sort_preview.budget_poll_interval_minutes is not none else "NONE" }}</strong>
+                        </article>
+                        <article class="metric-tile">
+                            <span>Actual Interval</span>
+                            <strong data-sort-preview-metric="actual_auto_poll_interval_minutes">{{ sort_preview.actual_auto_poll_interval_minutes if sort_preview.actual_auto_poll_interval_minutes is not none else "NONE" }}</strong>
+                        </article>
+                        <article class="metric-tile">
+                            <span>Projected Polls</span>
+                            <strong data-sort-preview-metric="projected_polls_per_polling_day">{{ sort_preview.projected_polls_per_polling_day }}</strong>
                         </article>
                         <article class="metric-tile">
                             <span>Next</span>

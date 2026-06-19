@@ -1,4 +1,5 @@
 import calendar
+import math
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -18,6 +19,7 @@ from app.services.gateway_matrix import DAY_OPTIONS, SORT_OPTIONS, gateway_timez
 DEFAULT_MONTHLY_API_UNITS = 600
 DEFAULT_UNITS_PER_POLL = 2
 DEFAULT_TAXI_TO_RAMP_MINUTES = 10
+DEFAULT_MINIMUM_AUTO_POLL_INTERVAL_MINUTES = 10
 DAY_VALUES = {day for day, _label in DAY_OPTIONS}
 SORT_VALUES = {sort_name for sort_name, _label in SORT_OPTIONS}
 MONTH_OPTIONS = tuple((month_number, calendar.month_name[month_number]) for month_number in range(1, 13))
@@ -32,6 +34,7 @@ def ensure_sort_timeline_settings(gateway):
             monthly_api_units=DEFAULT_MONTHLY_API_UNITS,
             units_per_poll=DEFAULT_UNITS_PER_POLL,
             taxi_to_ramp_minutes=DEFAULT_TAXI_TO_RAMP_MINUTES,
+            minimum_auto_poll_interval_minutes=DEFAULT_MINIMUM_AUTO_POLL_INTERVAL_MINUTES,
         )
         db.session.add(settings)
         db.session.flush()
@@ -43,6 +46,8 @@ def ensure_sort_timeline_settings(gateway):
             settings.units_per_poll = DEFAULT_UNITS_PER_POLL
         if settings.taxi_to_ramp_minutes is None:
             settings.taxi_to_ramp_minutes = DEFAULT_TAXI_TO_RAMP_MINUTES
+        if not getattr(settings, "minimum_auto_poll_interval_minutes", None):
+            settings.minimum_auto_poll_interval_minutes = DEFAULT_MINIMUM_AUTO_POLL_INTERVAL_MINUTES
 
     existing_sorts = {
         sort_setting.sort_name: sort_setting
@@ -134,6 +139,10 @@ def save_sort_timeline_from_form(gateway, form):
     settings.taxi_to_ramp_minutes = _nonnegative_int(
         form.get("taxi_to_ramp_minutes"),
         default=DEFAULT_TAXI_TO_RAMP_MINUTES,
+    )
+    settings.minimum_auto_poll_interval_minutes = _positive_int(
+        form.get("minimum_auto_poll_interval_minutes"),
+        default=DEFAULT_MINIMUM_AUTO_POLL_INTERVAL_MINUTES,
     )
     settings.provider_enabled = form.get("provider_enabled") == "1"
     settings.provider_name = _clean_text(form.get("provider_name"), max_length=120)
@@ -263,7 +272,7 @@ def month_budget_preview(settings, api_schedule, month_variances, month_start, g
         else 0
     )
     units_remaining = max(0, int(settings.monthly_api_units or 0) - units_used)
-    polls_remaining = max(0, monthly_poll_count - polls_used)
+    polls_remaining = max(0, units_remaining // _safe_units_per_poll(settings.units_per_poll))
     remaining_base_days = remaining_api_operating_day_count(
         month_start,
         api_schedule["configured_cells"],
@@ -286,10 +295,35 @@ def month_budget_preview(settings, api_schedule, month_variances, month_start, g
     adjusted_daily_cap = daily_poll_cap(polls_remaining, remaining_api_polling_days) if provider_enabled else 0
     effective_daily_cap = min(original_daily_cap, adjusted_daily_cap) if provider_enabled else 0
     budget_exhausted = provider_enabled and monthly_poll_count > 0 and polls_remaining <= 0
-    sort_previews = sort_timeline_previews(settings, api_schedule, month_start, effective_daily_cap)
+    minimum_interval = _minimum_auto_poll_interval_minutes(settings)
+    sort_previews = sort_timeline_previews(
+        settings,
+        api_schedule,
+        month_start,
+        adjusted_daily_cap,
+        provider_enabled=provider_enabled,
+        budget_exhausted=budget_exhausted,
+    )
     special_count = sum(preview["special_poll_count"] for preview in sort_previews)
-    auto_count = max(0, effective_daily_cap - special_count) if provider_enabled and not budget_exhausted else 0
+    projected_auto_count = sum(preview["auto_interval_poll_count"] for preview in sort_previews)
+    auto_count = (
+        min(projected_auto_count, max(0, adjusted_daily_cap - special_count))
+        if provider_enabled and not budget_exhausted
+        else 0
+    )
     total_scheduled_polls = special_count + auto_count if provider_enabled and not budget_exhausted else 0
+    budget_interval = _lowest_present(
+        preview["budget_poll_interval_minutes"]
+        for preview in sort_previews
+    )
+    actual_interval = _lowest_present(
+        preview["actual_auto_poll_interval_minutes"]
+        for preview in sort_previews
+    )
+    projected_polls = sum(
+        preview["projected_polls_per_polling_day"]
+        for preview in sort_previews
+    ) if provider_enabled and not budget_exhausted else 0
 
     return {
         "month_key": month_key,
@@ -300,6 +334,7 @@ def month_budget_preview(settings, api_schedule, month_variances, month_start, g
         "monthly_api_units": settings.monthly_api_units,
         "units_per_poll": settings.units_per_poll,
         "taxi_to_ramp_minutes": settings.taxi_to_ramp_minutes,
+        "minimum_auto_poll_interval_minutes": minimum_interval,
         "monthly_poll_limit": monthly_poll_count,
         "units_used": units_used,
         "units_remaining": units_remaining,
@@ -310,12 +345,16 @@ def month_budget_preview(settings, api_schedule, month_variances, month_start, g
         "operating_days": operating_days,
         "base_api_polling_days": base_api_polling_days,
         "api_polling_days": api_polling_days,
+        "full_month_api_polling_days": api_polling_days,
         "remaining_operating_days": remaining_operating_days,
         "remaining_api_polling_days": remaining_api_polling_days,
         "original_daily_poll_cap": original_daily_cap,
         "adjusted_daily_poll_cap": adjusted_daily_cap,
         "effective_daily_poll_cap": effective_daily_cap,
         "daily_poll_cap": effective_daily_cap,
+        "budget_poll_interval_minutes": budget_interval,
+        "actual_auto_poll_interval_minutes": actual_interval,
+        "projected_polls_per_polling_day": min(projected_polls, adjusted_daily_cap) if adjusted_daily_cap else 0,
         "special_poll_count": special_count,
         "auto_interval_poll_count": auto_count,
         "total_scheduled_polls": total_scheduled_polls,
@@ -323,10 +362,18 @@ def month_budget_preview(settings, api_schedule, month_variances, month_start, g
     }
 
 
-def sort_timeline_previews(settings, api_schedule, month_start, effective_daily_cap):
+def sort_timeline_previews(
+    settings,
+    api_schedule,
+    month_start,
+    adjusted_daily_cap,
+    provider_enabled=True,
+    budget_exhausted=False,
+):
     previews = []
     sort_settings = sort_settings_by_name(settings)
     enabled_cells = api_schedule["enabled_cells"]
+    minimum_interval = _minimum_auto_poll_interval_minutes(settings)
     for sort_info in api_schedule["configured_sorts"]:
         sort_name = sort_info["sort_name"]
         sort_setting = sort_settings.get(sort_name)
@@ -336,7 +383,25 @@ def sort_timeline_previews(settings, api_schedule, month_start, effective_daily_
             if (day_info["day"], sort_name) in enabled_cells
         ]
         special_count = len(sort_setting.special_poll_times) if sort_setting else 0
-        scheduled_times = scheduled_poll_times(sort_setting, effective_daily_cap)
+        polling_window_minutes = api_polling_window_minutes(sort_setting)
+        budget_interval = budget_poll_interval_minutes(
+            polling_window_minutes,
+            adjusted_daily_cap if provider_enabled and not budget_exhausted else 0,
+        )
+        actual_interval = actual_auto_poll_interval_minutes(budget_interval, minimum_interval)
+        projected_polls = projected_polls_per_polling_day(
+            polling_window_minutes,
+            actual_interval,
+            adjusted_daily_cap if provider_enabled and not budget_exhausted else 0,
+        )
+        remaining_after_special = max(0, int(adjusted_daily_cap or 0) - special_count)
+        auto_count = (
+            min(projected_polls, remaining_after_special)
+            if provider_enabled and not budget_exhausted
+            else 0
+        )
+        total_scheduled = special_count + auto_count if provider_enabled and not budget_exhausted else 0
+        scheduled_times = scheduled_poll_times(sort_setting, total_scheduled)
         previews.append(
             {
                 "sort_name": sort_name,
@@ -346,6 +411,13 @@ def sort_timeline_previews(settings, api_schedule, month_start, effective_daily_
                 "enabled_days": enabled_days,
                 "api_day_count": api_sort_day_count(month_start, sort_name, enabled_cells),
                 "special_poll_count": special_count,
+                "polling_window_minutes": polling_window_minutes,
+                "budget_poll_interval_minutes": budget_interval,
+                "minimum_auto_poll_interval_minutes": minimum_interval,
+                "actual_auto_poll_interval_minutes": actual_interval,
+                "projected_polls_per_polling_day": projected_polls,
+                "auto_interval_poll_count": auto_count,
+                "total_scheduled_polls": total_scheduled,
                 "next_poll_time": scheduled_times[0] if scheduled_times else None,
             }
         )
@@ -403,7 +475,12 @@ def remaining_api_operating_day_count(month_start, enabled_cells, sort_settings,
     for operating_date, sort_name in operating_occurrences:
         if operating_date > today:
             remaining += 1
-        elif operating_date == today and sort_api_window_still_active(sort_name, sort_settings, local_now):
+        elif operating_date == today and sort_api_window_still_active_on_date(
+            sort_name,
+            sort_settings,
+            operating_date,
+            local_now,
+        ):
             remaining += 1
     return remaining
 
@@ -436,6 +513,24 @@ def sort_api_window_still_active(sort_name, sort_settings, local_now):
         sort_setting.polling_start_local,
         sort_setting.polling_end_local,
     )
+
+
+def sort_api_window_still_active_on_date(sort_name, sort_settings, operating_date, local_now):
+    sort_setting = sort_settings.get(sort_name)
+    if not sort_setting or not sort_setting.polling_end_local:
+        return True
+
+    local_tz = local_now.tzinfo
+    start_time = sort_setting.polling_start_local or time.min
+    end_time = sort_setting.polling_end_local
+    window_start = datetime.combine(operating_date, start_time)
+    window_end = datetime.combine(operating_date, end_time)
+    if local_tz is not None:
+        window_start = window_start.replace(tzinfo=local_tz)
+        window_end = window_end.replace(tzinfo=local_tz)
+    if end_time <= start_time:
+        window_end += timedelta(days=1)
+    return local_now <= window_end
 
 
 def _time_window_still_active(current_time, start_time, end_time):
@@ -513,8 +608,63 @@ def daily_poll_cap(monthly_poll_count, operating_days):
     return max(0, int(monthly_poll_count or 0) // operating_days)
 
 
+def api_polling_window_minutes(sort_setting):
+    if not sort_setting:
+        return 0
+    return time_window_minutes(
+        sort_setting.polling_start_local,
+        sort_setting.polling_end_local,
+    )
+
+
+def time_window_minutes(start_time, end_time):
+    if not start_time or not end_time:
+        return 0
+    start_minutes = start_time.hour * 60 + start_time.minute
+    end_minutes = end_time.hour * 60 + end_time.minute
+    if end_minutes < start_minutes:
+        end_minutes += 24 * 60
+    return max(0, end_minutes - start_minutes)
+
+
+def budget_poll_interval_minutes(polling_window_minutes, adjusted_daily_cap):
+    if int(adjusted_daily_cap or 0) <= 0 or int(polling_window_minutes or 0) <= 0:
+        return None
+    return max(1, math.ceil(int(polling_window_minutes) / int(adjusted_daily_cap)))
+
+
+def actual_auto_poll_interval_minutes(budget_interval_minutes, minimum_interval_minutes):
+    if budget_interval_minutes is None:
+        return None
+    return max(int(budget_interval_minutes), int(minimum_interval_minutes or 1))
+
+
+def projected_polls_per_polling_day(polling_window_minutes, actual_interval_minutes, adjusted_daily_cap):
+    if (
+        int(adjusted_daily_cap or 0) <= 0
+        or int(polling_window_minutes or 0) <= 0
+        or actual_interval_minutes is None
+        or int(actual_interval_minutes or 0) <= 0
+    ):
+        return 0
+    projected = int(polling_window_minutes) // int(actual_interval_minutes)
+    return min(projected, int(adjusted_daily_cap or 0))
+
+
 def auto_interval_poll_count(daily_cap, special_poll_count):
     return max(0, int(daily_cap or 0) - int(special_poll_count or 0))
+
+
+def _minimum_auto_poll_interval_minutes(settings):
+    return _positive_int(
+        getattr(settings, "minimum_auto_poll_interval_minutes", None),
+        DEFAULT_MINIMUM_AUTO_POLL_INTERVAL_MINUTES,
+    )
+
+
+def _lowest_present(values):
+    present = [value for value in values if value is not None]
+    return min(present) if present else None
 
 
 def scheduled_poll_times(sort_setting, max_count):
