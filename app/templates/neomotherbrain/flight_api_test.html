@@ -277,6 +277,7 @@
                     <th>TYPE</th>
                     <th>FLIGHT</th>
                     <th>CALLSIGN</th>
+                    <th>CORES TRIED</th>
                     <th>ORIGIN/DEST</th>
                     <th>ETA/REVISED</th>
                     <th>TAIL</th>
@@ -292,6 +293,7 @@
                     <td>{{ item.mission_type|upper }}</td>
                     <td>{{ item.flight_number|upper }}</td>
                     <td>{{ item.call_sign or "-" }}</td>
+                    <td>{{ item.normalized_cores_tried|default("-", true) }}</td>
                     <td>{{ item.origin or "-" }} / {{ item.destination or "-" }}</td>
                     <td>{{ dt(item.revised_time_utc) }} UTC</td>
                     <td>{{ item.tail_number or "-" }}</td>
@@ -311,7 +313,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="10">NO UNMATCHED UPS FLIGHTS ARE PENDING REVIEW.</td>
+                    <td colspan="11">NO UNMATCHED UPS FLIGHTS ARE PENDING REVIEW.</td>
                 </tr>
                 {% endfor %}
             </tbody>

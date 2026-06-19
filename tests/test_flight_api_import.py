@@ -351,6 +351,52 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(client.calls[0]["start_local"], datetime(2026, 6, 1, 22, 15))
         self.assertEqual(client.calls[0]["end_local"], datetime(2026, 6, 2, 4, 30))
 
+    def test_rapidapi_path_uses_local_sort_lookup_window_not_utc(self):
+        night_setting = next(
+            setting for setting in self.settings.sort_settings if setting.sort_name == "night"
+        )
+        night_setting.sort_window_start_local = time(22, 15)
+        night_setting.sort_window_end_local = time(4, 30)
+        db.session.commit()
+        captured = {}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, _exc_type, _exc, _tb):
+                return False
+
+            def read(self):
+                return b'{"arrivals": [], "departures": []}'
+
+        def fake_urlopen(request, timeout):
+            captured["url"] = request.full_url
+            return FakeResponse()
+
+        previous = os.environ.get("AERODATABOX_API_KEY")
+        original_urlopen = flight_api_service.urlopen
+        os.environ["AERODATABOX_API_KEY"] = "RAPIDAPI-KEY"
+        flight_api_service.urlopen = fake_urlopen
+        try:
+            run_flight_api_import(self.gateway, self.operation)
+        finally:
+            flight_api_service.urlopen = original_urlopen
+            if previous is None:
+                os.environ.pop("AERODATABOX_API_KEY", None)
+            else:
+                os.environ["AERODATABOX_API_KEY"] = previous
+
+        parsed_url = urlparse(captured["url"])
+        self.assertIn(
+            "/flights/airports/iata/RFD/2026-06-01T22:15/2026-06-02T04:30",
+            parsed_url.path,
+        )
+        self.assertNotIn("Z", parsed_url.path)
+        self.assertNotIn("+00:00", parsed_url.path)
+        self.assertNotIn("2026-06-02T03:15", parsed_url.path)
+        self.assertNotIn("2026-06-02T09:30", parsed_url.path)
+
     def test_default_budget_preview_uses_tier_two_units_per_poll(self):
         context = sort_timeline_context(
             self.gateway,
@@ -408,6 +454,46 @@ class FlightApiImportTest(unittest.TestCase):
                     self.assertEqual(result["matched"][0]["mission"].id, mission.id)
                     self.assertEqual(len(result["review_items"]), 0)
 
+    def test_ups_provider_and_mission_padding_examples_match(self):
+        examples = (
+            ("5X673", "UPS673", "UPS0673"),
+            ("5X673", "UPS673", "0673"),
+            ("5X0673", "", "UPS673"),
+            ("", "UPS673", "5X0673"),
+        )
+
+        for provider_number, call_sign, mission_number in examples:
+            with self.subTest(
+                provider_number=provider_number,
+                call_sign=call_sign,
+                mission_number=mission_number,
+            ):
+                SortDateMission.query.delete()
+                FlightApiReviewItem.query.delete()
+                db.session.commit()
+                mission = self._mission("arrival", mission_number)
+                db.session.add(mission)
+                db.session.commit()
+
+                result = run_flight_api_import(
+                    self.gateway,
+                    self.operation,
+                    client=FakeFlightClient(
+                        {
+                            "arrivals": [
+                                self._api_flight(
+                                    number=provider_number,
+                                    call_sign=call_sign,
+                                )
+                            ]
+                        }
+                    ),
+                )
+
+                self.assertEqual(len(result["matched"]), 1)
+                self.assertEqual(result["matched"][0]["mission"].id, mission.id)
+                self.assertEqual(len(result["review_items"]), 0)
+
     def test_non_ups_same_number_does_not_match(self):
         mission = self._mission("arrival", "UPS0673")
         db.session.add(mission)
@@ -454,6 +540,56 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(len(result["matched"]), 1)
         self.assertEqual(result["matched"][0]["mission"].id, mission.id)
         self.assertEqual(len(result["review_items"]), 0)
+
+    def test_provider_flight_and_callsign_different_cores_try_both(self):
+        mission = self._mission("arrival", "UPS753")
+        db.session.add(mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "arrivals": [
+                        self._api_flight(number="5X755", call_sign="UPS753")
+                    ]
+                }
+            ),
+        )
+
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(result["matched"][0]["mission"].id, mission.id)
+        self.assertEqual(result["matched"][0]["api_flight"]["normalized_cores_tried"], ["755", "753"])
+
+    def test_ambiguous_provider_identities_stay_unmatched(self):
+        db.session.add_all(
+            [
+                self._mission("arrival", "5X755"),
+                self._mission("arrival", "UPS753"),
+            ]
+        )
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "arrivals": [
+                        self._api_flight(number="5X755", call_sign="UPS753")
+                    ]
+                }
+            ),
+        )
+
+        self.assertEqual(len(result["matched"]), 0)
+        self.assertEqual(len(result["review_items"]), 1)
+        self.assertEqual(
+            result["review_items"][0].review_reason,
+            "ambiguous provider identities",
+        )
+        self.assertEqual(result["review_items"][0].normalized_cores_tried, "755, 753")
 
     def test_ambiguous_normalized_match_stays_unmatched(self):
         db.session.add_all(
@@ -628,6 +764,44 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(result["unmatched_departures_count"], 0)
         self.assertEqual(result["non_ups_ignored_arrivals_count"], 1)
         self.assertEqual(result["non_ups_ignored_departures_count"], 1)
+
+    def test_departures_parse_into_diagnostics_for_matched_and_unmatched(self):
+        departure_mission = self._mission("departure", "UPS0456")
+        db.session.add(departure_mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "departures": [
+                        self._api_flight(
+                            mission_type="departure",
+                            number="5X456",
+                            call_sign="UPS456",
+                            origin="RFD",
+                            destination="SDF",
+                        ),
+                        self._api_flight(
+                            mission_type="departure",
+                            number="5X999",
+                            call_sign="UPS999",
+                            origin="RFD",
+                            destination="ONT",
+                        ),
+                    ]
+                }
+            ),
+        )
+
+        self.assertEqual(result["raw_departures_count"], 2)
+        self.assertEqual(result["ups_departures_count"], 2)
+        self.assertEqual(result["matched_departures_count"], 1)
+        self.assertEqual(result["unmatched_departures_count"], 1)
+        self.assertEqual(result["non_ups_ignored_departures_count"], 0)
+        self.assertEqual(result["review_items"][0].mission_type, "departure")
+        self.assertEqual(result["review_items"][0].review_reason, "no matching mission")
 
     def test_empty_provider_response_is_safe(self):
         result = run_flight_api_import(
@@ -1244,6 +1418,9 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"UNMATCHED DEPARTURES", response.data)
         self.assertIn(b"NON-UPS IGNORED ARRIVALS", response.data)
         self.assertIn(b"NON-UPS IGNORED DEPARTURES", response.data)
+        self.assertIn(b"CORES TRIED", response.data)
+        self.assertIn(b"999", response.data)
+        self.assertIn(b"no matching mission", response.data)
         self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
 
     def test_flight_api_review_page_link_visible_for_view_permission(self):

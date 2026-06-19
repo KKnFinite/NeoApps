@@ -53,6 +53,7 @@
                 <tr>
                     <th>TYPE</th>
                     <th>FLIGHT / CALLSIGN</th>
+                    <th>CORES TRIED</th>
                     <th>ORIGIN / DEST</th>
                     <th>ETA / STD</th>
                     <th>TAIL</th>
@@ -71,6 +72,7 @@
                         <br>
                         <span class="muted">{{ item.call_sign or "-" }}</span>
                     </td>
+                    <td>{{ item.normalized_cores_tried|default("-", true) }}</td>
                     <td>{{ item.origin or "-" }} / {{ item.destination or "-" }}</td>
                     <td>{{ dt(item.revised_time_utc) }} UTC</td>
                     <td>{{ item.tail_number or "-" }}</td>
@@ -94,7 +96,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="9">NO UNMATCHED UPS FLIGHTS ARE PENDING REVIEW.</td>
+                    <td colspan="10">NO UNMATCHED UPS FLIGHTS ARE PENDING REVIEW.</td>
                 </tr>
                 {% endfor %}
             </tbody>
