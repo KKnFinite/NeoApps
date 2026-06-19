@@ -132,6 +132,14 @@
             <strong>{{ "YES" if import_result.api_key_present else "NO" }}</strong>
         </article>
         <article class="status-card">
+            <span>USER-AGENT SENT</span>
+            <strong>{{ "YES" if import_result.user_agent_sent else "NO" }}</strong>
+        </article>
+        <article class="status-card">
+            <span>ACCEPT HEADER SENT</span>
+            <strong>{{ "YES" if import_result.accept_header_sent else "NO" }}</strong>
+        </article>
+        <article class="status-card">
             <span>API KEY NORMALIZED</span>
             <strong>{{ "YES" if import_result.api_key_normalized else "NO" }}</strong>
         </article>

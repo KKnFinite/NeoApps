@@ -29,7 +29,9 @@ from app.services.flight_api import (
     API_STATUS_SCHEDULED,
     FlightApiConfigurationError,
     FlightApiProviderError,
+    RAPIDAPI_ACCEPT,
     RAPIDAPI_QUERY_PARAMS,
+    RAPIDAPI_USER_AGENT,
     RapidApiFlightClient,
     accept_review_item,
     ignore_review_item,
@@ -176,6 +178,8 @@ class FlightApiImportTest(unittest.TestCase):
             parsed_url.path,
         )
         self.assertEqual(query_params, list(RAPIDAPI_QUERY_PARAMS))
+        self.assertEqual(captured["headers"]["user-agent"], RAPIDAPI_USER_AGENT)
+        self.assertEqual(captured["headers"]["accept"], RAPIDAPI_ACCEPT)
         self.assertEqual(captured["headers"]["x-rapidapi-key"], "RAPIDAPI-KEY")
         self.assertEqual(captured["headers"]["x-rapidapi-host"], "aerodatabox.p.rapidapi.com")
         self.assertEqual(captured["timeout"], 20)
@@ -209,9 +213,13 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(error.diagnostics["provider_status_code"], 403)
         self.assertEqual(error.diagnostics["request_host"], "aerodatabox.p.rapidapi.com")
         self.assertIn("/flights/airports/iata/RFD/", error.diagnostics["request_path_query"])
+        self.assertTrue(error.diagnostics["user_agent_sent"])
+        self.assertTrue(error.diagnostics["accept_header_sent"])
         self.assertTrue(error.diagnostics["api_key_present"])
         self.assertNotIn("SUPER-SECRET-RAPIDAPI-KEY", str(error))
         self.assertNotIn("SUPER-SECRET-RAPIDAPI-KEY", str(error.diagnostics))
+        self.assertEqual(captured["headers"]["user-agent"], RAPIDAPI_USER_AGENT)
+        self.assertEqual(captured["headers"]["accept"], RAPIDAPI_ACCEPT)
         self.assertEqual(captured["headers"]["x-rapidapi-key"], "SUPER-SECRET-RAPIDAPI-KEY")
 
     def test_rapidapi_client_strips_key_whitespace_before_sending(self):
@@ -246,6 +254,8 @@ class FlightApiImportTest(unittest.TestCase):
             flight_api_service.urlopen = original_urlopen
 
         self.assertEqual(captured["headers"]["x-rapidapi-key"], "RAPIDAPI-KEY")
+        self.assertEqual(captured["headers"]["user-agent"], RAPIDAPI_USER_AGENT)
+        self.assertEqual(captured["headers"]["accept"], RAPIDAPI_ACCEPT)
 
     def test_rapidapi_client_reports_normalized_and_quoted_key_safely(self):
         def fake_urlopen(request, timeout):
@@ -842,8 +852,8 @@ class FlightApiTestPageTest(unittest.TestCase):
 
         def fake_urlopen(request, timeout):
             body = BytesIO(
-                b'{"message":"invalid subscription",'
-                b'"X-RapidAPI-Key":"SUPER-SECRET-RAPIDAPI-KEY"}'
+                b"error code: 1010; "
+                b"X-RapidAPI-Key=SUPER-SECRET-RAPIDAPI-KEY"
             )
             raise HTTPError(request.full_url, 403, "Forbidden", hdrs=None, fp=body)
 
@@ -874,10 +884,12 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"/flights/airports/iata/RFD/", response.data)
         self.assertIn(b"API KEY PRESENT", response.data)
         self.assertIn(b"YES", response.data)
+        self.assertIn(b"USER-AGENT SENT", response.data)
+        self.assertIn(b"ACCEPT HEADER SENT", response.data)
         self.assertIn(b"API KEY NORMALIZED", response.data)
         self.assertIn(b"API KEY APPEARS QUOTED", response.data)
         self.assertIn(b"PROVIDER RESPONSE", response.data)
-        self.assertIn(b"invalid subscription", response.data)
+        self.assertIn(b"error code: 1010", response.data)
         self.assertIn(b"[redacted]", response.data)
         self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
         self.assertEqual(SortDateMission.query.count(), 0)

@@ -30,6 +30,8 @@ from app.services.sort_timeline import (
 AIRPORT_CODE = "RFD"
 DEFAULT_API_KEY_ENV_VAR = "AERODATABOX_API_KEY"
 RAPIDAPI_HOST = "aerodatabox.p.rapidapi.com"
+RAPIDAPI_USER_AGENT = "NeoGateway/1.0"
+RAPIDAPI_ACCEPT = "application/json"
 RAPIDAPI_QUERY_PARAMS = (
     ("withLeg", "true"),
     ("direction", "Both"),
@@ -104,6 +106,8 @@ def build_rapidapi_request(gateway_code, start_local, end_local, api_key):
     request = Request(
         details["url"],
         headers={
+            "User-Agent": RAPIDAPI_USER_AGENT,
+            "Accept": RAPIDAPI_ACCEPT,
             "X-RapidAPI-Key": normalized_key,
             "X-RapidAPI-Host": RAPIDAPI_HOST,
         },
@@ -112,6 +116,8 @@ def build_rapidapi_request(gateway_code, start_local, end_local, api_key):
         "provider_status_code": None,
         "request_host": details["host"],
         "request_path_query": details["path_query"],
+        "user_agent_sent": True,
+        "accept_header_sent": True,
         "provider_response_snippet": None,
         **key_diagnostics,
     }
@@ -232,6 +238,8 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
                 "provider_status_code": request_diagnostics.get("provider_status_code"),
                 "request_host": request_diagnostics.get("request_host"),
                 "request_path_query": request_diagnostics.get("request_path_query"),
+                "user_agent_sent": request_diagnostics.get("user_agent_sent"),
+                "accept_header_sent": request_diagnostics.get("accept_header_sent"),
                 "api_key_present": request_diagnostics.get(
                     "api_key_present",
                     key_diagnostics["api_key_present"],
@@ -690,6 +698,8 @@ def _safe_request_diagnostics(gateway_code, start_local, end_local, api_key):
         "provider_status_code": None,
         "request_host": details["host"],
         "request_path_query": details["path_query"],
+        "user_agent_sent": False,
+        "accept_header_sent": False,
         "provider_response_snippet": None,
         **key_diagnostics,
     }
