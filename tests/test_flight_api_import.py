@@ -352,11 +352,12 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(client.calls[0]["end_local"], datetime(2026, 6, 2, 4, 30))
 
     def test_rapidapi_path_uses_local_sort_lookup_window_not_utc(self):
+        self.operation.sort_date = date(2026, 6, 18)
         night_setting = next(
             setting for setting in self.settings.sort_settings if setting.sort_name == "night"
         )
-        night_setting.sort_window_start_local = time(22, 15)
-        night_setting.sort_window_end_local = time(4, 30)
+        night_setting.sort_window_start_local = time(22, 0)
+        night_setting.sort_window_end_local = time(4, 0)
         db.session.commit()
         captured = {}
 
@@ -389,13 +390,13 @@ class FlightApiImportTest(unittest.TestCase):
 
         parsed_url = urlparse(captured["url"])
         self.assertIn(
-            "/flights/airports/iata/RFD/2026-06-01T22:15/2026-06-02T04:30",
+            "/flights/airports/iata/RFD/2026-06-18T22:00/2026-06-19T04:00",
             parsed_url.path,
         )
         self.assertNotIn("Z", parsed_url.path)
         self.assertNotIn("+00:00", parsed_url.path)
-        self.assertNotIn("2026-06-02T03:15", parsed_url.path)
-        self.assertNotIn("2026-06-02T09:30", parsed_url.path)
+        self.assertNotIn("2026-06-19T03:00", parsed_url.path)
+        self.assertNotIn("2026-06-19T09:00", parsed_url.path)
 
     def test_default_budget_preview_uses_tier_two_units_per_poll(self):
         context = sort_timeline_context(
@@ -460,6 +461,10 @@ class FlightApiImportTest(unittest.TestCase):
             ("5X673", "UPS673", "0673"),
             ("5X0673", "", "UPS673"),
             ("", "UPS673", "5X0673"),
+            ("5X947", "UPS947", "UPS0947"),
+            ("5X909", "UPS909", "0909"),
+            ("5X853", "UPS853", "UPS0853"),
+            ("5X616", "UPS616", "UPS0616"),
         )
 
         for provider_number, call_sign, mission_number in examples:
@@ -541,7 +546,7 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(result["matched"][0]["mission"].id, mission.id)
         self.assertEqual(len(result["review_items"]), 0)
 
-    def test_provider_flight_and_callsign_different_cores_try_both(self):
+    def test_callsign_fallback_runs_when_provider_flight_has_no_match(self):
         mission = self._mission("arrival", "UPS753")
         db.session.add(mission)
         db.session.commit()
@@ -560,15 +565,12 @@ class FlightApiImportTest(unittest.TestCase):
 
         self.assertEqual(len(result["matched"]), 1)
         self.assertEqual(result["matched"][0]["mission"].id, mission.id)
-        self.assertEqual(result["matched"][0]["api_flight"]["normalized_cores_tried"], ["755", "753"])
+        self.assertEqual(result["matched"][0]["api_flight"]["normalized_cores_tried"], ["0755", "0753"])
 
-    def test_ambiguous_provider_identities_stay_unmatched(self):
-        db.session.add_all(
-            [
-                self._mission("arrival", "5X755"),
-                self._mission("arrival", "UPS753"),
-            ]
-        )
+    def test_provider_flight_number_wins_when_callsign_matches_other_mission(self):
+        provider_mission = self._mission("arrival", "0755")
+        callsign_mission = self._mission("arrival", "UPS753")
+        db.session.add_all([provider_mission, callsign_mission])
         db.session.commit()
 
         result = run_flight_api_import(
@@ -583,15 +585,33 @@ class FlightApiImportTest(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(len(result["matched"]), 0)
-        self.assertEqual(len(result["review_items"]), 1)
-        self.assertEqual(
-            result["review_items"][0].review_reason,
-            "ambiguous provider identities",
-        )
-        self.assertEqual(result["review_items"][0].normalized_cores_tried, "755, 753")
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(result["matched"][0]["mission"].id, provider_mission.id)
+        self.assertEqual(len(result["review_items"]), 0)
 
-    def test_ambiguous_normalized_match_stays_unmatched(self):
+    def test_provider_flight_number_priority_for_1075_when_callsign_differs(self):
+        provider_mission = self._mission("arrival", "1075")
+        callsign_mission = self._mission("arrival", "UPS1085")
+        db.session.add_all([provider_mission, callsign_mission])
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "arrivals": [
+                        self._api_flight(number="5X1075", call_sign="UPS1085")
+                    ]
+                }
+            ),
+        )
+
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(result["matched"][0]["mission"].id, provider_mission.id)
+        self.assertEqual(len(result["review_items"]), 0)
+
+    def test_duplicate_provider_flight_key_stays_unmatched(self):
         db.session.add_all(
             [
                 self._mission("arrival", "UPS0673"),
@@ -610,9 +630,30 @@ class FlightApiImportTest(unittest.TestCase):
 
         self.assertEqual(len(result["matched"]), 0)
         self.assertEqual(len(result["review_items"]), 1)
-        self.assertEqual(result["review_items"][0].review_reason, "ambiguous normalized match")
+        self.assertEqual(result["review_items"][0].review_reason, "ambiguous flight number match")
         pending_items = pending_review_items_for_operation(self.operation)
-        self.assertEqual(pending_items[0].review_reason, "ambiguous normalized match")
+        self.assertEqual(pending_items[0].review_reason, "ambiguous flight number match")
+
+    def test_duplicate_callsign_fallback_key_stays_unmatched(self):
+        db.session.add_all(
+            [
+                self._mission("arrival", "UPS0753"),
+                self._mission("arrival", "5X753"),
+            ]
+        )
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {"arrivals": [self._api_flight(number="", call_sign="UPS753")]}
+            ),
+        )
+
+        self.assertEqual(len(result["matched"]), 0)
+        self.assertEqual(len(result["review_items"]), 1)
+        self.assertEqual(result["review_items"][0].review_reason, "ambiguous callsign fallback")
 
     def test_unsupported_blank_ups_identity_stays_unmatched_with_reason(self):
         result = run_flight_api_import(
@@ -659,7 +700,7 @@ class FlightApiImportTest(unittest.TestCase):
             sort_name="night",
             mission_type="arrival",
             wave="1",
-            flight_number="UPS0673",
+            flight_number="UPS0947",
             origin="SDF",
             destination="RFD",
             active=True,
@@ -671,7 +712,7 @@ class FlightApiImportTest(unittest.TestCase):
         db.session.flush()
         mission = self._mission(
             "arrival",
-            "UPS0673",
+            "UPS0947",
             master_flight_schedule_id=master_row.id,
             eta_datetime_utc=datetime(2026, 6, 1, 7, 0),
         )
@@ -684,15 +725,17 @@ class FlightApiImportTest(unittest.TestCase):
             self.gateway,
             self.operation,
             client=FakeFlightClient(
-                {"arrivals": [self._api_flight(number="5X673", call_sign="UPS673")]}
+                {"arrivals": [self._api_flight(number="5X947", call_sign="UPS947")]}
             ),
         )
 
         self.assertEqual(len(result["matched"]), 1)
         db.session.refresh(master_row)
+        db.session.refresh(mission)
         self.assertEqual(MasterFlightSchedule.query.count(), 1)
         self.assertEqual(master_row.flight_number, original_master_flight)
         self.assertEqual(master_row.planned_time_local, original_master_time)
+        self.assertEqual(mission.flight_number, "UPS0947")
 
     def test_zero_padded_api_match_does_not_overwrite_manual_arrived(self):
         mission = self._mission("arrival", "UPS0673", arrival_status="arrived")

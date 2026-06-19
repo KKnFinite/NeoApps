@@ -14,7 +14,6 @@ from app.models import (
     SortDateOperation,
     SortTimelineSettings,
 )
-from app.services.flight_rules import match_api_flight_number
 from app.services.gateway_matrix import gateway_timezone
 from app.services.sort_date_operations import (
     create_default_crew_assignments_for_mission,
@@ -561,8 +560,9 @@ def is_ups_flight(api_flight):
 
 def normalize_api_flight(api_flight, operation=None, gateway=None):
     mission_type = _mission_type(api_flight)
-    flight_number = _api_flight_number(api_flight)
+    provider_flight_number = _api_declared_flight_number(api_flight)
     call_sign = _api_call_sign(api_flight)
+    flight_number = provider_flight_number or call_sign
     departure = _as_dict(api_flight.get("departure"))
     arrival = _as_dict(api_flight.get("arrival"))
     origin = _airport_code(departure.get("airport")) or (AIRPORT_CODE if mission_type == "departure" else "")
@@ -583,8 +583,9 @@ def normalize_api_flight(api_flight, operation=None, gateway=None):
         "flight_number": flight_number,
         "flight_variants": _flight_number_variants(flight_number, call_sign),
         "call_sign": call_sign,
+        "provider_flight_number": provider_flight_number,
         "normalized_cores_tried": _ups_numeric_cores_from_values(
-            flight_number,
+            provider_flight_number,
             call_sign,
         ),
         "origin": origin,
@@ -619,48 +620,25 @@ def match_api_flight_to_mission(normalized, missions):
 def match_api_flight_to_mission_with_reason(normalized, missions):
     mission_type = normalized["mission_type"]
     candidates = [mission for mission in missions if mission.mission_type == mission_type]
-    api_core_entries = _ups_numeric_core_entries(
-        ("flight_number", normalized.get("flight_number")),
-        ("call_sign", normalized.get("call_sign")),
-    )
-    api_cores = [entry["core"] for entry in api_core_entries]
-    if not api_cores:
+    provider_key = _ups_numeric_core(normalized.get("provider_flight_number"))
+    call_sign_key = _ups_numeric_core(normalized.get("call_sign"))
+
+    if not provider_key and not call_sign_key:
         return None, "unsupported/blank flight identity"
 
-    core_matches_by_id = {}
-    for api_core in api_cores:
-        core_matches = [
-            mission
-            for mission in candidates
-            if _ups_numeric_core_from_values(*_mission_flight_identity_values(mission)) == api_core
-        ]
-        if len(core_matches) > 1:
-            return None, "ambiguous normalized match"
-        if len(core_matches) == 1:
-            matched_mission = core_matches[0]
-            mission_key = _mission_match_key(matched_mission)
-            core_matches_by_id[mission_key] = matched_mission
+    if provider_key:
+        provider_matches = _missions_matching_ups_key(candidates, provider_key)
+        if len(provider_matches) > 1:
+            return None, "ambiguous flight number match"
+        if len(provider_matches) == 1:
+            return provider_matches[0], None
 
-    if len(core_matches_by_id) > 1:
-        return None, "ambiguous provider identities"
-
-    stored_numbers = [mission.flight_number for mission in candidates]
-    for variant in normalized["flight_variants"]:
-        matched_number = match_api_flight_number(variant, stored_numbers)
-        if not matched_number:
-            continue
-        for mission in candidates:
-            mission_core = _ups_numeric_core_from_values(
-                *_mission_flight_identity_values(mission)
-            )
-            if (
-                _clean_flight_number(mission.flight_number) == _clean_flight_number(matched_number)
-                and mission_core in api_cores
-            ):
-                return mission, None
-
-    if len(core_matches_by_id) == 1:
-        return next(iter(core_matches_by_id.values())), None
+    if call_sign_key:
+        call_sign_matches = _missions_matching_ups_key(candidates, call_sign_key)
+        if len(call_sign_matches) > 1:
+            return None, "ambiguous callsign fallback"
+        if len(call_sign_matches) == 1:
+            return call_sign_matches[0], None
 
     return None, "no matching mission"
 
@@ -822,10 +800,12 @@ def pending_review_items_for_operation(operation):
 
 
 def review_reason_for_item(review_item, missions):
+    raw_payload = _review_item_raw_payload(review_item)
     normalized = {
         "mission_type": review_item.mission_type,
         "flight_number": review_item.flight_number,
         "call_sign": review_item.call_sign,
+        "provider_flight_number": _api_declared_flight_number(raw_payload),
         "flight_variants": _flight_number_variants(
             review_item.flight_number,
             review_item.call_sign,
@@ -838,6 +818,14 @@ def review_reason_for_item(review_item, missions):
 def normalized_cores_display(cores):
     values = [str(core) for core in (cores or []) if core is not None and str(core)]
     return ", ".join(values) if values else "-"
+
+
+def _review_item_raw_payload(review_item):
+    try:
+        payload = json.loads(review_item.raw_payload or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def review_item_or_404(gateway, review_item_id):
@@ -946,7 +934,7 @@ def _mission_type(api_flight):
     return "arrival"
 
 
-def _api_flight_number(api_flight):
+def _api_declared_flight_number(api_flight):
     flight = _as_dict(api_flight.get("flight"))
     number = (
         api_flight.get("number")
@@ -959,8 +947,7 @@ def _api_flight_number(api_flight):
         or flight.get("iata")
         or flight.get("icao")
     )
-    call_sign = _api_call_sign(api_flight)
-    return _clean_flight_number(number or call_sign)
+    return _clean_flight_number(number)
 
 
 def _api_call_sign(api_flight):
@@ -1009,16 +996,12 @@ def _ups_numeric_core_from_values(*values):
     return cores[0] if cores else None
 
 
-def _ups_numeric_core_entries(*named_values):
-    entries = []
-    seen_cores = set()
-    for source, value in named_values:
-        core = _ups_numeric_core(value)
-        if not core or core in seen_cores:
-            continue
-        entries.append({"source": source, "value": _clean_flight_number(value), "core": core})
-        seen_cores.add(core)
-    return entries
+def _missions_matching_ups_key(missions, match_key):
+    return [
+        mission
+        for mission in missions
+        if _ups_numeric_core_from_values(*_mission_flight_identity_values(mission)) == match_key
+    ]
 
 
 def _ups_numeric_cores_from_values(*values):
@@ -1034,19 +1017,18 @@ def _ups_numeric_core(value):
     cleaned = _clean_flight_number(value)
     if not cleaned:
         return None
-    match = re.fullmatch(r"(?:UPS|5X)?0*(\d+)", cleaned)
-    if not match:
+    if cleaned.startswith("UPS"):
+        cleaned = cleaned[3:]
+    elif cleaned.startswith("5X"):
+        cleaned = cleaned[2:]
+    digits = "".join(re.findall(r"\d", cleaned))
+    if not digits:
         return None
-    core = match.group(1).lstrip("0")
-    return core or "0"
+    return str(int(digits)).zfill(4)
 
 
 def _mission_flight_identity_values(mission):
     return [getattr(mission, "flight_number", None)]
-
-
-def _mission_match_key(mission):
-    return mission.id if mission.id is not None else id(mission)
 
 
 def _review_key(mission_type, flight_number, call_sign, origin, destination):
