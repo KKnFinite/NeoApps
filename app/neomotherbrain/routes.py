@@ -65,6 +65,15 @@ from app.services.gateway_matrix import (
 )
 from app.services.night_sorting import master_schedule_sort_key, mission_board_sort_key
 from app.services.permission_rules import permission_access, user_can
+from app.services.parking_plan import (
+    ParkingLaneOccupied,
+    ParkingPlanError,
+    assign_tail_to_lane,
+    current_active_sort_operation,
+    parking_plan_context,
+    set_tail_hot,
+    unassign_tail,
+)
 from app.services.sort_timeline import (
     DAY_OPTIONS as TIMELINE_DAY_OPTIONS,
     SORT_OPTIONS as TIMELINE_SORT_OPTIONS,
@@ -472,6 +481,119 @@ def ignore_flight_api_review_item(review_item_id):
             operation_id=review_item.sort_date_operation_id,
         )
     )
+
+
+@bp.route("/motherbrain/parking-plan")
+@gateway_node_required("motherbrain")
+def parking_plan():
+    gateway = get_current_gateway()
+    context = parking_plan_context(gateway)
+    return render_template(
+        "neomotherbrain/parking_plan.html",
+        gateway=gateway,
+        **context,
+        **_flight_api_auto_poll_timer_context(gateway, operation=context["operation"]),
+    )
+
+
+@bp.route("/motherbrain/parking-plan/assign", methods=["POST"])
+@gateway_node_required("motherbrain")
+def assign_parking_plan_tail():
+    gateway = get_current_gateway()
+    operation = current_active_sort_operation(gateway)
+    if not operation:
+        return _parking_plan_response(False, "No current sort operation.", status=400)
+
+    try:
+        assignment = assign_tail_to_lane(
+            operation,
+            request.form.get("tail_number"),
+            request.form.get("ramp_code"),
+            request.form.get("position_code"),
+            request.form.get("lane_number"),
+            user=current_user,
+            replace_occupied=request.form.get("replace_occupied") == "1",
+            is_hot=_truthy_form_value(request.form.get("is_hot"))
+            if "is_hot" in request.form
+            else None,
+            note=request.form.get("note") if "note" in request.form else None,
+        )
+        db.session.commit()
+    except ParkingLaneOccupied as error:
+        db.session.rollback()
+        return _parking_plan_response(
+            False,
+            str(error),
+            status=409,
+            payload={"occupied_tail": error.occupied_tail},
+        )
+    except ParkingPlanError as error:
+        db.session.rollback()
+        return _parking_plan_response(False, str(error), status=400)
+
+    return _parking_plan_response(
+        True,
+        f"{assignment.tail_number} assigned to {assignment.position_code}-{assignment.lane_number}.",
+    )
+
+
+@bp.route("/motherbrain/parking-plan/unassign", methods=["POST"])
+@gateway_node_required("motherbrain")
+def unassign_parking_plan_tail():
+    gateway = get_current_gateway()
+    operation = current_active_sort_operation(gateway)
+    if not operation:
+        return _parking_plan_response(False, "No current sort operation.", status=400)
+
+    tail_number = request.form.get("tail_number")
+    unassign_tail(operation, tail_number, user=current_user)
+    db.session.commit()
+    return _parking_plan_response(True, f"{str(tail_number or '').strip().upper()} unassigned.")
+
+
+@bp.route("/motherbrain/parking-plan/hot", methods=["POST"])
+@gateway_node_required("motherbrain")
+def update_parking_plan_hot():
+    gateway = get_current_gateway()
+    operation = current_active_sort_operation(gateway)
+    if not operation:
+        return _parking_plan_response(False, "No current sort operation.", status=400)
+
+    try:
+        assignment = set_tail_hot(
+            operation,
+            request.form.get("tail_number"),
+            _truthy_form_value(request.form.get("is_hot")),
+            user=current_user,
+        )
+        db.session.commit()
+    except ParkingPlanError as error:
+        db.session.rollback()
+        return _parking_plan_response(False, str(error), status=400)
+
+    state = "HOT" if assignment.is_hot else "not HOT"
+    return _parking_plan_response(True, f"{assignment.tail_number} marked {state}.")
+
+
+def _parking_plan_response(success, message, status=200, payload=None):
+    payload = dict(payload or {})
+    payload.update({"ok": bool(success), "message": message})
+    if _wants_json_response():
+        return jsonify(payload), status
+
+    flash(message, "info" if success else "error")
+    return redirect(url_for("neomotherbrain.parking_plan"))
+
+
+def _wants_json_response():
+    return (
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or request.accept_mimetypes.best == "application/json"
+    )
+
+
+def _truthy_form_value(value):
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on", "hot"}
 
 
 def _flight_api_auto_poll_payload(

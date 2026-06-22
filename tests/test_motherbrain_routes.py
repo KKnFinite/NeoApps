@@ -17,6 +17,7 @@ from app.models import (
     SortDateCrewAssignment,
     SortDateMission,
     SortDateOperation,
+    SortDateParkingAssignment,
     SortDateTailState,
     User,
 )
@@ -3400,6 +3401,371 @@ class MotherBrainRoutesTest(unittest.TestCase):
             self._add_matrix_cell(day, sort_name, gateway=gateway)
             for day in days
         ]
+
+    def test_parking_plan_renders_for_current_active_sort(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        response = self.client.get("/motherbrain/parking-plan")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"PARKING PLAN", response.data)
+        self.assertIn(b"TAIL CHECKLIST", response.data)
+        self.assertIn(b"N457UP", response.data)
+        self.assertIn(b"R01", response.data)
+        self.assertIn(b"A01", response.data)
+        self.assertIn(b"E10", response.data)
+        self.assertEqual(response.data.count(b"data-lane-number"), 108)
+        self.assertIn(b"data-parking-tail", response.data)
+        self.assertIn(b"parking-mobile-assignment", response.data)
+        self.assertIn(b'href="/motherbrain/parking-plan"', response.data)
+
+    def test_motherbrain_dashboard_and_menu_link_to_parking_plan(self):
+        response = self.client.get("/motherbrain")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('href="/motherbrain/parking-plan"', html)
+        self.assertIn("PARKING PLAN", html)
+        dashboard_html = html.split('class="motherbrain-dashboard-grid"', 1)[1]
+        self.assertLess(dashboard_html.index("MANAGE SORT"), dashboard_html.index("PARKING PLAN"))
+
+    def test_parking_plan_overnight_active_sort_after_midnight(self):
+        operation = self._parking_operation(now=datetime(2026, 6, 19, 0, 30))
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        response = self.client.get("/motherbrain/parking-plan")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"NIGHT SORT DATE 2026-06-18", response.data)
+        self.assertIn(b"N457UP", response.data)
+
+    def test_parking_plan_shows_no_current_sort_state(self):
+        response = self.client.get("/motherbrain/parking-plan")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"NO CURRENT SORT OPERATION", response.data)
+        self.assertNotIn(b"data-lane-number", response.data)
+
+    def test_parking_assignment_is_current_sort_only_and_does_not_touch_master_schedule(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP")
+        master = MasterFlightSchedule(
+            gateway_id=self.rfd_gateway.id,
+            gateway_code="RFD",
+            sort_name="night",
+            mission_type="departure",
+            flight_number="UPS9999",
+            origin="RFD",
+            destination="LAX",
+            active_days='["thursday"]',
+            planned_time_local=time(1, 20),
+            timezone="America/Chicago",
+            active=True,
+        )
+        db.session.add(master)
+        db.session.commit()
+
+        response = self.client.post(
+            "/motherbrain/parking-plan/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        assignment = SortDateParkingAssignment.query.one()
+        self.assertEqual(assignment.sort_date_operation_id, operation.id)
+        self.assertEqual(assignment.position_code, "A01")
+        self.assertEqual(MasterFlightSchedule.query.count(), 1)
+        self.assertEqual(db.session.get(MasterFlightSchedule, master.id).destination, "LAX")
+
+    def test_tail_can_only_be_assigned_once_and_moves_lanes(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP")
+        db.session.commit()
+
+        self.client.post(
+            "/motherbrain/parking-plan/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+        self.client.post(
+            "/motherbrain/parking-plan/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "B",
+                "position_code": "B02",
+                "lane_number": "2",
+            },
+        )
+
+        assignments = SortDateParkingAssignment.query.all()
+        self.assertEqual(len(assignments), 1)
+        self.assertEqual(assignments[0].position_code, "B02")
+        self.assertEqual(assignments[0].lane_number, 2)
+
+    def test_occupied_lane_requires_confirmation_and_replaces_previous_tail(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="ONT")
+        self._parking_pair(operation, "N349UP", destination="LAX")
+        db.session.commit()
+
+        self.client.post(
+            "/motherbrain/parking-plan/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+        conflict = self.client.post(
+            "/motherbrain/parking-plan/assign",
+            data={
+                "tail_number": "N349UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+        replaced = self.client.post(
+            "/motherbrain/parking-plan/assign",
+            data={
+                "tail_number": "N349UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+                "replace_occupied": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(conflict.status_code, 409)
+        self.assertEqual(conflict.get_json()["occupied_tail"], "N457UP")
+        self.assertEqual(replaced.status_code, 200)
+        previous = SortDateParkingAssignment.query.filter_by(tail_number="N457UP").one()
+        current = SortDateParkingAssignment.query.filter_by(tail_number="N349UP").one()
+        self.assertIsNone(previous.position_code)
+        self.assertEqual(current.position_code, "A01")
+        self.assertEqual(current.lane_number, 1)
+
+    def test_unassign_and_hot_mark_unmark_work(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP")
+        db.session.commit()
+
+        self.client.post(
+            "/motherbrain/parking-plan/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+        self.client.post(
+            "/motherbrain/parking-plan/hot",
+            data={"tail_number": "N457UP", "is_hot": "1"},
+        )
+        assignment = SortDateParkingAssignment.query.filter_by(tail_number="N457UP").one()
+        self.assertTrue(assignment.is_hot)
+
+        self.client.post(
+            "/motherbrain/parking-plan/unassign",
+            data={"tail_number": "N457UP"},
+        )
+        self.client.post(
+            "/motherbrain/parking-plan/hot",
+            data={"tail_number": "N457UP", "is_hot": "0"},
+        )
+        assignment = SortDateParkingAssignment.query.filter_by(tail_number="N457UP").one()
+        self.assertIsNone(assignment.position_code)
+        self.assertFalse(assignment.is_hot)
+
+    def test_arrival_time_uses_sta_then_api_eta_with_taxi_offset(self):
+        operation = self._parking_operation()
+        arrival, _departure = self._parking_pair(
+            operation,
+            "N457UP",
+            arrival_local=datetime(2026, 6, 18, 23, 50),
+            departure_local=datetime(2026, 6, 19, 1, 0),
+        )
+        db.session.commit()
+
+        planned_response = self.client.get("/motherbrain/parking-plan")
+        self.assertIn(b"ONT 00:00", planned_response.data)
+
+        arrival.eta_datetime_utc = datetime(2026, 6, 19, 5, 5)
+        db.session.commit()
+        api_response = self.client.get("/motherbrain/parking-plan")
+
+        self.assertIn(b"ONT 00:15", api_response.data)
+        self.assertNotIn(b"05:15", api_response.data)
+
+    def test_arrival_time_uses_api_block_in_without_double_taxi_offset(self):
+        operation = self._parking_operation()
+        arrival, _departure = self._parking_pair(
+            operation,
+            "N457UP",
+            arrival_local=datetime(2026, 6, 18, 23, 50),
+            departure_local=datetime(2026, 6, 19, 1, 0),
+        )
+        arrival.api_assumed_arrived_time_utc = datetime(2026, 6, 19, 5, 12)
+        db.session.commit()
+
+        response = self.client.get("/motherbrain/parking-plan")
+
+        self.assertIn(b"ONT 00:12", response.data)
+        self.assertNotIn(b"ONT 00:22", response.data)
+
+    def test_ground_time_across_midnight_and_quick_turn_thresholds(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N457UP",
+            arrival_local=datetime(2026, 6, 18, 23, 50),
+            departure_local=datetime(2026, 6, 19, 0, 40),
+            aircraft_type="757",
+        )
+        self._parking_pair(
+            operation,
+            "N447UP",
+            arrival_local=datetime(2026, 6, 18, 23, 50),
+            departure_local=datetime(2026, 6, 19, 0, 50),
+            aircraft_type="757",
+            destination="SDF",
+        )
+        self._parking_pair(
+            operation,
+            "N171UP",
+            arrival_local=datetime(2026, 6, 18, 23, 50),
+            departure_local=datetime(2026, 6, 19, 1, 15),
+            aircraft_type="A300",
+            destination="EWR",
+        )
+        db.session.commit()
+
+        response = self.client.get("/motherbrain/parking-plan")
+        html = response.data.decode()
+
+        self.assertIn("GT 0:40", html)
+        self.assertIn("GT 0:50", html)
+        self.assertIn("GT 1:15", html)
+        self.assertIn("N457UP", html)
+        self.assertIn("N171UP", html)
+        self.assertIn("QT", html)
+        n447_section = html.split("<strong>N447UP</strong>", 1)[1].split("</article>", 1)[0]
+        self.assertNotIn("QT", n447_section)
+
+    def test_per_ramp_departure_order_is_calculated_by_ramp(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N457UP",
+            departure_local=datetime(2026, 6, 19, 1, 20),
+            destination="ONT",
+        )
+        self._parking_pair(
+            operation,
+            "N349UP",
+            departure_local=datetime(2026, 6, 19, 0, 55),
+            destination="LAX",
+        )
+        self._parking_pair(
+            operation,
+            "N171UP",
+            departure_local=datetime(2026, 6, 19, 0, 50),
+            destination="EWR",
+        )
+        db.session.commit()
+        self.client.post(
+            "/motherbrain/parking-plan/assign",
+            data={"tail_number": "N457UP", "ramp_code": "A", "position_code": "A01", "lane_number": "1"},
+        )
+        self.client.post(
+            "/motherbrain/parking-plan/assign",
+            data={"tail_number": "N349UP", "ramp_code": "A", "position_code": "A02", "lane_number": "1"},
+        )
+        self.client.post(
+            "/motherbrain/parking-plan/assign",
+            data={"tail_number": "N171UP", "ramp_code": "B", "position_code": "B01", "lane_number": "1"},
+        )
+
+        response = self.client.get("/motherbrain/parking-plan")
+        html = response.data.decode()
+        n349_card = html.split('data-occupied-tail="N349UP"', 1)[1].split("</article>", 1)[0]
+        n457_card = html.split('data-occupied-tail="N457UP"', 1)[1].split("</article>", 1)[0]
+        n171_card = html.split('data-occupied-tail="N171UP"', 1)[1].split("</article>", 1)[0]
+
+        self.assertIn('class="parking-order">1</span>', n349_card)
+        self.assertIn('class="parking-order">2</span>', n457_card)
+        self.assertIn('class="parking-order">1</span>', n171_card)
+
+    def _parking_operation(self, now=None):
+        now = now or datetime(2026, 6, 18, 23, 30)
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = now
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        settings = ensure_sort_timeline_settings(self.rfd_gateway)
+        settings.taxi_to_ramp_minutes = 10
+        operation = self._operation(sort_date=date(2026, 6, 18))
+        db.session.add(operation)
+        db.session.flush()
+        return operation
+
+    def _parking_pair(
+        self,
+        operation,
+        tail_number,
+        arrival_local=None,
+        departure_local=None,
+        origin="ONT",
+        destination="LAX",
+        aircraft_type="757",
+    ):
+        arrival_local = arrival_local or datetime(2026, 6, 18, 23, 50)
+        departure_local = departure_local or datetime(2026, 6, 19, 1, 0)
+        arrival = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number=f"ARR{tail_number[-4:-2]}",
+            origin=origin,
+            destination="RFD",
+            assigned_tail_number=tail_number,
+            planned_datetime_local=arrival_local,
+            planned_datetime_utc=arrival_local.replace(tzinfo=timezone.utc).replace(tzinfo=None),
+        )
+        departure = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number=f"DEP{tail_number[-4:-2]}",
+            origin="RFD",
+            destination=destination,
+            assigned_tail_number=tail_number,
+            planned_datetime_local=departure_local,
+            planned_datetime_utc=departure_local.replace(tzinfo=timezone.utc).replace(tzinfo=None),
+        )
+        state = SortDateTailState(
+            sort_date=operation.sort_date,
+            gateway_code=operation.gateway_code,
+            sort_name=operation.sort_name,
+            tail_number=tail_number,
+            aircraft_type=aircraft_type,
+            aircraft_type_source="manual",
+        )
+        db.session.add_all([arrival, departure, state])
+        return arrival, departure
 
     def _master_schedule_form_data(self, **overrides):
         values = {

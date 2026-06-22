@@ -34,6 +34,7 @@
             <p>SORT DATE {{ selected_operation.sort_date }}. {{ selected_operation.missions|length }} MISSION(S), {{ selected_operation.window_minutes }} MINUTE WINDOW.</p>
             <div class="action-row">
                 <a class="action-button" href="{{ url_for('neomotherbrain.operation_detail', operation_id=selected_operation.id) }}">OPEN SORT OPERATION</a>
+                <a class="action-button" href="{{ url_for('neomotherbrain.parking_plan') }}">PARKING PLAN</a>
                 <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=selected_operation.id) }}">ADD SPECIAL FLIGHT</a>
                 <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.arrival_board', operation_id=selected_operation.id) }}">ARRIVAL BOARD</a>
                 <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.departure_board', operation_id=selected_operation.id) }}">DEPARTURE BOARD</a>

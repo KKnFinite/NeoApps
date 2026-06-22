@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+
+{% block title %}Parking Plan | NeoApps{% endblock %}
+
+{% macro tail_badges(row) %}
+    {% if row.quick_turn %}<span class="parking-badge parking-badge-qt">QT</span>{% endif %}
+    {% if row.is_hot %}<span class="parking-badge parking-badge-hot">HOT</span>{% endif %}
+{% endmacro %}
+
+{% macro tail_card(row) %}
+<article
+    class="parking-tail-card{% if row.quick_turn %} is-quick-turn{% endif %}{% if row.is_hot %} is-hot{% endif %}"
+    draggable="true"
+    data-parking-tail
+    data-tail-number="{{ row.tail }}"
+>
+    <div class="parking-tail-line">
+        <span>{{ row.arrival_origin }} {{ row.arrival_time }}</span>
+        {% if row.ground_time %}<small>{{ row.ground_time }}</small>{% endif %}
+    </div>
+    <div class="parking-tail-main">
+        <strong>{{ row.tail }}</strong>
+        <span class="parking-tail-badges">{{ tail_badges(row) }}</span>
+        {% if row.departure_order %}<span class="parking-order">{{ row.departure_order }}</span>{% endif %}
+    </div>
+    <div class="parking-tail-line">
+        <span>{{ row.departure_destination }} {{ row.departure_time }}</span>
+        <small>{{ row.aircraft_type or "-" }}</small>
+    </div>
+</article>
+{% endmacro %}
+
+{% block content %}
+<section class="parking-plan-page" data-parking-plan data-assign-url="{{ url_for('neomotherbrain.assign_parking_plan_tail') }}">
+    <div class="section-heading">
+        <h1>PARKING PLAN</h1>
+        {% if operation %}
+        <p class="muted">{{ operation.gateway_code }} {{ operation.sort_name|upper }} SORT DATE {{ operation.sort_date }}</p>
+        {% else %}
+        <p class="muted">No current sort operation.</p>
+        {% endif %}
+    </div>
+
+    {% if not operation %}
+    <section class="panel parking-empty-state">
+        <h2>NO CURRENT SORT OPERATION</h2>
+        <p class="muted">Parking Plan opens when a current MotherBrain sort operation is active.</p>
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.manage_sort') }}">MANAGE SORT</a>
+    </section>
+    {% else %}
+    <section class="parking-summary-grid" aria-label="Parking plan summary">
+        <article><span>TOTAL TAILS</span><strong>{{ summary.total_tails }}</strong></article>
+        <article><span>ASSIGNED</span><strong>{{ summary.assigned_tails }}</strong></article>
+        <article><span>UNASSIGNED</span><strong>{{ summary.unassigned_tails }}</strong></article>
+        <article><span>HOT</span><strong>{{ summary.hot_count }}</strong></article>
+        <article><span>QUICK TURN</span><strong>{{ summary.quick_turn_count }}</strong></article>
+        <article><span>CONFLICTS</span><strong>{{ summary.conflict_count }}</strong></article>
+    </section>
+
+    <section class="parking-layout">
+        <aside class="parking-tail-panel" aria-label="Current sort tail checklist">
+            <div class="parking-panel-heading">
+                <h2>TAIL CHECKLIST</h2>
+                <span>{{ summary.assigned_tails }}/{{ summary.total_tails }} ASSIGNED</span>
+            </div>
+            <div class="parking-mobile-assignment" aria-label="Mobile parking assignment controls">
+                <form method="post" action="{{ url_for('neomotherbrain.assign_parking_plan_tail') }}">
+                    <label>
+                        <span>TAIL</span>
+                        <select name="tail_number" required>
+                            <option value="">SELECT TAIL</option>
+                            {% for row in tail_rows %}
+                            <option value="{{ row.tail }}">{{ row.tail }} {{ row.assigned_position or "UNASSIGNED" }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>
+                        <span>POSITION</span>
+                        <select name="position_code" required>
+                            <option value="">SELECT POSITION</option>
+                            {% for ramp_name, ramp_code, ramp_positions in positions %}
+                            {% for position in ramp_positions %}
+                            <option value="{{ position }}" data-ramp-code="{{ ramp_code }}">{{ position }}</option>
+                            {% endfor %}
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>
+                        <span>RAMP</span>
+                        <select name="ramp_code" required>
+                            <option value="">SELECT RAMP</option>
+                            {% for ramp_name, ramp_code, ramp_positions in positions %}
+                            <option value="{{ ramp_code }}">{{ ramp_name|upper }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>
+                        <span>LANE</span>
+                        <select name="lane_number" required>
+                            <option value="1">LANE 1</option>
+                            <option value="2">LANE 2</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>NOTE</span>
+                        <input type="text" name="note" maxlength="240" placeholder="OPTIONAL">
+                    </label>
+                    <label class="parking-checkbox">
+                        <input type="checkbox" name="is_hot" value="1">
+                        <span>HOT</span>
+                    </label>
+                    <button type="submit">ASSIGN TAIL</button>
+                </form>
+            </div>
+
+            <div class="parking-unassigned" aria-label="Unassigned tails">
+                <h3>UNASSIGNED</h3>
+                {% if unassigned_tail_rows %}
+                    {% for row in unassigned_tail_rows %}
+                    {{ tail_card(row) }}
+                    {% endfor %}
+                {% else %}
+                <p class="muted">All current-sort tails are assigned.</p>
+                {% endif %}
+            </div>
+
+            <div class="table-wrap parking-checklist-wrap">
+                <table class="data-table parking-checklist">
+                    <thead>
+                        <tr>
+                            <th>TAIL</th>
+                            <th>ARR</th>
+                            <th>DEP</th>
+                            <th>PARK</th>
+                            <th>GT</th>
+                            <th>FLAGS</th>
+                            <th>STATUS</th>
+                            <th>ACTIONS</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in tail_rows %}
+                        <tr>
+                            <td><strong>{{ row.tail }}</strong></td>
+                            <td>{{ row.arrival_origin }} {{ row.arrival_time }}</td>
+                            <td>{{ row.departure_destination }} {{ row.departure_time }}</td>
+                            <td>{{ row.assigned_position or "-" }}</td>
+                            <td>{{ row.ground_time }}</td>
+                            <td>{{ tail_badges(row) }}</td>
+                            <td>{{ row.status|upper }}</td>
+                            <td class="table-actions parking-action-cell">
+                                <form method="post" action="{{ url_for('neomotherbrain.update_parking_plan_hot') }}">
+                                    <input type="hidden" name="tail_number" value="{{ row.tail }}">
+                                    <input type="hidden" name="is_hot" value="{{ 0 if row.is_hot else 1 }}">
+                                    <button class="table-row-button" type="submit">{{ "CLEAR HOT" if row.is_hot else "HOT" }}</button>
+                                </form>
+                                <form method="post" action="{{ url_for('neomotherbrain.unassign_parking_plan_tail') }}">
+                                    <input type="hidden" name="tail_number" value="{{ row.tail }}">
+                                    <button class="table-row-button" type="submit">UNASSIGN</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </aside>
+
+        <section class="parking-ramp-layout" aria-label="Visual ramp parking layout">
+            {% for ramp in ramp_groups %}
+            <article class="parking-ramp-group parking-ramp-{{ ramp.code|lower }}">
+                <div class="parking-ramp-heading">
+                    <h2>{{ ramp.name|upper }}</h2>
+                    <span>{{ ramp.code }}</span>
+                </div>
+                <div class="parking-position-grid">
+                    {% for position in ramp.positions %}
+                    <section class="parking-position-card" aria-label="{{ position.code }}">
+                        <h3>{{ position.code }}</h3>
+                        <div class="parking-lanes">
+                            {% for lane in position.lanes %}
+                            <div
+                                class="parking-lane{% if lane.row %} is-occupied{% endif %}"
+                                data-parking-lane
+                                data-ramp-code="{{ ramp.code }}"
+                                data-position-code="{{ position.code }}"
+                                data-lane-number="{{ lane.number }}"
+                                data-occupied-tail="{{ lane.tail or '' }}"
+                            >
+                                <span class="parking-lane-label">LANE {{ lane.number }}</span>
+                                {% if lane.row %}
+                                    {{ tail_card(lane.row) }}
+                                {% else %}
+                                <span class="parking-empty-lane">DROP TAIL</span>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </section>
+                    {% endfor %}
+                </div>
+            </article>
+            {% endfor %}
+        </section>
+    </section>
+    {% endif %}
+</section>
+
+<script>
+(() => {
+    const page = document.querySelector("[data-parking-plan]");
+    if (!page) {
+        return;
+    }
+
+    const mobileForm = page.querySelector(".parking-mobile-assignment form");
+    if (mobileForm) {
+        const positionSelect = mobileForm.querySelector('select[name="position_code"]');
+        const rampSelect = mobileForm.querySelector('select[name="ramp_code"]');
+        positionSelect?.addEventListener("change", () => {
+            const selected = positionSelect.options[positionSelect.selectedIndex];
+            const rampCode = selected?.dataset?.rampCode;
+            if (rampCode && rampSelect) {
+                rampSelect.value = rampCode;
+            }
+        });
+    }
+
+    let draggedTail = "";
+    page.querySelectorAll("[data-parking-tail]").forEach((card) => {
+        card.addEventListener("dragstart", (event) => {
+            draggedTail = card.dataset.tailNumber || "";
+            event.dataTransfer.setData("text/plain", draggedTail);
+            event.dataTransfer.effectAllowed = "move";
+        });
+    });
+
+    page.querySelectorAll("[data-parking-lane]").forEach((lane) => {
+        lane.addEventListener("dragover", (event) => {
+            event.preventDefault();
+            lane.classList.add("is-drag-over");
+        });
+        lane.addEventListener("dragleave", () => {
+            lane.classList.remove("is-drag-over");
+        });
+        lane.addEventListener("drop", async (event) => {
+            event.preventDefault();
+            lane.classList.remove("is-drag-over");
+            const tail = event.dataTransfer.getData("text/plain") || draggedTail;
+            if (!tail) {
+                return;
+            }
+            const occupiedTail = lane.dataset.occupiedTail || "";
+            let replaceOccupied = "0";
+            if (occupiedTail && occupiedTail !== tail) {
+                const confirmed = window.confirm(`${occupiedTail} is already in ${lane.dataset.positionCode}-${lane.dataset.laneNumber}. Replace it with ${tail}?`);
+                if (!confirmed) {
+                    return;
+                }
+                replaceOccupied = "1";
+            }
+
+            const formData = new URLSearchParams();
+            formData.set("tail_number", tail);
+            formData.set("ramp_code", lane.dataset.rampCode);
+            formData.set("position_code", lane.dataset.positionCode);
+            formData.set("lane_number", lane.dataset.laneNumber);
+            formData.set("replace_occupied", replaceOccupied);
+
+            const response = await fetch(page.dataset.assignUrl, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    "Accept": "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                body: formData,
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                window.alert(payload.message || "Parking assignment failed.");
+                return;
+            }
+            window.location.reload();
+        });
+    });
+})();
+</script>
+{% endblock %}

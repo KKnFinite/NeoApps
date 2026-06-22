@@ -1,0 +1,550 @@
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from app.extensions import db
+from app.models import (
+    SortDateMission,
+    SortDateOperation,
+    SortDateParkingAssignment,
+    SortDateTailState,
+    SortTimelineSettings,
+)
+from app.services.flight_rules import derive_aircraft_type_from_tail_number
+from app.services.gateway_matrix import (
+    current_gateway_local_datetime,
+    current_operations_for_gateway,
+    gateway_timezone,
+    operation_is_active_at,
+)
+
+
+PARKING_RAMP_GROUPS = (
+    ("Remote", "R", ("R01", "R02", "R03", "R04")),
+    ("Alpha", "A", tuple(f"A{number:02d}" for number in range(1, 11))),
+    ("Bravo", "B", tuple(f"B{number:02d}" for number in range(1, 11))),
+    ("Charlie", "C", tuple(f"C{number:02d}" for number in range(1, 11))),
+    ("Delta", "D", tuple(f"D{number:02d}" for number in range(1, 11))),
+    ("Echo", "E", tuple(f"E{number:02d}" for number in range(1, 11))),
+)
+
+PARKING_LANES = (1, 2)
+QUICK_TURN_THRESHOLDS = {
+    "757": 45,
+    "A300": 75,
+    "767": 75,
+}
+
+
+class ParkingPlanError(ValueError):
+    pass
+
+
+class ParkingLaneOccupied(ParkingPlanError):
+    def __init__(self, occupied_tail):
+        self.occupied_tail = occupied_tail
+        super().__init__(f"{occupied_tail} is already assigned to that lane.")
+
+
+def parking_plan_context(gateway):
+    operation = current_active_sort_operation(gateway)
+    if not operation:
+        return {
+            "operation": None,
+            "summary": _empty_summary(),
+            "tail_rows": [],
+            "unassigned_tail_rows": [],
+            "ramp_groups": _empty_ramp_groups(),
+            "positions": PARKING_RAMP_GROUPS,
+        }
+
+    tail_rows = tail_rows_for_operation(gateway, operation)
+    assignment_by_tail = {row["tail"]: row["assignment"] for row in tail_rows}
+    _apply_departure_order(tail_rows)
+    ramp_groups = _ramp_groups_for_rows(tail_rows, assignment_by_tail)
+    unassigned = [
+        row
+        for row in tail_rows
+        if not row["assigned_position"]
+    ]
+
+    return {
+        "operation": operation,
+        "summary": _summary_for_rows(tail_rows),
+        "tail_rows": tail_rows,
+        "unassigned_tail_rows": unassigned,
+        "ramp_groups": ramp_groups,
+        "positions": PARKING_RAMP_GROUPS,
+    }
+
+
+def current_active_sort_operation(gateway):
+    local_now = current_gateway_local_datetime(gateway)
+    for operation in current_operations_for_gateway(gateway, now=local_now):
+        if operation_is_active_at(operation, local_now, gateway):
+            return operation
+    return None
+
+
+def tail_rows_for_operation(gateway, operation):
+    assignments = {
+        assignment.tail_number: assignment
+        for assignment in SortDateParkingAssignment.query.filter_by(
+            sort_date_operation_id=operation.id
+        ).all()
+    }
+    tail_states = {
+        state.tail_number.strip().upper(): state
+        for state in SortDateTailState.query.filter_by(
+            sort_date=operation.sort_date,
+            gateway_code=operation.gateway_code,
+            sort_name=operation.sort_name,
+        ).all()
+        if state.tail_number
+    }
+    grouped = {}
+    missions = (
+        SortDateMission.query.filter_by(sort_date_operation_id=operation.id)
+        .filter(SortDateMission.assigned_tail_number.isnot(None))
+        .order_by(SortDateMission.planned_datetime_utc.asc(), SortDateMission.id.asc())
+        .all()
+    )
+
+    for mission in missions:
+        tail = _normalize_tail(mission.assigned_tail_number)
+        if not tail:
+            continue
+        grouped.setdefault(tail, {"arrivals": [], "departures": []})
+        if mission.mission_type == "arrival":
+            grouped[tail]["arrivals"].append(mission)
+        elif mission.mission_type == "departure":
+            grouped[tail]["departures"].append(mission)
+
+    rows = []
+    taxi_minutes = _taxi_to_ramp_minutes(gateway)
+    timezone_name = gateway_timezone(gateway)
+    for tail, mission_group in sorted(grouped.items()):
+        arrival = _first_mission(mission_group["arrivals"])
+        departure = _first_mission(mission_group["departures"])
+        tail_state = tail_states.get(tail)
+        assignment = assignments.get(tail)
+        block_in_local, arrival_source = _operational_block_in_local(
+            arrival,
+            timezone_name,
+            taxi_minutes,
+        )
+        departure_local = _departure_local(departure)
+        ground_minutes = _ground_minutes(block_in_local, departure_local)
+        aircraft_type = _aircraft_type_for_tail(tail, arrival, departure, tail_state)
+        quick_turn = _is_quick_turn(aircraft_type, ground_minutes)
+        assigned_position = _assignment_position_label(assignment)
+
+        rows.append(
+            {
+                "tail": tail,
+                "arrival": arrival,
+                "departure": departure,
+                "arrival_origin": _mission_origin(arrival),
+                "arrival_time": _format_local_time(block_in_local),
+                "arrival_source": arrival_source,
+                "arrival_block_in_local": block_in_local,
+                "departure_destination": _mission_destination(departure),
+                "departure_time": _format_local_time(departure_local),
+                "departure_datetime_local": departure_local,
+                "ground_minutes": ground_minutes,
+                "ground_time": _format_ground_time(ground_minutes),
+                "aircraft_type": aircraft_type,
+                "quick_turn": quick_turn,
+                "assignment": assignment,
+                "assigned_position": assigned_position,
+                "is_hot": bool(assignment and assignment.is_hot),
+                "note": assignment.note if assignment else "",
+                "status": _row_status(assignment),
+                "departure_order": None,
+            }
+        )
+
+    return rows
+
+
+def assign_tail_to_lane(
+    operation,
+    tail_number,
+    ramp_code,
+    position_code,
+    lane_number,
+    user=None,
+    replace_occupied=False,
+    is_hot=None,
+    note=None,
+):
+    tail_number = _normalize_tail(tail_number)
+    ramp_code = _normalize_ramp_code(ramp_code)
+    position_code = _normalize_position_code(position_code)
+    lane_number = _normalize_lane(lane_number)
+    _validate_position(ramp_code, position_code)
+
+    if tail_number not in _current_operation_tails(operation):
+        raise ParkingPlanError(f"{tail_number or 'Tail'} is not in the current sort.")
+
+    assignment = _assignment_for_tail(operation, tail_number, create=True)
+    occupied = _assignment_for_lane(operation, ramp_code, position_code, lane_number)
+    if occupied and occupied.tail_number != tail_number:
+        if not replace_occupied:
+            raise ParkingLaneOccupied(occupied.tail_number)
+        occupied.ramp_code = None
+        occupied.position_code = None
+        occupied.lane_number = None
+        occupied.assigned_by_user_id = getattr(user, "id", None)
+        occupied.assigned_at = _utc_now()
+
+    assignment.ramp_code = ramp_code
+    assignment.position_code = position_code
+    assignment.lane_number = lane_number
+    if is_hot is not None:
+        assignment.is_hot = bool(is_hot)
+    if note is not None:
+        assignment.note = str(note or "").strip()
+    assignment.assigned_by_user_id = getattr(user, "id", None)
+    assignment.assigned_at = _utc_now()
+    db.session.flush()
+    return assignment
+
+
+def unassign_tail(operation, tail_number, user=None):
+    assignment = _assignment_for_tail(operation, tail_number)
+    if not assignment:
+        return None
+    assignment.ramp_code = None
+    assignment.position_code = None
+    assignment.lane_number = None
+    assignment.assigned_by_user_id = getattr(user, "id", None)
+    assignment.assigned_at = _utc_now()
+    db.session.flush()
+    return assignment
+
+
+def set_tail_hot(operation, tail_number, is_hot, user=None):
+    tail_number = _normalize_tail(tail_number)
+    if tail_number not in _current_operation_tails(operation):
+        raise ParkingPlanError(f"{tail_number or 'Tail'} is not in the current sort.")
+    assignment = _assignment_for_tail(operation, tail_number, create=True)
+    assignment.is_hot = bool(is_hot)
+    assignment.assigned_by_user_id = getattr(user, "id", None)
+    assignment.assigned_at = _utc_now()
+    db.session.flush()
+    return assignment
+
+
+def parking_position_options():
+    return PARKING_RAMP_GROUPS
+
+
+def _empty_ramp_groups():
+    return [
+        {
+            "name": name,
+            "code": code,
+            "positions": [
+                {
+                    "code": position,
+                    "lanes": [
+                        {"number": lane, "tail": None, "row": None}
+                        for lane in PARKING_LANES
+                    ],
+                }
+                for position in positions
+            ],
+        }
+        for name, code, positions in PARKING_RAMP_GROUPS
+    ]
+
+
+def _ramp_groups_for_rows(tail_rows, assignment_by_tail):
+    row_by_tail = {row["tail"]: row for row in tail_rows}
+    groups = _empty_ramp_groups()
+    for group in groups:
+        for position in group["positions"]:
+            for lane in position["lanes"]:
+                assignment = _assignment_for_position(
+                    assignment_by_tail.values(),
+                    group["code"],
+                    position["code"],
+                    lane["number"],
+                )
+                if not assignment:
+                    continue
+                lane["tail"] = assignment.tail_number
+                lane["row"] = row_by_tail.get(assignment.tail_number)
+    return groups
+
+
+def _assignment_for_position(assignments, ramp_code, position_code, lane_number):
+    return next(
+        (
+            assignment
+            for assignment in assignments
+            if assignment
+            and assignment.ramp_code == ramp_code
+            and assignment.position_code == position_code
+            and assignment.lane_number == lane_number
+        ),
+        None,
+    )
+
+
+def _apply_departure_order(tail_rows):
+    rows_by_ramp = {}
+    for row in tail_rows:
+        assignment = row["assignment"]
+        if not assignment or not assignment.ramp_code or not row["departure_datetime_local"]:
+            continue
+        rows_by_ramp.setdefault(assignment.ramp_code, []).append(row)
+
+    for rows in rows_by_ramp.values():
+        rows.sort(
+            key=lambda row: (
+                row["departure_datetime_local"],
+                row["tail"],
+            )
+        )
+        for index, row in enumerate(rows, start=1):
+            row["departure_order"] = index
+
+
+def _summary_for_rows(rows):
+    assigned = [row for row in rows if row["assigned_position"]]
+    hot = [row for row in rows if row["is_hot"]]
+    quick_turn = [row for row in rows if row["quick_turn"]]
+    conflicts = [row for row in rows if row["status"] == "conflict"]
+    return {
+        "total_tails": len(rows),
+        "assigned_tails": len(assigned),
+        "unassigned_tails": len(rows) - len(assigned),
+        "hot_count": len(hot),
+        "quick_turn_count": len(quick_turn),
+        "conflict_count": len(conflicts),
+    }
+
+
+def _empty_summary():
+    return {
+        "total_tails": 0,
+        "assigned_tails": 0,
+        "unassigned_tails": 0,
+        "hot_count": 0,
+        "quick_turn_count": 0,
+        "conflict_count": 0,
+    }
+
+
+def _current_operation_tails(operation):
+    if not operation:
+        return set()
+    return {
+        _normalize_tail(tail)
+        for tail, in db.session.query(SortDateMission.assigned_tail_number)
+        .filter_by(sort_date_operation_id=operation.id)
+        .filter(SortDateMission.assigned_tail_number.isnot(None))
+        .all()
+        if _normalize_tail(tail)
+    }
+
+
+def _assignment_for_tail(operation, tail_number, create=False):
+    tail_number = _normalize_tail(tail_number)
+    assignment = SortDateParkingAssignment.query.filter_by(
+        sort_date_operation_id=operation.id,
+        tail_number=tail_number,
+    ).first()
+    if not assignment and create:
+        assignment = SortDateParkingAssignment(
+            sort_date_operation_id=operation.id,
+            tail_number=tail_number,
+        )
+        db.session.add(assignment)
+    return assignment
+
+
+def _assignment_for_lane(operation, ramp_code, position_code, lane_number):
+    return SortDateParkingAssignment.query.filter_by(
+        sort_date_operation_id=operation.id,
+        ramp_code=ramp_code,
+        position_code=position_code,
+        lane_number=lane_number,
+    ).first()
+
+
+def _first_mission(missions):
+    return missions[0] if missions else None
+
+
+def _operational_block_in_local(mission, timezone_name, taxi_minutes):
+    if not mission:
+        return None, "missing"
+    if mission.api_assumed_arrived_time_utc:
+        return _utc_to_local(mission.api_assumed_arrived_time_utc, timezone_name), "api block-in"
+    if mission.actual_block_in_datetime_utc:
+        return _utc_to_local(mission.actual_block_in_datetime_utc, timezone_name), "actual block-in"
+    if mission.eta_datetime_utc:
+        return (
+            _utc_to_local(mission.eta_datetime_utc, timezone_name)
+            + timedelta(minutes=taxi_minutes),
+            "api eta + taxi",
+        )
+    if mission.planned_datetime_local:
+        return mission.planned_datetime_local + timedelta(minutes=taxi_minutes), "sta + taxi"
+    return None, "missing"
+
+
+def _departure_local(mission):
+    return mission.planned_datetime_local if mission else None
+
+
+def _ground_minutes(block_in_local, departure_local):
+    if not block_in_local or not departure_local:
+        return None
+    departure = departure_local
+    while departure < block_in_local:
+        departure += timedelta(days=1)
+    return int((departure - block_in_local).total_seconds() // 60)
+
+
+def _aircraft_type_for_tail(tail, arrival, departure, tail_state):
+    for value in (
+        getattr(departure, "api_aircraft_model", None),
+        getattr(arrival, "api_aircraft_model", None),
+        getattr(tail_state, "aircraft_type", None),
+        derive_aircraft_type_from_tail_number(tail),
+    ):
+        normalized = _normalize_aircraft_type(value)
+        if normalized:
+            return normalized
+    return ""
+
+
+def _normalize_aircraft_type(value):
+    text = str(value or "").strip().upper()
+    if not text or text == "UNKNOWN":
+        return ""
+    if "A300" in text or "A-300" in text:
+        return "A300"
+    for aircraft_type in ("747", "757", "767"):
+        if aircraft_type in text:
+            return aircraft_type
+    return text
+
+
+def _is_quick_turn(aircraft_type, ground_minutes):
+    if ground_minutes is None:
+        return False
+    threshold = QUICK_TURN_THRESHOLDS.get(_normalize_aircraft_type(aircraft_type))
+    return bool(threshold is not None and ground_minutes <= threshold)
+
+
+def _taxi_to_ramp_minutes(gateway):
+    settings = SortTimelineSettings.query.filter_by(gateway_id=gateway.id).first()
+    if not settings:
+        return 10
+    try:
+        return max(0, int(settings.taxi_to_ramp_minutes or 0))
+    except (TypeError, ValueError):
+        return 10
+
+
+def _utc_to_local(value, timezone_name):
+    if not value:
+        return None
+    if value.tzinfo:
+        value = value.astimezone(timezone.utc).replace(tzinfo=None)
+    try:
+        return value.replace(tzinfo=timezone.utc).astimezone(
+            ZoneInfo(timezone_name)
+        ).replace(tzinfo=None)
+    except ZoneInfoNotFoundError:
+        if timezone_name == "America/Chicago":
+            standard_local = value - timedelta(hours=6)
+            if _is_us_central_daylight_time(standard_local):
+                return value - timedelta(hours=5)
+        return value
+
+
+def _is_us_central_daylight_time(local_datetime):
+    year = local_datetime.year
+    dst_start = _nth_weekday_of_month(year, 3, 6, 2).replace(hour=2)
+    dst_end = _nth_weekday_of_month(year, 11, 6, 1).replace(hour=2)
+    return dst_start <= local_datetime < dst_end
+
+
+def _nth_weekday_of_month(year, month, weekday, occurrence):
+    candidate = datetime(year, month, 1)
+    days_until_weekday = (weekday - candidate.weekday()) % 7
+    return candidate + timedelta(days=days_until_weekday + (occurrence - 1) * 7)
+
+
+def _format_local_time(value):
+    if not value:
+        return "-"
+    return value.strftime("%H:%M")
+
+
+def _format_ground_time(minutes):
+    if minutes is None:
+        return "GT -"
+    hours, remainder = divmod(max(0, minutes), 60)
+    return f"GT {hours}:{remainder:02d}"
+
+
+def _mission_origin(mission):
+    return str(getattr(mission, "origin", "") or "-").strip().upper() or "-"
+
+
+def _mission_destination(mission):
+    return str(getattr(mission, "destination", "") or "-").strip().upper() or "-"
+
+
+def _assignment_position_label(assignment):
+    if not assignment or not assignment.ramp_code or not assignment.position_code:
+        return ""
+    lane = assignment.lane_number or "-"
+    return f"{assignment.position_code}-{lane}"
+
+
+def _row_status(assignment):
+    if not assignment or not assignment.ramp_code or not assignment.position_code:
+        return "unassigned"
+    return "assigned"
+
+
+def _validate_position(ramp_code, position_code):
+    positions = {
+        code: set(positions)
+        for _name, code, positions in PARKING_RAMP_GROUPS
+    }
+    if ramp_code not in positions or position_code not in positions[ramp_code]:
+        raise ParkingPlanError("Select a valid parking position.")
+
+
+def _normalize_tail(value):
+    return str(value or "").strip().upper()
+
+
+def _normalize_ramp_code(value):
+    return str(value or "").strip().upper()
+
+
+def _normalize_position_code(value):
+    return str(value or "").strip().upper()
+
+
+def _normalize_lane(value):
+    try:
+        lane = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ParkingPlanError("Select lane 1 or 2.") from exc
+    if lane not in PARKING_LANES:
+        raise ParkingPlanError("Select lane 1 or 2.")
+    return lane
+
+
+def _utc_now():
+    return datetime.utcnow()
