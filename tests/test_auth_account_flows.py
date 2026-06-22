@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from app import create_app
 from app.extensions import db
-from app.models import GatewayMembership, GatewayNodeRole, NeoNode, User, UserToken
+from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess, User, UserToken
 from app.services.access_control import (
     backfill_default_gateway_node_roles,
     ensure_default_gateway_and_nodes,
@@ -53,6 +53,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
         user = User.query.filter_by(email="newuser@example.com").first()
         membership = GatewayMembership.query.filter_by(user_id=user.id).first()
+        app_access = PortalAppAccess.query.filter_by(user_id=user.id, app_code="neogateway").first()
         token = UserToken.query.filter_by(user_id=user.id, token_type=EMAIL_VERIFICATION).first()
         raw_token = send_verification.call_args.args[1]
 
@@ -65,6 +66,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertTrue(user.check_password("AccountPass123!"))
         self.assertEqual(membership.gateway.code, "RFD")
         self.assertEqual(membership.status, "pending")
+        self.assertEqual(app_access.status, "pending")
         self.assertFalse(user_can_access_node(user, "RFD", "motherbrain"))
         self.assertEqual(GatewayNodeRole.query.count(), 0)
         self.assertEqual(send_verification.call_count, 1)
@@ -92,7 +94,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         motherbrain = self.client.get("/motherbrain", follow_redirects=False)
 
         self.assertEqual(login.status_code, 302)
-        self.assertEqual(login.location, "/access-pending")
+        self.assertEqual(login.location, "/portal")
         self.assertEqual(motherbrain.status_code, 302)
         self.assertEqual(motherbrain.location, "/access-pending")
 
@@ -135,6 +137,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
     def test_master_and_grandmaster_approve_only_after_email_verified(self):
         master = self._admin("master_admin", "master")
+        grandmaster = self._admin("grand_admin_for_approval", "grandmaster")
         unverified_user, unverified_membership = self._pending_user(
             "unverified",
             "unverified@example.com",
@@ -147,6 +150,13 @@ class AuthAccountFlowsTest(unittest.TestCase):
         )
         db.session.commit()
         self._login(master.username)
+
+        master_blocked = self.client.post(
+            f"/admin/access-requests/{verified_membership.id}/approve",
+            follow_redirects=False,
+        )
+        self.client.get("/logout")
+        self._login(grandmaster.username)
 
         blocked = self.client.post(
             f"/admin/access-requests/{unverified_membership.id}/approve",
@@ -164,11 +174,13 @@ class AuthAccountFlowsTest(unittest.TestCase):
             )
 
         self.assertEqual(blocked.status_code, 200)
+        self.assertEqual(master_blocked.status_code, 302)
+        self.assertEqual(master_blocked.location, "/portal")
         self.assertIn(b"Email not verified yet", blocked.data)
         self.assertEqual(db.session.get(GatewayMembership, unverified_membership.id).status, "pending")
         self.assertEqual(approved.status_code, 302)
         self.assertEqual(db.session.get(GatewayMembership, verified_membership.id).status, "approved")
-        self.assertEqual(verified_membership.approved_by_user_id, master.id)
+        self.assertEqual(verified_membership.approved_by_user_id, grandmaster.id)
         self.assertEqual(verified_membership.approval_notes, "Cleared by supervisor.")
         self.assertIsNotNone(verified_membership.approval_email_sent_at)
         self.assertTrue(user_can_access_node(verified_user, "RFD", "motherbrain"))
@@ -341,9 +353,8 @@ class AuthAccountFlowsTest(unittest.TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'src="/static/images/neogateway_logo3_large.png"', response.data)
-        self.assertIn(b'neogateway_logo3_small.png', response.data)
-        self.assertIn(b'neogateway_logo3_medium.png', response.data)
+        self.assertIn(b"NeoApps", response.data)
+        self.assertIn(b"PORTAL", response.data)
         self.assertIn(b'<button class="command-access-panel command-enter-button" type="submit">', response.data)
         self.assertIn(b'<label for="dashboard-email">Email</label>', response.data)
         self.assertIn(b'name="email"', response.data)
@@ -362,6 +373,10 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertIn(b'name="last_name"', response.data)
         self.assertIn(b'name="employee_id"', response.data)
         self.assertIn(b'name="email"', response.data)
+        self.assertIn(b'name="app_codes"', response.data)
+        self.assertIn(b'NeoGateway', response.data)
+        self.assertIn(b'NeoStaffing', response.data)
+        self.assertIn(b'NeoBid', response.data)
         self.assertNotIn(b'name="full_name"', response.data)
         self.assertNotIn(b'name="username"', response.data)
 
@@ -396,9 +411,69 @@ class AuthAccountFlowsTest(unittest.TestCase):
             follow_redirects=False,
         )
 
-        self.assertEqual(email_login.location, "/rfd")
-        self.assertEqual(legacy_username_login.location, "/rfd")
+        self.assertEqual(email_login.location, "/portal")
+        self.assertEqual(legacy_username_login.location, "/portal")
         self.assertEqual(employee_login.status_code, 401)
+
+    def test_portal_dashboard_shows_approved_pending_and_request_states(self):
+        user = self._user("portalstates", email="portalstates@example.com", verified=True)
+        gateway = ensure_default_gateway_and_nodes()
+        db.session.add(
+            GatewayMembership(
+                user_id=user.id,
+                gateway_id=gateway.id,
+                status="approved",
+                is_active=True,
+            )
+        )
+        db.session.add(
+            PortalAppAccess(
+                user_id=user.id,
+                app_code="neostaffing",
+                status="pending",
+                role="watcher",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+
+        self._login(user.username)
+        response = self.client.get("/portal")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"NeoGateway", response.data)
+        self.assertIn(b"APPROVED", response.data)
+        self.assertIn(b'href="/rfd"', response.data)
+        self.assertIn(b"NeoStaffing", response.data)
+        self.assertIn(b"PENDING", response.data)
+        self.assertIn(b"NeoBid", response.data)
+        self.assertIn(b"REQUEST ACCESS", response.data)
+
+    def test_grandmaster_can_approve_portal_app_access_and_assign_role(self):
+        grandmaster = self._admin("portal_grandmaster", "grandmaster")
+        target = self._user("staffingrequest", email="staffingrequest@example.com", verified=True)
+        access = PortalAppAccess(
+            user_id=target.id,
+            app_code="neostaffing",
+            status="pending",
+            role="watcher",
+            is_active=True,
+        )
+        db.session.add(access)
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        response = self.client.post(
+            f"/portal/manage/app-access/{access.id}/update",
+            data={"action": "approve", "role": "master", "notes": "Cleared."},
+            follow_redirects=False,
+        )
+
+        updated = db.session.get(PortalAppAccess, access.id)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/portal/manage")
+        self.assertEqual(updated.status, "approved")
+        self.assertEqual(updated.role, "master")
 
     def _account_form(self, **overrides):
         values = {

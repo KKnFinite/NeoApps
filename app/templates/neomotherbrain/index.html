@@ -52,8 +52,8 @@
                 <strong>GATEWAY MATRIX</strong>
             </a>
             {% if can_manage_system(current_user) %}
-            <a class="motherbrain-dashboard-card" href="{{ url_for('auth.users') }}">
-                <strong>USER MANAGEMENT</strong>
+            <a class="motherbrain-dashboard-card" href="{{ url_for('auth.portal_management') }}">
+                <strong>PORTAL MANAGEMENT</strong>
             </a>
             <a class="motherbrain-dashboard-card" href="{{ url_for('auth.permission_rules') }}">
                 <strong>PERMISSION RULES</strong>

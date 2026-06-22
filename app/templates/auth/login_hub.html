@@ -1,23 +1,15 @@
 {% extends "base.html" %}
 
 {% set public_landing = true %}
-{% set neogateway_logo_small = "images/neogateway_logo3_small.png" %}
-{% set neogateway_logo_medium = "images/neogateway_logo3_medium.png" %}
-{% set neogateway_logo_large = "images/neogateway_logo3_large.png" %}
-
-{% block title %}NeoGateway | {{ default_gateway.code }}{% endblock %}
+{% block title %}NeoApps Portal{% endblock %}
 
 {% block content %}
-<section class="motherbrain-command public-command" aria-label="NeoGateway login">
+<section class="motherbrain-command public-command" aria-label="NeoApps Portal login">
     <section class="motherbrain-core">
-        <div class="motherbrain-core-image">
-            <img
-                class="gateway-logo"
-                src="{{ url_for('static', filename=neogateway_logo_large) }}"
-                srcset="{{ url_for('static', filename=neogateway_logo_small) }} 420w, {{ url_for('static', filename=neogateway_logo_medium) }} 760w, {{ url_for('static', filename=neogateway_logo_large) }} 1200w"
-                sizes="(max-width: 760px) 86vw, 720px"
-                alt="NeoGateway"
-            />
+        <div class="portal-login-brand">
+            <span class="neo-node-name brand-inline-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Apps</span></span>
+            <strong>PORTAL</strong>
+            <p class="muted">Sign in once, then enter your approved NeoApps systems.</p>
         </div>
 
         <form class="command-login-form" method="post" action="{{ url_for('auth.login') }}">

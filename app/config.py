@@ -36,7 +36,7 @@ class Config:
         "images/neogateway_logo3_small.png",
     )
     BREVO_API_KEY = os.getenv("BREVO_API_KEY")
-    MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "NeoGateway")
+    MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "NeoApps Portal")
     MAIL_FROM_EMAIL = os.getenv(
         "MAIL_FROM_EMAIL",
         "no-reply@neogateway.khriskessler.com",

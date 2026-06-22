@@ -18,6 +18,7 @@ from app.models.neosektor_uld_on_the_way_event import NeoSektorUldOnTheWayEvent
 from app.models.neosektor_wave_state import NeoSektorWaveState
 from app.models.neo_node import NeoNode
 from app.models.permission_rule import PermissionRule
+from app.models.portal_app_access import PortalAppAccess
 from app.models.sort_date_crew_assignment import SortDateCrewAssignment
 from app.models.sort_date_mission import SortDateMission
 from app.models.sort_date_operation import SortDateOperation
@@ -44,6 +45,7 @@ __all__ = [
     "GatewaySortMatrix",
     "NeoNode",
     "PermissionRule",
+    "PortalAppAccess",
     "NeoErmacBuildingLineup",
     "NeoErmacDoorPull",
     "NeoErmacUldRequest",

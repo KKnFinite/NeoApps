@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#d95a1f">
-    <meta name="application-name" content="NeoGateway">
+    <meta name="application-name" content="NeoApps Portal">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="NeoGateway">
+    <meta name="apple-mobile-web-app-title" content="NeoApps">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>{% block title %}NeoApps{% endblock %}</title>
     <link rel="manifest" href="{{ url_for('pwa_manifest', v=config.STATIC_ASSET_VERSION) }}">
@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css', v=config.STATIC_ASSET_VERSION) }}">
 </head>
 {% set is_authenticated_app = current_user.is_authenticated and not public_landing|default(false) %}
+{% set is_portal_page = is_authenticated_app and request.blueprint == "auth" and (request.path.startswith("/portal") or request.path.startswith("/neostaffing") or request.path.startswith("/neobid")) %}
 {% set is_motherbrain_page = is_authenticated_app and request.blueprint == "neomotherbrain" and request.path.startswith("/motherbrain") %}
 {% set is_rfd_hub_page = is_authenticated_app and request.blueprint == "neomotherbrain" and request.path.rstrip("/") == "/rfd" %}
 {% set is_motherbrain_landing = is_motherbrain_page and request.path == "/motherbrain" %}
@@ -36,7 +37,7 @@
 {% set is_parking_plan_page = is_motherbrain_page and request.path.startswith("/motherbrain/parking-plan") %}
 {% set is_sort_timeline_page = is_motherbrain_page and request.path.startswith("/motherbrain/sort-timeline") %}
 {% set is_flight_api_review_page = is_motherbrain_page and request.path.startswith("/motherbrain/flight-api-review") %}
-{% set motherbrain_current_label = "PERMISSION RULES" if is_permission_management_page else ("USER MANAGEMENT" if is_user_management_page else ("FLIGHT API REVIEW" if is_flight_api_review_page else ("PARKING PLAN" if is_parking_plan_page else ("SORT TIMELINE" if is_sort_timeline_page else ("GATEWAY MATRIX" if is_gateway_matrix_page else ("MASTER SCHEDULE" if is_master_schedule_page else ("MANAGE SORT" if is_manage_sort_page else "DASHBOARD"))))))) %}
+{% set motherbrain_current_label = "PERMISSION RULES" if is_permission_management_page else ("PORTAL MANAGEMENT" if is_user_management_page else ("FLIGHT API REVIEW" if is_flight_api_review_page else ("PARKING PLAN" if is_parking_plan_page else ("SORT TIMELINE" if is_sort_timeline_page else ("GATEWAY MATRIX" if is_gateway_matrix_page else ("MASTER SCHEDULE" if is_master_schedule_page else ("MANAGE SORT" if is_manage_sort_page else "DASHBOARD"))))))) %}
 {% set is_neoermac_view_outbound_page = request.path.startswith("/neoermac/view-outbound") or request.path.startswith("/neoermac/outbound") %}
 {% set neoermac_current_label = "BUILDING LINEUP" if request.path.startswith("/neoermac/building-lineup") else ("DOOR VIEW" if request.path.startswith("/neoermac/door-view") else ("VIEW OUTBOUND" if is_neoermac_view_outbound_page else ("TUG ASSIGNMENTS" if request.path.startswith("/neoermac/tug-assignments") else "DASHBOARD"))) %}
 {% set neosektor_ballmat_side = request.args.get("side", "")|lower %}
@@ -71,13 +72,13 @@
                 <strong>{{ node_current_label }}</strong>
             </div>
             {% else %}
-            <a class="brand" href="{% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}{{ url_for('neomotherbrain.rfd_hub') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}" aria-label="{% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}NeoGateway - {{ default_gateway.code }}{% else %}NeoGateway{% endif %}">
+            <a class="brand" href="{% if is_rfd_hub_page %}{{ url_for('neomotherbrain.rfd_hub') }}{% elif current_user.is_authenticated and not public_landing|default(false) %}{{ url_for('auth.portal_dashboard') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}" aria-label="{% if is_rfd_hub_page %}NeoGateway - {{ default_gateway.code }}{% else %}NeoApps Portal{% endif %}">
                 <span>
                     <strong>
-                        {% if current_user.is_authenticated and user_has_gateway_access(current_user, default_gateway.code) and not public_landing|default(false) %}
+                        {% if is_rfd_hub_page %}
                         <span class="neo-node-name brand-inline-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span> - {{ default_gateway.code }}
                         {% else %}
-                        <span class="neo-node-name brand-inline-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span>
+                        <span class="neo-node-name brand-inline-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Apps</span></span> Portal
                         {% endif %}
                     </strong>
                     {% if not (current_user.is_authenticated and not public_landing|default(false)) %}
@@ -121,7 +122,7 @@
                     <a class="motherbrain-nav-link{% if is_master_schedule_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule') }}" {% if is_master_schedule_page %}aria-current="page"{% endif %}>MASTER SCHEDULE</a>
                     <a class="motherbrain-nav-link{% if is_gateway_matrix_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.gateway_matrix') }}" {% if is_gateway_matrix_page %}aria-current="page"{% endif %}>GATEWAY MATRIX</a>
                     {% if can_manage_system(current_user) %}
-                    <a class="motherbrain-nav-link{% if is_user_management_page %} is-active{% endif %}" href="{{ url_for('auth.users') }}" {% if is_user_management_page %}aria-current="page"{% endif %}>USER MANAGEMENT</a>
+                    <a class="motherbrain-nav-link{% if is_user_management_page %} is-active{% endif %}" href="{{ url_for('auth.portal_management') }}" {% if is_user_management_page %}aria-current="page"{% endif %}>PORTAL MANAGEMENT</a>
                     {% endif %}
                     {% endif %}
                 </nav>

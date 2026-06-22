@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Access Review | NeoGateway{% endblock %}
+{% block title %}Access Review | NeoApps Portal{% endblock %}
 
 {% block content %}
 <section class="panel compact-panel centered-command-page">
@@ -13,7 +13,7 @@
     </p>
     {% elif membership and membership.status == "pending" %}
     <p class="hero-copy">
-        Your {{ gateway.code }} access request is pending review. Operational data and NeoNode dashboards remain unavailable until approval is complete.
+        Your NeoGateway access request is pending review. Operational data and NeoNode dashboards remain unavailable until approval is complete.
     </p>
     {% elif membership and membership.status == "denied" %}
     <p class="hero-copy">
@@ -21,7 +21,7 @@
     </p>
     {% elif not membership %}
     <p class="hero-copy">
-        No {{ gateway.code }} access request is active for this account yet. Contact a supervisor or Grandmaster for access review.
+        No NeoGateway access request is active for this account yet. Return to the Portal to request access.
     </p>
     {% else %}
     <p class="hero-copy">
@@ -29,6 +29,7 @@
     </p>
     {% endif %}
     <div class="action-row">
+        <a class="action-button" href="{{ url_for('auth.portal_dashboard') }}">NeoApps Portal</a>
         <a class="action-button action-button-secondary" href="{{ url_for('auth.logout') }}">Logout</a>
     </div>
 </section>

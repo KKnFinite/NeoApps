@@ -15,14 +15,14 @@ def send_email_verification(user, token):
     return _send_transactional_email(
         to_email=user.email,
         to_name=user.display_name,
-        subject="Verify your NeoGateway account",
+        subject="Verify your NeoApps Portal account",
         html_content=(
-            "<p>Welcome to NeoGateway.</p>"
+            "<p>Welcome to NeoApps Portal.</p>"
             f'<p><a href="{verification_url}">Verify your email address</a></p>'
             "<p>This verification link will expire.</p>"
         ),
         text_content=(
-            "Welcome to NeoGateway.\n\n"
+            "Welcome to NeoApps Portal.\n\n"
             f"Verify your email address: {verification_url}\n\n"
             "This verification link will expire."
         ),
@@ -36,11 +36,11 @@ def send_access_approved(user, gateway):
         subject=f"{gateway.name} access approved",
         html_content=(
             f"<p>Your access to {gateway.name} has been approved.</p>"
-            f'<p><a href="{_absolute_url("/login")}">Log in to NeoGateway</a></p>'
+            f'<p><a href="{_absolute_url("/login")}">Log in to NeoApps Portal</a></p>'
         ),
         text_content=(
             f"Your access to {gateway.name} has been approved.\n\n"
-            f"Log in to NeoGateway: {_absolute_url('/login')}"
+            f"Log in to NeoApps Portal: {_absolute_url('/login')}"
         ),
     )
 
@@ -50,14 +50,14 @@ def send_password_reset(user, token):
     return _send_transactional_email(
         to_email=user.email,
         to_name=user.display_name,
-        subject="Reset your NeoGateway password",
+        subject="Reset your NeoApps Portal password",
         html_content=(
-            "<p>A NeoGateway password reset was requested.</p>"
+            "<p>A NeoApps Portal password reset was requested.</p>"
             f'<p><a href="{reset_url}">Reset your password</a></p>'
             "<p>This reset link will expire and can only be used once.</p>"
         ),
         text_content=(
-            "A NeoGateway password reset was requested.\n\n"
+            "A NeoApps Portal password reset was requested.\n\n"
             f"Reset your password: {reset_url}\n\n"
             "This reset link will expire and can only be used once."
         ),

@@ -73,7 +73,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
                 self.assertNotIn(b"Back to NeoMotherBrain", response.data)
                 self.assertIn(b"BACK TO", response.data)
                 self.assertNotIn(b"BACK TO NeoGateway", response.data)
-                self.assertIn(b"USER MANAGEMENT", response.data)
+                self.assertIn(b"PORTAL MANAGEMENT", response.data)
                 self.assertIn(b"GATEWAY MATRIX", response.data)
                 self.assertIn(b"MASTER SCHEDULE", response.data)
                 self.assertIn(b"MANAGE SORT", response.data)
@@ -102,7 +102,8 @@ class GrandmasterUserManagementTest(unittest.TestCase):
             with self.subTest(path=path):
                 response = self.client.get(path, follow_redirects=False)
                 self.assertEqual(response.status_code, 302)
-                self.assertEqual(response.location, "/rfd")
+                expected_location = "/rfd" if path == "/admin/permissions" else "/portal"
+                self.assertEqual(response.location, expected_location)
 
     def test_pending_users_appear_on_pending_requests_screen(self):
         grandmaster = self._admin("pending_grandmaster", "grandmaster")
@@ -167,7 +168,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertIn(b"ENTER A SEARCH TERM TO FIND A USER.", default_response.data)
         self.assertNotIn(b"Alpha User", default_response.data)
         self.assertEqual(legacy_response.status_code, 302)
-        self.assertIn("/admin/users/edit-users", legacy_response.location)
+        self.assertIn("/portal/manage/users/edit-users", legacy_response.location)
         self.assertEqual(old_route_response.status_code, 200)
         self.assertIn(b"Alpha User", old_route_response.data)
         self.assertEqual(name_response.status_code, 200)
@@ -527,7 +528,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
 
         updated = db.session.get(User, target.id)
         self.assertEqual(master_response.status_code, 302)
-        self.assertEqual(master_response.location, "/rfd")
+        self.assertEqual(master_response.location, "/portal")
         self.assertEqual(grandmaster_response.status_code, 302)
         self.assertTrue(updated.password_reset_required is False)
         self.assertTrue(updated.check_password("PermanentPassword123!"))
@@ -570,11 +571,11 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         roles_response = self.client.get("/admin/users/manage-roles")
 
         self.assertEqual(login_response.status_code, 302)
-        self.assertEqual(login_response.location, "/rfd")
+        self.assertEqual(login_response.location, "/portal")
         self.assertEqual(users_response.status_code, 200)
         self.assertIn(b"USER MANAGEMENT", users_response.data)
         self.assertEqual(roles_response.status_code, 302)
-        self.assertIn("/admin/users/edit-users", roles_response.location)
+        self.assertIn("/portal/manage/users/edit-users", roles_response.location)
 
     def test_pending_denied_and_no_membership_users_go_to_access_pending(self):
         gateway = ensure_default_gateway_and_nodes()
@@ -600,7 +601,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
                     follow_redirects=False,
                 )
                 motherbrain = self.client.get("/motherbrain", follow_redirects=False)
-                self.assertEqual(login.location, "/access-pending")
+                self.assertEqual(login.location, "/portal")
                 self.assertEqual(motherbrain.location, "/access-pending")
 
     def _role_form(self):

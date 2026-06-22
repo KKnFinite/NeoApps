@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Portal Management | NeoApps{% endblock %}
+
+{% block content %}
+<section class="panel users-panel centered-command-page">
+    <div class="section-heading">
+        <h1>PORTAL MANAGEMENT</h1>
+        <p class="muted">Manage NeoApps users and app-level access.</p>
+    </div>
+
+    <section class="user-management-stack" aria-labelledby="app-access-requests-title">
+        <div class="section-heading">
+            <h2 id="app-access-requests-title">APP ACCESS REQUESTS</h2>
+        </div>
+
+        {% if app_access_requests %}
+        <div class="table-wrap">
+            <table class="data-table wide-data-table pending-users-table">
+                <thead>
+                    <tr>
+                        <th>NAME</th>
+                        <th>APP</th>
+                        <th>EMAIL</th>
+                        <th>VERIFIED</th>
+                        <th>REQUESTED</th>
+                        <th>ACTIONS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for access in app_access_requests %}
+                    <tr>
+                        <td data-label="Name">{{ access.user.display_name }}</td>
+                        <td data-label="App">{{ access.app_code|replace("neo", "Neo") }}</td>
+                        <td data-label="Email">{{ access.user.email or "" }}</td>
+                        <td data-label="Verified">{{ "Yes" if access.user.email_verified_at else "Email not verified yet" }}</td>
+                        <td data-label="Requested">{{ access.created_at.strftime("%Y-%m-%d %H:%M") if access.created_at else "" }}</td>
+                        <td data-label="Actions">
+                            <div class="table-actions">
+                                <a href="{{ url_for('auth.user_detail', user_id=access.user.id) }}">VIEW DETAILS</a>
+                                {% if access.user.email_verified_at %}
+                                <form class="inline-button-form" method="post" action="{{ url_for('auth.update_portal_app_access', access_id=access.id) }}">
+                                    <input type="hidden" name="action" value="approve">
+                                    <select class="compact-action-input" name="role">
+                                        {% for role in role_choices %}
+                                        <option value="{{ role }}" {% if role == access.role %}selected{% endif %}>{{ role|role_label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <input class="compact-action-input" name="notes" placeholder="Approval notes">
+                                    <button type="submit">APPROVE</button>
+                                </form>
+                                {% else %}
+                                <span class="muted">Email not verified yet</span>
+                                {% endif %}
+                                <form class="inline-button-form" method="post" action="{{ url_for('auth.update_portal_app_access', access_id=access.id) }}">
+                                    <input type="hidden" name="action" value="deny">
+                                    <input class="compact-action-input" name="notes" placeholder="Denial notes">
+                                    <button type="submit">DENY</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="muted centered-empty-message">There are no pending app access requests.</p>
+        {% endif %}
+    </section>
+
+    <section class="user-management-stack" aria-labelledby="edit-users-title">
+        <div class="section-heading">
+            <h2 id="edit-users-title">USER MANAGEMENT</h2>
+            <p class="muted">Search by name, employee ID, or email to edit user profile and app access.</p>
+        </div>
+
+        {% set search_action = url_for('auth.portal_management') %}
+        {% include "auth/_user_search.html" %}
+    </section>
+
+    <div class="action-row">
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.portal_dashboard') }}">BACK TO PORTAL</a>
+    </div>
+</section>
+{% endblock %}

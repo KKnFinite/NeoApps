@@ -2,7 +2,7 @@ import unittest
 
 from app import create_app
 from app.extensions import db
-from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoNode, User
+from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess, User
 from app.models.user import ROLE_LEVELS
 from app.services.access_control import (
     DEFAULT_NEONODES,
@@ -13,6 +13,7 @@ from app.services.access_control import (
     get_user_gateway_membership,
     get_user_node_role,
     request_default_gateway_access_for_user,
+    user_has_app_access,
     user_can_access_node,
     user_has_gateway_access,
 )
@@ -113,7 +114,7 @@ class AccessControlTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.location, "/access-pending")
 
-    def test_approved_rfd_login_redirects_to_rfd_hub(self):
+    def test_approved_rfd_login_redirects_to_portal(self):
         user, _membership = self._approved_user("approved_hub_user")
         db.session.commit()
         client = self.app.test_client()
@@ -125,9 +126,9 @@ class AccessControlTest(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.location, "/rfd")
+        self.assertEqual(response.location, "/portal")
 
-    def test_blocked_users_cannot_access_rfd_or_sektor_launcher(self):
+    def test_blocked_users_land_on_portal_and_cannot_access_rfd_or_sektor_launcher(self):
         gateway = ensure_default_gateway_and_nodes()
         pending = self._user("pending_hub_user")
         denied = self._user("denied_hub_user")
@@ -157,6 +158,12 @@ class AccessControlTest(unittest.TestCase):
                 data={"username": user.username, "password": "TestPassword123!"},
                 follow_redirects=False,
             )
+            login = client.post(
+                "/login",
+                data={"username": user.username, "password": "TestPassword123!"},
+                follow_redirects=False,
+            )
+            self.assertEqual(login.location, "/portal")
 
             for path in ("/rfd", "/rfd/sektor"):
                 with self.subTest(username=user.username, path=path):
@@ -430,12 +437,58 @@ class AccessControlTest(unittest.TestCase):
 
         membership = request_default_gateway_access_for_user(user)
         db.session.commit()
+        app_access = PortalAppAccess.query.filter_by(
+            user_id=user.id,
+            app_code="neogateway",
+        ).one()
 
         self.assertEqual(membership.gateway.code, "RFD")
         self.assertEqual(membership.status, "pending")
+        self.assertEqual(app_access.status, "pending")
         self.assertTrue(membership.is_active)
+        self.assertFalse(user_has_app_access(user, "neogateway"))
         self.assertFalse(user_has_gateway_access(user, "RFD"))
         self.assertEqual(GatewayNodeRole.query.count(), 0)
+
+    def test_existing_approved_gateway_membership_backfills_neogateway_app_access(self):
+        user, membership = self._approved_user("legacy_gateway_user")
+        db.session.commit()
+
+        self.assertEqual(PortalAppAccess.query.count(), 0)
+        self.assertTrue(user_has_app_access(user, "neogateway"))
+        access = PortalAppAccess.query.filter_by(
+            user_id=user.id,
+            app_code="neogateway",
+        ).one()
+
+        self.assertEqual(access.status, "approved")
+        self.assertEqual(access.role, "watcher")
+        self.assertTrue(user_has_gateway_access(user, "RFD"))
+        self.assertIsNotNone(membership)
+
+    def test_user_without_neogateway_app_access_cannot_open_neogateway(self):
+        user, _membership = self._approved_user("denied_app_user")
+        db.session.add(
+            PortalAppAccess(
+                user_id=user.id,
+                app_code="neogateway",
+                status="denied",
+                role="watcher",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+        client = self.app.test_client()
+        client.post(
+            "/login",
+            data={"username": user.username, "password": "TestPassword123!"},
+        )
+
+        response = client.get("/rfd", follow_redirects=False)
+
+        self.assertFalse(user_has_gateway_access(user, "RFD"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/access-pending")
 
     def test_backfill_grants_admin_approved_rfd_roles_only(self):
         user = self._user("admin_user")
@@ -447,6 +500,7 @@ class AccessControlTest(unittest.TestCase):
 
         self.assertEqual(membership.gateway.code, "RFD")
         self.assertEqual(membership.status, "approved")
+        self.assertTrue(user_has_app_access(user, "neogateway"))
         self.assertTrue(user_can_access_node(user, "RFD", "motherbrain", "grandmaster"))
         self.assertFalse(user_has_gateway_access(user, "DFW"))
 

@@ -43,6 +43,39 @@
         </section>
 
         <section class="panel-subsection user-edit-section">
+            <h2>PORTAL APP ACCESS</h2>
+            {% for row in app_access_rows %}
+            {% set access = row.access %}
+            <div class="user-edit-role-field">
+                <span>{{ row.app.name }}</span>
+                <span class="role-select-wrap">
+                    <select name="app_status_{{ row.app.code }}">
+                        {% for status in ("none", "pending", "approved", "denied") %}
+                        <option value="{{ status }}" {% if (access.status if access else "none") == status %}selected{% endif %}>{{ status|status_label }}</option>
+                        {% endfor %}
+                    </select>
+                    <select name="app_role_{{ row.app.code }}">
+                        {% for role in ("watcher", "operator", "simulator", "master", "grandmaster") %}
+                        <option value="{{ role }}" {% if access and access.role == role %}selected{% endif %}>{{ role|role_label }}</option>
+                        {% endfor %}
+                    </select>
+                </span>
+                <label class="checkbox-line centered-checkbox-line">
+                    <input type="checkbox" name="app_active_{{ row.app.code }}" value="1" {% if not access or access.is_active %}checked{% endif %}>
+                    <span>ACTIVE</span>
+                </label>
+                <label>
+                    <span>NOTES</span>
+                    <input name="app_notes_{{ row.app.code }}">
+                </label>
+            </div>
+            {% endfor %}
+            {% if not target_user.email_verified_at %}
+            <p class="muted">Email not verified yet. App approval will be blocked until verification is complete.</p>
+            {% endif %}
+        </section>
+
+        <section class="panel-subsection user-edit-section">
             <h2>{{ gateway.code }} GATEWAY MEMBERSHIP</h2>
             <label>
                 <span>STATUS</span>

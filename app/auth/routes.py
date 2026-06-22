@@ -1,4 +1,5 @@
 from datetime import datetime
+from functools import wraps
 
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
@@ -8,13 +9,19 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.auth import bp
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
-from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, User
+from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, PortalAppAccess, User
 from app.models.user import ROLE_LEVELS
 from app.services import email_service
 from app.services.access_control import (
+    ensure_user_app_access,
     get_current_gateway,
     get_user_node_role,
+    portal_app_definition,
+    portal_app_definitions,
+    portal_dashboard_rows_for_user,
+    request_app_access_for_user,
     request_default_gateway_access_for_user,
+    user_has_app_access,
     user_has_gateway_access,
 )
 from app.services.permission_rules import ensure_default_permission_rules, grouped_permission_rules
@@ -39,8 +46,24 @@ ROLE_DISPLAY_LABELS = {
 }
 
 
+def portal_grandmaster_required(view_func):
+    @wraps(view_func)
+    @login_required
+    def wrapped_view(*args, **kwargs):
+        if current_user.role == "grandmaster":
+            return view_func(*args, **kwargs)
+
+        flash("Portal Management requires Grandmaster access.", "error")
+        return redirect(url_for("auth.portal_dashboard"))
+
+    return wrapped_view
+
+
 @bp.route("/login", methods=["GET", "POST"])
 def login():
+    if current_user.is_authenticated and request.method == "GET":
+        return redirect(url_for("auth.portal_dashboard"))
+
     if request.method == "POST":
         email = request.form.get("email", "").strip()
         legacy_username = request.form.get("username", "").strip()
@@ -69,11 +92,7 @@ def login():
         if user.password_reset_required:
             return redirect(url_for("auth.change_password"))
 
-        gateway = get_current_gateway()
-        if not user_has_gateway_access(user, gateway.code):
-            return redirect(url_for("auth.access_pending"))
-
-        return redirect(url_for("neomotherbrain.rfd_hub"))
+        return redirect(url_for("auth.portal_dashboard"))
 
     return render_template("auth/login.html")
 
@@ -85,6 +104,65 @@ def logout():
     return redirect(url_for("auth.login"))
 
 
+@bp.route("/portal")
+@login_required
+def portal_dashboard():
+    return render_template(
+        "auth/portal.html",
+        app_rows=portal_dashboard_rows_for_user(current_user),
+    )
+
+
+@bp.route("/portal/request-access", methods=["POST"])
+@login_required
+def request_portal_app_access():
+    app_code = request.form.get("app_code", "").strip().lower()
+    app_definition = portal_app_definition(app_code)
+    if not app_definition:
+        flash("Unsupported app access request.", "error")
+        return redirect(url_for("auth.portal_dashboard"))
+
+    try:
+        if app_code == "neogateway":
+            request_default_gateway_access_for_user(current_user)
+        else:
+            request_app_access_for_user(current_user, app_code)
+        db.session.commit()
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), "error")
+    else:
+        flash(f"{app_definition['name']} access requested.", "info")
+
+    return redirect(url_for("auth.portal_dashboard"))
+
+
+@bp.route("/neostaffing")
+@login_required
+def neostaffing_placeholder():
+    if not user_has_app_access(current_user, "neostaffing"):
+        flash("Request NeoStaffing access from the NeoApps Portal.", "error")
+        return redirect(url_for("auth.portal_dashboard"))
+    return render_template(
+        "auth/app_placeholder.html",
+        app_name="NeoStaffing",
+        app_status="Coming Soon",
+    )
+
+
+@bp.route("/neobid")
+@login_required
+def neobid_placeholder():
+    if not user_has_app_access(current_user, "neobid"):
+        flash("Request NeoBid access from the NeoApps Portal.", "error")
+        return redirect(url_for("auth.portal_dashboard"))
+    return render_template(
+        "auth/app_placeholder.html",
+        app_name="NeoBid",
+        app_status="Coming Soon",
+    )
+
+
 @bp.route("/create-account", methods=["GET", "POST"])
 def create_account():
     form = _account_form_from_request()
@@ -92,22 +170,41 @@ def create_account():
     if request.method == "POST":
         try:
             user = _build_user_from_account_form(form)
-            request_default_gateway_access_for_user(user)
+            requested_apps = _requested_portal_apps_from_form()
+            if not requested_apps:
+                raise ValueError("Select at least one NeoApps system for access.")
+            for app_code in requested_apps:
+                if app_code == "neogateway":
+                    request_default_gateway_access_for_user(user)
+                else:
+                    request_app_access_for_user(user, app_code)
             raw_token, _token_record = create_user_token(user, EMAIL_VERIFICATION)
             db.session.commit()
         except ValueError as error:
             db.session.rollback()
             flash(str(error), "error")
-            return render_template("auth/create_account.html", form=form), 400
+            return render_template(
+                "auth/create_account.html",
+                app_definitions=portal_app_definitions(),
+                form=form,
+            ), 400
         except SQLAlchemyError:
             db.session.rollback()
             flash("Account creation failed. Please try again.", "error")
-            return render_template("auth/create_account.html", form=form), 500
+            return render_template(
+                "auth/create_account.html",
+                app_definitions=portal_app_definitions(),
+                form=form,
+            ), 500
 
         email_service.send_email_verification(user, raw_token)
         return render_template("auth/account_created.html", user=user)
 
-    return render_template("auth/create_account.html", form=form)
+    return render_template(
+        "auth/create_account.html",
+        app_definitions=portal_app_definitions(),
+        form=form,
+    )
 
 
 @bp.route("/verify-email/<token>")
@@ -214,13 +311,59 @@ def change_password():
         current_user.password_reset_required = False
         db.session.commit()
         flash("Password changed.", "info")
-        return redirect(url_for("neomotherbrain.rfd_hub"))
+        return redirect(url_for("auth.portal_dashboard"))
 
     return render_template("auth/change_password.html")
 
 
+@bp.route("/portal/manage")
+@portal_grandmaster_required
+def portal_management():
+    gateway = get_current_gateway()
+    memberships = _pending_memberships_for_gateway(gateway).all()
+    app_access_requests = _pending_portal_app_accesses().all()
+    search = request.args.get("q", "").strip()
+    rows = _search_user_management_rows(gateway, search) if search else []
+    return render_template(
+        "auth/portal_management.html",
+        app_access_requests=app_access_requests,
+        app_definitions=portal_app_definitions(),
+        gateway=gateway,
+        memberships=memberships,
+        role_choices=ROLE_CHOICES,
+        rows=rows,
+        search=search,
+    )
+
+
+@bp.route("/portal/manage/app-access/<int:access_id>/update", methods=["POST"])
+@portal_grandmaster_required
+def update_portal_app_access(access_id):
+    access = PortalAppAccess.query.get_or_404(access_id)
+    action = request.form.get("action", "").strip().lower()
+    role = request.form.get("role", access.role or "watcher").strip().lower()
+    notes = request.form.get("notes", "").strip() or None
+
+    try:
+        if action == "approve":
+            _approve_portal_app_access(access, role, notes)
+            flash("App access approved.", "info")
+        elif action == "deny":
+            _deny_portal_app_access(access, notes)
+            flash("App access denied.", "info")
+        else:
+            raise ValueError("Unsupported app access action.")
+        db.session.commit()
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), "error")
+
+    return redirect(url_for("auth.portal_management"))
+
+
 @bp.route("/admin/users")
-@gateway_node_required("motherbrain", minimum_role="grandmaster")
+@bp.route("/portal/manage/users")
+@portal_grandmaster_required
 def users():
     gateway = get_current_gateway()
     memberships = _pending_memberships_for_gateway(gateway).all()
@@ -236,7 +379,8 @@ def users():
 
 
 @bp.route("/admin/users/edit-users")
-@gateway_node_required("motherbrain", minimum_role="grandmaster")
+@bp.route("/portal/manage/users/edit-users")
+@portal_grandmaster_required
 def edit_users():
     gateway = get_current_gateway()
     search = request.args.get("q", "").strip()
@@ -251,13 +395,15 @@ def edit_users():
 
 
 @bp.route("/admin/users/manage-roles")
-@gateway_node_required("motherbrain", minimum_role="grandmaster")
+@bp.route("/portal/manage/users/manage-roles")
+@portal_grandmaster_required
 def manage_roles():
     return redirect(url_for("auth.edit_users", q=request.args.get("q", "")))
 
 
 @bp.route("/admin/users/pending")
-@gateway_node_required("motherbrain", minimum_role="grandmaster")
+@bp.route("/portal/manage/users/pending")
+@portal_grandmaster_required
 def pending_users():
     gateway = get_current_gateway()
     memberships = _pending_memberships_for_gateway(gateway).all()
@@ -293,7 +439,8 @@ def permission_rules():
 
 
 @bp.route("/admin/users/<int:user_id>")
-@gateway_node_required("motherbrain", minimum_role="grandmaster")
+@bp.route("/portal/manage/users/<int:user_id>")
+@portal_grandmaster_required
 def user_detail(user_id):
     target_user = User.query.get_or_404(user_id)
     gateway = get_current_gateway()
@@ -301,6 +448,7 @@ def user_detail(user_id):
     node_rows = _node_role_rows(target_user, membership)
     return render_template(
         "auth/user_detail.html",
+        app_access_rows=_portal_app_access_rows(target_user),
         gateway=gateway,
         membership=membership,
         node_rows=node_rows,
@@ -309,7 +457,8 @@ def user_detail(user_id):
 
 
 @bp.route("/admin/users/<int:user_id>/edit", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="grandmaster")
+@bp.route("/portal/manage/users/<int:user_id>/edit", methods=["GET", "POST"])
+@portal_grandmaster_required
 def edit_user(user_id):
     target_user = User.query.get_or_404(user_id)
     gateway = get_current_gateway()
@@ -320,6 +469,8 @@ def edit_user(user_id):
         try:
             _apply_user_edit_form(target_user, form)
             membership = _apply_gateway_membership_edit_form(target_user, gateway, membership)
+            if _has_app_access_form_fields():
+                _apply_portal_app_access_form(target_user)
             if _has_node_role_form_fields():
                 if not _membership_is_approved_active(membership):
                     raise ValueError(
@@ -340,7 +491,8 @@ def edit_user(user_id):
 
 
 @bp.route("/admin/users/<int:user_id>/roles", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="grandmaster")
+@bp.route("/portal/manage/users/<int:user_id>/roles", methods=["GET", "POST"])
+@portal_grandmaster_required
 def user_roles(user_id):
     target_user = User.query.get_or_404(user_id)
     gateway = get_current_gateway()
@@ -372,7 +524,8 @@ def user_roles(user_id):
 
 
 @bp.route("/admin/users/<int:user_id>/gateway-membership", methods=["POST"])
-@gateway_node_required("motherbrain", minimum_role="grandmaster")
+@bp.route("/portal/manage/users/<int:user_id>/gateway-membership", methods=["POST"])
+@portal_grandmaster_required
 def update_user_gateway_membership(user_id):
     target_user = User.query.get_or_404(user_id)
     gateway = get_current_gateway()
@@ -415,7 +568,8 @@ def update_user_gateway_membership(user_id):
 
 
 @bp.route("/admin/access-requests")
-@gateway_node_required("motherbrain", minimum_role="master")
+@bp.route("/portal/manage/access-requests")
+@portal_grandmaster_required
 def access_requests():
     gateway = get_current_gateway()
     memberships = (
@@ -432,7 +586,8 @@ def access_requests():
 
 
 @bp.route("/admin/access-requests/<int:membership_id>/approve", methods=["POST"])
-@gateway_node_required("motherbrain", minimum_role="master")
+@bp.route("/portal/manage/access-requests/<int:membership_id>/approve", methods=["POST"])
+@portal_grandmaster_required
 def approve_access_request(membership_id):
     membership = _membership_or_404(membership_id)
     try:
@@ -450,7 +605,8 @@ def approve_access_request(membership_id):
 
 
 @bp.route("/admin/access-requests/<int:membership_id>/deny", methods=["POST"])
-@gateway_node_required("motherbrain", minimum_role="master")
+@bp.route("/portal/manage/access-requests/<int:membership_id>/deny", methods=["POST"])
+@portal_grandmaster_required
 def deny_access_request(membership_id):
     membership = _membership_or_404(membership_id)
     _deny_membership(
@@ -465,7 +621,9 @@ def deny_access_request(membership_id):
 
 @bp.route("/admin/users/<int:user_id>/emergency-password-reset", methods=["GET", "POST"])
 @bp.route("/admin/users/<int:user_id>/emergency-reset", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="grandmaster")
+@bp.route("/portal/manage/users/<int:user_id>/emergency-password-reset", methods=["GET", "POST"])
+@bp.route("/portal/manage/users/<int:user_id>/emergency-reset", methods=["GET", "POST"])
+@portal_grandmaster_required
 def emergency_reset_user_password(user_id):
     target_user = User.query.get_or_404(user_id)
 
@@ -496,6 +654,137 @@ def emergency_reset_user_password(user_id):
     return render_template("auth/emergency_reset.html", target_user=target_user)
 
 
+def _requested_portal_apps_from_form():
+    selected = request.form.getlist("app_codes")
+    if not selected and "app_codes" not in request.form:
+        selected = ["neogateway"]
+    valid_codes = {app["code"] for app in portal_app_definitions()}
+    normalized = []
+    for code in selected:
+        app_code = str(code or "").strip().lower()
+        if app_code in valid_codes and app_code not in normalized:
+            normalized.append(app_code)
+    return normalized
+
+
+def _pending_portal_app_accesses():
+    return (
+        PortalAppAccess.query.filter_by(status="pending", is_active=True)
+        .join(User, PortalAppAccess.user_id == User.id)
+        .order_by(PortalAppAccess.created_at.asc())
+    )
+
+
+def _portal_app_access_rows(user):
+    rows = []
+    for app in portal_app_definitions():
+        rows.append(
+            {
+                "app": app,
+                "access": ensure_user_app_access(user, app["code"])
+                if app["code"] == "neogateway"
+                else PortalAppAccess.query.filter_by(
+                    user_id=user.id,
+                    app_code=app["code"],
+                ).first(),
+            }
+        )
+    return rows
+
+
+def _has_app_access_form_fields():
+    return any(key.startswith("app_status_") for key in request.form)
+
+
+def _apply_portal_app_access_form(target_user):
+    for app in portal_app_definitions():
+        app_code = app["code"]
+        status = request.form.get(f"app_status_{app_code}", "none").strip().lower()
+        role = request.form.get(f"app_role_{app_code}", "watcher").strip().lower()
+        is_active = request.form.get(f"app_active_{app_code}") == "1"
+        if role not in ROLE_CHOICES:
+            raise ValueError("Unsupported app role selected.")
+        if status not in {"none", "pending", "approved", "denied"}:
+            raise ValueError("Unsupported app access status selected.")
+
+        access = PortalAppAccess.query.filter_by(
+            user_id=target_user.id,
+            app_code=app_code,
+        ).first()
+        if status == "none":
+            if access:
+                access.is_active = False
+            continue
+
+        access = ensure_user_app_access(target_user, app_code)
+        access.status = status
+        access.role = role
+        access.is_active = is_active
+        if status == "approved":
+            _approve_portal_app_access(
+                access,
+                role,
+                request.form.get(f"app_notes_{app_code}", "").strip() or None,
+                is_active=is_active,
+            )
+        elif status == "denied":
+            _deny_portal_app_access(access, request.form.get(f"app_notes_{app_code}", "").strip() or None)
+
+
+def _approve_portal_app_access(access, role, notes, is_active=True):
+    if not access:
+        raise ValueError("App access request was not found.")
+    if role not in ROLE_CHOICES:
+        raise ValueError("Unsupported app role selected.")
+    if not access.user.email_verified_at:
+        raise ValueError("Email not verified yet.")
+
+    if access.app_code == "neogateway":
+        gateway = get_current_gateway()
+        membership = _current_gateway_membership_for_user(access.user, gateway)
+        if not membership:
+            membership = GatewayMembership(
+                user_id=access.user_id,
+                gateway_id=gateway.id,
+                status="pending",
+                is_active=True,
+            )
+            db.session.add(membership)
+            db.session.flush()
+        _approve_membership(membership, notes)
+
+    access.status = "approved"
+    access.role = role
+    access.is_active = is_active
+    access.approved_by_user_id = current_user.id
+    access.approved_at = datetime.utcnow()
+    access.approval_notes = notes
+    access.denied_by_user_id = None
+    access.denied_at = None
+    access.denial_notes = None
+
+
+def _deny_portal_app_access(access, notes):
+    if not access:
+        raise ValueError("App access request was not found.")
+
+    if access.app_code == "neogateway":
+        gateway = get_current_gateway()
+        membership = _current_gateway_membership_for_user(access.user, gateway)
+        if membership:
+            _guard_last_grandmaster_gateway_change(access.user)
+            _deny_membership(membership, notes)
+
+    access.status = "denied"
+    access.is_active = True
+    access.denied_by_user_id = current_user.id
+    access.denied_at = datetime.utcnow()
+    access.denial_notes = notes
+    access.approved_by_user_id = None
+    access.approved_at = None
+    access.approval_notes = None
+
+
 def _account_form_from_request():
     return {
         "first_name": request.form.get("first_name", ""),
@@ -505,6 +794,7 @@ def _account_form_from_request():
         "email": request.form.get("email", ""),
         "work_area": request.form.get("work_area", ""),
         "access_reason": request.form.get("access_reason", ""),
+        "app_codes": _requested_portal_apps_from_form() if request.method == "POST" else ["neogateway"],
     }
 
 
@@ -643,6 +933,7 @@ def _apply_user_edit_form(user, form):
 def _render_user_edit_form(target_user, gateway, membership, form):
     return render_template(
         "auth/user_edit.html",
+        app_access_rows=_portal_app_access_rows(target_user),
         form=form,
         gateway=gateway,
         membership=membership,
@@ -1074,6 +1365,17 @@ def _approve_membership(membership, notes):
     membership.denial_notes = None
     db.session.flush()
 
+    if membership.gateway and membership.gateway.code == get_current_gateway().code:
+        app_access = ensure_user_app_access(membership.user, "neogateway")
+        app_access.status = "approved"
+        app_access.is_active = True
+        app_access.approved_by_user_id = current_user.id
+        app_access.approved_at = app_access.approved_at or datetime.utcnow()
+        app_access.approval_notes = notes
+        app_access.denied_by_user_id = None
+        app_access.denied_at = None
+        app_access.denial_notes = None
+
     send_result = email_service.send_access_approved(membership.user, membership.gateway)
     if send_result.get("sent"):
         membership.approval_email_sent_at = datetime.utcnow()
@@ -1092,3 +1394,14 @@ def _deny_membership(membership, notes):
     membership.approved_at = None
     membership.approval_notes = None
     membership.approval_email_sent_at = None
+
+    if membership.gateway and membership.gateway.code == get_current_gateway().code:
+        app_access = ensure_user_app_access(membership.user, "neogateway")
+        app_access.status = "denied"
+        app_access.is_active = True
+        app_access.denied_by_user_id = current_user.id
+        app_access.denied_at = app_access.denied_at or datetime.utcnow()
+        app_access.denial_notes = notes
+        app_access.approved_by_user_id = None
+        app_access.approved_at = None
+        app_access.approval_notes = None

@@ -36,6 +36,33 @@
     </section>
 
     <section class="panel-subsection">
+        <h2>PORTAL APP ACCESS</h2>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>APP</th>
+                        <th>STATUS</th>
+                        <th>ROLE</th>
+                        <th>ACTIVE</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in app_access_rows %}
+                    {% set access = row.access %}
+                    <tr>
+                        <td>{{ row.app.name }}</td>
+                        <td>{{ access.status if access else "none" }}</td>
+                        <td>{{ access.role|role_label if access else "-" }}</td>
+                        <td>{{ "Yes" if access and access.is_active else "No" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="panel-subsection">
         <h2>{{ gateway.code }} GATEWAY MEMBERSHIP</h2>
         {% if membership %}
         <dl class="detail-list">

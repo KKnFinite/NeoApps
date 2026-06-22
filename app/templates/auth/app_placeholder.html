@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}{{ app_name }} | NeoApps{% endblock %}
+
+{% block content %}
+<section class="panel compact-panel centered-command-page">
+    <div class="section-heading">
+        <h1>{{ app_name }}</h1>
+        <p class="muted">{{ app_status }}. This NeoApps system shell is ready for future buildout.</p>
+    </div>
+    <div class="action-row">
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.portal_dashboard') }}">BACK TO NEOAPPS PORTAL</a>
+    </div>
+</section>
+{% endblock %}

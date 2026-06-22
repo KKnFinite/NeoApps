@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Create Account | NeoGateway{% endblock %}
+{% block title %}Create Account | NeoApps Portal{% endblock %}
 
 {% block content %}
 <section class="panel compact-panel centered-command-page">
     <div class="section-heading">
         <h1>Create Account</h1>
-        <p class="muted">New accounts request access to {{ default_gateway.code }} for review.</p>
+        <p class="muted">New accounts request access to one or more NeoApps systems for review.</p>
     </div>
 
     <form class="operation-form" method="post">
@@ -38,6 +38,20 @@
             <span>Reason For Access</span>
             <textarea name="access_reason" required>{{ form.access_reason }}</textarea>
         </label>
+        <fieldset class="portal-app-request-fieldset">
+            <legend>REQUEST APP ACCESS</legend>
+            {% for app in app_definitions %}
+            <label class="checkbox-line">
+                <input
+                    type="checkbox"
+                    name="app_codes"
+                    value="{{ app.code }}"
+                    {% if app.code in form.app_codes %}checked{% endif %}
+                >
+                <span>{{ app.name }}</span>
+            </label>
+            {% endfor %}
+        </fieldset>
         <label>
             <span>Password</span>
             <input name="password" type="password" autocomplete="new-password" required>

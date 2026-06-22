@@ -138,6 +138,8 @@ MASTER_SCHEDULE_BLANK_ROW_INDEX = "__index__"
 
 @bp.route("/")
 def dashboard():
+    if current_user.is_authenticated:
+        return redirect(url_for("auth.portal_dashboard"))
     return render_template("auth/login.html")
 
 

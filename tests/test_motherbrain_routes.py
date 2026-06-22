@@ -100,7 +100,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"Master Schedule Rows", response.data)
         self.assertNotIn(b"MotherBrain Home", response.data)
         self.assertNotIn(b"Back to NeoMotherBrain", response.data)
-        self.assertIn(b"USER MANAGEMENT", response.data)
+        self.assertIn(b"PORTAL MANAGEMENT", response.data)
         self.assertIn(b"Change Characters", response.data)
         self.assertNotIn(b"BACK TO NeoGateway", response.data)
         self.assertIn(b"GATEWAY MATRIX", response.data)
@@ -119,12 +119,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
         dashboard_html = html.split('class="motherbrain-dashboard-grid"', 1)[1]
         self.assertLess(dashboard_html.index("MANAGE SORT"), dashboard_html.index("MASTER SCHEDULE"))
         self.assertLess(dashboard_html.index("MASTER SCHEDULE"), dashboard_html.index("GATEWAY MATRIX"))
-        self.assertLess(dashboard_html.index("GATEWAY MATRIX"), dashboard_html.index("USER MANAGEMENT"))
-        self.assertLess(dashboard_html.index("USER MANAGEMENT"), dashboard_html.index("PERMISSION RULES"))
+        self.assertLess(dashboard_html.index("GATEWAY MATRIX"), dashboard_html.index("PORTAL MANAGEMENT"))
+        self.assertLess(dashboard_html.index("PORTAL MANAGEMENT"), dashboard_html.index("PERMISSION RULES"))
         nav_html = html.split('id="motherbrain-mobile-menu"', 1)[1].split("</nav>", 1)[0]
         self.assertLess(nav_html.index("MANAGE SORT"), nav_html.index("MASTER SCHEDULE"))
         self.assertLess(nav_html.index("MASTER SCHEDULE"), nav_html.index("GATEWAY MATRIX"))
-        self.assertLess(nav_html.index("GATEWAY MATRIX"), nav_html.index("USER MANAGEMENT"))
+        self.assertLess(nav_html.index("GATEWAY MATRIX"), nav_html.index("PORTAL MANAGEMENT"))
         self.assertNotIn("BACK TO", nav_html)
         self.assertNotIn("MotherBrain Home", nav_html)
         self.assertNotIn("Back to NeoMotherBrain", nav_html)
@@ -135,7 +135,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b'aria-controls="motherbrain-mobile-menu"', response.data)
         self.assertIn(b'id="motherbrain-mobile-menu"', response.data)
         self.assertIn(b'href="/motherbrain"', response.data)
-        self.assertIn(b'href="/admin/users"', response.data)
+        self.assertIn(b'href="/portal/manage"', response.data)
         self.assertIn(b'href="/admin/permissions"', response.data)
         self.assertIn(b'href="/motherbrain/gateway-matrix"', response.data)
         self.assertIn(b'href="/motherbrain/master-schedule"', response.data)
@@ -146,7 +146,6 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_motherbrain_header_navigation_routes_work(self):
         routes = {
-            "/admin/users": b'href="/admin/users" aria-current="page"',
             "/motherbrain/gateway-matrix": b'href="/motherbrain/gateway-matrix" aria-current="page"',
             "/motherbrain/master-schedule": b'href="/motherbrain/master-schedule" aria-current="page"',
             "/motherbrain/manage-sort": b'href="/motherbrain/manage-sort" aria-current="page"',
@@ -172,7 +171,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertNotIn(b"Back to NeoMotherBrain", response.data)
                 self.assertIn(b"BACK TO", response.data)
                 self.assertNotIn(b"BACK TO NeoGateway", response.data)
-                self.assertIn(b"USER MANAGEMENT", response.data)
+                self.assertIn(b"PORTAL MANAGEMENT", response.data)
                 self.assertIn(b"GATEWAY MATRIX", response.data)
                 self.assertIn(b"MASTER SCHEDULE", response.data)
                 self.assertIn(b"MANAGE SORT", response.data)
@@ -188,6 +187,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertIn(b'id="motherbrain-mobile-menu"', response.data)
                 self.assertIn(active_link, response.data)
                 self.assertIn(b'aria-current="page"', response.data)
+
+        portal_management = self.client.get("/portal/manage")
+        self.assertEqual(portal_management.status_code, 200)
+        self.assertIn(b"PORTAL MANAGEMENT", portal_management.data)
 
         rfd_response = self.client.get("/rfd")
         self.assertEqual(rfd_response.status_code, 200)

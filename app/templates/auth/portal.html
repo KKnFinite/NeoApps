@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}NeoApps Portal{% endblock %}
+
+{% block content %}
+<section class="portal-page centered-command-page">
+    <div class="section-heading">
+        <h1><span class="neo-word">Neo</span>Apps Portal</h1>
+        <p class="muted">Choose an approved NeoApps system or request access.</p>
+    </div>
+
+    <section class="portal-app-grid" aria-label="NeoApps systems">
+        {% for row in app_rows %}
+        {% set app = row.app %}
+        {% set access = row.access %}
+        {% set status = access.status if access else "none" %}
+        <article class="portal-app-card portal-app-{{ app.code }} is-{{ status }}">
+            <div>
+                <h2>{{ app.name }}</h2>
+                <p class="muted">{{ app.description }}</p>
+            </div>
+            <div class="portal-app-state">
+                {% if status == "approved" and access.is_active %}
+                <span>APPROVED {{ access.role|role_label }}</span>
+                <a class="action-button" href="{{ url_for(app.endpoint) }}">OPEN</a>
+                {% elif status == "pending" and access.is_active %}
+                <span>PENDING</span>
+                <button type="button" disabled>PENDING REVIEW</button>
+                {% elif app.coming_soon and app.code == "neobid" %}
+                <span>COMING SOON</span>
+                <form method="post" action="{{ url_for('auth.request_portal_app_access') }}">
+                    <input type="hidden" name="app_code" value="{{ app.code }}">
+                    <button type="submit">REQUEST ACCESS</button>
+                </form>
+                {% else %}
+                <span>NO ACCESS</span>
+                <form method="post" action="{{ url_for('auth.request_portal_app_access') }}">
+                    <input type="hidden" name="app_code" value="{{ app.code }}">
+                    <button type="submit">REQUEST ACCESS</button>
+                </form>
+                {% endif %}
+            </div>
+        </article>
+        {% endfor %}
+    </section>
+
+    <div class="action-row">
+        {% if current_user.role == "grandmaster" %}
+        <a class="action-button" href="{{ url_for('auth.portal_management') }}">PORTAL MANAGEMENT</a>
+        {% endif %}
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.logout') }}">LOGOUT</a>
+    </div>
+</section>
+{% endblock %}

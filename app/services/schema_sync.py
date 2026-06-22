@@ -190,6 +190,7 @@ def sync_database_schema(app):
 def _create_missing_application_tables(existing_table_names):
     from app.models import (
         FlightApiReviewItem,
+        PortalAppAccess,
         SortDateParkingAssignment,
         SortTimelineApiParticipation,
         SortTimelineMonthVariance,
@@ -201,6 +202,7 @@ def _create_missing_application_tables(existing_table_names):
 
     for model in (
         FlightApiReviewItem,
+        PortalAppAccess,
         SortDateParkingAssignment,
         SortTimelineSettings,
         SortTimelineApiParticipation,
