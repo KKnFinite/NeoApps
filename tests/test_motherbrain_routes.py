@@ -3616,6 +3616,119 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(current.position_code, "A01")
         self.assertEqual(current.lane_number, 1)
 
+    def test_arrival_and_departure_boards_display_parking_plan_assignment(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="ONT")
+        db.session.commit()
+
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+
+        arrival_response = self.client.get(
+            f"/motherbrain/operations/{operation.id}/arrivals"
+        )
+        departure_response = self.client.get(
+            f"/motherbrain/operations/{operation.id}/departures"
+        )
+        detail_response = self.client.get(f"/motherbrain/operations/{operation.id}")
+
+        self.assertEqual(arrival_response.status_code, 200)
+        self.assertEqual(departure_response.status_code, 200)
+        self.assertIn(b"<td>A01</td>", arrival_response.data)
+        self.assertIn(b"<td>A01</td>", departure_response.data)
+        self.assertIn(b"<td>A01</td>", detail_response.data)
+
+    def test_boards_display_same_position_for_two_lanes(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="ONT")
+        self._parking_pair(operation, "N349UP", destination="LAX")
+        db.session.commit()
+
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N349UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "2",
+            },
+        )
+
+        arrival_response = self.client.get(
+            f"/motherbrain/operations/{operation.id}/arrivals"
+        )
+        departure_response = self.client.get(
+            f"/motherbrain/operations/{operation.id}/departures"
+        )
+
+        self.assertGreaterEqual(arrival_response.data.count(b"<td>A01</td>"), 2)
+        self.assertGreaterEqual(departure_response.data.count(b"<td>A01</td>"), 2)
+
+    def test_parking_display_is_sort_operation_specific(self):
+        first_operation = self._parking_operation()
+        self._parking_pair(first_operation, "N457UP", destination="ONT")
+        second_operation = self._operation(
+            sort_date=date(2026, 6, 18),
+            sort_name="day",
+        )
+        db.session.add(second_operation)
+        db.session.flush()
+        self._parking_pair(
+            second_operation,
+            "N457UP",
+            arrival_local=datetime(2026, 6, 18, 12, 0),
+            departure_local=datetime(2026, 6, 18, 16, 0),
+            destination="LAX",
+        )
+        db.session.commit()
+
+        self.client.post(
+            f"/motherbrain/parking-plan/{first_operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+
+        assigned_response = self.client.get(
+            f"/motherbrain/operations/{first_operation.id}/arrivals"
+        )
+        unassigned_response = self.client.get(
+            f"/motherbrain/operations/{second_operation.id}/arrivals"
+        )
+
+        self.assertIn(b"<td>A01</td>", assigned_response.data)
+        self.assertNotIn(b"<td>A01</td>", unassigned_response.data)
+        self.assertIn(b"<td>-</td>", unassigned_response.data)
+
+    def test_unassigned_tail_board_parking_shows_dash(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="ONT")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"<td>-</td>", response.data)
+
     def test_unassign_and_hot_mark_unmark_work(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP")

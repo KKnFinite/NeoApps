@@ -12,6 +12,7 @@ from app.models import (
     SortDateCrewAssignment,
     SortDateMission,
     SortDateOperation,
+    SortDateParkingAssignment,
     SortDateTailState,
 )
 from app.neomotherbrain import bp
@@ -1200,7 +1201,11 @@ def operation_detail(operation_id):
         operation = _operation_or_404(operation_id)
     arrival_count = _mission_count(operation, "arrival")
     departure_count = _mission_count(operation, "departure")
-    rows = [_mission_list_row(mission, operation) for mission in _all_missions_for_operation(operation)]
+    parking_assignments = _parking_assignments_for_operation(operation)
+    rows = [
+        _mission_list_row(mission, operation, parking_assignments)
+        for mission in _all_missions_for_operation(operation)
+    ]
     return render_template(
         "neomotherbrain/operation_detail.html",
         operation=operation,
@@ -1218,7 +1223,8 @@ def arrival_board(operation_id):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
     missions = _missions_for_operation(operation, "arrival")
-    rows = [_arrival_row(mission) for mission in missions]
+    parking_assignments = _parking_assignments_for_operation(operation)
+    rows = [_arrival_row(mission, parking_assignments) for mission in missions]
     return render_template(
         "neomotherbrain/arrival_board.html",
         operation=operation,
@@ -1233,7 +1239,11 @@ def departure_board(operation_id):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
     missions = _missions_for_operation(operation, "departure")
-    rows = [_departure_row(mission, operation) for mission in missions]
+    parking_assignments = _parking_assignments_for_operation(operation)
+    rows = [
+        _departure_row(mission, operation, parking_assignments)
+        for mission in missions
+    ]
     return render_template(
         "neomotherbrain/departure_board.html",
         operation=operation,
@@ -2373,28 +2383,25 @@ def _mission_count(operation, mission_type):
     ).count()
 
 
-def _arrival_row(mission):
-    tail_state = _tail_state_for_mission(mission)
+def _arrival_row(mission, parking_assignments=None):
     return {
         "mission": mission,
-        "parking_position": tail_state.parking_position if tail_state else None,
+        "parking_position": _parking_position_for_mission(mission, parking_assignments),
         "eta_time": mission.eta_datetime_utc or mission.planned_datetime_local,
         "crew_covered": is_mission_crew_covered(mission.crew_assignments),
     }
 
 
-def _departure_row(mission, operation):
-    tail_state = _tail_state_for_mission(mission)
+def _departure_row(mission, operation, parking_assignments=None):
     return {
         "mission": mission,
         "timing": mission_display_timing_data(mission, operation),
-        "parking_position": tail_state.parking_position if tail_state else None,
+        "parking_position": _parking_position_for_mission(mission, parking_assignments),
         "crew_covered": is_mission_crew_covered(mission.crew_assignments),
     }
 
 
-def _mission_list_row(mission, operation):
-    tail_state = _tail_state_for_mission(mission)
+def _mission_list_row(mission, operation, parking_assignments=None):
     timing = mission_display_timing_data(mission, operation)
     if mission.mission_type == "arrival":
         display_time = mission.eta_datetime_utc or mission.planned_datetime_local
@@ -2404,7 +2411,7 @@ def _mission_list_row(mission, operation):
     return {
         "mission": mission,
         "timing": timing,
-        "parking_position": tail_state.parking_position if tail_state else None,
+        "parking_position": _parking_position_for_mission(mission, parking_assignments),
         "display_time": display_time,
         "status": (
             mission.arrival_status
@@ -2412,6 +2419,36 @@ def _mission_list_row(mission, operation):
             else mission.departure_status
         ),
     }
+
+
+def _parking_assignments_for_operation(operation):
+    operation_id = getattr(operation, "id", operation)
+    if not operation_id:
+        return {}
+
+    return {
+        assignment.tail_number: assignment
+        for assignment in SortDateParkingAssignment.query.filter_by(
+            sort_date_operation_id=operation_id
+        ).all()
+    }
+
+
+def _parking_position_for_mission(mission, parking_assignments=None):
+    tail_number = (mission.assigned_tail_number or "").strip().upper()
+    if not tail_number:
+        return None
+
+    if parking_assignments is None:
+        parking_assignments = _parking_assignments_for_operation(
+            mission.sort_date_operation_id
+        )
+    assignment = parking_assignments.get(tail_number)
+    if assignment and assignment.position_code:
+        return assignment.position_code
+
+    tail_state = _tail_state_for_mission(mission)
+    return tail_state.parking_position if tail_state else None
 
 
 def _tail_state_for_mission(mission):
