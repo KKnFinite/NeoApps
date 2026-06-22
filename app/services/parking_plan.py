@@ -45,8 +45,32 @@ class ParkingLaneOccupied(ParkingPlanError):
         super().__init__(f"{occupied_tail} is already assigned to that lane.")
 
 
-def parking_plan_context(gateway):
-    operation = current_active_sort_operation(gateway)
+def parking_plan_landing_context(gateway):
+    local_now = current_gateway_local_datetime(gateway)
+    operations = current_operations_for_gateway(gateway, now=local_now)
+    options = []
+    for operation in operations:
+        tail_rows = tail_rows_for_operation(gateway, operation)
+        summary = _summary_for_rows(tail_rows)
+        options.append(
+            {
+                "operation": operation,
+                "is_active": operation_is_active_at(operation, local_now, gateway),
+                "mission_count": len(operation.missions),
+                "assigned_count": summary["assigned_tails"],
+                "unassigned_tail_count": summary["unassigned_tails"],
+                "total_tails": summary["total_tails"],
+            }
+        )
+
+    return {
+        "operation_options": options,
+        "local_date": local_now.date(),
+    }
+
+
+def parking_plan_context(gateway, operation=None):
+    operation = operation or current_active_sort_operation(gateway)
     if not operation:
         return {
             "operation": None,

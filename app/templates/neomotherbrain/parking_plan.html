@@ -31,20 +31,62 @@
 {% endmacro %}
 
 {% block content %}
-<section class="parking-plan-page" data-parking-plan data-assign-url="{{ url_for('neomotherbrain.assign_parking_plan_tail') }}">
+<section class="parking-plan-page" data-parking-plan data-assign-url="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) if operation else '' }}">
     <div class="section-heading">
         <h1>PARKING PLAN</h1>
         {% if operation %}
         <p class="muted">{{ operation.gateway_code }} {{ operation.sort_name|upper }} SORT DATE {{ operation.sort_date }}</p>
+        {% elif selection_mode %}
+        <p class="muted">{{ gateway.code }} LOCAL DATE {{ local_date }}. SELECT A PLANNED OR CURRENT SORT OPERATION.</p>
         {% else %}
-        <p class="muted">No current sort operation.</p>
+        <p class="muted">No planned sort operation.</p>
         {% endif %}
     </div>
 
-    {% if not operation %}
+    {% if selection_mode %}
+        {% if operation_options %}
+        <section class="parking-operation-list" aria-label="Planned sort operations">
+            {% for option in operation_options %}
+            {% set selected_operation = option.operation %}
+            <article class="parking-operation-card{% if option.is_active %} is-active{% endif %}">
+                <div>
+                    <span class="parking-operation-kicker">{{ "ACTIVE / CURRENT" if option.is_active else "PLANNED" }}</span>
+                    <h2>{{ selected_operation.sort_name|upper }}</h2>
+                    <p class="muted">SORT DATE {{ selected_operation.sort_date }}</p>
+                </div>
+                <dl>
+                    <div>
+                        <dt>MISSIONS</dt>
+                        <dd>{{ option.mission_count }}</dd>
+                    </div>
+                    <div>
+                        <dt>PARKED</dt>
+                        <dd>{{ option.assigned_count }}</dd>
+                    </div>
+                    <div>
+                        <dt>UNASSIGNED</dt>
+                        <dd>{{ option.unassigned_tail_count }}</dd>
+                    </div>
+                    <div>
+                        <dt>TAILS</dt>
+                        <dd>{{ option.total_tails }}</dd>
+                    </div>
+                </dl>
+                <a class="action-button" href="{{ url_for('neomotherbrain.parking_plan_operation', operation_id=selected_operation.id) }}">OPEN PARKING PLAN</a>
+            </article>
+            {% endfor %}
+        </section>
+        {% else %}
+        <section class="panel parking-empty-state">
+            <h2>NO PLANNED SORT OPERATIONS</h2>
+            <p class="muted">No planned sort operations found for this RFD local date.</p>
+            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.manage_sort') }}">MANAGE SORT</a>
+        </section>
+        {% endif %}
+    {% elif not operation %}
     <section class="panel parking-empty-state">
-        <h2>NO CURRENT SORT OPERATION</h2>
-        <p class="muted">Parking Plan opens when a current MotherBrain sort operation is active.</p>
+        <h2>NO PLANNED SORT OPERATIONS</h2>
+        <p class="muted">No planned sort operations found for this RFD local date.</p>
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.manage_sort') }}">MANAGE SORT</a>
     </section>
     {% else %}
@@ -64,7 +106,8 @@
                 <span>{{ summary.assigned_tails }}/{{ summary.total_tails }} ASSIGNED</span>
             </div>
             <div class="parking-mobile-assignment" aria-label="Mobile parking assignment controls">
-                <form method="post" action="{{ url_for('neomotherbrain.assign_parking_plan_tail') }}">
+                <form method="post" action="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) }}">
+                    <input type="hidden" name="operation_id" value="{{ operation.id }}">
                     <label>
                         <span>TAIL</span>
                         <select name="tail_number" required>
@@ -149,12 +192,14 @@
                             <td>{{ tail_badges(row) }}</td>
                             <td>{{ row.status|upper }}</td>
                             <td class="table-actions parking-action-cell">
-                                <form method="post" action="{{ url_for('neomotherbrain.update_parking_plan_hot') }}">
+                                <form method="post" action="{{ url_for('neomotherbrain.update_parking_plan_hot', operation_id=operation.id) }}">
+                                    <input type="hidden" name="operation_id" value="{{ operation.id }}">
                                     <input type="hidden" name="tail_number" value="{{ row.tail }}">
                                     <input type="hidden" name="is_hot" value="{{ 0 if row.is_hot else 1 }}">
                                     <button class="table-row-button" type="submit">{{ "CLEAR HOT" if row.is_hot else "HOT" }}</button>
                                 </form>
-                                <form method="post" action="{{ url_for('neomotherbrain.unassign_parking_plan_tail') }}">
+                                <form method="post" action="{{ url_for('neomotherbrain.unassign_parking_plan_tail', operation_id=operation.id) }}">
+                                    <input type="hidden" name="operation_id" value="{{ operation.id }}">
                                     <input type="hidden" name="tail_number" value="{{ row.tail }}">
                                     <button class="table-row-button" type="submit">UNASSIGN</button>
                                 </form>

@@ -3402,12 +3402,29 @@ class MotherBrainRoutesTest(unittest.TestCase):
             for day in days
         ]
 
-    def test_parking_plan_renders_for_current_active_sort(self):
-        operation = self._parking_operation()
+    def test_parking_plan_landing_lists_planned_sort_before_active_window(self):
+        operation = self._parking_operation(now=datetime(2026, 6, 18, 10, 0))
         self._parking_pair(operation, "N457UP", destination="LAX")
         db.session.commit()
 
         response = self.client.get("/motherbrain/parking-plan")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"PARKING PLAN", response.data)
+        self.assertIn(b"SELECT A PLANNED OR CURRENT SORT OPERATION", response.data)
+        self.assertIn(b"PLANNED", response.data)
+        self.assertIn(b"NIGHT", response.data)
+        self.assertIn(b"SORT DATE 2026-06-18", response.data)
+        self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"'.encode(), response.data)
+        self.assertNotIn(b"TAIL CHECKLIST", response.data)
+        self.assertNotIn(b"NO CURRENT SORT OPERATION", response.data)
+
+    def test_parking_plan_selected_operation_renders_board_and_checklist(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"PARKING PLAN", response.data)
@@ -3420,6 +3437,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"data-parking-tail", response.data)
         self.assertIn(b"parking-mobile-assignment", response.data)
         self.assertIn(b'href="/motherbrain/parking-plan"', response.data)
+        self.assertIn(f'action="/motherbrain/parking-plan/{operation.id}/assign"'.encode(), response.data)
 
     def test_motherbrain_dashboard_and_menu_link_to_parking_plan(self):
         response = self.client.get("/motherbrain")
@@ -3431,26 +3449,63 @@ class MotherBrainRoutesTest(unittest.TestCase):
         dashboard_html = html.split('class="motherbrain-dashboard-grid"', 1)[1]
         self.assertLess(dashboard_html.index("MANAGE SORT"), dashboard_html.index("PARKING PLAN"))
 
-    def test_parking_plan_overnight_active_sort_after_midnight(self):
-        operation = self._parking_operation(now=datetime(2026, 6, 19, 0, 30))
+    def test_manage_sort_parking_plan_button_links_to_selected_operation_plan(self):
+        operation = self._parking_operation(now=datetime(2026, 6, 18, 10, 0))
         self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        response = self.client.get("/motherbrain/manage-sort")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"'.encode(), response.data)
+
+    def test_parking_plan_landing_lists_active_previous_day_overnight_sort_after_midnight(self):
+        active_operation = self._parking_operation(now=datetime(2026, 6, 19, 0, 30))
+        self._parking_pair(active_operation, "N457UP", destination="LAX")
+        today_operation = self._operation(sort_date=date(2026, 6, 19), sort_name="day")
+        db.session.add(today_operation)
+        db.session.flush()
+        self._parking_pair(
+            today_operation,
+            "N349UP",
+            arrival_local=datetime(2026, 6, 19, 12, 10),
+            departure_local=datetime(2026, 6, 19, 16, 0),
+            destination="SDF",
+        )
         db.session.commit()
 
         response = self.client.get("/motherbrain/parking-plan")
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b"ACTIVE / CURRENT", response.data)
+        self.assertIn(b"NIGHT", response.data)
+        self.assertIn(b"SORT DATE 2026-06-18", response.data)
+        self.assertIn(b"DAY", response.data)
+        self.assertIn(b"SORT DATE 2026-06-19", response.data)
+        self.assertIn(f'href="/motherbrain/parking-plan/{active_operation.id}"'.encode(), response.data)
+        self.assertIn(f'href="/motherbrain/parking-plan/{today_operation.id}"'.encode(), response.data)
+
+    def test_parking_plan_selected_previous_day_overnight_sort_after_midnight(self):
+        operation = self._parking_operation(now=datetime(2026, 6, 19, 0, 30))
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+
+        self.assertEqual(response.status_code, 200)
         self.assertIn(b"NIGHT SORT DATE 2026-06-18", response.data)
         self.assertIn(b"N457UP", response.data)
 
-    def test_parking_plan_shows_no_current_sort_state(self):
+    def test_parking_plan_shows_no_planned_sort_state(self):
         response = self.client.get("/motherbrain/parking-plan")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"NO CURRENT SORT OPERATION", response.data)
+        self.assertIn(b"NO PLANNED SORT OPERATIONS", response.data)
+        self.assertIn(b"No planned sort operations found for this RFD local date.", response.data)
         self.assertNotIn(b"data-lane-number", response.data)
 
-    def test_parking_assignment_is_current_sort_only_and_does_not_touch_master_schedule(self):
-        operation = self._parking_operation()
+    def test_parking_assignment_saves_to_selected_operation_and_does_not_touch_master_schedule(self):
+        operation = self._parking_operation(now=datetime(2026, 6, 18, 10, 0))
         self._parking_pair(operation, "N457UP")
         master = MasterFlightSchedule(
             gateway_id=self.rfd_gateway.id,
@@ -3469,7 +3524,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.session.commit()
 
         response = self.client.post(
-            "/motherbrain/parking-plan/assign",
+            f"/motherbrain/parking-plan/{operation.id}/assign",
             data={
                 "tail_number": "N457UP",
                 "ramp_code": "A",
@@ -3492,7 +3547,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.session.commit()
 
         self.client.post(
-            "/motherbrain/parking-plan/assign",
+            f"/motherbrain/parking-plan/{operation.id}/assign",
             data={
                 "tail_number": "N457UP",
                 "ramp_code": "A",
@@ -3501,7 +3556,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             },
         )
         self.client.post(
-            "/motherbrain/parking-plan/assign",
+            f"/motherbrain/parking-plan/{operation.id}/assign",
             data={
                 "tail_number": "N457UP",
                 "ramp_code": "B",
@@ -3522,7 +3577,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.session.commit()
 
         self.client.post(
-            "/motherbrain/parking-plan/assign",
+            f"/motherbrain/parking-plan/{operation.id}/assign",
             data={
                 "tail_number": "N457UP",
                 "ramp_code": "A",
@@ -3531,7 +3586,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             },
         )
         conflict = self.client.post(
-            "/motherbrain/parking-plan/assign",
+            f"/motherbrain/parking-plan/{operation.id}/assign",
             data={
                 "tail_number": "N349UP",
                 "ramp_code": "A",
@@ -3541,7 +3596,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             headers={"Accept": "application/json"},
         )
         replaced = self.client.post(
-            "/motherbrain/parking-plan/assign",
+            f"/motherbrain/parking-plan/{operation.id}/assign",
             data={
                 "tail_number": "N349UP",
                 "ramp_code": "A",
@@ -3567,7 +3622,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.session.commit()
 
         self.client.post(
-            "/motherbrain/parking-plan/assign",
+            f"/motherbrain/parking-plan/{operation.id}/assign",
             data={
                 "tail_number": "N457UP",
                 "ramp_code": "A",
@@ -3576,18 +3631,18 @@ class MotherBrainRoutesTest(unittest.TestCase):
             },
         )
         self.client.post(
-            "/motherbrain/parking-plan/hot",
+            f"/motherbrain/parking-plan/{operation.id}/hot",
             data={"tail_number": "N457UP", "is_hot": "1"},
         )
         assignment = SortDateParkingAssignment.query.filter_by(tail_number="N457UP").one()
         self.assertTrue(assignment.is_hot)
 
         self.client.post(
-            "/motherbrain/parking-plan/unassign",
+            f"/motherbrain/parking-plan/{operation.id}/unassign",
             data={"tail_number": "N457UP"},
         )
         self.client.post(
-            "/motherbrain/parking-plan/hot",
+            f"/motherbrain/parking-plan/{operation.id}/hot",
             data={"tail_number": "N457UP", "is_hot": "0"},
         )
         assignment = SortDateParkingAssignment.query.filter_by(tail_number="N457UP").one()
@@ -3604,12 +3659,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         db.session.commit()
 
-        planned_response = self.client.get("/motherbrain/parking-plan")
+        planned_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
         self.assertIn(b"ONT 00:00", planned_response.data)
 
         arrival.eta_datetime_utc = datetime(2026, 6, 19, 5, 5)
         db.session.commit()
-        api_response = self.client.get("/motherbrain/parking-plan")
+        api_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
 
         self.assertIn(b"ONT 00:15", api_response.data)
         self.assertNotIn(b"05:15", api_response.data)
@@ -3625,7 +3680,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         arrival.api_assumed_arrived_time_utc = datetime(2026, 6, 19, 5, 12)
         db.session.commit()
 
-        response = self.client.get("/motherbrain/parking-plan")
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
 
         self.assertIn(b"ONT 00:12", response.data)
         self.assertNotIn(b"ONT 00:22", response.data)
@@ -3657,7 +3712,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         db.session.commit()
 
-        response = self.client.get("/motherbrain/parking-plan")
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
         html = response.data.decode()
 
         self.assertIn("GT 0:40", html)
@@ -3691,19 +3746,19 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         db.session.commit()
         self.client.post(
-            "/motherbrain/parking-plan/assign",
+            f"/motherbrain/parking-plan/{operation.id}/assign",
             data={"tail_number": "N457UP", "ramp_code": "A", "position_code": "A01", "lane_number": "1"},
         )
         self.client.post(
-            "/motherbrain/parking-plan/assign",
+            f"/motherbrain/parking-plan/{operation.id}/assign",
             data={"tail_number": "N349UP", "ramp_code": "A", "position_code": "A02", "lane_number": "1"},
         )
         self.client.post(
-            "/motherbrain/parking-plan/assign",
+            f"/motherbrain/parking-plan/{operation.id}/assign",
             data={"tail_number": "N171UP", "ramp_code": "B", "position_code": "B01", "lane_number": "1"},
         )
 
-        response = self.client.get("/motherbrain/parking-plan")
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
         html = response.data.decode()
         n349_card = html.split('data-occupied-tail="N349UP"', 1)[1].split("</article>", 1)[0]
         n457_card = html.split('data-occupied-tail="N457UP"', 1)[1].split("</article>", 1)[0]

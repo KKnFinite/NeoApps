@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 import re
 
-from flask import current_app, flash, jsonify, redirect, render_template, request, url_for
+from flask import abort, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import func
 
@@ -71,6 +71,7 @@ from app.services.parking_plan import (
     assign_tail_to_lane,
     current_active_sort_operation,
     parking_plan_context,
+    parking_plan_landing_context,
     set_tail_hot,
     unassign_tail,
 )
@@ -487,22 +488,44 @@ def ignore_flight_api_review_item(review_item_id):
 @gateway_node_required("motherbrain")
 def parking_plan():
     gateway = get_current_gateway()
-    context = parking_plan_context(gateway)
+    context = parking_plan_landing_context(gateway)
     return render_template(
         "neomotherbrain/parking_plan.html",
         gateway=gateway,
+        operation=None,
+        selection_mode=True,
+        **context,
+        **_flight_api_auto_poll_timer_context(gateway),
+    )
+
+
+@bp.route("/motherbrain/parking-plan/<int:operation_id>")
+@gateway_node_required("motherbrain")
+def parking_plan_operation(operation_id):
+    gateway = get_current_gateway()
+    operation = _parking_plan_operation_or_404(gateway, operation_id)
+    context = parking_plan_context(gateway, operation=operation)
+    return render_template(
+        "neomotherbrain/parking_plan.html",
+        gateway=gateway,
+        selection_mode=False,
         **context,
         **_flight_api_auto_poll_timer_context(gateway, operation=context["operation"]),
     )
 
 
 @bp.route("/motherbrain/parking-plan/assign", methods=["POST"])
+@bp.route("/motherbrain/parking-plan/<int:operation_id>/assign", methods=["POST"])
 @gateway_node_required("motherbrain")
-def assign_parking_plan_tail():
+def assign_parking_plan_tail(operation_id=None):
     gateway = get_current_gateway()
-    operation = current_active_sort_operation(gateway)
+    operation = _parking_plan_operation_for_action(gateway, operation_id)
     if not operation:
-        return _parking_plan_response(False, "No current sort operation.", status=400)
+        return _parking_plan_response(
+            False,
+            "Select a sort operation before assigning parking.",
+            status=400,
+        )
 
     try:
         assignment = assign_tail_to_lane(
@@ -534,30 +557,45 @@ def assign_parking_plan_tail():
     return _parking_plan_response(
         True,
         f"{assignment.tail_number} assigned to {assignment.position_code}-{assignment.lane_number}.",
+        operation_id=operation.id,
     )
 
 
 @bp.route("/motherbrain/parking-plan/unassign", methods=["POST"])
+@bp.route("/motherbrain/parking-plan/<int:operation_id>/unassign", methods=["POST"])
 @gateway_node_required("motherbrain")
-def unassign_parking_plan_tail():
+def unassign_parking_plan_tail(operation_id=None):
     gateway = get_current_gateway()
-    operation = current_active_sort_operation(gateway)
+    operation = _parking_plan_operation_for_action(gateway, operation_id)
     if not operation:
-        return _parking_plan_response(False, "No current sort operation.", status=400)
+        return _parking_plan_response(
+            False,
+            "Select a sort operation before updating parking.",
+            status=400,
+        )
 
     tail_number = request.form.get("tail_number")
     unassign_tail(operation, tail_number, user=current_user)
     db.session.commit()
-    return _parking_plan_response(True, f"{str(tail_number or '').strip().upper()} unassigned.")
+    return _parking_plan_response(
+        True,
+        f"{str(tail_number or '').strip().upper()} unassigned.",
+        operation_id=operation.id,
+    )
 
 
 @bp.route("/motherbrain/parking-plan/hot", methods=["POST"])
+@bp.route("/motherbrain/parking-plan/<int:operation_id>/hot", methods=["POST"])
 @gateway_node_required("motherbrain")
-def update_parking_plan_hot():
+def update_parking_plan_hot(operation_id=None):
     gateway = get_current_gateway()
-    operation = current_active_sort_operation(gateway)
+    operation = _parking_plan_operation_for_action(gateway, operation_id)
     if not operation:
-        return _parking_plan_response(False, "No current sort operation.", status=400)
+        return _parking_plan_response(
+            False,
+            "Select a sort operation before updating parking.",
+            status=400,
+        )
 
     try:
         assignment = set_tail_hot(
@@ -572,16 +610,46 @@ def update_parking_plan_hot():
         return _parking_plan_response(False, str(error), status=400)
 
     state = "HOT" if assignment.is_hot else "not HOT"
-    return _parking_plan_response(True, f"{assignment.tail_number} marked {state}.")
+    return _parking_plan_response(
+        True,
+        f"{assignment.tail_number} marked {state}.",
+        operation_id=operation.id,
+    )
 
 
-def _parking_plan_response(success, message, status=200, payload=None):
+def _parking_plan_operation_or_404(gateway, operation_id):
+    operation = db.session.get(SortDateOperation, operation_id)
+    if (
+        not operation
+        or operation.gateway_code != gateway.code
+        or operation.archived_at_utc is not None
+    ):
+        abort(404)
+    return operation
+
+
+def _parking_plan_operation_for_action(gateway, operation_id=None):
+    form_operation_id = request.form.get("operation_id")
+    selected_id = operation_id or form_operation_id
+    if selected_id:
+        try:
+            return _parking_plan_operation_or_404(gateway, int(selected_id))
+        except (TypeError, ValueError):
+            abort(404)
+    return current_active_sort_operation(gateway)
+
+
+def _parking_plan_response(success, message, status=200, payload=None, operation_id=None):
     payload = dict(payload or {})
     payload.update({"ok": bool(success), "message": message})
     if _wants_json_response():
         return jsonify(payload), status
 
     flash(message, "info" if success else "error")
+    if operation_id:
+        return redirect(
+            url_for("neomotherbrain.parking_plan_operation", operation_id=operation_id)
+        )
     return redirect(url_for("neomotherbrain.parking_plan"))
 
 
