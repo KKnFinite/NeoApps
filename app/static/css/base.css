@@ -3546,21 +3546,47 @@ h2 {
 
 .parking-position-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns:
+        minmax(150px, 1fr)
+        minmax(22px, 0.16fr)
+        minmax(86px, 0.48fr)
+        minmax(22px, 0.16fr)
+        minmax(150px, 1fr);
     grid-template-areas:
-        "top top"
-        "left1 right1"
-        "left2 right2"
-        "left3 right3"
-        "left4 right4"
-        "bottom bottom";
-    gap: 10px;
+        ". top top top ."
+        "left4 . center . right4"
+        "left3 . center . right3"
+        "left2 . center . right2"
+        "left1 . center . right1"
+        ". bottom bottom bottom .";
+    gap: 8px;
+    align-items: stretch;
 }
 
 .parking-position-grid-r {
+    grid-template-columns: repeat(2, minmax(130px, 1fr));
     grid-template-areas:
         "rtop1 rtop2"
         "rbottom1 rbottom2";
+}
+
+.parking-ramp-center {
+    grid-area: center;
+    display: grid;
+    min-height: 100%;
+    place-items: center;
+    border: 1px solid rgba(var(--node-rgb), 0.22);
+    border-radius: 5px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 26%),
+        rgba(0, 0, 0, 0.18);
+    color: var(--steel);
+    font-size: 0.78rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-orientation: upright;
+    text-transform: uppercase;
+    writing-mode: vertical-rl;
 }
 
 .parking-position-slot-top {
@@ -3621,8 +3647,8 @@ h2 {
 
 .parking-position-card {
     display: grid;
-    gap: 8px;
-    padding: 8px;
+    gap: 6px;
+    padding: 6px;
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 30%),
         rgba(3, 4, 6, 0.72);
@@ -3639,14 +3665,14 @@ h2 {
 
 .parking-lanes {
     display: grid;
-    gap: 7px;
+    gap: 5px;
 }
 
 .parking-lane {
     display: grid;
-    gap: 5px;
-    min-height: 92px;
-    padding: 6px;
+    gap: 4px;
+    min-height: 72px;
+    padding: 5px;
     border: 1px dashed rgba(var(--node-rgb), 0.38);
     border-radius: 6px;
     background: rgba(0, 0, 0, 0.24);
@@ -5838,6 +5864,10 @@ select::-ms-expand {
 
     .parking-position-card {
         grid-area: auto;
+    }
+
+    .parking-ramp-center {
+        display: none;
     }
 
     .parking-lanes {

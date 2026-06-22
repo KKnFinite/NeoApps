@@ -3453,14 +3453,43 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertLess(ramp_html.index("CHARLIE"), ramp_html.index("DELTA"))
         self.assertLess(ramp_html.index("DELTA"), ramp_html.index("ECHO"))
         self.assertLess(ramp_html.index("ECHO"), ramp_html.index("REMOTE"))
+        self.assertIn('data-ramp-code="A"', html)
+        self.assertIn('data-ramp-code="B"', html)
+        self.assertIn('data-ramp-code="C"', html)
+        self.assertIn('data-ramp-code="D"', html)
+        self.assertIn('data-ramp-code="E"', html)
+        self.assertIn('data-ramp-code="R"', html)
+        alpha_section = ramp_html.split('data-ramp-code="A"', 1)[1].split("</article>", 1)[0]
+        bravo_section = ramp_html.split('data-ramp-code="B"', 1)[1].split("</article>", 1)[0]
+        charlie_section = ramp_html.split('data-ramp-code="C"', 1)[1].split("</article>", 1)[0]
+        delta_section = ramp_html.split('data-ramp-code="D"', 1)[1].split("</article>", 1)[0]
+        echo_section = ramp_html.split('data-ramp-code="E"', 1)[1].split("</article>", 1)[0]
+        remote_section = ramp_html.split('data-ramp-code="R"', 1)[1].split("</article>", 1)[0]
+        self.assertIn('data-ramp-row="1"', alpha_section)
+        self.assertIn('data-ramp-column="1"', alpha_section)
+        self.assertIn('data-ramp-row="1"', bravo_section)
+        self.assertIn('data-ramp-column="2"', bravo_section)
+        self.assertIn('data-ramp-row="2"', charlie_section)
+        self.assertIn('data-ramp-column="1"', charlie_section)
+        self.assertIn('data-ramp-row="2"', delta_section)
+        self.assertIn('data-ramp-column="2"', delta_section)
+        self.assertIn('data-ramp-row="3"', echo_section)
+        self.assertIn('data-ramp-column="1"', echo_section)
+        self.assertIn('data-ramp-row="3"', remote_section)
+        self.assertIn('data-ramp-column="2"', remote_section)
         self.assertIn("parking-ramp-a", html)
         self.assertIn("parking-ramp-b", html)
         self.assertIn("parking-ramp-c", html)
         self.assertIn("parking-ramp-d", html)
         self.assertIn("parking-ramp-e", html)
         self.assertIn("parking-ramp-r", html)
+        self.assertIn('data-ramp-layout="standard"', html)
+        self.assertIn('data-ramp-layout="remote"', html)
+        self.assertIn("parking-ramp-center", html)
         self.assertIn("parking-position-left parking-position-slot-left-1", html)
+        self.assertIn("parking-position-left parking-position-slot-left-4", html)
         self.assertIn("parking-position-right parking-position-slot-right-1", html)
+        self.assertIn("parking-position-right parking-position-slot-right-4", html)
         self.assertIn("parking-position-top parking-position-slot-top", html)
         self.assertIn("parking-position-bottom parking-position-slot-bottom", html)
         self.assertIn("parking-position-remote-top parking-position-slot-remote-top-left", html)
@@ -3468,8 +3497,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("parking-position-remote-bottom parking-position-slot-remote-bottom-left", html)
         self.assertIn("parking-position-remote-bottom parking-position-slot-remote-bottom-right", html)
         self.assertIn('data-position-side="left"', html)
+        self.assertIn('data-position-side="top"', html)
+        self.assertIn('data-position-side="bottom"', html)
         self.assertIn('data-position-slot="right-1"', html)
         self.assertIn('data-position-slot="remote-bottom-right"', html)
+        remote_html = html.split('class="parking-ramp-group parking-ramp-r"', 1)[1]
+        self.assertLess(remote_html.index("R04"), remote_html.index("R03"))
+        self.assertLess(remote_html.index("R03"), remote_html.index("R02"))
+        self.assertLess(remote_html.index("R02"), remote_html.index("R01"))
 
     def test_parking_plan_drag_drop_and_mobile_action_order_render(self):
         operation = self._parking_operation()
