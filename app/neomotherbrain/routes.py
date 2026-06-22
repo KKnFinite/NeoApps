@@ -557,7 +557,7 @@ def assign_parking_plan_tail(operation_id=None):
 
     return _parking_plan_response(
         True,
-        f"{assignment.tail_number} assigned to {assignment.position_code}-{assignment.lane_number}.",
+        f"{assignment.tail_number} assigned to {assignment.position_code} Slot {assignment.lane_number}.",
         operation_id=operation.id,
     )
 

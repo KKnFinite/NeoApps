@@ -3435,6 +3435,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"A01", response.data)
         self.assertIn(b"E10", response.data)
         self.assertEqual(response.data.count(b"data-lane-number"), 108)
+        self.assertIn(b"data-slot-number", response.data)
+        self.assertIn(b"SLOT 1", response.data)
+        self.assertIn(b"+ SLOT 2", response.data)
+        self.assertNotIn(b"LANE 1", response.data)
+        self.assertNotIn(b"LANE 2", response.data)
         self.assertIn(b"data-parking-tail", response.data)
         self.assertIn(b"data-parking-unassign-drop", response.data)
         self.assertIn(f'data-unassign-url="/motherbrain/parking-plan/{operation.id}/unassign"'.encode(), response.data)
@@ -3529,14 +3534,69 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn('data-ramp-code="A"', html)
         self.assertIn('data-position-code="A01"', html)
         self.assertIn('data-lane-number="1"', html)
+        self.assertIn('data-slot-number="1"', html)
+        self.assertIn("parking-lane-slot-2 is-collapsed-slot", html)
         self.assertIn('data-occupied-tail=""', html)
         self.assertIn("parking-mobile-assign-controls", mobile_html)
         self.assertIn("parking-mobile-hot-note-controls", mobile_html)
         self.assertIn("parking-mobile-remove-controls", mobile_html)
+        self.assertIn("SLOT 1", mobile_html)
+        self.assertIn("SLOT 2", mobile_html)
+        self.assertNotIn("LANE 1", mobile_html)
+        self.assertIn("REPLACE SLOT 1", html)
+        self.assertIn("USE SLOT 2", html)
         self.assertLess(mobile_html.index("ASSIGN / MOVE"), mobile_html.index("HOT / NOTE"))
         self.assertLess(mobile_html.index("HOT / NOTE"), mobile_html.index("REMOVE"))
         self.assertLess(mobile_html.index("ASSIGN TAIL"), mobile_html.index("SAVE HOT / NOTE"))
         self.assertLess(mobile_html.index("SAVE HOT / NOTE"), mobile_html.index("REMOVE / UNASSIGN"))
+
+    def test_parking_plan_slot_two_collapses_until_needed(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        self._parking_pair(operation, "N349UP", destination="ONT")
+        db.session.commit()
+
+        empty_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        empty_html = empty_response.data.decode()
+
+        self.assertIn("parking-lane-slot-1", empty_html)
+        self.assertIn("parking-lane-slot-2 is-collapsed-slot", empty_html)
+        self.assertIn("+ SLOT 2", empty_html)
+
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+        slot_one_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        slot_one_html = slot_one_response.data.decode()
+        self.assertIn('data-slot-1-tail="N457UP"', slot_one_html)
+        self.assertIn('data-slot-2-tail=""', slot_one_html)
+        self.assertIn("REPLACE SLOT 1", slot_one_html)
+        self.assertIn("USE SLOT 2", slot_one_html)
+
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N349UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "2",
+            },
+        )
+        occupied_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        occupied_html = occupied_response.data.decode()
+        slot_two_html = occupied_html.split('data-occupied-tail="N349UP"', 1)[0].rsplit(
+            '<div',
+            1,
+        )[1]
+
+        self.assertIn("parking-lane-slot-2", slot_two_html)
+        self.assertNotIn("is-collapsed-slot", slot_two_html)
 
     def test_parking_tail_card_compact_flags_and_order_render(self):
         operation = self._parking_operation()
@@ -3565,20 +3625,20 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
         html = response.data.decode()
-        lane_html = html.split('data-occupied-tail="N457UP"', 1)[1].split(
+        slot_html = html.split('data-occupied-tail="N457UP"', 1)[1].split(
             "</article>", 1
         )[0]
 
-        self.assertIn("parking-tail-card is-quick-turn is-hot", lane_html)
-        self.assertIn("parking-tail-badges", lane_html)
-        self.assertIn("parking-badge parking-badge-qt", lane_html)
-        self.assertIn("parking-badge parking-badge-hot", lane_html)
-        self.assertIn('class="parking-order">1</span>', lane_html)
-        self.assertIn("ONT 00:00", lane_html)
-        self.assertIn("N457UP", lane_html)
-        self.assertIn("LAX 00:40", lane_html)
-        self.assertIn("GT 0:40", lane_html)
-        self.assertNotIn("757", lane_html)
+        self.assertIn("parking-tail-card is-quick-turn is-hot", slot_html)
+        self.assertIn("parking-tail-badges", slot_html)
+        self.assertIn("parking-badge parking-badge-qt", slot_html)
+        self.assertIn("parking-badge parking-badge-hot", slot_html)
+        self.assertIn('class="parking-order">1</span>', slot_html)
+        self.assertIn("ONT 00:00", slot_html)
+        self.assertIn("N457UP", slot_html)
+        self.assertIn("LAX 00:40", slot_html)
+        self.assertIn("GT 0:40", slot_html)
+        self.assertNotIn("757", slot_html)
 
     def test_motherbrain_dashboard_and_menu_link_to_parking_plan(self):
         response = self.client.get("/motherbrain")
@@ -3682,7 +3742,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(MasterFlightSchedule.query.count(), 1)
         self.assertEqual(db.session.get(MasterFlightSchedule, master.id).destination, "LAX")
 
-    def test_tail_can_only_be_assigned_once_and_moves_lanes(self):
+    def test_tail_can_only_be_assigned_once_and_moves_slots(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP")
         db.session.commit()
@@ -3711,7 +3771,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(assignments[0].position_code, "B02")
         self.assertEqual(assignments[0].lane_number, 2)
 
-    def test_occupied_lane_requires_confirmation_and_replaces_previous_tail(self):
+    def test_occupied_slot_requires_confirmation_and_replaces_previous_tail(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", destination="ONT")
         self._parking_pair(operation, "N349UP", destination="LAX")
@@ -3823,7 +3883,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"<td>A01</td>", arrival_response.data)
         self.assertNotIn(b"<td>A01</td>", departure_response.data)
 
-    def test_boards_display_same_position_for_two_lanes(self):
+    def test_boards_display_same_position_for_two_slots(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", destination="ONT")
         self._parking_pair(operation, "N349UP", destination="LAX")

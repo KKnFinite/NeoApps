@@ -121,9 +121,20 @@
                         <span>POSITION</span>
                         <select name="position_code" required>
                             <option value="">SELECT POSITION</option>
-                            {% for ramp_name, ramp_code, ramp_positions in positions %}
-                            {% for position in ramp_positions %}
-                            <option value="{{ position }}" data-ramp-code="{{ ramp_code }}">{{ position }}</option>
+                            {% for ramp in ramp_groups %}
+                            {% for position in ramp.positions %}
+                            {% set slot1 = namespace(tail='') %}
+                            {% set slot2 = namespace(tail='') %}
+                            {% for lane in position.lanes %}
+                                {% if lane.number == 1 %}{% set slot1.tail = lane.tail or '' %}{% endif %}
+                                {% if lane.number == 2 %}{% set slot2.tail = lane.tail or '' %}{% endif %}
+                            {% endfor %}
+                            <option
+                                value="{{ position.code }}"
+                                data-ramp-code="{{ ramp.code }}"
+                                data-slot-1-tail="{{ slot1.tail }}"
+                                data-slot-2-tail="{{ slot2.tail }}"
+                            >{{ position.code }}</option>
                             {% endfor %}
                             {% endfor %}
                         </select>
@@ -138,12 +149,13 @@
                         </select>
                     </label>
                     <label>
-                        <span>LANE</span>
+                        <span>SLOT</span>
                         <select name="lane_number" required>
-                            <option value="1">LANE 1</option>
-                            <option value="2">LANE 2</option>
+                            <option value="1">SLOT 1</option>
+                            <option value="2">SLOT 2</option>
                         </select>
                     </label>
+                    <input type="hidden" name="replace_occupied" value="0">
                     <button type="submit">ASSIGN TAIL</button>
                 </form>
 
@@ -267,18 +279,19 @@
                         <div class="parking-lanes">
                             {% for lane in position.lanes %}
                             <div
-                                class="parking-lane{% if lane.row %} is-occupied{% endif %}"
+                                class="parking-lane parking-lane-slot-{{ lane.number }}{% if lane.row %} is-occupied{% elif lane.number == 2 %} is-collapsed-slot{% endif %}"
                                 data-parking-lane
                                 data-ramp-code="{{ ramp.code }}"
                                 data-position-code="{{ position.code }}"
                                 data-lane-number="{{ lane.number }}"
+                                data-slot-number="{{ lane.number }}"
                                 data-occupied-tail="{{ lane.tail or '' }}"
                             >
-                                <span class="parking-lane-label">LANE {{ lane.number }}</span>
+                                <span class="parking-lane-label">SLOT {{ lane.number }}</span>
                                 {% if lane.row %}
                                     {{ tail_card(lane.row) }}
                                 {% else %}
-                                <span class="parking-empty-lane">DROP TAIL</span>
+                                <span class="parking-empty-lane">{{ "+ SLOT 2" if lane.number == 2 else "DROP SLOT 1" }}</span>
                                 {% endif %}
                             </div>
                             {% endfor %}
@@ -304,13 +317,46 @@
     if (mobileForm) {
         const positionSelect = mobileForm.querySelector('select[name="position_code"]');
         const rampSelect = mobileForm.querySelector('select[name="ramp_code"]');
-        positionSelect?.addEventListener("change", () => {
+        const slotSelect = mobileForm.querySelector('select[name="lane_number"]');
+        const replaceInput = mobileForm.querySelector('input[name="replace_occupied"]');
+        const updateReplaceFlag = () => {
+            if (!replaceInput || !slotSelect || !positionSelect) {
+                return;
+            }
+            const selected = positionSelect.options[positionSelect.selectedIndex];
+            const selectedSlot = slotSelect.value;
+            const occupiedTail = selected?.dataset?.[`slot${selectedSlot}Tail`] || "";
+            replaceInput.value = occupiedTail ? "1" : "0";
+        };
+        const updateSlotChoices = () => {
             const selected = positionSelect.options[positionSelect.selectedIndex];
             const rampCode = selected?.dataset?.rampCode;
             if (rampCode && rampSelect) {
                 rampSelect.value = rampCode;
             }
-        });
+            if (!slotSelect) {
+                return;
+            }
+            const slot1Tail = selected?.dataset?.slot1Tail || "";
+            const slot2Tail = selected?.dataset?.slot2Tail || "";
+            const slot1Option = slotSelect.querySelector('option[value="1"]');
+            const slot2Option = slotSelect.querySelector('option[value="2"]');
+            if (slot1Option) {
+                slot1Option.textContent = slot1Tail ? `REPLACE SLOT 1 (${slot1Tail})` : "SLOT 1";
+            }
+            if (slot2Option) {
+                slot2Option.textContent = slot2Tail ? `REPLACE SLOT 2 (${slot2Tail})` : "USE SLOT 2";
+            }
+            if (!slot1Tail) {
+                slotSelect.value = "1";
+            } else if (!slot2Tail) {
+                slotSelect.value = "2";
+            }
+            updateReplaceFlag();
+        };
+        positionSelect?.addEventListener("change", updateSlotChoices);
+        slotSelect?.addEventListener("change", updateReplaceFlag);
+        updateSlotChoices();
     }
 
     const dragEnabled = window.matchMedia("(min-width: 721px) and (pointer: fine)").matches;
@@ -345,7 +391,7 @@
             const occupiedTail = lane.dataset.occupiedTail || "";
             let replaceOccupied = "0";
             if (occupiedTail && occupiedTail !== tail) {
-                const confirmed = window.confirm(`${occupiedTail} is already in ${lane.dataset.positionCode}-${lane.dataset.laneNumber}. Replace it with ${tail}?`);
+                const confirmed = window.confirm(`${occupiedTail} is already in ${lane.dataset.positionCode} Slot ${lane.dataset.slotNumber}. Replace it with ${tail}?`);
                 if (!confirmed) {
                     return;
                 }

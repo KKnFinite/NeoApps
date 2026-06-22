@@ -42,7 +42,7 @@ class ParkingPlanError(ValueError):
 class ParkingLaneOccupied(ParkingPlanError):
     def __init__(self, occupied_tail):
         self.occupied_tail = occupied_tail
-        super().__init__(f"{occupied_tail} is already assigned to that lane.")
+        super().__init__(f"{occupied_tail} is already assigned to that slot.")
 
 
 def parking_plan_landing_context(gateway):
@@ -595,9 +595,9 @@ def _normalize_lane(value):
     try:
         lane = int(value)
     except (TypeError, ValueError) as exc:
-        raise ParkingPlanError("Select lane 1 or 2.") from exc
+        raise ParkingPlanError("Select slot 1 or 2.") from exc
     if lane not in PARKING_LANES:
-        raise ParkingPlanError("Select lane 1 or 2.")
+        raise ParkingPlanError("Select slot 1 or 2.")
     return lane
 
 
