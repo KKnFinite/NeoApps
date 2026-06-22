@@ -3543,7 +3543,8 @@ h2 {
 .parking-ramp-layout {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 24px;
+    column-gap: 44px;
+    row-gap: 30px;
 }
 
 .parking-ramp-group {
@@ -3554,16 +3555,16 @@ h2 {
     display: grid;
     grid-template-columns:
         minmax(142px, 0.78fr)
-        minmax(18px, 0.1fr)
+        minmax(6px, 0.04fr)
         minmax(150px, 0.74fr)
-        minmax(18px, 0.1fr)
+        minmax(6px, 0.04fr)
         minmax(142px, 0.78fr);
     grid-template-areas:
         "left4 . top . right4"
         "left3 . center . right3"
         "left2 . center . right2"
         "left1 . bottom . right1";
-    gap: 6px;
+    gap: 4px;
     align-items: stretch;
 }
 
