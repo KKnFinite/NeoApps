@@ -3439,6 +3439,104 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b'href="/motherbrain/parking-plan"', response.data)
         self.assertIn(f'action="/motherbrain/parking-plan/{operation.id}/assign"'.encode(), response.data)
 
+    def test_parking_plan_ramp_layout_renders_physical_rows_and_slots(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+        ramp_html = html.split('class="parking-ramp-layout"', 1)[1]
+
+        self.assertLess(ramp_html.index("ALPHA"), ramp_html.index("BRAVO"))
+        self.assertLess(ramp_html.index("BRAVO"), ramp_html.index("CHARLIE"))
+        self.assertLess(ramp_html.index("CHARLIE"), ramp_html.index("DELTA"))
+        self.assertLess(ramp_html.index("DELTA"), ramp_html.index("ECHO"))
+        self.assertLess(ramp_html.index("ECHO"), ramp_html.index("REMOTE"))
+        self.assertIn("parking-ramp-a", html)
+        self.assertIn("parking-ramp-b", html)
+        self.assertIn("parking-ramp-c", html)
+        self.assertIn("parking-ramp-d", html)
+        self.assertIn("parking-ramp-e", html)
+        self.assertIn("parking-ramp-r", html)
+        self.assertIn("parking-position-left parking-position-slot-left-1", html)
+        self.assertIn("parking-position-right parking-position-slot-right-1", html)
+        self.assertIn("parking-position-top parking-position-slot-top", html)
+        self.assertIn("parking-position-bottom parking-position-slot-bottom", html)
+        self.assertIn("parking-position-remote-top parking-position-slot-remote-top-left", html)
+        self.assertIn("parking-position-remote-top parking-position-slot-remote-top-right", html)
+        self.assertIn("parking-position-remote-bottom parking-position-slot-remote-bottom-left", html)
+        self.assertIn("parking-position-remote-bottom parking-position-slot-remote-bottom-right", html)
+        self.assertIn('data-position-side="left"', html)
+        self.assertIn('data-position-slot="right-1"', html)
+        self.assertIn('data-position-slot="remote-bottom-right"', html)
+
+    def test_parking_plan_drag_drop_and_mobile_action_order_render(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+        mobile_html = html.split('class="parking-mobile-assignment"', 1)[1].split(
+            'class="parking-unassigned"', 1
+        )[0]
+
+        self.assertIn("data-parking-lane", html)
+        self.assertIn('data-ramp-code="A"', html)
+        self.assertIn('data-position-code="A01"', html)
+        self.assertIn('data-lane-number="1"', html)
+        self.assertIn('data-occupied-tail=""', html)
+        self.assertIn("parking-mobile-assign-controls", mobile_html)
+        self.assertIn("parking-mobile-hot-note-controls", mobile_html)
+        self.assertIn("parking-mobile-remove-controls", mobile_html)
+        self.assertLess(mobile_html.index("ASSIGN / MOVE"), mobile_html.index("HOT / NOTE"))
+        self.assertLess(mobile_html.index("HOT / NOTE"), mobile_html.index("REMOVE"))
+        self.assertLess(mobile_html.index("ASSIGN TAIL"), mobile_html.index("SAVE HOT / NOTE"))
+        self.assertLess(mobile_html.index("SAVE HOT / NOTE"), mobile_html.index("REMOVE / UNASSIGN"))
+
+    def test_parking_tail_card_compact_flags_and_order_render(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N457UP",
+            arrival_local=datetime(2026, 6, 18, 23, 50),
+            departure_local=datetime(2026, 6, 19, 0, 40),
+            destination="LAX",
+            aircraft_type="757",
+        )
+        db.session.commit()
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/hot",
+            data={"tail_number": "N457UP", "is_hot": "1"},
+        )
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+        lane_html = html.split('data-occupied-tail="N457UP"', 1)[1].split(
+            "</article>", 1
+        )[0]
+
+        self.assertIn("parking-tail-card is-quick-turn is-hot", lane_html)
+        self.assertIn("parking-tail-badges", lane_html)
+        self.assertIn("parking-badge parking-badge-qt", lane_html)
+        self.assertIn("parking-badge parking-badge-hot", lane_html)
+        self.assertIn('class="parking-order">1</span>', lane_html)
+        self.assertIn("ONT 00:00", lane_html)
+        self.assertIn("N457UP", lane_html)
+        self.assertIn("LAX 00:40", lane_html)
+        self.assertIn("GT 0:40", lane_html)
+        self.assertNotIn("757", lane_html)
+
     def test_motherbrain_dashboard_and_menu_link_to_parking_plan(self):
         response = self.client.get("/motherbrain")
         html = response.data.decode()

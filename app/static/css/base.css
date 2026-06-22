@@ -3415,6 +3415,20 @@ h2 {
     display: none;
 }
 
+.parking-mobile-action-section {
+    display: grid;
+    gap: 8px;
+}
+
+.parking-mobile-action-section h3 {
+    margin: 0;
+    color: var(--steel);
+    font-size: 0.78rem;
+    font-weight: 950;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+}
+
 .parking-unassigned {
     display: grid;
     gap: 8px;
@@ -3512,6 +3526,7 @@ h2 {
 
 .parking-ramp-layout {
     display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px;
 }
 
@@ -3531,12 +3546,77 @@ h2 {
 
 .parking-position-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(164px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+        "top top"
+        "left1 right1"
+        "left2 right2"
+        "left3 right3"
+        "left4 right4"
+        "bottom bottom";
     gap: 10px;
 }
 
-.parking-ramp-r .parking-position-grid {
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+.parking-position-grid-r {
+    grid-template-areas:
+        "rtop1 rtop2"
+        "rbottom1 rbottom2";
+}
+
+.parking-position-slot-top {
+    grid-area: top;
+}
+
+.parking-position-slot-left-1 {
+    grid-area: left1;
+}
+
+.parking-position-slot-left-2 {
+    grid-area: left2;
+}
+
+.parking-position-slot-left-3 {
+    grid-area: left3;
+}
+
+.parking-position-slot-left-4 {
+    grid-area: left4;
+}
+
+.parking-position-slot-right-1 {
+    grid-area: right1;
+}
+
+.parking-position-slot-right-2 {
+    grid-area: right2;
+}
+
+.parking-position-slot-right-3 {
+    grid-area: right3;
+}
+
+.parking-position-slot-right-4 {
+    grid-area: right4;
+}
+
+.parking-position-slot-bottom {
+    grid-area: bottom;
+}
+
+.parking-position-slot-remote-top-left {
+    grid-area: rtop1;
+}
+
+.parking-position-slot-remote-top-right {
+    grid-area: rtop2;
+}
+
+.parking-position-slot-remote-bottom-left {
+    grid-area: rbottom1;
+}
+
+.parking-position-slot-remote-bottom-right {
+    grid-area: rbottom2;
 }
 
 .parking-position-card {
@@ -5681,13 +5761,18 @@ select::-ms-expand {
     }
 
     .parking-mobile-assignment {
-        display: block;
+        display: grid;
+        gap: 10px;
     }
 
-    .parking-mobile-assignment form {
+    .parking-mobile-action-section {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
+        padding: 9px;
+        border: 1px solid rgba(var(--node-rgb), 0.32);
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.2);
     }
 
     .parking-mobile-assignment label {
@@ -5695,10 +5780,20 @@ select::-ms-expand {
         gap: 4px;
     }
 
-    .parking-mobile-assignment label:nth-child(5),
+    .parking-mobile-action-section h3,
     .parking-mobile-assignment .parking-checkbox,
-    .parking-mobile-assignment button {
+    .parking-mobile-assignment button,
+    .parking-mobile-hot-note-controls label,
+    .parking-mobile-remove-controls label {
         grid-column: 1 / -1;
+    }
+
+    .parking-mobile-remove-controls {
+        margin-top: 2px;
+        border-color: rgba(255, 90, 96, 0.45);
+        background:
+            linear-gradient(180deg, rgba(153, 10, 22, 0.12), transparent 56%),
+            rgba(0, 0, 0, 0.24);
     }
 
     .parking-mobile-assignment select,
@@ -5728,9 +5823,21 @@ select::-ms-expand {
         background: rgba(0, 0, 0, 0.22);
     }
 
+    .parking-remove-button {
+        border-color: rgba(255, 90, 96, 0.72);
+        background:
+            linear-gradient(180deg, rgba(168, 25, 37, 0.86), rgba(58, 5, 12, 0.92)),
+            rgba(0, 0, 0, 0.28);
+    }
+
     .parking-position-grid,
-    .parking-ramp-r .parking-position-grid {
+    .parking-position-grid-r {
         grid-template-columns: 1fr;
+        grid-template-areas: none;
+    }
+
+    .parking-position-card {
+        grid-area: auto;
     }
 
     .parking-lanes {

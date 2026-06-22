@@ -602,8 +602,11 @@ def update_parking_plan_hot(operation_id=None):
         assignment = set_tail_hot(
             operation,
             request.form.get("tail_number"),
-            _truthy_form_value(request.form.get("is_hot")),
+            _truthy_form_value(request.form.get("is_hot"))
+            if "is_hot" in request.form and request.form.get("is_hot") != ""
+            else None,
             user=current_user,
+            note=request.form.get("note") if "note" in request.form else None,
         )
         db.session.commit()
     except ParkingPlanError as error:

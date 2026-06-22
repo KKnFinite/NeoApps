@@ -25,7 +25,6 @@
     </div>
     <div class="parking-tail-line">
         <span>{{ row.departure_destination }} {{ row.departure_time }}</span>
-        <small>{{ row.aircraft_type or "-" }}</small>
     </div>
 </article>
 {% endmacro %}
@@ -106,8 +105,9 @@
                 <span>{{ summary.assigned_tails }}/{{ summary.total_tails }} ASSIGNED</span>
             </div>
             <div class="parking-mobile-assignment" aria-label="Mobile parking assignment controls">
-                <form method="post" action="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) }}">
+                <form class="parking-mobile-action-section parking-mobile-assign-controls" method="post" action="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) }}">
                     <input type="hidden" name="operation_id" value="{{ operation.id }}">
+                    <h3>ASSIGN / MOVE</h3>
                     <label>
                         <span>TAIL</span>
                         <select name="tail_number" required>
@@ -144,15 +144,49 @@
                             <option value="2">LANE 2</option>
                         </select>
                     </label>
+                    <button type="submit">ASSIGN TAIL</button>
+                </form>
+
+                <form class="parking-mobile-action-section parking-mobile-hot-note-controls" method="post" action="{{ url_for('neomotherbrain.update_parking_plan_hot', operation_id=operation.id) }}">
+                    <input type="hidden" name="operation_id" value="{{ operation.id }}">
+                    <h3>HOT / NOTE</h3>
+                    <label>
+                        <span>TAIL</span>
+                        <select name="tail_number" required>
+                            <option value="">SELECT TAIL</option>
+                            {% for row in tail_rows %}
+                            <option value="{{ row.tail }}">{{ row.tail }} {{ row.assigned_position or "UNASSIGNED" }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
                     <label>
                         <span>NOTE</span>
                         <input type="text" name="note" maxlength="240" placeholder="OPTIONAL">
                     </label>
-                    <label class="parking-checkbox">
-                        <input type="checkbox" name="is_hot" value="1">
-                        <span>HOT</span>
+                    <label>
+                        <span>HOT STATE</span>
+                        <select name="is_hot">
+                            <option value="">NO CHANGE</option>
+                            <option value="1">MARK HOT</option>
+                            <option value="0">CLEAR HOT</option>
+                        </select>
                     </label>
-                    <button type="submit">ASSIGN TAIL</button>
+                    <button type="submit">SAVE HOT / NOTE</button>
+                </form>
+
+                <form class="parking-mobile-action-section parking-mobile-remove-controls" method="post" action="{{ url_for('neomotherbrain.unassign_parking_plan_tail', operation_id=operation.id) }}">
+                    <input type="hidden" name="operation_id" value="{{ operation.id }}">
+                    <h3>REMOVE</h3>
+                    <label>
+                        <span>TAIL</span>
+                        <select name="tail_number" required>
+                            <option value="">SELECT TAIL</option>
+                            {% for row in tail_rows %}
+                            <option value="{{ row.tail }}">{{ row.tail }} {{ row.assigned_position or "UNASSIGNED" }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <button class="parking-remove-button" type="submit">REMOVE / UNASSIGN</button>
                 </form>
             </div>
 
@@ -218,9 +252,14 @@
                     <h2>{{ ramp.name|upper }}</h2>
                     <span>{{ ramp.code }}</span>
                 </div>
-                <div class="parking-position-grid">
+                <div class="parking-position-grid parking-position-grid-{{ ramp.code|lower }}">
                     {% for position in ramp.positions %}
-                    <section class="parking-position-card" aria-label="{{ position.code }}">
+                    <section
+                        class="parking-position-card parking-position-{{ position.side }} parking-position-slot-{{ position.slot }}"
+                        aria-label="{{ position.code }}"
+                        data-position-side="{{ position.side }}"
+                        data-position-slot="{{ position.slot }}"
+                    >
                         <h3>{{ position.code }}</h3>
                         <div class="parking-lanes">
                             {% for lane in position.lanes %}
@@ -258,7 +297,7 @@
         return;
     }
 
-    const mobileForm = page.querySelector(".parking-mobile-assignment form");
+    const mobileForm = page.querySelector(".parking-mobile-assign-controls");
     if (mobileForm) {
         const positionSelect = mobileForm.querySelector('select[name="position_code"]');
         const rampSelect = mobileForm.querySelector('select[name="ramp_code"]');
@@ -269,6 +308,11 @@
                 rampSelect.value = rampCode;
             }
         });
+    }
+
+    const dragEnabled = window.matchMedia("(min-width: 721px) and (pointer: fine)").matches;
+    if (!dragEnabled) {
+        return;
     }
 
     let draggedTail = "";

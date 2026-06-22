@@ -19,12 +19,12 @@ from app.services.gateway_matrix import (
 
 
 PARKING_RAMP_GROUPS = (
-    ("Remote", "R", ("R01", "R02", "R03", "R04")),
     ("Alpha", "A", tuple(f"A{number:02d}" for number in range(1, 11))),
     ("Bravo", "B", tuple(f"B{number:02d}" for number in range(1, 11))),
     ("Charlie", "C", tuple(f"C{number:02d}" for number in range(1, 11))),
     ("Delta", "D", tuple(f"D{number:02d}" for number in range(1, 11))),
     ("Echo", "E", tuple(f"E{number:02d}" for number in range(1, 11))),
+    ("Remote", "R", ("R04", "R03", "R02", "R01")),
 )
 
 PARKING_LANES = (1, 2)
@@ -247,12 +247,15 @@ def unassign_tail(operation, tail_number, user=None):
     return assignment
 
 
-def set_tail_hot(operation, tail_number, is_hot, user=None):
+def set_tail_hot(operation, tail_number, is_hot, user=None, note=None):
     tail_number = _normalize_tail(tail_number)
     if tail_number not in _current_operation_tails(operation):
         raise ParkingPlanError(f"{tail_number or 'Tail'} is not in the current sort.")
     assignment = _assignment_for_tail(operation, tail_number, create=True)
-    assignment.is_hot = bool(is_hot)
+    if is_hot is not None:
+        assignment.is_hot = bool(is_hot)
+    if note is not None:
+        assignment.note = str(note or "").strip()
     assignment.assigned_by_user_id = getattr(user, "id", None)
     assignment.assigned_at = _utc_now()
     db.session.flush()
@@ -271,6 +274,7 @@ def _empty_ramp_groups():
             "positions": [
                 {
                     "code": position,
+                    **_position_layout(code, position),
                     "lanes": [
                         {"number": lane, "tail": None, "row": None}
                         for lane in PARKING_LANES
@@ -314,6 +318,33 @@ def _assignment_for_position(assignments, ramp_code, position_code, lane_number)
         ),
         None,
     )
+
+
+def _position_layout(ramp_code, position_code):
+    if ramp_code == "R":
+        remote_slots = {
+            "R04": ("remote-top", "remote-top-left"),
+            "R03": ("remote-top", "remote-top-right"),
+            "R02": ("remote-bottom", "remote-bottom-left"),
+            "R01": ("remote-bottom", "remote-bottom-right"),
+        }
+        side, slot = remote_slots.get(position_code, ("remote", "remote"))
+        return {"side": side, "slot": slot}
+
+    try:
+        number = int(position_code[1:])
+    except (TypeError, ValueError):
+        return {"side": "unknown", "slot": "unknown"}
+
+    if 1 <= number <= 4:
+        return {"side": "left", "slot": f"left-{number}"}
+    if 5 <= number <= 8:
+        return {"side": "right", "slot": f"right-{number - 4}"}
+    if number == 9:
+        return {"side": "bottom", "slot": "bottom"}
+    if number == 10:
+        return {"side": "top", "slot": "top"}
+    return {"side": "unknown", "slot": "unknown"}
 
 
 def _apply_departure_order(tail_rows):
