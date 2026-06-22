@@ -254,14 +254,8 @@
                 data-ramp-column="{{ loop.cycle('1', '2') }}"
                 data-ramp-layout="{{ 'remote' if ramp.code == 'R' else 'standard' }}"
             >
-                <div class="parking-ramp-heading">
-                    <h2>{{ ramp.name|upper }}</h2>
-                    <span>{{ ramp.code }}</span>
-                </div>
                 <div class="parking-position-grid parking-position-grid-{{ ramp.code|lower }}">
-                    {% if ramp.code != "R" %}
                     <div class="parking-ramp-center" aria-hidden="true">{{ ramp.name|upper }}</div>
-                    {% endif %}
                     {% for position in ramp.positions %}
                     <section
                         class="parking-position-card parking-position-{{ position.side }} parking-position-slot-{{ position.slot }}"

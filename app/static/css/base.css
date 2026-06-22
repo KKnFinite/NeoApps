@@ -3393,7 +3393,6 @@ h2 {
 }
 
 .parking-panel-heading,
-.parking-ramp-heading,
 .parking-tail-line,
 .parking-tail-main {
     display: flex;
@@ -3402,8 +3401,7 @@ h2 {
     gap: 8px;
 }
 
-.parking-panel-heading h2,
-.parking-ramp-heading h2 {
+.parking-panel-heading h2 {
     margin: 0;
     color: var(--steel);
     font-size: 0.98rem;
@@ -3534,16 +3532,6 @@ h2 {
     padding: 14px;
 }
 
-.parking-ramp-heading {
-    margin-bottom: 10px;
-}
-
-.parking-ramp-heading span {
-    color: var(--node-highlight);
-    font-size: 0.82rem;
-    font-weight: 950;
-}
-
 .parking-position-grid {
     display: grid;
     grid-template-columns:
@@ -3553,21 +3541,19 @@ h2 {
         minmax(22px, 0.16fr)
         minmax(150px, 1fr);
     grid-template-areas:
-        ". top top top ."
-        "left4 . center . right4"
+        "left4 . top . right4"
         "left3 . center . right3"
         "left2 . center . right2"
-        "left1 . center . right1"
-        ". bottom bottom bottom .";
+        "left1 . bottom . right1";
     gap: 8px;
     align-items: stretch;
 }
 
 .parking-position-grid-r {
-    grid-template-columns: repeat(2, minmax(130px, 1fr));
+    grid-template-columns: minmax(120px, 1fr) minmax(58px, 0.28fr) minmax(120px, 1fr);
     grid-template-areas:
-        "rtop1 rtop2"
-        "rbottom1 rbottom2";
+        "rtop1 rlabel rtop2"
+        "rbottom1 rlabel rbottom2";
 }
 
 .parking-ramp-center {
@@ -3581,12 +3567,17 @@ h2 {
         linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 26%),
         rgba(0, 0, 0, 0.18);
     color: var(--steel);
-    font-size: 0.78rem;
+    font-size: 1.02rem;
     font-weight: 950;
     letter-spacing: 0.08em;
     text-orientation: upright;
     text-transform: uppercase;
     writing-mode: vertical-rl;
+}
+
+.parking-position-grid-r .parking-ramp-center {
+    grid-area: rlabel;
+    font-size: 0.92rem;
 }
 
 .parking-position-slot-top {

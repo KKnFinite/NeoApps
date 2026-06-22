@@ -3486,6 +3486,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn('data-ramp-layout="standard"', html)
         self.assertIn('data-ramp-layout="remote"', html)
         self.assertIn("parking-ramp-center", html)
+        self.assertEqual(html.count("parking-ramp-center"), 6)
+        self.assertNotIn("parking-ramp-heading", html)
         self.assertIn("parking-position-left parking-position-slot-left-1", html)
         self.assertIn("parking-position-left parking-position-slot-left-4", html)
         self.assertIn("parking-position-right parking-position-slot-right-1", html)
