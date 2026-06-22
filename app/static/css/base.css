@@ -231,6 +231,10 @@
     width: min(1968px, calc(100% - 32px));
 }
 
+.motherbrain-parking-plan-page .shell {
+    width: min(2040px, calc(100% - 18px));
+}
+
 .neo-node-name {
     display: inline-flex;
     align-items: baseline;
@@ -3244,7 +3248,7 @@ h2 {
 .parking-plan-page {
     display: grid;
     gap: 18px;
-    width: min(100%, 1780px);
+    width: min(100%, 2040px);
     margin-inline: auto;
 }
 
@@ -3368,9 +3372,9 @@ h2 {
 
 .parking-layout {
     display: grid;
-    grid-template-columns: minmax(360px, 440px) minmax(0, 1fr);
+    grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
     align-items: start;
-    gap: 16px;
+    gap: 12px;
 }
 
 .parking-tail-panel,
@@ -3390,6 +3394,20 @@ h2 {
     display: grid;
     gap: 14px;
     padding: 14px;
+    transition:
+        border-color 150ms ease,
+        box-shadow 150ms ease,
+        background 150ms ease;
+}
+
+.parking-tail-panel.is-drag-over {
+    border-color: rgba(var(--node-highlight-rgb), 0.76);
+    background:
+        linear-gradient(145deg, rgba(var(--node-highlight-rgb), 0.14), transparent 38%),
+        rgba(7, 8, 11, 0.9);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 0 28px rgba(var(--node-highlight-rgb), 0.2);
 }
 
 .parking-panel-heading,

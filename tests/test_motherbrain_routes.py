@@ -3428,6 +3428,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"PARKING PLAN", response.data)
+        self.assertIn(b"motherbrain-parking-plan-page", response.data)
         self.assertIn(b"TAIL CHECKLIST", response.data)
         self.assertIn(b"N457UP", response.data)
         self.assertIn(b"R01", response.data)
@@ -3435,6 +3436,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"E10", response.data)
         self.assertEqual(response.data.count(b"data-lane-number"), 108)
         self.assertIn(b"data-parking-tail", response.data)
+        self.assertIn(b"data-parking-unassign-drop", response.data)
+        self.assertIn(f'data-unassign-url="/motherbrain/parking-plan/{operation.id}/unassign"'.encode(), response.data)
         self.assertIn(b"parking-mobile-assignment", response.data)
         self.assertIn(b'href="/motherbrain/parking-plan"', response.data)
         self.assertIn(f'action="/motherbrain/parking-plan/{operation.id}/assign"'.encode(), response.data)
@@ -3520,6 +3523,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )[0]
 
         self.assertIn("data-parking-lane", html)
+        self.assertIn("data-parking-unassign-drop", html)
+        self.assertIn("page.dataset.unassignUrl", html)
+        self.assertIn("Parking unassign failed.", html)
         self.assertIn('data-ramp-code="A"', html)
         self.assertIn('data-position-code="A01"', html)
         self.assertIn('data-lane-number="1"', html)
@@ -3779,6 +3785,43 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"<td>A01</td>", arrival_response.data)
         self.assertIn(b"<td>A01</td>", departure_response.data)
         self.assertIn(b"<td>A01</td>", detail_response.data)
+
+    def test_unassign_persists_and_boards_return_to_dash(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="ONT")
+        db.session.commit()
+
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/unassign",
+            data={"tail_number": "N457UP"},
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        assignment = SortDateParkingAssignment.query.filter_by(tail_number="N457UP").one()
+        self.assertIsNone(assignment.position_code)
+        plan_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        arrival_response = self.client.get(
+            f"/motherbrain/operations/{operation.id}/arrivals"
+        )
+        departure_response = self.client.get(
+            f"/motherbrain/operations/{operation.id}/departures"
+        )
+        self.assertIn(b"UNASSIGNED", plan_response.data)
+        self.assertIn(b"N457UP", plan_response.data)
+        self.assertIn(b"<td>-</td>", arrival_response.data)
+        self.assertIn(b"<td>-</td>", departure_response.data)
+        self.assertNotIn(b"<td>A01</td>", arrival_response.data)
+        self.assertNotIn(b"<td>A01</td>", departure_response.data)
 
     def test_boards_display_same_position_for_two_lanes(self):
         operation = self._parking_operation()

@@ -30,7 +30,7 @@
 {% endmacro %}
 
 {% block content %}
-<section class="parking-plan-page" data-parking-plan data-assign-url="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) if operation else '' }}">
+<section class="parking-plan-page" data-parking-plan data-assign-url="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) if operation else '' }}" data-unassign-url="{{ url_for('neomotherbrain.unassign_parking_plan_tail', operation_id=operation.id) if operation else '' }}">
     <div class="section-heading">
         <h1>PARKING PLAN</h1>
         {% if operation %}
@@ -99,7 +99,7 @@
     </section>
 
     <section class="parking-layout">
-        <aside class="parking-tail-panel" aria-label="Current sort tail checklist">
+        <aside class="parking-tail-panel" aria-label="Current sort tail checklist" data-parking-unassign-drop>
             <div class="parking-panel-heading">
                 <h2>TAIL CHECKLIST</h2>
                 <span>{{ summary.assigned_tails }}/{{ summary.total_tails }} ASSIGNED</span>
@@ -376,6 +376,46 @@
             window.location.reload();
         });
     });
+
+    const unassignDropTarget = page.querySelector("[data-parking-unassign-drop]");
+    if (unassignDropTarget) {
+        unassignDropTarget.addEventListener("dragover", (event) => {
+            event.preventDefault();
+            unassignDropTarget.classList.add("is-drag-over");
+        });
+        unassignDropTarget.addEventListener("dragleave", (event) => {
+            if (!unassignDropTarget.contains(event.relatedTarget)) {
+                unassignDropTarget.classList.remove("is-drag-over");
+            }
+        });
+        unassignDropTarget.addEventListener("drop", async (event) => {
+            event.preventDefault();
+            unassignDropTarget.classList.remove("is-drag-over");
+            const tail = event.dataTransfer.getData("text/plain") || draggedTail;
+            if (!tail || !page.dataset.unassignUrl) {
+                return;
+            }
+
+            const formData = new URLSearchParams();
+            formData.set("tail_number", tail);
+
+            const response = await fetch(page.dataset.unassignUrl, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    "Accept": "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                body: formData,
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                window.alert(payload.message || "Parking unassign failed.");
+                return;
+            }
+            window.location.reload();
+        });
+    }
 })();
 </script>
 {% endblock %}
