@@ -42,6 +42,106 @@ DEFAULT_NEONODES = (
     ("rain", "NeoRain", 70),
 )
 
+PWA_INSTALL_TARGETS = (
+    {
+        "kind": "app",
+        "code": "neogateway",
+        "manifest_key": "neogateway",
+        "icon_folder": "neogateway",
+        "name": "NeoGateway",
+        "description": "Gateway operations and NeoNode systems.",
+        "start_url": "/rfd",
+    },
+    {
+        "kind": "app",
+        "code": "neostaffing",
+        "manifest_key": "neostaffing",
+        "icon_folder": "neostaffing",
+        "name": "NeoStaffing",
+        "description": "Staffing operations and workforce planning.",
+        "start_url": "/neostaffing",
+    },
+    {
+        "kind": "app",
+        "code": "neobid",
+        "manifest_key": "neobid",
+        "icon_folder": "neobid",
+        "name": "NeoBid",
+        "description": "Bid tools placeholder for future buildout.",
+        "start_url": "/neobid",
+    },
+    {
+        "kind": "node",
+        "code": "motherbrain",
+        "manifest_key": "motherbrain",
+        "icon_folder": "motherbrain",
+        "name": "NeoMotherBrain",
+        "description": "Sort planning, schedules, and operation control.",
+        "start_url": "/motherbrain",
+        "minimum_role": "simulator",
+    },
+    {
+        "kind": "node",
+        "code": "sektor",
+        "manifest_key": "sektor",
+        "icon_folder": "sektor",
+        "name": "NeoSektor",
+        "description": "Ballmat counts, routing, and discharge operations.",
+        "start_url": "/neosektor",
+        "minimum_role": "watcher",
+    },
+    {
+        "kind": "node",
+        "code": "ermac",
+        "manifest_key": "ermac",
+        "icon_folder": "ermac",
+        "name": "NeoErmac",
+        "description": "Outbound door, lineup, and pull visibility.",
+        "start_url": "/neoermac",
+        "minimum_role": "watcher",
+    },
+    {
+        "kind": "node",
+        "code": "scorpion",
+        "manifest_key": "scorpion",
+        "icon_folder": "scorpion",
+        "name": "NeoScorpion",
+        "description": "Future NeoScorpion workspace.",
+        "start_url": "/nodes/",
+        "minimum_role": "watcher",
+    },
+    {
+        "kind": "node",
+        "code": "reptile",
+        "manifest_key": "reptile",
+        "icon_folder": "reptile",
+        "name": "NeoReptile",
+        "description": "Future NeoReptile workspace.",
+        "start_url": "/nodes/",
+        "minimum_role": "watcher",
+    },
+    {
+        "kind": "node",
+        "code": "subzero",
+        "manifest_key": "subzero",
+        "icon_folder": "subzero",
+        "name": "NeoSub-Zero",
+        "description": "Future NeoSub-Zero workspace.",
+        "start_url": "/nodes/",
+        "minimum_role": "watcher",
+    },
+    {
+        "kind": "node",
+        "code": "rain",
+        "manifest_key": "rain",
+        "icon_folder": "rain",
+        "name": "NeoRain",
+        "description": "Future NeoRain workspace.",
+        "start_url": "/nodes/",
+        "minimum_role": "watcher",
+    },
+)
+
 
 def get_default_gateway():
     gateway = Gateway.query.filter_by(code=_default_gateway_code()).first()
@@ -324,6 +424,31 @@ def portal_dashboard_rows_for_user(user):
         }
         for app in PORTAL_APPS
     ]
+
+
+def portal_install_rows_for_user(user):
+    gateway_code = _default_gateway_code()
+    rows = []
+    for target in PWA_INSTALL_TARGETS:
+        if target["kind"] == "app":
+            if not user_has_app_access(user, target["code"]):
+                continue
+        elif not user_can_access_node(
+            user,
+            gateway_code,
+            target["code"],
+            minimum_role=target.get("minimum_role", "watcher"),
+        ):
+            continue
+
+        rows.append(
+            {
+                **target,
+                "icon_src": f"/static/images/icons/{target['icon_folder']}/icon_192.png",
+                "manifest_url": f"/manifest/{target['manifest_key']}.webmanifest",
+            }
+        )
+    return rows
 
 
 def _sync_neogateway_app_access_from_gateway_membership(user):

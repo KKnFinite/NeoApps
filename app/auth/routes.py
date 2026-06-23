@@ -16,6 +16,7 @@ from app.services.access_control import (
     ensure_user_app_access,
     get_current_gateway,
     get_user_node_role,
+    portal_install_rows_for_user,
     portal_app_definition,
     portal_app_definitions,
     portal_dashboard_rows_for_user,
@@ -109,6 +110,7 @@ def portal_dashboard():
     return render_template(
         "auth/portal.html",
         app_rows=portal_dashboard_rows_for_user(current_user),
+        install_rows=portal_install_rows_for_user(current_user),
     )
 
 

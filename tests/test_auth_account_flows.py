@@ -449,6 +449,77 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertIn(b"NeoBid", response.data)
         self.assertIn(b"REQUEST ACCESS", response.data)
 
+    def test_portal_dashboard_shows_install_cards_only_for_accessible_apps_and_nodes(self):
+        user, _membership = self._approved_user("installcards", "installcards@example.com")
+        db.session.add(
+            PortalAppAccess(
+                user_id=user.id,
+                app_code="neostaffing",
+                status="pending",
+                role="watcher",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+
+        self._login(user.username)
+        response = self.client.get("/portal")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('class="portal-install-section"', html)
+        self.assertIn('data-manifest-url="/manifest/neogateway.webmanifest"', html)
+        self.assertIn('data-start-url="/rfd"', html)
+        self.assertIn('src="/static/images/icons/neogateway/icon_192.png"', html)
+        self.assertIn('data-manifest-url="/manifest/sektor.webmanifest"', html)
+        self.assertIn('data-manifest-url="/manifest/ermac.webmanifest"', html)
+        self.assertIn('data-manifest-url="/manifest/scorpion.webmanifest"', html)
+        self.assertIn('data-manifest-url="/manifest/reptile.webmanifest"', html)
+        self.assertIn('data-manifest-url="/manifest/subzero.webmanifest"', html)
+        self.assertIn('data-manifest-url="/manifest/rain.webmanifest"', html)
+        self.assertNotIn('data-manifest-url="/manifest/motherbrain.webmanifest"', html)
+        self.assertNotIn('data-manifest-url="/manifest/neostaffing.webmanifest"', html)
+        self.assertNotIn('data-manifest-url="/manifest/neobid.webmanifest"', html)
+
+    def test_portal_install_cards_include_motherbrain_and_staffing_when_approved(self):
+        user = self._admin("installmaster", "simulator")
+        db.session.add(
+            PortalAppAccess(
+                user_id=user.id,
+                app_code="neostaffing",
+                status="approved",
+                role="master",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+
+        self._login(user.username)
+        response = self.client.get("/portal")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-manifest-url="/manifest/motherbrain.webmanifest"', html)
+        self.assertIn('data-start-url="/motherbrain"', html)
+        self.assertIn('src="/static/images/icons/motherbrain/icon_192.png"', html)
+        self.assertIn('data-manifest-url="/manifest/neostaffing.webmanifest"', html)
+        self.assertIn('data-start-url="/neostaffing"', html)
+        self.assertIn('src="/static/images/icons/neostaffing/icon_192.png"', html)
+
+    def test_portal_install_buttons_have_fallback_script_without_exposing_secrets(self):
+        user, _membership = self._approved_user("installscript", "installscript@example.com")
+        db.session.commit()
+
+        self._login(user.username)
+        response = self.client.get("/portal")
+        html = response.get_data(as_text=True)
+
+        self.assertIn("beforeinstallprompt", html)
+        self.assertIn("window.location.assign(targetStartUrl)", html)
+        self.assertIn("data-install-button", html)
+        self.assertNotIn("AERODATABOX_API_KEY", html)
+        self.assertNotIn("BREVO_API_KEY", html)
+
     def test_grandmaster_can_approve_portal_app_access_and_assign_role(self):
         grandmaster = self._admin("portal_grandmaster", "grandmaster")
         target = self._user("staffingrequest", email="staffingrequest@example.com", verified=True)
