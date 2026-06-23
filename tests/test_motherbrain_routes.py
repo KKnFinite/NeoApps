@@ -2130,6 +2130,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "/motherbrain/master-schedule",
             data={
                 "board_mission_type": "departure",
+                "master_save_row": "departure_new",
                 "row_indexes": ["departure_new"],
                 "row_departure_new_id": "",
                 "row_departure_new_mission_type": "departure",
@@ -2158,6 +2159,66 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIsNone(created.aircraft_type)
         self.assertEqual(created.destination, "ONT")
         self.assertEqual(created.planned_time_local, time(5, 20))
+
+    def test_master_schedule_existing_departure_autosave_does_not_create_unsaved_add_row(self):
+        existing = self._add_master(
+            flight_number="DEPAUTO",
+            destination="SDF",
+            active_days="monday,tuesday",
+        )
+        db.session.commit()
+
+        response = self.client.post(
+            "/motherbrain/master-schedule",
+            data={
+                "board_mission_type": "departure",
+                "row_indexes": ["departure_0", "departure_new0"],
+                "row_departure_0_id": str(existing.id),
+                "row_departure_0_mission_type": "departure",
+                "row_departure_0_sort_name": "night",
+                "row_departure_0_active": "1",
+                "row_departure_0_active_days": ["monday", "tuesday"],
+                "row_departure_0_flight_number": "depauto",
+                "row_departure_0_aircraft_type": "757",
+                "row_departure_0_origin": "RFD",
+                "row_departure_0_destination": "ont",
+                "row_departure_0_planned_time_local_hour": "3",
+                "row_departure_0_planned_time_local_minute": "15",
+                "row_departure_0_pure_pull_time_local_hour": "1",
+                "row_departure_0_pure_pull_time_local_minute": "10",
+                "row_departure_0_first_mix_pull_time_local_hour": "1",
+                "row_departure_0_first_mix_pull_time_local_minute": "25",
+                "row_departure_0_final_mix_pull_time_local_hour": "1",
+                "row_departure_0_final_mix_pull_time_local_minute": "40",
+                "row_departure_new0_id": "",
+                "row_departure_new0_mission_type": "departure",
+                "row_departure_new0_sort_name": "night",
+                "row_departure_new0_active": "1",
+                "row_departure_new0_active_days": ["monday", "tuesday"],
+                "row_departure_new0_flight_number": "unsaved",
+                "row_departure_new0_aircraft_type": "",
+                "row_departure_new0_origin": "RFD",
+                "row_departure_new0_destination": "sdf",
+                "row_departure_new0_planned_time_local_hour": "4",
+                "row_departure_new0_planned_time_local_minute": "20",
+                "row_departure_new0_pure_pull_time_local_hour": "2",
+                "row_departure_new0_pure_pull_time_local_minute": "10",
+                "row_departure_new0_first_mix_pull_time_local_hour": "2",
+                "row_departure_new0_first_mix_pull_time_local_minute": "25",
+                "row_departure_new0_final_mix_pull_time_local_hour": "2",
+                "row_departure_new0_final_mix_pull_time_local_minute": "40",
+            },
+            headers={"Accept": "application/json", "X-Requested-With": "fetch"},
+        )
+
+        updated = db.session.get(MasterFlightSchedule, existing.id)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["updated"], 1)
+        self.assertEqual(response.get_json()["created"], 0)
+        self.assertEqual(updated.destination, "ONT")
+        self.assertEqual(updated.aircraft_type, "757")
+        self.assertEqual(updated.planned_time_local, time(3, 15))
+        self.assertIsNone(MasterFlightSchedule.query.filter_by(flight_number="UNSAVED").first())
 
     def test_master_schedule_board_save_creates_multiple_dynamic_add_rows(self):
         response = self.client.post(

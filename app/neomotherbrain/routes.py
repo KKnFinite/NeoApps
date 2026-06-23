@@ -895,6 +895,7 @@ def master_schedule():
         mission_type = request.form.get("board_mission_type", "").strip().lower()
         rows = _master_schedule_bulk_rows_from_request(gateway)
         strict_row_index = request.form.get("master_save_row", "").strip()
+        create_complete_new_rows = bool(strict_row_index) or not _wants_json_response()
         try:
             updated_count, created_count = _apply_master_schedule_board_edit(
                 rows,
@@ -902,6 +903,7 @@ def master_schedule():
                 gateway,
                 mission_type,
                 strict_row_index=strict_row_index or None,
+                create_complete_new_rows=create_complete_new_rows,
             )
         except ValueError as error:
             db.session.rollback()
@@ -1748,6 +1750,7 @@ def _apply_master_schedule_board_edit(
     gateway,
     mission_type,
     strict_row_index=None,
+    create_complete_new_rows=True,
 ):
     if mission_type not in MISSION_TYPES:
         raise ValueError("Mission type must be arrival or departure.")
@@ -1767,6 +1770,10 @@ def _apply_master_schedule_board_edit(
         strict_row_found = strict_row_found or is_strict_row
         schedule_id = row.get("id", "").strip()
         if not schedule_id:
+            if strict_row_index and not is_strict_row:
+                continue
+            if not strict_row_index and not create_complete_new_rows:
+                continue
             if not _master_schedule_board_row_has_data(row):
                 if is_strict_row:
                     raise ValueError("Complete the new master schedule row before saving.")
