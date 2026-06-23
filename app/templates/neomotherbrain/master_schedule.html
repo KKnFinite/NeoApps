@@ -233,7 +233,7 @@
             return false;
         }
         if (row.classList.contains("master-board-add-row")) {
-            return rowIsComplete(row);
+            return false;
         }
         return Boolean(fieldValue(row, "id")) && rowIsComplete(row);
     };

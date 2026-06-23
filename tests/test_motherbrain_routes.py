@@ -2230,6 +2230,59 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(created.planned_time_local, time(1, 5))
         self.assertIn(b"ARRSAVE", reload_response.data)
 
+    def test_master_schedule_new_arrival_allows_same_origin_with_different_flight(self):
+        existing = self._add_master(
+            flight_number="ARRSDF1",
+            mission_type="arrival",
+            origin="SDF",
+            destination="RFD",
+            planned_time_local=time(0, 30),
+            active_days="monday,tuesday",
+        )
+        db.session.commit()
+
+        response = self.client.post(
+            "/motherbrain/master-schedule",
+            data={
+                "board_mission_type": "arrival",
+                "master_save_row": "arrival_new0",
+                "row_indexes": ["arrival_0", "arrival_new0"],
+                "row_arrival_0_id": str(existing.id),
+                "row_arrival_0_mission_type": "arrival",
+                "row_arrival_0_sort_name": "night",
+                "row_arrival_0_active": "1",
+                "row_arrival_0_active_days": ["monday", "tuesday"],
+                "row_arrival_0_flight_number": "arrsdf1",
+                "row_arrival_0_aircraft_type": "",
+                "row_arrival_0_origin": "sdf",
+                "row_arrival_0_destination": "RFD",
+                "row_arrival_0_planned_time_local_hour": "0",
+                "row_arrival_0_planned_time_local_minute": "30",
+                "row_arrival_0_wave": "1",
+                "row_arrival_new0_id": "",
+                "row_arrival_new0_mission_type": "arrival",
+                "row_arrival_new0_sort_name": "night",
+                "row_arrival_new0_active": "1",
+                "row_arrival_new0_active_days": ["monday", "tuesday"],
+                "row_arrival_new0_flight_number": "arrsdf2",
+                "row_arrival_new0_aircraft_type": "",
+                "row_arrival_new0_origin": "sdf",
+                "row_arrival_new0_destination": "RFD",
+                "row_arrival_new0_planned_time_local_hour": "1",
+                "row_arrival_new0_planned_time_local_minute": "5",
+                "row_arrival_new0_wave": "1",
+            },
+            headers={"Accept": "application/json", "X-Requested-With": "fetch"},
+        )
+
+        created = MasterFlightSchedule.query.filter_by(flight_number="ARRSDF2").first()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["created"], 1)
+        self.assertEqual(response.get_json()["updated"], 1)
+        self.assertIsNotNone(created)
+        self.assertEqual(created.origin, "SDF")
+        self.assertEqual(created.planned_time_local, time(1, 5))
+
     def test_master_schedule_new_departure_row_save_button_saves_and_reloads(self):
         response = self.client.post(
             "/motherbrain/master-schedule",
