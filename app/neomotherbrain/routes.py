@@ -116,6 +116,10 @@ WAVE_OPTIONS = (
     ("2", "2"),
 )
 WAVES = {value for value, _label in WAVE_OPTIONS}
+MASTER_WAVE_OPTIONS = (
+    ("", ""),
+    *WAVE_OPTIONS,
+)
 MASTER_AIRCRAFT_TYPE_OPTIONS = ("", "A300", "747", "757", "767", "Other")
 FUEL_STATUSES = ("", "waiting", "received", "assigned", "complete")
 ARRIVAL_STATUSES = (
@@ -938,7 +942,7 @@ def master_schedule():
         active_day_options=ACTIVE_DAY_OPTIONS,
         aircraft_type_options=MASTER_AIRCRAFT_TYPE_OPTIONS,
         gateway=gateway,
-        wave_options=WAVE_OPTIONS,
+        wave_options=MASTER_WAVE_OPTIONS,
     )
 
 
@@ -1523,7 +1527,7 @@ def _render_master_schedule_form(form=None, mode="new", master_schedule=None, ro
         mission_type_options=MISSION_TYPE_OPTIONS,
         rows=rows,
         sort_name_options=SORT_NAME_OPTIONS,
-        wave_options=WAVE_OPTIONS,
+        wave_options=MASTER_WAVE_OPTIONS,
     )
 
 
@@ -1535,7 +1539,7 @@ def _master_schedule_form_from_request(gateway=None, prefix="", source=None):
         "gateway_code": gateway_code,
         "sort_name": source.get(f"{prefix}sort_name", "night"),
         "mission_type": source.get(f"{prefix}mission_type", "departure"),
-        "wave": source.get(f"{prefix}wave", "1"),
+        "wave": source.get(f"{prefix}wave", ""),
         "flight_number": source.get(f"{prefix}flight_number", ""),
         "aircraft_type": source.get(f"{prefix}aircraft_type", ""),
         "origin": source.get(f"{prefix}origin", ""),
@@ -1597,7 +1601,7 @@ def _master_schedule_form_from_model(master_schedule):
         "gateway_code": master_schedule.gateway_code,
         "sort_name": master_schedule.sort_name,
         "mission_type": master_schedule.mission_type,
-        "wave": normalize_wave(master_schedule.wave),
+        "wave": normalize_wave(master_schedule.wave) or "",
         "flight_number": master_schedule.flight_number,
         "aircraft_type": master_schedule.aircraft_type or "",
         "origin": master_schedule.origin,
@@ -1618,7 +1622,7 @@ def _blank_master_schedule_form(gateway=None):
         "gateway_code": gateway_code,
         "sort_name": "night",
         "mission_type": "departure",
-        "wave": "1",
+        "wave": "",
         "flight_number": "",
         "aircraft_type": "",
         "origin": "",
@@ -1859,7 +1863,7 @@ def _apply_master_schedule_form(master_schedule, form, gateway=None):
     gateway_code = gateway.code if gateway else form["gateway_code"].strip().upper()
     sort_name = form["sort_name"].strip().lower()
     mission_type = form["mission_type"].strip().lower()
-    wave = normalize_wave(form.get("wave"))
+    wave = _normalize_master_schedule_wave(form.get("wave"))
     flight_number = _normalize_flight_number(form["flight_number"])
     aircraft_type = _normalize_master_aircraft_type(form.get("aircraft_type", ""))
     origin = _normalize_airport_code(form["origin"], "Origin")
@@ -1870,9 +1874,6 @@ def _apply_master_schedule_form(master_schedule, form, gateway=None):
         raise ValueError("Sort name must be Night, Twilight, Day, or Sunrise.")
     if mission_type not in MISSION_TYPES:
         raise ValueError("Mission type must be arrival or departure.")
-    if wave not in WAVES:
-        raise ValueError("Wave must be 1 or 2.")
-
     if not all((gateway_code, sort_name, flight_number, origin, destination)):
         raise ValueError("Gateway, sort, flight, origin, and destination are required.")
 
@@ -1999,6 +2000,17 @@ def _time_value_from_form(source, name):
         minute = minute.zfill(2)
 
     return f"{hour}:{minute}"
+
+
+def _normalize_master_schedule_wave(value):
+    raw_wave = (value or "").strip()
+    if not raw_wave:
+        return None
+
+    wave = normalize_wave(raw_wave)
+    if wave not in WAVES:
+        raise ValueError("Wave must be blank, 1, or 2.")
+    return wave
 
 
 def _normalize_master_aircraft_type(value):

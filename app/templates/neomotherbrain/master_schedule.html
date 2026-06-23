@@ -36,7 +36,7 @@
 </select>
 {% endmacro %}
 
-{% macro wave_select(name, selected_value="1") %}
+{% macro wave_select(name, selected_value="") %}
 {% set selected_wave = selected_value|wave_label %}
 <select name="{{ name }}" aria-label="Wave">
     {% for wave_value, wave_label in wave_options %}
@@ -64,7 +64,7 @@
         {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
     </td>
     <td class="master-board-cell master-cell-wave" data-label="Wave">
-        {{ wave_select(prefix ~ "wave", schedule.wave if schedule and schedule.wave else "1") }}
+        {{ wave_select(prefix ~ "wave", schedule.wave if schedule else "") }}
     </td>
     <td data-label="Action" class="table-actions master-cell-actions">
         {% if schedule %}
@@ -95,7 +95,7 @@
         {{ military_time_select(prefix ~ "planned_time_local", schedule.planned_time_local.strftime("%H:%M") if schedule and schedule.planned_time_local else "") }}
     </td>
     <td class="master-board-cell master-cell-wave" data-label="Wave">
-        {{ wave_select(prefix ~ "wave", schedule.wave if schedule and schedule.wave else "1") }}
+        {{ wave_select(prefix ~ "wave", schedule.wave if schedule else "") }}
     </td>
     <td class="master-board-cell master-cell-pure-pull" data-label="Pure Pull">
         {{ military_time_select(prefix ~ "pure_pull_time_local", schedule.pure_pull_time_local.strftime("%H:%M") if schedule and schedule.pure_pull_time_local else "") }}

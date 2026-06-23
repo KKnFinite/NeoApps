@@ -265,11 +265,13 @@ def normalize_optional_window_minutes(window_minutes):
 
 def normalize_wave(wave):
     wave = str(wave or "").strip().lower()
+    if not wave:
+        return None
     if wave in ("1", "1st", "first", "first wave", "1st wave"):
         return "1"
     if wave in ("2", "2nd", "second", "second wave", "2nd wave"):
         return "2"
-    return "1"
+    return None
 
 
 def effective_window_minutes_for_mission(mission, operation=None):
@@ -282,8 +284,10 @@ def effective_window_minutes_for_mission(mission, operation=None):
     wave = normalize_wave(getattr(mission, "wave", None))
     if wave == "1":
         wave_window = getattr(operation, "first_wave_window_minutes", None)
-    else:
+    elif wave == "2":
         wave_window = getattr(operation, "second_wave_window_minutes", None)
+    else:
+        return default_window
 
     if wave_window is None:
         return default_window

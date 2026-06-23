@@ -102,6 +102,24 @@ class SortDateOperationsTest(unittest.TestCase):
         self.assertEqual(data["effective_window_minutes"], 20)
         self.assertEqual(data["adjusted_planned_departure_time"], datetime(2026, 6, 1, 2, 30))
 
+    def test_blank_wave_uses_default_window_not_wave_specific_windows(self):
+        operation = self._operation(
+            window_minutes=20,
+            first_wave_window_minutes=5,
+            second_wave_window_minutes=35,
+        )
+        mission = self._mission(
+            mission_type="departure",
+            wave=None,
+            planned_datetime_local=datetime(2026, 6, 1, 2, 10),
+        )
+
+        data = mission_display_timing_data(mission, operation)
+
+        self.assertIsNone(data["wave"])
+        self.assertEqual(data["effective_window_minutes"], 20)
+        self.assertEqual(data["adjusted_planned_departure_time"], datetime(2026, 6, 1, 2, 30))
+
     def test_window_does_not_mutate_base_mission_times(self):
         operation = self._operation(window_minutes=20)
         mission = self._mission(

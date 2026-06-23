@@ -96,9 +96,13 @@ def register_template_helpers(app):
 
     def format_wave_label(value):
         normalized = str(value or "").strip().lower()
+        if not normalized:
+            return ""
+        if normalized in ("1", "1st", "first", "first wave", "1st wave"):
+            return "1"
         if normalized in ("2", "2nd", "second", "second wave", "2nd wave"):
             return "2"
-        return "1"
+        return ""
 
     def format_local_datetime(value, timezone_name=None):
         if not value:

@@ -2288,6 +2288,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIsNotNone(created)
         self.assertEqual(created.origin, "SDF")
         self.assertEqual(created.destination, "RFD")
+        self.assertIsNone(created.wave)
         self.assertEqual(created.planned_time_local, time(1, 5))
         self.assertIn(b"ARRSAVE", reload_response.data)
 
@@ -2378,6 +2379,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.get_json()["created"], 1)
         self.assertIsNotNone(created)
         self.assertEqual(created.destination, "ONT")
+        self.assertIsNone(created.wave)
         self.assertEqual(created.planned_time_local, time(4, 20))
         self.assertEqual(created.pure_pull_time_local, time(2, 10))
         self.assertEqual(created.final_mix_pull_time_local, time(2, 40))
@@ -2739,6 +2741,36 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(master.wave, "2")
+
+    def test_master_schedule_allows_blank_wave_assignment(self):
+        response = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(
+                flight_number="WAVENULL",
+                wave="",
+            ),
+            follow_redirects=False,
+        )
+
+        master = MasterFlightSchedule.query.filter_by(flight_number="WAVENULL").first()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIsNotNone(master)
+        self.assertIsNone(master.wave)
+
+    def test_master_schedule_rejects_invalid_wave_assignment(self):
+        response = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(
+                flight_number="WAVE03",
+                wave="3",
+            ),
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"Wave must be blank, 1, or 2.", response.data)
+        self.assertIsNone(MasterFlightSchedule.query.filter_by(flight_number="WAVE03").first())
 
     def test_master_schedule_time_fields_use_24_hour_format_and_save(self):
         response = self.client.post(

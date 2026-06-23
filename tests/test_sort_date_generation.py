@@ -103,6 +103,19 @@ class SortDateGenerationTest(unittest.TestCase):
         self.assertEqual(mission.master_flight_schedule_id, master.id)
         self.assertEqual(mission.sort_date_operation, operation)
 
+    def test_generated_mission_preserves_blank_master_wave(self):
+        self._add_master(flight_number="5X124", wave=None)
+        db.session.commit()
+
+        operation = generate_sort_date_operation_from_master(
+            sort_date=date(2026, 6, 1),
+            gateway_code="RFD",
+            sort_name="night",
+        )
+
+        mission = operation.missions[0]
+        self.assertIsNone(mission.wave)
+
     def test_departure_copies_pull_times_and_sets_source(self):
         self._add_master(
             mission_type="departure",
