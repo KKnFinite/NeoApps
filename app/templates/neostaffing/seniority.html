@@ -29,11 +29,7 @@
 <section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="neostaffing-seniority-title">
     <nav class="neostaffing-mobile-tabs" aria-label="NeoStaffing mobile navigation">
         <a href="{{ url_for('neostaffing.index') }}">BOARD</a>
-        {% if can_manage_app %}
         <a href="{{ url_for('neostaffing.people') }}">PEOPLE</a>
-        {% else %}
-        <span>PEOPLE</span>
-        {% endif %}
         <a href="{{ url_for('neostaffing.seniority') }}" aria-current="page">SENIORITY</a>
         {% if can_manage_app %}
         <a href="{{ url_for('neostaffing.app_management') }}">MANAGE</a>
@@ -49,11 +45,7 @@
             </div>
             <a href="{{ url_for('neostaffing.index') }}">DASHBOARD</a>
             <span>STAFFING BOARD</span>
-            {% if can_manage_app %}
             <a href="{{ url_for('neostaffing.people') }}">PEOPLE</a>
-            {% else %}
-            <span>PEOPLE</span>
-            {% endif %}
             <a href="{{ url_for('neostaffing.seniority') }}" aria-current="page">SENIORITY</a>
             {% if can_manage_app %}
             <a href="{{ url_for('neostaffing.hierarchy') }}">WORK AREAS</a>

@@ -427,6 +427,94 @@ def seniority_context(filters=None):
     }
 
 
+def people_context(filters=None):
+    filters = filters or {}
+    sorts = units_by_type("sort")
+    all_operations = units_by_type("operation")
+    selected_sort = _resolve_optional_unit(filters.get("sort_id"), "sort")
+    operations = [
+        operation
+        for operation in all_operations
+        if selected_sort is None or operation.parent_id == selected_sort.id
+    ]
+    selected_operation = _resolve_selected_operation(filters.get("operation_id"), operations, all_operations)
+    if selected_operation and selected_sort is None:
+        selected_sort = selected_operation.parent
+    selected_department = _resolve_optional_unit(filters.get("department_id"), "department")
+    selected_work_area = _resolve_optional_unit(filters.get("work_area_id"), "work_area")
+    if selected_work_area and selected_department is None:
+        selected_department = selected_work_area.parent
+    if selected_department and selected_operation is None:
+        selected_operation = selected_department.parent
+    if selected_operation and selected_sort is None:
+        selected_sort = selected_operation.parent
+    if selected_sort:
+        operations = [
+            operation
+            for operation in all_operations
+            if operation.parent_id == selected_sort.id
+        ]
+
+    rows = _people_rows()
+    rows = _filter_people_rows(
+        rows,
+        {
+            **filters,
+            "selected_sort": selected_sort,
+            "selected_operation": selected_operation,
+            "selected_department": selected_department,
+            "selected_work_area": selected_work_area,
+        },
+    )
+    rows.sort(
+        key=lambda row: (
+            row["person"].last_name.lower(),
+            row["person"].first_name.lower(),
+            str(row["person"].employee_id or ""),
+            row["person"].id,
+        )
+    )
+
+    selected_person = _resolve_people_detail(filters.get("person_id"), rows)
+    if selected_person is None and rows:
+        selected_person = rows[0]
+
+    counts = {
+        "total": len(rows),
+        "active": sum(1 for row in rows if row["person"].active),
+        "inactive": sum(1 for row in rows if not row["person"].active),
+        "supervisors": sum(1 for row in rows if row["person"].classification in SUPERVISOR_CLASSIFICATIONS),
+        "managers": sum(1 for row in rows if row["person"].classification in MANAGER_CLASSIFICATIONS),
+    }
+
+    return {
+        "sorts": sorts,
+        "operations": operations,
+        "departments": _departments_under(selected_operation),
+        "work_areas": _work_areas_under(selected_operation),
+        "selected_sort": selected_sort,
+        "selected_operation": selected_operation,
+        "selected_department": selected_department,
+        "selected_work_area": selected_work_area,
+        "rows": rows,
+        "counts": counts,
+        "selected_person": selected_person,
+        "leadership_only": _parse_bool(filters.get("leadership_only"), default=False),
+        "filters": {
+            "sort_id": str(selected_sort.id) if selected_sort else "",
+            "operation_id": str(selected_operation.id) if selected_operation else "",
+            "classification": filters.get("classification", ""),
+            "department_id": filters.get("department_id", ""),
+            "work_area_id": filters.get("work_area_id", ""),
+            "search": filters.get("search", ""),
+            "active": filters.get("active", "active") or "active",
+            "leadership_only": "1" if _parse_bool(filters.get("leadership_only"), default=False) else "",
+            "person_id": str(selected_person["person"].id) if selected_person else "",
+        },
+        "hierarchy": staffing_hierarchy_tree(),
+    }
+
+
 def selectable_parent_units(unit_type):
     expected_parent_type = PARENT_TYPE_BY_UNIT_TYPE.get(unit_type)
     if expected_parent_type is None:
@@ -486,6 +574,150 @@ def people_query(search=None, classification=None, active=None):
     if active in {"active", "inactive"}:
         query = query.filter_by(active=(active == "active"))
     return query.order_by(StaffingPerson.seniority_date, StaffingPerson.last_name, StaffingPerson.first_name)
+
+
+def _people_rows():
+    active_work_assignments = {
+        assignment.person_id: assignment
+        for assignment in (
+            StaffingWorkAssignment.query.filter_by(active=True)
+            .join(StaffingUnit)
+            .all()
+        )
+    }
+    active_leadership = {}
+    for assignment in (
+        StaffingLeadershipAssignment.query.filter_by(active=True)
+        .join(StaffingUnit)
+        .all()
+    ):
+        active_leadership.setdefault(assignment.person_id, []).append(assignment)
+
+    rows = []
+    for person in StaffingPerson.query.order_by(StaffingPerson.last_name, StaffingPerson.first_name).all():
+        work_assignment = active_work_assignments.get(person.id)
+        work_area = work_assignment.work_area if work_assignment else None
+        department = work_area.parent if work_area and work_area.parent else None
+        operation = department.parent if department and department.parent else None
+        sort = operation.parent if operation and operation.parent else None
+        leadership_assignments = sorted(
+            active_leadership.get(person.id, []),
+            key=lambda row: (row.unit.unit_type, unit_path(row.unit), row.id),
+        )
+        rows.append(
+            {
+                "person": person,
+                "work_assignment": work_assignment,
+                "work_area": work_area,
+                "department": department,
+                "operation": operation,
+                "sort": sort,
+                "leadership_assignments": leadership_assignments,
+                "leadership_labels": _leadership_labels(person, leadership_assignments),
+                "seniority_operation": _people_seniority_operation(work_area, leadership_assignments),
+            }
+        )
+    return rows
+
+
+def _filter_people_rows(rows, filters):
+    active = filters.get("active", "active")
+    classification = str(filters.get("classification") or "").strip()
+    search = str(filters.get("search") or "").strip().lower()
+    leadership_only = _parse_bool(filters.get("leadership_only"), default=False)
+    selected_scope = (
+        filters.get("selected_work_area")
+        or filters.get("selected_department")
+        or filters.get("selected_operation")
+        or filters.get("selected_sort")
+    )
+    allowed_unit_ids = unit_ids_under(selected_scope) if selected_scope else None
+
+    filtered = []
+    for row in rows:
+        person = row["person"]
+        if active in {"active", "inactive"} and person.active != (active == "active"):
+            continue
+        if classification in STAFFING_CLASSIFICATIONS and person.classification != classification:
+            continue
+        if leadership_only and not row["leadership_assignments"]:
+            continue
+        if search:
+            searchable = " ".join(
+                [
+                    person.employee_id or "",
+                    person.first_name or "",
+                    person.last_name or "",
+                    person.full_name or "",
+                ]
+            ).lower()
+            if search not in searchable:
+                continue
+        if allowed_unit_ids is not None and not _people_row_matches_scope(row, allowed_unit_ids):
+            continue
+        filtered.append(row)
+    return filtered
+
+
+def _people_row_matches_scope(row, allowed_unit_ids):
+    scoped_ids = set()
+    for unit in (row.get("work_area"), row.get("department"), row.get("operation"), row.get("sort")):
+        if unit:
+            scoped_ids.add(unit.id)
+    scoped_ids.update(assignment.unit_id for assignment in row.get("leadership_assignments", []))
+    return bool(scoped_ids & allowed_unit_ids)
+
+
+def _leadership_labels(person, assignments):
+    labels = []
+    for assignment in assignments:
+        if person.classification == "part_time_supervisor" and assignment.unit.unit_type == "work_area":
+            label = "Work Area Supervisor"
+        elif person.classification == "full_time_supervisor" and assignment.unit.unit_type == "department":
+            label = "Department Supervisor"
+        elif person.classification == "manager" and assignment.unit.unit_type == "operation":
+            label = "Manager"
+        elif person.classification == "division_manager" and assignment.unit.unit_type == "sort":
+            label = "Division Manager"
+        elif person.classification == "full_time_specialist":
+            label = "Specialist Assignment"
+        else:
+            label = LEADERSHIP_LEVEL_LABELS.get(assignment.leadership_level, "Leadership")
+        labels.append(
+            {
+                "label": label,
+                "unit": assignment.unit,
+                "path": unit_path(assignment.unit),
+            }
+        )
+    return labels
+
+
+def _people_seniority_operation(work_area, leadership_assignments):
+    if work_area and work_area.parent and work_area.parent.parent:
+        return work_area.parent.parent
+    for assignment in leadership_assignments:
+        unit = assignment.unit
+        if unit.unit_type == "operation":
+            return unit
+        if unit.unit_type == "department" and unit.parent:
+            return unit.parent
+        if unit.unit_type == "work_area" and unit.parent and unit.parent.parent:
+            return unit.parent.parent
+    return None
+
+
+def _resolve_people_detail(person_id, rows):
+    if not person_id:
+        return None
+    try:
+        selected_id = int(person_id)
+    except (TypeError, ValueError):
+        return None
+    for row in rows:
+        if row["person"].id == selected_id:
+            return row
+    return None
 
 
 def _seniority_work_assignment_rows(operation, allowed_work_area_ids, filters):

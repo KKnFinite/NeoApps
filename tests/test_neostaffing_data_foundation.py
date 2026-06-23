@@ -372,6 +372,92 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         self.assertIn(operation, multiple["operations"])
         self.assertIn(second_operation, multiple["operations"])
 
+    def test_people_context_filters_by_hierarchy_classification_and_status(self):
+        sort, operation, department, work_area = self._hierarchy()
+        second_operation = staffing_service.create_unit(
+            {"unit_type": "operation", "name": "Ramp Operation", "parent_id": sort.id}
+        )
+        ramp_department = staffing_service.create_unit(
+            {"unit_type": "department", "name": "Ramp Department", "parent_id": second_operation.id}
+        )
+        ramp_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "Ramp", "parent_id": ramp_department.id}
+        )
+        east_employee = self._person_with_name("E700", "part_time", "Avery", "East", "2020-01-01")
+        combo_employee = self._person_with_name("E701", "full_time_combo", "Morgan", "Combo", "2020-01-02")
+        inactive_employee = self._person_with_name("E702", "part_time", "Inactive", "Worker", "2020-01-03")
+        ramp_employee = self._person_with_name("E703", "part_time", "Ramp", "Worker", "2020-01-04")
+        inactive_employee.active = False
+        staffing_service.assign_work_area(east_employee, work_area)
+        staffing_service.assign_work_area(combo_employee, work_area)
+        staffing_service.assign_work_area(inactive_employee, work_area)
+        staffing_service.assign_work_area(ramp_employee, ramp_area)
+
+        operation_context = staffing_service.people_context({"operation_id": str(operation.id)})
+        self.assertEqual(
+            [row["person"].employee_id for row in operation_context["rows"]],
+            ["E701", "E700"],
+        )
+        self.assertEqual(operation_context["counts"]["active"], 2)
+
+        combo_context = staffing_service.people_context(
+            {"operation_id": str(operation.id), "classification": "full_time_combo"}
+        )
+        self.assertEqual([row["person"].employee_id for row in combo_context["rows"]], ["E701"])
+
+        inactive_context = staffing_service.people_context(
+            {"operation_id": str(operation.id), "active": "inactive"}
+        )
+        self.assertEqual([row["person"].employee_id for row in inactive_context["rows"]], ["E702"])
+        self.assertEqual(inactive_context["counts"]["inactive"], 1)
+
+        work_area_context = staffing_service.people_context({"work_area_id": str(work_area.id)})
+        self.assertEqual(
+            [row["person"].employee_id for row in work_area_context["rows"]],
+            ["E701", "E700"],
+        )
+        self.assertEqual(work_area_context["selected_sort"], sort)
+
+    def test_people_context_searches_by_employee_id_and_name(self):
+        _sort, operation, _department, work_area = self._hierarchy()
+        avery = self._person_with_name("E710", "part_time", "Avery", "Spotter", "2020-01-01")
+        morgan = self._person_with_name("E711", "part_time", "Morgan", "Loader", "2020-01-02")
+        staffing_service.assign_work_area(avery, work_area)
+        staffing_service.assign_work_area(morgan, work_area)
+
+        by_id = staffing_service.people_context({"operation_id": str(operation.id), "search": "E710"})
+        by_name = staffing_service.people_context({"operation_id": str(operation.id), "search": "loader"})
+
+        self.assertEqual([row["person"].employee_id for row in by_id["rows"]], ["E710"])
+        self.assertEqual([row["person"].employee_id for row in by_name["rows"]], ["E711"])
+
+    def test_people_context_leadership_only_and_detail_data(self):
+        sort, operation, department, work_area = self._hierarchy()
+        employee = self._person_with_name("E720", "part_time", "Worker", "One", "2020-01-01")
+        supervisor = self._person_with_name(
+            "E721",
+            "part_time_supervisor",
+            "Supervisor",
+            "One",
+            "2019-01-01",
+        )
+        manager = self._person_with_name("E722", "manager", "Manager", "One", "2018-01-01")
+        staffing_service.assign_work_area(employee, work_area)
+        staffing_service.create_leadership_assignment(supervisor, work_area)
+        staffing_service.create_leadership_assignment(manager, operation)
+
+        context = staffing_service.people_context(
+            {"sort_id": str(sort.id), "leadership_only": "1", "person_id": str(supervisor.id)}
+        )
+
+        self.assertEqual([row["person"].employee_id for row in context["rows"]], ["E722", "E721"])
+        self.assertEqual(context["counts"]["supervisors"], 1)
+        self.assertEqual(context["counts"]["managers"], 1)
+        self.assertEqual(context["selected_person"]["person"], supervisor)
+        self.assertEqual(context["selected_person"]["leadership_labels"][0]["label"], "Work Area Supervisor")
+        self.assertEqual(context["selected_person"]["leadership_labels"][0]["unit"], work_area)
+        self.assertEqual(context["selected_person"]["seniority_operation"], operation)
+
     def _hierarchy(self):
         sort = staffing_service.create_unit({"unit_type": "sort", "name": "Night Sort"})
         operation = staffing_service.create_unit(

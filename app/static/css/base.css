@@ -4933,19 +4933,32 @@ body.blueprint-neostaffing {
     grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.neostaffing-people-metrics {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .neostaffing-seniority-workspace {
     display: grid;
     grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(220px, 270px);
     gap: 14px;
 }
 
+.neostaffing-people-workspace {
+    display: grid;
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(240px, 300px);
+    gap: 14px;
+}
+
 .neostaffing-seniority-filter-panel,
-.neostaffing-seniority-list-panel {
+.neostaffing-seniority-list-panel,
+.neostaffing-people-filter-panel,
+.neostaffing-people-list-panel {
     align-content: start;
     min-width: 0;
 }
 
-.neostaffing-seniority-filter-form {
+.neostaffing-seniority-filter-form,
+.neostaffing-people-filter-form {
     display: grid;
     gap: 10px;
 }
@@ -4967,14 +4980,16 @@ body.blueprint-neostaffing {
     accent-color: var(--node-primary);
 }
 
-.neostaffing-seniority-tree {
+.neostaffing-seniority-tree,
+.neostaffing-people-tree {
     display: grid;
     gap: 10px;
     padding-top: 12px;
     border-top: 1px solid rgba(var(--node-rgb), 0.16);
 }
 
-.neostaffing-seniority-list {
+.neostaffing-seniority-list,
+.neostaffing-people-list {
     display: grid;
     gap: 10px;
 }
@@ -5037,6 +5052,128 @@ body.blueprint-neostaffing {
     white-space: nowrap;
 }
 
+.neostaffing-people-card {
+    display: grid;
+    grid-template-columns: minmax(160px, 1.1fr) minmax(140px, 0.9fr) minmax(130px, 0.75fr) minmax(150px, 0.85fr);
+    gap: 10px;
+    align-items: center;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid rgba(var(--node-rgb), 0.24);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(18, 30, 42, 0.92), rgba(5, 11, 16, 0.96)),
+        rgba(5, 11, 16, 0.94);
+    color: inherit;
+    text-decoration: none;
+}
+
+.neostaffing-people-card.is-selected {
+    border-color: rgba(var(--node-rgb), 0.72);
+    box-shadow: 0 0 18px rgba(var(--node-rgb), 0.18);
+}
+
+.neostaffing-people-card.is-inactive {
+    opacity: 0.62;
+}
+
+.neostaffing-people-card > div {
+    min-width: 0;
+}
+
+.neostaffing-people-card span,
+.neostaffing-people-card em {
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-style: normal;
+    font-weight: 950;
+}
+
+.neostaffing-people-card strong {
+    display: block;
+    overflow: hidden;
+    color: var(--neo-bright-silver);
+    font-size: 0.96rem;
+    font-weight: 950;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.neostaffing-people-identity strong {
+    color: var(--node-primary);
+}
+
+.neostaffing-people-detail-head {
+    display: grid;
+    gap: 3px;
+    margin-bottom: 12px;
+    padding: 12px;
+    border: 1px solid rgba(var(--node-rgb), 0.24);
+    border-radius: 8px;
+    background: rgba(var(--node-rgb), 0.08);
+}
+
+.neostaffing-people-detail-head span,
+.neostaffing-people-detail-head em {
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-style: normal;
+    font-weight: 950;
+}
+
+.neostaffing-people-detail-head strong {
+    color: var(--neo-bright-silver);
+    font-size: 1.1rem;
+    font-weight: 950;
+}
+
+.neostaffing-detail-section {
+    display: grid;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(var(--node-rgb), 0.16);
+}
+
+.neostaffing-detail-section h3 {
+    margin: 0;
+    color: var(--node-primary);
+    font-size: 0.72rem;
+    font-weight: 950;
+}
+
+.neostaffing-detail-section p {
+    margin: 0;
+}
+
+.neostaffing-detail-list {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.neostaffing-detail-list li {
+    display: grid;
+    gap: 3px;
+    padding: 8px;
+    border: 1px solid rgba(var(--node-rgb), 0.16);
+    border-radius: 7px;
+    background: rgba(2, 8, 12, 0.48);
+}
+
+.neostaffing-detail-list strong {
+    color: var(--neo-bright-silver);
+    font-size: 0.8rem;
+}
+
+.neostaffing-detail-list span {
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 800;
+}
+
 @media (max-width: 900px) {
     .neostaffing-dashboard-page {
         width: min(100%, 760px);
@@ -5067,11 +5204,13 @@ body.blueprint-neostaffing {
         grid-template-columns: 1fr;
     }
 
-    .neostaffing-seniority-metrics {
+    .neostaffing-seniority-metrics,
+    .neostaffing-people-metrics {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .neostaffing-seniority-workspace {
+    .neostaffing-seniority-workspace,
+    .neostaffing-people-workspace {
         grid-template-columns: 1fr;
     }
 
@@ -5081,6 +5220,10 @@ body.blueprint-neostaffing {
 
     .neostaffing-seniority-date {
         grid-column: 2 / -1;
+    }
+
+    .neostaffing-people-card {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .neostaffing-management-layout {
@@ -5161,7 +5304,8 @@ body.blueprint-neostaffing {
         min-height: 0;
     }
 
-    .neostaffing-seniority-metrics {
+    .neostaffing-seniority-metrics,
+    .neostaffing-people-metrics {
         grid-template-columns: 1fr;
     }
 
@@ -5172,6 +5316,10 @@ body.blueprint-neostaffing {
     .neostaffing-seniority-scope,
     .neostaffing-seniority-date {
         grid-column: 2;
+    }
+
+    .neostaffing-people-card {
+        grid-template-columns: 1fr;
     }
 
     .neostaffing-hero {

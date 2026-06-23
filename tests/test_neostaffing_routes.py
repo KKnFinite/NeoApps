@@ -357,6 +357,99 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"E710", searched.data)
         self.assertNotIn(b"E711", searched.data)
 
+    def test_people_view_loads_for_approved_user_and_links_from_dashboard(self):
+        user = self._user("staffing_people_operator")
+        self._grant_app_access(user, "neostaffing", "operator")
+        db.session.commit()
+        self._login(user.username)
+
+        dashboard = self.client.get("/neostaffing")
+        response = self.client.get("/neostaffing/people")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"PEOPLE", response.data)
+        self.assertIn(b"FILTERS", response.data)
+        self.assertIn(b"TOTAL EMPLOYEES", response.data)
+        self.assertIn(b"Leadership Only", response.data)
+        self.assertIn(b'href="/neostaffing/people"', dashboard.data)
+
+    def test_people_view_blocks_user_without_neostaffing_access(self):
+        user = self._user("staffing_people_blocked")
+        db.session.commit()
+        self._login(user.username)
+
+        response = self.client.get("/neostaffing/people", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/portal")
+
+    def test_people_view_renders_filterable_roster_and_detail_panel(self):
+        user = self._user("staffing_people_data")
+        self._grant_app_access(user, "neostaffing", "master")
+        _sort, operation, department, work_area = self._staffing_hierarchy()
+        second_work_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "WBM", "parent_id": department.id}
+        )
+        avery = staffing_service.create_person(
+            {
+                "employee_id": "E810",
+                "first_name": "Avery",
+                "last_name": "Spotter",
+                "seniority_date": "2019-02-01",
+                "classification": "part_time",
+            }
+        )
+        morgan = staffing_service.create_person(
+            {
+                "employee_id": "E811",
+                "first_name": "Morgan",
+                "last_name": "Loader",
+                "seniority_date": "2021-03-01",
+                "classification": "full_time_combo",
+            }
+        )
+        supervisor = staffing_service.create_person(
+            {
+                "employee_id": "E812",
+                "first_name": "Sam",
+                "last_name": "Lead",
+                "seniority_date": "2018-01-01",
+                "classification": "part_time_supervisor",
+            }
+        )
+        staffing_service.assign_work_area(avery, work_area)
+        staffing_service.assign_work_area(morgan, second_work_area)
+        staffing_service.create_leadership_assignment(supervisor, work_area)
+        db.session.commit()
+        self._login(user.username)
+
+        response = self.client.get(
+            f"/neostaffing/people?operation_id={operation.id}&person_id={avery.id}"
+        )
+        searched = self.client.get(
+            f"/neostaffing/people?operation_id={operation.id}&search=avery"
+        )
+        leadership = self.client.get(
+            f"/neostaffing/people?operation_id={operation.id}&leadership_only=1&person_id={supervisor.id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"E810", response.data)
+        self.assertIn(b"Spotter, Avery", response.data)
+        self.assertIn(b"EBM", response.data)
+        self.assertIn(b"East Shift Department", response.data)
+        self.assertIn(b"Shift Operation", response.data)
+        self.assertIn(b"CURRENT WORK ASSIGNMENT", response.data)
+        self.assertIn(b"OPEN IN APP MANAGEMENT", response.data)
+        self.assertIn(b"VIEW SENIORITY POSITION", response.data)
+        self.assertEqual(searched.status_code, 200)
+        self.assertIn(b"E810", searched.data)
+        self.assertNotIn(b"E811", searched.data)
+        self.assertEqual(leadership.status_code, 200)
+        self.assertIn(b"E812", leadership.data)
+        self.assertIn(b"Work Area Supervisor", leadership.data)
+        self.assertNotIn(b"E810", leadership.data)
+
     def _user(self, username):
         user = User(
             username=username,

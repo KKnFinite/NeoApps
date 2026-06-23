@@ -81,6 +81,39 @@ def seniority():
     )
 
 
+@bp.route("/people")
+@neostaffing_app_required()
+def people():
+    classification = request.args.get("classification", "").strip()
+    if classification not in {choice[0] for choice in staffing_service.classification_choices()}:
+        classification = ""
+    active = request.args.get("active", "active").strip() or "active"
+    if active not in {"active", "inactive", "all"}:
+        active = "active"
+    context = staffing_service.people_context(
+        {
+            "sort_id": request.args.get("sort_id", "").strip(),
+            "operation_id": request.args.get("operation_id", "").strip(),
+            "department_id": request.args.get("department_id", "").strip(),
+            "work_area_id": request.args.get("work_area_id", "").strip(),
+            "classification": classification,
+            "active": active,
+            "leadership_only": request.args.get("leadership_only", "").strip(),
+            "search": request.args.get("search", "").strip(),
+            "person_id": request.args.get("person_id", "").strip(),
+        }
+    )
+    return render_template(
+        "neostaffing/people.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
+        can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
+        classification_choices=staffing_service.classification_choices(),
+        classification_labels=staffing_service.CLASSIFICATION_LABELS,
+        unit_path=staffing_service.unit_path,
+        people=context,
+    )
+
+
 @bp.route("/app-management")
 @neostaffing_app_required(minimum_role="master")
 def app_management():
@@ -161,7 +194,7 @@ def delete_unit(unit_id):
 
 @bp.route("/app-management/people")
 @neostaffing_app_required(minimum_role="master")
-def people():
+def people_management():
     search = request.args.get("search", "").strip()
     classification = request.args.get("classification", "").strip()
     active = request.args.get("active", "").strip()
@@ -173,7 +206,7 @@ def people():
         active=active or None,
     ).all()
     return render_template(
-        "neostaffing/people.html",
+        "neostaffing/people_management.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
         people=people_rows,
         classification_choices=staffing_service.classification_choices(),
@@ -188,7 +221,7 @@ def create_person():
     return _mutate(
         lambda: staffing_service.create_person(request.form),
         "Person added.",
-        "neostaffing.people",
+        "neostaffing.people_management",
     )
 
 
@@ -199,7 +232,7 @@ def update_person(person_id):
     return _mutate(
         lambda: staffing_service.update_person(person, request.form),
         "Person updated.",
-        "neostaffing.people",
+        "neostaffing.people_management",
     )
 
 
@@ -211,7 +244,7 @@ def toggle_person_active(person_id):
     def toggle():
         person.active = not person.active
 
-    return _mutate(toggle, "Person status updated.", "neostaffing.people")
+    return _mutate(toggle, "Person status updated.", "neostaffing.people_management")
 
 
 @bp.route("/app-management/people/<int:person_id>/delete", methods=["POST"])
@@ -221,7 +254,7 @@ def delete_person(person_id):
     return _mutate(
         lambda: staffing_service.delete_person(person),
         "Person deleted.",
-        "neostaffing.people",
+        "neostaffing.people_management",
     )
 
 

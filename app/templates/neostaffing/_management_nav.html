@@ -4,7 +4,7 @@
     </div>
     <a href="{{ url_for('neostaffing.app_management') }}" {% if staffing_management_active == "overview" %}aria-current="page"{% endif %}>MANAGE HOME</a>
     <a href="{{ url_for('neostaffing.hierarchy') }}" {% if staffing_management_active == "hierarchy" %}aria-current="page"{% endif %}>HIERARCHY</a>
-    <a href="{{ url_for('neostaffing.people') }}" {% if staffing_management_active == "people" %}aria-current="page"{% endif %}>PEOPLE</a>
+    <a href="{{ url_for('neostaffing.people_management') }}" {% if staffing_management_active == "people" %}aria-current="page"{% endif %}>PEOPLE</a>
     <a href="{{ url_for('neostaffing.work_assignments') }}" {% if staffing_management_active == "work" %}aria-current="page"{% endif %}>WORK ASSIGNMENTS</a>
     <a href="{{ url_for('neostaffing.management_assignments') }}" {% if staffing_management_active == "leadership" %}aria-current="page"{% endif %}>LEADERSHIP</a>
     <span>PERMISSIONS</span>
