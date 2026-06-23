@@ -35,11 +35,21 @@ def neostaffing_app_required(minimum_role="watcher"):
 @neostaffing_app_required()
 def index():
     role = get_user_app_role(current_user, "neostaffing")
+    dashboard = staffing_service.dashboard_context(
+        {
+            "sort_id": request.args.get("sort_id", "").strip(),
+            "operation_id": request.args.get("operation_id", "").strip(),
+            "department_id": request.args.get("department_id", "").strip(),
+            "search": request.args.get("search", "").strip(),
+            "understaffed_only": request.args.get("understaffed_only", "").strip(),
+            "missing_leadership_only": request.args.get("missing_leadership_only", "").strip(),
+        }
+    )
     return render_template(
         "neostaffing/index.html",
         app_role=role,
         can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
-        dashboard=staffing_service.dashboard_context(),
+        dashboard=dashboard,
     )
 
 

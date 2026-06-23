@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}NeoStaffing{% endblock %}
+{% block title %}NeoStaffing Board{% endblock %}
 
 {% macro render_tree(nodes) %}
     <ul class="neostaffing-dashboard-tree">
@@ -10,7 +10,7 @@
             <div class="neostaffing-dashboard-tree-node">
                 <span>{{ unit.name }}</span>
                 {% if unit.unit_type == "work_area" %}
-                <strong>{{ unit.required_headcount if unit.required_headcount is not none else "-" }}</strong>
+                <strong>{{ unit.required_headcount if unit.required_headcount is not none else "AUTO" }}</strong>
                 {% endif %}
             </div>
             {% if row.children %}
@@ -21,9 +21,35 @@
     </ul>
 {% endmacro %}
 
+{% macro render_rollups(title, rows) %}
+    {% if rows %}
+    <section class="neostaffing-rollup-section" aria-label="{{ title }}">
+        <div class="neostaffing-panel-heading">
+            <h2>{{ title }}</h2>
+            <span>{{ rows|length }} scopes</span>
+        </div>
+        <div class="neostaffing-rollup-grid">
+            {% for row in rows %}
+            <article class="neostaffing-rollup-card">
+                <span>{{ row.path }}</span>
+                <strong>{{ row.unit.name }}</strong>
+                <dl>
+                    <div><dt>Assigned</dt><dd>{{ row.assigned }}</dd></div>
+                    <div><dt>Required</dt><dd>{{ row.required }}</dd></div>
+                    <div><dt>Open</dt><dd>{{ row.open }}</dd></div>
+                    <div><dt>Coverage</dt><dd>{{ row.coverage }}%</dd></div>
+                </dl>
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+{% endmacro %}
+
 {% block content %}
 {% set summary = dashboard.summary %}
 {% set selected = dashboard.selected_work_area %}
+{% set filters = dashboard.filters %}
 <section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="neostaffing-title">
     <nav class="neostaffing-mobile-tabs" aria-label="NeoStaffing mobile navigation">
         <a href="{{ url_for('neostaffing.index') }}" aria-current="page">BOARD</a>
@@ -66,13 +92,18 @@
                     <p class="neostaffing-eyebrow">
                         <span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span>
                     </p>
-                    <h1 id="neostaffing-title">DASHBOARD</h1>
-                    <p>Operations staffing overview and setup control.</p>
+                    <h1 id="neostaffing-title">BOARD</h1>
+                    <p>Daily staffing coverage by Sort, Operation, Department, and Work Area.</p>
                 </div>
-                <label class="neostaffing-search">
-                    <span>Search</span>
-                    <input type="search" placeholder="Search employees, work areas, or skills" disabled>
-                </label>
+                <form class="neostaffing-search" method="get" action="{{ url_for('neostaffing.index') }}">
+                    <span>Work Area Search</span>
+                    {% if filters.sort_id %}<input type="hidden" name="sort_id" value="{{ filters.sort_id }}">{% endif %}
+                    {% if filters.operation_id %}<input type="hidden" name="operation_id" value="{{ filters.operation_id }}">{% endif %}
+                    {% if filters.department_id %}<input type="hidden" name="department_id" value="{{ filters.department_id }}">{% endif %}
+                    {% if filters.understaffed_only %}<input type="hidden" name="understaffed_only" value="1">{% endif %}
+                    {% if filters.missing_leadership_only %}<input type="hidden" name="missing_leadership_only" value="1">{% endif %}
+                    <input type="search" name="search" value="{{ filters.search }}" placeholder="Search work areas">
+                </form>
                 <div class="neostaffing-status-card">
                     <span>APP ROLE</span>
                     <strong>{{ app_role|role_label }}</strong>
@@ -82,21 +113,71 @@
                 {% endif %}
             </header>
 
-            <section class="neostaffing-summary-strip neostaffing-dashboard-metrics" aria-label="NeoStaffing current totals">
-                <article><span>TOTAL STAFF</span><strong>{{ summary.total_staff }}</strong></article>
-                <article><span>ASSIGNED</span><strong>{{ summary.assigned }}</strong></article>
-                <article><span>UNASSIGNED</span><strong>{{ summary.unassigned }}</strong></article>
-                <article><span>SUPERVISORS</span><strong>{{ summary.supervisors }}</strong></article>
+            <section class="neostaffing-summary-strip neostaffing-dashboard-metrics neostaffing-board-metrics" aria-label="NeoStaffing board totals">
+                <article><span>TOTAL EMPLOYEES</span><strong>{{ summary.total_employees }}</strong></article>
+                <article><span>TOTAL REQUIRED</span><strong>{{ summary.total_required }}</strong></article>
+                <article><span>OPEN POSITIONS</span><strong>{{ summary.total_open }}</strong></article>
+                <article><span>UNDERSTAFFED</span><strong>{{ summary.understaffed_work_areas }}</strong></article>
+                <article><span>MISSING LEADERSHIP</span><strong>{{ summary.missing_leadership_work_areas }}</strong></article>
             </section>
 
-            <section class="neostaffing-dashboard-workspace" aria-label="NeoStaffing operations workspace">
+            <section class="neostaffing-dashboard-workspace neostaffing-board-workspace" aria-label="NeoStaffing operations board">
                 <article class="neostaffing-data-card neostaffing-hierarchy-panel">
-                    <h2>ORGANIZATION HIERARCHY</h2>
-                    {% if dashboard.hierarchy %}
-                    {{ render_tree(dashboard.hierarchy) }}
-                    {% else %}
-                    <p class="muted">Build Sort > Operation > Department > Work Area before assigning employees.</p>
-                    {% endif %}
+                    <div class="neostaffing-panel-heading">
+                        <h2>FILTERS</h2>
+                        <a href="{{ url_for('neostaffing.index') }}">RESET</a>
+                    </div>
+                    <form class="neostaffing-board-filter-form" method="get" action="{{ url_for('neostaffing.index') }}">
+                        <label>
+                            <span>Sort</span>
+                            <select name="sort_id">
+                                <option value="">All Sorts</option>
+                                {% for sort in dashboard.sorts %}
+                                <option value="{{ sort.id }}" {% if filters.sort_id == sort.id|string %}selected{% endif %}>{{ sort.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label>
+                            <span>Operation</span>
+                            <select name="operation_id">
+                                <option value="">All Operations</option>
+                                {% for operation in dashboard.operations %}
+                                <option value="{{ operation.id }}" {% if filters.operation_id == operation.id|string %}selected{% endif %}>{{ operation.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label>
+                            <span>Department</span>
+                            <select name="department_id">
+                                <option value="">All Departments</option>
+                                {% for department in dashboard.departments %}
+                                <option value="{{ department.id }}" {% if filters.department_id == department.id|string %}selected{% endif %}>{{ department.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label>
+                            <span>Work Area</span>
+                            <input type="search" name="search" value="{{ filters.search }}" placeholder="Search work areas">
+                        </label>
+                        <label class="neostaffing-toggle-field">
+                            <span>Understaffed Only</span>
+                            <input type="checkbox" name="understaffed_only" value="1" {% if filters.understaffed_only %}checked{% endif %}>
+                        </label>
+                        <label class="neostaffing-toggle-field">
+                            <span>Missing Leadership Only</span>
+                            <input type="checkbox" name="missing_leadership_only" value="1" {% if filters.missing_leadership_only %}checked{% endif %}>
+                        </label>
+                        <button class="action-button" type="submit">APPLY FILTERS</button>
+                    </form>
+
+                    <div class="neostaffing-board-tree-block">
+                        <h2>ORGANIZATION HIERARCHY</h2>
+                        {% if dashboard.hierarchy %}
+                        {{ render_tree(dashboard.hierarchy) }}
+                        {% else %}
+                        <p class="muted">Build Sort > Operation > Department > Work Area before assigning employees.</p>
+                        {% endif %}
+                    </div>
                 </article>
 
                 <article class="neostaffing-data-card neostaffing-board-panel">
@@ -106,27 +187,56 @@
                         <a href="{{ url_for('neostaffing.work_assignments') }}">ASSIGN</a>
                         {% endif %}
                     </div>
-                    <div class="neostaffing-work-area-grid">
+
+                    {{ render_rollups("SORT ROLLUPS", dashboard.rollups.sorts) }}
+                    {{ render_rollups("OPERATION ROLLUPS", dashboard.rollups.operations) }}
+                    {{ render_rollups("DEPARTMENT ROLLUPS", dashboard.rollups.departments) }}
+
+                    <section class="neostaffing-work-area-grid neostaffing-board-card-grid" aria-label="Work area coverage cards">
                         {% for card in dashboard.work_area_cards %}
-                        <section class="neostaffing-work-area-card">
-                            <div>
-                                <span>{{ card.path }}</span>
-                                <h3>{{ card.unit.name }}</h3>
+                        <article class="neostaffing-work-area-card neostaffing-board-card is-status-{{ card.status_color }}">
+                            <div class="neostaffing-board-card-header">
+                                <div>
+                                    <span>{{ card.path }}</span>
+                                    <h3>{{ card.unit.name }}</h3>
+                                </div>
+                                <small class="neostaffing-status-pill is-{{ card.status_color }}">{{ card.status }}</small>
                             </div>
                             <div class="neostaffing-coverage-line">
-                                <strong>{{ card.assigned }}{% if card.required %} / {{ card.required }}{% endif %}</strong>
+                                <strong>{{ card.assigned }} / {{ card.required }}</strong>
                                 <em>{{ card.open }} OPEN</em>
                             </div>
                             <div class="neostaffing-progress" aria-hidden="true">
-                                {% set percent = 100 if not card.required else ((card.assigned / card.required) * 100) %}
-                                <i style="width: {{ 100 if percent > 100 else percent }}%"></i>
+                                <i style="width: {{ card.coverage }}%"></i>
                             </div>
-                            <small class="neostaffing-status-pill">{{ card.status }}</small>
-                        </section>
+                            <div class="neostaffing-board-card-metrics">
+                                <span>Coverage <strong>{{ card.coverage }}%</strong></span>
+                                <span>PT Sup <strong>{{ card.leadership.pt_supervisors }}</strong></span>
+                                <span>FT Sup <strong>{{ card.leadership.ft_supervisors }}</strong></span>
+                                <span>Manager <strong>{{ card.leadership.managers }}</strong></span>
+                            </div>
+                            {% if not card.required_configured %}
+                            <p class="neostaffing-required-flag">Required headcount defaults to assigned count.</p>
+                            {% endif %}
+                            {% if card.has_missing_leadership %}
+                            <p class="neostaffing-leadership-warning">Missing {{ card.missing_leadership|join(", ") }}</p>
+                            {% endif %}
+                            <div class="neostaffing-board-card-actions">
+                                <a href="{{ url_for('neostaffing.people', work_area_id=card.unit.id) }}">VIEW PEOPLE</a>
+                                {% if card.operation %}
+                                <a href="{{ url_for('neostaffing.seniority', operation_id=card.operation.id, work_area_id=card.unit.id) }}">VIEW SENIORITY</a>
+                                {% else %}
+                                <span>VIEW SENIORITY</span>
+                                {% endif %}
+                                {% if can_manage_app %}
+                                <a href="{{ url_for('neostaffing.hierarchy') }}">MANAGE WORK AREA</a>
+                                {% endif %}
+                            </div>
+                        </article>
                         {% else %}
-                        <p class="muted">No work areas yet. App Management will create the operating structure.</p>
+                        <p class="muted">No work areas match the current board filters.</p>
                         {% endfor %}
-                    </div>
+                    </section>
                 </article>
 
                 <aside class="neostaffing-data-card neostaffing-detail-panel" aria-label="Selected work area details">
@@ -134,10 +244,25 @@
                     {% if selected %}
                     <dl>
                         <div><dt>Assigned</dt><dd>{{ selected.assigned }}</dd></div>
-                        <div><dt>Required</dt><dd>{{ selected.required if selected.required else "-" }}</dd></div>
+                        <div><dt>Required</dt><dd>{{ selected.required }}</dd></div>
                         <div><dt>Open Positions</dt><dd>{{ selected.open }}</dd></div>
+                        <div><dt>Coverage</dt><dd>{{ selected.coverage }}%</dd></div>
                         <div><dt>Status</dt><dd>{{ selected.status }}</dd></div>
                     </dl>
+                    <section class="neostaffing-detail-section">
+                        <h3>LEADERSHIP COVERAGE</h3>
+                        <div class="neostaffing-leadership-grid">
+                            <span>PT Sup <strong>{{ selected.leadership.pt_supervisors }}</strong></span>
+                            <span>FT Sup <strong>{{ selected.leadership.ft_supervisors }}</strong></span>
+                            <span>Managers <strong>{{ selected.leadership.managers }}</strong></span>
+                            <span>Division <strong>{{ selected.leadership.division_managers }}</strong></span>
+                        </div>
+                        {% if selected.has_missing_leadership %}
+                        <p class="neostaffing-leadership-warning">Missing {{ selected.missing_leadership|join(", ") }}</p>
+                        {% else %}
+                        <p class="muted">Leadership coverage is complete.</p>
+                        {% endif %}
+                    </section>
                     <p class="muted">{{ selected.path }}</p>
                     {% else %}
                     <p class="muted">Select a Work Area after the structure is built.</p>

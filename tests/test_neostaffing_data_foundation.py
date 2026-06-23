@@ -278,6 +278,124 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         db.session.flush()
         self.assertIsNone(db.session.get(StaffingUnit, work_area.id))
 
+    def test_dashboard_context_calculates_coverage_and_required_defaults(self):
+        _sort, _operation, department, work_area = self._hierarchy()
+        staffing_service.update_unit(
+            work_area,
+            {
+                "unit_type": "work_area",
+                "name": work_area.name,
+                "parent_id": department.id,
+                "required_headcount": "4",
+            },
+        )
+        default_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "WBM", "parent_id": department.id}
+        )
+        for index in range(2):
+            staffing_service.assign_work_area(self._person(f"E55{index}", "part_time"), work_area)
+        staffing_service.assign_work_area(self._person("E553", "full_time_combo"), default_area)
+
+        context = staffing_service.dashboard_context()
+        cards = {card["unit"].name: card for card in context["work_area_cards"]}
+
+        self.assertEqual(cards["EBM"]["assigned"], 2)
+        self.assertEqual(cards["EBM"]["required"], 4)
+        self.assertEqual(cards["EBM"]["open"], 2)
+        self.assertEqual(cards["EBM"]["coverage"], 50)
+        self.assertEqual(cards["EBM"]["status"], "Understaffed")
+        self.assertEqual(cards["EBM"]["status_color"], "red")
+        self.assertTrue(cards["EBM"]["required_configured"])
+        self.assertEqual(cards["WBM"]["required"], 1)
+        self.assertEqual(cards["WBM"]["open"], 0)
+        self.assertEqual(cards["WBM"]["coverage"], 100)
+        self.assertFalse(cards["WBM"]["required_configured"])
+        self.assertEqual(context["summary"]["total_employees"], 3)
+        self.assertEqual(context["summary"]["total_required"], 5)
+        self.assertEqual(context["summary"]["total_open"], 2)
+        self.assertEqual(context["summary"]["understaffed_work_areas"], 1)
+
+    def test_dashboard_context_rolls_up_department_operation_and_sort(self):
+        sort, operation, department, work_area = self._hierarchy()
+        staffing_service.update_unit(
+            work_area,
+            {
+                "unit_type": "work_area",
+                "name": work_area.name,
+                "parent_id": department.id,
+                "required_headcount": "2",
+            },
+        )
+        second_area = staffing_service.create_unit(
+            {
+                "unit_type": "work_area",
+                "name": "WBM",
+                "parent_id": department.id,
+                "required_headcount": "3",
+            }
+        )
+        staffing_service.assign_work_area(self._person("E560", "part_time"), work_area)
+        for index in range(3):
+            staffing_service.assign_work_area(self._person(f"E57{index}", "part_time"), second_area)
+
+        context = staffing_service.dashboard_context({"operation_id": str(operation.id)})
+
+        for rollup_key in ("sorts", "operations", "departments"):
+            rollup = context["rollups"][rollup_key][0]
+            self.assertEqual(rollup["assigned"], 4)
+            self.assertEqual(rollup["required"], 5)
+            self.assertEqual(rollup["open"], 1)
+            self.assertEqual(rollup["coverage"], 80)
+        self.assertEqual(context["rollups"]["sorts"][0]["unit"], sort)
+        self.assertEqual(context["rollups"]["operations"][0]["unit"], operation)
+        self.assertEqual(context["rollups"]["departments"][0]["unit"], department)
+
+    def test_dashboard_context_detects_leadership_and_filters_board_cards(self):
+        sort, operation, department, work_area = self._hierarchy()
+        second_area = staffing_service.create_unit(
+            {
+                "unit_type": "work_area",
+                "name": "WBM",
+                "parent_id": department.id,
+                "required_headcount": "3",
+            }
+        )
+        staffing_service.update_unit(
+            work_area,
+            {
+                "unit_type": "work_area",
+                "name": work_area.name,
+                "parent_id": department.id,
+                "required_headcount": "1",
+            },
+        )
+        staffing_service.assign_work_area(self._person("E580", "part_time"), work_area)
+        staffing_service.assign_work_area(self._person("E581", "part_time"), second_area)
+        staffing_service.create_leadership_assignment(self._person("E582", "part_time_supervisor"), work_area)
+        staffing_service.create_leadership_assignment(self._person("E583", "full_time_supervisor"), department)
+        staffing_service.create_leadership_assignment(self._person("E584", "manager"), operation)
+        staffing_service.create_leadership_assignment(self._person("E585", "division_manager"), sort)
+
+        context = staffing_service.dashboard_context()
+        cards = {card["unit"].name: card for card in context["work_area_cards"]}
+
+        self.assertFalse(cards["EBM"]["has_missing_leadership"])
+        self.assertEqual(cards["EBM"]["leadership"]["pt_supervisors"], 1)
+        self.assertEqual(cards["EBM"]["leadership"]["ft_supervisors"], 1)
+        self.assertEqual(cards["EBM"]["leadership"]["managers"], 1)
+        self.assertEqual(cards["EBM"]["leadership"]["division_managers"], 1)
+        self.assertTrue(cards["WBM"]["has_missing_leadership"])
+        self.assertIn("PT Supervisor", cards["WBM"]["missing_leadership"])
+
+        missing_only = staffing_service.dashboard_context({"missing_leadership_only": "1"})
+        self.assertEqual([card["unit"].name for card in missing_only["work_area_cards"]], ["WBM"])
+
+        understaffed_only = staffing_service.dashboard_context({"understaffed_only": "1"})
+        self.assertEqual([card["unit"].name for card in understaffed_only["work_area_cards"]], ["WBM"])
+
+        searched = staffing_service.dashboard_context({"search": "ebm"})
+        self.assertEqual([card["unit"].name for card in searched["work_area_cards"]], ["EBM"])
+
     def test_seniority_context_traverses_operation_and_ranks_by_seniority(self):
         _sort, operation, department, work_area = self._hierarchy()
         second_work_area = staffing_service.create_unit(

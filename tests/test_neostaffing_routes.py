@@ -50,7 +50,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"DASHBOARD", response.data)
         self.assertIn(b"ORGANIZATION HIERARCHY", response.data)
         self.assertIn(b"STAFFING BOARD", response.data)
-        self.assertIn(b"Search employees, work areas, or skills", response.data)
+        self.assertIn(b"TOTAL REQUIRED", response.data)
+        self.assertIn(b"OPEN POSITIONS", response.data)
+        self.assertIn(b"MISSING LEADERSHIP", response.data)
+        self.assertIn(b"Search work areas", response.data)
         self.assertIn(b"PEOPLE", response.data)
         self.assertIn(b"SENIORITY", response.data)
         self.assertIn(b"MANAGE", response.data)
@@ -105,7 +108,123 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"EBM", response.data)
         self.assertIn(b"1 / 2", response.data)
         self.assertIn(b"1 OPEN", response.data)
-        self.assertIn(b"At Risk", response.data)
+        self.assertIn(b"Understaffed", response.data)
+        self.assertIn(b"SORT ROLLUPS", response.data)
+        self.assertIn(b"OPERATION ROLLUPS", response.data)
+        self.assertIn(b"DEPARTMENT ROLLUPS", response.data)
+        self.assertIn(b"PT Sup", response.data)
+        self.assertIn(b"FT Sup", response.data)
+        self.assertIn(b"VIEW PEOPLE", response.data)
+        self.assertIn(b"VIEW SENIORITY", response.data)
+        self.assertIn(b"MANAGE WORK AREA", response.data)
+
+    def test_board_filters_understaffed_missing_leadership_and_search(self):
+        user = self._user("staffing_board_filters")
+        self._grant_app_access(user, "neostaffing", "master")
+        sort, operation, department, work_area = self._staffing_hierarchy()
+        staffing_service.update_unit(
+            work_area,
+            {
+                "unit_type": "work_area",
+                "name": work_area.name,
+                "parent_id": department.id,
+                "required_headcount": "1",
+            },
+        )
+        second_work_area = staffing_service.create_unit(
+            {
+                "unit_type": "work_area",
+                "name": "WBM",
+                "parent_id": department.id,
+                "required_headcount": "3",
+            }
+        )
+        staffing_service.assign_work_area(
+            staffing_service.create_person(
+                {
+                    "employee_id": "21001",
+                    "first_name": "Avery",
+                    "last_name": "East",
+                    "seniority_date": "2020-01-01",
+                    "classification": "part_time",
+                }
+            ),
+            work_area,
+        )
+        staffing_service.assign_work_area(
+            staffing_service.create_person(
+                {
+                    "employee_id": "21002",
+                    "first_name": "Morgan",
+                    "last_name": "West",
+                    "seniority_date": "2020-01-02",
+                    "classification": "part_time",
+                }
+            ),
+            second_work_area,
+        )
+        staffing_service.create_leadership_assignment(
+            staffing_service.create_person(
+                {
+                    "employee_id": "21003",
+                    "first_name": "Pat",
+                    "last_name": "Lead",
+                    "seniority_date": "2019-01-01",
+                    "classification": "part_time_supervisor",
+                }
+            ),
+            work_area,
+        )
+        staffing_service.create_leadership_assignment(
+            staffing_service.create_person(
+                {
+                    "employee_id": "21004",
+                    "first_name": "Fran",
+                    "last_name": "Supervisor",
+                    "seniority_date": "2018-01-01",
+                    "classification": "full_time_supervisor",
+                }
+            ),
+            department,
+        )
+        staffing_service.create_leadership_assignment(
+            staffing_service.create_person(
+                {
+                    "employee_id": "21005",
+                    "first_name": "Manny",
+                    "last_name": "Manager",
+                    "seniority_date": "2017-01-01",
+                    "classification": "manager",
+                }
+            ),
+            operation,
+        )
+        staffing_service.create_leadership_assignment(
+            staffing_service.create_person(
+                {
+                    "employee_id": "21006",
+                    "first_name": "Dana",
+                    "last_name": "Division",
+                    "seniority_date": "2016-01-01",
+                    "classification": "division_manager",
+                }
+            ),
+            sort,
+        )
+        db.session.commit()
+        self._login(user.username)
+
+        response = self.client.get("/neostaffing?understaffed_only=1&missing_leadership_only=1")
+        searched = self.client.get("/neostaffing?search=EBM")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"WBM", response.data)
+        self.assertIn(b"1 / 3", response.data)
+        self.assertIn(b"Missing PT Supervisor", response.data)
+        self.assertEqual(searched.status_code, 200)
+        self.assertIn(b"EBM", searched.data)
+        self.assertIn(b"1 / 1", searched.data)
+        self.assertNotIn(b"1 / 3", searched.data)
 
     def test_user_without_neostaffing_access_cannot_open_dashboard(self):
         user = self._user("no_staffing")

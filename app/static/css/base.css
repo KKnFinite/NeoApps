@@ -4472,6 +4472,203 @@ body.blueprint-neostaffing {
     text-transform: uppercase;
 }
 
+.neostaffing-board-metrics {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.neostaffing-board-filter-form,
+.neostaffing-board-tree-block,
+.neostaffing-rollup-section,
+.neostaffing-board-card {
+    display: grid;
+    gap: 12px;
+}
+
+.neostaffing-board-filter-form label {
+    min-width: 0;
+}
+
+.neostaffing-board-tree-block {
+    padding-top: 12px;
+    border-top: 1px solid rgba(var(--node-rgb), 0.16);
+}
+
+.neostaffing-rollup-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.neostaffing-rollup-card {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+    padding: 11px;
+    border: 1px solid rgba(var(--node-rgb), 0.2);
+    border-radius: 8px;
+    background: rgba(2, 8, 12, 0.52);
+}
+
+.neostaffing-rollup-card span {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 0.64rem;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.neostaffing-rollup-card strong {
+    overflow: hidden;
+    color: var(--neo-bright-silver);
+    font-size: 0.92rem;
+    font-weight: 950;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.neostaffing-rollup-card dl,
+.neostaffing-board-card-metrics,
+.neostaffing-leadership-grid {
+    display: grid;
+    gap: 7px;
+    margin: 0;
+}
+
+.neostaffing-rollup-card dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.neostaffing-rollup-card dl div,
+.neostaffing-board-card-metrics span,
+.neostaffing-leadership-grid span {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 1px solid rgba(var(--node-rgb), 0.14);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--muted);
+    font-size: 0.66rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.neostaffing-rollup-card dt,
+.neostaffing-rollup-card dd {
+    margin: 0;
+}
+
+.neostaffing-rollup-card dd,
+.neostaffing-board-card-metrics strong,
+.neostaffing-leadership-grid strong {
+    color: var(--neo-bright-silver);
+    font-size: 0.78rem;
+    font-weight: 950;
+}
+
+.neostaffing-board-card {
+    min-height: 0;
+}
+
+.neostaffing-board-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+}
+
+.neostaffing-board-card-header > div {
+    min-width: 0;
+}
+
+.neostaffing-board-card.is-status-green {
+    border-color: rgba(54, 226, 123, 0.34);
+}
+
+.neostaffing-board-card.is-status-yellow {
+    border-color: rgba(244, 194, 31, 0.42);
+}
+
+.neostaffing-board-card.is-status-red {
+    border-color: rgba(255, 74, 28, 0.48);
+    box-shadow: 0 0 20px rgba(255, 74, 28, 0.09);
+}
+
+.neostaffing-status-pill.is-green {
+    border-color: rgba(54, 226, 123, 0.34);
+    background: rgba(54, 226, 123, 0.1);
+    color: #36e27b;
+}
+
+.neostaffing-status-pill.is-yellow {
+    border-color: rgba(244, 194, 31, 0.42);
+    background: rgba(244, 194, 31, 0.1);
+    color: #f4c21f;
+}
+
+.neostaffing-status-pill.is-red {
+    border-color: rgba(255, 74, 28, 0.5);
+    background: rgba(255, 74, 28, 0.1);
+    color: #ff4a1c;
+}
+
+.neostaffing-required-flag,
+.neostaffing-leadership-warning {
+    margin: 0;
+    padding: 8px;
+    border: 1px solid rgba(var(--node-rgb), 0.18);
+    border-radius: 7px;
+    background: rgba(2, 8, 12, 0.48);
+    color: var(--neo-silver);
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.neostaffing-leadership-warning {
+    border-color: rgba(255, 74, 28, 0.34);
+    color: #ff8b73;
+}
+
+.neostaffing-board-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 4px;
+    border-top: 1px solid rgba(var(--node-rgb), 0.14);
+}
+
+.neostaffing-board-card-actions a,
+.neostaffing-board-card-actions span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 0 9px;
+    border: 1px solid rgba(var(--node-rgb), 0.22);
+    border-radius: 6px;
+    color: var(--neo-silver);
+    font-size: 0.66rem;
+    font-weight: 950;
+    letter-spacing: 0.05em;
+    text-decoration: none;
+    text-transform: uppercase;
+}
+
+.neostaffing-board-card-actions a:hover {
+    border-color: rgba(var(--node-rgb), 0.46);
+    color: var(--node-primary);
+}
+
+.neostaffing-board-card-actions span {
+    opacity: 0.48;
+}
+
 .neostaffing-detail-panel dl {
     display: grid;
     gap: 10px;
@@ -5204,6 +5401,7 @@ body.blueprint-neostaffing {
         grid-template-columns: 1fr;
     }
 
+    .neostaffing-board-metrics,
     .neostaffing-seniority-metrics,
     .neostaffing-people-metrics {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5223,6 +5421,10 @@ body.blueprint-neostaffing {
     }
 
     .neostaffing-people-card {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neostaffing-rollup-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
@@ -5304,6 +5506,7 @@ body.blueprint-neostaffing {
         min-height: 0;
     }
 
+    .neostaffing-board-metrics,
     .neostaffing-seniority-metrics,
     .neostaffing-people-metrics {
         grid-template-columns: 1fr;
@@ -5319,6 +5522,12 @@ body.blueprint-neostaffing {
     }
 
     .neostaffing-people-card {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-rollup-grid,
+    .neostaffing-rollup-card dl,
+    .neostaffing-board-card-metrics {
         grid-template-columns: 1fr;
     }
 

@@ -280,76 +280,256 @@ def staffing_hierarchy_tree():
     return build(None)
 
 
-def dashboard_context():
-    active_people_count = StaffingPerson.query.filter_by(active=True).count()
-    active_non_management_count = (
-        StaffingPerson.query.filter(
-            StaffingPerson.active.is_(True),
-            StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS),
-        ).count()
+def dashboard_context(filters=None):
+    filters = filters or {}
+    selected_sort = _resolve_optional_unit(filters.get("sort_id"), "sort")
+    selected_operation = _resolve_optional_unit(filters.get("operation_id"), "operation")
+    selected_department = _resolve_optional_unit(filters.get("department_id"), "department")
+    if selected_department and selected_operation is None:
+        selected_operation = selected_department.parent
+    if selected_operation and selected_sort is None:
+        selected_sort = selected_operation.parent
+
+    operations = _board_operations(selected_sort)
+    departments = _board_departments(selected_operation, operations)
+    assigned_by_work_area = _board_assigned_counts()
+    leadership_index = _board_leadership_index()
+    search = str(filters.get("search") or "").strip().lower()
+    understaffed_only = _parse_bool(filters.get("understaffed_only"), default=False)
+    missing_leadership_only = _parse_bool(filters.get("missing_leadership_only"), default=False)
+
+    cards = []
+    for work_area in StaffingUnit.query.filter_by(unit_type="work_area", active=True).all():
+        department, operation, sort = _board_parent_chain(work_area)
+        if selected_sort and (not sort or sort.id != selected_sort.id):
+            continue
+        if selected_operation and (not operation or operation.id != selected_operation.id):
+            continue
+        if selected_department and (not department or department.id != selected_department.id):
+            continue
+        path = unit_path(work_area)
+        if search and search not in f"{work_area.name} {path}".lower():
+            continue
+
+        assigned = int(assigned_by_work_area.get(work_area.id, 0) or 0)
+        required_configured = work_area.required_headcount is not None
+        required = int(work_area.required_headcount if required_configured else assigned)
+        open_positions = max(0, required - assigned)
+        coverage = _coverage_percent(assigned, required)
+        status, status_color = _coverage_status(assigned, required, open_positions)
+        leadership = _board_work_area_leadership_counts(
+            leadership_index,
+            sort,
+            operation,
+            department,
+            work_area,
+        )
+        missing_leadership = _board_missing_leadership(leadership)
+        if understaffed_only and open_positions <= 0:
+            continue
+        if missing_leadership_only and not missing_leadership:
+            continue
+
+        cards.append(
+            {
+                "unit": work_area,
+                "path": path,
+                "sort": sort,
+                "operation": operation,
+                "department": department,
+                "assigned": assigned,
+                "required": required,
+                "required_configured": required_configured,
+                "open": open_positions,
+                "coverage": coverage,
+                "status": status,
+                "status_color": status_color,
+                "leadership": leadership,
+                "missing_leadership": missing_leadership,
+                "has_missing_leadership": bool(missing_leadership),
+            }
+        )
+
+    cards.sort(
+        key=lambda row: (
+            row["sort"].display_order if row["sort"] else 0,
+            row["sort"].name.lower() if row["sort"] else "",
+            row["operation"].display_order if row["operation"] else 0,
+            row["operation"].name.lower() if row["operation"] else "",
+            row["department"].display_order if row["department"] else 0,
+            row["department"].name.lower() if row["department"] else "",
+            row["unit"].display_order,
+            row["unit"].name.lower(),
+            row["unit"].id,
+        )
     )
-    assigned_by_work_area = {
-        work_area_id: count
+
+    rollups = {
+        "sorts": _board_rollups(cards, "sort"),
+        "operations": _board_rollups(cards, "operation"),
+        "departments": _board_rollups(cards, "department"),
+    }
+    summary = {
+        "total_employees": sum(card["assigned"] for card in cards),
+        "total_required": sum(card["required"] for card in cards),
+        "total_open": sum(card["open"] for card in cards),
+        "understaffed_work_areas": sum(1 for card in cards if card["open"] > 0),
+        "missing_leadership_work_areas": sum(1 for card in cards if card["has_missing_leadership"]),
+    }
+
+    return {
+        "summary": summary,
+        "hierarchy": staffing_hierarchy_tree(),
+        "work_area_cards": cards,
+        "selected_work_area": cards[0] if cards else None,
+        "rollups": rollups,
+        "sorts": units_by_type("sort"),
+        "operations": operations,
+        "departments": departments,
+        "filters": {
+            "sort_id": str(selected_sort.id) if selected_sort else "",
+            "operation_id": str(selected_operation.id) if selected_operation else "",
+            "department_id": str(selected_department.id) if selected_department else "",
+            "search": filters.get("search", ""),
+            "understaffed_only": "1" if understaffed_only else "",
+            "missing_leadership_only": "1" if missing_leadership_only else "",
+        },
+    }
+
+
+def _board_operations(selected_sort):
+    all_operations = units_by_type("operation")
+    if selected_sort:
+        return [operation for operation in all_operations if operation.parent_id == selected_sort.id]
+    return all_operations
+
+
+def _board_departments(selected_operation, operations):
+    if selected_operation:
+        return _departments_under(selected_operation)
+    operation_ids = {operation.id for operation in operations}
+    return (
+        StaffingUnit.query.filter(
+            StaffingUnit.unit_type == "department",
+            StaffingUnit.parent_id.in_(operation_ids or {-1}),
+        )
+        .order_by(StaffingUnit.display_order, StaffingUnit.name)
+        .all()
+    )
+
+
+def _board_assigned_counts():
+    return {
+        work_area_id: int(count or 0)
         for work_area_id, count in (
             db.session.query(
                 StaffingWorkAssignment.work_area_unit_id,
                 func.count(StaffingWorkAssignment.id),
             )
             .join(StaffingPerson)
-            .filter(StaffingPerson.active.is_(True), StaffingWorkAssignment.active.is_(True))
+            .filter(
+                StaffingPerson.active.is_(True),
+                StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS),
+                StaffingWorkAssignment.active.is_(True),
+            )
             .group_by(StaffingWorkAssignment.work_area_unit_id)
             .all()
         )
     }
-    assigned_non_management_count = sum(assigned_by_work_area.values())
-    unassigned_non_management_count = max(
-        0,
-        active_non_management_count - assigned_non_management_count,
-    )
-    supervisor_count = (
-        StaffingPerson.query.filter(
-            StaffingPerson.active.is_(True),
-            StaffingPerson.classification.notin_(NON_MANAGEMENT_CLASSIFICATIONS),
-        ).count()
-    )
-    work_areas = work_area_units()
-    work_area_cards = []
-    for work_area in work_areas:
-        assigned_count = int(assigned_by_work_area.get(work_area.id, 0) or 0)
-        required_count = int(work_area.required_headcount or 0)
-        open_count = max(0, required_count - assigned_count)
-        if not work_area.active:
-            status = "Inactive"
-        elif required_count <= 0:
-            status = "Setup Pending"
-        elif open_count == 0:
-            status = "On Track"
-        elif open_count <= 2:
-            status = "At Risk"
-        else:
-            status = "Open"
-        work_area_cards.append(
-            {
-                "unit": work_area,
-                "path": unit_path(work_area),
-                "assigned": assigned_count,
-                "required": required_count,
-                "open": open_count,
-                "status": status,
-            }
-        )
 
+
+def _board_leadership_index():
+    index = {}
+    assignments = (
+        StaffingLeadershipAssignment.query.join(StaffingPerson)
+        .filter(
+            StaffingLeadershipAssignment.active.is_(True),
+            StaffingPerson.active.is_(True),
+        )
+        .all()
+    )
+    for assignment in assignments:
+        index.setdefault(assignment.unit_id, {}).setdefault(assignment.person.classification, 0)
+        index[assignment.unit_id][assignment.person.classification] += 1
+    return index
+
+
+def _board_parent_chain(work_area):
+    department = work_area.parent if work_area else None
+    operation = department.parent if department and department.parent else None
+    sort = operation.parent if operation and operation.parent else None
+    return department, operation, sort
+
+
+def _board_work_area_leadership_counts(index, sort, operation, department, work_area):
     return {
-        "summary": {
-            "total_staff": active_people_count,
-            "assigned": assigned_non_management_count,
-            "unassigned": unassigned_non_management_count,
-            "supervisors": supervisor_count,
-        },
-        "hierarchy": staffing_hierarchy_tree(),
-        "work_area_cards": work_area_cards,
-        "selected_work_area": work_area_cards[0] if work_area_cards else None,
+        "pt_supervisors": int(index.get(work_area.id if work_area else None, {}).get("part_time_supervisor", 0)),
+        "ft_supervisors": int(index.get(department.id if department else None, {}).get("full_time_supervisor", 0)),
+        "managers": int(index.get(operation.id if operation else None, {}).get("manager", 0)),
+        "division_managers": int(index.get(sort.id if sort else None, {}).get("division_manager", 0)),
     }
+
+
+def _board_missing_leadership(leadership):
+    missing = []
+    if leadership["pt_supervisors"] <= 0:
+        missing.append("PT Supervisor")
+    if leadership["ft_supervisors"] <= 0:
+        missing.append("FT Supervisor")
+    if leadership["managers"] <= 0:
+        missing.append("Manager")
+    if leadership["division_managers"] <= 0:
+        missing.append("Division Manager")
+    return missing
+
+
+def _coverage_percent(assigned, required):
+    if required <= 0:
+        return 100 if assigned > 0 else 100
+    return int(round(min(assigned / required, 1) * 100))
+
+
+def _coverage_status(assigned, required, open_positions):
+    if required <= 0 or open_positions <= 0 or assigned >= required:
+        return "On Track", "green"
+    coverage = assigned / required
+    if coverage >= 0.8:
+        return "Near Target", "yellow"
+    return "Understaffed", "red"
+
+
+def _board_rollups(cards, key):
+    buckets = {}
+    for card in cards:
+        unit = card.get(key)
+        if not unit:
+            continue
+        bucket = buckets.setdefault(
+            unit.id,
+            {
+                "unit": unit,
+                "path": unit_path(unit),
+                "assigned": 0,
+                "required": 0,
+                "open": 0,
+                "coverage": 100,
+                "work_area_count": 0,
+            },
+        )
+        bucket["assigned"] += card["assigned"]
+        bucket["required"] += card["required"]
+        bucket["open"] += card["open"]
+        bucket["work_area_count"] += 1
+    for bucket in buckets.values():
+        bucket["coverage"] = _coverage_percent(bucket["assigned"], bucket["required"])
+    return sorted(
+        buckets.values(),
+        key=lambda row: (
+            row["unit"].display_order,
+            row["unit"].name.lower(),
+            row["unit"].id,
+        ),
+    )
 
 
 def seniority_context(filters=None):
