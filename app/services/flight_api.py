@@ -50,6 +50,7 @@ API_STATUS_SCHEDULED = "Scheduled"
 API_STATUS_IN_AIR = "In Air"
 API_STATUS_ON_GROUND = "On Ground"
 API_STATUS_ASSUMED_ARRIVED = "Assumed Arrived"
+DEPARTURE_TIME_MATCH_TOLERANCE_MINUTES = 90
 
 
 class FlightApiDisabledError(RuntimeError):
@@ -1054,6 +1055,9 @@ def match_api_flight_to_mission(normalized, missions):
 def match_api_flight_to_mission_with_reason(normalized, missions):
     mission_type = normalized["mission_type"]
     candidates = [mission for mission in missions if mission.mission_type == mission_type]
+    if mission_type == "departure":
+        return _match_api_departure_to_mission_with_reason(normalized, candidates)
+
     provider_key = _ups_numeric_core(normalized.get("provider_flight_number"))
     call_sign_key = _ups_numeric_core(normalized.get("call_sign"))
     call_sign_is_ups = _clean_flight_number(normalized.get("call_sign")).startswith("UPS")
@@ -1087,6 +1091,87 @@ def match_api_flight_to_mission_with_reason(normalized, missions):
     return None, "no matching mission"
 
 
+def _match_api_departure_to_mission_with_reason(normalized, candidates):
+    provider_key = _ups_numeric_core(normalized.get("provider_flight_number"))
+    call_sign_key = _ups_numeric_core(normalized.get("call_sign"))
+
+    if provider_key:
+        provider_matches = _missions_matching_ups_key(candidates, provider_key)
+        if len(provider_matches) > 1:
+            return None, "ambiguous flight number match"
+        if len(provider_matches) == 1:
+            return _departure_match_or_rejection(
+                provider_matches[0],
+                normalized,
+                "matched by provider flight",
+            )
+
+    if call_sign_key:
+        call_sign_matches = _missions_matching_ups_key(candidates, call_sign_key)
+        if len(call_sign_matches) > 1:
+            return None, "ambiguous callsign match"
+        if len(call_sign_matches) == 1:
+            return _departure_match_or_rejection(
+                call_sign_matches[0],
+                normalized,
+                "matched by callsign",
+            )
+
+    fallback_matches = _departure_destination_time_matches(candidates, normalized)
+    if len(fallback_matches) > 1:
+        return None, "ambiguous destination/time fallback"
+    if len(fallback_matches) == 1:
+        return fallback_matches[0], "matched by destination/time fallback"
+
+    if not provider_key and not call_sign_key:
+        return None, "unsupported/blank flight identity"
+    return None, "no matching mission"
+
+
+def _departure_match_or_rejection(mission, normalized, match_reason):
+    if _departure_destination_mismatches(mission, normalized):
+        return None, "destination mismatch"
+    if _departure_time_mismatches(mission, normalized):
+        return None, "departure time mismatch"
+    return mission, match_reason
+
+
+def _departure_destination_mismatches(mission, normalized):
+    api_destination = _clean_upper(normalized.get("destination"))
+    mission_destination = _clean_upper(getattr(mission, "destination", None))
+    return bool(api_destination and mission_destination and api_destination != mission_destination)
+
+
+def _departure_time_mismatches(mission, normalized):
+    api_time = flight_api_provider_time_utc(normalized)
+    mission_time = getattr(mission, "planned_datetime_utc", None)
+    if not api_time or not mission_time:
+        return False
+    return _datetime_difference_minutes(api_time, mission_time) > DEPARTURE_TIME_MATCH_TOLERANCE_MINUTES
+
+
+def _departure_destination_time_matches(candidates, normalized):
+    api_destination = _clean_upper(normalized.get("destination"))
+    api_time = flight_api_provider_time_utc(normalized)
+    if not api_destination or not api_time:
+        return []
+    matches = []
+    for mission in candidates:
+        mission_destination = _clean_upper(getattr(mission, "destination", None))
+        mission_time = getattr(mission, "planned_datetime_utc", None)
+        if not mission_destination or not mission_time:
+            continue
+        if mission_destination != api_destination:
+            continue
+        if _datetime_difference_minutes(api_time, mission_time) <= DEPARTURE_TIME_MATCH_TOLERANCE_MINUTES:
+            matches.append(mission)
+    return matches
+
+
+def _datetime_difference_minutes(left, right):
+    return abs((_utc_naive(left) - _utc_naive(right)).total_seconds()) / 60
+
+
 def apply_api_data_to_mission(mission, normalized, settings, now=None):
     now_utc = _utc_naive(now)
     mission.api_status = map_api_status(normalized, settings, now=now_utc)
@@ -1099,7 +1184,10 @@ def apply_api_data_to_mission(mission, normalized, settings, now=None):
         mission.eta_datetime_utc = normalized["revised_time_utc"]
         mission.eta_source = "api"
 
-    if normalized["tail_number"] and not mission.assigned_tail_number:
+    if normalized["tail_number"] and (
+        not mission.assigned_tail_number
+        or mission.tail_source == "api"
+    ):
         mission.assigned_tail_number = normalized["tail_number"]
         mission.tail_source = "api"
         mission.tail_updated_at = now_utc
@@ -1333,6 +1421,11 @@ def review_reason_for_item(review_item, missions):
         "flight_number": review_item.flight_number,
         "call_sign": review_item.call_sign,
         "provider_flight_number": _api_declared_flight_number(raw_payload),
+        "origin": review_item.origin,
+        "destination": review_item.destination,
+        "revised_time_utc": review_item.revised_time_utc,
+        "scheduled_time_utc": review_item.revised_time_utc,
+        "runway_time_utc": review_item.runway_time_utc,
         "flight_variants": _flight_number_variants(
             review_item.flight_number,
             review_item.call_sign,
