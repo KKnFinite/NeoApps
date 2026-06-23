@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}NeoStaffing Work Area Hierarchy{% endblock %}
+
+{% macro parent_select(unit_type, selected_id=none) %}
+    {% if unit_type == "operation" %}
+        {% set options = sorts %}
+    {% elif unit_type == "department" %}
+        {% set options = operations %}
+    {% elif unit_type == "work_area" %}
+        {% set options = departments %}
+    {% else %}
+        {% set options = [] %}
+    {% endif %}
+    {% if options %}
+    <select name="parent_id" required>
+        {% for option in options %}
+        <option value="{{ option.id }}" {% if selected_id == option.id %}selected{% endif %}>{{ option.name }}</option>
+        {% endfor %}
+    </select>
+    {% else %}
+    <input type="hidden" name="parent_id" value="">
+    {% endif %}
+{% endmacro %}
+
+{% macro render_tree(nodes) %}
+    <ul class="neostaffing-tree-list">
+        {% for row in nodes %}
+        {% set unit = row.unit %}
+        <li>
+            <div class="neostaffing-tree-node{% if not unit.active %} is-inactive{% endif %}">
+                <div>
+                    <span>{{ unit_type_labels[unit.unit_type] }}</span>
+                    <strong>{{ unit.name }}</strong>
+                    {% if unit.unit_type == "work_area" %}
+                    <em>Required {{ unit.required_headcount if unit.required_headcount is not none else "-" }}</em>
+                    {% endif %}
+                </div>
+                <small>ORDER {{ unit.display_order }} / {{ "ACTIVE" if unit.active else "INACTIVE" }}</small>
+            </div>
+            {% if row.children %}
+            {{ render_tree(row.children) }}
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+{% endmacro %}
+
+{% block content %}
+<section class="neostaffing-page theme-staffing" aria-labelledby="staffing-hierarchy-title">
+    <div class="neostaffing-hero neostaffing-hero-compact">
+        <div class="neostaffing-hero-copy">
+            <p class="neostaffing-eyebrow"><span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span></p>
+            <h1 id="staffing-hierarchy-title">WORK AREA HIERARCHY</h1>
+            <p>Build the Sort, Operation, Department, and Work Area structure that employees will attach to.</p>
+        </div>
+        <div class="neostaffing-status-card"><span>APP ROLE</span><strong>{{ app_role|role_label }}</strong></div>
+    </div>
+
+    <section class="neostaffing-data-grid">
+        <article class="neostaffing-data-card">
+            <h2>ADD SORT</h2>
+            <form class="operation-form neostaffing-compact-form" method="post" action="{{ url_for('neostaffing.create_unit') }}">
+                <input type="hidden" name="unit_type" value="sort">
+                <label><span>Name</span><input name="name" required></label>
+                <label><span>Display Order</span><input type="number" name="display_order" value="0"></label>
+                <button type="submit">ADD SORT</button>
+            </form>
+        </article>
+        <article class="neostaffing-data-card">
+            <h2>ADD OPERATION</h2>
+            <form class="operation-form neostaffing-compact-form" method="post" action="{{ url_for('neostaffing.create_unit') }}">
+                <input type="hidden" name="unit_type" value="operation">
+                <label><span>Sort</span>{{ parent_select("operation") }}</label>
+                <label><span>Name</span><input name="name" required></label>
+                <label><span>Display Order</span><input type="number" name="display_order" value="0"></label>
+                <button type="submit">ADD OPERATION</button>
+            </form>
+        </article>
+        <article class="neostaffing-data-card">
+            <h2>ADD DEPARTMENT</h2>
+            <form class="operation-form neostaffing-compact-form" method="post" action="{{ url_for('neostaffing.create_unit') }}">
+                <input type="hidden" name="unit_type" value="department">
+                <label><span>Operation</span>{{ parent_select("department") }}</label>
+                <label><span>Name</span><input name="name" required></label>
+                <label><span>Display Order</span><input type="number" name="display_order" value="0"></label>
+                <button type="submit">ADD DEPARTMENT</button>
+            </form>
+        </article>
+        <article class="neostaffing-data-card">
+            <h2>ADD WORK AREA</h2>
+            <form class="operation-form neostaffing-compact-form" method="post" action="{{ url_for('neostaffing.create_unit') }}">
+                <input type="hidden" name="unit_type" value="work_area">
+                <label><span>Department</span>{{ parent_select("work_area") }}</label>
+                <label><span>Name</span><input name="name" required></label>
+                <label><span>Required Headcount</span><input type="number" min="0" name="required_headcount"></label>
+                <label><span>Display Order</span><input type="number" name="display_order" value="0"></label>
+                <button type="submit">ADD WORK AREA</button>
+            </form>
+        </article>
+    </section>
+
+    <section class="neostaffing-data-card">
+        <h2>HIERARCHY TREE</h2>
+        {% if hierarchy %}
+        {{ render_tree(hierarchy) }}
+        {% else %}
+        <p class="muted">No staffing units have been created yet.</p>
+        {% endif %}
+    </section>
+
+    <section class="neostaffing-data-card">
+        <h2>EDIT UNITS</h2>
+        <div class="table-wrap">
+            <table class="data-table neostaffing-data-table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Name</th>
+                        <th>Parent</th>
+                        <th>Headcount</th>
+                        <th>Order</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for unit in units %}
+                    <tr>
+                        <td>{{ unit_type_labels[unit.unit_type] }}</td>
+                        <td colspan="4">
+                            <form class="neostaffing-inline-edit" method="post" action="{{ url_for('neostaffing.update_unit', unit_id=unit.id) }}">
+                                <input type="hidden" name="unit_type" value="{{ unit.unit_type }}">
+                                <input name="name" value="{{ unit.name }}" required>
+                                {{ parent_select(unit.unit_type, unit.parent_id) }}
+                                <input type="number" min="0" name="required_headcount" value="{{ unit.required_headcount if unit.required_headcount is not none else '' }}" {% if unit.unit_type != "work_area" %}disabled{% endif %}>
+                                <input type="number" name="display_order" value="{{ unit.display_order }}">
+                                <input type="hidden" name="active" value="{{ 1 if unit.active else 0 }}">
+                                <button class="table-row-button" type="submit">SAVE</button>
+                            </form>
+                        </td>
+                        <td>{{ "ACTIVE" if unit.active else "INACTIVE" }}</td>
+                        <td>
+                            <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.toggle_unit_active', unit_id=unit.id) }}">
+                                <button class="table-row-button" type="submit">{{ "DEACTIVATE" if unit.active else "ACTIVATE" }}</button>
+                            </form>
+                            <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.delete_unit', unit_id=unit.id) }}">
+                                <button class="table-row-button" type="submit">DELETE</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7">No units yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <div class="action-row">
+        <a class="action-button" href="{{ url_for('neostaffing.app_management') }}">BACK TO APP MANAGEMENT</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('neostaffing.index') }}">BACK TO NEOSTAFFING</a>
+    </div>
+</section>
+{% endblock %}

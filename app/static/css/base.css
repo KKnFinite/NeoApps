@@ -4036,6 +4036,144 @@ body.blueprint-neostaffing {
     margin-top: auto;
 }
 
+.neostaffing-summary-strip,
+.neostaffing-data-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.neostaffing-summary-strip article,
+.neostaffing-data-card {
+    border: 1px solid rgba(var(--node-rgb), 0.3);
+    border-radius: 8px;
+    background:
+        linear-gradient(145deg, rgba(var(--node-rgb), 0.1), transparent 44%),
+        rgba(3, 9, 13, 0.88);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 20px rgba(var(--node-rgb), 0.08);
+}
+
+.neostaffing-summary-strip article {
+    display: grid;
+    justify-items: center;
+    gap: 6px;
+    padding: 14px;
+    text-align: center;
+}
+
+.neostaffing-summary-strip span,
+.neostaffing-data-card h2,
+.neostaffing-tree-node span,
+.neostaffing-tree-node small,
+.neostaffing-tree-node em {
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 950;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.neostaffing-summary-strip strong {
+    color: var(--node-primary);
+    font-size: 1.55rem;
+    font-weight: 950;
+    line-height: 1;
+}
+
+.neostaffing-data-card {
+    display: grid;
+    gap: 14px;
+    padding: 16px;
+}
+
+.neostaffing-data-card h2 {
+    margin: 0;
+    color: var(--neo-bright-silver);
+}
+
+.neostaffing-compact-form,
+.neostaffing-filter-form,
+.neostaffing-people-form {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.neostaffing-people-form {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.neostaffing-compact-form button,
+.neostaffing-filter-form button,
+.neostaffing-people-form button {
+    align-self: end;
+}
+
+.neostaffing-tree-list {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    padding-left: 0;
+    list-style: none;
+}
+
+.neostaffing-tree-list .neostaffing-tree-list {
+    margin-top: 10px;
+    padding-left: 18px;
+    border-left: 1px solid rgba(var(--node-rgb), 0.25);
+}
+
+.neostaffing-tree-node {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(var(--node-rgb), 0.26);
+    border-radius: 7px;
+    background: rgba(6, 13, 18, 0.78);
+}
+
+.neostaffing-tree-node > div {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.neostaffing-tree-node strong {
+    color: var(--neo-bright-silver);
+    font-size: 1rem;
+    font-weight: 950;
+}
+
+.neostaffing-tree-node.is-inactive {
+    opacity: 0.58;
+}
+
+.neostaffing-inline-edit {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(110px, 1fr)) auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.neostaffing-person-edit {
+    grid-template-columns: repeat(6, minmax(110px, 1fr)) auto;
+}
+
+.neostaffing-inline-edit input,
+.neostaffing-inline-edit select {
+    min-width: 0;
+    width: 100%;
+}
+
+.neostaffing-data-table td {
+    vertical-align: middle;
+}
+
 @media (max-width: 900px) {
     .neostaffing-hero {
         grid-template-columns: 1fr;
@@ -4046,8 +4184,18 @@ body.blueprint-neostaffing {
     }
 
     .neostaffing-card-grid,
-    .neostaffing-management-grid {
+    .neostaffing-management-grid,
+    .neostaffing-summary-strip,
+    .neostaffing-data-grid,
+    .neostaffing-compact-form,
+    .neostaffing-filter-form,
+    .neostaffing-people-form {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neostaffing-inline-edit,
+    .neostaffing-person-edit {
+        grid-template-columns: repeat(2, minmax(130px, 1fr));
     }
 }
 
@@ -4061,7 +4209,14 @@ body.blueprint-neostaffing {
     }
 
     .neostaffing-card-grid,
-    .neostaffing-management-grid {
+    .neostaffing-management-grid,
+    .neostaffing-summary-strip,
+    .neostaffing-data-grid,
+    .neostaffing-compact-form,
+    .neostaffing-filter-form,
+    .neostaffing-people-form,
+    .neostaffing-inline-edit,
+    .neostaffing-person-edit {
         grid-template-columns: 1fr;
     }
 

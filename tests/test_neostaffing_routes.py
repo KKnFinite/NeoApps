@@ -110,6 +110,61 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.location, "/neostaffing")
 
+    def test_app_management_crud_pages_require_master_or_grandmaster(self):
+        paths = (
+            "/neostaffing/app-management/hierarchy",
+            "/neostaffing/app-management/people",
+            "/neostaffing/app-management/work-assignments",
+            "/neostaffing/app-management/management-assignments",
+        )
+        master = self._user("staffing_crud_master")
+        self._grant_app_access(master, "neostaffing", "master")
+        operator = self._user("staffing_crud_operator")
+        self._grant_app_access(operator, "neostaffing", "operator")
+        gateway_only = self._user("staffing_crud_gateway_only")
+        gateway = ensure_default_gateway_and_nodes()
+        db.session.add(
+            GatewayMembership(
+                user_id=gateway_only.id,
+                gateway_id=gateway.id,
+                status="approved",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+
+        for path in paths:
+            with self.subTest(path=path, access="master"):
+                master_client = self._logged_in_client(master.username)
+                response = master_client.get(path, follow_redirects=False)
+                self.assertEqual(response.status_code, 200, response.location)
+            with self.subTest(path=path, access="operator"):
+                operator_client = self._logged_in_client(operator.username)
+                blocked = operator_client.get(path, follow_redirects=False)
+                self.assertEqual(blocked.status_code, 302)
+                self.assertEqual(blocked.location, "/neostaffing")
+            with self.subTest(path=path, access="gateway-only"):
+                gateway_client = self._logged_in_client(gateway_only.username)
+                blocked = gateway_client.get(path, follow_redirects=False)
+                self.assertEqual(blocked.status_code, 302)
+                self.assertEqual(blocked.location, "/portal")
+
+    def test_app_management_links_to_setup_pages(self):
+        user = self._user("staffing_links_master")
+        self._grant_app_access(user, "neostaffing", "master")
+        db.session.commit()
+        self._login(user.username)
+
+        response = self.client.get("/neostaffing/app-management")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'href="/neostaffing/app-management/hierarchy"', response.data)
+        self.assertIn(b'href="/neostaffing/app-management/people"', response.data)
+        self.assertIn(b'href="/neostaffing/app-management/work-assignments"', response.data)
+        self.assertIn(b'href="/neostaffing/app-management/management-assignments"', response.data)
+        self.assertIn(b"CLASSIFICATION MANAGEMENT", response.data)
+        self.assertIn(b"PERMISSIONS", response.data)
+
     def test_portal_tile_opens_neostaffing_for_approved_user(self):
         user = self._user("staffing_portal")
         self._grant_app_access(user, "neostaffing", "operator")
@@ -159,6 +214,15 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             data={"username": username, "password": "Password123!"},
             follow_redirects=False,
         )
+
+    def _logged_in_client(self, username):
+        client = self.app.test_client()
+        client.post(
+            "/login",
+            data={"username": username, "password": "Password123!"},
+            follow_redirects=False,
+        )
+        return client
 
 
 if __name__ == "__main__":

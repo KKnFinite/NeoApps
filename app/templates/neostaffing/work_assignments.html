@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}NeoStaffing Work Assignments{% endblock %}
+
+{% block content %}
+<section class="neostaffing-page theme-staffing" aria-labelledby="staffing-work-assignments-title">
+    <div class="neostaffing-hero neostaffing-hero-compact">
+        <div class="neostaffing-hero-copy">
+            <p class="neostaffing-eyebrow"><span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span></p>
+            <h1 id="staffing-work-assignments-title">WORK ASSIGNMENTS</h1>
+            <p>Assign part time and full time combo employees to one Work Area.</p>
+        </div>
+        <div class="neostaffing-status-card"><span>APP ROLE</span><strong>{{ app_role|role_label }}</strong></div>
+    </div>
+
+    <section class="neostaffing-data-card">
+        <h2>ASSIGN EMPLOYEE</h2>
+        <form class="operation-form neostaffing-filter-form" method="post" action="{{ url_for('neostaffing.assign_work_area') }}">
+            <label><span>Person</span>
+                <select name="person_id" required>
+                    {% for person in people if person.classification in non_management_classifications %}
+                    <option value="{{ person.id }}">{{ person.employee_id }} - {{ person.full_name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label><span>Work Area</span>
+                <select name="work_area_unit_id" required>
+                    {% for work_area in work_areas %}
+                    <option value="{{ work_area.id }}">{{ unit_path(work_area) }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <button type="submit">ASSIGN / MOVE</button>
+        </form>
+    </section>
+
+    <section class="neostaffing-data-card">
+        <h2>FILTER ASSIGNMENTS</h2>
+        <form class="operation-form neostaffing-filter-form" method="get">
+            <label><span>Classification</span>
+                <select name="classification">
+                    <option value="">All</option>
+                    {% for value, label in classification_choices %}
+                    <option value="{{ value }}" {% if filters.classification == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label><span>Status</span>
+                <select name="active">
+                    <option value="">All</option>
+                    <option value="active" {% if filters.active == "active" %}selected{% endif %}>Active</option>
+                    <option value="inactive" {% if filters.active == "inactive" %}selected{% endif %}>Inactive</option>
+                </select>
+            </label>
+            <label><span>Assigned</span>
+                <select name="assignment_status">
+                    <option value="">All</option>
+                    <option value="assigned" {% if filters.assignment_status == "assigned" %}selected{% endif %}>Assigned</option>
+                    <option value="unassigned" {% if filters.assignment_status == "unassigned" %}selected{% endif %}>Unassigned</option>
+                </select>
+            </label>
+            <label><span>Sort</span>
+                <select name="sort_id">
+                    <option value="">All</option>
+                    {% for unit in sorts %}
+                    <option value="{{ unit.id }}" {% if filters.sort_id|string == unit.id|string %}selected{% endif %}>{{ unit.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label><span>Operation</span>
+                <select name="operation_id">
+                    <option value="">All</option>
+                    {% for unit in operations %}
+                    <option value="{{ unit.id }}" {% if filters.operation_id|string == unit.id|string %}selected{% endif %}>{{ unit_path(unit) }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label><span>Department</span>
+                <select name="department_id">
+                    <option value="">All</option>
+                    {% for unit in departments %}
+                    <option value="{{ unit.id }}" {% if filters.department_id|string == unit.id|string %}selected{% endif %}>{{ unit_path(unit) }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label><span>Work Area</span>
+                <select name="work_area_id">
+                    <option value="">All</option>
+                    {% for unit in work_areas %}
+                    <option value="{{ unit.id }}" {% if filters.work_area_id|string == unit.id|string %}selected{% endif %}>{{ unit_path(unit) }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <button type="submit">FILTER</button>
+        </form>
+    </section>
+
+    <section class="neostaffing-data-card">
+        <h2>CURRENT WORK ASSIGNMENTS</h2>
+        <div class="table-wrap">
+            <table class="data-table neostaffing-data-table">
+                <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>Classification</th>
+                        <th>Work Area</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for person in people %}
+                    <tr>
+                        <td>{{ person.employee_id }} / {{ person.full_name }}</td>
+                        <td>{{ classification_labels[person.classification] }}</td>
+                        <td>
+                            {% if person.work_assignment %}
+                            {{ unit_path(person.work_assignment.work_area) }}
+                            {% elif person.classification in non_management_classifications %}
+                            UNASSIGNED
+                            {% else %}
+                            MANAGEMENT CLASSIFICATION
+                            {% endif %}
+                        </td>
+                        <td>{{ "ACTIVE" if person.active else "INACTIVE" }}</td>
+                        <td>
+                            {% if person.work_assignment %}
+                            <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.clear_work_assignment', person_id=person.id) }}">
+                                <button class="table-row-button" type="submit">CLEAR</button>
+                            </form>
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5">No people found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <div class="action-row">
+        <a class="action-button" href="{{ url_for('neostaffing.people') }}">EMPLOYEE ROSTER</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('neostaffing.app_management') }}">BACK TO APP MANAGEMENT</a>
+    </div>
+</section>
+{% endblock %}

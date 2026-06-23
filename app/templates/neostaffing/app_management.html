@@ -18,18 +18,31 @@
         </div>
     </div>
 
-    <section class="neostaffing-management-grid" aria-label="NeoStaffing app management placeholders">
-        {% for title, description in [
-            ("WORK AREA HIERARCHY", "Future work area and reporting structure setup."),
-            ("EMPLOYEE ROSTER", "Future employee record management."),
-            ("CLASSIFICATION MANAGEMENT", "Future classification and role category controls."),
-            ("MANAGEMENT ASSIGNMENTS", "Future leadership and coverage assignment tools."),
-            ("PERMISSIONS", "Future NeoStaffing-specific permission controls.")
+    <section class="neostaffing-summary-strip" aria-label="NeoStaffing setup totals">
+        <article><span>PEOPLE</span><strong>{{ counts.people }}</strong></article>
+        <article><span>UNITS</span><strong>{{ counts.units }}</strong></article>
+        <article><span>WORK AREAS</span><strong>{{ counts.work_areas }}</strong></article>
+        <article><span>LEADERSHIP</span><strong>{{ counts.leadership }}</strong></article>
+    </section>
+
+    <section class="neostaffing-management-grid" aria-label="NeoStaffing app management">
+        {% for title, description, endpoint, state in [
+            ("WORK AREA HIERARCHY", "Build Sort > Operation > Department > Work Area structure.", "neostaffing.hierarchy", "LIVE SETUP"),
+            ("EMPLOYEE ROSTER", "Add and maintain people, classifications, seniority dates, and active status.", "neostaffing.people", "LIVE SETUP"),
+            ("WORK ASSIGNMENTS", "Assign part time and full time combo employees to Work Areas.", "neostaffing.work_assignments", "LIVE SETUP"),
+            ("CLASSIFICATION MANAGEMENT", "Controlled classification choices are active; future editable classification tools live here.", none, "PLACEHOLDER"),
+            ("MANAGEMENT ASSIGNMENTS", "Assign supervisors, specialists, managers, and division managers to scopes.", "neostaffing.management_assignments", "LIVE SETUP"),
+            ("PERMISSIONS", "Future NeoStaffing-specific permission controls.", none, "PLACEHOLDER")
         ] %}
         <article class="neostaffing-management-card">
-            <span>PLACEHOLDER</span>
+            <span>{{ state }}</span>
             <h2>{{ title }}</h2>
             <p>{{ description }}</p>
+            {% if endpoint %}
+            <a class="action-button" href="{{ url_for(endpoint) }}">OPEN</a>
+            {% else %}
+            <button class="action-button" type="button" disabled>SETUP PENDING</button>
+            {% endif %}
         </article>
         {% endfor %}
     </section>
