@@ -314,23 +314,23 @@ def register_pwa_assets(app):
 
     @app.route("/apple-touch-icon.png")
     def apple_touch_icon():
-        return send_pwa_image("apple_touch_icon_180.png")
+        return send_pwa_image("icons/neoportal/apple_touch_icon_180.png")
 
     @app.route("/apple-touch-icon-precomposed.png")
     def apple_touch_icon_precomposed():
-        return send_pwa_image("apple_touch_icon_180.png")
+        return send_pwa_image("icons/neoportal/apple_touch_icon_180.png")
 
     @app.route("/favicon-32x32.png")
     def favicon_32():
-        return send_pwa_image("favicon_32.png")
+        return send_pwa_image("icons/neoportal/favicon_32.png")
 
     @app.route("/favicon-16x16.png")
     def favicon_16():
-        return send_pwa_image("favicon_16.png")
+        return send_pwa_image("icons/neoportal/favicon_16.png")
 
     @app.route("/favicon.ico")
     def favicon_ico():
-        return send_pwa_image("favicon_32.png")
+        return send_pwa_image("icons/neoportal/favicon_32.png")
 
 
 def register_blueprints(app):

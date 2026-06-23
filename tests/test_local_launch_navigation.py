@@ -123,15 +123,15 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("url_for('favicon_32')", template)
         self.assertIn("url_for('favicon_16')", template)
 
-    def test_neogateway_manifest_uses_current_branding(self):
+    def test_neoportal_manifest_uses_current_branding(self):
         response = self.client.get("/manifest.webmanifest")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.mimetype, "application/manifest+json")
         self.assertIn("no-cache", response.headers["Cache-Control"])
         manifest = response.get_json()
-        self.assertEqual(manifest["name"], "NeoGateway")
-        self.assertEqual(manifest["short_name"], "NeoGateway")
+        self.assertEqual(manifest["name"], "NeoApps Portal")
+        self.assertEqual(manifest["short_name"], "NeoPortal")
         self.assertEqual(manifest["start_url"], "/login")
         self.assertEqual(manifest["scope"], "/")
         self.assertEqual(manifest["display"], "standalone")
@@ -140,16 +140,16 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             for icon in manifest["icons"]
         }
         self.assertIn(
-            ("/static/images/neogateway_icon_192.png", "192x192", "any"),
+            ("/static/images/icons/neoportal/icon_192.png", "192x192", "any"),
             icon_map,
         )
         self.assertIn(
-            ("/static/images/neogateway_icon_512.png", "512x512", "any"),
+            ("/static/images/icons/neoportal/icon_512.png", "512x512", "any"),
             icon_map,
         )
         self.assertIn(
             (
-                "/static/images/neogateway_icon_maskable_192.png",
+                "/static/images/icons/neoportal/icon_maskable_192.png",
                 "192x192",
                 "maskable",
             ),
@@ -157,23 +157,24 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         )
         self.assertIn(
             (
-                "/static/images/neogateway_icon_maskable_512.png",
+                "/static/images/icons/neoportal/icon_maskable_512.png",
                 "512x512",
                 "maskable",
             ),
             icon_map,
         )
         manifest_text = response.get_data(as_text=True)
+        self.assertNotIn("neogateway_icon", manifest_text)
         self.assertNotIn("NeoRFD", manifest_text)
         self.assertNotIn("neorfd", manifest_text.lower())
 
-    def test_pwa_root_icon_routes_serve_neogateway_images(self):
+    def test_pwa_root_icon_routes_serve_neoportal_images(self):
         icon_routes = {
-            "/apple-touch-icon.png": Path("app/static/images/apple_touch_icon_180.png"),
-            "/apple-touch-icon-precomposed.png": Path("app/static/images/apple_touch_icon_180.png"),
-            "/favicon-32x32.png": Path("app/static/images/favicon_32.png"),
-            "/favicon-16x16.png": Path("app/static/images/favicon_16.png"),
-            "/favicon.ico": Path("app/static/images/favicon_32.png"),
+            "/apple-touch-icon.png": Path("app/static/images/icons/neoportal/apple_touch_icon_180.png"),
+            "/apple-touch-icon-precomposed.png": Path("app/static/images/icons/neoportal/apple_touch_icon_180.png"),
+            "/favicon-32x32.png": Path("app/static/images/icons/neoportal/favicon_32.png"),
+            "/favicon-16x16.png": Path("app/static/images/icons/neoportal/favicon_16.png"),
+            "/favicon.ico": Path("app/static/images/icons/neoportal/favicon_32.png"),
         }
 
         for route, source_path in icon_routes.items():
@@ -184,6 +185,31 @@ class LocalLaunchNavigationTest(unittest.TestCase):
                 self.assertEqual(response.mimetype, "image/png")
                 self.assertIn("no-cache", response.headers["Cache-Control"])
                 self.assertEqual(response.data, source_path.read_bytes())
+
+    def test_future_app_and_node_icon_structure_exists(self):
+        icon_root = Path("app/static/images/icons")
+        expected_folders = {
+            "neoportal",
+            "neogateway",
+            "neostaffing",
+            "neobid",
+            "motherbrain",
+            "sektor",
+            "ermac",
+            "scorpion",
+            "reptile",
+            "subzero",
+            "rain",
+        }
+
+        for folder in expected_folders:
+            with self.subTest(folder=folder):
+                self.assertTrue((icon_root / folder / "icon_192.png").exists())
+                self.assertTrue((icon_root / folder / "icon_512.png").exists())
+
+        self.assertTrue((icon_root / "neoportal" / "favicon_32.png").exists())
+        self.assertTrue((icon_root / "neoportal" / "favicon_16.png").exists())
+        self.assertTrue((icon_root / "neoportal" / "apple_touch_icon_180.png").exists())
 
     def test_service_worker_is_conservative_and_uses_current_logo_assets(self):
         response = self.client.get("/service-worker.js")

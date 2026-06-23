@@ -1,7 +1,7 @@
 {
-  "name": "NeoGateway",
-  "short_name": "NeoGateway",
-  "description": "NeoGateway operational access portal.",
+  "name": "NeoApps Portal",
+  "short_name": "NeoPortal",
+  "description": "NeoApps Portal access dashboard.",
   "start_url": "/login",
   "scope": "/",
   "display": "standalone",
@@ -9,25 +9,25 @@
   "theme_color": "#d95a1f",
   "icons": [
     {
-      "src": "/static/images/neogateway_icon_192.png",
+      "src": "/static/images/icons/neoportal/icon_192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/static/images/neogateway_icon_512.png",
+      "src": "/static/images/icons/neoportal/icon_512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/static/images/neogateway_icon_maskable_192.png",
+      "src": "/static/images/icons/neoportal/icon_maskable_192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/static/images/neogateway_icon_maskable_512.png",
+      "src": "/static/images/icons/neoportal/icon_maskable_512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
