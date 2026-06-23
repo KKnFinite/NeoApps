@@ -3477,6 +3477,104 @@ h2 {
     font-weight: 950;
 }
 
+.parking-status-panel {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid rgba(var(--node-rgb), 0.32);
+    border-radius: 7px;
+    background:
+        linear-gradient(135deg, rgba(var(--node-rgb), 0.12), transparent 44%),
+        rgba(5, 6, 9, 0.86);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 22px rgba(var(--node-rgb), 0.1);
+}
+
+.parking-status-panel.has-warnings {
+    border-color: rgba(var(--node-highlight-rgb), 0.48);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 24px rgba(var(--node-highlight-rgb), 0.16);
+}
+
+.parking-status-panel.is-clean {
+    border-color: rgba(var(--node-rgb), 0.26);
+}
+
+.parking-status-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.parking-status-heading span,
+.parking-status-line strong {
+    color: var(--muted);
+    font-size: 0.66rem;
+    font-weight: 950;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+}
+
+.parking-status-heading h2 {
+    margin: 2px 0 0;
+    color: var(--steel);
+    font-size: 1rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.parking-status-counts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.parking-status-counts span {
+    min-height: 28px;
+    padding: 6px 9px;
+    border: 1px solid rgba(var(--node-rgb), 0.34);
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.24);
+    color: var(--steel);
+    font-size: 0.62rem;
+}
+
+.parking-status-line {
+    display: grid;
+    grid-template-columns: minmax(130px, auto) minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    padding: 9px 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.22);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.24);
+}
+
+.parking-status-line span,
+.parking-status-clean,
+.parking-status-line li {
+    color: var(--steel);
+    font-size: 0.78rem;
+    font-weight: 850;
+    line-height: 1.35;
+}
+
+.parking-status-line ul {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding-left: 18px;
+}
+
+.parking-status-clean {
+    margin: 0;
+    color: var(--muted);
+}
+
 .parking-layout {
     display: grid;
     grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
@@ -6455,6 +6553,42 @@ select::-ms-expand {
 
     .parking-summary-grid strong {
         font-size: 1.12rem;
+    }
+
+    .parking-status-panel {
+        gap: 8px;
+        padding: 10px;
+    }
+
+    .parking-status-heading {
+        display: grid;
+        gap: 8px;
+    }
+
+    .parking-status-heading h2 {
+        font-size: 0.9rem;
+    }
+
+    .parking-status-counts {
+        justify-content: start;
+    }
+
+    .parking-status-counts span {
+        min-height: 26px;
+        padding: 5px 7px;
+        font-size: 0.56rem;
+    }
+
+    .parking-status-line {
+        grid-template-columns: 1fr;
+        gap: 5px;
+        padding: 8px;
+    }
+
+    .parking-status-line span,
+    .parking-status-clean,
+    .parking-status-line li {
+        font-size: 0.72rem;
     }
 
     .parking-layout {

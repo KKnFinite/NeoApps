@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timezone
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
 
 from app import create_app
@@ -25,6 +26,7 @@ from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.gateway_matrix import current_gateway_local_date
 from app.services.gateway_matrix import current_operations_for_gateway
 from app.services.night_sorting import night_sort_time_key
+from app.services.parking_plan import parking_status_for_rows
 from app.services.sort_timeline import (
     ensure_sort_timeline_settings,
     record_sort_timeline_api_attempt,
@@ -3708,6 +3710,112 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"parking-mobile-assignment", response.data)
         self.assertIn(b'href="/motherbrain/parking-plan"', response.data)
         self.assertIn(f'action="/motherbrain/parking-plan/{operation.id}/assign"'.encode(), response.data)
+
+    def test_parking_plan_status_panel_counts_and_unassigned_tails(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        self._parking_pair(operation, "N349UP", destination="ONT")
+        db.session.commit()
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+        status_html = html.split('class="parking-status-panel', 1)[1].split(
+            'class="parking-layout"',
+            1,
+        )[0]
+
+        self.assertIn("PARKING STATUS", status_html)
+        self.assertIn("CHECK ASSIGNMENTS", status_html)
+        self.assertIn("TOTAL 2", status_html)
+        self.assertIn("ASSIGNED 1", status_html)
+        self.assertIn("UNASSIGNED 1", status_html)
+        self.assertIn("UNASSIGNED TAILS", status_html)
+        self.assertIn("N349UP", status_html)
+        self.assertNotIn("No parking conflicts", status_html)
+
+    def test_parking_plan_status_panel_shows_clean_state_when_all_assigned(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+        status_html = html.split('class="parking-status-panel', 1)[1].split(
+            'class="parking-layout"',
+            1,
+        )[0]
+
+        self.assertIn("NO PARKING CONFLICTS", status_html)
+        self.assertIn("TOTAL 1", status_html)
+        self.assertIn("ASSIGNED 1", status_html)
+        self.assertIn("UNASSIGNED 0", status_html)
+        self.assertIn("All current-sort tails are assigned", status_html)
+
+    def test_parking_status_helper_detects_duplicate_conflicts(self):
+        tail_rows = [
+            {"tail": "N111UP", "assigned_position": "A01-1"},
+            {"tail": "N222UP", "assigned_position": ""},
+        ]
+        assignments = [
+            SimpleNamespace(
+                tail_number="N111UP",
+                ramp_code="A",
+                position_code="A01",
+                lane_number=1,
+            ),
+            SimpleNamespace(
+                tail_number="N111UP",
+                ramp_code="B",
+                position_code="B02",
+                lane_number=2,
+            ),
+            SimpleNamespace(
+                tail_number="N333UP",
+                ramp_code="A",
+                position_code="A01",
+                lane_number=1,
+            ),
+        ]
+
+        status = parking_status_for_rows(tail_rows, assignments)
+
+        self.assertEqual(status["summary"]["total_tails_needing_parking"], 2)
+        self.assertEqual(status["summary"]["assigned_tails"], 1)
+        self.assertEqual(status["summary"]["unassigned_tails"], 1)
+        self.assertEqual(status["unassigned_tails"], ["N222UP"])
+        self.assertEqual(status["conflict_count"], 2)
+        self.assertTrue(status["has_conflicts"])
+        self.assertEqual(status["duplicate_tail_conflicts"][0]["tail"], "N111UP")
+        self.assertEqual(
+            status["duplicate_tail_conflicts"][0]["locations"],
+            ["A01 Slot 1", "B02 Slot 2"],
+        )
+        self.assertEqual(
+            status["duplicate_slot_conflicts"][0]["position"],
+            "A01 Slot 1",
+        )
+        self.assertEqual(
+            status["duplicate_slot_conflicts"][0]["tails"],
+            ["N111UP", "N333UP"],
+        )
 
     def test_parking_plan_ramp_layout_renders_physical_rows_and_slots(self):
         operation = self._parking_operation()

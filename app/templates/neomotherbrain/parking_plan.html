@@ -98,6 +98,53 @@
         <article><span>CONFLICTS</span><strong>{{ summary.conflict_count }}</strong></article>
     </section>
 
+    <section class="parking-status-panel{% if parking_status.has_conflicts or parking_status.unassigned_tails %} has-warnings{% else %} is-clean{% endif %}" aria-label="Parking warnings and status">
+        <div class="parking-status-heading">
+            <div>
+                <span>PARKING STATUS</span>
+                <h2>{{ "CHECK ASSIGNMENTS" if parking_status.has_conflicts or parking_status.unassigned_tails else "NO PARKING CONFLICTS" }}</h2>
+            </div>
+            <div class="parking-status-counts" aria-label="Parking assignment counts">
+                <span>TOTAL {{ parking_status.summary.total_tails_needing_parking }}</span>
+                <span>ASSIGNED {{ parking_status.summary.assigned_tails }}</span>
+                <span>UNASSIGNED {{ parking_status.summary.unassigned_tails }}</span>
+            </div>
+        </div>
+
+        {% if parking_status.unassigned_tails %}
+        <div class="parking-status-line">
+            <strong>UNASSIGNED TAILS</strong>
+            <span>{{ parking_status.unassigned_tails|join(", ") }}</span>
+        </div>
+        {% endif %}
+
+        {% if parking_status.duplicate_tail_conflicts %}
+        <div class="parking-status-line">
+            <strong>DUPLICATE TAIL ASSIGNMENTS</strong>
+            <ul>
+                {% for conflict in parking_status.duplicate_tail_conflicts %}
+                <li>{{ conflict.tail }}: {{ conflict.locations|join(", ") }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if parking_status.duplicate_slot_conflicts %}
+        <div class="parking-status-line">
+            <strong>DUPLICATE POSITION / SLOT</strong>
+            <ul>
+                {% for conflict in parking_status.duplicate_slot_conflicts %}
+                <li>{{ conflict.position }}: {{ conflict.tails|join(", ") }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if parking_status.is_clean %}
+        <p class="parking-status-clean">All current-sort tails are assigned and no duplicate conflicts were found.</p>
+        {% endif %}
+    </section>
+
     <section class="parking-layout">
         <aside class="parking-tail-panel" aria-label="Current sort tail checklist" data-parking-unassign-drop>
             <div class="parking-panel-heading">

@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -82,6 +83,9 @@ def parking_plan_context(gateway, operation=None):
         }
 
     tail_rows = tail_rows_for_operation(gateway, operation)
+    assignments = SortDateParkingAssignment.query.filter_by(
+        sort_date_operation_id=operation.id
+    ).all()
     assignment_by_tail = {row["tail"]: row["assignment"] for row in tail_rows}
     _apply_departure_order(tail_rows)
     ramp_groups = _ramp_groups_for_rows(tail_rows, assignment_by_tail)
@@ -90,14 +94,47 @@ def parking_plan_context(gateway, operation=None):
         for row in tail_rows
         if not row["assigned_position"]
     ]
+    parking_status = parking_status_for_rows(tail_rows, assignments)
+    summary = _summary_for_rows(tail_rows)
+    summary["conflict_count"] = parking_status["conflict_count"]
 
     return {
         "operation": operation,
-        "summary": _summary_for_rows(tail_rows),
+        "summary": summary,
+        "parking_status": parking_status,
         "tail_rows": tail_rows,
         "unassigned_tail_rows": unassigned,
         "ramp_groups": ramp_groups,
         "positions": PARKING_RAMP_GROUPS,
+    }
+
+
+def parking_status_for_rows(tail_rows, assignments=None):
+    assignments = [
+        assignment
+        for assignment in (assignments or [])
+        if assignment is not None
+    ]
+    unassigned_rows = [
+        row
+        for row in tail_rows
+        if not row.get("assigned_position")
+    ]
+    duplicate_tail_conflicts = _duplicate_tail_conflicts(assignments)
+    duplicate_slot_conflicts = _duplicate_slot_conflicts(assignments)
+
+    return {
+        "summary": {
+            "total_tails_needing_parking": len(tail_rows),
+            "assigned_tails": len(tail_rows) - len(unassigned_rows),
+            "unassigned_tails": len(unassigned_rows),
+        },
+        "unassigned_tails": [row["tail"] for row in unassigned_rows],
+        "duplicate_tail_conflicts": duplicate_tail_conflicts,
+        "duplicate_slot_conflicts": duplicate_slot_conflicts,
+        "conflict_count": len(duplicate_tail_conflicts) + len(duplicate_slot_conflicts),
+        "has_conflicts": bool(duplicate_tail_conflicts or duplicate_slot_conflicts),
+        "is_clean": not unassigned_rows and not duplicate_tail_conflicts and not duplicate_slot_conflicts,
     }
 
 
@@ -390,6 +427,64 @@ def _empty_summary():
         "quick_turn_count": 0,
         "conflict_count": 0,
     }
+
+
+def _duplicate_tail_conflicts(assignments):
+    grouped = defaultdict(list)
+    for assignment in assignments:
+        tail = _normalize_tail(getattr(assignment, "tail_number", ""))
+        if tail:
+            grouped[tail].append(assignment)
+
+    conflicts = []
+    for tail, tail_assignments in sorted(grouped.items()):
+        if len(tail_assignments) <= 1:
+            continue
+        conflicts.append(
+            {
+                "tail": tail,
+                "locations": [
+                    _assignment_location_label(assignment)
+                    for assignment in tail_assignments
+                ],
+            }
+        )
+    return conflicts
+
+
+def _duplicate_slot_conflicts(assignments):
+    grouped = defaultdict(list)
+    for assignment in assignments:
+        ramp_code = _normalize_ramp_code(getattr(assignment, "ramp_code", ""))
+        position_code = _normalize_position_code(getattr(assignment, "position_code", ""))
+        lane_number = getattr(assignment, "lane_number", None)
+        if not ramp_code or not position_code or lane_number is None:
+            continue
+        grouped[(ramp_code, position_code, lane_number)].append(assignment)
+
+    conflicts = []
+    for (_ramp_code, position_code, lane_number), slot_assignments in sorted(grouped.items()):
+        if len(slot_assignments) <= 1:
+            continue
+        conflicts.append(
+            {
+                "position": f"{position_code} Slot {lane_number}",
+                "tails": [
+                    _normalize_tail(getattr(assignment, "tail_number", ""))
+                    for assignment in slot_assignments
+                    if _normalize_tail(getattr(assignment, "tail_number", ""))
+                ],
+            }
+        )
+    return conflicts
+
+
+def _assignment_location_label(assignment):
+    position_code = _normalize_position_code(getattr(assignment, "position_code", ""))
+    lane_number = getattr(assignment, "lane_number", None)
+    if position_code and lane_number:
+        return f"{position_code} Slot {lane_number}"
+    return "UNASSIGNED"
 
 
 def _current_operation_tails(operation):
