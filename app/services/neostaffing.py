@@ -39,6 +39,13 @@ LEADERSHIP_LEVEL_LABELS = {
 }
 
 NON_MANAGEMENT_CLASSIFICATIONS = {"part_time", "full_time_combo"}
+MANAGEMENT_CLASSIFICATIONS = set(STAFFING_CLASSIFICATIONS) - NON_MANAGEMENT_CLASSIFICATIONS
+SUPERVISOR_CLASSIFICATIONS = {
+    "part_time_supervisor",
+    "full_time_supervisor",
+    "full_time_specialist",
+}
+MANAGER_CLASSIFICATIONS = {"manager", "division_manager"}
 PARENT_TYPE_BY_UNIT_TYPE = {
     "sort": None,
     "operation": "sort",
@@ -345,6 +352,81 @@ def dashboard_context():
     }
 
 
+def seniority_context(filters=None):
+    filters = filters or {}
+    sorts = units_by_type("sort")
+    all_operations = units_by_type("operation")
+    selected_sort = _resolve_optional_unit(filters.get("sort_id"), "sort")
+    operations = [
+        operation
+        for operation in all_operations
+        if selected_sort is None or operation.parent_id == selected_sort.id
+    ]
+    selected_operation = _resolve_selected_operation(filters.get("operation_id"), operations, all_operations)
+    if selected_operation and selected_sort is None:
+        selected_sort = selected_operation.parent
+
+    include_management = _parse_bool(filters.get("include_management"), default=False)
+    rows = []
+    if selected_operation:
+        allowed_work_area_ids = work_area_ids_under(selected_operation)
+        rows.extend(
+            _seniority_work_assignment_rows(
+                selected_operation,
+                allowed_work_area_ids,
+                filters,
+            )
+        )
+        if include_management:
+            rows.extend(_seniority_management_rows(selected_operation, filters))
+
+    rows.sort(
+        key=lambda row: (
+            row["person"].seniority_date,
+            str(row["person"].employee_id or ""),
+            row["person"].id,
+            row["scope_name"],
+        )
+    )
+    for index, row in enumerate(rows, start=1):
+        row["rank"] = index
+
+    counts = {
+        "total": len(rows),
+        "part_time": sum(1 for row in rows if row["person"].classification == "part_time"),
+        "combo": sum(1 for row in rows if row["person"].classification == "full_time_combo"),
+        "supervisors": sum(1 for row in rows if row["person"].classification in SUPERVISOR_CLASSIFICATIONS),
+        "managers": sum(1 for row in rows if row["person"].classification in MANAGER_CLASSIFICATIONS),
+    }
+
+    selected_department = _resolve_optional_unit(filters.get("department_id"), "department")
+    selected_work_area = _resolve_optional_unit(filters.get("work_area_id"), "work_area")
+    return {
+        "sorts": sorts,
+        "operations": operations,
+        "departments": _departments_under(selected_operation),
+        "work_areas": _work_areas_under(selected_operation),
+        "selected_sort": selected_sort,
+        "selected_operation": selected_operation,
+        "selected_department": selected_department,
+        "selected_work_area": selected_work_area,
+        "rows": rows,
+        "counts": counts,
+        "include_management": include_management,
+        "filters": {
+            "sort_id": str(selected_sort.id) if selected_sort else "",
+            "operation_id": str(selected_operation.id) if selected_operation else "",
+            "classification": filters.get("classification", ""),
+            "department_id": filters.get("department_id", ""),
+            "work_area_id": filters.get("work_area_id", ""),
+            "search": filters.get("search", ""),
+            "active": filters.get("active", "active") or "active",
+            "include_management": "1" if include_management else "",
+        },
+        "hierarchy": staffing_hierarchy_tree(),
+    }
+
+
 def selectable_parent_units(unit_type):
     expected_parent_type = PARENT_TYPE_BY_UNIT_TYPE.get(unit_type)
     if expected_parent_type is None:
@@ -404,6 +486,147 @@ def people_query(search=None, classification=None, active=None):
     if active in {"active", "inactive"}:
         query = query.filter_by(active=(active == "active"))
     return query.order_by(StaffingPerson.seniority_date, StaffingPerson.last_name, StaffingPerson.first_name)
+
+
+def _seniority_work_assignment_rows(operation, allowed_work_area_ids, filters):
+    query = (
+        StaffingWorkAssignment.query.join(StaffingPerson)
+        .join(StaffingUnit, StaffingWorkAssignment.work_area)
+        .filter(
+            StaffingWorkAssignment.active.is_(True),
+            StaffingWorkAssignment.work_area_unit_id.in_(allowed_work_area_ids or {-1}),
+        )
+    )
+    query = _apply_seniority_person_filters(query, filters)
+    department = _resolve_optional_unit(filters.get("department_id"), "department")
+    if department:
+        query = query.filter(StaffingWorkAssignment.work_area_unit_id.in_(work_area_ids_under(department) or {-1}))
+    work_area = _resolve_optional_unit(filters.get("work_area_id"), "work_area")
+    if work_area:
+        query = query.filter(StaffingWorkAssignment.work_area_unit_id == work_area.id)
+
+    rows = []
+    for assignment in query.all():
+        work_area = assignment.work_area
+        rows.append(
+            {
+                "person": assignment.person,
+                "work_area": work_area,
+                "scope": work_area,
+                "scope_name": work_area.name,
+                "scope_path": unit_path(work_area),
+                "source": "work_assignment",
+            }
+        )
+    return rows
+
+
+def _seniority_management_rows(operation, filters):
+    allowed_unit_ids = unit_ids_under(operation)
+    query = (
+        StaffingLeadershipAssignment.query.join(StaffingPerson)
+        .join(StaffingUnit)
+        .filter(
+            StaffingLeadershipAssignment.active.is_(True),
+            StaffingLeadershipAssignment.unit_id.in_(allowed_unit_ids or {-1}),
+        )
+    )
+    query = _apply_seniority_person_filters(query, filters, management_only=True)
+    department = _resolve_optional_unit(filters.get("department_id"), "department")
+    if department:
+        query = query.filter(StaffingLeadershipAssignment.unit_id.in_(unit_ids_under(department) or {-1}))
+    work_area = _resolve_optional_unit(filters.get("work_area_id"), "work_area")
+    if work_area:
+        query = query.filter(StaffingLeadershipAssignment.unit_id == work_area.id)
+
+    rows = []
+    seen = set()
+    for assignment in query.all():
+        key = (assignment.person_id, assignment.unit_id, assignment.leadership_level)
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append(
+            {
+                "person": assignment.person,
+                "work_area": assignment.unit if assignment.unit.unit_type == "work_area" else None,
+                "scope": assignment.unit,
+                "scope_name": assignment.unit.name,
+                "scope_path": unit_path(assignment.unit),
+                "source": "leadership_assignment",
+            }
+        )
+    return rows
+
+
+def _apply_seniority_person_filters(query, filters, management_only=False):
+    active = filters.get("active", "active")
+    if active in {"active", "inactive"}:
+        query = query.filter(StaffingPerson.active.is_(active == "active"))
+    classification = str(filters.get("classification") or "").strip()
+    if classification in STAFFING_CLASSIFICATIONS:
+        query = query.filter(StaffingPerson.classification == classification)
+    elif management_only:
+        query = query.filter(StaffingPerson.classification.in_(MANAGEMENT_CLASSIFICATIONS))
+    else:
+        query = query.filter(StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS))
+
+    search = str(filters.get("search") or "").strip()
+    if search:
+        pattern = f"%{search}%"
+        query = query.filter(
+            db.or_(
+                StaffingPerson.employee_id.ilike(pattern),
+                StaffingPerson.first_name.ilike(pattern),
+                StaffingPerson.last_name.ilike(pattern),
+            )
+        )
+    return query
+
+
+def _resolve_selected_operation(operation_id, operations, all_operations):
+    selected_operation = _resolve_optional_unit(operation_id, "operation")
+    if selected_operation and selected_operation in operations:
+        return selected_operation
+    if not operation_id and len(operations) == 1:
+        return operations[0]
+    if not operation_id and not operations and len(all_operations) == 1:
+        return all_operations[0]
+    return None
+
+
+def _resolve_optional_unit(unit_id, unit_type):
+    if not unit_id:
+        return None
+    try:
+        unit = db.session.get(StaffingUnit, int(unit_id))
+    except (TypeError, ValueError):
+        return None
+    if not unit or unit.unit_type != unit_type:
+        return None
+    return unit
+
+
+def _departments_under(operation):
+    if not operation:
+        return []
+    return sorted(
+        [child for child in operation.children if child.unit_type == "department"],
+        key=lambda row: (row.display_order, row.name.lower(), row.id),
+    )
+
+
+def _work_areas_under(operation):
+    if not operation:
+        return []
+    return (
+        StaffingUnit.query.filter(
+            StaffingUnit.unit_type == "work_area",
+            StaffingUnit.id.in_(work_area_ids_under(operation) or {-1}),
+        )
+        .order_by(StaffingUnit.display_order, StaffingUnit.name)
+        .all()
+    )
 
 
 def unit_path(unit):

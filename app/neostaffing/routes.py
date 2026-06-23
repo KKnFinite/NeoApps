@@ -49,6 +49,38 @@ def index_slash():
     return redirect(url_for("neostaffing.index"))
 
 
+@bp.route("/seniority")
+@neostaffing_app_required()
+def seniority():
+    classification = request.args.get("classification", "").strip()
+    if classification not in {choice[0] for choice in staffing_service.classification_choices()}:
+        classification = ""
+    active = request.args.get("active", "active").strip() or "active"
+    if active not in {"active", "inactive", "all"}:
+        active = "active"
+    context = staffing_service.seniority_context(
+        {
+            "sort_id": request.args.get("sort_id", "").strip(),
+            "operation_id": request.args.get("operation_id", "").strip(),
+            "classification": classification,
+            "department_id": request.args.get("department_id", "").strip(),
+            "work_area_id": request.args.get("work_area_id", "").strip(),
+            "search": request.args.get("search", "").strip(),
+            "active": active,
+            "include_management": request.args.get("include_management", "").strip(),
+        }
+    )
+    return render_template(
+        "neostaffing/seniority.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
+        can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
+        classification_choices=staffing_service.classification_choices(),
+        classification_labels=staffing_service.CLASSIFICATION_LABELS,
+        unit_path=staffing_service.unit_path,
+        seniority=context,
+    )
+
+
 @bp.route("/app-management")
 @neostaffing_app_required(minimum_role="master")
 def app_management():

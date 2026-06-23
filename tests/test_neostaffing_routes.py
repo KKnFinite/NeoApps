@@ -12,6 +12,7 @@ from app.models import (
     User,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
+from app.services import neostaffing as staffing_service
 
 
 class NeoStaffingRoutesTest(unittest.TestCase):
@@ -279,6 +280,83 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"APPROVED Operator", response.data)
         self.assertIn(b'href="/neostaffing"', response.data)
 
+    def test_seniority_view_loads_for_approved_user_and_links_from_dashboard(self):
+        user = self._user("staffing_seniority_operator")
+        self._grant_app_access(user, "neostaffing", "operator")
+        db.session.commit()
+        self._login(user.username)
+
+        dashboard = self.client.get("/neostaffing")
+        response = self.client.get("/neostaffing/seniority")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"SENIORITY", response.data)
+        self.assertIn(b"FILTERS", response.data)
+        self.assertIn(b"TOTAL EMPLOYEES", response.data)
+        self.assertIn(b"Include Management", response.data)
+        self.assertIn(b'href="/neostaffing/seniority"', dashboard.data)
+
+    def test_seniority_view_blocks_user_without_neostaffing_access(self):
+        user = self._user("staffing_seniority_blocked")
+        db.session.commit()
+        self._login(user.username)
+
+        response = self.client.get("/neostaffing/seniority", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/portal")
+
+    def test_seniority_view_renders_ranked_filterable_data(self):
+        user = self._user("staffing_seniority_data")
+        self._grant_app_access(user, "neostaffing", "operator")
+        sort, operation, department, work_area = self._staffing_hierarchy()
+        second_work_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "WBM", "parent_id": department.id}
+        )
+        avery = staffing_service.create_person(
+            {
+                "employee_id": "E710",
+                "first_name": "Avery",
+                "last_name": "Spotter",
+                "seniority_date": "2019-02-01",
+                "classification": "part_time",
+            }
+        )
+        morgan = staffing_service.create_person(
+            {
+                "employee_id": "E711",
+                "first_name": "Morgan",
+                "last_name": "Loader",
+                "seniority_date": "2021-03-01",
+                "classification": "full_time_combo",
+            }
+        )
+        staffing_service.assign_work_area(morgan, second_work_area)
+        staffing_service.assign_work_area(avery, work_area)
+        db.session.commit()
+        self._login(user.username)
+
+        response = self.client.get(f"/neostaffing/seniority?operation_id={operation.id}")
+        searched = self.client.get(
+            f"/neostaffing/seniority?operation_id={operation.id}&search=avery"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Night Sort", response.data)
+        self.assertIn(b"Shift Operation", response.data)
+        self.assertIn(b"E710", response.data)
+        self.assertIn(b"Spotter, Avery", response.data)
+        self.assertIn(b"E711", response.data)
+        self.assertIn(b"Loader, Morgan", response.data)
+        self.assertIn(b"RANK", response.data)
+        self.assertIn(b"PART TIME", response.data)
+        self.assertIn(b"COMBO", response.data)
+        self.assertIn(b"EBM", response.data)
+        self.assertIn(b"WBM", response.data)
+        self.assertEqual(searched.status_code, 200)
+        self.assertIn(b"E710", searched.data)
+        self.assertNotIn(b"E711", searched.data)
+
     def _user(self, username):
         user = User(
             username=username,
@@ -324,6 +402,23 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             follow_redirects=False,
         )
         return client
+
+    def _staffing_hierarchy(self):
+        sort = staffing_service.create_unit({"unit_type": "sort", "name": "Night Sort"})
+        operation = staffing_service.create_unit(
+            {"unit_type": "operation", "name": "Shift Operation", "parent_id": sort.id}
+        )
+        department = staffing_service.create_unit(
+            {
+                "unit_type": "department",
+                "name": "East Shift Department",
+                "parent_id": operation.id,
+            }
+        )
+        work_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "EBM", "parent_id": department.id}
+        )
+        return sort, operation, department, work_area
 
 
 if __name__ == "__main__":

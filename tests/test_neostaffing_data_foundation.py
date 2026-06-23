@@ -278,6 +278,100 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         db.session.flush()
         self.assertIsNone(db.session.get(StaffingUnit, work_area.id))
 
+    def test_seniority_context_traverses_operation_and_ranks_by_seniority(self):
+        _sort, operation, department, work_area = self._hierarchy()
+        second_work_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "WBM", "parent_id": department.id}
+        )
+        junior = self._person_with_name("E602", "part_time", "Junior", "Worker", "2022-01-01")
+        senior = self._person_with_name("E601", "full_time_combo", "Senior", "Worker", "2019-01-01")
+        tie = self._person_with_name("E600", "part_time", "Tie", "Worker", "2019-01-01")
+        staffing_service.assign_work_area(junior, work_area)
+        staffing_service.assign_work_area(senior, second_work_area)
+        staffing_service.assign_work_area(tie, work_area)
+
+        context = staffing_service.seniority_context({"operation_id": str(operation.id)})
+
+        self.assertEqual([row["person"].employee_id for row in context["rows"]], ["E600", "E601", "E602"])
+        self.assertEqual([row["rank"] for row in context["rows"]], [1, 2, 3])
+        self.assertEqual(context["counts"]["total"], 3)
+        self.assertEqual(context["counts"]["part_time"], 2)
+        self.assertEqual(context["counts"]["combo"], 1)
+
+    def test_seniority_context_filters_by_classification_work_area_and_search(self):
+        _sort, operation, department, work_area = self._hierarchy()
+        second_work_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "WBM", "parent_id": department.id}
+        )
+        avery = self._person_with_name("E610", "part_time", "Avery", "Spotter", "2020-01-01")
+        morgan = self._person_with_name("E611", "full_time_combo", "Morgan", "Loader", "2021-01-01")
+        staffing_service.assign_work_area(avery, work_area)
+        staffing_service.assign_work_area(morgan, second_work_area)
+
+        classification = staffing_service.seniority_context(
+            {"operation_id": str(operation.id), "classification": "full_time_combo"}
+        )
+        self.assertEqual([row["person"].employee_id for row in classification["rows"]], ["E611"])
+
+        work_area_filtered = staffing_service.seniority_context(
+            {"operation_id": str(operation.id), "work_area_id": str(work_area.id)}
+        )
+        self.assertEqual([row["person"].employee_id for row in work_area_filtered["rows"]], ["E610"])
+
+        search_filtered = staffing_service.seniority_context(
+            {"operation_id": str(operation.id), "search": "avery"}
+        )
+        self.assertEqual([row["person"].employee_id for row in search_filtered["rows"]], ["E610"])
+
+    def test_seniority_context_excludes_and_includes_management(self):
+        _sort, operation, department, work_area = self._hierarchy()
+        employee = self._person_with_name("E620", "part_time", "Worker", "One", "2020-01-01")
+        supervisor = self._person_with_name(
+            "E621",
+            "part_time_supervisor",
+            "Supervisor",
+            "One",
+            "2018-01-01",
+        )
+        staffing_service.assign_work_area(employee, work_area)
+        staffing_service.create_leadership_assignment(supervisor, work_area)
+
+        excluded = staffing_service.seniority_context({"operation_id": str(operation.id)})
+        self.assertEqual([row["person"].employee_id for row in excluded["rows"]], ["E620"])
+        self.assertEqual(excluded["counts"]["supervisors"], 0)
+
+        included = staffing_service.seniority_context(
+            {"operation_id": str(operation.id), "include_management": "1"}
+        )
+        self.assertEqual([row["person"].employee_id for row in included["rows"]], ["E621", "E620"])
+        self.assertEqual(included["counts"]["supervisors"], 1)
+
+    def test_seniority_context_ignores_inactive_assignments_by_default(self):
+        _sort, operation, _department, work_area = self._hierarchy()
+        employee = self._person("E630", "part_time")
+        staffing_service.assign_work_area(employee, work_area)
+        staffing_service.clear_work_assignment(employee)
+
+        context = staffing_service.seniority_context({"operation_id": str(operation.id)})
+
+        self.assertEqual(context["rows"], [])
+
+    def test_seniority_context_defaults_only_when_one_operation_is_available(self):
+        sort, operation, _department, _work_area = self._hierarchy()
+
+        single = staffing_service.seniority_context({"sort_id": str(sort.id)})
+        self.assertEqual(single["selected_operation"], operation)
+
+        second_operation = staffing_service.create_unit(
+            {"unit_type": "operation", "name": "Ramp Operation", "parent_id": sort.id}
+        )
+        db.session.flush()
+
+        multiple = staffing_service.seniority_context({"sort_id": str(sort.id)})
+        self.assertIsNone(multiple["selected_operation"])
+        self.assertIn(operation, multiple["operations"])
+        self.assertIn(second_operation, multiple["operations"])
+
     def _hierarchy(self):
         sort = staffing_service.create_unit({"unit_type": "sort", "name": "Night Sort"})
         operation = staffing_service.create_unit(
@@ -298,6 +392,17 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
                 "first_name": "Test",
                 "last_name": employee_id,
                 "seniority_date": "2020-01-02",
+                "classification": classification,
+            }
+        )
+
+    def _person_with_name(self, employee_id, classification, first_name, last_name, seniority_date):
+        return staffing_service.create_person(
+            {
+                "employee_id": employee_id,
+                "first_name": first_name,
+                "last_name": last_name,
+                "seniority_date": seniority_date,
                 "classification": classification,
             }
         )

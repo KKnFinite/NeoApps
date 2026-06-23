@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}NeoStaffing Seniority{% endblock %}
+
+{% macro render_tree(nodes) %}
+    <ul class="neostaffing-dashboard-tree">
+        {% for row in nodes %}
+        {% set unit = row.unit %}
+        <li>
+            <div class="neostaffing-dashboard-tree-node">
+                <span>{{ unit.name }}</span>
+                {% if seniority.selected_operation and unit.id == seniority.selected_operation.id %}
+                <strong>ON</strong>
+                {% elif unit.unit_type == "work_area" %}
+                <strong>{{ unit.required_headcount if unit.required_headcount is not none else "-" }}</strong>
+                {% endif %}
+            </div>
+            {% if row.children %}
+            {{ render_tree(row.children) }}
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+{% endmacro %}
+
+{% block content %}
+{% set counts = seniority.counts %}
+{% set filters = seniority.filters %}
+<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="neostaffing-seniority-title">
+    <nav class="neostaffing-mobile-tabs" aria-label="NeoStaffing mobile navigation">
+        <a href="{{ url_for('neostaffing.index') }}">BOARD</a>
+        {% if can_manage_app %}
+        <a href="{{ url_for('neostaffing.people') }}">PEOPLE</a>
+        {% else %}
+        <span>PEOPLE</span>
+        {% endif %}
+        <a href="{{ url_for('neostaffing.seniority') }}" aria-current="page">SENIORITY</a>
+        {% if can_manage_app %}
+        <a href="{{ url_for('neostaffing.app_management') }}">MANAGE</a>
+        {% else %}
+        <span>MANAGE</span>
+        {% endif %}
+    </nav>
+
+    <div class="neostaffing-dashboard-shell">
+        <aside class="neostaffing-rail" aria-label="NeoStaffing navigation">
+            <div class="neostaffing-rail-brand">
+                <span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span>
+            </div>
+            <a href="{{ url_for('neostaffing.index') }}">DASHBOARD</a>
+            <span>STAFFING BOARD</span>
+            {% if can_manage_app %}
+            <a href="{{ url_for('neostaffing.people') }}">PEOPLE</a>
+            {% else %}
+            <span>PEOPLE</span>
+            {% endif %}
+            <a href="{{ url_for('neostaffing.seniority') }}" aria-current="page">SENIORITY</a>
+            {% if can_manage_app %}
+            <a href="{{ url_for('neostaffing.hierarchy') }}">WORK AREAS</a>
+            <a href="{{ url_for('neostaffing.work_assignments') }}">ASSIGNMENTS</a>
+            <a href="{{ url_for('neostaffing.management_assignments') }}">LEADERSHIP</a>
+            <a href="{{ url_for('neostaffing.app_management') }}">APP MANAGEMENT</a>
+            {% endif %}
+            <a class="neostaffing-rail-return" href="{{ url_for('auth.portal_dashboard') }}">NEOAPPS PORTAL</a>
+        </aside>
+
+        <main class="neostaffing-dashboard-main">
+            <header class="neostaffing-dashboard-topbar">
+                <div>
+                    <p class="neostaffing-eyebrow">
+                        <span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span>
+                    </p>
+                    <h1 id="neostaffing-seniority-title">SENIORITY</h1>
+                    <p>Operation seniority list by assigned Work Area.</p>
+                </div>
+                <label class="neostaffing-search">
+                    <span>Search</span>
+                    <input form="seniority-filter-form" type="search" name="search" value="{{ filters.search }}" placeholder="Search employee ID or name">
+                </label>
+                <div class="neostaffing-status-card">
+                    <span>APP ROLE</span>
+                    <strong>{{ app_role|role_label }}</strong>
+                </div>
+                {% if can_manage_app %}
+                <a class="action-button" href="{{ url_for('neostaffing.work_assignments') }}">ASSIGNMENTS</a>
+                {% endif %}
+            </header>
+
+            <section class="neostaffing-summary-strip neostaffing-dashboard-metrics neostaffing-seniority-metrics" aria-label="NeoStaffing seniority totals">
+                <article><span>TOTAL EMPLOYEES</span><strong>{{ counts.total }}</strong></article>
+                <article><span>PART TIME</span><strong>{{ counts.part_time }}</strong></article>
+                <article><span>COMBO</span><strong>{{ counts.combo }}</strong></article>
+                <article><span>SUPERVISORS</span><strong>{{ counts.supervisors }}</strong></article>
+                <article><span>MANAGERS</span><strong>{{ counts.managers }}</strong></article>
+            </section>
+
+            <section class="neostaffing-seniority-workspace" aria-label="NeoStaffing seniority workspace">
+                <aside class="neostaffing-data-card neostaffing-seniority-filter-panel">
+                    <h2>FILTERS</h2>
+                    <form id="seniority-filter-form" class="operation-form neostaffing-seniority-filter-form" method="get">
+                        <label><span>Sort</span>
+                            <select name="sort_id">
+                                <option value="">All Sorts</option>
+                                {% for sort in seniority.sorts %}
+                                <option value="{{ sort.id }}" {% if filters.sort_id|string == sort.id|string %}selected{% endif %}>{{ sort.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label><span>Operation</span>
+                            <select name="operation_id">
+                                <option value="">Auto</option>
+                                {% for operation in seniority.operations %}
+                                <option value="{{ operation.id }}" {% if filters.operation_id|string == operation.id|string %}selected{% endif %}>{{ unit_path(operation) }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label><span>Classification</span>
+                            <select name="classification">
+                                <option value="">All</option>
+                                {% for value, label in classification_choices %}
+                                <option value="{{ value }}" {% if filters.classification == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label><span>Department</span>
+                            <select name="department_id">
+                                <option value="">All Departments</option>
+                                {% for department in seniority.departments %}
+                                <option value="{{ department.id }}" {% if filters.department_id|string == department.id|string %}selected{% endif %}>{{ department.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label><span>Work Area</span>
+                            <select name="work_area_id">
+                                <option value="">All Work Areas</option>
+                                {% for work_area in seniority.work_areas %}
+                                <option value="{{ work_area.id }}" {% if filters.work_area_id|string == work_area.id|string %}selected{% endif %}>{{ work_area.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label><span>Status</span>
+                            <select name="active">
+                                <option value="active" {% if filters.active == "active" %}selected{% endif %}>Active Only</option>
+                                <option value="inactive" {% if filters.active == "inactive" %}selected{% endif %}>Inactive Only</option>
+                                <option value="all" {% if filters.active == "all" %}selected{% endif %}>All</option>
+                            </select>
+                        </label>
+                        <label class="neostaffing-toggle-field">
+                            <span>Include Management</span>
+                            <input type="checkbox" name="include_management" value="1" {% if seniority.include_management %}checked{% endif %}>
+                        </label>
+                        <button type="submit">APPLY FILTERS</button>
+                    </form>
+                    <div class="neostaffing-seniority-tree">
+                        <h2>HIERARCHY</h2>
+                        {% if seniority.hierarchy %}
+                        {{ render_tree(seniority.hierarchy) }}
+                        {% else %}
+                        <p class="muted">Build hierarchy in App Management.</p>
+                        {% endif %}
+                    </div>
+                </aside>
+
+                <article class="neostaffing-data-card neostaffing-seniority-list-panel">
+                    <div class="neostaffing-panel-heading">
+                        <h2>{% if seniority.selected_operation %}{{ seniority.selected_operation.name }}{% else %}SENIORITY LIST{% endif %}</h2>
+                        <span>{{ counts.total }} SHOWN</span>
+                    </div>
+                    {% if not seniority.selected_operation %}
+                    <p class="muted">Select a Sort and Operation to view seniority.</p>
+                    {% endif %}
+                    <div class="neostaffing-seniority-list">
+                        {% for row in seniority.rows %}
+                        {% set person = row.person %}
+                        <section class="neostaffing-seniority-card">
+                            <div class="neostaffing-seniority-rank">
+                                <span>RANK</span>
+                                <strong>{{ row.rank }}</strong>
+                            </div>
+                            <div class="neostaffing-seniority-person">
+                                <span>{{ person.employee_id }}</span>
+                                <strong>{{ person.last_name }}, {{ person.first_name }}</strong>
+                                <em>{{ classification_labels[person.classification] }}</em>
+                            </div>
+                            <div class="neostaffing-seniority-scope">
+                                <span>{% if row.source == "leadership_assignment" %}SCOPE{% else %}WORK AREA{% endif %}</span>
+                                <strong>{{ row.scope_name }}</strong>
+                                <em>{{ row.scope_path }}</em>
+                            </div>
+                            <div class="neostaffing-seniority-date">
+                                <span>SENIORITY</span>
+                                <strong>{{ person.seniority_date.isoformat() }}</strong>
+                            </div>
+                        </section>
+                        {% else %}
+                        <p class="muted">No employees match the selected filters.</p>
+                        {% endfor %}
+                    </div>
+                </article>
+
+                <aside class="neostaffing-data-card neostaffing-detail-panel" aria-label="Seniority details">
+                    <h2>DETAIL</h2>
+                    <dl>
+                        <div><dt>Sort</dt><dd>{% if seniority.selected_sort %}{{ seniority.selected_sort.name }}{% else %}-{% endif %}</dd></div>
+                        <div><dt>Operation</dt><dd>{% if seniority.selected_operation %}{{ seniority.selected_operation.name }}{% else %}-{% endif %}</dd></div>
+                        <div><dt>Management</dt><dd>{{ "Included" if seniority.include_management else "Excluded" }}</dd></div>
+                        <div><dt>Total</dt><dd>{{ counts.total }}</dd></div>
+                    </dl>
+                </aside>
+            </section>
+        </main>
+    </div>
+</section>
+{% endblock %}

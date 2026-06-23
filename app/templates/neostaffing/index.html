@@ -32,7 +32,7 @@
         {% else %}
         <span>PEOPLE</span>
         {% endif %}
-        <span>SENIORITY</span>
+        <a href="{{ url_for('neostaffing.seniority') }}">SENIORITY</a>
         {% if can_manage_app %}
         <a href="{{ url_for('neostaffing.app_management') }}">MANAGE</a>
         {% else %}
@@ -49,12 +49,14 @@
             <span>STAFFING BOARD</span>
             {% if can_manage_app %}
             <a href="{{ url_for('neostaffing.people') }}">PEOPLE</a>
+            <a href="{{ url_for('neostaffing.seniority') }}">SENIORITY</a>
             <a href="{{ url_for('neostaffing.hierarchy') }}">WORK AREAS</a>
             <a href="{{ url_for('neostaffing.work_assignments') }}">ASSIGNMENTS</a>
             <a href="{{ url_for('neostaffing.management_assignments') }}">LEADERSHIP</a>
             <a href="{{ url_for('neostaffing.app_management') }}">APP MANAGEMENT</a>
             {% else %}
             <span>PEOPLE</span>
+            <a href="{{ url_for('neostaffing.seniority') }}">SENIORITY</a>
             <span>WORK AREAS</span>
             <span>ASSIGNMENTS</span>
             <span>LEADERSHIP</span>

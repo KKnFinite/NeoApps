@@ -4929,6 +4929,114 @@ body.blueprint-neostaffing {
     border-top: 1px solid rgba(var(--node-rgb), 0.16);
 }
 
+.neostaffing-seniority-metrics {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.neostaffing-seniority-workspace {
+    display: grid;
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(220px, 270px);
+    gap: 14px;
+}
+
+.neostaffing-seniority-filter-panel,
+.neostaffing-seniority-list-panel {
+    align-content: start;
+    min-width: 0;
+}
+
+.neostaffing-seniority-filter-form {
+    display: grid;
+    gap: 10px;
+}
+
+.neostaffing-toggle-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 42px;
+    padding: 8px 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.18);
+    border-radius: 7px;
+    background: rgba(2, 8, 12, 0.58);
+}
+
+.neostaffing-toggle-field input {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--node-primary);
+}
+
+.neostaffing-seniority-tree {
+    display: grid;
+    gap: 10px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(var(--node-rgb), 0.16);
+}
+
+.neostaffing-seniority-list {
+    display: grid;
+    gap: 10px;
+}
+
+.neostaffing-seniority-card {
+    display: grid;
+    grid-template-columns: 72px minmax(170px, 1.2fr) minmax(160px, 1fr) minmax(110px, 0.55fr);
+    gap: 10px;
+    align-items: center;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid rgba(var(--node-rgb), 0.26);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(18, 30, 42, 0.92), rgba(5, 11, 16, 0.96)),
+        rgba(5, 11, 16, 0.94);
+}
+
+.neostaffing-seniority-card > div {
+    min-width: 0;
+}
+
+.neostaffing-seniority-card span,
+.neostaffing-seniority-card em,
+.neostaffing-panel-heading span {
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-style: normal;
+    font-weight: 950;
+}
+
+.neostaffing-seniority-card strong {
+    display: block;
+    overflow: hidden;
+    color: var(--neo-bright-silver);
+    font-size: 1rem;
+    font-weight: 950;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.neostaffing-seniority-rank {
+    display: grid;
+    justify-items: center;
+    padding: 8px;
+    border: 1px solid rgba(var(--node-rgb), 0.28);
+    border-radius: 7px;
+    background: rgba(var(--node-rgb), 0.1);
+}
+
+.neostaffing-seniority-rank strong {
+    color: var(--node-primary);
+    font-size: 1.38rem;
+}
+
+.neostaffing-seniority-scope em {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 @media (max-width: 900px) {
     .neostaffing-dashboard-page {
         width: min(100%, 760px);
@@ -4957,6 +5065,22 @@ body.blueprint-neostaffing {
 
     .neostaffing-dashboard-workspace {
         grid-template-columns: 1fr;
+    }
+
+    .neostaffing-seniority-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neostaffing-seniority-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-seniority-card {
+        grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .neostaffing-seniority-date {
+        grid-column: 2 / -1;
     }
 
     .neostaffing-management-layout {
@@ -5035,6 +5159,19 @@ body.blueprint-neostaffing {
 
     .neostaffing-work-area-card {
         min-height: 0;
+    }
+
+    .neostaffing-seniority-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-seniority-card {
+        grid-template-columns: 58px minmax(0, 1fr);
+    }
+
+    .neostaffing-seniority-scope,
+    .neostaffing-seniority-date {
+        grid-column: 2;
     }
 
     .neostaffing-hero {
