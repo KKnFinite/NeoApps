@@ -22,6 +22,8 @@ class StaffingWorkAssignment(db.Model):
         nullable=False,
         index=True,
     )
+    active = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    effective_date = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

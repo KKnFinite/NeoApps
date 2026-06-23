@@ -1,0 +1,12 @@
+<aside class="neostaffing-management-rail" aria-label="NeoStaffing App Management navigation">
+    <div class="neostaffing-rail-brand">
+        <span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span>
+    </div>
+    <a href="{{ url_for('neostaffing.app_management') }}" {% if staffing_management_active == "overview" %}aria-current="page"{% endif %}>MANAGE HOME</a>
+    <a href="{{ url_for('neostaffing.hierarchy') }}" {% if staffing_management_active == "hierarchy" %}aria-current="page"{% endif %}>HIERARCHY</a>
+    <a href="{{ url_for('neostaffing.people') }}" {% if staffing_management_active == "people" %}aria-current="page"{% endif %}>PEOPLE</a>
+    <a href="{{ url_for('neostaffing.work_assignments') }}" {% if staffing_management_active == "work" %}aria-current="page"{% endif %}>WORK ASSIGNMENTS</a>
+    <a href="{{ url_for('neostaffing.management_assignments') }}" {% if staffing_management_active == "leadership" %}aria-current="page"{% endif %}>LEADERSHIP</a>
+    <span>PERMISSIONS</span>
+    <a class="neostaffing-rail-return" href="{{ url_for('neostaffing.index') }}">NEOSTAFFING</a>
+</aside>

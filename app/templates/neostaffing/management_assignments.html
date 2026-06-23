@@ -13,6 +13,10 @@
         <div class="neostaffing-status-card"><span>APP ROLE</span><strong>{{ app_role|role_label }}</strong></div>
     </div>
 
+    <div class="neostaffing-management-layout">
+        {% set staffing_management_active = "leadership" %}
+        {% include "neostaffing/_management_nav.html" %}
+        <div class="neostaffing-management-main">
     <section class="neostaffing-data-card">
         <h2>ADD MANAGEMENT ASSIGNMENT</h2>
         <form class="operation-form neostaffing-filter-form" method="post" action="{{ url_for('neostaffing.create_management_assignment') }}">
@@ -105,42 +109,42 @@
     </section>
 
     <section class="neostaffing-data-card">
-        <h2>CURRENT MANAGEMENT ASSIGNMENTS</h2>
-        <div class="table-wrap">
-            <table class="data-table neostaffing-data-table">
-                <thead>
-                    <tr>
-                        <th>Person</th>
-                        <th>Classification</th>
-                        <th>Level</th>
-                        <th>Scope</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for assignment in assignments %}
-                    <tr>
-                        <td>{{ assignment.person.employee_id }} / {{ assignment.person.full_name }}</td>
-                        <td>{{ classification_labels[assignment.person.classification] }}</td>
-                        <td>{{ leadership_level_labels[assignment.leadership_level] }}</td>
-                        <td>{{ unit_type_labels[assignment.unit.unit_type] }} / {{ unit_path(assignment.unit) }}</td>
-                        <td>
-                            <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.delete_management_assignment', assignment_id=assignment.id) }}">
-                                <button class="table-row-button" type="submit">REMOVE</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="5">No management assignments yet.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <h2>LEADERSHIP SCOPE DECK</h2>
+        <div class="neostaffing-record-grid">
+            {% for assignment in assignments %}
+            <article class="neostaffing-record-card{% if not assignment.active %} is-inactive{% endif %}">
+                <header class="neostaffing-record-header">
+                    <div>
+                        <span>{{ assignment.person.employee_id }}</span>
+                        <strong>{{ assignment.person.full_name }}</strong>
+                    </div>
+                    <em>{{ "ACTIVE" if assignment.active else "INACTIVE" }}</em>
+                </header>
+                <div class="neostaffing-record-meta">
+                    <span>{{ classification_labels[assignment.person.classification] }}</span>
+                    <span>{{ leadership_level_labels[assignment.leadership_level] }}</span>
+                    <span>{{ unit_type_labels[assignment.unit.unit_type] }}</span>
+                </div>
+                <p class="neostaffing-record-path">{{ unit_path(assignment.unit) }}</p>
+                {% if assignment.active %}
+                <div class="neostaffing-card-actions">
+                    <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.delete_management_assignment', assignment_id=assignment.id) }}">
+                        <button class="table-row-button" type="submit">DEACTIVATE ASSIGNMENT</button>
+                    </form>
+                </div>
+                {% endif %}
+            </article>
+            {% else %}
+            <p class="muted">No management assignments yet.</p>
+            {% endfor %}
         </div>
     </section>
 
     <div class="action-row">
         <a class="action-button" href="{{ url_for('neostaffing.people') }}">EMPLOYEE ROSTER</a>
         <a class="action-button action-button-secondary" href="{{ url_for('neostaffing.app_management') }}">BACK TO APP MANAGEMENT</a>
+    </div>
+        </div>
     </div>
 </section>
 {% endblock %}

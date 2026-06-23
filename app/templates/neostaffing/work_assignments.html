@@ -13,6 +13,10 @@
         <div class="neostaffing-status-card"><span>APP ROLE</span><strong>{{ app_role|role_label }}</strong></div>
     </div>
 
+    <div class="neostaffing-management-layout">
+        {% set staffing_management_active = "work" %}
+        {% include "neostaffing/_management_nav.html" %}
+        <div class="neostaffing-management-main">
     <section class="neostaffing-data-card">
         <h2>ASSIGN EMPLOYEE</h2>
         <form class="operation-form neostaffing-filter-form" method="post" action="{{ url_for('neostaffing.assign_work_area') }}">
@@ -30,6 +34,7 @@
                     {% endfor %}
                 </select>
             </label>
+            <label><span>Effective Date</span><input type="date" name="effective_date"></label>
             <button type="submit">ASSIGN / MOVE</button>
         </form>
     </section>
@@ -96,54 +101,67 @@
     </section>
 
     <section class="neostaffing-data-card">
-        <h2>CURRENT WORK ASSIGNMENTS</h2>
-        <div class="table-wrap">
-            <table class="data-table neostaffing-data-table">
-                <thead>
-                    <tr>
-                        <th>Employee</th>
-                        <th>Classification</th>
-                        <th>Work Area</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for person in people %}
-                    <tr>
-                        <td>{{ person.employee_id }} / {{ person.full_name }}</td>
-                        <td>{{ classification_labels[person.classification] }}</td>
-                        <td>
-                            {% if person.work_assignment %}
-                            {{ unit_path(person.work_assignment.work_area) }}
-                            {% elif person.classification in non_management_classifications %}
-                            UNASSIGNED
-                            {% else %}
-                            MANAGEMENT CLASSIFICATION
-                            {% endif %}
-                        </td>
-                        <td>{{ "ACTIVE" if person.active else "INACTIVE" }}</td>
-                        <td>
-                            {% if person.work_assignment %}
-                            <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.clear_work_assignment', person_id=person.id) }}">
-                                <button class="table-row-button" type="submit">CLEAR</button>
-                            </form>
-                            {% else %}
-                            -
-                            {% endif %}
-                        </td>
-                    </tr>
+        <h2>WORK AREA ASSIGNMENT DECK</h2>
+        <div class="neostaffing-record-grid">
+            {% for person in people %}
+            {% set active_assignment = person.work_assignment if person.work_assignment and person.work_assignment.active else none %}
+            <article class="neostaffing-record-card{% if not person.active %} is-inactive{% endif %}">
+                <header class="neostaffing-record-header">
+                    <div>
+                        <span>{{ person.employee_id }}</span>
+                        <strong>{{ person.full_name }}</strong>
+                    </div>
+                    <em>{% if active_assignment %}ASSIGNED{% elif person.classification in non_management_classifications %}UNASSIGNED{% else %}LEADERSHIP{% endif %}</em>
+                </header>
+                <div class="neostaffing-record-meta">
+                    <span>{{ classification_labels[person.classification] }}</span>
+                    <span>{{ "ACTIVE" if person.active else "INACTIVE" }}</span>
+                    {% if active_assignment and active_assignment.effective_date %}
+                    <span>EFFECTIVE {{ active_assignment.effective_date.isoformat() }}</span>
+                    {% endif %}
+                </div>
+                <p class="neostaffing-record-path">
+                    {% if active_assignment %}
+                    {{ unit_path(active_assignment.work_area) }}
+                    {% elif person.classification in non_management_classifications %}
+                    Ready for Work Area assignment
                     {% else %}
-                    <tr><td colspan="5">No people found.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    Management classifications are assigned on Leadership.
+                    {% endif %}
+                </p>
+                {% if person.classification in non_management_classifications %}
+                <form class="operation-form neostaffing-card-form" method="post" action="{{ url_for('neostaffing.assign_work_area') }}">
+                    <input type="hidden" name="person_id" value="{{ person.id }}">
+                    <label><span>Work Area</span>
+                        <select name="work_area_unit_id" required>
+                            {% for work_area in work_areas %}
+                            <option value="{{ work_area.id }}" {% if active_assignment and active_assignment.work_area_unit_id == work_area.id %}selected{% endif %}>{{ unit_path(work_area) }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label><span>Effective Date</span><input type="date" name="effective_date" value="{{ active_assignment.effective_date.isoformat() if active_assignment and active_assignment.effective_date else '' }}"></label>
+                    <button type="submit">ASSIGN / MOVE</button>
+                </form>
+                {% endif %}
+                {% if active_assignment %}
+                <div class="neostaffing-card-actions">
+                    <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.clear_work_assignment', person_id=person.id) }}">
+                        <button class="table-row-button" type="submit">DEACTIVATE ASSIGNMENT</button>
+                    </form>
+                </div>
+                {% endif %}
+            </article>
+            {% else %}
+            <p class="muted">No people found.</p>
+            {% endfor %}
         </div>
     </section>
 
     <div class="action-row">
         <a class="action-button" href="{{ url_for('neostaffing.people') }}">EMPLOYEE ROSTER</a>
         <a class="action-button action-button-secondary" href="{{ url_for('neostaffing.app_management') }}">BACK TO APP MANAGEMENT</a>
+    </div>
+        </div>
     </div>
 </section>
 {% endblock %}

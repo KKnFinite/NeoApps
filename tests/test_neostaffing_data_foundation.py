@@ -131,11 +131,14 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         combo = self._person("E201", "full_time_combo")
         supervisor = self._person("E202", "part_time_supervisor")
 
-        assignment = staffing_service.assign_work_area(employee, work_area)
+        assignment = staffing_service.assign_work_area(employee, work_area, "2026-06-23")
         self.assertEqual(assignment.work_area, work_area)
+        self.assertTrue(assignment.active)
+        self.assertEqual(assignment.effective_date, date(2026, 6, 23))
         staffing_service.assign_work_area(employee, second_work_area)
         self.assertEqual(StaffingWorkAssignment.query.filter_by(person_id=employee.id).count(), 1)
         self.assertEqual(employee.work_assignment.work_area, second_work_area)
+        self.assertTrue(employee.work_assignment.active)
 
         self.assertEqual(staffing_service.assign_work_area(combo, work_area).work_area, work_area)
 
@@ -158,31 +161,31 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
 
         first = staffing_service.create_leadership_assignment(part_time_supervisor, work_area)
         second = staffing_service.create_leadership_assignment(part_time_supervisor, second_work_area)
-        self.assertEqual(first.leadership_level, "work_area_lead")
-        self.assertEqual(second.leadership_level, "work_area_lead")
+        self.assertEqual(first.leadership_level, "work_area")
+        self.assertEqual(second.leadership_level, "work_area")
         self.assertEqual(
             StaffingLeadershipAssignment.query.filter_by(person_id=part_time_supervisor.id).count(),
             2,
         )
         self.assertEqual(
             staffing_service.create_leadership_assignment(full_time_supervisor, department).leadership_level,
-            "department_lead",
+            "department",
         )
         self.assertEqual(
             staffing_service.create_leadership_assignment(specialist, department).leadership_level,
-            "specialist_support",
+            "department",
         )
         self.assertEqual(
             staffing_service.create_leadership_assignment(specialist, operation).leadership_level,
-            "specialist_support",
+            "operation",
         )
         self.assertEqual(
             staffing_service.create_leadership_assignment(manager, operation).leadership_level,
-            "operation_lead",
+            "operation",
         )
         self.assertEqual(
             staffing_service.create_leadership_assignment(division_manager, sort).leadership_level,
-            "sort_lead",
+            "sort",
         )
 
         with self.assertRaisesRegex(ValueError, "already exists"):
@@ -191,11 +194,11 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cannot lead"):
             staffing_service.create_leadership_assignment(manager, work_area)
 
-        with self.assertRaisesRegex(ValueError, "does not match"):
+        with self.assertRaisesRegex(ValueError, "must match"):
             staffing_service.create_leadership_assignment(
                 full_time_supervisor,
                 department,
-                "operation_lead",
+                "operation",
             )
 
     def test_classification_change_removes_invalid_assignments(self):
@@ -213,7 +216,7 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
                 "classification": "manager",
             },
         )
-        self.assertIsNone(employee.work_assignment)
+        self.assertFalse(employee.work_assignment.active)
 
         staffing_service.create_leadership_assignment(employee, operation)
         staffing_service.update_person(
@@ -226,7 +229,31 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
                 "classification": "part_time",
             },
         )
-        self.assertEqual(employee.leadership_assignments, [])
+        self.assertTrue(all(not assignment.active for assignment in employee.leadership_assignments))
+
+    def test_assignment_deactivation_and_reactivation(self):
+        _sort, operation, department, work_area = self._hierarchy()
+        second_work_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "WBM", "parent_id": department.id}
+        )
+        employee = self._person("E450", "part_time")
+        manager = self._person("E451", "manager")
+
+        work_assignment = staffing_service.assign_work_area(employee, work_area)
+        staffing_service.clear_work_assignment(employee)
+        self.assertFalse(work_assignment.active)
+
+        reactivated = staffing_service.assign_work_area(employee, second_work_area)
+        self.assertEqual(reactivated.id, work_assignment.id)
+        self.assertTrue(reactivated.active)
+        self.assertEqual(reactivated.work_area, second_work_area)
+
+        leadership = staffing_service.create_leadership_assignment(manager, operation)
+        staffing_service.delete_leadership_assignment(leadership)
+        self.assertFalse(leadership.active)
+        reactivated_leadership = staffing_service.create_leadership_assignment(manager, operation)
+        self.assertEqual(reactivated_leadership.id, leadership.id)
+        self.assertTrue(reactivated_leadership.active)
 
     def test_delete_unit_protections(self):
         _sort, _operation, department, work_area = self._hierarchy()

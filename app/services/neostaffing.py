@@ -32,11 +32,10 @@ UNIT_TYPE_LABELS = {
 }
 
 LEADERSHIP_LEVEL_LABELS = {
-    "work_area_lead": "Work Area Lead",
-    "department_lead": "Department Lead",
-    "operation_lead": "Operation Lead",
-    "sort_lead": "Sort Lead",
-    "specialist_support": "Specialist Support",
+    "work_area": "Work Area",
+    "department": "Department",
+    "operation": "Operation",
+    "sort": "Sort",
 }
 
 NON_MANAGEMENT_CLASSIFICATIONS = {"part_time", "full_time_combo"}
@@ -141,9 +140,9 @@ def update_unit(unit, values, is_new=False):
 def delete_unit(unit):
     if unit.children:
         raise ValueError("Remove child units before deleting this unit.")
-    if unit.work_assignments:
+    if any(assignment.active for assignment in unit.work_assignments):
         raise ValueError("Remove work assignments before deleting this work area.")
-    if unit.leadership_assignments:
+    if any(assignment.active for assignment in unit.leadership_assignments):
         raise ValueError("Remove leadership assignments before deleting this unit.")
     parent = unit.parent
     db.session.delete(unit)
@@ -152,23 +151,26 @@ def delete_unit(unit):
         db.session.expire(parent, ["children"])
 
 
-def assign_work_area(person, work_area):
+def assign_work_area(person, work_area, effective_date=None):
     _validate_work_assignment(person, work_area)
+    parsed_effective_date = _parse_optional_date(effective_date)
     assignment = StaffingWorkAssignment.query.filter_by(person_id=person.id).first()
     if assignment:
         assignment.work_area = work_area
+        assignment.active = True
     else:
-        assignment = StaffingWorkAssignment(person=person, work_area=work_area)
+        assignment = StaffingWorkAssignment(person=person, work_area=work_area, active=True)
         db.session.add(assignment)
+    assignment.effective_date = parsed_effective_date
     db.session.flush()
     return assignment
 
 
 def clear_work_assignment(person):
     assignment = StaffingWorkAssignment.query.filter_by(person_id=person.id).first()
-    if assignment:
+    if assignment and assignment.active:
         work_area = assignment.work_area
-        db.session.delete(assignment)
+        assignment.active = False
         db.session.flush()
         if person in db.session:
             db.session.expire(person, ["work_assignment"])
@@ -186,13 +188,18 @@ def create_leadership_assignment(person, unit, leadership_level=None):
         unit_id=unit.id,
         leadership_level=level,
     ).first()
-    if existing:
+    if existing and existing.active:
         raise ValueError("This leadership assignment already exists.")
+    if existing:
+        existing.active = True
+        db.session.flush()
+        return existing
 
     assignment = StaffingLeadershipAssignment(
         person=person,
         unit=unit,
         leadership_level=level,
+        active=True,
     )
     db.session.add(assignment)
     db.session.flush()
@@ -202,7 +209,7 @@ def create_leadership_assignment(person, unit, leadership_level=None):
 def delete_leadership_assignment(assignment):
     person = assignment.person
     unit = assignment.unit
-    db.session.delete(assignment)
+    assignment.active = False
     db.session.flush()
     if person in db.session:
         db.session.expire(person, ["leadership_assignments"])
@@ -218,7 +225,7 @@ def remove_invalid_assignments_for_person(person):
         try:
             _validate_leadership_assignment(person, assignment.unit, assignment.leadership_level)
         except ValueError:
-            db.session.delete(assignment)
+            assignment.active = False
     db.session.flush()
     if person in db.session:
         db.session.expire(person, ["leadership_assignments"])
@@ -227,15 +234,15 @@ def remove_invalid_assignments_for_person(person):
 def default_leadership_level_for(person, unit):
     classification = person.classification
     if classification == "part_time_supervisor" and unit.unit_type == "work_area":
-        return "work_area_lead"
+        return "work_area"
     if classification == "full_time_supervisor" and unit.unit_type == "department":
-        return "department_lead"
+        return "department"
     if classification == "manager" and unit.unit_type == "operation":
-        return "operation_lead"
+        return "operation"
     if classification == "division_manager" and unit.unit_type == "sort":
-        return "sort_lead"
+        return "sort"
     if classification == "full_time_specialist" and unit.unit_type in {"department", "operation"}:
-        return "specialist_support"
+        return unit.unit_type
     raise ValueError("This person classification cannot lead the selected unit.")
 
 
@@ -282,7 +289,7 @@ def dashboard_context():
                 func.count(StaffingWorkAssignment.id),
             )
             .join(StaffingPerson)
-            .filter(StaffingPerson.active.is_(True))
+            .filter(StaffingPerson.active.is_(True), StaffingWorkAssignment.active.is_(True))
             .group_by(StaffingWorkAssignment.work_area_unit_id)
             .all()
         )
@@ -417,6 +424,8 @@ def _validate_work_assignment(person, work_area):
 
 def _validate_leadership_assignment(person, unit, leadership_level):
     _normalize_choice(leadership_level, STAFFING_LEADERSHIP_LEVELS, "leadership level")
+    if leadership_level != unit.unit_type:
+        raise ValueError("Leadership level must match the selected unit scope.")
     expected_level = default_leadership_level_for(person, unit)
     if leadership_level != expected_level:
         raise ValueError("Leadership level does not match this classification and unit scope.")
@@ -470,6 +479,18 @@ def _parse_date(value, label):
         return date.fromisoformat(text)
     except ValueError as exc:
         raise ValueError(f"{label} must be a valid date.") from exc
+
+
+def _parse_optional_date(value):
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError("Effective date must be a valid date.") from exc
 
 
 def _parse_int(value, default=0):

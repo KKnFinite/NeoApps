@@ -4,11 +4,10 @@ from app.extensions import db
 
 
 STAFFING_LEADERSHIP_LEVELS = (
-    "work_area_lead",
-    "department_lead",
-    "operation_lead",
-    "sort_lead",
-    "specialist_support",
+    "work_area",
+    "department",
+    "operation",
+    "sort",
 )
 
 
@@ -16,8 +15,7 @@ class StaffingLeadershipAssignment(db.Model):
     __tablename__ = "staffing_leadership_assignments"
     __table_args__ = (
         db.CheckConstraint(
-            "leadership_level IN ('work_area_lead', 'department_lead', 'operation_lead', "
-            "'sort_lead', 'specialist_support')",
+            "leadership_level IN ('work_area', 'department', 'operation', 'sort')",
             name="ck_staffing_leadership_assignments_level",
         ),
         db.UniqueConstraint(
@@ -42,6 +40,7 @@ class StaffingLeadershipAssignment(db.Model):
         index=True,
     )
     leadership_level = db.Column(db.String(40), nullable=False, index=True)
+    active = db.Column(db.Boolean, nullable=False, default=True, index=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

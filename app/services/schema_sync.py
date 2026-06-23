@@ -72,6 +72,13 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "sort_timeline_usage_counters": {
         "units_consumed": "INTEGER DEFAULT 0",
     },
+    "staffing_work_assignments": {
+        "active": "BOOLEAN DEFAULT 1",
+        "effective_date": "DATE",
+    },
+    "staffing_leadership_assignments": {
+        "active": "BOOLEAN DEFAULT 1",
+    },
 }
 
 POSTGRES_OPTIONAL_COLUMNS = {
@@ -115,6 +122,13 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "sort_timeline_usage_counters": {
         "units_consumed": "INTEGER DEFAULT 0",
+    },
+    "staffing_work_assignments": {
+        "active": "BOOLEAN DEFAULT TRUE",
+        "effective_date": "DATE",
+    },
+    "staffing_leadership_assignments": {
+        "active": "BOOLEAN DEFAULT TRUE",
     },
 }
 

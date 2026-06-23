@@ -57,6 +57,10 @@
         <div class="neostaffing-status-card"><span>APP ROLE</span><strong>{{ app_role|role_label }}</strong></div>
     </div>
 
+    <div class="neostaffing-management-layout">
+        {% set staffing_management_active = "hierarchy" %}
+        {% include "neostaffing/_management_nav.html" %}
+        <div class="neostaffing-management-main">
     <section class="neostaffing-data-grid">
         <article class="neostaffing-data-card">
             <h2>ADD SORT</h2>
@@ -110,56 +114,49 @@
     </section>
 
     <section class="neostaffing-data-card">
-        <h2>EDIT UNITS</h2>
-        <div class="table-wrap">
-            <table class="data-table neostaffing-data-table">
-                <thead>
-                    <tr>
-                        <th>Type</th>
-                        <th>Name</th>
-                        <th>Parent</th>
-                        <th>Headcount</th>
-                        <th>Order</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for unit in units %}
-                    <tr>
-                        <td>{{ unit_type_labels[unit.unit_type] }}</td>
-                        <td colspan="4">
-                            <form class="neostaffing-inline-edit" method="post" action="{{ url_for('neostaffing.update_unit', unit_id=unit.id) }}">
-                                <input type="hidden" name="unit_type" value="{{ unit.unit_type }}">
-                                <input name="name" value="{{ unit.name }}" required>
-                                {{ parent_select(unit.unit_type, unit.parent_id) }}
-                                <input type="number" min="0" name="required_headcount" value="{{ unit.required_headcount if unit.required_headcount is not none else '' }}" {% if unit.unit_type != "work_area" %}disabled{% endif %}>
-                                <input type="number" name="display_order" value="{{ unit.display_order }}">
-                                <input type="hidden" name="active" value="{{ 1 if unit.active else 0 }}">
-                                <button class="table-row-button" type="submit">SAVE</button>
-                            </form>
-                        </td>
-                        <td>{{ "ACTIVE" if unit.active else "INACTIVE" }}</td>
-                        <td>
-                            <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.toggle_unit_active', unit_id=unit.id) }}">
-                                <button class="table-row-button" type="submit">{{ "DEACTIVATE" if unit.active else "ACTIVATE" }}</button>
-                            </form>
-                            <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.delete_unit', unit_id=unit.id) }}">
-                                <button class="table-row-button" type="submit">DELETE</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="7">No units yet.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <h2>UNIT CONTROL DECK</h2>
+        <div class="neostaffing-record-grid">
+            {% for unit in units %}
+            <article class="neostaffing-record-card{% if not unit.active %} is-inactive{% endif %}">
+                <header class="neostaffing-record-header">
+                    <div>
+                        <span>{{ unit_type_labels[unit.unit_type] }}</span>
+                        <strong>{{ unit.name }}</strong>
+                    </div>
+                    <em>{{ "ACTIVE" if unit.active else "INACTIVE" }}</em>
+                </header>
+                <p class="neostaffing-record-path">
+                    {% if unit.parent %}{{ unit_type_labels[unit.parent.unit_type] }} / {{ unit.parent.name }}{% else %}TOP LEVEL SORT{% endif %}
+                </p>
+                <form class="operation-form neostaffing-card-form" method="post" action="{{ url_for('neostaffing.update_unit', unit_id=unit.id) }}">
+                    <input type="hidden" name="unit_type" value="{{ unit.unit_type }}">
+                    <label><span>Name</span><input name="name" value="{{ unit.name }}" required></label>
+                    <label><span>Parent</span>{{ parent_select(unit.unit_type, unit.parent_id) }}</label>
+                    <label><span>Required</span><input type="number" min="0" name="required_headcount" value="{{ unit.required_headcount if unit.required_headcount is not none else '' }}" {% if unit.unit_type != "work_area" %}disabled{% endif %}></label>
+                    <label><span>Order</span><input type="number" name="display_order" value="{{ unit.display_order }}"></label>
+                    <input type="hidden" name="active" value="{{ 1 if unit.active else 0 }}">
+                    <button type="submit">SAVE UNIT</button>
+                </form>
+                <div class="neostaffing-card-actions">
+                    <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.toggle_unit_active', unit_id=unit.id) }}">
+                        <button class="table-row-button" type="submit">{{ "DEACTIVATE" if unit.active else "ACTIVATE" }}</button>
+                    </form>
+                    <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.delete_unit', unit_id=unit.id) }}">
+                        <button class="table-row-button" type="submit">DELETE</button>
+                    </form>
+                </div>
+            </article>
+            {% else %}
+            <p class="muted">No units yet.</p>
+            {% endfor %}
         </div>
     </section>
 
     <div class="action-row">
         <a class="action-button" href="{{ url_for('neostaffing.app_management') }}">BACK TO APP MANAGEMENT</a>
         <a class="action-button action-button-secondary" href="{{ url_for('neostaffing.index') }}">BACK TO NEOSTAFFING</a>
+    </div>
+        </div>
     </div>
 </section>
 {% endblock %}

@@ -5,7 +5,7 @@ from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
-from app.models import StaffingLeadershipAssignment, StaffingPerson, StaffingUnit
+from app.models import StaffingLeadershipAssignment, StaffingPerson, StaffingUnit, StaffingWorkAssignment
 from app.neostaffing import bp
 from app.services.access_control import get_user_app_role, user_can_access_app, user_has_app_access
 from app.services import neostaffing as staffing_service
@@ -56,10 +56,11 @@ def app_management():
         "neostaffing/app_management.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
         counts={
-            "people": StaffingPerson.query.count(),
-            "units": StaffingUnit.query.count(),
-            "work_areas": StaffingUnit.query.filter_by(unit_type="work_area").count(),
-            "leadership": StaffingLeadershipAssignment.query.count(),
+            "people": StaffingPerson.query.filter_by(active=True).count(),
+            "units": StaffingUnit.query.filter_by(active=True).count(),
+            "work_areas": StaffingUnit.query.filter_by(unit_type="work_area", active=True).count(),
+            "work_assignments": StaffingWorkAssignment.query.filter_by(active=True).count(),
+            "leadership": StaffingLeadershipAssignment.query.filter_by(active=True).count(),
         },
     )
 
@@ -232,6 +233,7 @@ def assign_work_area():
         lambda: staffing_service.assign_work_area(
             _get_person(request.form.get("person_id")),
             _get_unit(request.form.get("work_area_unit_id")),
+            request.form.get("effective_date"),
         ),
         "Work assignment updated.",
         "neostaffing.work_assignments",
@@ -244,7 +246,7 @@ def clear_work_assignment(person_id):
     person = _get_person(person_id)
     return _mutate(
         lambda: staffing_service.clear_work_assignment(person),
-        "Work assignment cleared.",
+        "Work assignment deactivated.",
         "neostaffing.work_assignments",
     )
 
@@ -310,7 +312,7 @@ def delete_management_assignment(assignment_id):
         return redirect(url_for("neostaffing.management_assignments"))
     return _mutate(
         lambda: staffing_service.delete_leadership_assignment(assignment),
-        "Management assignment removed.",
+        "Management assignment deactivated.",
         "neostaffing.management_assignments",
     )
 
@@ -347,13 +349,14 @@ def _filter_people_for_work_assignment_page(people_rows):
     allowed_work_area_ids = _selected_work_area_filter_ids()
     filtered = []
     for person in people_rows:
-        has_assignment = person.work_assignment is not None
+        active_assignment = person.work_assignment if person.work_assignment and person.work_assignment.active else None
+        has_assignment = active_assignment is not None
         if assignment_status == "assigned" and not has_assignment:
             continue
         if assignment_status == "unassigned" and has_assignment:
             continue
         if allowed_work_area_ids is not None:
-            if not has_assignment or person.work_assignment.work_area_unit_id not in allowed_work_area_ids:
+            if not has_assignment or active_assignment.work_area_unit_id not in allowed_work_area_ids:
                 continue
         filtered.append(person)
     return filtered
@@ -370,7 +373,7 @@ def _filter_leadership_assignments(assignments):
             continue
         if person_id and str(assignment.person_id) != person_id:
             continue
-        if active in {"active", "inactive"} and assignment.person.active != (active == "active"):
+        if active in {"active", "inactive"} and assignment.active != (active == "active"):
             continue
         if allowed_unit_ids is not None and assignment.unit_id not in allowed_unit_ids:
             continue

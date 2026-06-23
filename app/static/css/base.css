@@ -4792,6 +4792,143 @@ body.blueprint-neostaffing {
     vertical-align: middle;
 }
 
+.neostaffing-management-layout {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 16px;
+}
+
+.neostaffing-management-main {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+}
+
+.neostaffing-management-rail {
+    position: sticky;
+    top: 96px;
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid rgba(var(--node-rgb), 0.28);
+    border-radius: 8px;
+    background: linear-gradient(180deg, rgba(14, 24, 35, 0.94), rgba(4, 10, 15, 0.96));
+}
+
+.neostaffing-management-rail a,
+.neostaffing-management-rail span {
+    display: flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 0 11px;
+    border: 1px solid rgba(216, 221, 229, 0.08);
+    border-radius: 6px;
+    color: var(--neo-silver);
+    font-size: 0.76rem;
+    font-weight: 950;
+    text-decoration: none;
+}
+
+.neostaffing-management-rail span {
+    opacity: 0.52;
+}
+
+.neostaffing-management-rail a:hover,
+.neostaffing-management-rail a[aria-current="page"] {
+    border-color: rgba(var(--node-rgb), 0.5);
+    background: rgba(var(--node-rgb), 0.12);
+    color: var(--node-primary);
+}
+
+.neostaffing-record-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.neostaffing-record-card {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid rgba(var(--node-rgb), 0.26);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(16, 27, 38, 0.94), rgba(6, 12, 18, 0.96)),
+        rgba(6, 12, 18, 0.94);
+    box-shadow: 0 0 18px rgba(var(--node-rgb), 0.08);
+}
+
+.neostaffing-record-card.is-inactive {
+    opacity: 0.62;
+}
+
+.neostaffing-record-header,
+.neostaffing-card-actions,
+.neostaffing-record-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.neostaffing-record-header {
+    justify-content: space-between;
+}
+
+.neostaffing-record-header span,
+.neostaffing-record-meta span {
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 950;
+}
+
+.neostaffing-record-header strong {
+    display: block;
+    color: var(--neo-bright-silver);
+    font-size: 1.08rem;
+    font-weight: 950;
+}
+
+.neostaffing-record-header em {
+    padding: 4px 7px;
+    border: 1px solid rgba(var(--node-rgb), 0.32);
+    border-radius: 999px;
+    color: var(--node-primary);
+    font-size: 0.68rem;
+    font-style: normal;
+    font-weight: 950;
+}
+
+.neostaffing-record-path {
+    margin: 0;
+    color: var(--neo-silver);
+    font-size: 0.82rem;
+    font-weight: 750;
+}
+
+.neostaffing-card-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+}
+
+.neostaffing-card-form label {
+    min-width: 0;
+}
+
+.neostaffing-card-form button {
+    grid-column: 1 / -1;
+}
+
+.neostaffing-card-actions {
+    justify-content: flex-end;
+    padding-top: 4px;
+    border-top: 1px solid rgba(var(--node-rgb), 0.16);
+}
+
 @media (max-width: 900px) {
     .neostaffing-dashboard-page {
         width: min(100%, 760px);
@@ -4822,6 +4959,20 @@ body.blueprint-neostaffing {
         grid-template-columns: 1fr;
     }
 
+    .neostaffing-management-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-management-rail {
+        position: static;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neostaffing-management-rail .neostaffing-rail-brand,
+    .neostaffing-management-rail .neostaffing-rail-return {
+        grid-column: 1 / -1;
+    }
+
     .neostaffing-hero {
         grid-template-columns: 1fr;
     }
@@ -4834,6 +4985,7 @@ body.blueprint-neostaffing {
     .neostaffing-management-grid,
     .neostaffing-summary-strip,
     .neostaffing-data-grid,
+    .neostaffing-record-grid,
     .neostaffing-compact-form,
     .neostaffing-filter-form,
     .neostaffing-people-form {
@@ -4858,6 +5010,10 @@ body.blueprint-neostaffing {
     .neostaffing-dashboard-topbar {
         grid-template-columns: 1fr;
         padding: 12px;
+    }
+
+    .neostaffing-management-rail {
+        grid-template-columns: 1fr;
     }
 
     .neostaffing-dashboard-topbar h1 {
@@ -4889,9 +5045,11 @@ body.blueprint-neostaffing {
     .neostaffing-management-grid,
     .neostaffing-summary-strip,
     .neostaffing-data-grid,
+    .neostaffing-record-grid,
     .neostaffing-compact-form,
     .neostaffing-filter-form,
     .neostaffing-people-form,
+    .neostaffing-card-form,
     .neostaffing-inline-edit,
     .neostaffing-person-edit {
         grid-template-columns: 1fr;

@@ -10,7 +10,7 @@
                 <span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span>
             </p>
             <h1 id="neostaffing-management-title">APP MANAGEMENT</h1>
-            <p>Structure placeholders for the NeoStaffing data foundation.</p>
+            <p>Configure the operating hierarchy, people, work-area assignments, and leadership scopes.</p>
         </div>
         <div class="neostaffing-status-card">
             <span>APP ROLE</span>
@@ -18,20 +18,24 @@
         </div>
     </div>
 
+    <div class="neostaffing-management-layout">
+        {% set staffing_management_active = "overview" %}
+        {% include "neostaffing/_management_nav.html" %}
+        <div class="neostaffing-management-main">
     <section class="neostaffing-summary-strip" aria-label="NeoStaffing setup totals">
-        <article><span>PEOPLE</span><strong>{{ counts.people }}</strong></article>
-        <article><span>UNITS</span><strong>{{ counts.units }}</strong></article>
+        <article><span>ACTIVE PEOPLE</span><strong>{{ counts.people }}</strong></article>
+        <article><span>ACTIVE UNITS</span><strong>{{ counts.units }}</strong></article>
         <article><span>WORK AREAS</span><strong>{{ counts.work_areas }}</strong></article>
-        <article><span>LEADERSHIP</span><strong>{{ counts.leadership }}</strong></article>
+        <article><span>ASSIGNED</span><strong>{{ counts.work_assignments }}</strong></article>
     </section>
 
     <section class="neostaffing-management-grid" aria-label="NeoStaffing app management">
         {% for title, description, endpoint, state in [
             ("WORK AREA HIERARCHY", "Build Sort > Operation > Department > Work Area structure.", "neostaffing.hierarchy", "LIVE SETUP"),
-            ("EMPLOYEE ROSTER", "Add and maintain people, classifications, seniority dates, and active status.", "neostaffing.people", "LIVE SETUP"),
-            ("WORK ASSIGNMENTS", "Assign part time and full time combo employees to Work Areas.", "neostaffing.work_assignments", "LIVE SETUP"),
+            ("PEOPLE", "Add and maintain employees, classifications, seniority dates, and active status.", "neostaffing.people", "LIVE SETUP"),
+            ("WORK ASSIGNMENTS", "Move part time and full time combo employees into Work Areas.", "neostaffing.work_assignments", "LIVE SETUP"),
             ("CLASSIFICATION MANAGEMENT", "Controlled classification choices are active; future editable classification tools live here.", none, "PLACEHOLDER"),
-            ("MANAGEMENT ASSIGNMENTS", "Assign supervisors, specialists, managers, and division managers to scopes.", "neostaffing.management_assignments", "LIVE SETUP"),
+            ("LEADERSHIP", "Assign supervisors, specialists, managers, and division managers to scopes.", "neostaffing.management_assignments", "LIVE SETUP"),
             ("PERMISSIONS", "Future NeoStaffing-specific permission controls.", none, "PLACEHOLDER")
         ] %}
         <article class="neostaffing-management-card">
@@ -50,6 +54,8 @@
     <div class="action-row">
         <a class="action-button" href="{{ url_for('neostaffing.index') }}">BACK TO NEOSTAFFING</a>
         <a class="action-button action-button-secondary" href="{{ url_for('auth.portal_dashboard') }}">BACK TO NEOAPPS PORTAL</a>
+    </div>
+        </div>
     </div>
 </section>
 {% endblock %}

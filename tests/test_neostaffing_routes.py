@@ -154,7 +154,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 self.assertIn(b"APP MANAGEMENT", response.data)
                 self.assertIn(b"WORK AREA HIERARCHY", response.data)
                 self.assertIn(b"CLASSIFICATION MANAGEMENT", response.data)
-                self.assertIn(b"MANAGEMENT ASSIGNMENTS", response.data)
+                self.assertIn(b"LEADERSHIP", response.data)
                 self.assertIn(b"PERMISSIONS", response.data)
 
     def test_lower_neostaffing_role_cannot_open_app_management(self):
@@ -222,6 +222,49 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b'href="/neostaffing/app-management/management-assignments"', response.data)
         self.assertIn(b"CLASSIFICATION MANAGEMENT", response.data)
         self.assertIn(b"PERMISSIONS", response.data)
+
+    def test_app_management_crud_pages_use_operations_card_layout(self):
+        user = self._user("staffing_card_layout")
+        self._grant_app_access(user, "neostaffing", "master")
+        sort = StaffingUnit(unit_type="sort", name="Night Sort", display_order=1)
+        operation = StaffingUnit(unit_type="operation", name="Shift Operation", parent=sort, display_order=1)
+        department = StaffingUnit(
+            unit_type="department",
+            name="East Shift Department",
+            parent=operation,
+            display_order=1,
+        )
+        work_area = StaffingUnit(
+            unit_type="work_area",
+            name="EBM",
+            parent=department,
+            display_order=1,
+            required_headcount=4,
+        )
+        person = StaffingPerson(
+            employee_id="20001",
+            first_name="Jordan",
+            last_name="Worker",
+            seniority_date=date(2020, 1, 2),
+            classification="part_time",
+            active=True,
+        )
+        db.session.add_all([sort, operation, department, work_area, person])
+        db.session.flush()
+        db.session.add(StaffingWorkAssignment(person=person, work_area=work_area, active=True))
+        db.session.commit()
+        self._login(user.username)
+
+        for path, marker in (
+            ("/neostaffing/app-management/hierarchy", b"UNIT CONTROL DECK"),
+            ("/neostaffing/app-management/people", b"PEOPLE CONTROL DECK"),
+            ("/neostaffing/app-management/work-assignments", b"WORK AREA ASSIGNMENT DECK"),
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(marker, response.data)
+                self.assertIn(b"neostaffing-record-card", response.data)
 
     def test_portal_tile_opens_neostaffing_for_approved_user(self):
         user = self._user("staffing_portal")
