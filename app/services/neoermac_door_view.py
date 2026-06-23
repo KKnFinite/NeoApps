@@ -8,7 +8,7 @@ from app.models import (
     NeoErmacDoorPull,
     SortDateMission,
     SortDateOperation,
-    SortDateTailState,
+    SortDateParkingAssignment,
 )
 from app.services.neoermac_building_lineup import (
     DESTINATION_FIELDS,
@@ -136,7 +136,19 @@ def door_view_uld_state(gateway, selected_door):
     if selected_door not in get_door_options(gateway):
         raise ValueError(f"{selected_door} is not available.")
 
-    return door_uld_state_payload(gateway, selected_door)
+    operation = _current_operation(gateway)
+    destinations = _destination_cards_for_door(gateway, selected_door, operation)
+    state = door_uld_state_payload(gateway, selected_door)
+    state["destinations"] = [
+        {
+            "destination": card["destination"],
+            "flight_number": card["flight_number"],
+            "tail": card["tail"],
+            "parking": card["parking"] or "-",
+        }
+        for card in destinations
+    ]
+    return state
 
 
 def normalize_door(value):
@@ -159,6 +171,7 @@ def get_door_options(gateway):
 def _destination_cards_for_door(gateway, selected_door, operation):
     destination_slots = _destination_slots_for_door(gateway, selected_door)
     missions = _missions_by_destination(gateway, operation)
+    parking_by_tail = _parking_assignments_by_tail(operation)
     masters = _master_departures_by_destination(gateway)
     cards = []
 
@@ -166,7 +179,6 @@ def _destination_cards_for_door(gateway, selected_door, operation):
         mission = missions.get(destination)
         master = masters.get(destination)
         door_pull = _door_pull_record(gateway, selected_door, destination, operation)
-        tail_state = _tail_state_for_mission(mission)
         timing_data = _mission_timing_data(mission, operation)
 
         cards.append(
@@ -177,7 +189,7 @@ def _destination_cards_for_door(gateway, selected_door, operation):
                 "status": _status_for_card(mission, master),
                 "slot_labels": slot_labels,
                 "tail": mission.assigned_tail_number if mission else "",
-                "parking": tail_state.parking_position if tail_state else "",
+                "parking": _parking_for_mission(mission, parking_by_tail),
                 "window_minutes": timing_data.get("effective_window_minutes", 0),
                 "planned": {
                     "pure": _time_value(_planned_pull_time(timing_data, master, "pure")),
@@ -239,6 +251,28 @@ def _destination_slots_for_door(gateway, selected_door):
             destination_slots.setdefault(destination, []).append(f"{row.belt_group_label} {label}")
 
     return dict(sorted(destination_slots.items()))
+
+
+def _parking_assignments_by_tail(operation):
+    if not operation:
+        return {}
+    assignments = SortDateParkingAssignment.query.filter_by(
+        sort_date_operation_id=operation.id,
+    ).all()
+    return {
+        _normalize_tail(assignment.tail_number): assignment.position_code
+        for assignment in assignments
+        if _normalize_tail(assignment.tail_number) and assignment.position_code
+    }
+
+
+def _parking_for_mission(mission, parking_by_tail):
+    if not mission:
+        return ""
+    tail = _normalize_tail(mission.assigned_tail_number)
+    if not tail:
+        return ""
+    return str(parking_by_tail.get(tail) or "").strip().upper()
 
 
 def _current_operation(gateway):
@@ -327,16 +361,8 @@ def _uld_request_for_door(gateway, selected_door):
     return get_uld_request(gateway, selected_door)
 
 
-def _tail_state_for_mission(mission):
-    if not mission or not mission.assigned_tail_number:
-        return None
-
-    return SortDateTailState.query.filter_by(
-        sort_date=mission.sort_date,
-        gateway_code=mission.gateway_code,
-        sort_name=mission.sort_name,
-        tail_number=mission.assigned_tail_number.strip().upper(),
-    ).first()
+def _normalize_tail(value):
+    return str(value or "").strip().upper()
 
 
 def _sync_mission_actual_pulls(gateway, operation, destination, door_pull):

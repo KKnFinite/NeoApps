@@ -1,6 +1,11 @@
 from sqlalchemy import or_
 
-from app.models import NeoErmacDoorPull, SortDateMission, SortDateOperation, SortDateTailState
+from app.models import (
+    NeoErmacDoorPull,
+    SortDateMission,
+    SortDateOperation,
+    SortDateParkingAssignment,
+)
 from app.services.neoermac_building_lineup import (
     DESTINATION_FIELDS,
     get_building_lineup_rows,
@@ -29,7 +34,7 @@ def neoermac_dashboard_context(gateway):
     assignments_by_destination = _lineup_assignments_by_destination(gateway)
     door_pulls_by_destination = _door_pulls_by_destination(gateway, operation)
     missions = _departure_missions(operation)
-    tail_states = _tail_states_by_mission_tail(operation, missions)
+    parking_by_tail = _parking_assignments_by_tail(operation)
     rows = {"east": [], "west": []}
 
     for mission in missions:
@@ -37,7 +42,7 @@ def neoermac_dashboard_context(gateway):
         if not destination:
             continue
         tail = _text_value(mission.assigned_tail_number)
-        parking = _parking_for_mission(tail_states, mission, tail)
+        parking = _parking_for_tail(parking_by_tail, tail)
 
         for assignment in assignments_by_destination.get(destination, []):
             side = assignment["side"]
@@ -161,31 +166,13 @@ def _departure_missions(operation):
     )
 
 
-def _tail_states_by_mission_tail(operation, missions):
-    tail_numbers = sorted(
-        {
-            _text_value(mission.assigned_tail_number)
-            for mission in missions
-            if _text_value(mission.assigned_tail_number)
-        }
-    )
-    if not tail_numbers:
-        return {}
-
-    rows = SortDateTailState.query.filter(
-        SortDateTailState.sort_date == operation.sort_date,
-        SortDateTailState.gateway_code == operation.gateway_code,
-        SortDateTailState.sort_name == operation.sort_name,
-        SortDateTailState.tail_number.in_(tail_numbers),
-    ).all()
+def _parking_assignments_by_tail(operation):
     return {
-        (
-            row.sort_date,
-            _text_value(row.gateway_code),
-            _text_value(row.sort_name),
-            _text_value(row.tail_number),
-        ): row
-        for row in rows
+        _text_value(assignment.tail_number): assignment.position_code
+        for assignment in SortDateParkingAssignment.query.filter_by(
+            sort_date_operation_id=operation.id,
+        ).all()
+        if _text_value(assignment.tail_number) and assignment.position_code
     }
 
 
@@ -246,18 +233,10 @@ def _pull_sort_key(row):
     )
 
 
-def _parking_for_mission(tail_states, mission, tail):
+def _parking_for_tail(parking_by_tail, tail):
     if not tail:
         return ""
-    tail_state = tail_states.get(
-        (
-            mission.sort_date,
-            _text_value(mission.gateway_code),
-            _text_value(mission.sort_name),
-            tail,
-        )
-    )
-    return _text_value(getattr(tail_state, "parking_position", ""))
+    return _text_value(parking_by_tail.get(tail))
 
 
 def _side_for_door(door):

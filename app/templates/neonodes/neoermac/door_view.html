@@ -52,7 +52,11 @@
             <div class="neoermac-door-destination-list">
                 {% for card in destinations %}
                 {% set destination_index = loop.index0 %}
-                <article class="neoermac-door-destination-card">
+                <article
+                    class="neoermac-door-destination-card"
+                    data-door-destination-card
+                    data-door-destination="{{ card.destination }}"
+                >
                     <input type="hidden" name="destination_{{ destination_index }}" value="{{ card.destination }}">
                     <div class="neoermac-door-card-head">
                         <div class="neoermac-door-flight">
@@ -69,11 +73,11 @@
                         </div>
                         <div class="neoermac-door-tail">
                             <span>TAIL</span>
-                            <strong>{{ card.tail or "-" }}</strong>
+                            <strong data-door-tail>{{ card.tail or "-" }}</strong>
                         </div>
                         <div class="neoermac-door-parking">
                             <span>PARKING</span>
-                            <strong>{{ card.parking or "-" }}</strong>
+                            <strong data-door-parking>{{ card.parking or "-" }}</strong>
                         </div>
                     </div>
 
@@ -287,6 +291,34 @@
         }
 
         renderEvents(state.on_the_way_events || []);
+        renderDestinations(state.destinations || []);
+    };
+
+    const renderDestinations = (destinations) => {
+        const rows = new Map(
+            destinations.map((destination) => [
+                String(destination.destination || "").toUpperCase(),
+                destination,
+            ])
+        );
+
+        root.querySelectorAll("[data-door-destination-card]").forEach((card) => {
+            const destination = String(card.dataset.doorDestination || "").toUpperCase();
+            const row = rows.get(destination);
+            if (!row) {
+                return;
+            }
+
+            const tail = card.querySelector("[data-door-tail]");
+            if (tail) {
+                tail.textContent = row.tail || "-";
+            }
+
+            const parking = card.querySelector("[data-door-parking]");
+            if (parking) {
+                parking.textContent = row.parking || "-";
+            }
+        });
     };
 
     const refreshState = async () => {

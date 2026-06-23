@@ -16,6 +16,7 @@ from app.models import (
     PermissionRule,
     SortDateMission,
     SortDateOperation,
+    SortDateParkingAssignment,
     SortDateTailState,
     User,
 )
@@ -347,7 +348,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
     def test_door_view_selected_door_shows_building_lineup_destinations(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
         self._assign_lineup_destination("runout_11", "west_destination_2", "ONT")
-        self._add_operation_departure("UPS301", "SDF", tail="N123UP", parking="A12")
+        self._add_operation_departure("UPS301", "SDF", tail="N123UP", parking="A01")
         db.session.commit()
         self._login_approved_user(role="operator")
 
@@ -362,7 +363,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"LIVE SORT", response.data)
         self.assertIn(b"NO FLIGHT DATA", response.data)
         self.assertIn(b"N123UP", response.data)
-        self.assertIn(b"A12", response.data)
+        self.assertIn(b"A01", response.data)
         self.assertIn(b"OUTBOUND PULLS", response.data)
         self.assertNotIn(b"DESTINATION PULLS", response.data)
         self.assertNotIn(b"neoermac-door-belt-list", response.data)
@@ -374,6 +375,186 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertLess(response.data.index(b"UPS301"), response.data.index(b"ONT"))
         self.assertIn(b"No tugs assigned yet.", response.data)
         self.assertIn(b"No active on-the-way events.", response.data)
+
+    def test_door_view_initial_render_shows_parking_plan_assignment(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        mission = self._add_operation_departure("UPS948", "SDF", tail="N316UP")
+        db.session.add(
+            SortDateParkingAssignment(
+                sort_date_operation_id=mission.sort_date_operation_id,
+                tail_number="N316UP",
+                ramp_code="A",
+                position_code="A01",
+                lane_number=1,
+            )
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"UPS948", response.data)
+        self.assertIn(b"N316UP", response.data)
+        self.assertIn(b"<strong data-door-parking>A01</strong>", response.data)
+
+    def test_door_view_state_shows_parking_plan_assignment(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        mission = self._add_operation_departure("UPS948", "SDF", tail="N316UP")
+        db.session.add(
+            SortDateParkingAssignment(
+                sort_date_operation_id=mission.sort_date_operation_id,
+                tail_number="N316UP",
+                ramp_code="A",
+                position_code="A01",
+                lane_number=2,
+            )
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view/state?door=D34")
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["state"]["destinations"][0]["destination"], "SDF")
+        self.assertEqual(payload["state"]["destinations"][0]["tail"], "N316UP")
+        self.assertEqual(payload["state"]["destinations"][0]["parking"], "A01")
+
+    def test_door_view_shared_position_slots_both_display_position_only(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "east_destination_2", "ONT")
+        first = self._add_operation_departure("UPS948", "SDF", tail="N316UP")
+        second = self._add_operation_departure("UPS949", "ONT", tail="N317UP")
+        db.session.add_all(
+            [
+                SortDateParkingAssignment(
+                    sort_date_operation_id=first.sort_date_operation_id,
+                    tail_number="N316UP",
+                    ramp_code="A",
+                    position_code="A01",
+                    lane_number=1,
+                ),
+                SortDateParkingAssignment(
+                    sort_date_operation_id=second.sort_date_operation_id,
+                    tail_number="N317UP",
+                    ramp_code="A",
+                    position_code="A01",
+                    lane_number=2,
+                ),
+            ]
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+        payload = self.client.get("/neoermac/door-view/state?door=D34").get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data.count(b"<strong data-door-parking>A01</strong>"), 2)
+        self.assertNotIn(b"A01-1", response.data)
+        self.assertNotIn(b"A01-2", response.data)
+        self.assertEqual(
+            [row["parking"] for row in payload["state"]["destinations"]],
+            ["A01", "A01"],
+        )
+
+    def test_door_view_parking_is_current_sort_operation_only(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        current_mission = self._add_operation_departure("UPS948", "SDF", tail="N316UP")
+        other_operation = SortDateOperation(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_name="night",
+            sort_date=date(2026, 6, 10),
+            window_minutes=0,
+        )
+        db.session.add(other_operation)
+        db.session.flush()
+        db.session.add(
+            SortDateParkingAssignment(
+                sort_date_operation_id=other_operation.id,
+                tail_number="N316UP",
+                ramp_code="B",
+                position_code="B02",
+                lane_number=1,
+            )
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+
+        self.assertEqual(current_mission.assigned_tail_number, "N316UP")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"N316UP", response.data)
+        self.assertIn(b"<strong data-door-parking>-</strong>", response.data)
+        self.assertNotIn(b"B02", response.data)
+
+    def test_door_view_parking_returns_to_dash_after_unassign(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        mission = self._add_operation_departure("UPS948", "SDF", tail="N316UP")
+        assignment = SortDateParkingAssignment(
+            sort_date_operation_id=mission.sort_date_operation_id,
+            tail_number="N316UP",
+            ramp_code="A",
+            position_code="A01",
+            lane_number=1,
+        )
+        db.session.add(assignment)
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        assigned_response = self.client.get("/neoermac/door-view?door=D34")
+        assignment.position_code = None
+        assignment.ramp_code = None
+        assignment.lane_number = None
+        db.session.commit()
+        unassigned_response = self.client.get("/neoermac/door-view?door=D34")
+        state_response = self.client.get("/neoermac/door-view/state?door=D34")
+
+        self.assertIn(b"<strong data-door-parking>A01</strong>", assigned_response.data)
+        self.assertIn(b"<strong data-door-parking>-</strong>", unassigned_response.data)
+        self.assertEqual(state_response.get_json()["state"]["destinations"][0]["parking"], "-")
+
+    def test_door_view_parking_assignment_does_not_mutate_master_schedule(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        master = MasterFlightSchedule(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_name="night",
+            mission_type="departure",
+            flight_number="UPS948",
+            origin=self.gateway.code,
+            destination="SDF",
+            active=True,
+            active_days="monday,tuesday,wednesday,thursday,friday,saturday,sunday",
+            planned_time_local=time(2, 15),
+            timezone="America/Chicago",
+            preferred_parking="OLD",
+        )
+        mission = self._add_operation_departure("UPS948", "SDF", tail="N316UP")
+        db.session.add_all(
+            [
+                master,
+                SortDateParkingAssignment(
+                    sort_date_operation_id=mission.sort_date_operation_id,
+                    tail_number="N316UP",
+                    ramp_code="A",
+                    position_code="A01",
+                    lane_number=1,
+                ),
+            ]
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+
+        db.session.refresh(master)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"A01", response.data)
+        self.assertEqual(master.preferred_parking, "OLD")
 
     def test_door_view_renders_actual_flight_status(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
@@ -1210,6 +1391,15 @@ class NeoErmacRoutesTest(unittest.TestCase):
                     sort_name=operation.sort_name,
                     tail_number=tail,
                     parking_position=parking,
+                )
+            )
+            db.session.add(
+                SortDateParkingAssignment(
+                    sort_date_operation_id=operation.id,
+                    tail_number=tail.strip().upper(),
+                    ramp_code=parking[0].upper() if parking else None,
+                    position_code=parking.strip().upper(),
+                    lane_number=1,
                 )
             )
         return mission
