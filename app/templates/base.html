@@ -17,7 +17,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css', v=config.STATIC_ASSET_VERSION) }}">
 </head>
 {% set is_authenticated_app = current_user.is_authenticated and not public_landing|default(false) %}
-{% set is_portal_page = is_authenticated_app and request.blueprint == "auth" and (request.path.startswith("/portal") or request.path.startswith("/neostaffing") or request.path.startswith("/neobid")) %}
+{% set is_portal_page = is_authenticated_app and request.blueprint == "auth" and (request.path.startswith("/portal") or request.path.startswith("/neobid")) %}
+{% set is_neostaffing_page = is_authenticated_app and request.blueprint == "neostaffing" %}
 {% set is_motherbrain_page = is_authenticated_app and request.blueprint == "neomotherbrain" and request.path.startswith("/motherbrain") %}
 {% set is_rfd_hub_page = is_authenticated_app and request.blueprint == "neomotherbrain" and request.path.rstrip("/") == "/rfd" %}
 {% set is_motherbrain_landing = is_motherbrain_page and request.path == "/motherbrain" %}
@@ -72,11 +73,13 @@
                 <strong>{{ node_current_label }}</strong>
             </div>
             {% else %}
-            <a class="brand" href="{% if is_rfd_hub_page %}{{ url_for('neomotherbrain.rfd_hub') }}{% elif current_user.is_authenticated and not public_landing|default(false) %}{{ url_for('auth.portal_dashboard') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}" aria-label="{% if is_rfd_hub_page %}NeoGateway - {{ default_gateway.code }}{% else %}NeoApps Portal{% endif %}">
+            <a class="brand" href="{% if is_rfd_hub_page %}{{ url_for('neomotherbrain.rfd_hub') }}{% elif is_neostaffing_page %}{{ url_for('neostaffing.index') }}{% elif current_user.is_authenticated and not public_landing|default(false) %}{{ url_for('auth.portal_dashboard') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}" aria-label="{% if is_rfd_hub_page %}NeoGateway - {{ default_gateway.code }}{% elif is_neostaffing_page %}NeoStaffing{% else %}NeoApps Portal{% endif %}">
                 <span>
                     <strong>
                         {% if is_rfd_hub_page %}
                         <span class="neo-node-name brand-inline-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Gateway</span></span> - {{ default_gateway.code }}
+                        {% elif is_neostaffing_page %}
+                        <span class="neo-node-name brand-inline-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span>
                         {% else %}
                         <span class="neo-node-name brand-inline-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Apps</span></span> Portal
                         {% endif %}
@@ -127,7 +130,7 @@
                     {% endif %}
                 </nav>
                 {% else %}
-                {% if not is_rfd_hub_page and not is_neosektor_standalone_operator_page %}
+                {% if not is_rfd_hub_page and not is_neosektor_standalone_operator_page and not is_neostaffing_page %}
                 {% set character_switcher_modifier = "character-switcher-header" %}
                 {% include "_change_characters.html" %}
                 {% endif %}

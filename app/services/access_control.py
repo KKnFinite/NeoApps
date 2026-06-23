@@ -18,9 +18,9 @@ PORTAL_APPS = (
     {
         "code": "neostaffing",
         "name": "NeoStaffing",
-        "description": "Staffing tools shell for future buildout.",
-        "endpoint": "auth.neostaffing_placeholder",
-        "coming_soon": True,
+        "description": "Staffing operations and workforce planning.",
+        "endpoint": "neostaffing.index",
+        "coming_soon": False,
     },
     {
         "code": "neobid",
@@ -297,6 +297,14 @@ def get_user_app_role(user, app_code):
     if not _app_access_is_approved_active(access):
         return None
     return access.role
+
+
+def user_can_access_app(user, app_code, minimum_role="watcher"):
+    role = get_user_app_role(user, app_code)
+    if role is None:
+        return False
+
+    return ROLE_LEVELS.get(role, 0) >= ROLE_LEVELS.get(minimum_role, 0)
 
 
 def request_app_access_for_user(user, app_code):

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}NeoStaffing App Management{% endblock %}
+
+{% block content %}
+<section class="neostaffing-page theme-staffing" aria-labelledby="neostaffing-management-title">
+    <div class="neostaffing-hero neostaffing-hero-compact">
+        <div class="neostaffing-hero-copy">
+            <p class="neostaffing-eyebrow">
+                <span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span>
+            </p>
+            <h1 id="neostaffing-management-title">APP MANAGEMENT</h1>
+            <p>Structure placeholders for the NeoStaffing data foundation.</p>
+        </div>
+        <div class="neostaffing-status-card">
+            <span>APP ROLE</span>
+            <strong>{{ app_role|role_label }}</strong>
+        </div>
+    </div>
+
+    <section class="neostaffing-management-grid" aria-label="NeoStaffing app management placeholders">
+        {% for title, description in [
+            ("WORK AREA HIERARCHY", "Future work area and reporting structure setup."),
+            ("EMPLOYEE ROSTER", "Future employee record management."),
+            ("CLASSIFICATION MANAGEMENT", "Future classification and role category controls."),
+            ("MANAGEMENT ASSIGNMENTS", "Future leadership and coverage assignment tools."),
+            ("PERMISSIONS", "Future NeoStaffing-specific permission controls.")
+        ] %}
+        <article class="neostaffing-management-card">
+            <span>PLACEHOLDER</span>
+            <h2>{{ title }}</h2>
+            <p>{{ description }}</p>
+        </article>
+        {% endfor %}
+    </section>
+
+    <div class="action-row">
+        <a class="action-button" href="{{ url_for('neostaffing.index') }}">BACK TO NEOSTAFFING</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.portal_dashboard') }}">BACK TO NEOAPPS PORTAL</a>
+    </div>
+</section>
+{% endblock %}

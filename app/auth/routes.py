@@ -21,7 +21,6 @@ from app.services.access_control import (
     portal_dashboard_rows_for_user,
     request_app_access_for_user,
     request_default_gateway_access_for_user,
-    user_has_app_access,
     user_has_gateway_access,
 )
 from app.services.permission_rules import ensure_default_permission_rules, grouped_permission_rules
@@ -135,19 +134,6 @@ def request_portal_app_access():
         flash(f"{app_definition['name']} access requested.", "info")
 
     return redirect(url_for("auth.portal_dashboard"))
-
-
-@bp.route("/neostaffing")
-@login_required
-def neostaffing_placeholder():
-    if not user_has_app_access(current_user, "neostaffing"):
-        flash("Request NeoStaffing access from the NeoApps Portal.", "error")
-        return redirect(url_for("auth.portal_dashboard"))
-    return render_template(
-        "auth/app_placeholder.html",
-        app_name="NeoStaffing",
-        app_status="Coming Soon",
-    )
 
 
 @bp.route("/neobid")

@@ -59,6 +59,12 @@
     --node-rain-primary-rgb: 127, 77, 255;
     --node-rain-secondary-rgb: 199, 166, 74;
     --node-rain-highlight-rgb: 200, 166, 255;
+    --node-staffing-primary: #24d6c7;
+    --node-staffing-secondary: #17313a;
+    --node-staffing-highlight: #4db7ff;
+    --node-staffing-primary-rgb: 36, 214, 199;
+    --node-staffing-secondary-rgb: 23, 49, 58;
+    --node-staffing-highlight-rgb: 77, 183, 255;
     --mobile-node-banner-button-height: 36px;
 }
 
@@ -144,6 +150,16 @@
     --node-highlight-rgb: var(--node-rain-highlight-rgb);
 }
 
+.theme-staffing,
+.node-staffing {
+    --node-primary: var(--node-staffing-primary);
+    --node-secondary: var(--node-staffing-secondary);
+    --node-highlight: var(--node-staffing-highlight);
+    --node-rgb: var(--node-staffing-primary-rgb);
+    --node-secondary-rgb: var(--node-staffing-secondary-rgb);
+    --node-highlight-rgb: var(--node-staffing-highlight-rgb);
+}
+
 .blueprint-public,
 .blueprint-auth {
     --node-primary: var(--node-gateway-primary);
@@ -216,6 +232,15 @@
     --node-rgb: var(--node-rain-primary-rgb);
     --node-secondary-rgb: var(--node-rain-secondary-rgb);
     --node-highlight-rgb: var(--node-rain-highlight-rgb);
+}
+
+.blueprint-neostaffing {
+    --node-primary: var(--node-staffing-primary);
+    --node-secondary: var(--node-staffing-secondary);
+    --node-highlight: var(--node-staffing-highlight);
+    --node-rgb: var(--node-staffing-primary-rgb);
+    --node-secondary-rgb: var(--node-staffing-secondary-rgb);
+    --node-highlight-rgb: var(--node-staffing-highlight-rgb);
 }
 
 .rfd-hub-page {
@@ -3852,6 +3877,198 @@ h2 {
     border: 1px solid rgba(var(--node-rgb), 0.3);
     border-radius: 7px;
     background: rgba(0, 0, 0, 0.18);
+}
+
+body.blueprint-neostaffing {
+    background:
+        radial-gradient(circle at 18% 0%, rgba(var(--node-rgb), 0.18), transparent 24rem),
+        radial-gradient(circle at 82% 18%, rgba(var(--node-highlight-rgb), 0.12), transparent 22rem),
+        linear-gradient(135deg, #02070b 0%, #0d141a 48%, #05080b 100%);
+}
+
+.neostaffing-page {
+    display: grid;
+    gap: 18px;
+    width: min(1180px, 100%);
+    margin: 0 auto;
+}
+
+.neostaffing-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 18px;
+    align-items: stretch;
+    padding: 22px;
+    border: 1px solid rgba(var(--node-rgb), 0.34);
+    border-radius: 8px;
+    background:
+        linear-gradient(135deg, rgba(var(--node-rgb), 0.12), transparent 42%),
+        linear-gradient(180deg, rgba(18, 28, 34, 0.96), rgba(4, 8, 12, 0.94));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 0 28px rgba(var(--node-rgb), 0.12);
+}
+
+.neostaffing-hero-compact {
+    align-items: center;
+}
+
+.neostaffing-hero-copy {
+    display: grid;
+    align-content: center;
+    gap: 8px;
+}
+
+.neostaffing-eyebrow,
+.neostaffing-hero h1,
+.neostaffing-hero p,
+.neostaffing-app-card h2,
+.neostaffing-app-card p,
+.neostaffing-management-card h2,
+.neostaffing-management-card p {
+    margin: 0;
+}
+
+.neostaffing-eyebrow {
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.neostaffing-hero h1 {
+    color: var(--neo-bright-silver);
+    font-size: clamp(2rem, 5vw, 4.4rem);
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    line-height: 0.95;
+}
+
+.neostaffing-hero p {
+    max-width: 660px;
+    color: var(--neo-silver);
+    font-size: 0.96rem;
+    font-weight: 700;
+    line-height: 1.5;
+}
+
+.neostaffing-status-card {
+    display: grid;
+    align-content: center;
+    gap: 8px;
+    min-width: 180px;
+    padding: 16px;
+    border: 1px solid rgba(var(--node-rgb), 0.42);
+    border-radius: 7px;
+    background:
+        linear-gradient(180deg, rgba(var(--node-highlight-rgb), 0.08), transparent 40%),
+        rgba(2, 7, 11, 0.86);
+    text-align: center;
+}
+
+.neostaffing-status-card span,
+.neostaffing-app-card span,
+.neostaffing-management-card span {
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 950;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.neostaffing-status-card strong {
+    color: var(--node-primary);
+    font-size: 1.22rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.neostaffing-card-grid,
+.neostaffing-management-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.neostaffing-management-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.neostaffing-app-card,
+.neostaffing-management-card {
+    display: grid;
+    align-content: start;
+    gap: 12px;
+    min-height: 220px;
+    padding: 18px;
+    border: 1px solid rgba(var(--node-rgb), 0.3);
+    border-radius: 8px;
+    background:
+        linear-gradient(160deg, rgba(var(--node-rgb), 0.13), transparent 42%),
+        linear-gradient(180deg, rgba(22, 32, 39, 0.92), rgba(4, 8, 12, 0.95));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 22px rgba(var(--node-rgb), 0.1);
+}
+
+.neostaffing-app-card h2,
+.neostaffing-management-card h2 {
+    color: var(--neo-bright-silver);
+    font-size: 1.18rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    line-height: 1.15;
+}
+
+.neostaffing-app-card p,
+.neostaffing-management-card p {
+    color: var(--neo-silver);
+    font-size: 0.9rem;
+    font-weight: 650;
+    line-height: 1.45;
+}
+
+.neostaffing-app-card .action-button,
+.neostaffing-app-card button {
+    align-self: end;
+    margin-top: auto;
+}
+
+@media (max-width: 900px) {
+    .neostaffing-hero {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-status-card {
+        min-width: 0;
+    }
+
+    .neostaffing-card-grid,
+    .neostaffing-management-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 620px) {
+    .neostaffing-page {
+        gap: 14px;
+    }
+
+    .neostaffing-hero {
+        padding: 16px;
+    }
+
+    .neostaffing-card-grid,
+    .neostaffing-management-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-app-card,
+    .neostaffing-management-card {
+        min-height: 0;
+    }
 }
 
 .node-strip article,

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}NeoStaffing{% endblock %}
+
+{% block content %}
+<section class="neostaffing-page theme-staffing" aria-labelledby="neostaffing-title">
+    <div class="neostaffing-hero">
+        <div class="neostaffing-hero-copy">
+            <p class="neostaffing-eyebrow">
+                <span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span>
+            </p>
+            <h1 id="neostaffing-title">STAFFING CONTROL</h1>
+            <p>Initial NeoStaffing shell for workforce operations. Core data tools are staged for the next buildout.</p>
+        </div>
+        <div class="neostaffing-status-card">
+            <span>APP ROLE</span>
+            <strong>{{ app_role|role_label }}</strong>
+        </div>
+    </div>
+
+    <section class="neostaffing-card-grid" aria-label="NeoStaffing sections">
+        <article class="neostaffing-app-card">
+            <span>SETUP PENDING</span>
+            <h2>STAFFING BOARD</h2>
+            <p>Operational staffing board placeholder.</p>
+        </article>
+        <article class="neostaffing-app-card">
+            <span>SETUP PENDING</span>
+            <h2>EMPLOYEE ROSTER</h2>
+            <p>Roster foundation placeholder.</p>
+        </article>
+        <article class="neostaffing-app-card">
+            <span>SETUP PENDING</span>
+            <h2>SENIORITY LISTS</h2>
+            <p>Seniority list tools placeholder.</p>
+        </article>
+        <article class="neostaffing-app-card">
+            <span>{% if can_manage_app %}APP SETUP{% else %}MASTER ACCESS{% endif %}</span>
+            <h2>APP MANAGEMENT</h2>
+            <p>Configure future NeoStaffing structure and controls.</p>
+            {% if can_manage_app %}
+            <a class="action-button" href="{{ url_for('neostaffing.app_management') }}">OPEN</a>
+            {% else %}
+            <button class="action-button" type="button" disabled>RESTRICTED</button>
+            {% endif %}
+        </article>
+    </section>
+
+    <div class="action-row">
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.portal_dashboard') }}">BACK TO NEOAPPS PORTAL</a>
+    </div>
+</section>
+{% endblock %}
