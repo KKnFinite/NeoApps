@@ -1543,6 +1543,10 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(len(result["matched"]), 0)
         self.assertEqual(len(result["review_items"]), 1)
         self.assertEqual(result["review_items"][0].review_reason, "destination mismatch")
+        self.assertEqual(result["departure_match_audit"][0]["current_flight_key"], "0910")
+        self.assertTrue(result["departure_match_audit"][0]["api_candidate_found"])
+        self.assertFalse(result["departure_match_audit"][0]["matched"])
+        self.assertEqual(result["departure_match_audit"][0]["reason"], "destination mismatch")
         self.assertIsNone(mission.assigned_tail_number)
 
     def test_departure_time_mismatch_stays_unmatched(self):
@@ -1577,6 +1581,9 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(len(result["matched"]), 0)
         self.assertEqual(len(result["review_items"]), 1)
         self.assertEqual(result["review_items"][0].review_reason, "departure time mismatch")
+        self.assertEqual(result["departure_match_audit"][0]["reason"], "departure time mismatch")
+        self.assertEqual(result["departure_match_audit"][0]["minute_difference"], 180)
+        self.assertEqual(result["departure_match_audit"][0]["time_tolerance_minutes"], 90)
         self.assertIsNone(mission.assigned_tail_number)
 
     def test_departure_destination_time_fallback_matches_exactly_one_candidate(self):
@@ -1660,6 +1667,10 @@ class FlightApiImportTest(unittest.TestCase):
             result["review_items"][0].review_reason,
             "ambiguous destination/time fallback",
         )
+        self.assertEqual(
+            result["api_ups_departures"][0]["unmatched_reason"],
+            "ambiguous destination/time fallback",
+        )
 
     def test_departure_matching_is_current_sort_operation_only(self):
         other_operation = self._operation()
@@ -1696,6 +1707,172 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(len(result["matched"]), 0)
         self.assertEqual(len(result["review_items"]), 1)
         self.assertEqual(other_mission.assigned_tail_number, None)
+
+    def test_departure_match_audit_reports_missing_provider_candidate(self):
+        mission = self._mission("departure", "UPS0910", destination="SDF")
+        db.session.add(mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient({"departures": []}),
+        )
+
+        self.assertEqual(result["matched_departures_count"], 0)
+        self.assertEqual(result["api_ups_departures"], [])
+        self.assertEqual(result["departure_match_audit"][0]["current_flight_key"], "0910")
+        self.assertFalse(result["departure_match_audit"][0]["api_candidate_found"])
+        self.assertEqual(
+            result["departure_match_audit"][0]["reason"],
+            "provider did not return this departure",
+        )
+
+    def test_departure_match_audit_reports_parser_candidate_gap(self):
+        mission = self._mission("departure", "UPS0910", destination="SDF")
+        db.session.add(mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "departures": [
+                        self._api_flight(
+                            mission_type="departure",
+                            number="AA910",
+                            call_sign="AAL910",
+                            airline_icao="AAL",
+                            airline_iata="AA",
+                            destination="SDF",
+                        )
+                    ]
+                }
+            ),
+        )
+
+        self.assertEqual(result["raw_departures_count"], 1)
+        self.assertEqual(result["ups_departures_count"], 0)
+        self.assertEqual(
+            result["departure_match_audit"][0]["reason"],
+            "parser did not produce departure candidate",
+        )
+
+    def test_departure_match_audit_reports_tail_update_states(self):
+        blank_tail = self._mission("departure", "UPS0910", destination="SDF")
+        manual_tail = self._mission(
+            "departure",
+            "UPS0856",
+            destination="ONT",
+            assigned_tail_number="NMANUAL",
+            tail_source="manual",
+        )
+        api_tail = self._mission(
+            "departure",
+            "UPS0928",
+            destination="PHX",
+            assigned_tail_number="NOLDUP",
+            tail_source="api",
+        )
+        no_api_tail = self._mission("departure", "UPS0637", destination="DFW")
+        db.session.add_all([blank_tail, manual_tail, api_tail, no_api_tail])
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "departures": [
+                        self._api_flight(
+                            mission_type="departure",
+                            number="5X910",
+                            call_sign="UPS910",
+                            destination="SDF",
+                            tail="N910UP",
+                        ),
+                        self._api_flight(
+                            mission_type="departure",
+                            number="5X856",
+                            call_sign="UPS856",
+                            destination="ONT",
+                            tail="N856UP",
+                        ),
+                        self._api_flight(
+                            mission_type="departure",
+                            number="5X928",
+                            call_sign="UPS928",
+                            destination="PHX",
+                            tail="N928UP",
+                        ),
+                        self._api_flight(
+                            mission_type="departure",
+                            number="5X637",
+                            call_sign="UPS637",
+                            destination="DFW",
+                            tail="",
+                        ),
+                    ]
+                }
+            ),
+        )
+
+        audit_by_key = {
+            row["current_flight_key"]: row for row in result["departure_match_audit"]
+        }
+        self.assertEqual(audit_by_key["0910"]["tail_update_reason"], "tail updated")
+        self.assertEqual(blank_tail.assigned_tail_number, "N910UP")
+        self.assertEqual(
+            audit_by_key["0856"]["tail_update_reason"],
+            "tail update blocked because current tail is manual/non-API",
+        )
+        self.assertEqual(manual_tail.assigned_tail_number, "NMANUAL")
+        self.assertEqual(
+            audit_by_key["0928"]["tail_update_reason"],
+            "API-owned tail refreshed",
+        )
+        self.assertEqual(api_tail.assigned_tail_number, "N928UP")
+        self.assertEqual(
+            audit_by_key["0637"]["tail_update_reason"],
+            "matched but no API tail/registration available",
+        )
+        self.assertIsNone(no_api_tail.assigned_tail_number)
+
+    def test_departure_match_audit_handles_midnight_time_comparison(self):
+        mission = self._mission(
+            "departure",
+            "UPS0637",
+            destination="DFW",
+            planned_datetime_local=datetime(2026, 6, 2, 0, 30),
+            planned_datetime_utc=datetime(2026, 6, 2, 5, 30),
+        )
+        db.session.add(mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "departures": [
+                        self._api_flight(
+                            mission_type="departure",
+                            number="UPS637",
+                            call_sign="UPS637",
+                            destination="DFW",
+                            revised_time="2026-06-02T00:20:00",
+                            tail="N637UP",
+                        )
+                    ]
+                }
+            ),
+        )
+
+        self.assertEqual(result["matched_departures_count"], 1)
+        self.assertEqual(result["departure_match_audit"][0]["minute_difference"], 10)
+        self.assertEqual(result["departure_match_audit"][0]["time_tolerance_minutes"], 90)
+        self.assertEqual(mission.assigned_tail_number, "N637UP")
 
     def test_api_status_mapping(self):
         scheduled = {"api_status_raw": "Expected", "runway_time_utc": None}
@@ -2797,6 +2974,24 @@ class FlightApiTestPageTest(unittest.TestCase):
         settings = ensure_sort_timeline_settings(self.gateway)
         settings.provider_enabled = True
         db.session.add(operation)
+        db.session.flush()
+        mission = SortDateMission(
+            sort_date_operation_id=operation.id,
+            gateway_code=self.gateway.code,
+            sort_date=operation.sort_date,
+            sort_name=operation.sort_name,
+            mission_type="departure",
+            mission_source="master",
+            wave="1",
+            flight_number="UPS0456",
+            origin="RFD",
+            destination="SDF",
+            timezone="America/Chicago",
+            planned_datetime_local=datetime(2026, 6, 1, 3, 0),
+            planned_datetime_utc=datetime(2026, 6, 1, 8, 0),
+            planned_source="master",
+        )
+        db.session.add(mission)
         db.session.commit()
 
         class FakeResponse:
@@ -2832,6 +3027,7 @@ class FlightApiTestPageTest(unittest.TestCase):
                                 "airline": {"icao": "UPS", "iata": "5X"},
                                 "departure": {"airport": {"iata": "RFD"}, "scheduledTime": {"local": "2026-06-01T03:00:00"}},
                                 "arrival": {"airport": {"iata": "SDF"}, "scheduledTime": {"local": "2026-06-01T03:00:00"}},
+                                "aircraft": {"reg": "N456UP"},
                             }
                         ],
                     }
@@ -2873,6 +3069,11 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"FIRST PROVIDER DEPARTURE", response.data)
         self.assertIn(b"LAST PROVIDER DEPARTURE", response.data)
         self.assertIn(b"03:00 Local", response.data)
+        self.assertIn(b"DEPARTURE MATCH AUDIT", response.data)
+        self.assertIn(b"API UPS DEPARTURES", response.data)
+        self.assertIn(b"0456", response.data)
+        self.assertIn(b"N456UP", response.data)
+        self.assertIn(b"tail updated", response.data)
         self.assertIn(b"NON-UPS IGNORED ARRIVALS", response.data)
         self.assertIn(b"NON-UPS IGNORED DEPARTURES", response.data)
         self.assertIn(b"CORES TRIED", response.data)

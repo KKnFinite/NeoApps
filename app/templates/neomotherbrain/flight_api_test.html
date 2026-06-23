@@ -384,6 +384,118 @@
     {% endif %}
     {% endif %}
 
+    {% if import_result %}
+    <section class="table-wrap" aria-labelledby="departure-match-audit-title">
+        <h2 id="departure-match-audit-title">DEPARTURE MATCH AUDIT</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>CURRENT FLIGHT</th>
+                    <th>CURRENT KEY</th>
+                    <th>CURRENT DEST</th>
+                    <th>CURRENT STD</th>
+                    <th>CURRENT TAIL</th>
+                    <th>API CANDIDATE</th>
+                    <th>MATCHED</th>
+                    <th>API FLIGHT</th>
+                    <th>API CALLSIGN</th>
+                    <th>API KEYS</th>
+                    <th>API DEST</th>
+                    <th>API DEPARTURE TIME</th>
+                    <th>API TAIL</th>
+                    <th>REASON / TAIL DEBUG</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in import_result.departure_match_audit %}
+                <tr>
+                    <td>{{ row.current_flight_number or "-" }}</td>
+                    <td><strong>{{ row.current_flight_key or "-" }}</strong></td>
+                    <td>{{ row.current_destination or "-" }}</td>
+                    <td>{{ format_flight_api_time(row.current_std_utc, gateway) }}</td>
+                    <td>{{ row.current_tail or "-" }}</td>
+                    <td>{{ "YES" if row.api_candidate_found else "NO" }}</td>
+                    <td>{{ "YES" if row.matched else "NO" }}</td>
+                    <td>{{ row.matched_api_flight_number or "-" }}</td>
+                    <td>{{ row.matched_api_call_sign or "-" }}</td>
+                    <td>{{ row.matched_api_normalized_keys or "-" }}</td>
+                    <td>{{ row.matched_api_destination or "-" }}</td>
+                    <td>
+                        {{ format_flight_api_time(row.matched_api_departure_time_utc, gateway) }}
+                        {% if row.minute_difference is not none %}
+                        <br><span class="muted">DIFF {{ row.minute_difference }} MIN / TOL {{ row.time_tolerance_minutes }} MIN</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ row.matched_api_tail or "-" }}</td>
+                    <td>
+                        {{ row.reason or "-" }}
+                        {% if row.tail_update_reason %}
+                        <br><span class="muted">{{ row.tail_update_reason }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="14">NO CURRENT-SORT DEPARTURE MISSIONS FOUND FOR THIS OPERATION.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+
+    <section class="table-wrap" aria-labelledby="api-ups-departures-title">
+        <h2 id="api-ups-departures-title">API UPS DEPARTURES</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>PROVIDER FLIGHT</th>
+                    <th>CALLSIGN</th>
+                    <th>KEYS TRIED</th>
+                    <th>DESTINATION</th>
+                    <th>DEPARTURE TIME</th>
+                    <th>TAIL / REG</th>
+                    <th>STATUS</th>
+                    <th>MATCHED CURRENT MISSION</th>
+                    <th>UNMATCHED REASON / TAIL DEBUG</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in import_result.api_ups_departures %}
+                <tr>
+                    <td>{{ row.provider_flight_number or "-" }}</td>
+                    <td>{{ row.call_sign or "-" }}</td>
+                    <td>{{ row.normalized_keys or "-" }}</td>
+                    <td>{{ row.destination or "-" }}</td>
+                    <td>
+                        {{ format_flight_api_time(row.departure_time_utc, gateway) }}
+                        {% if row.minute_difference is not none %}
+                        <br><span class="muted">DIFF {{ row.minute_difference }} MIN / TOL {{ row.time_tolerance_minutes }} MIN</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ row.tail_number or "-" }}</td>
+                    <td>{{ row.api_status or "-" }}</td>
+                    <td>{{ row.matched_current_mission or "-" }}</td>
+                    <td>
+                        {% if row.matched %}
+                        MATCHED
+                        {% else %}
+                        {{ row.unmatched_reason or "-" }}
+                        {% endif %}
+                        {% if row.tail_update_reason %}
+                        <br><span class="muted">{{ row.tail_update_reason }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="9">NO UPS DEPARTURES WERE PARSED FROM THE PROVIDER PAYLOAD.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+
     {% if import_result and import_result.matched %}
     <section class="table-wrap" aria-labelledby="matched-api-flights-title">
         <h2 id="matched-api-flights-title">MATCHED UPS FLIGHTS</h2>

@@ -430,6 +430,7 @@ def process_api_flights_for_operation(
     non_ups_ignored = 0
     diagnostics = _empty_import_count_diagnostics()
     replaced_review_count = replace_active_review_queue_for_operation(operation) if apply else 0
+    ups_departure_candidates = []
 
     for api_flight in api_flights:
         mission_type = _mission_type(api_flight)
@@ -443,6 +444,8 @@ def process_api_flights_for_operation(
 
         _increment_count(diagnostics, "ups", mission_type)
         normalized_type = normalized.get("mission_type") or mission_type
+        if normalized_type == "departure":
+            ups_departure_candidates.append(normalized)
         mission, match_detail = match_api_flight_to_mission_with_reason(
             normalized,
             missions,
@@ -450,6 +453,16 @@ def process_api_flights_for_operation(
         if mission:
             if match_detail:
                 normalized["match_diagnostic"] = match_detail
+            if normalized_type == "departure":
+                normalized["matched_mission_id"] = mission.id
+                normalized["matched_mission_flight_number"] = mission.flight_number
+                normalized["tail_update_diagnostic"] = departure_tail_update_diagnostic(
+                    mission,
+                    normalized,
+                )
+                normalized["departure_time_difference_minutes"] = (
+                    departure_time_difference_minutes(mission, normalized)
+                )
             if apply:
                 apply_api_data_to_mission(mission, normalized, settings, now=now_utc)
             matched.append(
@@ -476,6 +489,19 @@ def process_api_flights_for_operation(
             continue
 
         normalized["unmatched_reason"] = match_detail
+        if normalized_type == "departure":
+            audit_mission = departure_audit_candidate_mission(normalized, missions)
+            normalized["candidate_mission_id"] = getattr(audit_mission, "id", None)
+            normalized["candidate_mission_flight_number"] = getattr(
+                audit_mission,
+                "flight_number",
+                None,
+            )
+            normalized["departure_time_difference_minutes"] = (
+                departure_time_difference_minutes(audit_mission, normalized)
+                if audit_mission
+                else None
+            )
         if apply:
             review_item, was_ignored = upsert_review_item(gateway, operation, normalized)
         else:
@@ -493,6 +519,11 @@ def process_api_flights_for_operation(
             _increment_count(diagnostics, "unmatched", normalized_type)
 
     db.session.flush()
+    departure_match_audit = build_departure_match_audit(
+        missions,
+        ups_departure_candidates,
+        diagnostics,
+    )
     return {
         "provider_enabled": bool(settings.provider_enabled),
         "attempted": False,
@@ -506,6 +537,11 @@ def process_api_flights_for_operation(
         "replaced_review_count": replaced_review_count,
         "source": source,
         "replay_preview": source == "replay",
+        "api_ups_departures": [
+            api_ups_departure_audit_row(normalized)
+            for normalized in ups_departure_candidates
+        ],
+        "departure_match_audit": departure_match_audit,
         **diagnostics,
     }
 
@@ -1170,6 +1206,149 @@ def _departure_destination_time_matches(candidates, normalized):
 
 def _datetime_difference_minutes(left, right):
     return abs((_utc_naive(left) - _utc_naive(right)).total_seconds()) / 60
+
+
+def departure_time_difference_minutes(mission, normalized):
+    if not mission:
+        return None
+    api_time = flight_api_provider_time_utc(normalized)
+    mission_time = getattr(mission, "planned_datetime_utc", None)
+    if not api_time or not mission_time:
+        return None
+    return int(round(_datetime_difference_minutes(api_time, mission_time)))
+
+
+def departure_tail_update_diagnostic(mission, normalized):
+    api_tail = normalized.get("tail_number")
+    if not api_tail:
+        return "matched but no API tail/registration available"
+    if not getattr(mission, "assigned_tail_number", None):
+        return "tail updated"
+    if getattr(mission, "tail_source", None) == "api":
+        return "API-owned tail refreshed"
+    return "tail update blocked because current tail is manual/non-API"
+
+
+def departure_audit_candidate_mission(normalized, missions):
+    candidates = [
+        mission for mission in missions if getattr(mission, "mission_type", None) == "departure"
+    ]
+    provider_key = _ups_numeric_core(normalized.get("provider_flight_number"))
+    call_sign_key = _ups_numeric_core(normalized.get("call_sign"))
+    for match_key in (provider_key, call_sign_key):
+        if not match_key:
+            continue
+        matches = _missions_matching_ups_key(candidates, match_key)
+        if len(matches) == 1:
+            return matches[0]
+    fallback_matches = _departure_destination_time_matches(candidates, normalized)
+    if len(fallback_matches) == 1:
+        return fallback_matches[0]
+    return None
+
+
+def build_departure_match_audit(missions, ups_departure_candidates, diagnostics=None):
+    diagnostics = diagnostics or {}
+    departures = sorted(
+        [mission for mission in missions if getattr(mission, "mission_type", None) == "departure"],
+        key=lambda mission: (
+            getattr(mission, "planned_datetime_utc", None) or datetime.max,
+            getattr(mission, "id", 0) or 0,
+        ),
+    )
+    rows = []
+    for mission in departures:
+        current_key = _ups_numeric_core_from_values(*_mission_flight_identity_values(mission))
+        matched_api = next(
+            (
+                candidate
+                for candidate in ups_departure_candidates
+                if candidate.get("matched_mission_id") == mission.id
+            ),
+            None,
+        )
+        key_candidates = [
+            candidate
+            for candidate in ups_departure_candidates
+            if current_key and current_key in (candidate.get("normalized_cores_tried") or [])
+        ]
+        api_candidate = matched_api or (key_candidates[0] if key_candidates else None)
+        if matched_api:
+            reason = ""
+        elif api_candidate:
+            reason = departure_audit_reason(api_candidate)
+        elif diagnostics.get("raw_departures_count") and not ups_departure_candidates:
+            reason = "parser did not produce departure candidate"
+        else:
+            reason = "provider did not return this departure"
+
+        rows.append(
+            {
+                "current_flight_number": mission.flight_number,
+                "current_flight_key": current_key or "-",
+                "current_destination": mission.destination,
+                "current_std_utc": mission.planned_datetime_utc,
+                "current_tail": mission.assigned_tail_number,
+                "api_candidate_found": bool(api_candidate),
+                "matched": bool(matched_api),
+                "matched_api_flight_number": (
+                    api_candidate.get("provider_flight_number") if api_candidate else None
+                ),
+                "matched_api_call_sign": api_candidate.get("call_sign") if api_candidate else None,
+                "matched_api_normalized_keys": normalized_cores_display(
+                    api_candidate.get("normalized_cores_tried") if api_candidate else None
+                ),
+                "matched_api_destination": api_candidate.get("destination") if api_candidate else None,
+                "matched_api_departure_time_utc": (
+                    flight_api_provider_time_utc(api_candidate) if api_candidate else None
+                ),
+                "matched_api_tail": api_candidate.get("tail_number") if api_candidate else None,
+                "reason": reason,
+                "minute_difference": (
+                    departure_time_difference_minutes(mission, api_candidate)
+                    if api_candidate
+                    else None
+                ),
+                "time_tolerance_minutes": DEPARTURE_TIME_MATCH_TOLERANCE_MINUTES,
+                "tail_update_reason": (
+                    api_candidate.get("tail_update_diagnostic")
+                    if api_candidate
+                    else None
+                ),
+            }
+        )
+    return rows
+
+
+def api_ups_departure_audit_row(normalized):
+    return {
+        "provider_flight_number": normalized.get("provider_flight_number")
+        or normalized.get("flight_number"),
+        "call_sign": normalized.get("call_sign"),
+        "normalized_keys": normalized_cores_display(normalized.get("normalized_cores_tried")),
+        "destination": normalized.get("destination"),
+        "departure_time_utc": flight_api_provider_time_utc(normalized),
+        "tail_number": normalized.get("tail_number"),
+        "api_status": normalized.get("api_status_raw"),
+        "matched_current_mission": normalized.get("matched_mission_flight_number")
+        or normalized.get("candidate_mission_flight_number"),
+        "matched": bool(normalized.get("matched_mission_id")),
+        "unmatched_reason": (
+            "" if normalized.get("matched_mission_id") else departure_audit_reason(normalized)
+        ),
+        "tail_update_reason": normalized.get("tail_update_diagnostic"),
+        "minute_difference": normalized.get("departure_time_difference_minutes"),
+        "time_tolerance_minutes": DEPARTURE_TIME_MATCH_TOLERANCE_MINUTES,
+    }
+
+
+def departure_audit_reason(normalized):
+    reason = normalized.get("unmatched_reason") or "flight key not found"
+    if reason == "no matching mission":
+        return "flight key not found"
+    if reason == "ambiguous flight number match":
+        return "ambiguous flight key match"
+    return reason
 
 
 def apply_api_data_to_mission(mission, normalized, settings, now=None):
