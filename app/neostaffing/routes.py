@@ -39,6 +39,7 @@ def index():
         "neostaffing/index.html",
         app_role=role,
         can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
+        dashboard=staffing_service.dashboard_context(),
     )
 
 

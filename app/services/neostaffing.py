@@ -1,5 +1,7 @@
 from datetime import date, datetime
 
+from sqlalchemy import func
+
 from app.extensions import db
 from app.models import (
     StaffingLeadershipAssignment,
@@ -262,6 +264,78 @@ def staffing_hierarchy_tree():
         ]
 
     return build(None)
+
+
+def dashboard_context():
+    active_people_count = StaffingPerson.query.filter_by(active=True).count()
+    active_non_management_count = (
+        StaffingPerson.query.filter(
+            StaffingPerson.active.is_(True),
+            StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS),
+        ).count()
+    )
+    assigned_by_work_area = {
+        work_area_id: count
+        for work_area_id, count in (
+            db.session.query(
+                StaffingWorkAssignment.work_area_unit_id,
+                func.count(StaffingWorkAssignment.id),
+            )
+            .join(StaffingPerson)
+            .filter(StaffingPerson.active.is_(True))
+            .group_by(StaffingWorkAssignment.work_area_unit_id)
+            .all()
+        )
+    }
+    assigned_non_management_count = sum(assigned_by_work_area.values())
+    unassigned_non_management_count = max(
+        0,
+        active_non_management_count - assigned_non_management_count,
+    )
+    supervisor_count = (
+        StaffingPerson.query.filter(
+            StaffingPerson.active.is_(True),
+            StaffingPerson.classification.notin_(NON_MANAGEMENT_CLASSIFICATIONS),
+        ).count()
+    )
+    work_areas = work_area_units()
+    work_area_cards = []
+    for work_area in work_areas:
+        assigned_count = int(assigned_by_work_area.get(work_area.id, 0) or 0)
+        required_count = int(work_area.required_headcount or 0)
+        open_count = max(0, required_count - assigned_count)
+        if not work_area.active:
+            status = "Inactive"
+        elif required_count <= 0:
+            status = "Setup Pending"
+        elif open_count == 0:
+            status = "On Track"
+        elif open_count <= 2:
+            status = "At Risk"
+        else:
+            status = "Open"
+        work_area_cards.append(
+            {
+                "unit": work_area,
+                "path": unit_path(work_area),
+                "assigned": assigned_count,
+                "required": required_count,
+                "open": open_count,
+                "status": status,
+            }
+        )
+
+    return {
+        "summary": {
+            "total_staff": active_people_count,
+            "assigned": assigned_non_management_count,
+            "unassigned": unassigned_non_management_count,
+            "supervisors": supervisor_count,
+        },
+        "hierarchy": staffing_hierarchy_tree(),
+        "work_area_cards": work_area_cards,
+        "selected_work_area": work_area_cards[0] if work_area_cards else None,
+    }
 
 
 def selectable_parent_units(unit_type):

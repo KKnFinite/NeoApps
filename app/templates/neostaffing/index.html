@@ -2,52 +2,152 @@
 
 {% block title %}NeoStaffing{% endblock %}
 
-{% block content %}
-<section class="neostaffing-page theme-staffing" aria-labelledby="neostaffing-title">
-    <div class="neostaffing-hero">
-        <div class="neostaffing-hero-copy">
-            <p class="neostaffing-eyebrow">
-                <span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span>
-            </p>
-            <h1 id="neostaffing-title">STAFFING CONTROL</h1>
-            <p>Initial NeoStaffing shell for workforce operations. Core data tools are staged for the next buildout.</p>
-        </div>
-        <div class="neostaffing-status-card">
-            <span>APP ROLE</span>
-            <strong>{{ app_role|role_label }}</strong>
-        </div>
-    </div>
-
-    <section class="neostaffing-card-grid" aria-label="NeoStaffing sections">
-        <article class="neostaffing-app-card">
-            <span>SETUP PENDING</span>
-            <h2>STAFFING BOARD</h2>
-            <p>Operational staffing board placeholder.</p>
-        </article>
-        <article class="neostaffing-app-card">
-            <span>SETUP PENDING</span>
-            <h2>EMPLOYEE ROSTER</h2>
-            <p>Roster foundation placeholder.</p>
-        </article>
-        <article class="neostaffing-app-card">
-            <span>SETUP PENDING</span>
-            <h2>SENIORITY LISTS</h2>
-            <p>Seniority list tools placeholder.</p>
-        </article>
-        <article class="neostaffing-app-card">
-            <span>{% if can_manage_app %}APP SETUP{% else %}MASTER ACCESS{% endif %}</span>
-            <h2>APP MANAGEMENT</h2>
-            <p>Configure future NeoStaffing structure and controls.</p>
-            {% if can_manage_app %}
-            <a class="action-button" href="{{ url_for('neostaffing.app_management') }}">OPEN</a>
-            {% else %}
-            <button class="action-button" type="button" disabled>RESTRICTED</button>
+{% macro render_tree(nodes) %}
+    <ul class="neostaffing-dashboard-tree">
+        {% for row in nodes %}
+        {% set unit = row.unit %}
+        <li>
+            <div class="neostaffing-dashboard-tree-node">
+                <span>{{ unit.name }}</span>
+                {% if unit.unit_type == "work_area" %}
+                <strong>{{ unit.required_headcount if unit.required_headcount is not none else "-" }}</strong>
+                {% endif %}
+            </div>
+            {% if row.children %}
+            {{ render_tree(row.children) }}
             {% endif %}
-        </article>
-    </section>
+        </li>
+        {% endfor %}
+    </ul>
+{% endmacro %}
 
-    <div class="action-row">
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.portal_dashboard') }}">BACK TO NEOAPPS PORTAL</a>
+{% block content %}
+{% set summary = dashboard.summary %}
+{% set selected = dashboard.selected_work_area %}
+<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="neostaffing-title">
+    <nav class="neostaffing-mobile-tabs" aria-label="NeoStaffing mobile navigation">
+        <a href="{{ url_for('neostaffing.index') }}" aria-current="page">BOARD</a>
+        {% if can_manage_app %}
+        <a href="{{ url_for('neostaffing.people') }}">PEOPLE</a>
+        {% else %}
+        <span>PEOPLE</span>
+        {% endif %}
+        <span>SENIORITY</span>
+        {% if can_manage_app %}
+        <a href="{{ url_for('neostaffing.app_management') }}">MANAGE</a>
+        {% else %}
+        <span>MANAGE</span>
+        {% endif %}
+    </nav>
+
+    <div class="neostaffing-dashboard-shell">
+        <aside class="neostaffing-rail" aria-label="NeoStaffing navigation">
+            <div class="neostaffing-rail-brand">
+                <span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span>
+            </div>
+            <a href="{{ url_for('neostaffing.index') }}" aria-current="page">DASHBOARD</a>
+            <span>STAFFING BOARD</span>
+            {% if can_manage_app %}
+            <a href="{{ url_for('neostaffing.people') }}">PEOPLE</a>
+            <a href="{{ url_for('neostaffing.hierarchy') }}">WORK AREAS</a>
+            <a href="{{ url_for('neostaffing.work_assignments') }}">ASSIGNMENTS</a>
+            <a href="{{ url_for('neostaffing.management_assignments') }}">LEADERSHIP</a>
+            <a href="{{ url_for('neostaffing.app_management') }}">APP MANAGEMENT</a>
+            {% else %}
+            <span>PEOPLE</span>
+            <span>WORK AREAS</span>
+            <span>ASSIGNMENTS</span>
+            <span>LEADERSHIP</span>
+            <span>APP MANAGEMENT</span>
+            {% endif %}
+            <a class="neostaffing-rail-return" href="{{ url_for('auth.portal_dashboard') }}">NEOAPPS PORTAL</a>
+        </aside>
+
+        <main class="neostaffing-dashboard-main">
+            <header class="neostaffing-dashboard-topbar">
+                <div>
+                    <p class="neostaffing-eyebrow">
+                        <span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span>
+                    </p>
+                    <h1 id="neostaffing-title">DASHBOARD</h1>
+                    <p>Operations staffing overview and setup control.</p>
+                </div>
+                <label class="neostaffing-search">
+                    <span>Search</span>
+                    <input type="search" placeholder="Search employees, work areas, or skills" disabled>
+                </label>
+                <div class="neostaffing-status-card">
+                    <span>APP ROLE</span>
+                    <strong>{{ app_role|role_label }}</strong>
+                </div>
+                {% if can_manage_app %}
+                <a class="action-button" href="{{ url_for('neostaffing.app_management') }}">APP MANAGEMENT</a>
+                {% endif %}
+            </header>
+
+            <section class="neostaffing-summary-strip neostaffing-dashboard-metrics" aria-label="NeoStaffing current totals">
+                <article><span>TOTAL STAFF</span><strong>{{ summary.total_staff }}</strong></article>
+                <article><span>ASSIGNED</span><strong>{{ summary.assigned }}</strong></article>
+                <article><span>UNASSIGNED</span><strong>{{ summary.unassigned }}</strong></article>
+                <article><span>SUPERVISORS</span><strong>{{ summary.supervisors }}</strong></article>
+            </section>
+
+            <section class="neostaffing-dashboard-workspace" aria-label="NeoStaffing operations workspace">
+                <article class="neostaffing-data-card neostaffing-hierarchy-panel">
+                    <h2>ORGANIZATION HIERARCHY</h2>
+                    {% if dashboard.hierarchy %}
+                    {{ render_tree(dashboard.hierarchy) }}
+                    {% else %}
+                    <p class="muted">Build Sort > Operation > Department > Work Area before assigning employees.</p>
+                    {% endif %}
+                </article>
+
+                <article class="neostaffing-data-card neostaffing-board-panel">
+                    <div class="neostaffing-panel-heading">
+                        <h2>STAFFING BOARD</h2>
+                        {% if can_manage_app %}
+                        <a href="{{ url_for('neostaffing.work_assignments') }}">ASSIGN</a>
+                        {% endif %}
+                    </div>
+                    <div class="neostaffing-work-area-grid">
+                        {% for card in dashboard.work_area_cards %}
+                        <section class="neostaffing-work-area-card">
+                            <div>
+                                <span>{{ card.path }}</span>
+                                <h3>{{ card.unit.name }}</h3>
+                            </div>
+                            <div class="neostaffing-coverage-line">
+                                <strong>{{ card.assigned }}{% if card.required %} / {{ card.required }}{% endif %}</strong>
+                                <em>{{ card.open }} OPEN</em>
+                            </div>
+                            <div class="neostaffing-progress" aria-hidden="true">
+                                {% set percent = 100 if not card.required else ((card.assigned / card.required) * 100) %}
+                                <i style="width: {{ 100 if percent > 100 else percent }}%"></i>
+                            </div>
+                            <small class="neostaffing-status-pill">{{ card.status }}</small>
+                        </section>
+                        {% else %}
+                        <p class="muted">No work areas yet. App Management will create the operating structure.</p>
+                        {% endfor %}
+                    </div>
+                </article>
+
+                <aside class="neostaffing-data-card neostaffing-detail-panel" aria-label="Selected work area details">
+                    <h2>{% if selected %}{{ selected.unit.name }}{% else %}WORK AREA DETAILS{% endif %}</h2>
+                    {% if selected %}
+                    <dl>
+                        <div><dt>Assigned</dt><dd>{{ selected.assigned }}</dd></div>
+                        <div><dt>Required</dt><dd>{{ selected.required if selected.required else "-" }}</dd></div>
+                        <div><dt>Open Positions</dt><dd>{{ selected.open }}</dd></div>
+                        <div><dt>Status</dt><dd>{{ selected.status }}</dd></div>
+                    </dl>
+                    <p class="muted">{{ selected.path }}</p>
+                    {% else %}
+                    <p class="muted">Select a Work Area after the structure is built.</p>
+                    {% endif %}
+                </aside>
+            </section>
+        </main>
     </div>
 </section>
 {% endblock %}

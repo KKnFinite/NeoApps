@@ -1,9 +1,16 @@
-from datetime import datetime
+from datetime import date, datetime
 import unittest
 
 from app import create_app
 from app.extensions import db
-from app.models import GatewayMembership, PortalAppAccess, User
+from app.models import (
+    GatewayMembership,
+    PortalAppAccess,
+    StaffingPerson,
+    StaffingUnit,
+    StaffingWorkAssignment,
+    User,
+)
 from app.services.access_control import ensure_default_gateway_and_nodes
 
 
@@ -39,14 +46,65 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         response = self.client.get("/neostaffing")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"STAFFING CONTROL", response.data)
+        self.assertIn(b"DASHBOARD", response.data)
+        self.assertIn(b"ORGANIZATION HIERARCHY", response.data)
         self.assertIn(b"STAFFING BOARD", response.data)
-        self.assertIn(b"EMPLOYEE ROSTER", response.data)
-        self.assertIn(b"SENIORITY LISTS", response.data)
+        self.assertIn(b"Search employees, work areas, or skills", response.data)
+        self.assertIn(b"PEOPLE", response.data)
+        self.assertIn(b"SENIORITY", response.data)
+        self.assertIn(b"MANAGE", response.data)
         self.assertIn(b"APP MANAGEMENT", response.data)
-        self.assertIn(b"BACK TO NEOAPPS PORTAL", response.data)
+        self.assertIn(b"NEOAPPS PORTAL", response.data)
         self.assertNotIn(b"NeoMotherBrain", response.data)
         self.assertNotIn(b"Change Characters", response.data)
+
+    def test_dashboard_uses_hierarchy_driven_operations_layout(self):
+        user = self._user("staffing_dashboard_master")
+        self._grant_app_access(user, "neostaffing", "master")
+        sort = StaffingUnit(unit_type="sort", name="Night Sort", display_order=1)
+        operation = StaffingUnit(
+            unit_type="operation",
+            name="Shift Operation",
+            parent=sort,
+            display_order=1,
+        )
+        department = StaffingUnit(
+            unit_type="department",
+            name="East Shift Department",
+            parent=operation,
+            display_order=1,
+        )
+        work_area = StaffingUnit(
+            unit_type="work_area",
+            name="EBM",
+            parent=department,
+            display_order=1,
+            required_headcount=2,
+        )
+        person = StaffingPerson(
+            employee_id="10001",
+            first_name="Avery",
+            last_name="Spotter",
+            seniority_date=date(2021, 5, 17),
+            classification="part_time",
+            active=True,
+        )
+        db.session.add_all([sort, operation, department, work_area, person])
+        db.session.flush()
+        db.session.add(StaffingWorkAssignment(person=person, work_area=work_area))
+        db.session.commit()
+        self._login(user.username)
+
+        response = self.client.get("/neostaffing")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Night Sort", response.data)
+        self.assertIn(b"Shift Operation", response.data)
+        self.assertIn(b"East Shift Department", response.data)
+        self.assertIn(b"EBM", response.data)
+        self.assertIn(b"1 / 2", response.data)
+        self.assertIn(b"1 OPEN", response.data)
+        self.assertIn(b"At Risk", response.data)
 
     def test_user_without_neostaffing_access_cannot_open_dashboard(self):
         user = self._user("no_staffing")
