@@ -50,7 +50,7 @@ API_STATUS_SCHEDULED = "Scheduled"
 API_STATUS_IN_AIR = "In Air"
 API_STATUS_ON_GROUND = "On Ground"
 API_STATUS_ASSUMED_ARRIVED = "Assumed Arrived"
-DEPARTURE_TIME_MATCH_TOLERANCE_MINUTES = 90
+DEPARTURE_LOOKAHEAD_MATCH_WINDOW_MINUTES = 8 * 60
 
 
 class FlightApiDisabledError(RuntimeError):
@@ -463,6 +463,9 @@ def process_api_flights_for_operation(
                 normalized["departure_time_difference_minutes"] = (
                     departure_time_difference_minutes(mission, normalized)
                 )
+                normalized["inside_departure_match_window"] = (
+                    departure_inside_match_window(mission, normalized)
+                )
             if apply:
                 apply_api_data_to_mission(mission, normalized, settings, now=now_utc)
             matched.append(
@@ -499,6 +502,11 @@ def process_api_flights_for_operation(
             )
             normalized["departure_time_difference_minutes"] = (
                 departure_time_difference_minutes(audit_mission, normalized)
+                if audit_mission
+                else None
+            )
+            normalized["inside_departure_match_window"] = (
+                departure_inside_match_window(audit_mission, normalized)
                 if audit_mission
                 else None
             )
@@ -542,6 +550,7 @@ def process_api_flights_for_operation(
             for normalized in ups_departure_candidates
         ],
         "departure_match_audit": departure_match_audit,
+        "departure_match_window_minutes": DEPARTURE_LOOKAHEAD_MATCH_WINDOW_MINUTES,
         **diagnostics,
     }
 
@@ -1183,7 +1192,7 @@ def _departure_time_mismatches(mission, normalized):
     mission_time = getattr(mission, "planned_datetime_utc", None)
     if not api_time or not mission_time:
         return False
-    return _datetime_difference_minutes(api_time, mission_time) > DEPARTURE_TIME_MATCH_TOLERANCE_MINUTES
+    return _datetime_difference_minutes(api_time, mission_time) > DEPARTURE_LOOKAHEAD_MATCH_WINDOW_MINUTES
 
 
 def _departure_destination_time_matches(candidates, normalized):
@@ -1199,7 +1208,7 @@ def _departure_destination_time_matches(candidates, normalized):
             continue
         if mission_destination != api_destination:
             continue
-        if _datetime_difference_minutes(api_time, mission_time) <= DEPARTURE_TIME_MATCH_TOLERANCE_MINUTES:
+        if _datetime_difference_minutes(api_time, mission_time) <= DEPARTURE_LOOKAHEAD_MATCH_WINDOW_MINUTES:
             matches.append(mission)
     return matches
 
@@ -1216,6 +1225,13 @@ def departure_time_difference_minutes(mission, normalized):
     if not api_time or not mission_time:
         return None
     return int(round(_datetime_difference_minutes(api_time, mission_time)))
+
+
+def departure_inside_match_window(mission, normalized):
+    difference = departure_time_difference_minutes(mission, normalized)
+    if difference is None:
+        return None
+    return difference <= DEPARTURE_LOOKAHEAD_MATCH_WINDOW_MINUTES
 
 
 def departure_tail_update_diagnostic(mission, normalized):
@@ -1309,7 +1325,12 @@ def build_departure_match_audit(missions, ups_departure_candidates, diagnostics=
                     if api_candidate
                     else None
                 ),
-                "time_tolerance_minutes": DEPARTURE_TIME_MATCH_TOLERANCE_MINUTES,
+                "time_tolerance_minutes": DEPARTURE_LOOKAHEAD_MATCH_WINDOW_MINUTES,
+                "inside_departure_match_window": (
+                    departure_inside_match_window(mission, api_candidate)
+                    if api_candidate
+                    else None
+                ),
                 "tail_update_reason": (
                     api_candidate.get("tail_update_diagnostic")
                     if api_candidate
@@ -1338,7 +1359,8 @@ def api_ups_departure_audit_row(normalized):
         ),
         "tail_update_reason": normalized.get("tail_update_diagnostic"),
         "minute_difference": normalized.get("departure_time_difference_minutes"),
-        "time_tolerance_minutes": DEPARTURE_TIME_MATCH_TOLERANCE_MINUTES,
+        "time_tolerance_minutes": DEPARTURE_LOOKAHEAD_MATCH_WINDOW_MINUTES,
+        "inside_departure_match_window": normalized.get("inside_departure_match_window"),
     }
 
 
@@ -1666,6 +1688,9 @@ def _empty_result(gateway, operation, provider_enabled, message):
         "source": "live",
         "replay_preview": False,
         "message": message,
+        "api_ups_departures": [],
+        "departure_match_audit": [],
+        "departure_match_window_minutes": DEPARTURE_LOOKAHEAD_MATCH_WINDOW_MINUTES,
         **_empty_import_count_diagnostics(),
     }
 

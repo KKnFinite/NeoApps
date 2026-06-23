@@ -334,6 +334,10 @@
             <strong>{{ format_flight_api_time(import_result.last_provider_departure_time_utc, gateway) }}</strong>
         </article>
         <article class="status-card">
+            <span>DEPARTURE MATCH WINDOW</span>
+            <strong>{% if import_result.departure_match_window_minutes %}{{ import_result.departure_match_window_minutes }} MIN{% else %}-{% endif %}</strong>
+        </article>
+        <article class="status-card">
             <span>UNITS CONSUMED</span>
             <strong>{{ import_result.usage_units_consumed }}</strong>
         </article>
@@ -402,6 +406,7 @@
                     <th>API KEYS</th>
                     <th>API DEST</th>
                     <th>API DEPARTURE TIME</th>
+                    <th>INSIDE MATCH WINDOW</th>
                     <th>API TAIL</th>
                     <th>REASON / TAIL DEBUG</th>
                 </tr>
@@ -423,9 +428,10 @@
                     <td>
                         {{ format_flight_api_time(row.matched_api_departure_time_utc, gateway) }}
                         {% if row.minute_difference is not none %}
-                        <br><span class="muted">DIFF {{ row.minute_difference }} MIN / TOL {{ row.time_tolerance_minutes }} MIN</span>
+                        <br><span class="muted">DIFF {{ row.minute_difference }} MIN / WINDOW {{ row.time_tolerance_minutes }} MIN</span>
                         {% endif %}
                     </td>
+                    <td>{% if row.inside_departure_match_window is none %}-{% else %}{{ "YES" if row.inside_departure_match_window else "NO" }}{% endif %}</td>
                     <td>{{ row.matched_api_tail or "-" }}</td>
                     <td>
                         {{ row.reason or "-" }}
@@ -436,7 +442,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="14">NO CURRENT-SORT DEPARTURE MISSIONS FOUND FOR THIS OPERATION.</td>
+                    <td colspan="15">NO CURRENT-SORT DEPARTURE MISSIONS FOUND FOR THIS OPERATION.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -453,6 +459,7 @@
                     <th>KEYS TRIED</th>
                     <th>DESTINATION</th>
                     <th>DEPARTURE TIME</th>
+                    <th>INSIDE MATCH WINDOW</th>
                     <th>TAIL / REG</th>
                     <th>STATUS</th>
                     <th>MATCHED CURRENT MISSION</th>
@@ -469,9 +476,10 @@
                     <td>
                         {{ format_flight_api_time(row.departure_time_utc, gateway) }}
                         {% if row.minute_difference is not none %}
-                        <br><span class="muted">DIFF {{ row.minute_difference }} MIN / TOL {{ row.time_tolerance_minutes }} MIN</span>
+                        <br><span class="muted">DIFF {{ row.minute_difference }} MIN / WINDOW {{ row.time_tolerance_minutes }} MIN</span>
                         {% endif %}
                     </td>
+                    <td>{% if row.inside_departure_match_window is none %}-{% else %}{{ "YES" if row.inside_departure_match_window else "NO" }}{% endif %}</td>
                     <td>{{ row.tail_number or "-" }}</td>
                     <td>{{ row.api_status or "-" }}</td>
                     <td>{{ row.matched_current_mission or "-" }}</td>
@@ -488,7 +496,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="9">NO UPS DEPARTURES WERE PARSED FROM THE PROVIDER PAYLOAD.</td>
+                    <td colspan="10">NO UPS DEPARTURES WERE PARSED FROM THE PROVIDER PAYLOAD.</td>
                 </tr>
                 {% endfor %}
             </tbody>
