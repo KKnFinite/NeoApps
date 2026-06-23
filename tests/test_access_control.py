@@ -185,8 +185,8 @@ class AccessControlTest(unittest.TestCase):
 
         self.assertEqual(hub.status_code, 200)
         hub_html = hub.data.decode()
-        left_column = hub_html.split('rfd-node-column-left"', 1)[1].split("</div>", 1)[0]
-        right_column = hub_html.split('rfd-node-column-right"', 1)[1].split("</div>", 1)[0]
+        left_column = hub_html.split('rfd-node-column-left"', 1)[1].split('rfd-hub-logo"', 1)[0]
+        right_column = hub_html.split('rfd-node-column-right"', 1)[1].split("</section>", 1)[0]
         self.assertIn(b"RFD Hub", hub.data)
         self.assertNotIn(b"RFD Command Hub", hub.data)
         self.assertIn(b"NeoGateway - RFD", hub.data)
@@ -198,6 +198,14 @@ class AccessControlTest(unittest.TestCase):
         self.assertIn(b"NeoMotherBrain", hub.data)
         self.assertIn(b"NeoSektor", hub.data)
         self.assertIn(b'href="/neoermac"', hub.data)
+        self.assertIn(b'src="/static/images/icons/motherbrain/icon_192.png"', hub.data)
+        self.assertIn(b'src="/static/images/icons/sektor/icon_192.png"', hub.data)
+        self.assertIn(b'src="/static/images/icons/ermac/icon_192.png"', hub.data)
+        self.assertIn(b'src="/static/images/icons/scorpion/icon_192.png"', hub.data)
+        self.assertIn(b"Sort planning, flight schedules, parking, and API review.", hub.data)
+        self.assertIn(b"Inbound operations, ballmat counts, discharge, and routing.", hub.data)
+        self.assertIn(b"Shift execution, doors, belts, ULD requests, and outbound pulls.", hub.data)
+        self.assertIn(b"Future node.", hub.data)
         for node_name in (
             b"NeoScorpion",
             b"NeoReptile",
@@ -236,6 +244,7 @@ class AccessControlTest(unittest.TestCase):
         self.assertNotIn(b'class="gateway-context"', hub.data)
         self.assertNotIn(b'class="platform-brand"', hub.data)
         self.assertNotIn(b'class="powered-by"', hub.data)
+        self.assertNotIn(b'href="/motherbrain"', hub.data)
         self.assertEqual(motherbrain.status_code, 302)
         self.assertEqual(motherbrain.location, "/rfd")
 

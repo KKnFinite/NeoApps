@@ -127,3 +127,29 @@ Password: 1313
 ```
 
 To use a different local password, set `NEOAPPS_DEV_GRANDMASTER_PASSWORD` before running the seed script.
+
+## Codex Result Summary Format
+
+When reporting implementation results for ChatGPT handoff, use this copy-friendly format:
+
+```text
+Implemented and pushed:
+Commit: <hash> - <title>
+
+Changed files:
+- path
+- path
+
+What changed:
+- short bullet
+- short bullet
+
+Verification:
+- command/result
+- command/result
+- browser checks if any
+
+Notes:
+- untracked files left untouched, if relevant
+- anything intentionally deferred or not done
+```
