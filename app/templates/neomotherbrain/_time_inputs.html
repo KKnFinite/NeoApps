@@ -16,6 +16,7 @@
         autocomplete="off"
         aria-label="Hour"
         data-time-max="23"
+        data-time-part="hour"
         {% if required %}required{% endif %}
     >
     <span class="military-time-separator">:</span>
@@ -31,6 +32,7 @@
         autocomplete="off"
         aria-label="Minute"
         data-time-max="59"
+        data-time-part="minute"
         {% if required %}required{% endif %}
     >
 </div>
@@ -63,11 +65,26 @@
                     }
                 };
 
-                input.addEventListener("input", () => {
+                input.addEventListener("input", (event) => {
                     input.value = input.value.replace(/\D/g, "").slice(0, 2);
                     const max = Number(input.dataset.timeMax || "59");
                     if (input.value !== "" && Number(input.value) > max) {
                         input.value = String(max);
+                    }
+                    const isDelete = event.inputType === "deleteContentBackward"
+                        || event.inputType === "deleteContentForward";
+                    if (
+                        input.dataset.timePart === "hour"
+                        && input.value.length >= 2
+                        && !isDelete
+                    ) {
+                        const container = input.closest(".military-time-select");
+                        const minute = container
+                            ? container.querySelector("[data-time-part='minute']")
+                            : null;
+                        if (minute) {
+                            minute.focus();
+                        }
                     }
                 });
                 input.addEventListener("blur", normalizeTimePart);

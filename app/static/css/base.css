@@ -5727,6 +5727,24 @@ select::-ms-expand {
     line-height: 1;
 }
 
+.master-board-table .master-row-save-button {
+    min-width: 40px;
+    min-height: 28px;
+    padding: 4px 7px;
+    border-color: rgba(var(--node-highlight-rgb), 0.74);
+    border-radius: 999px;
+    background:
+        linear-gradient(180deg, rgba(var(--node-highlight-rgb), 0.32), rgba(var(--node-rgb), 0.18)),
+        #0b0d11;
+    color: var(--neo-bright-silver);
+    font-size: 0.62rem;
+    font-weight: 900;
+    letter-spacing: 0;
+    box-shadow:
+        0 0 10px rgba(var(--node-rgb), 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
 .master-board-add-row td {
     background: rgba(var(--node-rgb), 0.05);
 }
@@ -7261,7 +7279,7 @@ select::-ms-expand {
             minmax(50px, 0.92fr)
             55px
             minmax(36px, 0.68fr)
-            26px;
+            38px;
         grid-template-areas:
             "flight origin ac sta wave delete";
         align-items: end;
@@ -7274,7 +7292,7 @@ select::-ms-expand {
             minmax(54px, 0.95fr)
             55px
             minmax(36px, 0.68fr)
-            26px;
+            38px;
         grid-template-areas:
             "flight destination ac etd wave ."
             "pure first second second second delete";
@@ -7432,6 +7450,13 @@ select::-ms-expand {
         padding: 0;
         border-radius: 50%;
         font-size: 0.94rem;
+    }
+
+    .blueprint-neomotherbrain .master-board-table .master-row-save-button {
+        min-width: 36px;
+        min-height: 26px;
+        padding: 4px 5px;
+        font-size: 0.56rem;
     }
 
     .blueprint-neomotherbrain .master-flight-table .table-actions .table-row-delete-button {

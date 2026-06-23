@@ -894,12 +894,14 @@ def master_schedule():
     if request.method == "POST":
         mission_type = request.form.get("board_mission_type", "").strip().lower()
         rows = _master_schedule_bulk_rows_from_request(gateway)
+        strict_row_index = request.form.get("master_save_row", "").strip()
         try:
             updated_count, created_count = _apply_master_schedule_board_edit(
                 rows,
                 schedules,
                 gateway,
                 mission_type,
+                strict_row_index=strict_row_index or None,
             )
         except ValueError as error:
             db.session.rollback()
@@ -1740,7 +1742,13 @@ def _apply_master_schedule_bulk_edit(rows, schedules, gateway):
     return updated_count, len(created_schedules)
 
 
-def _apply_master_schedule_board_edit(rows, schedules, gateway, mission_type):
+def _apply_master_schedule_board_edit(
+    rows,
+    schedules,
+    gateway,
+    mission_type,
+    strict_row_index=None,
+):
     if mission_type not in MISSION_TYPES:
         raise ValueError("Mission type must be arrival or departure.")
 
@@ -1751,14 +1759,23 @@ def _apply_master_schedule_board_edit(rows, schedules, gateway, mission_type):
     }
     processed_schedules = []
     created_schedules = []
+    strict_row_found = not strict_row_index
 
     for row in rows:
         row["mission_type"] = mission_type
+        is_strict_row = bool(strict_row_index and row.get("index") == strict_row_index)
+        strict_row_found = strict_row_found or is_strict_row
         schedule_id = row.get("id", "").strip()
         if not schedule_id:
             if not _master_schedule_board_row_has_data(row):
+                if is_strict_row:
+                    raise ValueError("Complete the new master schedule row before saving.")
                 continue
             if not _master_schedule_board_row_is_complete(row):
+                if is_strict_row:
+                    raise ValueError(
+                        "Complete all required fields for the new master schedule row before saving."
+                    )
                 continue
 
         if schedule_id:
@@ -1771,6 +1788,9 @@ def _apply_master_schedule_board_edit(rows, schedules, gateway, mission_type):
 
         _apply_master_schedule_form(schedule, row, gateway)
         processed_schedules.append(schedule)
+
+    if not strict_row_found:
+        raise ValueError("New master schedule row was not found.")
 
     _raise_for_duplicate_active_master_schedule_rows(processed_schedules)
     for schedule in processed_schedules:

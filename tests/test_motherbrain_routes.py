@@ -914,6 +914,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b'name="night_sort_start"', response.data)
         self.assertIn(b'value="22:15"', response.data)
         self.assertIn(b'value="01:00"', response.data)
+        self.assertNotIn(b'data-time-part="hour"', response.data)
+        self.assertNotIn(b"NeoAppsTimeInputs", response.data)
         self.assertNotIn(b'type="time"', response.data)
 
     def test_sort_timeline_special_poll_delete_persists(self):
@@ -1801,9 +1803,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b'name="row_arrival_0_planned_time_local_hour"', response.data)
         self.assertIn(b'data-time-max="23"', response.data)
         self.assertIn(b'data-time-max="59"', response.data)
+        self.assertIn(b'data-time-part="hour"', response.data)
+        self.assertIn(b'data-time-part="minute"', response.data)
         self.assertIn(b"<script>", response.data)
         self.assertIn(b"NeoAppsTimeInputs", response.data)
         self.assertIn(b'padStart(2, "0")', response.data)
+        self.assertIn(b"minute.focus()", response.data)
         self.assertNotIn(b'<select name="row_arrival_0_planned_time_local_hour"', response.data)
         self.assertIn(b'name="row_arrival_0_aircraft_type"', response.data)
         self.assertIn(b'name="row_departure_0_aircraft_type"', response.data)
@@ -1816,12 +1821,18 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b'name="row_departure_0_final_mix_pull_time_local_hour"', response.data)
         self.assertIn(b'name="row_arrival_new__INDEX___flight_number"', response.data)
         self.assertIn(b'name="row_departure_new__INDEX___flight_number"', response.data)
+        self.assertIn(b'class="table-row-button master-row-save-button"', response.data)
+        self.assertIn(b'name="master_save_row"', response.data)
+        self.assertIn(b'value="arrival_new__INDEX__"', response.data)
+        self.assertIn(b'value="departure_new__INDEX__"', response.data)
+        self.assertIn(b">SAVE</button>", response.data)
         self.assertNotIn(b'name="row_arrival_new_flight_number"', response.data)
         self.assertNotIn(b'name="row_departure_new_flight_number"', response.data)
         self.assertNotIn(b"New arrival", response.data)
         self.assertNotIn(b"New departure", response.data)
         self.assertNotIn(b"SAVE MASTER ARRIVALS", response.data)
         self.assertNotIn(b"SAVE MASTER DEPARTURES", response.data)
+        self.assertIn(b"<th>ACTION</th>", response.data)
         for aircraft_type in (b"A300", b"747", b"757", b"767", b"Other"):
             self.assertIn(b'<option value="' + aircraft_type + b'"', response.data)
         self.assertIn(b'<option value="" selected></option>', response.data)
@@ -2187,6 +2198,105 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIsNone(created[0].aircraft_type)
         self.assertEqual(created[1].aircraft_type, "A300")
 
+    def test_master_schedule_new_arrival_row_save_button_saves_and_reloads(self):
+        response = self.client.post(
+            "/motherbrain/master-schedule",
+            data={
+                "board_mission_type": "arrival",
+                "master_save_row": "arrival_new0",
+                "row_indexes": ["arrival_new0"],
+                "row_arrival_new0_id": "",
+                "row_arrival_new0_mission_type": "arrival",
+                "row_arrival_new0_sort_name": "night",
+                "row_arrival_new0_active": "1",
+                "row_arrival_new0_active_days": ["monday", "tuesday"],
+                "row_arrival_new0_flight_number": "arrsave",
+                "row_arrival_new0_aircraft_type": "",
+                "row_arrival_new0_origin": "sdf",
+                "row_arrival_new0_destination": "RFD",
+                "row_arrival_new0_planned_time_local_hour": "1",
+                "row_arrival_new0_planned_time_local_minute": "5",
+            },
+            headers={"Accept": "application/json", "X-Requested-With": "fetch"},
+        )
+        reload_response = self.client.get("/motherbrain/master-schedule")
+
+        created = MasterFlightSchedule.query.filter_by(flight_number="ARRSAVE").first()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["created"], 1)
+        self.assertIsNotNone(created)
+        self.assertEqual(created.origin, "SDF")
+        self.assertEqual(created.destination, "RFD")
+        self.assertEqual(created.planned_time_local, time(1, 5))
+        self.assertIn(b"ARRSAVE", reload_response.data)
+
+    def test_master_schedule_new_departure_row_save_button_saves_and_reloads(self):
+        response = self.client.post(
+            "/motherbrain/master-schedule",
+            data={
+                "board_mission_type": "departure",
+                "master_save_row": "departure_new0",
+                "row_indexes": ["departure_new0"],
+                "row_departure_new0_id": "",
+                "row_departure_new0_mission_type": "departure",
+                "row_departure_new0_sort_name": "night",
+                "row_departure_new0_active": "1",
+                "row_departure_new0_active_days": ["monday", "tuesday"],
+                "row_departure_new0_flight_number": "depsave",
+                "row_departure_new0_aircraft_type": "",
+                "row_departure_new0_origin": "RFD",
+                "row_departure_new0_destination": "ont",
+                "row_departure_new0_planned_time_local_hour": "4",
+                "row_departure_new0_planned_time_local_minute": "20",
+                "row_departure_new0_pure_pull_time_local_hour": "2",
+                "row_departure_new0_pure_pull_time_local_minute": "10",
+                "row_departure_new0_first_mix_pull_time_local_hour": "2",
+                "row_departure_new0_first_mix_pull_time_local_minute": "25",
+                "row_departure_new0_final_mix_pull_time_local_hour": "2",
+                "row_departure_new0_final_mix_pull_time_local_minute": "40",
+            },
+            headers={"Accept": "application/json", "X-Requested-With": "fetch"},
+        )
+        reload_response = self.client.get("/motherbrain/master-schedule")
+
+        created = MasterFlightSchedule.query.filter_by(flight_number="DEPSAVE").first()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["created"], 1)
+        self.assertIsNotNone(created)
+        self.assertEqual(created.destination, "ONT")
+        self.assertEqual(created.planned_time_local, time(4, 20))
+        self.assertEqual(created.pure_pull_time_local, time(2, 10))
+        self.assertEqual(created.final_mix_pull_time_local, time(2, 40))
+        self.assertIn(b"DEPSAVE", reload_response.data)
+
+    def test_master_schedule_explicit_new_row_save_rejects_invalid_partial_row(self):
+        response = self.client.post(
+            "/motherbrain/master-schedule",
+            data={
+                "board_mission_type": "arrival",
+                "master_save_row": "arrival_new0",
+                "row_indexes": ["arrival_new0"],
+                "row_arrival_new0_id": "",
+                "row_arrival_new0_mission_type": "arrival",
+                "row_arrival_new0_sort_name": "night",
+                "row_arrival_new0_active": "1",
+                "row_arrival_new0_active_days": ["monday", "tuesday"],
+                "row_arrival_new0_flight_number": "badadd",
+                "row_arrival_new0_aircraft_type": "",
+                "row_arrival_new0_origin": "",
+                "row_arrival_new0_destination": "RFD",
+                "row_arrival_new0_planned_time_local_hour": "1",
+                "row_arrival_new0_planned_time_local_minute": "5",
+            },
+            headers={"Accept": "application/json", "X-Requested-With": "fetch"},
+        )
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("Complete all required fields", payload["message"])
+        self.assertIsNone(MasterFlightSchedule.query.filter_by(flight_number="BADADD").first())
+
     def test_master_schedule_form_uses_limited_sort_dropdown_and_capitalized_missions(self):
         response = self.client.get("/motherbrain/master-schedule/new")
 
@@ -2537,9 +2647,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b'name="row_0_planned_time_local_minute"', form_response.data)
         self.assertIn(b'data-time-max="23"', form_response.data)
         self.assertIn(b'data-time-max="59"', form_response.data)
+        self.assertIn(b'data-time-part="hour"', form_response.data)
+        self.assertIn(b'data-time-part="minute"', form_response.data)
         self.assertIn(b"<script>", form_response.data)
         self.assertIn(b"NeoAppsTimeInputs", form_response.data)
         self.assertIn(b'padStart(2, "0")', form_response.data)
+        self.assertIn(b"minute.focus()", form_response.data)
         self.assertNotIn(b'<select name="row_0_planned_time_local_hour"', form_response.data)
         self.assertNotIn(b'type="time"', form_response.data)
 
