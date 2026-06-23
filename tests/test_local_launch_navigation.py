@@ -114,7 +114,10 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         template = Path("app/templates/base.html").read_text()
 
         self.assertIn("filename='css/base.css', v=config.STATIC_ASSET_VERSION", template)
-        self.assertIn("url_for('pwa_manifest', v=config.STATIC_ASSET_VERSION)", template)
+        self.assertIn(
+            "url_for('pwa_manifest_by_key', manifest_key=current_pwa_manifest_key(), v=config.STATIC_ASSET_VERSION)",
+            template,
+        )
         self.assertIn("url_for('service_worker', v=config.STATIC_ASSET_VERSION)", template)
         self.assertIn('name="theme-color" content="#d95a1f"', template)
         self.assertIn('name="apple-mobile-web-app-title" content="NeoApps"', template)
@@ -130,9 +133,10 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertEqual(response.mimetype, "application/manifest+json")
         self.assertIn("no-cache", response.headers["Cache-Control"])
         manifest = response.get_json()
+        self.assertEqual(manifest["id"], "/manifest/neoportal.webmanifest")
         self.assertEqual(manifest["name"], "NeoApps Portal")
         self.assertEqual(manifest["short_name"], "NeoPortal")
-        self.assertEqual(manifest["start_url"], "/login")
+        self.assertEqual(manifest["start_url"], "/portal")
         self.assertEqual(manifest["scope"], "/")
         self.assertEqual(manifest["display"], "standalone")
         icon_map = {
@@ -167,6 +171,62 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertNotIn("neogateway_icon", manifest_text)
         self.assertNotIn("NeoRFD", manifest_text)
         self.assertNotIn("neorfd", manifest_text.lower())
+
+    def test_app_and_node_manifests_have_independent_branding_and_icons(self):
+        expected_manifests = {
+            "neoportal": ("NeoApps Portal", "NeoPortal", "/portal", "#4db7ff", "neoportal"),
+            "neogateway": ("NeoGateway", "NeoGateway", "/rfd", "#d95a1f", "neogateway"),
+            "neostaffing": ("NeoStaffing", "NeoStaffing", "/neostaffing", "#27d0c2", "neostaffing"),
+            "neobid": ("NeoBid", "NeoBid", "/neobid", "#8c96aa", "neobid"),
+            "motherbrain": ("NeoMotherBrain", "MotherBrain", "/motherbrain", "#cf6a6e", "motherbrain"),
+            "sektor": ("NeoSektor", "NeoSektor", "/neosektor", "#b5121b", "sektor"),
+            "ermac": ("NeoErmac", "NeoErmac", "/neoermac", "#8f1826", "ermac"),
+            "scorpion": ("NeoScorpion", "NeoScorpion", "/nodes/", "#f4c21f", "scorpion"),
+            "reptile": ("NeoReptile", "NeoReptile", "/nodes/", "#70e13b", "reptile"),
+            "subzero": ("NeoSub-Zero", "Sub-Zero", "/nodes/", "#4db7ff", "subzero"),
+            "rain": ("NeoRain", "NeoRain", "/nodes/", "#7f4dff", "rain"),
+        }
+
+        for manifest_key, (name, short_name, start_url, theme_color, icon_folder) in expected_manifests.items():
+            with self.subTest(manifest_key=manifest_key):
+                response = self.client.get(f"/manifest/{manifest_key}.webmanifest")
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.mimetype, "application/manifest+json")
+                self.assertIn("no-cache", response.headers["Cache-Control"])
+                manifest = response.get_json()
+                self.assertEqual(manifest["id"], f"/manifest/{manifest_key}.webmanifest")
+                self.assertEqual(manifest["name"], name)
+                self.assertEqual(manifest["short_name"], short_name)
+                self.assertEqual(manifest["start_url"], start_url)
+                self.assertEqual(manifest["scope"], "/")
+                self.assertEqual(manifest["display"], "standalone")
+                self.assertEqual(manifest["theme_color"], theme_color)
+                self.assertIn(
+                    {
+                        "src": f"/static/images/icons/{icon_folder}/icon_192.png",
+                        "sizes": "192x192",
+                        "type": "image/png",
+                        "purpose": "any",
+                    },
+                    manifest["icons"],
+                )
+                self.assertIn(
+                    {
+                        "src": f"/static/images/icons/{icon_folder}/icon_512.png",
+                        "sizes": "512x512",
+                        "type": "image/png",
+                        "purpose": "any",
+                    },
+                    manifest["icons"],
+                )
+                for icon in manifest["icons"]:
+                    icon_response = self.client.get(icon["src"])
+                    self.assertEqual(icon_response.status_code, 200)
+                    self.assertEqual(icon_response.mimetype, "image/png")
+
+        missing_response = self.client.get("/manifest/not-real.webmanifest")
+        self.assertEqual(missing_response.status_code, 404)
 
     def test_pwa_root_icon_routes_serve_neoportal_images(self):
         icon_routes = {

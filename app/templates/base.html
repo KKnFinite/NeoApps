@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-title" content="NeoApps">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>{% block title %}NeoApps{% endblock %}</title>
-    <link rel="manifest" href="{{ url_for('pwa_manifest', v=config.STATIC_ASSET_VERSION) }}">
+    <link rel="manifest" href="{{ url_for('pwa_manifest_by_key', manifest_key=current_pwa_manifest_key(), v=config.STATIC_ASSET_VERSION) }}">
     <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('apple_touch_icon') }}">
     <link rel="apple-touch-icon-precomposed" sizes="180x180" href="{{ url_for('apple_touch_icon_precomposed') }}">
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('favicon_32') }}">

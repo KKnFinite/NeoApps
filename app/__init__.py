@@ -1,9 +1,10 @@
+import json
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from flask import Flask, redirect, request, send_from_directory, url_for
+from flask import Flask, abort, redirect, request, send_from_directory, url_for
 from flask_login import current_user
 
 from app.auth.permissions import (
@@ -124,6 +125,37 @@ def register_template_helpers(app):
 
         return utc_value.astimezone(local_timezone).strftime("%Y-%m-%d %H:%M")
 
+    def current_pwa_manifest_key():
+        path = request.path.rstrip("/") or "/"
+        if path == "/rfd" or path.startswith("/rfd/"):
+            return "neogateway"
+        if path == "/motherbrain" or path.startswith("/motherbrain/"):
+            return "motherbrain"
+        if path == "/neostaffing" or path.startswith("/neostaffing/"):
+            return "neostaffing"
+        if path == "/neobid" or path.startswith("/neobid/"):
+            return "neobid"
+        if path == "/neoermac" or path.startswith("/neoermac/"):
+            return "ermac"
+        if path == "/neosektor" or path.startswith("/neosektor/"):
+            return "sektor"
+        if path == "/neoscorpion" or path.startswith("/neoscorpion/"):
+            return "scorpion"
+        if path == "/neoreptile" or path.startswith("/neoreptile/"):
+            return "reptile"
+        if (
+            path == "/neosubzero"
+            or path.startswith("/neosubzero/")
+            or path == "/neosub-zero"
+            or path.startswith("/neosub-zero/")
+            or path == "/neo-sub-zero"
+            or path.startswith("/neo-sub-zero/")
+        ):
+            return "subzero"
+        if path == "/neorain" or path.startswith("/neorain/"):
+            return "rain"
+        return "neoportal"
+
     def change_character_targets():
         if not current_user.is_authenticated:
             return []
@@ -232,6 +264,7 @@ def register_template_helpers(app):
             "user_can": user_can,
             "permission_access": permission_access,
             "change_character_targets": change_character_targets,
+            "current_pwa_manifest_key": current_pwa_manifest_key,
         }
 
     @app.context_processor
@@ -279,6 +312,8 @@ def register_security_headers(app):
 
 
 def register_pwa_assets(app):
+    manifest_definitions = _pwa_manifest_definitions()
+
     def send_pwa_image(filename):
         response = send_from_directory(
             app.static_folder,
@@ -289,16 +324,25 @@ def register_pwa_assets(app):
         response.headers["Cache-Control"] = "no-cache"
         return response
 
-    @app.route("/manifest.webmanifest")
-    def pwa_manifest():
-        response = send_from_directory(
-            app.static_folder,
-            "manifest.webmanifest",
+    def manifest_response(manifest_key):
+        manifest = manifest_definitions.get(manifest_key)
+        if not manifest:
+            abort(404)
+
+        response = app.response_class(
+            json.dumps(manifest, indent=2),
             mimetype="application/manifest+json",
-            max_age=0,
         )
         response.headers["Cache-Control"] = "no-cache"
         return response
+
+    @app.route("/manifest.webmanifest")
+    def pwa_manifest():
+        return manifest_response("neoportal")
+
+    @app.route("/manifest/<manifest_key>.webmanifest")
+    def pwa_manifest_by_key(manifest_key):
+        return manifest_response(str(manifest_key or "").strip().lower())
 
     @app.route("/service-worker.js")
     def service_worker():
@@ -331,6 +375,139 @@ def register_pwa_assets(app):
     @app.route("/favicon.ico")
     def favicon_ico():
         return send_pwa_image("icons/neoportal/favicon_32.png")
+
+
+def _pwa_manifest_definitions():
+    specs = {
+        "neoportal": {
+            "name": "NeoApps Portal",
+            "short_name": "NeoPortal",
+            "description": "NeoApps Portal access dashboard.",
+            "start_url": "/portal",
+            "theme_color": "#4db7ff",
+            "icon_folder": "neoportal",
+            "maskable": True,
+        },
+        "neogateway": {
+            "name": "NeoGateway",
+            "short_name": "NeoGateway",
+            "description": "NeoGateway operations hub.",
+            "start_url": "/rfd",
+            "theme_color": "#d95a1f",
+            "icon_folder": "neogateway",
+        },
+        "neostaffing": {
+            "name": "NeoStaffing",
+            "short_name": "NeoStaffing",
+            "description": "NeoStaffing workforce planning.",
+            "start_url": "/neostaffing",
+            "theme_color": "#27d0c2",
+            "icon_folder": "neostaffing",
+        },
+        "neobid": {
+            "name": "NeoBid",
+            "short_name": "NeoBid",
+            "description": "NeoBid bid tools placeholder.",
+            "start_url": "/neobid",
+            "theme_color": "#8c96aa",
+            "icon_folder": "neobid",
+        },
+        "motherbrain": {
+            "name": "NeoMotherBrain",
+            "short_name": "MotherBrain",
+            "description": "NeoMotherBrain operations core.",
+            "start_url": "/motherbrain",
+            "theme_color": "#cf6a6e",
+            "icon_folder": "motherbrain",
+        },
+        "sektor": {
+            "name": "NeoSektor",
+            "short_name": "NeoSektor",
+            "description": "NeoSektor ballmat operations.",
+            "start_url": "/neosektor",
+            "theme_color": "#b5121b",
+            "icon_folder": "sektor",
+        },
+        "ermac": {
+            "name": "NeoErmac",
+            "short_name": "NeoErmac",
+            "description": "NeoErmac outbound operations.",
+            "start_url": "/neoermac",
+            "theme_color": "#8f1826",
+            "icon_folder": "ermac",
+        },
+        "scorpion": {
+            "name": "NeoScorpion",
+            "short_name": "NeoScorpion",
+            "description": "NeoScorpion placeholder.",
+            "start_url": "/nodes/",
+            "theme_color": "#f4c21f",
+            "icon_folder": "scorpion",
+        },
+        "reptile": {
+            "name": "NeoReptile",
+            "short_name": "NeoReptile",
+            "description": "NeoReptile placeholder.",
+            "start_url": "/nodes/",
+            "theme_color": "#70e13b",
+            "icon_folder": "reptile",
+        },
+        "subzero": {
+            "name": "NeoSub-Zero",
+            "short_name": "Sub-Zero",
+            "description": "NeoSub-Zero placeholder.",
+            "start_url": "/nodes/",
+            "theme_color": "#4db7ff",
+            "icon_folder": "subzero",
+        },
+        "rain": {
+            "name": "NeoRain",
+            "short_name": "NeoRain",
+            "description": "NeoRain placeholder.",
+            "start_url": "/nodes/",
+            "theme_color": "#7f4dff",
+            "icon_folder": "rain",
+        },
+    }
+
+    return {key: _build_pwa_manifest(key, spec) for key, spec in specs.items()}
+
+
+def _build_pwa_manifest(manifest_key, spec):
+    icon_folder = spec["icon_folder"]
+    icons = [
+        _pwa_icon(icon_folder, "icon_192.png", "192x192", "any"),
+        _pwa_icon(icon_folder, "icon_512.png", "512x512", "any"),
+    ]
+    if spec.get("maskable"):
+        icons.extend(
+            [
+                _pwa_icon(icon_folder, "icon_maskable_192.png", "192x192", "maskable"),
+                _pwa_icon(icon_folder, "icon_maskable_512.png", "512x512", "maskable"),
+            ]
+        )
+
+    return {
+        "id": f"/manifest/{manifest_key}.webmanifest",
+        "name": spec["name"],
+        "short_name": spec["short_name"],
+        "description": spec["description"],
+        "start_url": spec["start_url"],
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#050506",
+        "theme_color": spec["theme_color"],
+        "icons": icons,
+    }
+
+
+def _pwa_icon(icon_folder, filename, sizes, purpose):
+    return {
+        "src": f"/static/images/icons/{icon_folder}/{filename}",
+        "sizes": sizes,
+        "type": "image/png",
+        "purpose": purpose,
+    }
 
 
 def register_blueprints(app):
