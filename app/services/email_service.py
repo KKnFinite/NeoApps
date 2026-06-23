@@ -1,4 +1,5 @@
 import json
+from html import escape
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -30,17 +31,21 @@ def send_email_verification(user, token):
 
 
 def send_access_approved(user, gateway):
+    approved_app_name = getattr(gateway, "name", None) or "NeoGateway"
+    login_url = _absolute_url("/login")
     return _send_transactional_email(
         to_email=user.email,
         to_name=user.display_name,
-        subject=f"{gateway.name} access approved",
+        subject="NeoApps access approved",
         html_content=(
-            f"<p>Your access to {gateway.name} has been approved.</p>"
-            f'<p><a href="{_absolute_url("/login")}">Log in to NeoApps Portal</a></p>'
+            "<p>Your access request has been approved.</p>"
+            f"<p>Approved access: <strong>{escape(approved_app_name)}</strong></p>"
+            f'<p>You can open NeoApps Portal here: <a href="{login_url}">{login_url}</a></p>'
         ),
         text_content=(
-            f"Your access to {gateway.name} has been approved.\n\n"
-            f"Log in to NeoApps Portal: {_absolute_url('/login')}"
+            "Your access request has been approved.\n\n"
+            f"Approved access: {approved_app_name}\n\n"
+            f"Open NeoApps Portal: {login_url}"
         ),
     )
 
