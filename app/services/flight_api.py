@@ -525,6 +525,15 @@ def process_api_flights_for_operation(
             if review_item and _record_value(review_item, "review_status") == "ignored":
                 ignored_count += 1
         elif review_item:
+            _set_record_value(
+                review_item,
+                "review_reason",
+                flight_number_mismatch_diagnostic(
+                    normalized,
+                    missions,
+                )
+                or _record_value(review_item, "review_reason"),
+            )
             review_items.append(review_item)
             _increment_count(diagnostics, "unmatched", normalized_type)
 
@@ -1543,6 +1552,10 @@ def preview_review_item_for_normalized(gateway, operation, normalized):
     ).first()
     if existing and existing.review_status in {"ignored", "accepted"}:
         return existing, True
+    review_reason = flight_number_mismatch_diagnostic(
+        normalized,
+        SortDateMission.query.filter_by(sort_date_operation_id=operation.id).all(),
+    ) or normalized.get("unmatched_reason") or "no matching mission"
     return {
         "sort_date_operation_id": operation.id,
         "gateway_id": gateway.id if gateway else operation.gateway_id,
@@ -1563,7 +1576,7 @@ def preview_review_item_for_normalized(gateway, operation, normalized):
         "aircraft_model": normalized["aircraft_model"],
         "api_status": normalized["api_status_raw"],
         "identity_warning": normalized.get("identity_warning"),
-        "review_reason": normalized.get("unmatched_reason") or "no matching mission",
+        "review_reason": review_reason,
         "normalized_cores_tried": normalized_cores_display(
             normalized.get("normalized_cores_tried")
         ),
@@ -1673,7 +1686,89 @@ def review_reason_for_item(review_item, missions):
     _mission, reason = match_api_flight_to_mission_with_reason(normalized, missions)
     if _mission:
         return reason or "matching mission now exists"
+    mismatch = flight_number_mismatch_diagnostic(normalized, missions)
+    if mismatch:
+        return mismatch
     return reason or "no matching mission"
+
+
+def flight_number_mismatch_diagnostic(normalized, missions):
+    if normalized.get("mission_type") != "arrival":
+        return ""
+    provider_key = _ups_numeric_core(normalized.get("provider_flight_number")) or _ups_numeric_core(
+        normalized.get("call_sign")
+    )
+    if not provider_key:
+        return ""
+    same_route_candidates = [
+        mission
+        for mission in missions
+        if getattr(mission, "mission_type", None) == normalized.get("mission_type")
+        and _mission_matches_provider_route(mission, normalized)
+        and _flight_key_mismatch_is_near(
+            provider_key,
+            _ups_numeric_core_from_values(*_mission_flight_identity_values(mission)),
+        )
+    ]
+    if not same_route_candidates:
+        return ""
+    current_mission = _nearest_mission_by_provider_time(same_route_candidates, normalized)
+    if not current_mission:
+        return ""
+    return (
+        f"Provider has {_provider_ups_display(normalized)} / "
+        f"{_provider_raw_identity_display(normalized)}, current mission is "
+        f"{_clean_flight_number(current_mission.flight_number)} \u2014 flight number mismatch."
+    )
+
+
+def _mission_matches_provider_route(mission, normalized):
+    if normalized.get("mission_type") == "arrival":
+        api_origin = _clean_upper(normalized.get("origin"))
+        mission_origin = _clean_upper(getattr(mission, "origin", None))
+        return bool(api_origin and mission_origin and api_origin == mission_origin)
+    api_destination = _clean_upper(normalized.get("destination"))
+    mission_destination = _clean_upper(getattr(mission, "destination", None))
+    return bool(api_destination and mission_destination and api_destination == mission_destination)
+
+
+def _flight_key_mismatch_is_near(provider_key, mission_key):
+    if not provider_key or not mission_key or provider_key == mission_key:
+        return False
+    return abs(int(provider_key) - int(mission_key)) <= 20
+
+
+def _nearest_mission_by_provider_time(missions, normalized):
+    provider_time = flight_api_provider_time_utc(normalized)
+    if not provider_time:
+        return sorted(missions, key=lambda mission: getattr(mission, "id", 0) or 0)[0]
+    return sorted(
+        missions,
+        key=lambda mission: (
+            _datetime_difference_minutes(
+                provider_time,
+                getattr(mission, "planned_datetime_utc", None),
+            )
+            if getattr(mission, "planned_datetime_utc", None)
+            else 999999,
+            getattr(mission, "id", 0) or 0,
+        ),
+    )[0]
+
+
+def _provider_ups_display(normalized):
+    provider_key = _ups_numeric_core(normalized.get("provider_flight_number")) or _ups_numeric_core(
+        normalized.get("call_sign")
+    )
+    return f"UPS{provider_key}" if provider_key else "-"
+
+
+def _provider_raw_identity_display(normalized):
+    return (
+        _clean_flight_number(normalized.get("provider_flight_number"))
+        or _clean_flight_number(normalized.get("call_sign"))
+        or "-"
+    )
 
 
 def normalized_cores_display(cores):
@@ -1819,6 +1914,13 @@ def _record_value(record, key):
     if isinstance(record, dict):
         return record.get(key)
     return getattr(record, key, None)
+
+
+def _set_record_value(record, key, value):
+    if isinstance(record, dict):
+        record[key] = value
+    else:
+        setattr(record, key, value)
 
 
 def _safe_request_diagnostics(gateway_code, start_local, end_local, api_key):

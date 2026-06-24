@@ -865,6 +865,38 @@ class FlightApiImportTest(unittest.TestCase):
             "Provider number/callsign mismatch",
         )
 
+    def test_arrival_near_flight_number_mismatch_gets_clear_diagnostic(self):
+        mission = self._mission("arrival", "UPS0755", origin="DFW")
+        db.session.add(mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "arrivals": [
+                        self._api_flight(
+                            number="5X 753",
+                            call_sign="UPS753",
+                            origin="DFW",
+                            tail="N438UP",
+                            status="Arrived",
+                        )
+                    ]
+                }
+            ),
+        )
+
+        db.session.refresh(mission)
+        self.assertEqual(len(result["matched"]), 0)
+        self.assertEqual(len(result["review_items"]), 1)
+        self.assertEqual(
+            result["review_items"][0].review_reason,
+            "Provider has UPS0753 / 5X753, current mission is UPS0755 — flight number mismatch.",
+        )
+        self.assertIsNone(mission.assigned_tail_number)
+
     def test_callsign_fallback_runs_only_when_provider_flight_is_missing(self):
         mission = self._mission("arrival", "UPS753")
         db.session.add(mission)
