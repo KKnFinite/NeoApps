@@ -4120,10 +4120,13 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.data.count(b"data-lane-number"), 108)
         self.assertIn(b"data-slot-number", response.data)
         self.assertIn(b"SLOT 1", response.data)
-        self.assertIn(b"+ SLOT 2", response.data)
+        self.assertIn(b"data-slot-expand", response.data)
+        self.assertIn(b"Show A01 Slot 2", response.data)
         self.assertNotIn(b"LANE 1", response.data)
         self.assertNotIn(b"LANE 2", response.data)
         self.assertIn(b"data-parking-tail", response.data)
+        self.assertIn(b"data-parking-tail-assigned=\"0\"", response.data)
+        self.assertIn(b"data-parking-selection-status", response.data)
         self.assertIn(b"data-parking-unassign-drop", response.data)
         self.assertIn(f'data-unassign-url="/motherbrain/parking-plan/{operation.id}/unassign"'.encode(), response.data)
         self.assertIn(b"parking-mobile-assignment", response.data)
@@ -4320,11 +4323,18 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("data-parking-unassign-drop", html)
         self.assertIn("page.dataset.unassignUrl", html)
         self.assertIn("Parking unassign failed.", html)
+        self.assertIn("data-parking-selection-status", html)
+        self.assertIn("data-clear-selected-tail", html)
+        self.assertIn("setSelectedTail", html)
+        self.assertIn("assignTailToLane(lane, selectedTail)", html)
+        self.assertIn("is-expanded-slot", html)
         self.assertIn('data-ramp-code="A"', html)
         self.assertIn('data-position-code="A01"', html)
         self.assertIn('data-lane-number="1"', html)
         self.assertIn('data-slot-number="1"', html)
+        self.assertIn('data-slot-collapsed="1"', html)
         self.assertIn("parking-lane-slot-2 is-collapsed-slot", html)
+        self.assertIn("parking-slot-expand", html)
         self.assertIn('data-occupied-tail=""', html)
         self.assertIn("parking-mobile-assign-controls", mobile_html)
         self.assertIn("parking-mobile-hot-note-controls", mobile_html)
@@ -4350,7 +4360,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertIn("parking-lane-slot-1", empty_html)
         self.assertIn("parking-lane-slot-2 is-collapsed-slot", empty_html)
-        self.assertIn("+ SLOT 2", empty_html)
+        self.assertIn('data-slot-collapsed="1"', empty_html)
+        self.assertIn("parking-slot-expand", empty_html)
+        self.assertIn("Show A01 Slot 2", empty_html)
 
         self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/assign",
@@ -4386,6 +4398,35 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertIn("parking-lane-slot-2", slot_two_html)
         self.assertNotIn("is-collapsed-slot", slot_two_html)
+
+    def test_parking_plan_click_to_assign_hooks_render(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        self._parking_pair(operation, "N349UP", destination="ONT")
+        db.session.commit()
+
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+
+        self.assertIn("data-parking-selection-status", html)
+        self.assertIn("data-selected-tail-label", html)
+        self.assertIn("data-clear-selected-tail", html)
+        self.assertIn("data-parking-tail-assigned=\"0\"", html)
+        self.assertIn("data-parking-tail-assigned=\"1\"", html)
+        self.assertIn("card.dataset.parkingTailAssigned === \"1\"", html)
+        self.assertIn("page.classList.toggle(\"has-selected-tail\"", html)
+        self.assertIn("await assignTailToLane(lane, selectedTail)", html)
+        self.assertIn("window.confirm(`${occupiedTail} is already", html)
 
     def test_parking_tail_card_compact_flags_and_order_render(self):
         operation = self._parking_operation()

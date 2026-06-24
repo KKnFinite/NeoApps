@@ -13,6 +13,7 @@
     draggable="true"
     data-parking-tail
     data-tail-number="{{ row.tail }}"
+    data-parking-tail-assigned="{{ '1' if row.assigned_position else '0' }}"
 >
     <div class="parking-tail-line">
         <span>{{ row.arrival_origin }} {{ row.arrival_time }}</span>
@@ -249,6 +250,11 @@
                 </form>
             </div>
 
+            <div class="parking-click-assign-status" data-parking-selection-status hidden>
+                <span>SELECTED <strong data-selected-tail-label></strong></span>
+                <button type="button" data-clear-selected-tail>CANCEL</button>
+            </div>
+
             <div class="parking-unassigned" aria-label="Unassigned tails">
                 <h3>UNASSIGNED</h3>
                 {% if unassigned_tail_rows %}
@@ -333,12 +339,18 @@
                                 data-lane-number="{{ lane.number }}"
                                 data-slot-number="{{ lane.number }}"
                                 data-occupied-tail="{{ lane.tail or '' }}"
+                                data-slot-collapsed="{{ '1' if lane.number == 2 and not lane.row else '0' }}"
                             >
                                 <span class="parking-lane-label">SLOT {{ lane.number }}</span>
                                 {% if lane.row %}
                                     {{ tail_card(lane.row) }}
                                 {% else %}
-                                <span class="parking-empty-lane">{{ "+ SLOT 2" if lane.number == 2 else "DROP SLOT 1" }}</span>
+                                    {% if lane.number == 2 %}
+                                    <button class="parking-slot-expand" type="button" data-slot-expand aria-label="Show {{ position.code }} Slot 2">+</button>
+                                    <span class="parking-empty-lane">SLOT 2</span>
+                                    {% else %}
+                                    <span class="parking-empty-lane">DROP SLOT 1</span>
+                                    {% endif %}
                                 {% endif %}
                             </div>
                             {% endfor %}
@@ -412,15 +424,90 @@
     }
 
     let draggedTail = "";
+    let selectedTail = "";
+    const selectionStatus = page.querySelector("[data-parking-selection-status]");
+    const selectedTailLabel = page.querySelector("[data-selected-tail-label]");
+    const clearSelectedTailButton = page.querySelector("[data-clear-selected-tail]");
+    const setSelectedTail = (tail) => {
+        selectedTail = tail || "";
+        page.classList.toggle("has-selected-tail", Boolean(selectedTail));
+        page.querySelectorAll("[data-parking-tail]").forEach((card) => {
+            card.classList.toggle("is-selected", Boolean(selectedTail) && card.dataset.tailNumber === selectedTail);
+        });
+        if (selectionStatus) {
+            selectionStatus.hidden = !selectedTail;
+        }
+        if (selectedTailLabel) {
+            selectedTailLabel.textContent = selectedTail;
+        }
+    };
+    const assignTailToLane = async (lane, tail) => {
+        const occupiedTail = lane.dataset.occupiedTail || "";
+        let replaceOccupied = "0";
+        if (occupiedTail && occupiedTail !== tail) {
+            const confirmed = window.confirm(`${occupiedTail} is already in ${lane.dataset.positionCode} Slot ${lane.dataset.slotNumber}. Replace it with ${tail}?`);
+            if (!confirmed) {
+                return;
+            }
+            replaceOccupied = "1";
+        }
+
+        const formData = new URLSearchParams();
+        formData.set("tail_number", tail);
+        formData.set("ramp_code", lane.dataset.rampCode);
+        formData.set("position_code", lane.dataset.positionCode);
+        formData.set("lane_number", lane.dataset.laneNumber);
+        formData.set("replace_occupied", replaceOccupied);
+
+        const response = await fetch(page.dataset.assignUrl, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                "Accept": "application/json",
+                "X-Requested-With": "XMLHttpRequest",
+            },
+            body: formData,
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.ok) {
+            window.alert(payload.message || "Parking assignment failed.");
+            return;
+        }
+        window.location.reload();
+    };
+    clearSelectedTailButton?.addEventListener("click", () => {
+        setSelectedTail("");
+    });
+
     page.querySelectorAll("[data-parking-tail]").forEach((card) => {
         card.addEventListener("dragstart", (event) => {
             draggedTail = card.dataset.tailNumber || "";
             event.dataTransfer.setData("text/plain", draggedTail);
             event.dataTransfer.effectAllowed = "move";
         });
+        card.addEventListener("click", (event) => {
+            if (card.dataset.parkingTailAssigned === "1") {
+                return;
+            }
+            event.preventDefault();
+            setSelectedTail(card.dataset.tailNumber || "");
+        });
     });
 
     page.querySelectorAll("[data-parking-lane]").forEach((lane) => {
+        lane.addEventListener("click", async (event) => {
+            if (event.target.closest("[data-parking-tail]")) {
+                return;
+            }
+            if (lane.dataset.slotCollapsed === "1" && !selectedTail) {
+                lane.classList.toggle("is-expanded-slot");
+                return;
+            }
+            if (!selectedTail) {
+                return;
+            }
+            await assignTailToLane(lane, selectedTail);
+        });
         lane.addEventListener("dragover", (event) => {
             event.preventDefault();
             lane.classList.add("is-drag-over");
@@ -435,38 +522,7 @@
             if (!tail) {
                 return;
             }
-            const occupiedTail = lane.dataset.occupiedTail || "";
-            let replaceOccupied = "0";
-            if (occupiedTail && occupiedTail !== tail) {
-                const confirmed = window.confirm(`${occupiedTail} is already in ${lane.dataset.positionCode} Slot ${lane.dataset.slotNumber}. Replace it with ${tail}?`);
-                if (!confirmed) {
-                    return;
-                }
-                replaceOccupied = "1";
-            }
-
-            const formData = new URLSearchParams();
-            formData.set("tail_number", tail);
-            formData.set("ramp_code", lane.dataset.rampCode);
-            formData.set("position_code", lane.dataset.positionCode);
-            formData.set("lane_number", lane.dataset.laneNumber);
-            formData.set("replace_occupied", replaceOccupied);
-
-            const response = await fetch(page.dataset.assignUrl, {
-                method: "POST",
-                credentials: "same-origin",
-                headers: {
-                    "Accept": "application/json",
-                    "X-Requested-With": "XMLHttpRequest",
-                },
-                body: formData,
-            });
-            const payload = await response.json();
-            if (!response.ok || !payload.ok) {
-                window.alert(payload.message || "Parking assignment failed.");
-                return;
-            }
-            window.location.reload();
+            await assignTailToLane(lane, tail);
         });
     });
 

@@ -3577,7 +3577,7 @@ h2 {
 
 .parking-layout {
     display: grid;
-    grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
     align-items: start;
     gap: 12px;
 }
@@ -3597,8 +3597,8 @@ h2 {
 
 .parking-tail-panel {
     display: grid;
-    gap: 14px;
-    padding: 14px;
+    gap: 10px;
+    padding: 10px;
     transition:
         border-color 150ms ease,
         box-shadow 150ms ease,
@@ -3636,6 +3636,48 @@ h2 {
     display: none;
 }
 
+.parking-click-assign-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 8px;
+    border: 1px solid rgba(var(--node-highlight-rgb), 0.46);
+    border-radius: 5px;
+    background:
+        linear-gradient(90deg, rgba(var(--node-highlight-rgb), 0.14), transparent 72%),
+        rgba(0, 0, 0, 0.3);
+}
+
+.parking-click-assign-status[hidden] {
+    display: none;
+}
+
+.parking-click-assign-status span {
+    color: var(--muted);
+    font-size: 0.62rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.parking-click-assign-status strong {
+    color: var(--steel);
+    font-size: 0.82rem;
+}
+
+.parking-click-assign-status button {
+    min-height: 24px;
+    padding: 4px 7px;
+    border: 1px solid rgba(var(--node-rgb), 0.34);
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--steel);
+    font-size: 0.58rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+}
+
 .parking-mobile-action-section {
     display: grid;
     gap: 8px;
@@ -3662,9 +3704,9 @@ h2 {
 
 .parking-tail-card {
     display: grid;
-    gap: 4px;
+    gap: 3px;
     min-width: 0;
-    padding: 8px;
+    padding: 6px;
     border: 1px solid rgba(var(--node-rgb), 0.4);
     border-radius: 5px;
     background:
@@ -3673,6 +3715,13 @@ h2 {
     color: var(--text);
     cursor: grab;
     user-select: none;
+}
+
+.parking-tail-card.is-selected {
+    border-color: var(--node-highlight);
+    box-shadow:
+        0 0 0 1px rgba(var(--node-highlight-rgb), 0.52),
+        0 0 18px rgba(var(--node-highlight-rgb), 0.28);
 }
 
 .parking-tail-card:active {
@@ -3694,19 +3743,19 @@ h2 {
 
 .parking-tail-line span {
     color: var(--steel);
-    font-size: 0.76rem;
+    font-size: 0.7rem;
     font-weight: 850;
 }
 
 .parking-tail-line small {
     color: var(--muted);
-    font-size: 0.68rem;
+    font-size: 0.62rem;
     font-weight: 850;
 }
 
 .parking-tail-main strong {
     color: var(--text);
-    font-size: 0.92rem;
+    font-size: 0.84rem;
     font-weight: 950;
 }
 
@@ -3748,22 +3797,22 @@ h2 {
 .parking-ramp-layout {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 44px;
-    row-gap: 30px;
+    column-gap: 34px;
+    row-gap: 24px;
 }
 
 .parking-ramp-group {
-    padding: 14px;
+    padding: 9px;
 }
 
 .parking-position-grid {
     display: grid;
     grid-template-columns:
-        minmax(142px, 0.78fr)
+        minmax(110px, 0.78fr)
         minmax(6px, 0.04fr)
-        minmax(150px, 0.74fr)
+        minmax(118px, 0.74fr)
         minmax(6px, 0.04fr)
-        minmax(142px, 0.78fr);
+        minmax(110px, 0.78fr);
     grid-template-areas:
         "left4 . top . right4"
         "left3 . center . right3"
@@ -3774,7 +3823,7 @@ h2 {
 }
 
 .parking-position-grid-r {
-    grid-template-columns: minmax(120px, 1fr) minmax(58px, 0.28fr) minmax(120px, 1fr);
+    grid-template-columns: minmax(108px, 1fr) minmax(46px, 0.24fr) minmax(108px, 1fr);
     grid-template-areas:
         "rtop1 rlabel rtop2"
         "rbottom1 rlabel rbottom2";
@@ -3791,7 +3840,7 @@ h2 {
         linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 26%),
         rgba(0, 0, 0, 0.18);
     color: var(--steel);
-    font-size: 1.02rem;
+    font-size: 0.92rem;
     font-weight: 950;
     letter-spacing: 0.08em;
     text-orientation: upright;
@@ -3801,7 +3850,7 @@ h2 {
 
 .parking-position-grid-r .parking-ramp-center {
     grid-area: rlabel;
-    font-size: 0.92rem;
+    font-size: 0.82rem;
 }
 
 .parking-position-slot-top {
@@ -3862,8 +3911,8 @@ h2 {
 
 .parking-position-card {
     display: grid;
-    gap: 6px;
-    padding: 6px;
+    gap: 4px;
+    padding: 5px;
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 30%),
         rgba(3, 4, 6, 0.72);
@@ -3872,7 +3921,7 @@ h2 {
 .parking-position-card h3 {
     margin: 0;
     color: var(--node-highlight);
-    font-size: 0.82rem;
+    font-size: 0.72rem;
     font-weight: 950;
     letter-spacing: 0.08em;
     text-align: center;
@@ -3880,14 +3929,14 @@ h2 {
 
 .parking-lanes {
     display: grid;
-    gap: 5px;
+    gap: 4px;
 }
 
 .parking-lane {
     display: grid;
-    gap: 4px;
-    min-height: 72px;
-    padding: 5px;
+    gap: 3px;
+    min-height: 56px;
+    padding: 4px;
     border: 1px dashed rgba(var(--node-rgb), 0.38);
     border-radius: 6px;
     background: rgba(0, 0, 0, 0.24);
@@ -3898,12 +3947,16 @@ h2 {
 }
 
 .parking-lane-slot-2.is-collapsed-slot {
-    min-height: 30px;
-    padding: 4px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 18px;
+    padding: 1px 4px;
     border-style: solid;
     background:
         linear-gradient(180deg, rgba(var(--node-rgb), 0.12), transparent 52%),
         rgba(0, 0, 0, 0.2);
+    cursor: pointer;
 }
 
 .parking-lane-slot-2.is-collapsed-slot .parking-lane-label {
@@ -3911,7 +3964,44 @@ h2 {
 }
 
 .parking-lane-slot-2.is-collapsed-slot .parking-empty-lane {
-    min-height: 22px;
+    display: none;
+}
+
+.parking-slot-expand {
+    width: 100%;
+    min-height: 16px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--node-highlight);
+    font-size: 0.78rem;
+    font-weight: 950;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.parking-lane-slot-2.is-collapsed-slot.is-expanded-slot,
+.parking-lane-slot-2.is-collapsed-slot.is-drag-over {
+    display: grid;
+    min-height: 48px;
+    padding: 4px;
+    border-style: dashed;
+}
+
+.parking-lane-slot-2.is-collapsed-slot.is-expanded-slot .parking-slot-expand,
+.parking-lane-slot-2.is-collapsed-slot.is-drag-over .parking-slot-expand {
+    display: none;
+}
+
+.parking-lane-slot-2.is-collapsed-slot.is-expanded-slot .parking-lane-label,
+.parking-lane-slot-2.is-collapsed-slot.is-drag-over .parking-lane-label {
+    display: block;
+}
+
+.parking-lane-slot-2.is-collapsed-slot.is-expanded-slot .parking-empty-lane,
+.parking-lane-slot-2.is-collapsed-slot.is-drag-over .parking-empty-lane {
+    display: grid;
+    min-height: 30px;
     color: var(--node-highlight);
     font-size: 0.62rem;
 }
@@ -3922,18 +4012,9 @@ h2 {
     box-shadow: inset 0 0 18px rgba(var(--node-rgb), 0.2);
 }
 
-.parking-lane-slot-2.is-collapsed-slot.is-drag-over {
-    min-height: 58px;
-    border-style: dashed;
-}
-
-.parking-lane-slot-2.is-collapsed-slot.is-drag-over .parking-empty-lane {
-    min-height: 42px;
-}
-
 .parking-empty-lane {
     display: grid;
-    min-height: 46px;
+    min-height: 34px;
     place-items: center;
     color: rgba(238, 246, 255, 0.42);
 }
