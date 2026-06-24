@@ -1693,18 +1693,25 @@ def review_reason_for_item(review_item, missions):
 
 
 def flight_number_mismatch_diagnostic(normalized, missions):
-    if normalized.get("mission_type") != "arrival":
+    mission_type = normalized.get("mission_type")
+    if mission_type != "arrival":
         return ""
     provider_key = _ups_numeric_core(normalized.get("provider_flight_number")) or _ups_numeric_core(
         normalized.get("call_sign")
     )
     if not provider_key:
         return ""
-    same_route_candidates = [
+    type_missions = [
         mission
         for mission in missions
-        if getattr(mission, "mission_type", None) == normalized.get("mission_type")
-        and _mission_matches_provider_route(mission, normalized)
+        if getattr(mission, "mission_type", None) == mission_type
+    ]
+    if _missions_matching_ups_key(type_missions, provider_key):
+        return ""
+    same_route_candidates = [
+        mission
+        for mission in type_missions
+        if _mission_matches_provider_route(mission, normalized)
         and _flight_key_mismatch_is_near(
             provider_key,
             _ups_numeric_core_from_values(*_mission_flight_identity_values(mission)),

@@ -897,6 +897,71 @@ class FlightApiImportTest(unittest.TestCase):
         )
         self.assertIsNone(mission.assigned_tail_number)
 
+    def test_arrival_exact_matches_suppress_same_origin_near_mismatch(self):
+        mission_753 = self._mission("arrival", "UPS0753", origin="DFW")
+        mission_755 = self._mission("arrival", "UPS0755", origin="DFW")
+        db.session.add_all([mission_753, mission_755])
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "arrivals": [
+                        self._api_flight(
+                            number="5X 753",
+                            call_sign="UPS753",
+                            origin="DFW",
+                            tail="N438UP",
+                        ),
+                        self._api_flight(
+                            number="5X 755",
+                            call_sign="UPS755",
+                            origin="DFW",
+                            tail="N755UP",
+                        ),
+                    ]
+                }
+            ),
+        )
+
+        matched_ids = {match["mission"].id for match in result["matched"]}
+        db.session.refresh(mission_753)
+        db.session.refresh(mission_755)
+        self.assertEqual(matched_ids, {mission_753.id, mission_755.id})
+        self.assertEqual(len(result["review_items"]), 0)
+        self.assertEqual(mission_753.assigned_tail_number, "N438UP")
+        self.assertEqual(mission_755.assigned_tail_number, "N755UP")
+
+    def test_arrival_exact_match_has_no_near_mismatch_diagnostic(self):
+        mission = self._mission("arrival", "UPS0753", origin="DFW")
+        db.session.add(mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "arrivals": [
+                        self._api_flight(
+                            number="5X 753",
+                            call_sign="UPS753",
+                            origin="DFW",
+                            tail="N438UP",
+                        )
+                    ]
+                }
+            ),
+        )
+
+        db.session.refresh(mission)
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(result["matched"][0]["mission"].id, mission.id)
+        self.assertEqual(len(result["review_items"]), 0)
+        self.assertEqual(mission.assigned_tail_number, "N438UP")
+
     def test_callsign_fallback_runs_only_when_provider_flight_is_missing(self):
         mission = self._mission("arrival", "UPS753")
         db.session.add(mission)
