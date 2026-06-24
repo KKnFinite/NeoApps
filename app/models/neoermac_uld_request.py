@@ -9,7 +9,8 @@ class NeoErmacUldRequest(db.Model):
         db.UniqueConstraint(
             "gateway_id",
             "door",
-            name="uq_neoermac_uld_requests_gateway_door",
+            "setup_needed",
+            name="uq_neoermac_uld_requests_gateway_door_setup",
         ),
         db.CheckConstraint("a2_count >= 0", name="ck_neoermac_uld_requests_a2_nonnegative"),
         db.CheckConstraint("a1_count >= 0", name="ck_neoermac_uld_requests_a1_nonnegative"),

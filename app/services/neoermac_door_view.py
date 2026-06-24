@@ -20,8 +20,8 @@ from app.services.sort_date_operations import mission_display_timing_data
 from app.services.uld_requests import (
     ULD_TYPES,
     active_on_the_way_event_views,
+    aggregate_uld_request_for_door,
     door_uld_state_payload,
-    get_uld_request,
     update_uld_request_from_form,
 )
 
@@ -358,7 +358,7 @@ def _door_pull_record(gateway, selected_door, destination, operation, create=Fal
 
 
 def _uld_request_for_door(gateway, selected_door):
-    return get_uld_request(gateway, selected_door)
+    return aggregate_uld_request_for_door(gateway, selected_door)
 
 
 def _normalize_tail(value):

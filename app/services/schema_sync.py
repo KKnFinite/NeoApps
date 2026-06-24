@@ -169,6 +169,7 @@ def sync_local_sqlite_schema(app):
                 text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
             )
 
+    _sync_uld_request_unique_constraint_sqlite(inspector, table_names)
     db.session.flush()
 
 
@@ -200,7 +201,111 @@ def sync_database_schema(app):
                 )
             )
 
+    _sync_uld_request_unique_constraint_postgres(table_names)
     db.session.flush()
+
+
+def _sync_uld_request_unique_constraint_sqlite(inspector, table_names):
+    table_name = "neoermac_uld_requests"
+    legacy_table = "neoermac_uld_requests_legacy"
+    all_tables = set(inspector.get_table_names())
+    if table_name not in all_tables and legacy_table not in all_tables:
+        return
+
+    if legacy_table in all_tables:
+        _restore_uld_request_sqlite_table_from_legacy(table_name, legacy_table)
+        return
+
+    unique_sets = {
+        tuple(constraint.get("column_names") or ())
+        for constraint in inspector.get_unique_constraints(table_name)
+    }
+    if ("gateway_id", "door", "setup_needed") in unique_sets:
+        return
+
+    from app.models import NeoErmacUldRequest
+
+    db.session.execute(text(f"ALTER TABLE {table_name} RENAME TO {legacy_table}"))
+    _drop_uld_request_sqlite_indexes()
+    NeoErmacUldRequest.__table__.create(bind=db.engine, checkfirst=True)
+    _copy_uld_request_legacy_rows()
+    db.session.execute(text(f"DROP TABLE {legacy_table}"))
+
+
+def _restore_uld_request_sqlite_table_from_legacy(table_name, legacy_table):
+    from app.models import NeoErmacUldRequest
+
+    _drop_uld_request_sqlite_indexes()
+    NeoErmacUldRequest.__table__.create(bind=db.engine, checkfirst=True)
+    _copy_uld_request_legacy_rows()
+    db.session.execute(text(f"DROP TABLE {legacy_table}"))
+
+
+def _drop_uld_request_sqlite_indexes():
+    db.session.execute(text("DROP INDEX IF EXISTS ix_neoermac_uld_requests_door"))
+    db.session.execute(text("DROP INDEX IF EXISTS ix_neoermac_uld_requests_gateway_id"))
+
+
+def _copy_uld_request_legacy_rows():
+    db.session.execute(
+        text(
+            """
+            INSERT OR IGNORE INTO neoermac_uld_requests (
+                id,
+                gateway_id,
+                door,
+                a2_count,
+                a1_count,
+                amp_count,
+                setup_needed,
+                created_at,
+                updated_at
+            )
+            SELECT
+                id,
+                gateway_id,
+                door,
+                a2_count,
+                a1_count,
+                amp_count,
+                setup_needed,
+                created_at,
+                updated_at
+            FROM neoermac_uld_requests_legacy
+            """
+        )
+    )
+
+
+def _sync_uld_request_unique_constraint_postgres(table_names):
+    if "neoermac_uld_requests" not in table_names:
+        return
+
+    db.session.execute(
+        text(
+            "ALTER TABLE neoermac_uld_requests "
+            "DROP CONSTRAINT IF EXISTS uq_neoermac_uld_requests_gateway_door"
+        )
+    )
+    db.session.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM pg_constraint
+                    WHERE conname = 'uq_neoermac_uld_requests_gateway_door_setup'
+                ) THEN
+                    ALTER TABLE neoermac_uld_requests
+                    ADD CONSTRAINT uq_neoermac_uld_requests_gateway_door_setup
+                    UNIQUE (gateway_id, door, setup_needed);
+                END IF;
+            END
+            $$;
+            """
+        )
+    )
 
 
 def _create_missing_application_tables(existing_table_names):

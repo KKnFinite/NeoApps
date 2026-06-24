@@ -159,15 +159,15 @@
             <div class="neoermac-uld-grid">
                 <label>
                     <span>A2</span>
-                    <input type="number" name="uld_a2_count" min="0" step="1" inputmode="numeric" value="{{ uld_request.a2_count if uld_request else 0 }}" data-uld-count="A2">
+                    <input type="number" name="uld_a2_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="A2">
                 </label>
                 <label>
                     <span>A1</span>
-                    <input type="number" name="uld_a1_count" min="0" step="1" inputmode="numeric" value="{{ uld_request.a1_count if uld_request else 0 }}" data-uld-count="A1">
+                    <input type="number" name="uld_a1_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="A1">
                 </label>
                 <label>
                     <span>AMP</span>
-                    <input type="number" name="uld_amp_count" min="0" step="1" inputmode="numeric" value="{{ uld_request.amp_count if uld_request else 0 }}" data-uld-count="AMP">
+                    <input type="number" name="uld_amp_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="AMP">
                 </label>
             </div>
             <label class="neoermac-door-toggle neoermac-setup-toggle">
@@ -179,14 +179,13 @@
                 <button class="neoermac-menu-link neoermac-menu-link-secondary neoermac-clear-request" type="submit" name="clear_uld_request" value="1">CLEAR REQUEST</button>
             </div>
         </form>
-        {% else %}
+        {% endif %}
         <div class="neoermac-uld-status">
             <span>A2 <strong data-uld-status-count="A2">{{ uld_request.a2_count if uld_request else 0 }}</strong></span>
             <span>A1 <strong data-uld-status-count="A1">{{ uld_request.a1_count if uld_request else 0 }}</strong></span>
             <span>AMP <strong data-uld-status-count="AMP">{{ uld_request.amp_count if uld_request else 0 }}</strong></span>
             <span data-uld-status-setup>{{ "Needed for setup" if uld_request and uld_request.setup_needed else "Setup priority off" }}</span>
         </div>
-        {% endif %}
     </section>
 
     <section class="neoermac-door-panel" aria-label="ULDs on the way" data-uld-events>
@@ -268,11 +267,6 @@
 
         uldTypes.forEach((uldType) => {
             const count = counts[uldType] ?? 0;
-            const input = root.querySelector(`[data-uld-count="${uldType}"]`);
-            if (input && document.activeElement !== input) {
-                input.value = count;
-            }
-
             const status = root.querySelector(`[data-uld-status-count="${uldType}"]`);
             if (status) {
                 status.textContent = count;
@@ -280,11 +274,6 @@
         });
 
         const setupNeeded = Boolean(request.setup_needed);
-        const setupInput = root.querySelector("[data-uld-setup]");
-        if (setupInput && document.activeElement !== setupInput) {
-            setupInput.checked = setupNeeded;
-        }
-
         const setupStatus = root.querySelector("[data-uld-status-setup]");
         if (setupStatus) {
             setupStatus.textContent = setupNeeded ? "Needed for setup" : "Setup priority off";

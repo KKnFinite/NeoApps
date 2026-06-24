@@ -26,6 +26,7 @@ from app.services.uld_requests import (
     active_on_the_way_events,
     active_request_views,
     send_uld_on_the_way,
+    update_uld_request,
 )
 
 
@@ -325,6 +326,60 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"NEEDED FOR SETUP", response.data)
         self.assertNotIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
 
+    def test_door_request_same_door_and_setup_combines_and_updates_timestamp(self):
+        first_time = datetime(2026, 6, 12, 12, 0)
+        second_time = datetime(2026, 6, 12, 12, 7)
+
+        update_uld_request(
+            self.gateway,
+            "D34",
+            {"A2": 1, "A1": 2, "AMP": 0},
+            setup_needed=True,
+            now=first_time,
+        )
+        update_uld_request(
+            self.gateway,
+            "D34",
+            {"A2": 3, "A1": 0, "AMP": 1},
+            setup_needed=True,
+            now=second_time,
+        )
+        db.session.commit()
+
+        request_record = NeoErmacUldRequest.query.filter_by(door="D34").one()
+        self.assertEqual(request_record.a2_count, 4)
+        self.assertEqual(request_record.a1_count, 2)
+        self.assertEqual(request_record.amp_count, 1)
+        self.assertTrue(request_record.setup_needed)
+        self.assertEqual(request_record.updated_at, second_time)
+
+    def test_door_request_same_door_different_setup_stays_separate(self):
+        update_uld_request(
+            self.gateway,
+            "D34",
+            {"A2": 1, "A1": 0, "AMP": 0},
+            setup_needed=False,
+            now=datetime(2026, 6, 12, 12, 0),
+        )
+        update_uld_request(
+            self.gateway,
+            "D34",
+            {"A2": 0, "A1": 1, "AMP": 0},
+            setup_needed=True,
+            now=datetime(2026, 6, 12, 12, 5),
+        )
+        db.session.commit()
+
+        self.assertEqual(NeoErmacUldRequest.query.filter_by(door="D34").count(), 2)
+        self.assertEqual(
+            NeoErmacUldRequest.query.filter_by(door="D34", setup_needed=False).one().a2_count,
+            1,
+        )
+        self.assertEqual(
+            NeoErmacUldRequest.query.filter_by(door="D34", setup_needed=True).one().a1_count,
+            1,
+        )
+
     def test_discharge_view_only_user_cannot_send_ulds(self):
         edit_rule = PermissionRule.query.filter_by(
             permission_key="neosektor.discharge.edit"
@@ -382,20 +437,18 @@ class NeoSektorRoutesTest(unittest.TestCase):
             json={"door": "D34", "uld_type": "AMP", "quantity": 2},
         )
 
-        saved = NeoErmacUldRequest.query.filter_by(door="D34").one()
         events = NeoSektorUldOnTheWayEvent.query.order_by(
             NeoSektorUldOnTheWayEvent.id.asc()
         ).all()
         self.assertEqual(a1_response.status_code, 200)
         self.assertEqual(amp_response.status_code, 200)
-        self.assertEqual(saved.a1_count, 0)
-        self.assertEqual(saved.amp_count, 0)
+        self.assertEqual(NeoErmacUldRequest.query.filter_by(door="D34").count(), 0)
         self.assertEqual(
             [(event.uld_type, event.quantity) for event in events],
             [("A1", 1), ("AMP", 2)],
         )
 
-    def test_discharge_send_quantity_clamps_to_requested_count(self):
+    def test_discharge_oversend_records_actual_sent_and_closes_request(self):
         self._add_uld_request("D34", a2_count=1)
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -406,9 +459,25 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["event"]["quantity"], 1)
-        self.assertEqual(NeoErmacUldRequest.query.filter_by(door="D34").one().a2_count, 0)
-        self.assertEqual(NeoSektorUldOnTheWayEvent.query.one().quantity, 1)
+        self.assertEqual(response.get_json()["event"]["quantity"], 5)
+        self.assertEqual(NeoErmacUldRequest.query.filter_by(door="D34").count(), 0)
+        self.assertEqual(NeoSektorUldOnTheWayEvent.query.one().quantity, 5)
+
+    def test_discharge_partial_send_keeps_remaining_request(self):
+        self._add_uld_request("D34", a2_count=3, a1_count=2)
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neosektor/discharge/send",
+            json={"door": "D34", "uld_type": "A2", "quantity": 1},
+        )
+
+        saved = NeoErmacUldRequest.query.filter_by(door="D34").one()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(saved.a2_count, 2)
+        self.assertEqual(saved.a1_count, 2)
+        self.assertEqual(saved.amp_count, 0)
 
     def test_each_discharge_send_creates_separate_expiring_event(self):
         base_time = datetime(2026, 6, 12, 12, 4)
@@ -461,6 +530,17 @@ class NeoSektorRoutesTest(unittest.TestCase):
         setup = self._add_uld_request("D1", a1_count=1, setup_needed=True)
         normal.updated_at = datetime(2026, 6, 12, 12, 0)
         setup.updated_at = datetime(2026, 6, 12, 12, 5)
+        db.session.commit()
+
+        views = active_request_views(self.gateway, now=datetime(2026, 6, 12, 12, 10))
+
+        self.assertEqual([row["door"] for row in views], ["D1", "D34"])
+
+    def test_discharge_sorting_uses_oldest_timestamp_within_priority_group(self):
+        newer = self._add_uld_request("D34", a2_count=1, setup_needed=False)
+        older = self._add_uld_request("D1", a1_count=1, setup_needed=False)
+        newer.updated_at = datetime(2026, 6, 12, 12, 5)
+        older.updated_at = datetime(2026, 6, 12, 12, 0)
         db.session.commit()
 
         views = active_request_views(self.gateway, now=datetime(2026, 6, 12, 12, 10))

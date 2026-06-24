@@ -330,6 +330,7 @@ def discharge_send():
             payload.get("door"),
             payload.get("uld_type"),
             payload.get("quantity"),
+            request_id=payload.get("request_id"),
         )
     except ValueError as exc:
         db.session.rollback()

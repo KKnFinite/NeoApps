@@ -679,17 +679,39 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 "uld_a2_count": "4",
                 "uld_a1_count": "0",
                 "uld_amp_count": "1",
+                "setup_needed": "on",
+            },
+            follow_redirects=False,
+        )
+        separate_response = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "save_uld_request",
+                "uld_a2_count": "1",
+                "uld_a1_count": "0",
+                "uld_amp_count": "0",
             },
             follow_redirects=False,
         )
 
-        saved = NeoErmacUldRequest.query.filter_by(door="D34").one()
+        setup_request = NeoErmacUldRequest.query.filter_by(
+            door="D34",
+            setup_needed=True,
+        ).one()
+        standard_request = NeoErmacUldRequest.query.filter_by(
+            door="D34",
+            setup_needed=False,
+        ).one()
         self.assertEqual(create_response.status_code, 302)
         self.assertEqual(update_response.status_code, 302)
-        self.assertEqual(saved.a2_count, 4)
-        self.assertEqual(saved.a1_count, 0)
-        self.assertEqual(saved.amp_count, 1)
-        self.assertFalse(saved.setup_needed)
+        self.assertEqual(separate_response.status_code, 302)
+        self.assertEqual(setup_request.a2_count, 6)
+        self.assertEqual(setup_request.a1_count, 1)
+        self.assertEqual(setup_request.amp_count, 4)
+        self.assertEqual(standard_request.a2_count, 1)
+        self.assertEqual(standard_request.a1_count, 0)
+        self.assertEqual(standard_request.amp_count, 0)
 
     def test_door_view_state_reflects_request_changes_from_another_update_cycle(self):
         request_record = NeoErmacUldRequest(
