@@ -99,8 +99,7 @@
                     </div>
 
                     <div class="neoermac-door-complete-summary" data-pull-complete-summary {% if not card.pulls_complete %}hidden{% endif %}>
-                        <span data-pull-complete-title>{% if card.pulls_complete %}PULLS COMPLETE{% endif %}</span>
-                        <strong data-pull-complete-destination>{% if card.pulls_complete %}{{ card.destination }} &middot; Parking {{ card.parking or "-" }}{% endif %}</strong>
+                        <span data-pull-complete-title>{% if card.pulls_complete %}{{ card.complete_title }}{% endif %}</span>
                         <strong data-pull-complete-lines>{% if card.pulls_complete %}{{ card.pull_summary }}{% endif %}</strong>
                         {% if can_edit %}
                         <button
@@ -414,8 +413,8 @@
     const pullKeys = ["pure", "first_mix", "second_mix"];
     const pullLabels = {
         pure: "PURE",
-        first_mix: "1ST",
-        second_mix: "2ND",
+        first_mix: "1Mix",
+        second_mix: "2Mix",
     };
     const pendingSaves = new WeakMap();
     const hhmmPattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
@@ -484,16 +483,14 @@
 
         const summary = card.querySelector("[data-pull-complete-summary]");
         const title = card.querySelector("[data-pull-complete-title]");
-        const destinationLine = card.querySelector("[data-pull-complete-destination]");
         const pullLine = card.querySelector("[data-pull-complete-lines]");
         if (title) {
-            title.textContent = cardData.pulls_complete ? "PULLS COMPLETE" : "";
-        }
-        if (destinationLine) {
-            destinationLine.textContent = `${cardData.destination || card.dataset.doorDestination || "-"} \u00B7 Parking ${cardData.parking || "-"}`;
+            title.textContent = cardData.pulls_complete
+                ? (cardData.complete_title || `${cardData.destination || card.dataset.doorDestination || "-"} ${cardData.parking || "-"} COMPLETE`)
+                : "";
         }
         if (pullLine) {
-            pullLine.textContent = summaryText(cardData);
+            pullLine.textContent = cardData.pull_summary || summaryText(cardData);
         }
 
         if (cardData.pulls_complete) {

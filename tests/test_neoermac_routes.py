@@ -750,9 +750,17 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"is-pulls-complete is-pulls-collapsed", response.data)
-        self.assertIn(b"PULLS COMPLETE", response.data)
-        self.assertIn(b"SDF &middot; Parking A01", response.data)
-        self.assertIn("PURE 14:05 · 1ST 14:07 · 2ND NO".encode(), response.data)
+        summary_match = re.search(
+            rb'<div class="neoermac-door-complete-summary"[^>]*>.*?</div>',
+            response.data,
+            re.S,
+        )
+        self.assertIsNotNone(summary_match)
+        summary_html = summary_match.group(0)
+        self.assertIn(b"SDF A01 COMPLETE", summary_html)
+        self.assertNotIn(b"PULLS COMPLETE", summary_html)
+        self.assertNotIn(b"Parking", summary_html)
+        self.assertIn("PURE 14:05 · 1Mix 14:07 · 2Mix NO".encode(), summary_html)
         self.assertIn(b"EDIT PULLS", response.data)
         self.assertIn(b"data-pull-edit-toggle", response.data)
 
@@ -777,7 +785,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(b"is-pulls-complete", rendered_html)
-        self.assertNotIn(b"PULLS COMPLETE", rendered_html)
+        self.assertNotIn(b"SDF - COMPLETE", rendered_html)
 
     def test_door_view_edit_user_can_create_and_update_uld_requested_counts(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")

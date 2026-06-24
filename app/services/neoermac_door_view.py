@@ -201,6 +201,7 @@ def _pull_card_payload(gateway, selected_door, destination, operation):
                 "actual": card["actual"],
                 "no_pull": card["no_pull"],
                 "pulls_complete": card["pulls_complete"],
+                "complete_title": card["complete_title"],
                 "pull_summary": card["pull_summary"],
             }
     raise ValueError(f"{destination} is not assigned to {selected_door}.")
@@ -279,6 +280,10 @@ def _destination_cards_for_door(gateway, selected_door, operation):
                 "actual": actual,
                 "no_pull": no_pull,
                 "pulls_complete": _pulls_complete(actual, no_pull),
+                "complete_title": _complete_title(
+                    destination,
+                    _parking_for_mission(mission, parking_by_tail),
+                ),
                 "pull_summary": _pull_summary(actual, no_pull),
             }
         )
@@ -565,12 +570,23 @@ def _pulls_complete(actual, no_pull):
 
 
 def _pull_summary(actual, no_pull):
+    labels = {
+        "pure": "PURE",
+        "first_mix": "1Mix",
+        "second_mix": "2Mix",
+    }
     parts = []
     for field in PULL_FIELDS:
         key = field["key"]
         value = "NO" if no_pull[key] else (actual[key] or "-")
-        parts.append(f"{field['short_label']} {value}")
+        parts.append(f"{labels[key]} {value}")
     return " · ".join(parts)
+
+
+def _complete_title(destination, parking):
+    destination = normalize_destination(destination) or "-"
+    parking = str(parking or "").strip().upper() or "-"
+    return f"{destination} {parking} COMPLETE"
 
 
 def _int_value(value, default=0):

@@ -2385,28 +2385,23 @@ a {
 }
 
 .neoermac-door-complete-summary span {
-    color: var(--node-ermac-secondary);
-    font-size: 0.62rem;
+    color: #eef6ff;
+    font-size: 0.72rem;
     font-weight: 950;
     letter-spacing: 0.08em;
     text-transform: uppercase;
 }
 
 .neoermac-door-complete-summary strong {
-    color: #eef6ff;
-    font-size: 0.82rem;
+    color: #d8e5f2;
+    font-size: 0.86rem;
     font-weight: 950;
     line-height: 1.2;
 }
 
-.neoermac-door-complete-summary strong + strong {
-    color: #ffffff;
-    font-size: 0.88rem;
-}
-
 .neoermac-door-edit-pulls {
     grid-column: 2;
-    grid-row: 1 / span 3;
+    grid-row: 1 / span 2;
     align-self: stretch;
     min-height: 38px;
     padding-inline: 10px;
