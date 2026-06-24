@@ -435,6 +435,9 @@
                     <td>{{ row.matched_api_tail or "-" }}</td>
                     <td>
                         {{ row.reason or "-" }}
+                        {% if row.identity_warning %}
+                        <br><span class="muted">{{ row.identity_warning }}</span>
+                        {% endif %}
                         {% if row.tail_update_reason %}
                         <br><span class="muted">{{ row.tail_update_reason }}</span>
                         {% endif %}
@@ -488,6 +491,9 @@
                         MATCHED
                         {% else %}
                         {{ row.unmatched_reason or "-" }}
+                        {% endif %}
+                        {% if row.identity_warning %}
+                        <br><span class="muted">{{ row.identity_warning }}</span>
                         {% endif %}
                         {% if row.tail_update_reason %}
                         <br><span class="muted">{{ row.tail_update_reason }}</span>
@@ -544,6 +550,9 @@
                         {% if row.match_diagnostic %}
                         <br><span class="muted">{{ row.match_diagnostic|upper }}</span>
                         {% endif %}
+                        {% if api.identity_warning %}
+                        <br><span class="muted">{{ api.identity_warning|upper }}</span>
+                        {% endif %}
                     </td>
                     <td>{{ row.display_tail or "-" }}</td>
                     <td>{{ row.display_model or "-" }}</td>
@@ -593,7 +602,12 @@
                     <td>{{ item.tail_number or "-" }}</td>
                     <td>{{ item.aircraft_model or "-" }}</td>
                     <td>{{ item.api_status or "-" }}</td>
-                    <td>{{ item.review_reason|default("-", true) }}</td>
+                    <td>
+                        {{ item.review_reason|default("-", true) }}
+                        {% if item.identity_warning %}
+                        <br><span class="muted">{{ item.identity_warning }}</span>
+                        {% endif %}
+                    </td>
                     <td class="table-actions">
                         {% if import_result and import_result.replay_preview %}
                         <span class="muted">PREVIEW ONLY</span>

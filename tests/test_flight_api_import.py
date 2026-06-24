@@ -810,7 +810,7 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(len(result["review_items"]), 0)
         self.assertEqual(result["non_ups_ignored"], 1)
 
-    def test_callsign_can_match_when_provider_flight_number_differs(self):
+    def test_provider_number_blocks_callsign_match_when_numbers_differ(self):
         mission = self._mission("arrival", "673")
         db.session.add(mission)
         db.session.commit()
@@ -827,11 +827,15 @@ class FlightApiImportTest(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(len(result["matched"]), 1)
-        self.assertEqual(result["matched"][0]["mission"].id, mission.id)
-        self.assertEqual(len(result["review_items"]), 0)
+        self.assertEqual(len(result["matched"]), 0)
+        self.assertEqual(len(result["review_items"]), 1)
+        self.assertEqual(result["review_items"][0].review_reason, "no matching mission")
+        self.assertEqual(
+            result["review_items"][0].identity_warning,
+            "Provider number/callsign mismatch",
+        )
 
-    def test_callsign_fallback_runs_when_provider_flight_has_no_match(self):
+    def test_callsign_fallback_runs_only_when_provider_flight_is_missing(self):
         mission = self._mission("arrival", "UPS753")
         db.session.add(mission)
         db.session.commit()
@@ -842,7 +846,7 @@ class FlightApiImportTest(unittest.TestCase):
             client=FakeFlightClient(
                 {
                     "arrivals": [
-                        self._api_flight(number="5X755", call_sign="UPS753")
+                        self._api_flight(number="", call_sign="UPS753")
                     ]
                 }
             ),
@@ -850,9 +854,12 @@ class FlightApiImportTest(unittest.TestCase):
 
         self.assertEqual(len(result["matched"]), 1)
         self.assertEqual(result["matched"][0]["mission"].id, mission.id)
-        self.assertEqual(result["matched"][0]["api_flight"]["normalized_cores_tried"], ["0755", "0753"])
+        self.assertEqual(
+            result["matched"][0]["api_flight"]["normalized_cores_tried"],
+            ["0753"],
+        )
 
-    def test_callsign_wins_when_provider_flight_number_matches_other_mission(self):
+    def test_provider_number_wins_when_callsign_matches_other_mission(self):
         provider_mission = self._mission("arrival", "0755")
         callsign_mission = self._mission("arrival", "UPS753")
         db.session.add_all([provider_mission, callsign_mission])
@@ -871,10 +878,14 @@ class FlightApiImportTest(unittest.TestCase):
         )
 
         self.assertEqual(len(result["matched"]), 1)
-        self.assertEqual(result["matched"][0]["mission"].id, callsign_mission.id)
+        self.assertEqual(result["matched"][0]["mission"].id, provider_mission.id)
+        self.assertEqual(
+            result["matched"][0]["api_flight"]["identity_warning"],
+            "Provider number/callsign mismatch",
+        )
         self.assertEqual(len(result["review_items"]), 0)
 
-    def test_callsign_priority_for_1075_when_provider_flight_differs(self):
+    def test_provider_priority_for_1075_when_callsign_differs(self):
         provider_mission = self._mission("arrival", "1075")
         callsign_mission = self._mission("arrival", "UPS1085")
         db.session.add_all([provider_mission, callsign_mission])
@@ -893,10 +904,14 @@ class FlightApiImportTest(unittest.TestCase):
         )
 
         self.assertEqual(len(result["matched"]), 1)
-        self.assertEqual(result["matched"][0]["mission"].id, callsign_mission.id)
+        self.assertEqual(result["matched"][0]["mission"].id, provider_mission.id)
+        self.assertEqual(
+            result["matched"][0]["api_flight"]["identity_warning"],
+            "Provider number/callsign mismatch",
+        )
         self.assertEqual(len(result["review_items"]), 0)
 
-    def test_callsign_priority_for_616_when_provider_flight_differs(self):
+    def test_provider_priority_for_616_when_callsign_differs(self):
         provider_mission = self._mission("arrival", "UPS0616")
         callsign_mission = self._mission("arrival", "UPS0612")
         db.session.add_all([provider_mission, callsign_mission])
@@ -915,10 +930,14 @@ class FlightApiImportTest(unittest.TestCase):
         )
 
         self.assertEqual(len(result["matched"]), 1)
-        self.assertEqual(result["matched"][0]["mission"].id, callsign_mission.id)
+        self.assertEqual(result["matched"][0]["mission"].id, provider_mission.id)
+        self.assertEqual(
+            result["matched"][0]["api_flight"]["identity_warning"],
+            "Provider number/callsign mismatch",
+        )
         self.assertEqual(len(result["review_items"]), 0)
 
-    def test_callsign_priority_for_755_when_provider_flight_differs(self):
+    def test_provider_priority_for_755_when_callsign_differs(self):
         provider_mission = self._mission("arrival", "UPS0755")
         callsign_mission = self._mission("arrival", "UPS0753")
         db.session.add_all([provider_mission, callsign_mission])
@@ -937,7 +956,11 @@ class FlightApiImportTest(unittest.TestCase):
         )
 
         self.assertEqual(len(result["matched"]), 1)
-        self.assertEqual(result["matched"][0]["mission"].id, callsign_mission.id)
+        self.assertEqual(result["matched"][0]["mission"].id, provider_mission.id)
+        self.assertEqual(
+            result["matched"][0]["api_flight"]["identity_warning"],
+            "Provider number/callsign mismatch",
+        )
         self.assertEqual(len(result["review_items"]), 0)
 
     def test_duplicate_callsign_key_stays_unmatched(self):
@@ -959,9 +982,9 @@ class FlightApiImportTest(unittest.TestCase):
 
         self.assertEqual(len(result["matched"]), 0)
         self.assertEqual(len(result["review_items"]), 1)
-        self.assertEqual(result["review_items"][0].review_reason, "ambiguous callsign match")
+        self.assertEqual(result["review_items"][0].review_reason, "ambiguous flight number match")
         pending_items = pending_review_items_for_operation(self.operation)
-        self.assertEqual(pending_items[0].review_reason, "ambiguous callsign match")
+        self.assertEqual(pending_items[0].review_reason, "ambiguous flight number match")
 
     def test_duplicate_callsign_fallback_key_stays_unmatched(self):
         db.session.add_all(
@@ -1419,7 +1442,7 @@ class FlightApiImportTest(unittest.TestCase):
                     "departures": [
                         self._api_flight(
                             mission_type="departure",
-                            number="5X999",
+                            number="",
                             call_sign="UPS637",
                             destination="DFW",
                             tail="N637UP",
@@ -1434,6 +1457,70 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(result["matched"][0]["match_diagnostic"], "matched by callsign")
         self.assertEqual(mission.assigned_tail_number, "N637UP")
         self.assertEqual(len(result["review_items"]), 0)
+
+    def test_departure_provider_number_blocks_disagreeing_callsign_match(self):
+        provider_mission = self._mission("departure", "UPS0616", destination="DFW")
+        callsign_mission = self._mission("departure", "UPS0612", destination="DFW")
+        db.session.add_all([provider_mission, callsign_mission])
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "departures": [
+                        self._api_flight(
+                            mission_type="departure",
+                            number="5X616",
+                            call_sign="UPS612",
+                            destination="DFW",
+                            tail="N616UP",
+                        )
+                    ]
+                }
+            ),
+        )
+
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(result["matched"][0]["mission"].id, provider_mission.id)
+        self.assertEqual(provider_mission.assigned_tail_number, "N616UP")
+        self.assertIsNone(callsign_mission.assigned_tail_number)
+        self.assertEqual(
+            result["matched"][0]["api_flight"]["identity_warning"],
+            "Provider number/callsign mismatch",
+        )
+
+    def test_departure_provider_number_without_match_does_not_fallback_to_callsign(self):
+        callsign_mission = self._mission("departure", "UPS0612", destination="DFW")
+        db.session.add(callsign_mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "departures": [
+                        self._api_flight(
+                            mission_type="departure",
+                            number="5X616",
+                            call_sign="UPS612",
+                            destination="DFW",
+                            tail="N616UP",
+                        )
+                    ]
+                }
+            ),
+        )
+
+        self.assertEqual(len(result["matched"]), 0)
+        self.assertIsNone(callsign_mission.assigned_tail_number)
+        self.assertEqual(result["review_items"][0].review_reason, "no matching mission")
+        self.assertEqual(
+            result["review_items"][0].identity_warning,
+            "Provider number/callsign mismatch",
+        )
 
     def test_departure_match_does_not_overwrite_master_or_manual_tail(self):
         master_row = MasterFlightSchedule(
@@ -1684,8 +1771,8 @@ class FlightApiImportTest(unittest.TestCase):
                     "departures": [
                         self._api_flight(
                             mission_type="departure",
-                            number="5X999",
-                            call_sign="UPS999",
+                            number="",
+                            call_sign="",
                             destination="SDF",
                             revised_time="2026-06-01T02:10:00",
                             tail="N910UP",
@@ -1730,8 +1817,8 @@ class FlightApiImportTest(unittest.TestCase):
                     "departures": [
                         self._api_flight(
                             mission_type="departure",
-                            number="5X999",
-                            call_sign="UPS999",
+                            number="",
+                            call_sign="",
                             destination="SDF",
                             revised_time="2026-06-01T02:10:00",
                         )
@@ -2158,7 +2245,7 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(db.session.get(FlightApiReviewItem, existing_item.id).review_status, "pending")
         self.assertEqual(pending_review_items_for_operation(self.operation)[0].flight_number, "5X333")
 
-    def test_provider_flight_fallback_only_when_callsign_has_no_match(self):
+    def test_provider_flight_number_is_primary_when_callsign_has_no_match(self):
         mission = self._mission("arrival", "UPS1075")
         db.session.add(mission)
         db.session.commit()
@@ -2175,12 +2262,16 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(result["matched"][0]["mission"].id, mission.id)
         self.assertEqual(
             result["matched"][0]["match_diagnostic"],
-            "matched by provider flight fallback",
+            "matched by provider flight",
+        )
+        self.assertEqual(
+            result["matched"][0]["api_flight"]["identity_warning"],
+            "Provider number/callsign mismatch",
         )
         self.assertEqual(len(result["review_items"]), 0)
         self.assertEqual(pending_review_items_for_operation(self.operation), [])
 
-    def test_provider_flight_number_fallback_with_blank_callsign(self):
+    def test_provider_flight_number_matches_with_blank_callsign(self):
         mission = self._mission("arrival", "UPS0616")
         db.session.add(mission)
         db.session.commit()
@@ -2269,13 +2360,13 @@ class FlightApiImportTest(unittest.TestCase):
                 os.environ["AERODATABOX_API_KEY"] = previous
 
         matched_ids = {row["mission"].id for row in result["matched"]}
-        self.assertIn(callsign_1085.id, matched_ids)
-        self.assertIn(callsign_612.id, matched_ids)
-        self.assertIn(callsign_753.id, matched_ids)
+        self.assertIn(provider_1075.id, matched_ids)
+        self.assertIn(provider_616.id, matched_ids)
+        self.assertIn(provider_755.id, matched_ids)
         self.assertIn(departure.id, matched_ids)
-        self.assertNotIn(provider_1075.id, matched_ids)
-        self.assertNotIn(provider_616.id, matched_ids)
-        self.assertNotIn(provider_755.id, matched_ids)
+        self.assertNotIn(callsign_1085.id, matched_ids)
+        self.assertNotIn(callsign_612.id, matched_ids)
+        self.assertNotIn(callsign_753.id, matched_ids)
         self.assertEqual(result["raw_arrivals_count"], 7)
         self.assertEqual(result["raw_departures_count"], 1)
         self.assertEqual(result["ups_arrivals_count"], 6)
@@ -2294,17 +2385,24 @@ class FlightApiImportTest(unittest.TestCase):
             "pending",
         )
         db.session.refresh(callsign_1085)
+        db.session.refresh(provider_1075)
         db.session.refresh(master_row)
         self.assertEqual(callsign_1085.eta_datetime_utc, datetime(2026, 6, 19, 4, 0))
         self.assertEqual(callsign_1085.arrival_status, "arrived")
         self.assertIsNone(callsign_1085.assigned_tail_number)
+        self.assertIsNone(provider_1075.eta_datetime_utc)
+        self.assertIsNone(provider_1075.assigned_tail_number)
         self.assertEqual(master_row.flight_number, "UPS1085")
-        replay_1085 = next(
-            row for row in result["matched"] if row["mission"].id == callsign_1085.id
+        replay_1075 = next(
+            row for row in result["matched"] if row["mission"].id == provider_1075.id
         )
-        self.assertEqual(replay_1085["match_reason"], "matched by callsign")
+        self.assertEqual(replay_1075["match_reason"], "matched by provider flight")
         self.assertEqual(
-            flight_api_operational_time_utc(replay_1085["api_flight"], self.settings),
+            replay_1075["api_flight"]["identity_warning"],
+            "Provider number/callsign mismatch",
+        )
+        self.assertEqual(
+            flight_api_operational_time_utc(replay_1075["api_flight"], self.settings),
             datetime(2026, 6, 19, 5, 16),
         )
 
@@ -3263,7 +3361,7 @@ class FlightApiTestPageTest(unittest.TestCase):
             mission_type="arrival",
             mission_source="master",
             wave="1",
-            flight_number="UPS1085",
+            flight_number="UPS1075",
             origin="EWR",
             destination="RFD",
             timezone="America/Chicago",
@@ -3338,7 +3436,8 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"PREVIEW ONLY", response.data)
         self.assertIn(b"UPS1085", response.data)
         self.assertIn(b"5X1075", response.data)
-        self.assertIn(b"matched by callsign", response.data)
+        self.assertIn(b"matched by provider flight", response.data)
+        self.assertIn(b"PROVIDER NUMBER/CALLSIGN MISMATCH", response.data)
         self.assertIn(b"00:14 Local Jun 19", response.data)
         self.assertIn(b"PROVIDER 00:04 Local Jun 19", response.data)
         self.assertIn(b"UPS999", response.data)

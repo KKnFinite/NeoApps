@@ -1042,6 +1042,8 @@ def normalize_api_flight(api_flight, operation=None, gateway=None):
     mission_type = _mission_type(api_flight)
     provider_flight_number = _api_declared_flight_number(api_flight)
     call_sign = _api_call_sign(api_flight)
+    provider_key = _ups_numeric_core(provider_flight_number)
+    call_sign_key = _ups_numeric_core(call_sign)
     flight_number = provider_flight_number or call_sign
     departure = _as_dict(api_flight.get("departure"))
     arrival = _as_dict(api_flight.get("arrival"))
@@ -1064,6 +1066,13 @@ def normalize_api_flight(api_flight, operation=None, gateway=None):
         "flight_variants": _flight_number_variants(flight_number, call_sign),
         "call_sign": call_sign,
         "provider_flight_number": provider_flight_number,
+        "provider_flight_key": provider_key,
+        "call_sign_key": call_sign_key,
+        "identity_warning": (
+            "Provider number/callsign mismatch"
+            if provider_key and call_sign_key and provider_key != call_sign_key
+            else ""
+        ),
         "normalized_cores_tried": _ups_numeric_cores_from_values(
             provider_flight_number,
             call_sign,
@@ -1105,28 +1114,19 @@ def match_api_flight_to_mission_with_reason(normalized, missions):
 
     provider_key = _ups_numeric_core(normalized.get("provider_flight_number"))
     call_sign_key = _ups_numeric_core(normalized.get("call_sign"))
-    call_sign_is_ups = _clean_flight_number(normalized.get("call_sign")).startswith("UPS")
 
     if not provider_key and not call_sign_key:
         return None, "unsupported/blank flight identity"
-
-    if call_sign_is_ups and call_sign_key:
-        call_sign_matches = _missions_matching_ups_key(candidates, call_sign_key)
-        if len(call_sign_matches) > 1:
-            return None, "ambiguous callsign match"
-        if len(call_sign_matches) == 1:
-            return call_sign_matches[0], "matched by callsign"
 
     if provider_key:
         provider_matches = _missions_matching_ups_key(candidates, provider_key)
         if len(provider_matches) > 1:
             return None, "ambiguous flight number match"
         if len(provider_matches) == 1:
-            if call_sign_key and call_sign_key != provider_key:
-                return provider_matches[0], "matched by provider flight fallback"
             return provider_matches[0], "matched by provider flight"
+        return None, "no matching mission"
 
-    if not call_sign_is_ups and call_sign_key:
+    if call_sign_key:
         call_sign_matches = _missions_matching_ups_key(candidates, call_sign_key)
         if len(call_sign_matches) > 1:
             return None, "ambiguous callsign match"
@@ -1150,6 +1150,7 @@ def _match_api_departure_to_mission_with_reason(normalized, candidates):
                 normalized,
                 "matched by provider flight",
             )
+        return None, "no matching mission"
 
     if call_sign_key:
         call_sign_matches = _missions_matching_ups_key(candidates, call_sign_key)
@@ -1251,10 +1252,13 @@ def departure_audit_candidate_mission(normalized, missions):
     ]
     provider_key = _ups_numeric_core(normalized.get("provider_flight_number"))
     call_sign_key = _ups_numeric_core(normalized.get("call_sign"))
-    for match_key in (provider_key, call_sign_key):
-        if not match_key:
-            continue
-        matches = _missions_matching_ups_key(candidates, match_key)
+    if provider_key:
+        matches = _missions_matching_ups_key(candidates, provider_key)
+        if len(matches) == 1:
+            return matches[0]
+        return None
+    if call_sign_key:
+        matches = _missions_matching_ups_key(candidates, call_sign_key)
         if len(matches) == 1:
             return matches[0]
     fallback_matches = _departure_destination_time_matches(candidates, normalized)
@@ -1286,7 +1290,7 @@ def build_departure_match_audit(missions, ups_departure_candidates, diagnostics=
         key_candidates = [
             candidate
             for candidate in ups_departure_candidates
-            if current_key and current_key in (candidate.get("normalized_cores_tried") or [])
+            if _departure_audit_candidate_uses_current_key(candidate, current_key)
         ]
         api_candidate = matched_api or (key_candidates[0] if key_candidates else None)
         if matched_api:
@@ -1319,6 +1323,9 @@ def build_departure_match_audit(missions, ups_departure_candidates, diagnostics=
                     flight_api_provider_time_utc(api_candidate) if api_candidate else None
                 ),
                 "matched_api_tail": api_candidate.get("tail_number") if api_candidate else None,
+                "identity_warning": (
+                    api_candidate.get("identity_warning") if api_candidate else None
+                ),
                 "reason": reason,
                 "minute_difference": (
                     departure_time_difference_minutes(mission, api_candidate)
@@ -1341,6 +1348,16 @@ def build_departure_match_audit(missions, ups_departure_candidates, diagnostics=
     return rows
 
 
+def _departure_audit_candidate_uses_current_key(candidate, current_key):
+    if not current_key:
+        return False
+    provider_key = _ups_numeric_core(candidate.get("provider_flight_number"))
+    if provider_key:
+        return current_key == provider_key
+    call_sign_key = _ups_numeric_core(candidate.get("call_sign"))
+    return bool(call_sign_key and current_key == call_sign_key)
+
+
 def api_ups_departure_audit_row(normalized):
     return {
         "provider_flight_number": normalized.get("provider_flight_number")
@@ -1358,6 +1375,7 @@ def api_ups_departure_audit_row(normalized):
             "" if normalized.get("matched_mission_id") else departure_audit_reason(normalized)
         ),
         "tail_update_reason": normalized.get("tail_update_diagnostic"),
+        "identity_warning": normalized.get("identity_warning"),
         "minute_difference": normalized.get("departure_time_difference_minutes"),
         "time_tolerance_minutes": DEPARTURE_LOOKAHEAD_MATCH_WINDOW_MINUTES,
         "inside_departure_match_window": normalized.get("inside_departure_match_window"),
@@ -1494,6 +1512,7 @@ def upsert_review_item(gateway, operation, normalized):
     item.aircraft_model = normalized["aircraft_model"]
     item.api_status = normalized["api_status_raw"]
     item.raw_payload = json.dumps(normalized["raw"], sort_keys=True, default=str)
+    item.identity_warning = normalized.get("identity_warning")
     item.review_reason = normalized.get("unmatched_reason") or "no matching mission"
     item.normalized_cores_tried = normalized_cores_display(
         normalized.get("normalized_cores_tried")
@@ -1529,6 +1548,7 @@ def preview_review_item_for_normalized(gateway, operation, normalized):
         "tail_number": normalized["tail_number"],
         "aircraft_model": normalized["aircraft_model"],
         "api_status": normalized["api_status_raw"],
+        "identity_warning": normalized.get("identity_warning"),
         "review_reason": normalized.get("unmatched_reason") or "no matching mission",
         "normalized_cores_tried": normalized_cores_display(
             normalized.get("normalized_cores_tried")
