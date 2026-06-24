@@ -285,6 +285,9 @@ def dashboard_context(filters=None):
     selected_sort = _resolve_optional_unit(filters.get("sort_id"), "sort")
     selected_operation = _resolve_optional_unit(filters.get("operation_id"), "operation")
     selected_department = _resolve_optional_unit(filters.get("department_id"), "department")
+    selected_work_area = _resolve_optional_unit(filters.get("work_area_id"), "work_area")
+    if selected_work_area and selected_department is None:
+        selected_department = selected_work_area.parent
     if selected_department and selected_operation is None:
         selected_operation = selected_department.parent
     if selected_operation and selected_sort is None:
@@ -306,6 +309,8 @@ def dashboard_context(filters=None):
         if selected_operation and (not operation or operation.id != selected_operation.id):
             continue
         if selected_department and (not department or department.id != selected_department.id):
+            continue
+        if selected_work_area and work_area.id != selected_work_area.id:
             continue
         path = unit_path(work_area)
         if search and search not in f"{work_area.name} {path}".lower():
@@ -375,6 +380,13 @@ def dashboard_context(filters=None):
         "total_open": sum(card["open"] for card in cards),
         "understaffed_work_areas": sum(1 for card in cards if card["open"] > 0),
         "missing_leadership_work_areas": sum(1 for card in cards if card["has_missing_leadership"]),
+        "default_required_work_areas": sum(1 for card in cards if not card["required_configured"]),
+        "most_understaffed": sorted(
+            [card for card in cards if card["open"] > 0],
+            key=lambda row: (-row["open"], row["unit"].name.lower(), row["unit"].id),
+        )[:3],
+        "missing_leadership": [card for card in cards if card["has_missing_leadership"]][:3],
+        "default_required": [card for card in cards if not card["required_configured"]][:3],
     }
 
     return {
@@ -386,10 +398,12 @@ def dashboard_context(filters=None):
         "sorts": units_by_type("sort"),
         "operations": operations,
         "departments": departments,
+        "work_areas": _required_headcount_work_areas(selected_department, selected_operation),
         "filters": {
             "sort_id": str(selected_sort.id) if selected_sort else "",
             "operation_id": str(selected_operation.id) if selected_operation else "",
             "department_id": str(selected_department.id) if selected_department else "",
+            "work_area_id": str(selected_work_area.id) if selected_work_area else "",
             "search": filters.get("search", ""),
             "understaffed_only": "1" if understaffed_only else "",
             "missing_leadership_only": "1" if missing_leadership_only else "",
@@ -416,6 +430,94 @@ def _board_departments(selected_operation, operations):
         .order_by(StaffingUnit.display_order, StaffingUnit.name)
         .all()
     )
+
+
+def required_headcount_context(filters=None):
+    filters = filters or {}
+    selected_sort = _resolve_optional_unit(filters.get("sort_id"), "sort")
+    selected_operation = _resolve_optional_unit(filters.get("operation_id"), "operation")
+    selected_department = _resolve_optional_unit(filters.get("department_id"), "department")
+    selected_work_area = _resolve_optional_unit(filters.get("work_area_id"), "work_area")
+    if selected_work_area and selected_department is None:
+        selected_department = selected_work_area.parent
+    if selected_department and selected_operation is None:
+        selected_operation = selected_department.parent
+    if selected_operation and selected_sort is None:
+        selected_sort = selected_operation.parent
+
+    operations = _board_operations(selected_sort)
+    departments = _board_departments(selected_operation, operations)
+    assigned_by_work_area = _board_assigned_counts()
+    rows = []
+    for work_area in StaffingUnit.query.filter_by(unit_type="work_area", active=True).all():
+        department, operation, sort = _board_parent_chain(work_area)
+        if selected_sort and (not sort or sort.id != selected_sort.id):
+            continue
+        if selected_operation and (not operation or operation.id != selected_operation.id):
+            continue
+        if selected_department and (not department or department.id != selected_department.id):
+            continue
+        if selected_work_area and work_area.id != selected_work_area.id:
+            continue
+        assigned = int(assigned_by_work_area.get(work_area.id, 0) or 0)
+        configured = work_area.required_headcount is not None
+        required = int(work_area.required_headcount if configured else assigned)
+        rows.append(
+            {
+                "unit": work_area,
+                "sort": sort,
+                "operation": operation,
+                "department": department,
+                "path": unit_path(work_area),
+                "configured": configured,
+                "required": required,
+                "assigned": assigned,
+                "difference": assigned - required,
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            row["sort"].display_order if row["sort"] else 0,
+            row["sort"].name.lower() if row["sort"] else "",
+            row["operation"].display_order if row["operation"] else 0,
+            row["operation"].name.lower() if row["operation"] else "",
+            row["department"].display_order if row["department"] else 0,
+            row["department"].name.lower() if row["department"] else "",
+            row["unit"].display_order,
+            row["unit"].name.lower(),
+            row["unit"].id,
+        )
+    )
+    return {
+        "rows": rows,
+        "sorts": units_by_type("sort"),
+        "operations": operations,
+        "departments": departments,
+        "work_areas": _required_headcount_work_areas(selected_department, selected_operation),
+        "filters": {
+            "sort_id": str(selected_sort.id) if selected_sort else "",
+            "operation_id": str(selected_operation.id) if selected_operation else "",
+            "department_id": str(selected_department.id) if selected_department else "",
+            "work_area_id": str(selected_work_area.id) if selected_work_area else "",
+        },
+    }
+
+
+def update_required_headcount(work_area, raw_required_headcount):
+    if work_area.unit_type != "work_area":
+        raise ValueError("Required headcount can only be set for Work Areas.")
+    work_area.required_headcount = _parse_optional_int(raw_required_headcount, minimum=0)
+    db.session.flush()
+    return work_area
+
+
+def _required_headcount_work_areas(selected_department, selected_operation):
+    query = StaffingUnit.query.filter_by(unit_type="work_area", active=True)
+    if selected_department:
+        query = query.filter(StaffingUnit.parent_id == selected_department.id)
+    elif selected_operation:
+        query = query.filter(StaffingUnit.id.in_(work_area_ids_under(selected_operation) or {-1}))
+    return query.order_by(StaffingUnit.display_order, StaffingUnit.name).all()
 
 
 def _board_assigned_counts():

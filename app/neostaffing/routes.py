@@ -40,6 +40,7 @@ def index():
             "sort_id": request.args.get("sort_id", "").strip(),
             "operation_id": request.args.get("operation_id", "").strip(),
             "department_id": request.args.get("department_id", "").strip(),
+            "work_area_id": request.args.get("work_area_id", "").strip(),
             "search": request.args.get("search", "").strip(),
             "understaffed_only": request.args.get("understaffed_only", "").strip(),
             "missing_leadership_only": request.args.get("missing_leadership_only", "").strip(),
@@ -200,6 +201,47 @@ def delete_unit(unit_id):
         "Staffing unit deleted.",
         "neostaffing.hierarchy",
     )
+
+
+@bp.route("/app-management/required-headcount")
+@neostaffing_app_required(minimum_role="master")
+def required_headcount():
+    context = staffing_service.required_headcount_context(
+        {
+            "sort_id": request.args.get("sort_id", "").strip(),
+            "operation_id": request.args.get("operation_id", "").strip(),
+            "department_id": request.args.get("department_id", "").strip(),
+            "work_area_id": request.args.get("work_area_id", "").strip(),
+        }
+    )
+    return render_template(
+        "neostaffing/required_headcount.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
+        required_headcount=context,
+        unit_path=staffing_service.unit_path,
+    )
+
+
+@bp.route("/app-management/required-headcount/<int:unit_id>/update", methods=["POST"])
+@neostaffing_app_required(minimum_role="master")
+def update_required_headcount(unit_id):
+    unit = _get_unit(unit_id)
+    try:
+        staffing_service.update_required_headcount(unit, request.form.get("required_headcount"))
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        message = str(getattr(error, "orig", None) or error)
+        flash(message, "error")
+    else:
+        flash("Required headcount updated.", "success")
+
+    query = {
+        key: request.form.get(key, "").strip()
+        for key in ("sort_id", "operation_id", "department_id", "work_area_id")
+        if request.form.get(key, "").strip()
+    }
+    return redirect(url_for("neostaffing.required_headcount", **query))
 
 
 @bp.route("/app-management/people")

@@ -291,6 +291,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
     def test_app_management_crud_pages_require_master_or_grandmaster(self):
         paths = (
             "/neostaffing/app-management/hierarchy",
+            "/neostaffing/app-management/required-headcount",
             "/neostaffing/app-management/people",
             "/neostaffing/app-management/work-assignments",
             "/neostaffing/app-management/management-assignments",
@@ -337,6 +338,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'href="/neostaffing/app-management/hierarchy"', response.data)
+        self.assertIn(b'href="/neostaffing/app-management/required-headcount"', response.data)
         self.assertIn(b'href="/neostaffing/app-management/people"', response.data)
         self.assertIn(b'href="/neostaffing/app-management/work-assignments"', response.data)
         self.assertIn(b'href="/neostaffing/app-management/management-assignments"', response.data)
@@ -377,6 +379,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         for path, marker in (
             ("/neostaffing/app-management/hierarchy", b"UNIT CONTROL DECK"),
+            ("/neostaffing/app-management/required-headcount", b"REQUIRED HEADCOUNT DECK"),
             ("/neostaffing/app-management/people", b"PEOPLE CONTROL DECK"),
             ("/neostaffing/app-management/work-assignments", b"WORK AREA ASSIGNMENT DECK"),
         ):
@@ -385,6 +388,125 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(marker, response.data)
                 self.assertIn(b"neostaffing-record-card", response.data)
+
+    def test_required_headcount_page_edits_validates_and_filters_work_areas(self):
+        user = self._user("staffing_required_master")
+        self._grant_app_access(user, "neostaffing", "master")
+        sort, operation, department, work_area = self._staffing_hierarchy()
+        second_work_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "WBM", "parent_id": department.id}
+        )
+        employee = staffing_service.create_person(
+            {
+                "employee_id": "23001",
+                "first_name": "Assigned",
+                "last_name": "Worker",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+            }
+        )
+        staffing_service.assign_work_area(employee, work_area)
+        db.session.commit()
+        self._login(user.username)
+
+        page = self.client.get(f"/neostaffing/app-management/required-headcount?work_area_id={work_area.id}")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"REQUIRED HEADCOUNT DECK", page.data)
+        self.assertIn(b"1 Work Areas", page.data)
+        self.assertIn(b"EBM", page.data)
+        self.assertIn(b"DEFAULTED", page.data)
+        self.assertIn(b"Difference", page.data)
+
+        update = self.client.post(
+            f"/neostaffing/app-management/required-headcount/{work_area.id}/update",
+            data={
+                "required_headcount": "5",
+                "sort_id": str(sort.id),
+                "operation_id": str(operation.id),
+                "department_id": str(department.id),
+                "work_area_id": str(work_area.id),
+            },
+            follow_redirects=True,
+        )
+        self.assertEqual(update.status_code, 200)
+        self.assertEqual(db.session.get(StaffingUnit, work_area.id).required_headcount, 5)
+        self.assertIn(b"CONFIGURED", update.data)
+        self.assertIn(b"5", update.data)
+
+        invalid = self.client.post(
+            f"/neostaffing/app-management/required-headcount/{work_area.id}/update",
+            data={"required_headcount": "-1", "work_area_id": str(work_area.id)},
+            follow_redirects=True,
+        )
+        self.assertEqual(invalid.status_code, 200)
+        self.assertEqual(db.session.get(StaffingUnit, work_area.id).required_headcount, 5)
+        self.assertIn(b"Required headcount cannot be negative.", invalid.data)
+
+        lower = self._user("staffing_required_operator")
+        self._grant_app_access(lower, "neostaffing", "operator")
+        db.session.commit()
+        operator_client = self._logged_in_client(lower.username)
+        blocked = operator_client.get("/neostaffing/app-management/required-headcount", follow_redirects=False)
+        self.assertEqual(blocked.status_code, 302)
+        self.assertEqual(blocked.location, "/neostaffing")
+
+        self.assertIsNotNone(second_work_area)
+
+    def test_board_drilldown_links_detail_panel_and_required_status(self):
+        user = self._user("staffing_board_drilldown")
+        self._grant_app_access(user, "neostaffing", "master")
+        sort, operation, department, work_area = self._staffing_hierarchy()
+        staffing_service.update_unit(
+            work_area,
+            {
+                "unit_type": "work_area",
+                "name": work_area.name,
+                "parent_id": department.id,
+                "required_headcount": "2",
+            },
+        )
+        default_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "Default Area", "parent_id": department.id}
+        )
+        employee = staffing_service.create_person(
+            {
+                "employee_id": "24001",
+                "first_name": "Detail",
+                "last_name": "Worker",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+            }
+        )
+        staffing_service.assign_work_area(employee, work_area)
+        db.session.commit()
+        self._login(user.username)
+
+        response = self.client.get(f"/neostaffing?work_area_id={work_area.id}")
+        defaulted = self.client.get(f"/neostaffing?work_area_id={default_area.id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Required Source", response.data)
+        self.assertIn(b"Configured", response.data)
+        self.assertIn(b"Department", response.data)
+        self.assertIn(b"East Shift Department", response.data)
+        self.assertIn(b"Operation", response.data)
+        self.assertIn(b"Shift Operation", response.data)
+        self.assertIn(
+            f'href="/neostaffing/people?sort_id={sort.id}&amp;operation_id={operation.id}&amp;department_id={department.id}&amp;work_area_id={work_area.id}"'.encode(),
+            response.data,
+        )
+        self.assertIn(
+            f'href="/neostaffing/seniority?sort_id={sort.id}&amp;operation_id={operation.id}&amp;department_id={department.id}&amp;work_area_id={work_area.id}"'.encode(),
+            response.data,
+        )
+        self.assertIn(
+            f'href="/neostaffing/app-management/required-headcount?sort_id={sort.id}&amp;operation_id={operation.id}&amp;department_id={department.id}&amp;work_area_id={work_area.id}"'.encode(),
+            response.data,
+        )
+        self.assertIn(b"DEFAULT REQUIRED", response.data)
+        self.assertEqual(defaulted.status_code, 200)
+        self.assertIn(b"Defaulted", defaulted.data)
+        self.assertIn(b"Required headcount defaults to assigned count.", defaulted.data)
 
     def test_portal_tile_opens_neostaffing_for_approved_user(self):
         user = self._user("staffing_portal")

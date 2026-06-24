@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}NeoStaffing Required Headcount{% endblock %}
+
+{% block content %}
+{% set filters = required_headcount.filters %}
+<section class="neostaffing-page theme-staffing" aria-labelledby="staffing-required-title">
+    <div class="neostaffing-hero neostaffing-hero-compact">
+        <div class="neostaffing-hero-copy">
+            <p class="neostaffing-eyebrow"><span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span></p>
+            <h1 id="staffing-required-title">REQUIRED HEADCOUNT</h1>
+            <p>Set Work Area coverage targets used by the Board. Blank keeps the Board defaulted to assigned count.</p>
+        </div>
+        <div class="neostaffing-status-card"><span>APP ROLE</span><strong>{{ app_role|role_label }}</strong></div>
+    </div>
+
+    <div class="neostaffing-management-layout">
+        {% set staffing_management_active = "required" %}
+        {% include "neostaffing/_management_nav.html" %}
+        <div class="neostaffing-management-main">
+            <section class="neostaffing-data-card">
+                <h2>FILTER WORK AREAS</h2>
+                <form class="operation-form neostaffing-filter-form" method="get">
+                    <label><span>Sort</span>
+                        <select name="sort_id">
+                            <option value="">All</option>
+                            {% for unit in required_headcount.sorts %}
+                            <option value="{{ unit.id }}" {% if filters.sort_id|string == unit.id|string %}selected{% endif %}>{{ unit.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label><span>Operation</span>
+                        <select name="operation_id">
+                            <option value="">All</option>
+                            {% for unit in required_headcount.operations %}
+                            <option value="{{ unit.id }}" {% if filters.operation_id|string == unit.id|string %}selected{% endif %}>{{ unit_path(unit) }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label><span>Department</span>
+                        <select name="department_id">
+                            <option value="">All</option>
+                            {% for unit in required_headcount.departments %}
+                            <option value="{{ unit.id }}" {% if filters.department_id|string == unit.id|string %}selected{% endif %}>{{ unit_path(unit) }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label><span>Work Area</span>
+                        <select name="work_area_id">
+                            <option value="">All</option>
+                            {% for unit in required_headcount.work_areas %}
+                            <option value="{{ unit.id }}" {% if filters.work_area_id|string == unit.id|string %}selected{% endif %}>{{ unit_path(unit) }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <button type="submit">FILTER</button>
+                </form>
+            </section>
+
+            <section class="neostaffing-data-card">
+                <div class="neostaffing-panel-heading">
+                    <h2>REQUIRED HEADCOUNT DECK</h2>
+                    <span>{{ required_headcount.rows|length }} Work Areas</span>
+                </div>
+                <div class="neostaffing-record-grid neostaffing-required-grid">
+                    {% for row in required_headcount.rows %}
+                    <article class="neostaffing-record-card neostaffing-required-card{% if not row.configured %} is-defaulted{% endif %}">
+                        <header class="neostaffing-record-header">
+                            <div>
+                                <span>{{ row.sort.name if row.sort else "No Sort" }} / {{ row.operation.name if row.operation else "No Operation" }} / {{ row.department.name if row.department else "No Department" }}</span>
+                                <strong>{{ row.unit.name }}</strong>
+                            </div>
+                            <em>{{ "CONFIGURED" if row.configured else "DEFAULTED" }}</em>
+                        </header>
+                        <p class="neostaffing-record-path">{{ row.path }}</p>
+                        <div class="neostaffing-required-metrics">
+                            <span>Assigned <strong>{{ row.assigned }}</strong></span>
+                            <span>Required <strong>{{ row.required }}</strong></span>
+                            <span>Difference <strong>{% if row.difference > 0 %}+{% endif %}{{ row.difference }}</strong></span>
+                        </div>
+                        <form class="operation-form neostaffing-required-form" method="post" action="{{ url_for('neostaffing.update_required_headcount', unit_id=row.unit.id) }}">
+                            <input type="hidden" name="sort_id" value="{{ filters.sort_id }}">
+                            <input type="hidden" name="operation_id" value="{{ filters.operation_id }}">
+                            <input type="hidden" name="department_id" value="{{ filters.department_id }}">
+                            <input type="hidden" name="work_area_id" value="{{ filters.work_area_id }}">
+                            <label>
+                                <span>Required Headcount</span>
+                                <input type="number" min="0" step="1" name="required_headcount" value="{{ row.unit.required_headcount if row.configured else '' }}" placeholder="{{ row.assigned }}">
+                            </label>
+                            <button type="submit">SAVE TARGET</button>
+                        </form>
+                    </article>
+                    {% else %}
+                    <p class="muted">No active Work Areas match the current filters.</p>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <div class="action-row">
+                <a class="action-button" href="{{ url_for('neostaffing.index') }}">BACK TO BOARD</a>
+                <a class="action-button action-button-secondary" href="{{ url_for('neostaffing.app_management') }}">BACK TO APP MANAGEMENT</a>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
