@@ -2546,27 +2546,23 @@ def _arrival_board_display(mission, operation=None):
             "status_label": _status_label(manual_status),
         }
 
-    raw_status = (getattr(mission, "api_status_raw", None) or "").strip().lower()
-    if "arrived" in raw_status:
-        display_time = mission.api_runway_time_utc or mission.eta_datetime_utc
-        return {
-            "time": _arrival_local_time(display_time, timezone_name)
-            or _arrival_eta_display_time(mission, operation),
-            "time_note": "Actual runway" if mission.api_runway_time_utc else "",
-            "status_label": "Arrived",
-        }
-
     if mission.api_runway_time_utc:
         taxi_minutes = _arrival_board_taxi_minutes(operation)
-        parking_time = mission.api_assumed_arrived_time_utc
-        if not parking_time:
-            parking_time = mission.api_runway_time_utc + timedelta(
-                minutes=taxi_minutes
-            )
+        parking_time = mission.api_runway_time_utc + timedelta(
+            minutes=taxi_minutes
+        )
         return {
             "time": _arrival_local_time(parking_time, timezone_name),
             "time_note": f"Est parking +{taxi_minutes} min",
             "status_label": "On Ground",
+        }
+
+    raw_status = (getattr(mission, "api_status_raw", None) or "").strip().lower()
+    if "arrived" in raw_status:
+        return {
+            "time": _arrival_eta_display_time(mission, operation),
+            "time_note": "",
+            "status_label": "Arrived",
         }
 
     api_status = (mission.api_status or "").strip().lower()
