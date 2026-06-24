@@ -802,6 +802,117 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"01:05", response.data)
         self.assertIn(b"01:02", response.data)
 
+    def test_door_view_discharge_end_to_end_request_send_and_expiry_flow(self):
+        self._login_approved_user(role="operator")
+        self._grant_node_role("neoermac_operator_user", "sektor", "operator")
+
+        standard_response = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "save_uld_request",
+                "uld_a2_count": "2",
+                "uld_a1_count": "1",
+                "uld_amp_count": "0",
+            },
+            follow_redirects=False,
+        )
+        setup_response = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "save_uld_request",
+                "uld_a2_count": "1",
+                "uld_a1_count": "0",
+                "uld_amp_count": "2",
+                "setup_needed": "on",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(standard_response.status_code, 302)
+        self.assertEqual(setup_response.status_code, 302)
+        requests = NeoErmacUldRequest.query.filter_by(door="D34").order_by(
+            NeoErmacUldRequest.setup_needed.desc(),
+            NeoErmacUldRequest.id.asc(),
+        ).all()
+        self.assertEqual(len(requests), 2)
+        setup_request = requests[0]
+        standard_request = requests[1]
+        self.assertTrue(setup_request.setup_needed)
+        self.assertFalse(standard_request.setup_needed)
+
+        door_state = self.client.get("/neoermac/door-view/state?door=D34").get_json()["state"]
+        self.assertEqual(len(door_state["requests"]), 2)
+        self.assertTrue(door_state["requests"][0]["setup_needed"])
+        self.assertEqual(
+            door_state["requests"][0]["counts"],
+            {"A2": 1, "A1": 0, "AMP": 2},
+        )
+        self.assertEqual(
+            door_state["requests"][1]["counts"],
+            {"A2": 2, "A1": 1, "AMP": 0},
+        )
+
+        discharge_state = self.client.get("/neosektor/discharge/state").get_json()["state"]
+        self.assertEqual([row["id"] for row in discharge_state["requests"]], [setup_request.id, standard_request.id])
+
+        partial_response = self.client.post(
+            "/neosektor/discharge/send",
+            data={
+                "door": "D34",
+                "request_id": str(setup_request.id),
+                "send_a2_count": "1",
+                "send_a1_count": "0",
+                "send_amp_count": "1",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(partial_response.status_code, 302)
+        db.session.refresh(setup_request)
+        self.assertEqual(setup_request.a2_count, 0)
+        self.assertEqual(setup_request.a1_count, 0)
+        self.assertEqual(setup_request.amp_count, 1)
+
+        after_partial_state = self.client.get("/neoermac/door-view/state?door=D34").get_json()["state"]
+        self.assertEqual(
+            [(event["uld_type"], event["quantity"]) for event in after_partial_state["on_the_way_events"]],
+            [("A2", 1), ("AMP", 1)],
+        )
+
+        oversend_response = self.client.post(
+            "/neosektor/discharge/send",
+            data={
+                "door": "D34",
+                "request_id": str(setup_request.id),
+                "send_a2_count": "0",
+                "send_a1_count": "0",
+                "send_amp_count": "4",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(oversend_response.status_code, 302)
+        self.assertIsNone(db.session.get(NeoErmacUldRequest, setup_request.id))
+        remaining_request = NeoErmacUldRequest.query.filter_by(door="D34").one()
+        self.assertEqual(remaining_request.id, standard_request.id)
+
+        discharge_after_oversend = self.client.get("/neosektor/discharge/state").get_json()["state"]
+        self.assertEqual([row["id"] for row in discharge_after_oversend["requests"]], [standard_request.id])
+        final_door_state = self.client.get("/neoermac/door-view/state?door=D34").get_json()["state"]
+        self.assertEqual(len(final_door_state["requests"]), 1)
+        self.assertFalse(final_door_state["requests"][0]["setup_needed"])
+        self.assertEqual(
+            [(event["uld_type"], event["quantity"]) for event in final_door_state["on_the_way_events"]],
+            [("A2", 1), ("AMP", 1), ("AMP", 4)],
+        )
+
+        for event in NeoSektorUldOnTheWayEvent.query.filter_by(door="D34").all():
+            event.expires_at_utc = datetime(2026, 6, 24, 0, 0)
+        db.session.commit()
+        expired_state = self.client.get("/neoermac/door-view/state?door=D34").get_json()["state"]
+        self.assertEqual(expired_state["on_the_way_events"], [])
+        self.assertEqual(NeoErmacUldRequest.query.filter_by(door="D34").count(), 1)
+
     def test_door_view_state_reflects_request_changes_from_another_update_cycle(self):
         request_record = NeoErmacUldRequest(
             gateway_id=self.gateway.id,
@@ -1416,6 +1527,31 @@ class NeoErmacRoutesTest(unittest.TestCase):
             data={"email": user.email, "password": "TestPassword123!"},
             follow_redirects=False,
         )
+
+    def _grant_node_role(self, username, node_code, role):
+        user = User.query.filter_by(username=username).one()
+        membership = GatewayMembership.query.filter_by(
+            user_id=user.id,
+            gateway_id=self.gateway.id,
+        ).one()
+        node = NeoNode.query.filter_by(code=node_code).one()
+        existing = GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            node_id=node.id,
+        ).first()
+        if existing:
+            existing.role = role
+            existing.is_active = True
+        else:
+            db.session.add(
+                GatewayNodeRole(
+                    gateway_membership_id=membership.id,
+                    node_id=node.id,
+                    role=role,
+                    is_active=True,
+                )
+            )
+        db.session.commit()
 
     def _add_master_departure(
         self,
