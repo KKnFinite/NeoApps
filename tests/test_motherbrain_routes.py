@@ -3689,6 +3689,180 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"01:40", response.data)
         self.assertNotIn(b"02:15", response.data)
 
+    def test_alp_arrival_paste_preview_matches_and_converts_zulu_times(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        db.session.add(operation)
+        db.session.add_all(
+            [
+                self._mission(
+                    operation=operation,
+                    mission_type="arrival",
+                    flight_number="UPS0910",
+                    planned_datetime_local=datetime(2026, 6, 23, 22, 0),
+                    planned_datetime_utc=datetime(2026, 6, 24, 3, 0),
+                ),
+                self._mission(
+                    operation=operation,
+                    mission_type="arrival",
+                    flight_number="UPS0612",
+                    planned_datetime_local=datetime(2026, 6, 23, 22, 11),
+                    planned_datetime_utc=datetime(2026, 6, 24, 3, 11),
+                ),
+            ]
+        )
+        db.session.commit()
+        paste = "\n".join(
+            [
+                "24-JUN-2026\tUPS910\tSDF\tN910UP\tA01\tScheduled\t07:24 (S)",
+                "24-JUN-2026\t5X 612\tSDF\tN612UP\tA02\tArrived\t03:11 (A)",
+            ]
+        )
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            data={"paste_text": paste, "alp_action": "preview"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"ALP ARRIVAL PASTE", response.data)
+        self.assertIn(b"UPS0910", response.data)
+        self.assertIn(b"N910UP", response.data)
+        self.assertIn(b"02:24 Local Jun 24", response.data)
+        self.assertIn(b"UPS0612", response.data)
+        self.assertIn(b"22:11 Local Jun 23", response.data)
+        self.assertIn(b"- -&gt; N612UP", response.data)
+
+    def test_alp_departure_paste_apply_updates_selected_operation_only(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        other_operation = self._operation(sort_date=date(2026, 6, 25))
+        db.session.add_all([operation, other_operation])
+        selected_mission = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="UPS0910",
+            planned_datetime_local=datetime(2026, 6, 24, 2, 10),
+            planned_datetime_utc=datetime(2026, 6, 24, 7, 10),
+        )
+        other_mission = self._mission(
+            operation=other_operation,
+            mission_type="departure",
+            flight_number="UPS0910",
+            planned_datetime_local=datetime(2026, 6, 25, 2, 10),
+            planned_datetime_utc=datetime(2026, 6, 25, 7, 10),
+        )
+        db.session.add_all([selected_mission, other_mission])
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/departure",
+            data={
+                "paste_text": "24-JUN-2026\t5X 910\tSDF\tN910UP\tA01\tScheduled\t07:24 (A)",
+                "alp_action": "apply",
+            },
+        )
+
+        db.session.refresh(selected_mission)
+        db.session.refresh(other_mission)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(selected_mission.assigned_tail_number, "N910UP")
+        self.assertEqual(selected_mission.tail_source, "alp")
+        self.assertEqual(
+            selected_mission.actual_block_out_datetime_utc,
+            datetime(2026, 6, 24, 7, 24),
+        )
+        self.assertEqual(selected_mission.actual_block_out_source, "alp")
+        self.assertIsNone(other_mission.assigned_tail_number)
+
+    def test_alp_arrival_paste_apply_does_not_mutate_master_schedule(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        db.session.add(operation)
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS0948",
+            assigned_tail_number="NOLDUP",
+            tail_source="api",
+        )
+        master = MasterFlightSchedule(
+            gateway_id=self.rfd_gateway.id,
+            gateway_code="RFD",
+            sort_name="night",
+            mission_type="arrival",
+            wave="1",
+            flight_number="UPS0948",
+            origin="SDF",
+            destination="RFD",
+            active_days="wednesday",
+            planned_time_local=time(2, 10),
+            timezone="America/Chicago",
+            preferred_parking="A01",
+            active=True,
+        )
+        db.session.add_all([mission, master])
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            data={
+                "paste_text": "24-JUN-2026\tUPS948\tSDF\tN948UP\tA99\tIgnored\t07:24 (S)",
+                "alp_action": "apply",
+            },
+        )
+
+        db.session.refresh(mission)
+        db.session.refresh(master)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mission.assigned_tail_number, "N948UP")
+        self.assertEqual(mission.tail_source, "alp")
+        self.assertEqual(mission.eta_datetime_utc, datetime(2026, 6, 24, 7, 24))
+        self.assertEqual(mission.eta_source, "alp")
+        self.assertEqual(master.preferred_parking, "A01")
+        self.assertEqual(MasterFlightSchedule.query.count(), 1)
+        self.assertIn(b"API tail differs; ALP will replace API tail.", response.data)
+
+    def test_alp_paste_preview_reports_duplicate_invalid_unmatched_and_missing_rows(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        db.session.add(operation)
+        db.session.add_all(
+            [
+                self._mission(
+                    operation=operation,
+                    mission_type="arrival",
+                    flight_number="UPS0910",
+                ),
+                self._mission(
+                    operation=operation,
+                    mission_type="arrival",
+                    flight_number="UPS0856",
+                ),
+            ]
+        )
+        db.session.commit()
+        paste = "\n".join(
+            [
+                "24-JUN-2026\tUPS910\tSDF\tN910UP\tA01\tScheduled\t07:24 (S)",
+                "24-JUN-2026\t5X 910\tSDF\tN911UP\tA02\tScheduled\t07:25 (S)",
+                "24-JUN-2026\tUPS999\tSDF\tN999UP\tA03\tScheduled\t07:26 (S)",
+                "BROKEN ROW",
+            ]
+        )
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            data={"paste_text": paste, "alp_action": "preview"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"DUPLICATE ROWS", response.data)
+        self.assertIn(b"UPS0910", response.data)
+        self.assertIn(b"N911UP", response.data)
+        self.assertIn(b"UNMATCHED ALP ROWS", response.data)
+        self.assertIn(b"UPS0999", response.data)
+        self.assertIn(b"INVALID ROWS", response.data)
+        self.assertIn(b"Expected 7 ALP columns.", response.data)
+        self.assertIn(b"CURRENT OPERATION FLIGHTS MISSING FROM PASTE", response.data)
+        self.assertIn(b"UPS0856", response.data)
+
     def test_window_update_rejects_negative_values(self):
         operation = self._operation()
         db.session.add(operation)

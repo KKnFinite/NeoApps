@@ -1394,6 +1394,41 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(mission.api_status_raw, "Arrived")
         self.assertEqual(mission.api_runway_time_utc, datetime(2026, 6, 1, 7, 30))
 
+    def test_matched_arrival_does_not_overwrite_alp_tail(self):
+        mission = self._mission(
+            "arrival",
+            "5X123",
+            assigned_tail_number="NALPUP",
+            tail_source="alp",
+        )
+        db.session.add(mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "arrivals": [
+                        self._api_flight(
+                            revised_time="2026-06-01T02:25:00",
+                            runway_time="2026-06-01T02:30:00",
+                            status="Arrived",
+                            tail="N123UP",
+                            model="A300",
+                        )
+                    ]
+                }
+            ),
+            now=datetime(2026, 6, 1, 7, 32, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(mission.assigned_tail_number, "NALPUP")
+        self.assertEqual(mission.tail_source, "alp")
+        self.assertEqual(mission.api_status_raw, "Arrived")
+        self.assertEqual(mission.api_runway_time_utc, datetime(2026, 6, 1, 7, 30))
+
     def test_departure_match_does_not_overwrite_std_or_pull_times(self):
         mission = self._mission(
             "departure",

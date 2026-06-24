@@ -10,6 +10,7 @@
 
     <div class="action-row">
         <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">ADD MISSION</a>
+        <a class="action-button" href="{{ url_for('neomotherbrain.alp_import', operation_id=operation.id, mission_type='arrival') }}">ALP ARRIVAL PASTE</a>
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">OPERATION OVERVIEW</a>
         <a class="action-button" href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">DEPARTURE BOARD</a>
     </div>

@@ -50,6 +50,7 @@ from app.services.access_control import (
     user_can_access_node,
     user_has_gateway_access,
 )
+from app.services.alp_import import apply_alp_paste, preview_alp_paste
 from app.services.sort_date_operations import (
     ensure_tail_state_for_mission,
     generate_sort_date_operation_from_master,
@@ -1277,6 +1278,45 @@ def departure_board(operation_id):
         operation=operation,
         rows=rows,
         **_flight_api_auto_poll_timer_context(gateway, operation=operation),
+    )
+
+
+@bp.route("/motherbrain/operations/<int:operation_id>/alp/<mission_type>", methods=["GET", "POST"])
+@gateway_node_required("motherbrain")
+def alp_import(operation_id, mission_type):
+    operation = _operation_or_404(operation_id)
+    mission_type = (mission_type or "").strip().lower()
+    if mission_type not in {"arrival", "departure"}:
+        abort(404)
+
+    paste_text = request.form.get("paste_text", "")
+    action = request.form.get("alp_action", "preview")
+    preview = None
+    if request.method == "POST":
+        try:
+            if action == "apply":
+                preview = apply_alp_paste(
+                    operation,
+                    mission_type,
+                    paste_text,
+                    user=current_user,
+                )
+                flash(
+                    f"Applied {preview['applied_count']} ALP {preview['label'].lower()} rows.",
+                    "info",
+                )
+            else:
+                preview = preview_alp_paste(operation, mission_type, paste_text)
+        except ValueError as exc:
+            flash(str(exc), "error")
+
+    return render_template(
+        "neomotherbrain/alp_import.html",
+        operation=operation,
+        mission_type=mission_type,
+        label="Arrival" if mission_type == "arrival" else "Departure",
+        paste_text=paste_text,
+        preview=preview,
     )
 
 
