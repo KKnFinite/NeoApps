@@ -3,6 +3,8 @@ from types import SimpleNamespace
 
 from app.extensions import db
 from app.models import NeoErmacUldRequest, NeoSektorUldOnTheWayEvent
+from app.services.gateway_matrix import gateway_timezone
+from app.services.time_display import format_local_hhmm
 
 
 ULD_TYPES = ("A2", "A1", "AMP")
@@ -160,7 +162,10 @@ def door_uld_state_payload(gateway, door, now=None):
     return {
         "door": normalized_door,
         "request": _aggregate_request_counts_payload(request_records),
-        "requests": [_single_request_counts_payload(request_record) for request_record in request_records],
+        "requests": [
+            _single_request_counts_payload(gateway, request_record)
+            for request_record in request_records
+        ],
         "on_the_way_events": [
             _event_payload(event)
             for event in active_on_the_way_event_views(gateway, normalized_door, now)
@@ -180,13 +185,13 @@ def active_request_views(gateway, now=None):
         if not request_has_counts(request_record):
             continue
 
-        requests.append(_request_view(request_record, active_events_by_door, now))
+        requests.append(_request_view(gateway, request_record, active_events_by_door, now))
         request_doors.add(request_record.door)
 
     for door, events in active_events_by_door.items():
         if door in request_doors:
             continue
-        requests.append(_event_only_request_view(door, events))
+        requests.append(_event_only_request_view(gateway, door, events))
 
     return sorted(
         requests,
@@ -290,7 +295,10 @@ def active_on_the_way_events(gateway, door=None, now=None):
 
 
 def active_on_the_way_event_views(gateway, door=None, now=None):
-    return [_event_view(event) for event in active_on_the_way_events(gateway, door, now)]
+    return [
+        _event_view(gateway, event)
+        for event in active_on_the_way_events(gateway, door, now)
+    ]
 
 
 def normalize_uld_counts(counts):
@@ -330,8 +338,9 @@ def request_has_counts(request_record):
     return any((getattr(request_record, field_name) or 0) > 0 for field_name in ULD_REQUEST_FIELDS.values())
 
 
-def _request_view(request_record, active_events_by_door, now):
+def _request_view(gateway, request_record, active_events_by_door, now):
     events = active_events_by_door.get(request_record.door, [])
+    timezone_name = gateway_timezone(gateway)
     return {
         "id": request_record.id,
         "door": request_record.door,
@@ -342,12 +351,14 @@ def _request_view(request_record, active_events_by_door, now):
         "setup_needed": bool(request_record.setup_needed),
         "created_at": request_record.created_at,
         "updated_at": request_record.updated_at,
-        "on_the_way_events": [_event_view(event) for event in events],
+        "updated_at_label": format_local_hhmm(request_record.updated_at, timezone_name),
+        "on_the_way_events": [_event_view(gateway, event) for event in events],
     }
 
 
-def _event_only_request_view(door, events):
+def _event_only_request_view(gateway, door, events):
     first_event = events[0] if events else None
+    timezone_name = gateway_timezone(gateway)
     return {
         "id": None,
         "door": door,
@@ -355,7 +366,11 @@ def _event_only_request_view(door, events):
         "setup_needed": False,
         "created_at": getattr(first_event, "sent_at_utc", None),
         "updated_at": getattr(first_event, "sent_at_utc", None),
-        "on_the_way_events": [_event_view(event) for event in events],
+        "updated_at_label": format_local_hhmm(
+            getattr(first_event, "sent_at_utc", None),
+            timezone_name,
+        ),
+        "on_the_way_events": [_event_view(gateway, event) for event in events],
     }
 
 
@@ -367,11 +382,13 @@ def _request_payload(row):
         "setup_needed": row["setup_needed"],
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
+        "updated_at_label": row.get("updated_at_label"),
         "on_the_way_events": [_event_payload(event) for event in row["on_the_way_events"]],
     }
 
 
-def _single_request_counts_payload(request_record):
+def _single_request_counts_payload(gateway, request_record):
+    timezone_name = gateway_timezone(gateway)
     return {
         "id": request_record.id,
         "counts": {
@@ -381,6 +398,7 @@ def _single_request_counts_payload(request_record):
         "setup_needed": bool(getattr(request_record, "setup_needed", False)),
         "created_at": request_record.created_at.isoformat() if request_record.created_at else None,
         "updated_at": request_record.updated_at.isoformat() if request_record.updated_at else None,
+        "updated_at_label": format_local_hhmm(request_record.updated_at, timezone_name),
     }
 
 
@@ -398,7 +416,9 @@ def _aggregate_request_counts_payload(request_records):
     }
 
 
-def _event_view(event):
+def _event_view(gateway, event):
+    timezone_name = gateway_timezone(gateway)
+    sent_label = format_local_hhmm(event.sent_at_utc, timezone_name)
     return {
         "id": event.id,
         "door": event.door,
@@ -408,7 +428,7 @@ def _event_view(event):
         "expires_at": event.expires_at_utc,
         "label": (
             f"{max(event.quantity or 0, 0)} {_plural_uld(event.uld_type, event.quantity)} "
-            f"sent at {event.sent_at_utc.strftime('%H:%M')}"
+            f"sent at {sent_label}"
         ),
     }
 

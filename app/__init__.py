@@ -17,6 +17,7 @@ from app.config import Config
 from app.extensions import db, login_manager
 from app.services.access_control import user_can_access_node, user_has_gateway_access
 from app.services.permission_rules import permission_access, user_can
+from app.services.time_display import format_local_hhmm
 
 
 def create_app(config_class=Config, auto_bootstrap=True):
@@ -124,6 +125,9 @@ def register_template_helpers(app):
             return value.strftime("%Y-%m-%d %H:%M")
 
         return utc_value.astimezone(local_timezone).strftime("%Y-%m-%d %H:%M")
+
+    def format_local_time(value, timezone_name=None):
+        return format_local_hhmm(value, timezone_name)
 
     def current_pwa_manifest_key():
         path = request.path.rstrip("/") or "/"
@@ -248,6 +252,7 @@ def register_template_helpers(app):
         return targets
 
     app.jinja_env.filters["local_datetime"] = format_local_datetime
+    app.jinja_env.filters["local_time"] = format_local_time
     app.jinja_env.filters["role_label"] = format_role_label
     app.jinja_env.filters["status_label"] = format_status_label
     app.jinja_env.filters["wave_label"] = format_wave_label

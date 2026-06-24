@@ -22,6 +22,7 @@ from app.models import (
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.permission_rules import ensure_default_permission_rules
+from app.services.time_display import format_local_hhmm
 
 
 class NeoErmacRoutesTest(unittest.TestCase):
@@ -656,7 +657,56 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         reload_response = self.client.get("/neoermac/door-view?door=D34")
         self.assertIn(b'value="01:15"', reload_response.data)
+        self.assertIn(b'type="text"', reload_response.data)
+        self.assertIn(b'pattern="([01][0-9]|2[0-3]):[0-5][0-9]"', reload_response.data)
         self.assertIn(b"checked", reload_response.data)
+
+    def test_door_view_completed_pull_card_collapses_with_summary(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        mission = self._add_operation_departure("UPS302", "SDF")
+        db.session.add(
+            NeoErmacDoorPull(
+                gateway_id=self.gateway.id,
+                sort_date_operation_id=mission.sort_date_operation_id,
+                door="D34",
+                destination="SDF",
+                actual_pure_pull_time_local=time(14, 5),
+                actual_first_mix_pull_time_local=time(14, 7),
+                no_second_mix_pull=True,
+            )
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"is-pulls-complete is-pulls-collapsed", response.data)
+        self.assertIn(b"PULLS COMPLETE", response.data)
+        self.assertIn("PURE 14:05 · 1ST 14:07 · 2ND NO".encode(), response.data)
+        self.assertIn(b"EDIT PULLS", response.data)
+        self.assertIn(b"data-pull-edit-toggle", response.data)
+
+    def test_door_view_partial_pull_card_does_not_collapse(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        mission = self._add_operation_departure("UPS302", "SDF")
+        db.session.add(
+            NeoErmacDoorPull(
+                gateway_id=self.gateway.id,
+                sort_date_operation_id=mission.sort_date_operation_id,
+                door="D34",
+                destination="SDF",
+                actual_pure_pull_time_local=time(14, 5),
+                no_first_mix_pull=True,
+            )
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"PULLS COMPLETE", response.data)
 
     def test_door_view_edit_user_can_create_and_update_uld_requested_counts(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
@@ -762,8 +812,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"checked", form_html)
 
     def test_door_view_displays_setup_and_standard_requests_for_same_door(self):
-        setup_time = datetime(2026, 6, 24, 1, 5)
-        standard_time = datetime(2026, 6, 24, 1, 2)
+        setup_time = datetime(2026, 6, 24, 19, 5)
+        standard_time = datetime(2026, 6, 24, 19, 2)
         db.session.add_all(
             [
                 NeoErmacUldRequest(
@@ -799,8 +849,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"SETUP", response.data)
         self.assertIn(b"STANDARD", response.data)
         self.assertLess(response.data.index(b"SETUP"), response.data.index(b"STANDARD"))
-        self.assertIn(b"01:05", response.data)
-        self.assertIn(b"01:02", response.data)
+        self.assertIn(b"14:05", response.data)
+        self.assertIn(b"14:02", response.data)
 
     def test_door_view_discharge_end_to_end_request_send_and_expiry_flow(self):
         self._login_approved_user(role="operator")
@@ -978,6 +1028,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(len(payload["state"]["on_the_way_events"]), 1)
         self.assertEqual(payload["state"]["on_the_way_events"][0]["uld_type"], "A2")
         self.assertIn("1 A2 sent at", payload["state"]["on_the_way_events"][0]["label"])
+        self.assertIn(format_local_hhmm(now), payload["state"]["on_the_way_events"][0]["label"])
         self.assertEqual(payload["state"]["requests"], [])
 
     def test_door_view_state_requires_view_permission(self):
@@ -1011,7 +1062,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
         response = self.client.get("/neoermac/door-view?door=D34")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(f"2 A2s sent at {sent_at:%H:%M}".encode(), response.data)
+        self.assertIn(
+            f"2 A2s sent at {format_local_hhmm(sent_at)}".encode(),
+            response.data,
+        )
+        self.assertNotIn(f"2 A2s sent at {sent_at:%H:%M}".encode(), response.data)
 
     def test_door_view_displays_oversent_on_the_way_totals_exactly(self):
         sent_at = datetime.utcnow()
@@ -1031,7 +1086,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
         response = self.client.get("/neoermac/door-view?door=D34")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(f"5 AMPs sent at {sent_at:%H:%M}".encode(), response.data)
+        self.assertIn(
+            f"5 AMPs sent at {format_local_hhmm(sent_at)}".encode(),
+            response.data,
+        )
 
     def test_door_view_uld_request_edits_do_not_clear_on_the_way_events(self):
         sent_at = datetime.utcnow()
@@ -1063,7 +1121,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(NeoSektorUldOnTheWayEvent.query.count(), 1)
         reload_response = self.client.get("/neoermac/door-view?door=D34")
-        self.assertIn(f"1 AMP sent at {sent_at:%H:%M}".encode(), reload_response.data)
+        self.assertIn(
+            f"1 AMP sent at {format_local_hhmm(sent_at)}".encode(),
+            reload_response.data,
+        )
 
     def test_building_lineup_page_renders_belt_map(self):
         self._login_approved_user(role="operator")

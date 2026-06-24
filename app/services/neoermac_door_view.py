@@ -187,6 +187,20 @@ def _destination_cards_for_door(gateway, selected_door, operation):
         master = masters.get(destination)
         door_pull = _door_pull_record(gateway, selected_door, destination, operation)
         timing_data = _mission_timing_data(mission, operation)
+        actual = {
+            "pure": _time_value(getattr(door_pull, "actual_pure_pull_time_local", None)),
+            "first_mix": _time_value(
+                getattr(door_pull, "actual_first_mix_pull_time_local", None)
+            ),
+            "second_mix": _time_value(
+                getattr(door_pull, "actual_second_mix_pull_time_local", None)
+            ),
+        }
+        no_pull = {
+            "pure": bool(getattr(door_pull, "no_pure_pull", False)),
+            "first_mix": bool(getattr(door_pull, "no_first_mix_pull", False)),
+            "second_mix": bool(getattr(door_pull, "no_second_mix_pull", False)),
+        }
 
         cards.append(
             {
@@ -214,20 +228,10 @@ def _destination_cards_for_door(gateway, selected_door, operation):
                         _base_pull_time(timing_data, master, "second_mix")
                     ),
                 },
-                "actual": {
-                    "pure": _time_value(getattr(door_pull, "actual_pure_pull_time_local", None)),
-                    "first_mix": _time_value(
-                        getattr(door_pull, "actual_first_mix_pull_time_local", None)
-                    ),
-                    "second_mix": _time_value(
-                        getattr(door_pull, "actual_second_mix_pull_time_local", None)
-                    ),
-                },
-                "no_pull": {
-                    "pure": bool(getattr(door_pull, "no_pure_pull", False)),
-                    "first_mix": bool(getattr(door_pull, "no_first_mix_pull", False)),
-                    "second_mix": bool(getattr(door_pull, "no_second_mix_pull", False)),
-                },
+                "actual": actual,
+                "no_pull": no_pull,
+                "pulls_complete": _pulls_complete(actual, no_pull),
+                "pull_summary": _pull_summary(actual, no_pull),
             }
         )
 
@@ -498,6 +502,19 @@ def _time_value(value):
     if not value:
         return ""
     return value.strftime("%H:%M")
+
+
+def _pulls_complete(actual, no_pull):
+    return all(bool(no_pull[field["key"]] or actual[field["key"]]) for field in PULL_FIELDS)
+
+
+def _pull_summary(actual, no_pull):
+    parts = []
+    for field in PULL_FIELDS:
+        key = field["key"]
+        value = "NO" if no_pull[key] else (actual[key] or "-")
+        parts.append(f"{field['short_label']} {value}")
+    return " · ".join(parts)
 
 
 def _int_value(value, default=0):
