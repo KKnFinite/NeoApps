@@ -321,10 +321,25 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"DISCHARGE", response.data)
+        self.assertIn(b"ACTIVE REQUESTS", response.data)
         self.assertIn(b"D34", response.data)
-        self.assertIn(b"A2 REQUESTED", response.data)
-        self.assertIn(b"NEEDED FOR SETUP", response.data)
+        self.assertIn(b"A2", response.data)
+        self.assertIn(b"SETUP", response.data)
         self.assertNotIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
+
+    def test_discharge_selected_request_renders_compact_send_form(self):
+        request_record = self._add_uld_request("D34", a2_count=2, a1_count=1, amp_count=3)
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get(f"/neosektor/discharge?request_id={request_record.id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"BACK TO QUEUE", response.data)
+        self.assertIn(b"SEND ON THE WAY", response.data)
+        self.assertIn(b'name="send_a2_count"', response.data)
+        self.assertIn(b'name="send_a1_count"', response.data)
+        self.assertIn(b'name="send_amp_count"', response.data)
 
     def test_door_request_same_door_and_setup_combines_and_updates_timestamp(self):
         first_time = datetime(2026, 6, 12, 12, 0)
@@ -389,7 +404,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login_approved_user(role="operator")
 
-        page = self.client.get("/neosektor/discharge")
+        request_record = NeoErmacUldRequest.query.filter_by(door="D34").one()
+        page = self.client.get(f"/neosektor/discharge?request_id={request_record.id}")
         response = self.client.post(
             "/neosektor/discharge/send",
             json={"door": "D34", "uld_type": "A2", "quantity": 1},
@@ -397,10 +413,42 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual(page.status_code, 200)
         self.assertIn(b"VIEW ONLY", page.data)
-        self.assertIn(b"disabled", page.data)
+        self.assertIn(b"View-only access", page.data)
+        self.assertNotIn(b"SEND ON THE WAY", page.data)
         self.assertEqual(response.status_code, 403)
         self.assertEqual(NeoSektorUldOnTheWayEvent.query.count(), 0)
         self.assertEqual(NeoErmacUldRequest.query.filter_by(door="D34").one().a2_count, 2)
+
+    def test_discharge_selected_request_form_sends_all_uld_types(self):
+        request_record = self._add_uld_request("D34", a2_count=3, a1_count=1, amp_count=0)
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neosektor/discharge/send",
+            data={
+                "door": "D34",
+                "request_id": str(request_record.id),
+                "send_a2_count": "2",
+                "send_a1_count": "1",
+                "send_amp_count": "4",
+            },
+            follow_redirects=False,
+        )
+
+        saved = NeoErmacUldRequest.query.filter_by(door="D34").one()
+        events = NeoSektorUldOnTheWayEvent.query.order_by(
+            NeoSektorUldOnTheWayEvent.id.asc()
+        ).all()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/neosektor/discharge")
+        self.assertEqual(saved.a2_count, 1)
+        self.assertEqual(saved.a1_count, 0)
+        self.assertEqual(saved.amp_count, 0)
+        self.assertEqual(
+            [(event.uld_type, event.quantity) for event in events],
+            [("A2", 2), ("A1", 1), ("AMP", 4)],
+        )
 
     def test_discharge_edit_user_can_send_ulds_and_reduce_requested_count(self):
         self._add_uld_request("D34", a2_count=3, a1_count=1)
@@ -511,7 +559,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             [],
         )
 
-    def test_discharge_keeps_on_the_way_event_visible_after_count_reaches_zero(self):
+    def test_discharge_fulfilled_request_disappears_from_queue(self):
         sent_at = datetime.utcnow()
         self._add_uld_request("D34", a2_count=1)
         send_uld_on_the_way(self.gateway, "D34", "A2", 1, now=sent_at)
@@ -521,9 +569,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         response = self.client.get("/neosektor/discharge")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"D34", response.data)
-        self.assertIn(b"0", response.data)
-        self.assertIn(f"1 A2 sent at {sent_at:%H:%M}".encode(), response.data)
+        self.assertNotIn(b"D34", response.data)
+        self.assertIn(b"NO ACTIVE ULD REQUESTS", response.data)
 
     def test_discharge_sorting_puts_setup_needed_requests_first(self):
         normal = self._add_uld_request("D34", a2_count=1, setup_needed=False)
@@ -574,7 +621,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_discharge_state_reflects_active_on_the_way_events_and_excludes_expired(self):
         now = datetime.utcnow()
-        self._add_uld_request("D34", a2_count=0)
+        self._add_uld_request("D34", a2_count=1)
         db.session.add_all(
             [
                 NeoSektorUldOnTheWayEvent(

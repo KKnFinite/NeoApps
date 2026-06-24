@@ -22,6 +22,7 @@ from app.services.permission_rules import user_can
 from app.services.uld_requests import (
     discharge_context,
     discharge_state_payload,
+    send_uld_totals_on_the_way,
     send_uld_on_the_way,
 )
 
@@ -289,12 +290,22 @@ def discharge():
 
     gateway = get_current_gateway()
     context = discharge_context(gateway)
+    selected_request_id = request.args.get("request_id", type=int)
+    selected_request = next(
+        (
+            request_row
+            for request_row in context["requests"]
+            if request_row.get("id") == selected_request_id
+        ),
+        None,
+    )
     db.session.commit()
     return render_template(
         "neonodes/neosektor/discharge.html",
         gateway=gateway,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
+        selected_request=selected_request,
         **context,
     )
 
@@ -325,19 +336,32 @@ def discharge_send():
 
     payload = request.get_json(silent=True) if request.is_json else request.form
     try:
-        event = send_uld_on_the_way(
-            get_current_gateway(),
-            payload.get("door"),
-            payload.get("uld_type"),
-            payload.get("quantity"),
-            request_id=payload.get("request_id"),
-        )
+        if _has_multi_uld_send_payload(payload):
+            events = send_uld_totals_on_the_way(
+                get_current_gateway(),
+                payload.get("door"),
+                {
+                    "A2": payload.get("send_a2_count"),
+                    "A1": payload.get("send_a1_count"),
+                    "AMP": payload.get("send_amp_count"),
+                },
+                request_id=payload.get("request_id"),
+            )
+            event = events[0]
+        else:
+            event = send_uld_on_the_way(
+                get_current_gateway(),
+                payload.get("door"),
+                payload.get("uld_type"),
+                payload.get("quantity"),
+                request_id=payload.get("request_id"),
+            )
     except ValueError as exc:
         db.session.rollback()
         if request.is_json:
             return jsonify({"ok": False, "error": str(exc)}), 400
         flash(str(exc), "error")
-        return redirect(url_for("neosektor.discharge"))
+        return redirect(url_for("neosektor.discharge", request_id=payload.get("request_id")))
 
     db.session.commit()
     if request.is_json:
@@ -353,7 +377,7 @@ def discharge_send():
             }
         )
 
-    flash(f"{event.quantity} {event.uld_type} SENT TO {event.door}.", "success")
+    flash("ULDs marked on the way.", "success")
     return redirect(url_for("neosektor.discharge"))
 
 
@@ -361,6 +385,13 @@ def discharge_send():
 @gateway_node_required("sektor")
 def live_counts():
     return redirect(url_for("neosektor.index"))
+
+
+def _has_multi_uld_send_payload(payload):
+    return any(
+        key in payload
+        for key in ("send_a2_count", "send_a1_count", "send_amp_count")
+    )
 
 
 @bp.route("/live-counts/state")

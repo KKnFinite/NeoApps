@@ -2,15 +2,23 @@
 
 {% block title %}DISCHARGE | NeoSektor{% endblock %}
 
+{% macro request_time(request_row) -%}
+    {{ request_row.updated_at.strftime("%H:%M") if request_row.updated_at else "-" }}
+{%- endmacro %}
+
+{% macro count_strip(request_row) -%}
+    <div class="neosektor-discharge-count-strip" aria-label="Remaining ULD counts">
+        <span>A2 <strong>{{ request_row.counts["A2"] }}</strong></span>
+        <span>A1 <strong>{{ request_row.counts["A1"] }}</strong></span>
+        <span>AMP <strong>{{ request_row.counts["AMP"] }}</strong></span>
+    </div>
+{%- endmacro %}
+
 {% block content %}
 <section
     class="neosektor-standalone-page neosektor-discharge-shell tunnel-body"
     aria-labelledby="neosektor-discharge-title"
     data-neosektor-discharge
-    data-state-url="{{ url_for('neosektor.discharge_state') }}"
-    data-send-url="{{ url_for('neosektor.discharge_send') }}"
-    data-can-edit="{{ 'true' if can_edit else 'false' }}"
-    data-uld-types='{{ uld_types|tojson }}'
 >
     <header class="app-header neosektor-standalone-header">
         <div class="header-title">
@@ -21,222 +29,94 @@
     </header>
 
     <main class="counts-wrap neosektor-discharge-wrap">
-        <div class="neosektor-discharge-list" aria-label="Active ULD requests" data-discharge-list {% if not requests %}hidden{% endif %}>
-            {% for request_row in requests %}
-            <article class="neosektor-discharge-card tunnel-panel{% if request_row.setup_needed %} is-setup-needed{% endif %}">
-                <header class="neosektor-discharge-card-head">
-                    <div>
-                        <span>DOOR</span>
-                        <strong>{{ request_row.door }}</strong>
-                    </div>
-                    <em>{{ "NEEDED FOR SETUP" if request_row.setup_needed else "STANDARD" }}</em>
-                </header>
-
-                <div class="neosektor-discharge-count-grid">
-                    {% for uld_type in uld_types %}
-                    <section class="neosektor-discharge-count-card tunnel-readonly-card">
-                        <span>{{ uld_type }} REQUESTED</span>
-                        <strong>{{ request_row.counts[uld_type] }}</strong>
-                        {% if can_edit %}
-                        <form method="post" action="{{ url_for('neosektor.discharge_send') }}" class="neosektor-discharge-send-form" data-discharge-send-form>
-                            <input type="hidden" name="door" value="{{ request_row.door }}">
-                            <input type="hidden" name="request_id" value="{{ request_row.id or '' }}">
-                            <input type="hidden" name="uld_type" value="{{ uld_type }}">
-                            <label>
-                                <span>SEND</span>
-                                <input type="number" name="quantity" min="1" inputmode="numeric" value="{{ 1 if request_row.id else 0 }}" {% if not request_row.id %}disabled{% endif %}>
-                            </label>
-                            <button type="submit" {% if not request_row.id %}disabled{% endif %}>ON THE WAY</button>
-                        </form>
-                        {% else %}
-                        <button type="button" disabled>ON THE WAY</button>
-                        {% endif %}
-                    </section>
-                    {% endfor %}
+        {% if selected_request %}
+        <section class="neosektor-discharge-detail tunnel-panel{% if selected_request.setup_needed %} is-setup-needed{% endif %}" aria-label="Selected ULD request">
+            <a class="neosektor-discharge-back" href="{{ url_for('neosektor.discharge') }}">BACK TO QUEUE</a>
+            <header class="neosektor-discharge-detail-head">
+                <div>
+                    <span>DOOR</span>
+                    <strong>{{ selected_request.door }}</strong>
                 </div>
+                <div>
+                    <span>REQUESTED</span>
+                    <strong>{{ request_time(selected_request) }}</strong>
+                </div>
+                {% if selected_request.setup_needed %}
+                <em>SETUP</em>
+                {% endif %}
+            </header>
 
-                <section class="neosektor-discharge-events tunnel-readonly-card" aria-label="On the way for {{ request_row.door }}">
-                    <h2>ON THE WAY</h2>
-                    {% if request_row.on_the_way_events %}
-                    <ul>
-                        {% for event in request_row.on_the_way_events %}
-                        <li>{{ event.label }}</li>
-                        {% endfor %}
-                    </ul>
-                    {% else %}
-                    <p>No active on-the-way events.</p>
+            {{ count_strip(selected_request) }}
+
+            {% if can_edit %}
+            <form method="post" action="{{ url_for('neosektor.discharge_send') }}" class="neosektor-discharge-send-panel">
+                <input type="hidden" name="door" value="{{ selected_request.door }}">
+                <input type="hidden" name="request_id" value="{{ selected_request.id }}">
+                <label>
+                    <span>A2 SENT</span>
+                    <input type="number" name="send_a2_count" min="0" step="1" inputmode="numeric" value="0">
+                </label>
+                <label>
+                    <span>A1 SENT</span>
+                    <input type="number" name="send_a1_count" min="0" step="1" inputmode="numeric" value="0">
+                </label>
+                <label>
+                    <span>AMP SENT</span>
+                    <input type="number" name="send_amp_count" min="0" step="1" inputmode="numeric" value="0">
+                </label>
+                <button type="submit">SEND ON THE WAY</button>
+            </form>
+            {% else %}
+            <p class="neosektor-discharge-view-only">View-only access. Send controls are disabled.</p>
+            {% endif %}
+
+            <section class="neosektor-discharge-events" aria-label="On the way for {{ selected_request.door }}">
+                <h2>ON THE WAY</h2>
+                {% if selected_request.on_the_way_events %}
+                <ul>
+                    {% for event in selected_request.on_the_way_events %}
+                    <li>{{ event.label }}</li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p>No active on-the-way events.</p>
+                {% endif %}
+            </section>
+        </section>
+        {% endif %}
+
+        <section class="neosektor-discharge-queue tunnel-panel" aria-label="Active ULD request queue">
+            <header class="neosektor-discharge-queue-head">
+                <div>
+                    <span>ACTIVE REQUESTS</span>
+                    <strong>{{ requests|length }}</strong>
+                </div>
+                <p>Setup-needed requests sort first. Oldest requests stay at the top.</p>
+            </header>
+
+            {% if requests %}
+            <div class="neosektor-discharge-list">
+                {% for request_row in requests %}
+                <a
+                    class="neosektor-discharge-row{% if request_row.setup_needed %} is-setup-needed{% endif %}{% if selected_request and selected_request.id == request_row.id %} is-selected{% endif %}"
+                    href="{{ url_for('neosektor.discharge', request_id=request_row.id) }}"
+                >
+                    <span class="neosektor-discharge-door">{{ request_row.door }}</span>
+                    {{ count_strip(request_row) }}
+                    <span class="neosektor-discharge-time">{{ request_time(request_row) }}</span>
+                    {% if request_row.setup_needed %}
+                    <span class="neosektor-discharge-setup">SETUP</span>
                     {% endif %}
-                </section>
-            </article>
-            {% endfor %}
-        </div>
-        <section class="neosektor-discharge-empty tunnel-panel" data-discharge-empty {% if requests %}hidden{% endif %}>
-            <h2>NO ACTIVE ULD REQUESTS</h2>
-            <p>Door requests will appear here when NeoErmac users request A2, A1, or AMP equipment.</p>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="neosektor-discharge-empty">
+                <h2>NO ACTIVE ULD REQUESTS</h2>
+                <p>Door requests will appear here when NeoErmac users request A2, A1, or AMP equipment.</p>
+            </div>
+            {% endif %}
         </section>
     </main>
 </section>
-
-<script>
-(() => {
-    const root = document.querySelector("[data-neosektor-discharge]");
-    if (!root) {
-        return;
-    }
-
-    const stateUrl = root.dataset.stateUrl;
-    const sendUrl = root.dataset.sendUrl;
-    const canEdit = root.dataset.canEdit === "true";
-    let uldTypes = ["A2", "A1", "AMP"];
-
-    try {
-        uldTypes = JSON.parse(root.dataset.uldTypes || "[]");
-    } catch (_error) {}
-
-    const list = root.querySelector("[data-discharge-list]");
-    const empty = root.querySelector("[data-discharge-empty]");
-
-    const renderState = (state) => {
-        const requests = state.requests || [];
-        if (!list || !empty) {
-            return;
-        }
-
-        list.hidden = requests.length === 0;
-        empty.hidden = requests.length > 0;
-        list.innerHTML = requests.map(renderRequest).join("");
-    };
-
-    const renderRequest = (requestRow) => {
-        const status = requestRow.setup_needed ? "NEEDED FOR SETUP" : "STANDARD";
-        const setupClass = requestRow.setup_needed ? " is-setup-needed" : "";
-        return `
-            <article class="neosektor-discharge-card tunnel-panel${setupClass}">
-                <header class="neosektor-discharge-card-head">
-                    <div>
-                        <span>DOOR</span>
-                        <strong>${escapeHtml(requestRow.door || "")}</strong>
-                    </div>
-                    <em>${status}</em>
-                </header>
-
-                <div class="neosektor-discharge-count-grid">
-                    ${uldTypes.map((uldType) => renderCountCard(requestRow, uldType)).join("")}
-                </div>
-
-                <section class="neosektor-discharge-events tunnel-readonly-card" aria-label="On the way for ${escapeHtml(requestRow.door || "")}">
-                    <h2>ON THE WAY</h2>
-                    ${renderEvents(requestRow.on_the_way_events || [])}
-                </section>
-            </article>
-        `;
-    };
-
-    const renderCountCard = (requestRow, uldType) => {
-        const count = Number.parseInt(requestRow.counts?.[uldType] ?? 0, 10) || 0;
-        if (!canEdit) {
-            return `
-                <section class="neosektor-discharge-count-card tunnel-readonly-card">
-                    <span>${escapeHtml(uldType)} REQUESTED</span>
-                    <strong>${count}</strong>
-                    <button type="button" disabled>ON THE WAY</button>
-                </section>
-            `;
-        }
-
-        const hasRequest = Boolean(requestRow.id);
-        const disabled = hasRequest ? "" : " disabled";
-        const value = hasRequest ? 1 : 0;
-        return `
-            <section class="neosektor-discharge-count-card tunnel-readonly-card">
-                <span>${escapeHtml(uldType)} REQUESTED</span>
-                <strong>${count}</strong>
-                <form method="post" action="${sendUrl}" class="neosektor-discharge-send-form" data-discharge-send-form>
-                    <input type="hidden" name="door" value="${escapeHtml(requestRow.door || "")}">
-                    <input type="hidden" name="request_id" value="${escapeHtml(requestRow.id || "")}">
-                    <input type="hidden" name="uld_type" value="${escapeHtml(uldType)}">
-                    <label>
-                        <span>SEND</span>
-                        <input type="number" name="quantity" min="1" inputmode="numeric" value="${value}"${disabled}>
-                    </label>
-                    <button type="submit"${disabled}>ON THE WAY</button>
-                </form>
-            </section>
-        `;
-    };
-
-    const renderEvents = (events) => {
-        if (!events.length) {
-            return "<p>No active on-the-way events.</p>";
-        }
-
-        return `<ul>${events
-            .map((event) => `<li>${escapeHtml(event.label || "")}</li>`)
-            .join("")}</ul>`;
-    };
-
-    const refreshState = async () => {
-        try {
-            const response = await fetch(stateUrl, { cache: "no-store", credentials: "same-origin" });
-            if (!response.ok) {
-                return;
-            }
-            const payload = await response.json();
-            if (payload.ok) {
-                renderState(payload.state);
-            }
-        } catch (_error) {}
-    };
-
-    const sendUlds = async (form) => {
-        if (!canEdit) {
-            return;
-        }
-
-        const payload = {
-            door: form.querySelector('[name="door"]')?.value,
-            request_id: form.querySelector('[name="request_id"]')?.value,
-            uld_type: form.querySelector('[name="uld_type"]')?.value,
-            quantity: form.querySelector('[name="quantity"]')?.value,
-        };
-
-        try {
-            const response = await fetch(sendUrl, {
-                method: "POST",
-                cache: "no-store",
-                credentials: "same-origin",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
-            if (!response.ok) {
-                return;
-            }
-            const result = await response.json();
-            if (result.ok) {
-                renderState(result.state);
-            }
-        } catch (_error) {}
-    };
-
-    const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;",
-    }[character]));
-
-    root.addEventListener("submit", (event) => {
-        const form = event.target.closest("[data-discharge-send-form]");
-        if (!form) {
-            return;
-        }
-
-        event.preventDefault();
-        sendUlds(form);
-    });
-
-    window.setInterval(refreshState, 3000);
-})();
-</script>
 {% endblock %}

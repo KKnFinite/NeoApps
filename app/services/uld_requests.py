@@ -135,16 +135,20 @@ def update_uld_request_from_form(gateway, door, form_data):
 
 def discharge_context(gateway, now=None):
     return {
-        "requests": active_request_views(gateway, now),
+        "requests": active_discharge_request_views(gateway, now),
         "uld_types": ULD_TYPES,
     }
 
 
 def discharge_state_payload(gateway, now=None):
     return {
-        "requests": [_request_payload(row) for row in active_request_views(gateway, now)],
+        "requests": [_request_payload(row) for row in active_discharge_request_views(gateway, now)],
         "uld_types": list(ULD_TYPES),
     }
+
+
+def active_discharge_request_views(gateway, now=None):
+    return [row for row in active_request_views(gateway, now) if row.get("id")]
 
 
 def door_uld_state_payload(gateway, door, now=None):
@@ -195,17 +199,29 @@ def active_request_views(gateway, now=None):
 
 
 def send_uld_on_the_way(gateway, door, uld_type, quantity, request_id=None, now=None):
-    now = now or datetime.utcnow()
-    normalized_door = normalize_door(door)
     normalized_type = normalize_uld_type(uld_type)
-    if not normalized_door:
-        raise ValueError("Select a door.")
     if not normalized_type:
         raise ValueError("Select a valid ULD type.")
 
-    requested_quantity = clean_count(quantity)
-    if requested_quantity <= 0:
-        raise ValueError("Send quantity must be greater than zero.")
+    events = send_uld_totals_on_the_way(
+        gateway,
+        door,
+        {normalized_type: quantity},
+        request_id=request_id,
+        now=now,
+    )
+    return events[0]
+
+
+def send_uld_totals_on_the_way(gateway, door, counts, request_id=None, now=None):
+    now = now or datetime.utcnow()
+    normalized_door = normalize_door(door)
+    if not normalized_door:
+        raise ValueError("Select a door.")
+
+    normalized_counts = normalize_uld_counts(counts)
+    if not any(normalized_counts.values()):
+        raise ValueError("Send at least one ULD.")
 
     request_record = get_uld_request_by_id(gateway, request_id, normalized_door)
     if request_record is None:
@@ -213,23 +229,30 @@ def send_uld_on_the_way(gateway, door, uld_type, quantity, request_id=None, now=
     if request_record is None:
         raise ValueError("No active ULD request for this door.")
 
-    field_name = ULD_REQUEST_FIELDS[normalized_type]
-    available_quantity = max(getattr(request_record, field_name) or 0, 0)
-    setattr(request_record, field_name, max(available_quantity - requested_quantity, 0))
+    events = []
+    for normalized_type, requested_quantity in normalized_counts.items():
+        if requested_quantity <= 0:
+            continue
 
-    event = NeoSektorUldOnTheWayEvent(
-        gateway_id=gateway.id,
-        door=normalized_door,
-        uld_type=normalized_type,
-        quantity=requested_quantity,
-        sent_at_utc=now,
-        expires_at_utc=now + timedelta(minutes=ON_THE_WAY_MINUTES),
-    )
-    db.session.add(event)
+        field_name = ULD_REQUEST_FIELDS[normalized_type]
+        available_quantity = max(getattr(request_record, field_name) or 0, 0)
+        setattr(request_record, field_name, max(available_quantity - requested_quantity, 0))
+
+        event = NeoSektorUldOnTheWayEvent(
+            gateway_id=gateway.id,
+            door=normalized_door,
+            uld_type=normalized_type,
+            quantity=requested_quantity,
+            sent_at_utc=now,
+            expires_at_utc=now + timedelta(minutes=ON_THE_WAY_MINUTES),
+        )
+        db.session.add(event)
+        events.append(event)
+
     if not request_has_counts(request_record):
         db.session.delete(request_record)
     db.session.flush()
-    return event
+    return events
 
 
 def get_uld_request_by_id(gateway, request_id, door=None):
@@ -342,6 +365,8 @@ def _request_payload(row):
         "door": row["door"],
         "counts": row["counts"],
         "setup_needed": row["setup_needed"],
+        "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+        "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
         "on_the_way_events": [_event_payload(event) for event in row["on_the_way_events"]],
     }
 

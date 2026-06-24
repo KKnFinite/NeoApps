@@ -13618,3 +13618,379 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     min-width: 0;
     max-width: 100%;
 }
+
+.blueprint-neosektor .neosektor-discharge-shell,
+.neosektor-discharge-shell {
+    width: min(100%, 430px);
+    max-width: 430px;
+    gap: 10px;
+    overflow-x: hidden;
+}
+
+.blueprint-neosektor .neosektor-discharge-wrap,
+.neosektor-discharge-wrap {
+    display: grid;
+    gap: 10px;
+    width: 100%;
+    max-width: 100%;
+    padding: 0 8px 16px;
+    overflow-x: hidden;
+}
+
+.blueprint-neosektor .neosektor-discharge-queue,
+.blueprint-neosektor .neosektor-discharge-detail,
+.neosektor-discharge-queue,
+.neosektor-discharge-detail {
+    display: grid;
+    gap: 9px;
+    width: 100%;
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid rgba(var(--node-sektor-primary-rgb), 0.45);
+    border-radius: 8px;
+    background:
+        radial-gradient(circle at 50% 0%, rgba(var(--node-sektor-primary-rgb), 0.16), transparent 15rem),
+        linear-gradient(180deg, rgba(18, 22, 28, 0.98), rgba(4, 7, 11, 0.99));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 20px rgba(var(--node-sektor-primary-rgb), 0.1);
+}
+
+.blueprint-neosektor .neosektor-discharge-detail.is-setup-needed,
+.neosektor-discharge-detail.is-setup-needed {
+    border-color: rgba(var(--node-sektor-highlight-rgb), 0.66);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 0 20px rgba(var(--node-sektor-highlight-rgb), 0.16);
+}
+
+.blueprint-neosektor .neosektor-discharge-queue-head,
+.neosektor-discharge-queue-head {
+    display: grid;
+    gap: 5px;
+}
+
+.blueprint-neosektor .neosektor-discharge-queue-head div,
+.neosektor-discharge-queue-head div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.blueprint-neosektor .neosektor-discharge-queue-head span,
+.blueprint-neosektor .neosektor-discharge-detail-head span,
+.blueprint-neosektor .neosektor-discharge-send-panel span,
+.blueprint-neosektor .neosektor-discharge-events h2,
+.neosektor-discharge-queue-head span,
+.neosektor-discharge-detail-head span,
+.neosektor-discharge-send-panel span,
+.neosektor-discharge-events h2 {
+    margin: 0;
+    color: rgba(238, 246, 255, 0.68);
+    font-size: 0.58rem;
+    font-weight: 950;
+    letter-spacing: 0.1em;
+    line-height: 1.1;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-discharge-queue-head strong,
+.neosektor-discharge-queue-head strong {
+    color: var(--node-sektor-highlight);
+    font-size: 1.4rem;
+    line-height: 1;
+}
+
+.blueprint-neosektor .neosektor-discharge-queue-head p,
+.blueprint-neosektor .neosektor-discharge-view-only,
+.neosektor-discharge-queue-head p,
+.neosektor-discharge-view-only {
+    margin: 0;
+    color: rgba(238, 246, 255, 0.78);
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1.25;
+}
+
+.blueprint-neosektor .neosektor-discharge-list,
+.neosektor-discharge-list {
+    display: grid;
+    gap: 7px;
+    width: 100%;
+}
+
+.blueprint-neosektor .neosektor-discharge-row,
+.neosektor-discharge-row {
+    display: grid;
+    grid-template-columns: 54px minmax(0, 1fr) 44px;
+    grid-template-areas:
+        "door counts time"
+        "door counts flag";
+    align-items: center;
+    gap: 4px 7px;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid rgba(216, 220, 224, 0.18);
+    border-radius: 7px;
+    background:
+        linear-gradient(180deg, rgba(244, 246, 248, 0.06), transparent 45%),
+        rgba(5, 8, 12, 0.76);
+    color: inherit;
+    text-decoration: none;
+}
+
+.blueprint-neosektor .neosektor-discharge-row.is-setup-needed,
+.neosektor-discharge-row.is-setup-needed {
+    border-color: rgba(var(--node-sektor-highlight-rgb), 0.56);
+}
+
+.blueprint-neosektor .neosektor-discharge-row.is-selected,
+.neosektor-discharge-row.is-selected {
+    box-shadow: inset 0 0 0 1px rgba(var(--node-sektor-highlight-rgb), 0.42);
+}
+
+.blueprint-neosektor .neosektor-discharge-door,
+.neosektor-discharge-door {
+    grid-area: door;
+    color: var(--node-sektor-highlight);
+    font-size: 1.1rem;
+    font-weight: 950;
+    line-height: 1;
+}
+
+.blueprint-neosektor .neosektor-discharge-count-strip,
+.neosektor-discharge-count-strip {
+    grid-area: counts;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    min-width: 0;
+}
+
+.blueprint-neosektor .neosektor-discharge-detail > .neosektor-discharge-count-strip,
+.neosektor-discharge-detail > .neosektor-discharge-count-strip {
+    grid-area: auto;
+}
+
+.blueprint-neosektor .neosektor-discharge-count-strip span,
+.neosektor-discharge-count-strip span {
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    min-width: 0;
+    padding: 5px 3px;
+    border: 1px solid rgba(var(--node-sektor-primary-rgb), 0.24);
+    border-radius: 6px;
+    background: rgba(1, 4, 7, 0.72);
+    color: rgba(238, 246, 255, 0.7);
+    font-size: 0.52rem;
+    font-weight: 950;
+    letter-spacing: 0.05em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-discharge-count-strip strong,
+.neosektor-discharge-count-strip strong {
+    color: #fff;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.blueprint-neosektor .neosektor-discharge-time,
+.blueprint-neosektor .neosektor-discharge-setup,
+.neosektor-discharge-time,
+.neosektor-discharge-setup {
+    justify-self: end;
+    min-width: 0;
+    color: rgba(238, 246, 255, 0.78);
+    font-size: 0.62rem;
+    font-weight: 950;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-discharge-time,
+.neosektor-discharge-time {
+    grid-area: time;
+}
+
+.blueprint-neosektor .neosektor-discharge-setup,
+.neosektor-discharge-setup {
+    grid-area: flag;
+    padding: 4px 5px;
+    border-radius: 999px;
+    background: rgba(var(--node-sektor-highlight-rgb), 0.18);
+    color: var(--node-sektor-highlight);
+}
+
+.blueprint-neosektor .neosektor-discharge-detail-head,
+.neosektor-discharge-detail-head {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+    align-items: center;
+    gap: 7px;
+}
+
+.blueprint-neosektor .neosektor-discharge-detail-head div,
+.neosektor-discharge-detail-head div {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid rgba(216, 220, 224, 0.18);
+    border-radius: 7px;
+    background: rgba(5, 8, 12, 0.74);
+}
+
+.blueprint-neosektor .neosektor-discharge-detail-head strong,
+.neosektor-discharge-detail-head strong {
+    overflow: hidden;
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 950;
+    line-height: 1.05;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.blueprint-neosektor .neosektor-discharge-detail-head em,
+.neosektor-discharge-detail-head em {
+    justify-self: end;
+    padding: 6px 7px;
+    border: 1px solid rgba(var(--node-sektor-highlight-rgb), 0.45);
+    border-radius: 999px;
+    color: var(--node-sektor-highlight);
+    font-size: 0.62rem;
+    font-style: normal;
+    font-weight: 950;
+    line-height: 1;
+}
+
+.blueprint-neosektor .neosektor-discharge-back,
+.neosektor-discharge-back {
+    justify-self: start;
+    color: var(--node-sektor-highlight);
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.06em;
+    text-decoration: none;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-discharge-send-panel,
+.neosektor-discharge-send-panel {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+    min-width: 0;
+}
+
+.blueprint-neosektor .neosektor-discharge-send-panel label,
+.neosektor-discharge-send-panel label {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.blueprint-neosektor .neosektor-discharge-send-panel input,
+.neosektor-discharge-send-panel input {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    border: 1px solid rgba(var(--node-sektor-highlight-rgb), 0.42);
+    border-radius: 6px;
+    background: rgba(2, 4, 7, 0.9);
+    color: #fff;
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 950;
+    text-align: center;
+}
+
+.blueprint-neosektor .neosektor-discharge-send-panel button,
+.neosektor-discharge-send-panel button {
+    grid-column: 1 / -1;
+    min-height: 40px;
+    border: 1px solid rgba(244, 246, 248, 0.24);
+    border-radius: 7px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 40%),
+        linear-gradient(180deg, var(--node-sektor-primary), #4e060c);
+    color: #fff;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-discharge-events,
+.neosektor-discharge-events,
+.blueprint-neosektor .neosektor-discharge-empty,
+.neosektor-discharge-empty {
+    display: grid;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid rgba(216, 220, 224, 0.16);
+    border-radius: 7px;
+    background: rgba(5, 8, 12, 0.58);
+}
+
+.blueprint-neosektor .neosektor-discharge-events ul,
+.neosektor-discharge-events ul {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.blueprint-neosektor .neosektor-discharge-events li,
+.blueprint-neosektor .neosektor-discharge-events p,
+.blueprint-neosektor .neosektor-discharge-empty p,
+.neosektor-discharge-events li,
+.neosektor-discharge-events p,
+.neosektor-discharge-empty p {
+    margin: 0;
+    color: rgba(238, 246, 255, 0.82);
+    font-size: 0.76rem;
+    font-weight: 800;
+    line-height: 1.25;
+}
+
+.blueprint-neosektor .neosektor-discharge-empty h2,
+.neosektor-discharge-empty h2 {
+    margin: 0;
+    color: var(--node-sektor-highlight);
+    font-size: 0.8rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+@media (max-width: 430px) {
+    .blueprint-neosektor .neosektor-discharge-wrap,
+    .neosektor-discharge-wrap {
+        padding-inline: 6px;
+    }
+
+    .blueprint-neosektor .neosektor-discharge-row,
+    .neosektor-discharge-row {
+        grid-template-columns: 48px minmax(0, 1fr) 40px;
+        gap: 4px 5px;
+        padding: 7px;
+    }
+
+    .blueprint-neosektor .neosektor-discharge-count-strip span,
+    .neosektor-discharge-count-strip span {
+        padding-inline: 2px;
+        font-size: 0.5rem;
+    }
+
+    .blueprint-neosektor .neosektor-discharge-count-strip strong,
+    .neosektor-discharge-count-strip strong {
+        font-size: 0.92rem;
+    }
+}
