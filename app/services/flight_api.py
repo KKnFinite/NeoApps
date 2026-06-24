@@ -677,6 +677,13 @@ def flight_api_auto_poll_status(gateway, operation=None, now=None):
     status["polling_window_start_local"] = polling_start_local
     status["polling_window_end_local"] = polling_end_local
 
+    if local_now < polling_start_local:
+        status["next_eligible_time_utc"] = polling_start_utc
+        status["next_eligible_time_local"] = polling_start_local
+        return _auto_poll_not_eligible(status, "before API Polling Window")
+    if local_now > polling_end_local:
+        return _auto_poll_not_eligible(status, "outside API Polling Window")
+
     budget_summary = _auto_poll_budget_summary(gateway, operation, settings, now_utc)
     status.update(budget_summary)
 
@@ -696,10 +703,6 @@ def flight_api_auto_poll_status(gateway, operation=None, now=None):
     status["next_eligible_time_utc"] = next_eligible_utc
     status["next_eligible_time_local"] = _utc_to_local_naive(next_eligible_utc, timezone_name)
 
-    if local_now < polling_start_local:
-        return _auto_poll_not_eligible(status, "before API Polling Window")
-    if local_now > polling_end_local:
-        return _auto_poll_not_eligible(status, "outside API Polling Window")
     if now_utc < next_eligible_utc:
         return _auto_poll_not_eligible(status, "waiting for auto poll interval")
 
