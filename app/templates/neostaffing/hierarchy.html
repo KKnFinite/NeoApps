@@ -33,7 +33,7 @@
                     <span>{{ unit_type_labels[unit.unit_type] }}</span>
                     <strong>{{ unit.name }}</strong>
                     {% if unit.unit_type == "work_area" %}
-                    <em>Required {{ unit.required_headcount if unit.required_headcount is not none else "-" }}</em>
+                    <em>Planned {{ unit.required_headcount if unit.required_headcount is not none else "-" }}</em>
                     {% endif %}
                 </div>
                 <small>ORDER {{ unit.display_order }} / {{ "ACTIVE" if unit.active else "INACTIVE" }}</small>
@@ -97,7 +97,7 @@
                 <input type="hidden" name="unit_type" value="work_area">
                 <label><span>Department</span>{{ parent_select("work_area") }}</label>
                 <label><span>Name</span><input name="name" required></label>
-                <label><span>Required Headcount</span><input type="number" min="0" name="required_headcount"></label>
+                <label><span>Planned Staffing</span><input type="number" min="0" name="required_headcount"></label>
                 <label><span>Display Order</span><input type="number" name="display_order" value="0"></label>
                 <button type="submit">ADD WORK AREA</button>
             </form>
@@ -132,7 +132,7 @@
                     <input type="hidden" name="unit_type" value="{{ unit.unit_type }}">
                     <label><span>Name</span><input name="name" value="{{ unit.name }}" required></label>
                     <label><span>Parent</span>{{ parent_select(unit.unit_type, unit.parent_id) }}</label>
-                    <label><span>Required</span><input type="number" min="0" name="required_headcount" value="{{ unit.required_headcount if unit.required_headcount is not none else '' }}" {% if unit.unit_type != "work_area" %}disabled{% endif %}></label>
+                    <label><span>Planned Staffing</span><input type="number" min="0" name="required_headcount" value="{{ unit.required_headcount if unit.required_headcount is not none else '' }}" {% if unit.unit_type != "work_area" %}disabled{% endif %}></label>
                     <label><span>Order</span><input type="number" name="display_order" value="{{ unit.display_order }}"></label>
                     <input type="hidden" name="active" value="{{ 1 if unit.active else 0 }}">
                     <button type="submit">SAVE UNIT</button>

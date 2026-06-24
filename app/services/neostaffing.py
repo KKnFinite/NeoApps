@@ -52,6 +52,7 @@ PARENT_TYPE_BY_UNIT_TYPE = {
     "department": "operation",
     "work_area": "department",
 }
+STAFFING_NEAR_TARGET_THRESHOLD = 0.8
 
 
 def classification_choices():
@@ -130,7 +131,11 @@ def update_unit(unit, values, is_new=False):
     active = _parse_bool(values.get("active"), default=True)
     required_headcount = None
     if unit_type == "work_area":
-        required_headcount = _parse_optional_int(values.get("required_headcount"), minimum=0)
+        required_headcount = _parse_optional_int(
+            values.get("required_headcount"),
+            minimum=0,
+            label="Planned staffing",
+        )
 
     if not is_new and parent and parent.id == unit.id:
         raise ValueError("A unit cannot be its own parent.")
@@ -317,11 +322,13 @@ def dashboard_context(filters=None):
             continue
 
         assigned = int(assigned_by_work_area.get(work_area.id, 0) or 0)
-        required_configured = work_area.required_headcount is not None
-        required = int(work_area.required_headcount if required_configured else assigned)
-        open_positions = max(0, required - assigned)
-        coverage = _coverage_percent(assigned, required)
-        status, status_color = _coverage_status(assigned, required, open_positions)
+        staffing_gap = staffing_gap_for_work_area(work_area, assigned)
+        planned = staffing_gap["planned"]
+        open_positions = staffing_gap["open_positions"]
+        extra_staffing = staffing_gap["extra_staffing"]
+        coverage = staffing_gap["coverage"]
+        required_configured = staffing_gap["planned_configured"]
+        status, status_color = _coverage_status(assigned, planned, open_positions)
         leadership = _board_work_area_leadership_counts(
             leadership_index,
             sort,
@@ -343,10 +350,17 @@ def dashboard_context(filters=None):
                 "operation": operation,
                 "department": department,
                 "assigned": assigned,
-                "required": required,
+                "required": planned,
+                "planned": planned,
                 "required_configured": required_configured,
+                "planned_configured": required_configured,
                 "open": open_positions,
+                "open_positions": open_positions,
+                "extra": extra_staffing,
+                "extra_staffing": extra_staffing,
+                "gap": staffing_gap["gap"],
                 "coverage": coverage,
+                "coverage_bar": min(coverage, 100),
                 "status": status,
                 "status_color": status_color,
                 "leadership": leadership,
@@ -374,19 +388,23 @@ def dashboard_context(filters=None):
         "operations": _board_rollups(cards, "operation"),
         "departments": _board_rollups(cards, "department"),
     }
+    gap_analysis = staffing_gap_analysis(cards)
     summary = {
         "total_employees": sum(card["assigned"] for card in cards),
-        "total_required": sum(card["required"] for card in cards),
-        "total_open": sum(card["open"] for card in cards),
+        "total_assigned": sum(card["assigned"] for card in cards),
+        "total_required": sum(card["planned"] for card in cards),
+        "total_planned": sum(card["planned"] for card in cards),
+        "total_open": sum(card["open_positions"] for card in cards),
+        "total_extra": sum(card["extra_staffing"] for card in cards),
         "understaffed_work_areas": sum(1 for card in cards if card["open"] > 0),
         "missing_leadership_work_areas": sum(1 for card in cards if card["has_missing_leadership"]),
         "default_required_work_areas": sum(1 for card in cards if not card["required_configured"]),
-        "most_understaffed": sorted(
-            [card for card in cards if card["open"] > 0],
-            key=lambda row: (-row["open"], row["unit"].name.lower(), row["unit"].id),
-        )[:3],
-        "missing_leadership": [card for card in cards if card["has_missing_leadership"]][:3],
+        "default_planned_work_areas": sum(1 for card in cards if not card["planned_configured"]),
+        "most_understaffed": gap_analysis["most_understaffed"],
+        "most_overstaffed": gap_analysis["most_overstaffed"],
+        "missing_leadership": gap_analysis["missing_leadership"],
         "default_required": [card for card in cards if not card["required_configured"]][:3],
+        "default_planned": [card for card in cards if not card["planned_configured"]][:3],
     }
 
     return {
@@ -460,8 +478,9 @@ def required_headcount_context(filters=None):
         if selected_work_area and work_area.id != selected_work_area.id:
             continue
         assigned = int(assigned_by_work_area.get(work_area.id, 0) or 0)
-        configured = work_area.required_headcount is not None
-        required = int(work_area.required_headcount if configured else assigned)
+        staffing_gap = staffing_gap_for_work_area(work_area, assigned)
+        configured = staffing_gap["planned_configured"]
+        planned = staffing_gap["planned"]
         rows.append(
             {
                 "unit": work_area,
@@ -470,9 +489,13 @@ def required_headcount_context(filters=None):
                 "department": department,
                 "path": unit_path(work_area),
                 "configured": configured,
-                "required": required,
+                "required": planned,
+                "planned": planned,
                 "assigned": assigned,
-                "difference": assigned - required,
+                "difference": assigned - planned,
+                "gap": staffing_gap["gap"],
+                "open_positions": staffing_gap["open_positions"],
+                "extra_staffing": staffing_gap["extra_staffing"],
             }
         )
     rows.sort(
@@ -505,10 +528,52 @@ def required_headcount_context(filters=None):
 
 def update_required_headcount(work_area, raw_required_headcount):
     if work_area.unit_type != "work_area":
-        raise ValueError("Required headcount can only be set for Work Areas.")
-    work_area.required_headcount = _parse_optional_int(raw_required_headcount, minimum=0)
+        raise ValueError("Planned staffing can only be set for Work Areas.")
+    work_area.required_headcount = _parse_optional_int(
+        raw_required_headcount,
+        minimum=0,
+        label="Planned staffing",
+    )
     db.session.flush()
     return work_area
+
+
+def staffing_gap_for_work_area(work_area, assigned_count):
+    assigned = int(assigned_count or 0)
+    planned_configured = work_area.required_headcount is not None
+    planned = int(work_area.required_headcount if planned_configured else assigned)
+    gap = assigned - planned
+    open_positions = max(0, planned - assigned)
+    extra_staffing = max(0, assigned - planned)
+    return {
+        "work_area": work_area,
+        "assigned": assigned,
+        "assigned_staffing": assigned,
+        "planned": planned,
+        "planned_staffing": planned,
+        "planned_configured": planned_configured,
+        "open_positions": open_positions,
+        "extra_staffing": extra_staffing,
+        "gap": gap,
+        "coverage": _coverage_percent(assigned, planned),
+    }
+
+
+def staffing_gap_analysis(cards, limit=3):
+    understaffed = sorted(
+        [card for card in cards if card["open_positions"] > 0],
+        key=lambda row: (-row["open_positions"], row["unit"].name.lower(), row["unit"].id),
+    )[:limit]
+    overstaffed = sorted(
+        [card for card in cards if card["extra_staffing"] > 0],
+        key=lambda row: (-row["extra_staffing"], row["unit"].name.lower(), row["unit"].id),
+    )[:limit]
+    missing_leadership = [card for card in cards if card["has_missing_leadership"]][:limit]
+    return {
+        "most_understaffed": understaffed,
+        "most_overstaffed": overstaffed,
+        "missing_leadership": missing_leadership,
+    }
 
 
 def _required_headcount_work_areas(selected_department, selected_operation):
@@ -588,14 +653,14 @@ def _board_missing_leadership(leadership):
 def _coverage_percent(assigned, required):
     if required <= 0:
         return 100 if assigned > 0 else 100
-    return int(round(min(assigned / required, 1) * 100))
+    return int(round((assigned / required) * 100))
 
 
 def _coverage_status(assigned, required, open_positions):
     if required <= 0 or open_positions <= 0 or assigned >= required:
         return "On Track", "green"
     coverage = assigned / required
-    if coverage >= 0.8:
+    if coverage >= STAFFING_NEAR_TARGET_THRESHOLD:
         return "Near Target", "yellow"
     return "Understaffed", "red"
 
@@ -613,14 +678,20 @@ def _board_rollups(cards, key):
                 "path": unit_path(unit),
                 "assigned": 0,
                 "required": 0,
+                "planned": 0,
                 "open": 0,
+                "extra": 0,
+                "extra_staffing": 0,
                 "coverage": 100,
                 "work_area_count": 0,
             },
         )
         bucket["assigned"] += card["assigned"]
-        bucket["required"] += card["required"]
-        bucket["open"] += card["open"]
+        bucket["required"] += card["planned"]
+        bucket["planned"] += card["planned"]
+        bucket["open"] += card["open_positions"]
+        bucket["extra"] += card["extra_staffing"]
+        bucket["extra_staffing"] += card["extra_staffing"]
         bucket["work_area_count"] += 1
     for bucket in buckets.values():
         bucket["coverage"] = _coverage_percent(bucket["assigned"], bucket["required"])
@@ -1239,15 +1310,15 @@ def _parse_int(value, default=0):
         raise ValueError("Display order must be a number.") from exc
 
 
-def _parse_optional_int(value, minimum=None):
+def _parse_optional_int(value, minimum=None, label="Value"):
     if value in (None, ""):
         return None
     try:
         parsed = int(value)
     except (TypeError, ValueError) as exc:
-        raise ValueError("Required headcount must be a number.") from exc
+        raise ValueError(f"{label} must be a number.") from exc
     if minimum is not None and parsed < minimum:
-        raise ValueError("Required headcount cannot be negative.")
+        raise ValueError(f"{label} cannot be negative.")
     return parsed
 
 

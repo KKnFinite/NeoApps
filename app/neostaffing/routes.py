@@ -206,6 +206,12 @@ def delete_unit(unit_id):
 @bp.route("/app-management/required-headcount")
 @neostaffing_app_required(minimum_role="master")
 def required_headcount():
+    return redirect(url_for("neostaffing.planned_staffing", **request.args))
+
+
+@bp.route("/app-management/planned-staffing")
+@neostaffing_app_required(minimum_role="master")
+def planned_staffing():
     context = staffing_service.required_headcount_context(
         {
             "sort_id": request.args.get("sort_id", "").strip(),
@@ -215,16 +221,17 @@ def required_headcount():
         }
     )
     return render_template(
-        "neostaffing/required_headcount.html",
+        "neostaffing/planned_staffing.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
-        required_headcount=context,
+        planned_staffing=context,
         unit_path=staffing_service.unit_path,
     )
 
 
 @bp.route("/app-management/required-headcount/<int:unit_id>/update", methods=["POST"])
+@bp.route("/app-management/planned-staffing/<int:unit_id>/update", methods=["POST"])
 @neostaffing_app_required(minimum_role="master")
-def update_required_headcount(unit_id):
+def update_planned_staffing(unit_id):
     unit = _get_unit(unit_id)
     try:
         staffing_service.update_required_headcount(unit, request.form.get("required_headcount"))
@@ -234,14 +241,14 @@ def update_required_headcount(unit_id):
         message = str(getattr(error, "orig", None) or error)
         flash(message, "error")
     else:
-        flash("Required headcount updated.", "success")
+        flash("Planned staffing updated.", "success")
 
     query = {
         key: request.form.get(key, "").strip()
         for key in ("sort_id", "operation_id", "department_id", "work_area_id")
         if request.form.get(key, "").strip()
     }
-    return redirect(url_for("neostaffing.required_headcount", **query))
+    return redirect(url_for("neostaffing.planned_staffing", **query))
 
 
 @bp.route("/app-management/people")

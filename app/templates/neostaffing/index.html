@@ -34,10 +34,11 @@
                 <span>{{ row.path }}</span>
                 <strong>{{ row.unit.name }}</strong>
                 <dl>
-                    <div><dt>Assigned</dt><dd>{{ row.assigned }}</dd></div>
-                    <div><dt>Required</dt><dd>{{ row.required }}</dd></div>
-                    <div><dt>Open</dt><dd>{{ row.open }}</dd></div>
-                    <div><dt>Coverage</dt><dd>{{ row.coverage }}%</dd></div>
+                    <div><dt>Assigned Staffing</dt><dd>{{ row.assigned }}</dd></div>
+                    <div><dt>Planned Staffing</dt><dd>{{ row.planned }}</dd></div>
+                    <div><dt>Open Positions</dt><dd>{{ row.open }}</dd></div>
+                    <div><dt>Extra Staffing</dt><dd>{{ row.extra }}</dd></div>
+                    <div><dt>Coverage %</dt><dd>{{ row.coverage }}%</dd></div>
                 </dl>
             </article>
             {% endfor %}
@@ -115,24 +116,37 @@
             </header>
 
             <section class="neostaffing-summary-strip neostaffing-dashboard-metrics neostaffing-board-metrics" aria-label="NeoStaffing board totals">
-                <article><span>TOTAL EMPLOYEES</span><strong>{{ summary.total_employees }}</strong></article>
-                <article><span>TOTAL REQUIRED</span><strong>{{ summary.total_required }}</strong></article>
-                <article><span>OPEN POSITIONS</span><strong>{{ summary.total_open }}</strong></article>
-                <article><span>UNDERSTAFFED</span><strong>{{ summary.understaffed_work_areas }}</strong></article>
-                <article><span>MISSING LEADERSHIP</span><strong>{{ summary.missing_leadership_work_areas }}</strong></article>
+                <article><span>TOTAL PLANNED STAFFING</span><strong>{{ summary.total_planned }}</strong></article>
+                <article><span>TOTAL ASSIGNED STAFFING</span><strong>{{ summary.total_assigned }}</strong></article>
+                <article><span>TOTAL OPEN POSITIONS</span><strong>{{ summary.total_open }}</strong></article>
+                <article><span>TOTAL EXTRA STAFFING</span><strong>{{ summary.total_extra }}</strong></article>
+                <article><span>UNDERSTAFFED WORK AREAS</span><strong>{{ summary.understaffed_work_areas }}</strong></article>
+                <article><span>WORK AREAS MISSING LEADERSHIP</span><strong>{{ summary.missing_leadership_work_areas }}</strong></article>
             </section>
 
-            <section class="neostaffing-board-alerts" aria-label="NeoStaffing board indicators">
+            <section class="neostaffing-board-alerts" aria-label="NeoStaffing staffing gap analysis">
                 <article>
                     <span>MOST UNDERSTAFFED</span>
                     {% if summary.most_understaffed %}
                     <ul>
                         {% for card in summary.most_understaffed %}
-                        <li><strong>{{ card.unit.name }}</strong><em>{{ card.open }} open</em></li>
+                        <li><strong>{{ card.unit.name }}</strong><em>Planned {{ card.planned }} / Assigned {{ card.assigned }} / Gap {{ card.open_positions }}</em></li>
                         {% endfor %}
                     </ul>
                     {% else %}
                     <p>No open positions.</p>
+                    {% endif %}
+                </article>
+                <article>
+                    <span>MOST OVERSTAFFED</span>
+                    {% if summary.most_overstaffed %}
+                    <ul>
+                        {% for card in summary.most_overstaffed %}
+                        <li><strong>{{ card.unit.name }}</strong><em>Planned {{ card.planned }} / Assigned {{ card.assigned }} / Extra {{ card.extra_staffing }}</em></li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p>No extra staffing.</p>
                     {% endif %}
                 </article>
                 <article>
@@ -148,15 +162,15 @@
                     {% endif %}
                 </article>
                 <article>
-                    <span>DEFAULT REQUIRED</span>
-                    {% if summary.default_required %}
+                    <span>DEFAULT PLANNED STAFFING</span>
+                    {% if summary.default_planned %}
                     <ul>
-                        {% for card in summary.default_required %}
-                        <li><strong>{{ card.unit.name }}</strong><em>Uses assigned count</em></li>
+                        {% for card in summary.default_planned %}
+                        <li><strong>{{ card.unit.name }}</strong><em>Uses assigned staffing</em></li>
                         {% endfor %}
                     </ul>
                     {% else %}
-                    <p>All visible Work Areas are configured.</p>
+                    <p>All visible Work Areas have a staffing plan.</p>
                     {% endif %}
                 </article>
             </section>
@@ -252,20 +266,31 @@
                                 <small class="neostaffing-status-pill is-{{ card.status_color }}">{{ card.status }}</small>
                             </div>
                             <div class="neostaffing-coverage-line">
-                                <strong>{{ card.assigned }} / {{ card.required }}</strong>
-                                <em>{{ card.open }} OPEN</em>
+                                <strong>{{ card.assigned }} / {{ card.planned }}</strong>
+                                <em>
+                                    {% if card.open_positions > 0 %}
+                                    {{ card.open_positions }} OPEN
+                                    {% elif card.extra_staffing > 0 %}
+                                    +{{ card.extra_staffing }} EXTRA
+                                    {% else %}
+                                    FULL
+                                    {% endif %}
+                                </em>
                             </div>
                             <div class="neostaffing-progress" aria-hidden="true">
-                                <i style="width: {{ card.coverage }}%"></i>
+                                <i style="width: {{ card.coverage_bar }}%"></i>
                             </div>
                             <div class="neostaffing-board-card-metrics">
+                                <span>Planned <strong>{{ card.planned }}</strong></span>
+                                <span>Assigned <strong>{{ card.assigned }}</strong></span>
+                                <span>Open <strong>{{ card.open_positions }}</strong></span>
+                                <span>Extra <strong>{{ card.extra_staffing }}</strong></span>
                                 <span>Coverage <strong>{{ card.coverage }}%</strong></span>
                                 <span>PT Sup <strong>{{ card.leadership.pt_supervisors }}</strong></span>
                                 <span>FT Sup <strong>{{ card.leadership.ft_supervisors }}</strong></span>
-                                <span>Manager <strong>{{ card.leadership.managers }}</strong></span>
                             </div>
                             <p class="neostaffing-required-flag{% if not card.required_configured %} is-defaulted{% endif %}">
-                                {{ "Required headcount configured." if card.required_configured else "Required headcount defaults to assigned count." }}
+                                {{ "Planned staffing configured." if card.planned_configured else "Planned staffing defaults to assigned staffing." }}
                             </p>
                             {% if card.has_missing_leadership %}
                             <p class="neostaffing-leadership-warning">Missing {{ card.missing_leadership|join(", ") }}</p>
@@ -279,7 +304,7 @@
                                 <span>VIEW SENIORITY</span>
                                 {% endif %}
                                 {% if can_manage_app %}
-                                <a href="{{ url_for('neostaffing.required_headcount', sort_id=card.sort.id if card.sort else '', operation_id=card.operation.id if card.operation else '', department_id=card.department.id if card.department else '', work_area_id=card.unit.id) }}">MANAGE WORK AREA</a>
+                                <a href="{{ url_for('neostaffing.planned_staffing', sort_id=card.sort.id if card.sort else '', operation_id=card.operation.id if card.operation else '', department_id=card.department.id if card.department else '', work_area_id=card.unit.id) }}">MANAGE WORK AREA</a>
                                 {% endif %}
                             </div>
                         </article>
@@ -293,12 +318,13 @@
                     <h2>{% if selected %}{{ selected.unit.name }}{% else %}WORK AREA DETAILS{% endif %}</h2>
                     {% if selected %}
                     <dl>
-                        <div><dt>Assigned</dt><dd>{{ selected.assigned }}</dd></div>
-                        <div><dt>Required</dt><dd>{{ selected.required }}</dd></div>
-                        <div><dt>Open Positions</dt><dd>{{ selected.open }}</dd></div>
-                        <div><dt>Coverage</dt><dd>{{ selected.coverage }}%</dd></div>
+                        <div><dt>Assigned Staffing</dt><dd>{{ selected.assigned }}</dd></div>
+                        <div><dt>Planned Staffing</dt><dd>{{ selected.planned }}</dd></div>
+                        <div><dt>Open Positions</dt><dd>{{ selected.open_positions }}</dd></div>
+                        <div><dt>Extra Staffing</dt><dd>{{ selected.extra_staffing }}</dd></div>
+                        <div><dt>Coverage %</dt><dd>{{ selected.coverage }}%</dd></div>
                         <div><dt>Status</dt><dd>{{ selected.status }}</dd></div>
-                        <div><dt>Required Source</dt><dd>{{ "Configured" if selected.required_configured else "Defaulted" }}</dd></div>
+                        <div><dt>Planned Source</dt><dd>{{ "Configured" if selected.planned_configured else "Defaulted" }}</dd></div>
                         <div><dt>Department</dt><dd>{{ selected.department.name if selected.department else "-" }}</dd></div>
                         <div><dt>Operation</dt><dd>{{ selected.operation.name if selected.operation else "-" }}</dd></div>
                     </dl>
@@ -323,7 +349,7 @@
                         <a href="{{ url_for('neostaffing.seniority', sort_id=selected.sort.id if selected.sort else '', operation_id=selected.operation.id, department_id=selected.department.id if selected.department else '', work_area_id=selected.unit.id) }}">VIEW SENIORITY</a>
                         {% endif %}
                         {% if can_manage_app %}
-                        <a href="{{ url_for('neostaffing.required_headcount', sort_id=selected.sort.id if selected.sort else '', operation_id=selected.operation.id if selected.operation else '', department_id=selected.department.id if selected.department else '', work_area_id=selected.unit.id) }}">MANAGE WORK AREA</a>
+                        <a href="{{ url_for('neostaffing.planned_staffing', sort_id=selected.sort.id if selected.sort else '', operation_id=selected.operation.id if selected.operation else '', department_id=selected.department.id if selected.department else '', work_area_id=selected.unit.id) }}">MANAGE WORK AREA</a>
                         {% endif %}
                     </div>
                     {% else %}

@@ -50,8 +50,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"DASHBOARD", response.data)
         self.assertIn(b"ORGANIZATION HIERARCHY", response.data)
         self.assertIn(b"STAFFING BOARD", response.data)
-        self.assertIn(b"TOTAL REQUIRED", response.data)
-        self.assertIn(b"OPEN POSITIONS", response.data)
+        self.assertIn(b"TOTAL PLANNED STAFFING", response.data)
+        self.assertIn(b"TOTAL ASSIGNED STAFFING", response.data)
+        self.assertIn(b"TOTAL OPEN POSITIONS", response.data)
+        self.assertIn(b"TOTAL EXTRA STAFFING", response.data)
         self.assertIn(b"MISSING LEADERSHIP", response.data)
         self.assertIn(b"Search work areas", response.data)
         self.assertIn(b"PEOPLE", response.data)
@@ -108,6 +110,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"EBM", response.data)
         self.assertIn(b"1 / 2", response.data)
         self.assertIn(b"1 OPEN", response.data)
+        self.assertIn(b"Planned", response.data)
+        self.assertIn(b"Assigned", response.data)
+        self.assertIn(b"Open", response.data)
+        self.assertIn(b"Extra", response.data)
         self.assertIn(b"Understaffed", response.data)
         self.assertIn(b"SORT ROLLUPS", response.data)
         self.assertIn(b"OPERATION ROLLUPS", response.data)
@@ -226,6 +232,67 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"1 / 1", searched.data)
         self.assertNotIn(b"1 / 3", searched.data)
 
+    def test_board_planned_staffing_gap_analysis_and_rollups(self):
+        user = self._user("staffing_gap_board")
+        self._grant_app_access(user, "neostaffing", "master")
+        sort, operation, department, work_area = self._staffing_hierarchy()
+        understaffed = staffing_service.update_unit(
+            work_area,
+            {
+                "unit_type": "work_area",
+                "name": "EBM",
+                "parent_id": department.id,
+                "required_headcount": "4",
+            },
+        )
+        overstaffed = staffing_service.create_unit(
+            {
+                "unit_type": "work_area",
+                "name": "East Primary",
+                "parent_id": department.id,
+                "required_headcount": "1",
+            }
+        )
+        defaulted = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "East Irregs", "parent_id": department.id}
+        )
+        for index, area in enumerate([understaffed, overstaffed, overstaffed, defaulted], start=1):
+            person = staffing_service.create_person(
+                {
+                    "employee_id": f"2500{index}",
+                    "first_name": f"Worker{index}",
+                    "last_name": "Gap",
+                    "seniority_date": "2020-01-01",
+                    "classification": "part_time",
+                }
+            )
+            staffing_service.assign_work_area(person, area)
+        db.session.commit()
+        self._login(user.username)
+
+        response = self.client.get("/neostaffing")
+        context = staffing_service.dashboard_context({})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"TOTAL PLANNED STAFFING", response.data)
+        self.assertIn(b"TOTAL ASSIGNED STAFFING", response.data)
+        self.assertIn(b"TOTAL OPEN POSITIONS", response.data)
+        self.assertIn(b"TOTAL EXTRA STAFFING", response.data)
+        self.assertIn(b"MOST UNDERSTAFFED", response.data)
+        self.assertIn(b"MOST OVERSTAFFED", response.data)
+        self.assertIn(b"Planned 4 / Assigned 1 / Gap 3", response.data)
+        self.assertIn(b"Planned 1 / Assigned 2 / Extra 1", response.data)
+        self.assertIn(b"Planned staffing defaults to assigned staffing.", response.data)
+        self.assertEqual(context["summary"]["total_planned"], 6)
+        self.assertEqual(context["summary"]["total_assigned"], 4)
+        self.assertEqual(context["summary"]["total_open"], 3)
+        self.assertEqual(context["summary"]["total_extra"], 1)
+        self.assertEqual(context["summary"]["most_understaffed"][0]["unit"].name, "EBM")
+        self.assertEqual(context["summary"]["most_overstaffed"][0]["unit"].name, "East Primary")
+        overstaffed_card = next(card for card in context["work_area_cards"] if card["unit"].name == "East Primary")
+        self.assertEqual(overstaffed_card["coverage"], 200)
+        self.assertEqual(overstaffed_card["coverage_bar"], 100)
+
     def test_user_without_neostaffing_access_cannot_open_dashboard(self):
         user = self._user("no_staffing")
         db.session.commit()
@@ -291,7 +358,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
     def test_app_management_crud_pages_require_master_or_grandmaster(self):
         paths = (
             "/neostaffing/app-management/hierarchy",
-            "/neostaffing/app-management/required-headcount",
+            "/neostaffing/app-management/planned-staffing",
             "/neostaffing/app-management/people",
             "/neostaffing/app-management/work-assignments",
             "/neostaffing/app-management/management-assignments",
@@ -338,7 +405,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'href="/neostaffing/app-management/hierarchy"', response.data)
-        self.assertIn(b'href="/neostaffing/app-management/required-headcount"', response.data)
+        self.assertIn(b'href="/neostaffing/app-management/planned-staffing"', response.data)
         self.assertIn(b'href="/neostaffing/app-management/people"', response.data)
         self.assertIn(b'href="/neostaffing/app-management/work-assignments"', response.data)
         self.assertIn(b'href="/neostaffing/app-management/management-assignments"', response.data)
@@ -379,7 +446,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         for path, marker in (
             ("/neostaffing/app-management/hierarchy", b"UNIT CONTROL DECK"),
-            ("/neostaffing/app-management/required-headcount", b"REQUIRED HEADCOUNT DECK"),
+            ("/neostaffing/app-management/planned-staffing", b"PLANNED STAFFING DECK"),
             ("/neostaffing/app-management/people", b"PEOPLE CONTROL DECK"),
             ("/neostaffing/app-management/work-assignments", b"WORK AREA ASSIGNMENT DECK"),
         ):
@@ -389,7 +456,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 self.assertIn(marker, response.data)
                 self.assertIn(b"neostaffing-record-card", response.data)
 
-    def test_required_headcount_page_edits_validates_and_filters_work_areas(self):
+    def test_planned_staffing_page_edits_validates_and_filters_work_areas(self):
         user = self._user("staffing_required_master")
         self._grant_app_access(user, "neostaffing", "master")
         sort, operation, department, work_area = self._staffing_hierarchy()
@@ -409,16 +476,20 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login(user.username)
 
-        page = self.client.get(f"/neostaffing/app-management/required-headcount?work_area_id={work_area.id}")
+        page = self.client.get(f"/neostaffing/app-management/planned-staffing?work_area_id={work_area.id}")
         self.assertEqual(page.status_code, 200)
-        self.assertIn(b"REQUIRED HEADCOUNT DECK", page.data)
+        self.assertIn(b"PLANNED STAFFING DECK", page.data)
         self.assertIn(b"1 Work Areas", page.data)
         self.assertIn(b"EBM", page.data)
         self.assertIn(b"DEFAULTED", page.data)
         self.assertIn(b"Difference", page.data)
+        self.assertIn(b"Planned Staffing", page.data)
+        self.assertIn(b"Assigned Staffing", page.data)
+        self.assertIn(b"Open Positions", page.data)
+        self.assertIn(b"Extra Staffing", page.data)
 
         update = self.client.post(
-            f"/neostaffing/app-management/required-headcount/{work_area.id}/update",
+            f"/neostaffing/app-management/planned-staffing/{work_area.id}/update",
             data={
                 "required_headcount": "5",
                 "sort_id": str(sort.id),
@@ -432,21 +503,22 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(db.session.get(StaffingUnit, work_area.id).required_headcount, 5)
         self.assertIn(b"CONFIGURED", update.data)
         self.assertIn(b"5", update.data)
+        self.assertIn(b"Planned staffing updated.", update.data)
 
         invalid = self.client.post(
-            f"/neostaffing/app-management/required-headcount/{work_area.id}/update",
+            f"/neostaffing/app-management/planned-staffing/{work_area.id}/update",
             data={"required_headcount": "-1", "work_area_id": str(work_area.id)},
             follow_redirects=True,
         )
         self.assertEqual(invalid.status_code, 200)
         self.assertEqual(db.session.get(StaffingUnit, work_area.id).required_headcount, 5)
-        self.assertIn(b"Required headcount cannot be negative.", invalid.data)
+        self.assertIn(b"Planned staffing cannot be negative.", invalid.data)
 
         lower = self._user("staffing_required_operator")
         self._grant_app_access(lower, "neostaffing", "operator")
         db.session.commit()
         operator_client = self._logged_in_client(lower.username)
-        blocked = operator_client.get("/neostaffing/app-management/required-headcount", follow_redirects=False)
+        blocked = operator_client.get("/neostaffing/app-management/planned-staffing", follow_redirects=False)
         self.assertEqual(blocked.status_code, 302)
         self.assertEqual(blocked.location, "/neostaffing")
 
@@ -485,7 +557,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         defaulted = self.client.get(f"/neostaffing?work_area_id={default_area.id}")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Required Source", response.data)
+        self.assertIn(b"Planned Source", response.data)
         self.assertIn(b"Configured", response.data)
         self.assertIn(b"Department", response.data)
         self.assertIn(b"East Shift Department", response.data)
@@ -500,13 +572,13 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             response.data,
         )
         self.assertIn(
-            f'href="/neostaffing/app-management/required-headcount?sort_id={sort.id}&amp;operation_id={operation.id}&amp;department_id={department.id}&amp;work_area_id={work_area.id}"'.encode(),
+            f'href="/neostaffing/app-management/planned-staffing?sort_id={sort.id}&amp;operation_id={operation.id}&amp;department_id={department.id}&amp;work_area_id={work_area.id}"'.encode(),
             response.data,
         )
-        self.assertIn(b"DEFAULT REQUIRED", response.data)
+        self.assertIn(b"DEFAULT PLANNED STAFFING", response.data)
         self.assertEqual(defaulted.status_code, 200)
         self.assertIn(b"Defaulted", defaulted.data)
-        self.assertIn(b"Required headcount defaults to assigned count.", defaulted.data)
+        self.assertIn(b"Planned staffing defaults to assigned staffing.", defaulted.data)
 
     def test_portal_tile_opens_neostaffing_for_approved_user(self):
         user = self._user("staffing_portal")
