@@ -3520,6 +3520,74 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"ARR001", response.data)
         self.assertNotIn(b"DEP999", response.data)
 
+    def test_arrival_board_eta_displays_api_eta_as_local_time(self):
+        operation = self._operation(sort_date=date(2026, 6, 1))
+        db.session.add(operation)
+        db.session.add(
+            self._mission(
+                operation=operation,
+                mission_type="arrival",
+                flight_number="UPS555",
+                planned_datetime_local=datetime(2026, 6, 1, 21, 55),
+                planned_datetime_utc=datetime(2026, 6, 2, 2, 55),
+                eta_datetime_utc=datetime(2026, 6, 2, 3, 8),
+                eta_source="api",
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"UPS555", response.data)
+        self.assertIn(b"22:08", response.data)
+        self.assertNotIn(b"03:08", response.data)
+
+    def test_arrival_board_eta_falls_back_to_scheduled_local_time(self):
+        operation = self._operation(sort_date=date(2026, 6, 1))
+        db.session.add(operation)
+        db.session.add(
+            self._mission(
+                operation=operation,
+                mission_type="arrival",
+                flight_number="UPS1487",
+                planned_datetime_local=datetime(2026, 6, 1, 22, 9),
+                planned_datetime_utc=datetime(2026, 6, 2, 3, 9),
+                eta_datetime_utc=None,
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"UPS1487", response.data)
+        self.assertIn(b"22:09", response.data)
+        self.assertNotIn(b"03:09", response.data)
+
+    def test_arrival_board_eta_displays_crossing_midnight_local_time(self):
+        operation = self._operation(sort_date=date(2026, 6, 1))
+        db.session.add(operation)
+        db.session.add(
+            self._mission(
+                operation=operation,
+                mission_type="arrival",
+                flight_number="UPS999",
+                planned_datetime_local=datetime(2026, 6, 2, 0, 0),
+                planned_datetime_utc=datetime(2026, 6, 2, 5, 0),
+                eta_datetime_utc=datetime(2026, 6, 2, 5, 9),
+                eta_source="api",
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"UPS999", response.data)
+        self.assertIn(b"00:09", response.data)
+        self.assertNotIn(b"05:09", response.data)
+
     def test_departure_board_shows_only_departure_missions(self):
         operation = self._operation_with_missions()
         db.session.commit()

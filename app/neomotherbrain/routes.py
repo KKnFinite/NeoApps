@@ -40,6 +40,7 @@ from app.services.flight_api import (
     run_flight_api_import,
     run_flight_api_replay,
     sort_flight_lookup_window_snapshot,
+    _utc_to_local_naive as flight_api_utc_to_local_naive,
 )
 from app.services.access_control import (
     get_current_gateway,
@@ -1249,7 +1250,7 @@ def arrival_board(operation_id):
     operation = _operation_or_404(operation_id)
     missions = _missions_for_operation(operation, "arrival")
     parking_assignments = _parking_assignments_for_operation(operation)
-    rows = [_arrival_row(mission, parking_assignments) for mission in missions]
+    rows = [_arrival_row(mission, operation, parking_assignments) for mission in missions]
     return render_template(
         "neomotherbrain/arrival_board.html",
         operation=operation,
@@ -2439,11 +2440,11 @@ def _mission_count(operation, mission_type):
     ).count()
 
 
-def _arrival_row(mission, parking_assignments=None):
+def _arrival_row(mission, operation=None, parking_assignments=None):
     return {
         "mission": mission,
         "parking_position": _parking_position_for_mission(mission, parking_assignments),
-        "eta_time": mission.eta_datetime_utc or mission.planned_datetime_local,
+        "eta_time": _arrival_eta_display_time(mission, operation),
         "crew_covered": is_mission_crew_covered(mission.crew_assignments),
     }
 
@@ -2475,6 +2476,16 @@ def _mission_list_row(mission, operation, parking_assignments=None):
             else mission.departure_status
         ),
     }
+
+
+def _arrival_eta_display_time(mission, operation=None):
+    if mission.eta_datetime_utc:
+        timezone_name = (
+            getattr(mission, "timezone", None)
+            or _gateway_timezone(getattr(operation, "gateway", None))
+        )
+        return flight_api_utc_to_local_naive(mission.eta_datetime_utc, timezone_name)
+    return mission.planned_datetime_local
 
 
 def _parking_assignments_for_operation(operation):
