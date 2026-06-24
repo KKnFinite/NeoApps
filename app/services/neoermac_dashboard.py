@@ -48,15 +48,16 @@ def neoermac_dashboard_context(gateway):
             side = assignment["side"]
             if side not in rows:
                 continue
+            required_doors = assignment["required_doors"]
             related_door_pulls = [
                 door_pull
                 for door_pull in door_pulls_by_destination.get(destination, [])
-                if door_pull.door in assignment["candidate_doors"]
+                if door_pull.door in required_doors
             ]
 
             for pull_order, pull_field in enumerate(PULL_FIELDS):
                 planned_time = _planned_pull_time(mission, operation, pull_field["key"])
-                if _pull_is_complete(mission, related_door_pulls, pull_field):
+                if _pull_is_complete(mission, related_door_pulls, pull_field, required_doors):
                     continue
                 rows[side].append(
                     {
@@ -87,22 +88,9 @@ def neoermac_dashboard_context(gateway):
 
 def _lineup_assignments_by_destination(gateway):
     assignments_by_destination = {}
-    seen_assignments = set()
-    real_doors = get_outbound_door_options()
-    real_door_numbers = {door: _door_number(door) for door in real_doors}
+    assignment_index = {}
 
     for row in get_building_lineup_rows(gateway):
-        start_number = _door_number(row.door_start)
-        end_number = _door_number(row.door_end)
-        if start_number is None or end_number is None:
-            continue
-        low, high = sorted((start_number, end_number))
-        candidate_doors = tuple(
-            door
-            for door, door_number in real_door_numbers.items()
-            if door_number is not None and low <= door_number <= high
-        )
-
         for field_name in DESTINATION_FIELDS:
             destination = normalize_destination(getattr(row, field_name, None))
             if not destination:
@@ -116,17 +104,22 @@ def _lineup_assignments_by_destination(gateway):
             slot_label = row.slot_labels.get(field_name, field_name.replace("_", " ").upper())
             location = f"{row.belt_group_label} {_dashboard_belt_label(slot_label)}"
             assignment_key = (destination, side, location)
-            if assignment_key in seen_assignments:
-                continue
-            seen_assignments.add(assignment_key)
-            assignments_by_destination.setdefault(destination, []).append(
-                {
+            assignment = assignment_index.get(assignment_key)
+            if not assignment:
+                assignment = {
                     "door": row.belt_group_label,
                     "location": location,
                     "side": side,
-                    "candidate_doors": candidate_doors,
+                    "required_doors": [],
                 }
-            )
+                assignment_index[assignment_key] = assignment
+                assignments_by_destination.setdefault(destination, []).append(assignment)
+            if primary_door not in assignment["required_doors"]:
+                assignment["required_doors"].append(primary_door)
+
+    for assignments in assignments_by_destination.values():
+        for assignment in assignments:
+            assignment["required_doors"] = tuple(assignment["required_doors"])
 
     return assignments_by_destination
 
@@ -209,9 +202,22 @@ def _planned_pull_time(mission, operation, pull_key):
     return timing_data.get(adjusted_key) or getattr(mission, planned_attr, None)
 
 
-def _pull_is_complete(mission, door_pulls, pull_field):
+def _pull_is_complete(mission, door_pulls, pull_field, required_doors=()):
     actual_attr = pull_field["actual_attr"]
     no_attr = pull_field["no_attr"]
+    if required_doors:
+        pulls_by_door = {door_pull.door: door_pull for door_pull in door_pulls}
+        for door in required_doors:
+            door_pull = pulls_by_door.get(door)
+            if not door_pull:
+                return False
+            if not (
+                getattr(door_pull, actual_attr, None)
+                or getattr(door_pull, no_attr, False)
+            ):
+                return False
+        return True
+
     if getattr(mission, actual_attr, None):
         return True
     return any(

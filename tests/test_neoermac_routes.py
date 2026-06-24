@@ -218,9 +218,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self._login_approved_user(role="operator")
 
         save_response = self.client.post(
-            "/neoermac/door-view?door=D34",
+            "/neoermac/door-view?door=D32",
             data={
-                "door": "D34",
+                "door": "D32",
                 "action": "save_pulls",
                 "destination_count": "1",
                 "destination_0": "SDF",
@@ -240,6 +240,58 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"1st Mix", west_html)
         self.assertIn(b"01:55", west_html)
         self.assertIn(b"2nd Mix", west_html)
+
+    def test_neoermac_menu_keeps_multi_door_pull_until_all_required_doors_addressed(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "LAX")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "LAX")
+        self._add_operation_departure(
+            "UPS704",
+            "LAX",
+            pure_pull_time_local=time(1, 20),
+            first_mix_pull_time_local=time(1, 40),
+            final_mix_pull_time_local=time(1, 55),
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        first_side_response = self.client.post(
+            "/neoermac/door-view?door=D32",
+            data={
+                "door": "D32",
+                "action": "save_pulls",
+                "destination_count": "1",
+                "destination_0": "LAX",
+                "actual_first_mix_0": "01:45",
+            },
+            follow_redirects=False,
+        )
+        one_side_dashboard = self.client.get("/neoermac")
+        one_side_west_html = self._upcoming_side_html(one_side_dashboard, "West")
+
+        self.assertEqual(first_side_response.status_code, 302)
+        self.assertEqual(one_side_dashboard.status_code, 200)
+        self.assertIn(b"LAX / - / -", one_side_west_html)
+        self.assertIn(b"01:40", one_side_west_html)
+        self.assertIn(b"1st Mix", one_side_west_html)
+
+        second_side_response = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "save_pulls",
+                "destination_count": "1",
+                "destination_0": "LAX",
+                "no_first_mix_0": "on",
+            },
+            follow_redirects=False,
+        )
+        complete_dashboard = self.client.get("/neoermac")
+        complete_west_html = self._upcoming_side_html(complete_dashboard, "West")
+
+        self.assertEqual(second_side_response.status_code, 302)
+        self.assertEqual(complete_dashboard.status_code, 200)
+        self.assertNotIn(b"01:40", complete_west_html)
+        self.assertNotIn(b"1st Mix", complete_west_html)
 
     def test_neoermac_menu_sorts_upcoming_pulls_and_limits_each_side(self):
         assignments = (
