@@ -3,7 +3,11 @@
 {% block title %}DISCHARGE | NeoSektor{% endblock %}
 
 {% macro request_time(request_row) -%}
-    {{ request_row.updated_at.strftime("%H:%M") if request_row.updated_at else "-" }}
+    {{ request_row.updated_at|local_time if request_row.updated_at else "-" }}
+{%- endmacro %}
+
+{% macro request_type(request_row) -%}
+    {{ "SETUP" if request_row.setup_needed else "RESPOT" }}
 {%- endmacro %}
 
 {% macro count_strip(request_row) -%}
@@ -41,9 +45,7 @@
                     <span>REQUESTED</span>
                     <strong>{{ request_time(selected_request) }}</strong>
                 </div>
-                {% if selected_request.setup_needed %}
-                <em>SETUP</em>
-                {% endif %}
+                <em>{{ request_type(selected_request) }}</em>
             </header>
 
             {{ count_strip(selected_request) }}
@@ -104,9 +106,7 @@
                     <span class="neosektor-discharge-door">{{ request_row.door }}</span>
                     {{ count_strip(request_row) }}
                     <span class="neosektor-discharge-time">{{ request_time(request_row) }}</span>
-                    {% if request_row.setup_needed %}
-                    <span class="neosektor-discharge-setup">SETUP</span>
-                    {% endif %}
+                    <span class="neosektor-discharge-setup">{{ request_type(request_row) }}</span>
                 </a>
                 {% endfor %}
             </div>

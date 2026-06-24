@@ -126,6 +126,40 @@ def save_door_pulls(gateway, selected_door, form_data):
     db.session.flush()
 
 
+def save_single_door_pull(gateway, selected_door, destination, pull_key, actual_value, no_pull):
+    selected_door = normalize_door(selected_door)
+    if not selected_door:
+        raise ValueError("Select a door.")
+    if selected_door not in get_door_options(gateway):
+        raise ValueError(f"{selected_door} is not available.")
+
+    destination = normalize_destination(destination)
+    if not destination:
+        raise ValueError("Select a destination.")
+
+    field = _pull_field_by_key(pull_key)
+    if not field:
+        raise ValueError("Select a valid pull type.")
+
+    operation = _current_operation(gateway)
+    door_cards = _destination_cards_for_door(gateway, selected_door, operation)
+    allowed_destinations = {card["destination"] for card in door_cards}
+    if destination not in allowed_destinations:
+        raise ValueError(f"{destination} is not assigned to {selected_door}.")
+
+    record = _door_pull_record(gateway, selected_door, destination, operation, create=True)
+    no_pull = bool(no_pull)
+    setattr(record, field["no_attr"], no_pull)
+    if no_pull:
+        setattr(record, field["actual_attr"], None)
+    else:
+        setattr(record, field["actual_attr"], _parse_optional_time(actual_value))
+    _sync_mission_actual_pulls(gateway, operation, destination, record)
+
+    db.session.flush()
+    return _pull_card_payload(gateway, selected_door, destination, operation)
+
+
 def save_uld_request(gateway, selected_door, form_data):
     selected_door = normalize_door(selected_door)
     if not selected_door:
@@ -156,6 +190,20 @@ def door_view_uld_state(gateway, selected_door):
         for card in destinations
     ]
     return state
+
+
+def _pull_card_payload(gateway, selected_door, destination, operation):
+    for card in _destination_cards_for_door(gateway, selected_door, operation):
+        if card["destination"] == destination:
+            return {
+                "destination": card["destination"],
+                "parking": card["parking"] or "-",
+                "actual": card["actual"],
+                "no_pull": card["no_pull"],
+                "pulls_complete": card["pulls_complete"],
+                "pull_summary": card["pull_summary"],
+            }
+    raise ValueError(f"{destination} is not assigned to {selected_door}.")
 
 
 def normalize_door(value):
@@ -502,6 +550,14 @@ def _time_value(value):
     if not value:
         return ""
     return value.strftime("%H:%M")
+
+
+def _pull_field_by_key(pull_key):
+    pull_key = str(pull_key or "").strip()
+    for field in PULL_FIELDS:
+        if field["key"] == pull_key:
+            return field
+    return None
 
 
 def _pulls_complete(actual, no_pull):

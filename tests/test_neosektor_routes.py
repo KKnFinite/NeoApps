@@ -336,6 +336,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"BACK TO QUEUE", response.data)
+        self.assertIn(b"RESPOT", response.data)
         self.assertIn(b"SEND ON THE WAY", response.data)
         self.assertIn(b'name="send_a2_count"', response.data)
         self.assertIn(b'name="send_a1_count"', response.data)

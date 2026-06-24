@@ -2364,12 +2364,18 @@ a {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 7px;
+    min-width: 0;
     padding: 8px;
     border: 1px solid rgba(54, 226, 123, 0.38);
     border-radius: 5px;
     background:
         radial-gradient(circle at 12% 0%, rgba(54, 226, 123, 0.12), transparent 9rem),
         rgba(2, 8, 8, 0.7);
+}
+
+.neoermac-door-complete-summary[hidden],
+.neoermac-door-destination-card:not(.is-pulls-collapsed) .neoermac-door-complete-summary {
+    display: none;
 }
 
 .neoermac-door-complete-summary span,
@@ -2393,17 +2399,48 @@ a {
     line-height: 1.2;
 }
 
+.neoermac-door-complete-summary strong + strong {
+    color: #ffffff;
+    font-size: 0.88rem;
+}
+
 .neoermac-door-edit-pulls {
     grid-column: 2;
-    grid-row: 1 / span 2;
+    grid-row: 1 / span 3;
     align-self: stretch;
     min-height: 38px;
     padding-inline: 10px;
     font-size: 0.62rem;
 }
 
+.neoermac-door-destination-card.is-pulls-collapsed .neoermac-door-card-head,
+.neoermac-door-destination-card.is-pulls-collapsed .neoermac-door-window-row,
 .neoermac-door-destination-card.is-pulls-collapsed .neoermac-door-pull-grid {
     display: none;
+}
+
+.neoermac-door-pull-form.is-all-pulls-complete .neoermac-door-save {
+    display: none;
+}
+
+.neoermac-door-autosave-error {
+    margin: 0;
+    padding: 5px 7px;
+    border: 1px solid rgba(255, 77, 101, 0.42);
+    border-radius: 5px;
+    background: rgba(87, 0, 14, 0.36);
+    color: #ffdbe0;
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+}
+
+.neoermac-door-autosave-error[hidden] {
+    display: none;
+}
+
+.neoermac-door-destination-card.is-pull-saving {
+    border-color: rgba(54, 226, 123, 0.26);
 }
 
 .neoermac-door-pull-row {

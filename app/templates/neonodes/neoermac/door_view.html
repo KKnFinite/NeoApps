@@ -4,7 +4,7 @@
 
 {% macro uld_request_row(request_record) -%}
     <div class="neoermac-uld-request-row{% if request_record.setup_needed %} is-setup-needed{% endif %}" data-uld-request-row>
-        <span class="neoermac-uld-request-priority">{{ "SETUP" if request_record.setup_needed else "STANDARD" }}</span>
+        <span class="neoermac-uld-request-priority">{{ "SETUP" if request_record.setup_needed else "RESPOT" }}</span>
         <span>A2 <strong>{{ request_record.a2_count }}</strong></span>
         <span>A1 <strong>{{ request_record.a1_count }}</strong></span>
         <span>AMP <strong>{{ request_record.amp_count }}</strong></span>
@@ -19,6 +19,7 @@
     {% if selected_door %}
     data-door-view
     data-state-url="{{ url_for('neoermac.door_view_state', door=selected_door) }}"
+    data-pull-save-url="{{ url_for('neoermac.door_view_pull_autosave') }}"
     {% endif %}
 >
     <div class="neoermac-hero neoermac-door-hero">
@@ -54,7 +55,8 @@
         <h2>OUTBOUND PULLS</h2>
 
         {% if destinations %}
-        <form method="post" class="neoermac-door-pull-form">
+        {% set all_pulls_complete = destinations|selectattr("pulls_complete")|list|length == destinations|length %}
+        <form method="post" class="neoermac-door-pull-form{% if all_pulls_complete %} is-all-pulls-complete{% endif %}" data-door-pull-form>
             <input type="hidden" name="door" value="{{ selected_door }}">
             <input type="hidden" name="action" value="save_pulls">
             <input type="hidden" name="destination_count" value="{{ destinations|length }}">
@@ -66,6 +68,7 @@
                     class="neoermac-door-destination-card{% if card.pulls_complete %} is-pulls-complete is-pulls-collapsed{% endif %}"
                     data-door-destination-card
                     data-door-destination="{{ card.destination }}"
+                    data-destination-index="{{ destination_index }}"
                 >
                     <input type="hidden" name="destination_{{ destination_index }}" value="{{ card.destination }}">
                     <div class="neoermac-door-card-head">
@@ -95,18 +98,20 @@
                         <span class="neoermac-door-window">WINDOW {{ card.window_minutes ~ " MIN" if card.window_minutes else "TBD" }}</span>
                     </div>
 
-                    {% if card.pulls_complete %}
-                    <div class="neoermac-door-complete-summary" data-pull-complete-summary>
-                        <span>PULLS COMPLETE</span>
-                        <strong>{{ card.pull_summary }}</strong>
+                    <div class="neoermac-door-complete-summary" data-pull-complete-summary {% if not card.pulls_complete %}hidden{% endif %}>
+                        <span data-pull-complete-title>{% if card.pulls_complete %}PULLS COMPLETE{% endif %}</span>
+                        <strong data-pull-complete-destination>{% if card.pulls_complete %}{{ card.destination }} &middot; Parking {{ card.parking or "-" }}{% endif %}</strong>
+                        <strong data-pull-complete-lines>{% if card.pulls_complete %}{{ card.pull_summary }}{% endif %}</strong>
+                        {% if can_edit %}
                         <button
                             class="neoermac-menu-link neoermac-menu-link-secondary neoermac-door-edit-pulls"
                             type="button"
                             data-pull-edit-toggle
                             aria-expanded="false"
                         >EDIT PULLS</button>
+                        {% endif %}
                     </div>
-                    {% endif %}
+                    <p class="neoermac-door-autosave-error" data-pull-autosave-error hidden></p>
 
                     <div class="neoermac-door-pull-grid" data-pull-details>
                         {% for pull in pull_fields %}
@@ -133,6 +138,8 @@
                                     pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
                                     placeholder="HH:MM"
                                     data-hhmm-input
+                                    data-pull-key="{{ pull.key }}"
+                                    data-door-destination="{{ card.destination }}"
                                     data-no-pull-input="{{ pull.key }}-{{ destination_index }}"
                                     {% if card.no_pull[pull.key] %}disabled{% endif %}
                                 >
@@ -141,6 +148,8 @@
                                 <input
                                     type="checkbox"
                                     name="{{ pull.no_field }}_{{ destination_index }}"
+                                    data-pull-key="{{ pull.key }}"
+                                    data-door-destination="{{ card.destination }}"
                                     data-no-pull-toggle="{{ pull.key }}-{{ destination_index }}"
                                     {% if card.no_pull[pull.key] %}checked{% endif %}
                                 >
@@ -162,7 +171,7 @@
             </div>
 
             {% if can_edit %}
-            <button class="neoermac-menu-link neoermac-door-save" type="submit">SAVE PULLS</button>
+            <button class="neoermac-menu-link neoermac-door-save" type="submit" data-manual-pull-save>SAVE PULLS</button>
             {% endif %}
         </form>
         {% else %}
@@ -314,7 +323,7 @@
                     const counts = requestRow.counts || {};
                     return `
                         <div class="neoermac-uld-request-row${requestRow.setup_needed ? " is-setup-needed" : ""}" data-uld-request-row>
-                            <span class="neoermac-uld-request-priority">${requestRow.setup_needed ? "SETUP" : "STANDARD"}</span>
+                            <span class="neoermac-uld-request-priority">${requestRow.setup_needed ? "SETUP" : "RESPOT"}</span>
                             <span>A2 <strong>${Number.parseInt(counts.A2 ?? 0, 10) || 0}</strong></span>
                             <span>A1 <strong>${Number.parseInt(counts.A1 ?? 0, 10) || 0}</strong></span>
                             <span>AMP <strong>${Number.parseInt(counts.AMP ?? 0, 10) || 0}</strong></span>
@@ -399,17 +408,188 @@
 {% if can_edit %}
 <script>
 (() => {
-    document.querySelectorAll("[data-pull-edit-toggle]").forEach((button) => {
+    const root = document.querySelector("[data-door-view]");
+    const pullForm = document.querySelector("[data-door-pull-form]");
+    const saveUrl = root?.dataset.pullSaveUrl;
+    const pullKeys = ["pure", "first_mix", "second_mix"];
+    const pullLabels = {
+        pure: "PURE",
+        first_mix: "1ST",
+        second_mix: "2ND",
+    };
+    const pendingSaves = new WeakMap();
+    const hhmmPattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+
+    const findActualInput = (card, pullKey) => Array.from(
+        card.querySelectorAll("[data-hhmm-input]")
+    ).find((input) => input.dataset.pullKey === pullKey);
+
+    const findNoPullToggle = (card, pullKey) => Array.from(
+        card.querySelectorAll("[data-no-pull-toggle]")
+    ).find((toggle) => toggle.dataset.pullKey === pullKey);
+
+    const setCardError = (card, message) => {
+        const error = card.querySelector("[data-pull-autosave-error]");
+        if (!error) {
+            return;
+        }
+        error.textContent = message || "";
+        error.hidden = !message;
+        card.classList.toggle("has-pull-save-error", Boolean(message));
+        if (message) {
+            card.classList.remove("is-pulls-collapsed");
+        }
+    };
+
+    const updateManualSaveVisibility = () => {
+        if (!pullForm) {
+            return;
+        }
+        const button = pullForm.querySelector("[data-manual-pull-save]");
+        const cards = Array.from(pullForm.querySelectorAll("[data-door-destination-card]"));
+        const allCompleteCollapsed = cards.length > 0 && cards.every((card) => (
+            card.classList.contains("is-pulls-complete")
+            && card.classList.contains("is-pulls-collapsed")
+        ));
+        pullForm.classList.toggle("is-all-pulls-complete", allCompleteCollapsed);
+        if (button) {
+            button.hidden = allCompleteCollapsed;
+        }
+    };
+
+    const summaryText = (cardData) => pullKeys
+        .map((key) => {
+            const value = cardData.no_pull?.[key] ? "NO" : (cardData.actual?.[key] || "-");
+            return `${pullLabels[key]} ${value}`;
+        })
+        .join(" \u00B7 ");
+
+    const applyCardState = (card, cardData) => {
+        if (!cardData) {
+            return;
+        }
+
+        pullKeys.forEach((key) => {
+            const input = findActualInput(card, key);
+            const toggle = findNoPullToggle(card, key);
+            const noPull = Boolean(cardData.no_pull?.[key]);
+            if (toggle) {
+                toggle.checked = noPull;
+            }
+            if (input) {
+                input.value = noPull ? "" : (cardData.actual?.[key] || "");
+                input.disabled = noPull;
+            }
+        });
+
+        const summary = card.querySelector("[data-pull-complete-summary]");
+        const title = card.querySelector("[data-pull-complete-title]");
+        const destinationLine = card.querySelector("[data-pull-complete-destination]");
+        const pullLine = card.querySelector("[data-pull-complete-lines]");
+        if (title) {
+            title.textContent = cardData.pulls_complete ? "PULLS COMPLETE" : "";
+        }
+        if (destinationLine) {
+            destinationLine.textContent = `${cardData.destination || card.dataset.doorDestination || "-"} \u00B7 Parking ${cardData.parking || "-"}`;
+        }
+        if (pullLine) {
+            pullLine.textContent = summaryText(cardData);
+        }
+
+        if (cardData.pulls_complete) {
+            card.classList.add("is-pulls-complete", "is-pulls-collapsed");
+            if (summary) {
+                summary.hidden = false;
+            }
+            const toggle = card.querySelector("[data-pull-edit-toggle]");
+            if (toggle) {
+                toggle.setAttribute("aria-expanded", "false");
+                toggle.textContent = "EDIT PULLS";
+            }
+        } else {
+            card.classList.remove("is-pulls-complete", "is-pulls-collapsed");
+            if (summary) {
+                summary.hidden = true;
+            }
+        }
+
+        setCardError(card, "");
+        updateManualSaveVisibility();
+    };
+
+    const savePull = async (card, pullKey) => {
+        if (!saveUrl || !card || !pullKey) {
+            return;
+        }
+        const input = findActualInput(card, pullKey);
+        const toggle = findNoPullToggle(card, pullKey);
+        if (!input || !toggle) {
+            return;
+        }
+
+        const value = input.value.trim();
+        if (!toggle.checked && value && !hhmmPattern.test(value)) {
+            setCardError(card, "Use HH:MM.");
+            return;
+        }
+
+        const body = new FormData();
+        body.set("door", root.querySelector('[name="door"]')?.value || "");
+        body.set("destination", card.dataset.doorDestination || "");
+        body.set("pull_key", pullKey);
+        body.set("actual_pull", toggle.checked ? "" : value);
+        body.set("no_pull", toggle.checked ? "1" : "0");
+
+        card.classList.add("is-pull-saving");
+        try {
+            const response = await fetch(saveUrl, {
+                method: "POST",
+                body,
+                credentials: "same-origin",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.error || "Pull save failed.");
+            }
+            applyCardState(card, payload.card);
+        } catch (error) {
+            setCardError(card, error.message || "Pull save failed.");
+        } finally {
+            card.classList.remove("is-pull-saving");
+        }
+    };
+
+    const scheduleSave = (input, delay = 350) => {
+        const card = input.closest("[data-door-destination-card]");
+        if (!card) {
+            return;
+        }
+        const existing = pendingSaves.get(input);
+        if (existing) {
+            window.clearTimeout(existing);
+        }
+        pendingSaves.set(
+            input,
+            window.setTimeout(() => savePull(card, input.dataset.pullKey), delay)
+        );
+    };
+
+    root?.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-pull-edit-toggle]");
+        if (!button) {
+            return;
+        }
         const card = button.closest("[data-door-destination-card]");
         if (!card) {
             return;
         }
-
-        button.addEventListener("click", () => {
-            card.classList.remove("is-pulls-collapsed");
-            button.setAttribute("aria-expanded", "true");
-            button.textContent = "PULL ROWS OPEN";
-        });
+        card.classList.remove("is-pulls-collapsed");
+        button.setAttribute("aria-expanded", "true");
+        button.textContent = "PULL ROWS OPEN";
+        updateManualSaveVisibility();
     });
 
     document.querySelectorAll("[data-hhmm-input]").forEach((input) => {
@@ -419,6 +599,20 @@
                 input.value = `${digits.slice(0, 2)}:${digits.slice(2)}`;
             } else {
                 input.value = digits;
+            }
+            if (!input.value || hhmmPattern.test(input.value)) {
+                scheduleSave(input);
+            }
+        });
+
+        input.addEventListener("blur", () => {
+            if (!input.value || hhmmPattern.test(input.value)) {
+                scheduleSave(input, 0);
+            } else {
+                const card = input.closest("[data-door-destination-card]");
+                if (card) {
+                    setCardError(card, "Use HH:MM.");
+                }
             }
         });
     });
@@ -436,9 +630,17 @@
             }
         };
 
-        toggle.addEventListener("change", syncInput);
+        toggle.addEventListener("change", () => {
+            syncInput();
+            const card = toggle.closest("[data-door-destination-card]");
+            if (card) {
+                savePull(card, toggle.dataset.pullKey);
+            }
+        });
         syncInput();
     });
+
+    updateManualSaveVisibility();
 })();
 </script>
 {% endif %}

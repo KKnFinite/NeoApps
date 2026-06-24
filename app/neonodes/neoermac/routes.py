@@ -17,6 +17,7 @@ from app.services.neoermac_door_view import (
     door_view_context,
     door_view_uld_state,
     save_door_pulls,
+    save_single_door_pull,
     save_uld_request,
 )
 from app.services.neoermac_dashboard import neoermac_dashboard_context
@@ -172,6 +173,32 @@ def door_view_state():
 
     db.session.commit()
     return jsonify({"ok": True, "state": state})
+
+
+@bp.route("/door-view/pull-autosave", methods=["POST"])
+@gateway_node_required("ermac")
+def door_view_pull_autosave():
+    gateway = get_current_gateway()
+    access = permission_access(DOOR_VIEW_VIEW_PERMISSION, DOOR_VIEW_EDIT_PERMISSION)
+    if not access["can_edit"]:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": "Access denied."}), 403
+
+    try:
+        card = save_single_door_pull(
+            gateway,
+            request.form.get("door", ""),
+            request.form.get("destination", ""),
+            request.form.get("pull_key", ""),
+            request.form.get("actual_pull", ""),
+            request.form.get("no_pull") == "1",
+        )
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    db.session.commit()
+    return jsonify({"ok": True, "card": card})
 
 
 @bp.route("/tug-assignments")

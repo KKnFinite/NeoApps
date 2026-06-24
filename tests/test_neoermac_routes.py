@@ -616,9 +616,20 @@ class NeoErmacRoutesTest(unittest.TestCase):
             },
             follow_redirects=False,
         )
+        autosave_response = self.client.post(
+            "/neoermac/door-view/pull-autosave",
+            data={
+                "door": "D34",
+                "destination": "SDF",
+                "pull_key": "pure",
+                "actual_pull": "01:15",
+                "no_pull": "0",
+            },
+        )
 
         self.assertEqual(pull_response.status_code, 403)
         self.assertEqual(uld_response.status_code, 403)
+        self.assertEqual(autosave_response.status_code, 403)
         self.assertEqual(NeoErmacDoorPull.query.count(), 0)
         self.assertEqual(NeoErmacUldRequest.query.count(), 0)
 
@@ -660,10 +671,67 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'type="text"', reload_response.data)
         self.assertIn(b'pattern="([01][0-9]|2[0-3]):[0-5][0-9]"', reload_response.data)
         self.assertIn(b"checked", reload_response.data)
+        self.assertNotIn(b" AM", reload_response.data)
+        self.assertNotIn(b" PM", reload_response.data)
+
+    def test_door_view_pull_autosave_saves_valid_hhmm_actual_pull(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._add_operation_departure("UPS302", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neoermac/door-view/pull-autosave",
+            data={
+                "door": "D34",
+                "destination": "SDF",
+                "pull_key": "pure",
+                "actual_pull": "14:05",
+                "no_pull": "0",
+            },
+        )
+
+        payload = response.get_json()
+        saved = NeoErmacDoorPull.query.filter_by(door="D34", destination="SDF").one()
+        mission = SortDateMission.query.filter_by(destination="SDF").one()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["card"]["actual"]["pure"], "14:05")
+        self.assertFalse(payload["card"]["pulls_complete"])
+        self.assertEqual(saved.actual_pure_pull_time_local, time(14, 5))
+        self.assertFalse(saved.no_pure_pull)
+        self.assertEqual(mission.actual_pure_pull_time_local, time(14, 5))
+
+    def test_door_view_pull_autosave_saves_no_checkbox_state(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._add_operation_departure("UPS302", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neoermac/door-view/pull-autosave",
+            data={
+                "door": "D34",
+                "destination": "SDF",
+                "pull_key": "first_mix",
+                "actual_pull": "14:07",
+                "no_pull": "1",
+            },
+        )
+
+        payload = response.get_json()
+        saved = NeoErmacDoorPull.query.filter_by(door="D34", destination="SDF").one()
+        mission = SortDateMission.query.filter_by(destination="SDF").one()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["card"]["no_pull"]["first_mix"])
+        self.assertTrue(saved.no_first_mix_pull)
+        self.assertIsNone(saved.actual_first_mix_pull_time_local)
+        self.assertIsNone(mission.actual_first_mix_pull_time_local)
 
     def test_door_view_completed_pull_card_collapses_with_summary(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
-        mission = self._add_operation_departure("UPS302", "SDF")
+        mission = self._add_operation_departure("UPS302", "SDF", tail="N302UP", parking="A01")
         db.session.add(
             NeoErmacDoorPull(
                 gateway_id=self.gateway.id,
@@ -683,6 +751,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"is-pulls-complete is-pulls-collapsed", response.data)
         self.assertIn(b"PULLS COMPLETE", response.data)
+        self.assertIn(b"SDF &middot; Parking A01", response.data)
         self.assertIn("PURE 14:05 · 1ST 14:07 · 2ND NO".encode(), response.data)
         self.assertIn(b"EDIT PULLS", response.data)
         self.assertIn(b"data-pull-edit-toggle", response.data)
@@ -704,9 +773,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self._login_approved_user(role="operator")
 
         response = self.client.get("/neoermac/door-view?door=D34")
+        rendered_html = response.data.split(b"<script>")[0]
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotIn(b"PULLS COMPLETE", response.data)
+        self.assertNotIn(b"is-pulls-complete", rendered_html)
+        self.assertNotIn(b"PULLS COMPLETE", rendered_html)
 
     def test_door_view_edit_user_can_create_and_update_uld_requested_counts(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
@@ -811,7 +882,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"name=\"setup_needed\"", form_html)
         self.assertNotIn(b"checked", form_html)
 
-    def test_door_view_displays_setup_and_standard_requests_for_same_door(self):
+    def test_door_view_displays_setup_and_respot_requests_for_same_door(self):
         setup_time = datetime(2026, 6, 24, 19, 5)
         standard_time = datetime(2026, 6, 24, 19, 2)
         db.session.add_all(
@@ -847,8 +918,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(rendered_html.count(b"data-uld-request-row"), 2)
         self.assertIn(b"SETUP", response.data)
-        self.assertIn(b"STANDARD", response.data)
-        self.assertLess(response.data.index(b"SETUP"), response.data.index(b"STANDARD"))
+        self.assertIn(b"RESPOT", response.data)
+        self.assertNotIn(b"STANDARD", response.data)
+        self.assertLess(response.data.index(b"SETUP"), response.data.index(b"RESPOT"))
         self.assertIn(b"14:05", response.data)
         self.assertIn(b"14:02", response.data)
 
