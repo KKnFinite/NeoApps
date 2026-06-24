@@ -121,6 +121,7 @@ def build_rapidapi_request(gateway_code, start_local, end_local, api_key):
     diagnostics = {
         "provider_status_code": None,
         "request_host": details["host"],
+        "request_url_redacted": details["url"],
         "request_path_query": details["path_query"],
         "user_agent_sent": True,
         "accept_header_sent": True,
@@ -251,6 +252,7 @@ def run_flight_api_import(gateway, operation=None, client=None, now=None):
                 "usage_polls_used": usage_counter.attempted_call_count,
                 "provider_status_code": request_diagnostics.get("provider_status_code"),
                 "request_host": request_diagnostics.get("request_host"),
+                "request_url_redacted": request_diagnostics.get("request_url_redacted"),
                 "request_path_query": request_diagnostics.get("request_path_query"),
                 "user_agent_sent": request_diagnostics.get("user_agent_sent"),
                 "accept_header_sent": request_diagnostics.get("accept_header_sent"),
@@ -939,7 +941,18 @@ def api_window_for_operation(operation, settings):
 
 def sort_flight_lookup_window_snapshot(operation, settings):
     start_local, end_local = sort_flight_lookup_window_for_operation(operation, settings)
-    return _window_snapshot(operation, start_local, end_local, "lookup_window")
+    snapshot = _window_snapshot(operation, start_local, end_local, "lookup_window")
+    snapshot.update(
+        {
+            "operation_sort_start_local": snapshot["lookup_window_start_local"],
+            "operation_sort_end_local": snapshot["lookup_window_end_local"],
+            "provider_from_local": snapshot["lookup_window_start_local"],
+            "provider_to_local": snapshot["lookup_window_end_local"],
+            "provider_from_utc": snapshot["lookup_window_start_utc"],
+            "provider_to_utc": snapshot["lookup_window_end_utc"],
+        }
+    )
+    return snapshot
 
 
 def api_polling_window_snapshot(operation, settings):
@@ -1809,6 +1822,7 @@ def _safe_request_diagnostics(gateway_code, start_local, end_local, api_key):
     return {
         "provider_status_code": None,
         "request_host": details["host"],
+        "request_url_redacted": details["url"],
         "request_path_query": details["path_query"],
         "user_agent_sent": False,
         "accept_header_sent": False,

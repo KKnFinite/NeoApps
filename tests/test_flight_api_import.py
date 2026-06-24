@@ -566,12 +566,40 @@ class FlightApiImportTest(unittest.TestCase):
         db.session.commit()
         client = FakeFlightClient({"arrivals": []})
 
-        run_flight_api_import(self.gateway, self.operation, client=client)
+        result = run_flight_api_import(self.gateway, self.operation, client=client)
 
         self.assertEqual(len(client.calls), 1)
         self.assertEqual(client.calls[0]["gateway_code"], "RFD")
         self.assertEqual(client.calls[0]["start_local"], datetime(2026, 6, 1, 22, 15))
         self.assertEqual(client.calls[0]["end_local"], datetime(2026, 6, 2, 4, 30))
+        self.assertEqual(result["operation_sort_start_local"], datetime(2026, 6, 1, 22, 15))
+        self.assertEqual(result["operation_sort_end_local"], datetime(2026, 6, 2, 4, 30))
+        self.assertEqual(result["provider_from_local"], datetime(2026, 6, 1, 22, 15))
+        self.assertEqual(result["provider_to_local"], datetime(2026, 6, 2, 4, 30))
+        self.assertIn(
+            "/flights/airports/iata/RFD/2026-06-01T22:15/2026-06-02T04:30",
+            result["request_url_redacted"],
+        )
+
+    def test_provider_request_uses_same_day_sort_lookup_window(self):
+        night_setting = next(
+            setting for setting in self.settings.sort_settings if setting.sort_name == "night"
+        )
+        night_setting.sort_window_start_local = time(10, 0)
+        night_setting.sort_window_end_local = time(18, 0)
+        db.session.commit()
+        client = FakeFlightClient({"arrivals": [], "departures": []})
+
+        result = run_flight_api_import(self.gateway, self.operation, client=client)
+
+        self.assertEqual(client.calls[0]["start_local"], datetime(2026, 6, 1, 10, 0))
+        self.assertEqual(client.calls[0]["end_local"], datetime(2026, 6, 1, 18, 0))
+        self.assertEqual(result["provider_from_local"], datetime(2026, 6, 1, 10, 0))
+        self.assertEqual(result["provider_to_local"], datetime(2026, 6, 1, 18, 0))
+        self.assertIn(
+            "/flights/airports/iata/RFD/2026-06-01T10:00/2026-06-01T18:00",
+            result["request_path_query"],
+        )
 
     def test_current_operation_resolver_returns_previous_day_overnight_sort_after_midnight(self):
         self.operation.sort_date = date(2026, 6, 18)
@@ -604,6 +632,8 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(result["operation"].id, self.operation.id)
         self.assertEqual(client.calls[0]["start_local"], datetime(2026, 6, 18, 22, 0))
         self.assertEqual(client.calls[0]["end_local"], datetime(2026, 6, 19, 4, 0))
+        self.assertEqual(result["provider_from_local"], datetime(2026, 6, 18, 22, 0))
+        self.assertEqual(result["provider_to_local"], datetime(2026, 6, 19, 4, 0))
 
     def test_rapidapi_path_uses_local_sort_lookup_window_not_utc(self):
         self.operation.sort_date = date(2026, 6, 18)
@@ -3083,6 +3113,55 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"API key env var AERODATABOX_API_KEY is not set.", response.data)
         self.assertIn(b"SKIPPED", response.data)
         self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
+
+    def test_flight_api_test_page_shows_selected_operation_provider_window(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 18, 21, 0)
+        operation = SortDateOperation(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_date=date(2026, 6, 18),
+            sort_name="night",
+            window_minutes=0,
+        )
+        settings = ensure_sort_timeline_settings(self.gateway)
+        settings.provider_enabled = True
+        night_setting = next(
+            setting for setting in settings.sort_settings if setting.sort_name == "night"
+        )
+        night_setting.sort_window_start_local = time(22, 0)
+        night_setting.sort_window_end_local = time(4, 0)
+        night_setting.polling_start_local = time(0, 30)
+        night_setting.polling_end_local = time(2, 0)
+        db.session.add(operation)
+        db.session.commit()
+        previous = os.environ.pop("AERODATABOX_API_KEY", None)
+        try:
+            response = self.client.post(
+                "/motherbrain/flight-api-test",
+                data={"flight_api_action": "pull", "operation_id": str(operation.id)},
+                follow_redirects=True,
+            )
+        finally:
+            if previous is not None:
+                os.environ["AERODATABOX_API_KEY"] = previous
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"SELECTED OPERATION ID", response.data)
+        self.assertIn(str(operation.id).encode(), response.data)
+        self.assertIn(b"SELECTED OPERATION NAME", response.data)
+        self.assertIn(b"SELECTED SORT DATE", response.data)
+        self.assertIn(b"SORT START LOCAL", response.data)
+        self.assertIn(b"SORT END LOCAL", response.data)
+        self.assertIn(b"PROVIDER FROMLOCAL", response.data)
+        self.assertIn(b"PROVIDER TOLOCAL", response.data)
+        self.assertIn(b"PROVIDER URL", response.data)
+        self.assertIn(b"2026-06-18 22:00", response.data)
+        self.assertIn(b"2026-06-19 04:00", response.data)
+        self.assertIn(
+            b"https://aerodatabox.p.rapidapi.com/flights/airports/iata/RFD/2026-06-18T22:00/2026-06-19T04:00",
+            response.data,
+        )
+        self.assertNotIn(b"AERODATABOX_API_KEY=", response.data)
 
     def test_flight_api_test_page_shows_safe_403_diagnostics(self):
         operation = SortDateOperation(

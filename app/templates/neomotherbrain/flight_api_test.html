@@ -10,6 +10,8 @@
 {% set lookup_window = import_result if import_result and import_result.lookup_window_start_local else selected_lookup_window %}
 {% set polling_window = import_result if import_result and import_result.polling_window_start_local else selected_polling_window %}
 {% set ops_window = import_result if import_result and import_result.ops_window_start_local else selected_ops_window %}
+{% set provider_request_url = import_result.request_url_redacted if import_result and import_result.request_url_redacted else (selected_request_details.url if selected_request_details else none) %}
+{% set provider_request_path_query = import_result.request_path_query if import_result and import_result.request_path_query else (selected_request_details.path_query if selected_request_details else none) %}
 {% set review_rows = import_result.review_items if import_result and import_result.replay_preview else pending_review_items %}
 <section class="panel centered-command-page flight-api-test-page" aria-labelledby="flight-api-test-title">
     <div class="section-heading">
@@ -177,6 +179,18 @@
             </strong>
         </article>
         <article class="status-card">
+            <span>SELECTED OPERATION ID</span>
+            <strong>{{ selected_operation.id if selected_operation else "-" }}</strong>
+        </article>
+        <article class="status-card">
+            <span>SELECTED OPERATION NAME</span>
+            <strong>{{ selected_operation.sort_name|upper if selected_operation else "-" }}</strong>
+        </article>
+        <article class="status-card">
+            <span>SELECTED SORT DATE</span>
+            <strong>{{ selected_operation.sort_date if selected_operation else "-" }}</strong>
+        </article>
+        <article class="status-card">
             <span>ATTEMPTED POLL</span>
             <strong>
                 {% if import_result and import_result.attempted %}
@@ -195,6 +209,66 @@
                 {% if import_result.replay_preview %}REPLAY{% else %}{{ "ENABLED" if import_result.provider_enabled else "DISABLED" }}{% endif %}
                 {% else %}
                 READY
+                {% endif %}
+            </strong>
+        </article>
+        <article class="status-card">
+            <span>SORT START LOCAL</span>
+            <strong>
+                {% if lookup_window %}
+                {{ dt(lookup_window.operation_sort_start_local or lookup_window.lookup_window_start_local) }} {{ lookup_window.lookup_window_timezone }}
+                {% else %}
+                -
+                {% endif %}
+            </strong>
+        </article>
+        <article class="status-card">
+            <span>SORT END LOCAL</span>
+            <strong>
+                {% if lookup_window %}
+                {{ dt(lookup_window.operation_sort_end_local or lookup_window.lookup_window_end_local) }} {{ lookup_window.lookup_window_timezone }}
+                {% else %}
+                -
+                {% endif %}
+            </strong>
+        </article>
+        <article class="status-card">
+            <span>PROVIDER FROMLOCAL</span>
+            <strong>
+                {% if lookup_window %}
+                {{ dt(lookup_window.provider_from_local or lookup_window.lookup_window_start_local) }}
+                {% else %}
+                -
+                {% endif %}
+            </strong>
+        </article>
+        <article class="status-card">
+            <span>PROVIDER TOLOCAL</span>
+            <strong>
+                {% if lookup_window %}
+                {{ dt(lookup_window.provider_to_local or lookup_window.lookup_window_end_local) }}
+                {% else %}
+                -
+                {% endif %}
+            </strong>
+        </article>
+        <article class="status-card">
+            <span>PROVIDER FROM/TO UTC</span>
+            <strong>
+                {% if lookup_window %}
+                {{ dt(lookup_window.provider_from_utc or lookup_window.lookup_window_start_utc) }} - {{ dt(lookup_window.provider_to_utc or lookup_window.lookup_window_end_utc) }} UTC
+                {% else %}
+                -
+                {% endif %}
+            </strong>
+        </article>
+        <article class="status-card">
+            <span>PROVIDER URL</span>
+            <strong class="diagnostic-path">
+                {% if import_result and import_result.replay_preview %}
+                Replay mode: no external request
+                {% else %}
+                {{ provider_request_url or "-" }}
                 {% endif %}
             </strong>
         </article>
@@ -255,7 +329,7 @@
         </article>
         <article class="status-card">
             <span>REQUEST PATH/QUERY</span>
-            <strong class="diagnostic-path">{{ import_result.request_path_query or "-" }}</strong>
+            <strong class="diagnostic-path">{{ provider_request_path_query or "-" }}</strong>
         </article>
         <article class="status-card">
             <span>MATCHED UPS</span>
@@ -355,6 +429,10 @@
         <article class="status-card">
             <span>REQUEST HOST</span>
             <strong>{{ import_result.request_host or "-" }}</strong>
+        </article>
+        <article class="status-card">
+            <span>REQUEST URL</span>
+            <strong class="diagnostic-path">{{ import_result.request_url_redacted or "-" }}</strong>
         </article>
         <article class="status-card">
             <span>REQUEST PATH/QUERY</span>

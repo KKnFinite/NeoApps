@@ -36,6 +36,7 @@ from app.services.flight_api import (
     pending_review_items_for_operation,
     release_flight_api_auto_poll_lock,
     review_item_or_404,
+    rapidapi_request_details,
     run_flight_api_import,
     run_flight_api_replay,
     sort_flight_lookup_window_snapshot,
@@ -262,6 +263,7 @@ def flight_api_test():
     selected_lookup_window = None
     selected_polling_window = None
     selected_ops_window = None
+    selected_request_details = None
     settings = ensure_sort_timeline_settings(gateway)
     replay_payload = ""
     auto_poll_status = None
@@ -316,6 +318,15 @@ def flight_api_test():
             selected_operation,
             settings,
         )
+        if (
+            selected_lookup_window.get("provider_from_local")
+            and selected_lookup_window.get("provider_to_local")
+        ):
+            selected_request_details = rapidapi_request_details(
+                gateway.code,
+                selected_lookup_window["provider_from_local"],
+                selected_lookup_window["provider_to_local"],
+            )
         auto_poll_status = flight_api_auto_poll_status(
             gateway,
             operation=selected_operation,
@@ -331,6 +342,7 @@ def flight_api_test():
         selected_lookup_window=selected_lookup_window,
         selected_polling_window=selected_polling_window,
         selected_ops_window=selected_ops_window,
+        selected_request_details=selected_request_details,
         import_result=import_result,
         pending_review_items=pending_items,
         replay_payload=replay_payload,
