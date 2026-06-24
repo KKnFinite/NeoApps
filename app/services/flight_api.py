@@ -1407,6 +1407,7 @@ def departure_audit_reason(normalized):
 def apply_api_data_to_mission(mission, normalized, settings, now=None):
     now_utc = _utc_naive(now)
     mission.api_status = map_api_status(normalized, settings, now=now_utc)
+    mission.api_status_raw = normalized.get("api_status_raw") or mission.api_status_raw
     mission.api_runway_time_utc = normalized["runway_time_utc"]
     mission.api_assumed_arrived_time_utc = assumed_arrived_time(normalized, settings)
     mission.api_aircraft_model = normalized["aircraft_model"] or mission.api_aircraft_model
@@ -1585,6 +1586,7 @@ def replace_active_review_queue_for_operation(operation):
 
 def build_api_added_mission(operation, normalized):
     timezone_name = gateway_timezone(operation.gateway)
+    settings = ensure_sort_timeline_settings(operation.gateway)
     planned_utc = (
         normalized.get("revised_time_utc")
         or normalized.get("scheduled_time_utc")
@@ -1613,7 +1615,10 @@ def build_api_added_mission(operation, normalized):
         assigned_tail_number=normalized["tail_number"] or None,
         tail_source="api" if normalized["tail_number"] else "unknown",
         tail_updated_at=datetime.utcnow() if normalized["tail_number"] else None,
-        api_status=normalized.get("api_status_raw") or None,
+        api_status=map_api_status(normalized, settings),
+        api_status_raw=normalized.get("api_status_raw") or None,
+        api_runway_time_utc=normalized.get("runway_time_utc"),
+        api_assumed_arrived_time_utc=assumed_arrived_time(normalized, settings),
         api_aircraft_model=normalized["aircraft_model"] or None,
         api_added_current_sort_only=True,
     )

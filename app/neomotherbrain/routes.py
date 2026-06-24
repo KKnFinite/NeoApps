@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import re
 
 from flask import abort, current_app, flash, jsonify, redirect, render_template, request, url_for
@@ -14,6 +14,7 @@ from app.models import (
     SortDateOperation,
     SortDateParkingAssignment,
     SortDateTailState,
+    SortTimelineSettings,
 )
 from app.neomotherbrain import bp
 from app.services.flight_rules import (
@@ -40,6 +41,7 @@ from app.services.flight_api import (
     run_flight_api_import,
     run_flight_api_replay,
     sort_flight_lookup_window_snapshot,
+    taxi_to_ramp_minutes,
     _utc_to_local_naive as flight_api_utc_to_local_naive,
 )
 from app.services.access_control import (
@@ -2441,10 +2443,13 @@ def _mission_count(operation, mission_type):
 
 
 def _arrival_row(mission, operation=None, parking_assignments=None):
+    arrival_display = _arrival_board_display(mission, operation)
     return {
         "mission": mission,
         "parking_position": _parking_position_for_mission(mission, parking_assignments),
-        "eta_time": _arrival_eta_display_time(mission, operation),
+        "eta_time": arrival_display["time"],
+        "eta_time_note": arrival_display["time_note"],
+        "status_label": arrival_display["status_label"],
         "crew_covered": is_mission_crew_covered(mission.crew_assignments),
     }
 
@@ -2486,6 +2491,86 @@ def _arrival_eta_display_time(mission, operation=None):
         )
         return flight_api_utc_to_local_naive(mission.eta_datetime_utc, timezone_name)
     return mission.planned_datetime_local
+
+
+def _arrival_board_display(mission, operation=None):
+    timezone_name = (
+        getattr(mission, "timezone", None)
+        or _gateway_timezone(getattr(operation, "gateway", None))
+    )
+    manual_status = (mission.arrival_status or "").strip().lower()
+    if manual_status in {"arrived", "unloaded"}:
+        return {
+            "time": _arrival_manual_time(mission, operation, timezone_name),
+            "time_note": "",
+            "status_label": _status_label(manual_status),
+        }
+
+    raw_status = (getattr(mission, "api_status_raw", None) or "").strip().lower()
+    if "arrived" in raw_status:
+        display_time = mission.api_runway_time_utc or mission.eta_datetime_utc
+        return {
+            "time": _arrival_local_time(display_time, timezone_name)
+            or _arrival_eta_display_time(mission, operation),
+            "time_note": "Actual runway" if mission.api_runway_time_utc else "",
+            "status_label": "Arrived",
+        }
+
+    if mission.api_runway_time_utc:
+        taxi_minutes = _arrival_board_taxi_minutes(operation)
+        parking_time = mission.api_assumed_arrived_time_utc
+        if not parking_time:
+            parking_time = mission.api_runway_time_utc + timedelta(
+                minutes=taxi_minutes
+            )
+        return {
+            "time": _arrival_local_time(parking_time, timezone_name),
+            "time_note": f"Est parking +{taxi_minutes} min",
+            "status_label": "On Ground",
+        }
+
+    api_status = (mission.api_status or "").strip().lower()
+    if api_status:
+        status_label = "Expected" if api_status == "scheduled" else mission.api_status
+    elif manual_status:
+        status_label = _status_label(manual_status)
+    else:
+        status_label = "Expected"
+
+    return {
+        "time": _arrival_eta_display_time(mission, operation),
+        "time_note": "",
+        "status_label": status_label,
+    }
+
+
+def _arrival_manual_time(mission, operation=None, timezone_name=None):
+    timezone_name = timezone_name or (
+        getattr(mission, "timezone", None)
+        or _gateway_timezone(getattr(operation, "gateway", None))
+    )
+    display_time = mission.actual_block_in_datetime_utc or mission.eta_datetime_utc
+    return _arrival_local_time(display_time, timezone_name) or _arrival_eta_display_time(
+        mission, operation
+    )
+
+
+def _arrival_local_time(value, timezone_name):
+    if not value:
+        return None
+    return flight_api_utc_to_local_naive(value, timezone_name)
+
+
+def _arrival_board_taxi_minutes(operation=None):
+    gateway = getattr(operation, "gateway", None)
+    if not gateway:
+        return taxi_to_ramp_minutes(None)
+    settings = SortTimelineSettings.query.filter_by(gateway_id=gateway.id).first()
+    return taxi_to_ramp_minutes(settings)
+
+
+def _status_label(value):
+    return str(value or "").replace("_", " ").title()
 
 
 def _parking_assignments_for_operation(operation):

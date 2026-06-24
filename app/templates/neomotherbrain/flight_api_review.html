@@ -81,6 +81,9 @@
                         {% if item.mission_type == "arrival" and provider_time and provider_time != operational_time %}
                         <br><span class="muted">PROVIDER {{ format_flight_api_time(provider_time, gateway) }}</span>
                         {% endif %}
+                        {% if item.mission_type == "arrival" and item.runway_time_utc %}
+                        <br><span class="muted">RUNWAY {{ format_flight_api_time(item.runway_time_utc, gateway) }}</span>
+                        {% endif %}
                     </td>
                     <td>{{ item.tail_number or "-" }}</td>
                     <td>{{ item.aircraft_model or "-" }}</td>

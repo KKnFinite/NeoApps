@@ -3532,6 +3532,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 planned_datetime_utc=datetime(2026, 6, 2, 2, 55),
                 eta_datetime_utc=datetime(2026, 6, 2, 3, 8),
                 eta_source="api",
+                api_status="Scheduled",
+                api_status_raw="Expected",
             )
         )
         db.session.commit()
@@ -3541,7 +3543,66 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"UPS555", response.data)
         self.assertIn(b"22:08", response.data)
+        self.assertIn(b"Expected", response.data)
         self.assertNotIn(b"03:08", response.data)
+
+    def test_arrival_board_runway_time_displays_on_ground_parking_estimate(self):
+        operation = self._operation(sort_date=date(2026, 6, 1))
+        db.session.add(operation)
+        db.session.add(
+            self._mission(
+                operation=operation,
+                mission_type="arrival",
+                flight_number="UPS777",
+                planned_datetime_local=datetime(2026, 6, 1, 21, 55),
+                planned_datetime_utc=datetime(2026, 6, 2, 2, 55),
+                eta_datetime_utc=datetime(2026, 6, 2, 3, 8),
+                eta_source="api",
+                api_status="On Ground",
+                api_status_raw="Expected",
+                api_runway_time_utc=datetime(2026, 6, 2, 3, 8),
+                api_assumed_arrived_time_utc=datetime(2026, 6, 2, 3, 18),
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"UPS777", response.data)
+        self.assertIn(b"22:18", response.data)
+        self.assertIn(b"On Ground", response.data)
+        self.assertIn(b"Est parking +10 min", response.data)
+        self.assertNotIn(b"03:18", response.data)
+
+    def test_arrival_board_arrived_api_status_displays_actual_runway_time(self):
+        operation = self._operation(sort_date=date(2026, 6, 1))
+        db.session.add(operation)
+        db.session.add(
+            self._mission(
+                operation=operation,
+                mission_type="arrival",
+                flight_number="UPS888",
+                planned_datetime_local=datetime(2026, 6, 1, 21, 55),
+                planned_datetime_utc=datetime(2026, 6, 2, 2, 55),
+                eta_datetime_utc=datetime(2026, 6, 2, 3, 6),
+                eta_source="api",
+                api_status="On Ground",
+                api_status_raw="Arrived",
+                api_runway_time_utc=datetime(2026, 6, 2, 3, 8),
+                api_assumed_arrived_time_utc=datetime(2026, 6, 2, 3, 18),
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"UPS888", response.data)
+        self.assertIn(b"22:08", response.data)
+        self.assertIn(b"Arrived", response.data)
+        self.assertIn(b"Actual runway", response.data)
+        self.assertNotIn(b"22:18", response.data)
 
     def test_arrival_board_eta_falls_back_to_scheduled_local_time(self):
         operation = self._operation(sort_date=date(2026, 6, 1))

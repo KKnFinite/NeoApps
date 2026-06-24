@@ -1278,6 +1278,7 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(mission.eta_datetime_utc, datetime(2026, 6, 1, 7, 35))
         self.assertEqual(mission.api_runway_time_utc, datetime(2026, 6, 1, 7, 40))
         self.assertEqual(mission.api_status, API_STATUS_ON_GROUND)
+        self.assertEqual(mission.api_status_raw, "Departed")
         self.assertEqual(mission.assigned_tail_number, "N321UP")
         self.assertEqual(mission.api_aircraft_model, "B763")
 
@@ -1351,11 +1352,47 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(mission.api_runway_time_utc, datetime(2026, 6, 1, 7, 30))
         self.assertEqual(mission.api_assumed_arrived_time_utc, datetime(2026, 6, 1, 7, 40))
         self.assertEqual(mission.api_status, API_STATUS_ON_GROUND)
+        self.assertEqual(mission.api_status_raw, "Arrived")
         self.assertEqual(mission.assigned_tail_number, "N123UP")
         self.assertEqual(mission.api_aircraft_model, "A300")
         self.assertEqual(mission.arrival_status, "arrived")
         self.assertEqual(mission.planned_datetime_local, datetime(2026, 6, 1, 2, 0))
         self.assertEqual(mission.planned_datetime_utc, datetime(2026, 6, 1, 7, 0))
+
+    def test_matched_arrival_does_not_overwrite_manual_tail(self):
+        mission = self._mission(
+            "arrival",
+            "5X123",
+            assigned_tail_number="NMANUAL",
+            tail_source="manual",
+        )
+        db.session.add(mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "arrivals": [
+                        self._api_flight(
+                            revised_time="2026-06-01T02:25:00",
+                            runway_time="2026-06-01T02:30:00",
+                            status="Arrived",
+                            tail="N123UP",
+                            model="A300",
+                        )
+                    ]
+                }
+            ),
+            now=datetime(2026, 6, 1, 7, 32, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(mission.assigned_tail_number, "NMANUAL")
+        self.assertEqual(mission.tail_source, "manual")
+        self.assertEqual(mission.api_status_raw, "Arrived")
+        self.assertEqual(mission.api_runway_time_utc, datetime(2026, 6, 1, 7, 30))
 
     def test_departure_match_does_not_overwrite_std_or_pull_times(self):
         mission = self._mission(
@@ -3420,6 +3457,7 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"MATCHED UPS FLIGHTS", response.data)
         self.assertIn(b"02:50 Local Jun 1", response.data)
         self.assertIn(b"PROVIDER 02:40 Local Jun 1", response.data)
+        self.assertIn(b"RUNWAY 02:40 Local Jun 1", response.data)
         self.assertNotIn(b"2026-06-01 07:40 UTC", response.data)
 
     def test_flight_api_test_page_replay_preview_does_not_call_provider_or_mutate(self):

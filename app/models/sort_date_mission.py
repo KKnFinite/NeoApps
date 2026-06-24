@@ -67,6 +67,7 @@ class SortDateMission(db.Model):
     eta_datetime_utc = db.Column(db.DateTime, nullable=True)
     eta_source = db.Column(db.String(32), nullable=False, default="unknown")
     api_status = db.Column(db.String(32), nullable=True)
+    api_status_raw = db.Column(db.String(120), nullable=True)
     api_runway_time_utc = db.Column(db.DateTime, nullable=True)
     api_assumed_arrived_time_utc = db.Column(db.DateTime, nullable=True)
     api_aircraft_model = db.Column(db.String(120), nullable=True)
