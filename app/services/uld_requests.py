@@ -379,6 +379,8 @@ def _single_request_counts_payload(request_record):
             for uld_type, field_name in ULD_REQUEST_FIELDS.items()
         },
         "setup_needed": bool(getattr(request_record, "setup_needed", False)),
+        "created_at": request_record.created_at.isoformat() if request_record.created_at else None,
+        "updated_at": request_record.updated_at.isoformat() if request_record.updated_at else None,
     }
 
 

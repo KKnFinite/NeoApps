@@ -20,6 +20,7 @@ from app.services.sort_date_operations import mission_display_timing_data
 from app.services.uld_requests import (
     ULD_TYPES,
     active_on_the_way_event_views,
+    active_uld_requests_for_door,
     aggregate_uld_request_for_door,
     door_uld_state_payload,
     update_uld_request_from_form,
@@ -35,6 +36,7 @@ PULL_FIELDS = (
         "no_attr": "no_pure_pull",
         "actual_field": "actual_pure",
         "no_field": "no_pure",
+        "short_label": "PURE",
     },
     {
         "key": "first_mix",
@@ -44,6 +46,7 @@ PULL_FIELDS = (
         "no_attr": "no_first_mix_pull",
         "actual_field": "actual_first_mix",
         "no_field": "no_first_mix",
+        "short_label": "1ST",
     },
     {
         "key": "second_mix",
@@ -53,6 +56,7 @@ PULL_FIELDS = (
         "no_attr": "no_second_mix_pull",
         "actual_field": "actual_second_mix",
         "no_field": "no_second_mix",
+        "short_label": "2ND",
     },
 )
 
@@ -65,9 +69,11 @@ def door_view_context(gateway, selected_door=None):
     operation = _current_operation(gateway)
     destinations = []
     uld_request = None
+    uld_requests = []
     if selected_door:
         destinations = _destination_cards_for_door(gateway, selected_door, operation)
         uld_request = _uld_request_for_door(gateway, selected_door)
+        uld_requests = active_uld_requests_for_door(gateway, selected_door)
 
     return {
         "door_options": door_options,
@@ -76,6 +82,7 @@ def door_view_context(gateway, selected_door=None):
         "pull_fields": PULL_FIELDS,
         "uld_types": ULD_TYPES,
         "uld_request": uld_request,
+        "uld_requests": uld_requests,
         "operation": operation,
         "tugs": [],
         "on_the_way_events": (

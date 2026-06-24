@@ -621,6 +621,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(NeoErmacDoorPull.query.count(), 0)
         self.assertEqual(NeoErmacUldRequest.query.count(), 0)
 
+        page = self.client.get("/neoermac/door-view?door=D34")
+        self.assertIn(b"View-only access. ULD request controls are disabled.", page.data)
+        self.assertNotIn(b"data-uld-request-form", page.data)
+
     def test_door_view_edit_user_can_save_actual_pull_and_no_pull_states(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
         self._add_operation_departure("UPS302", "SDF")
@@ -713,6 +717,91 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(standard_request.a1_count, 0)
         self.assertEqual(standard_request.amp_count, 0)
 
+    def test_door_view_request_form_renders_clean_mobile_markup(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"neoermac-door-mobile-tight", response.data)
+        self.assertIn(b"data-uld-request-form", response.data)
+        self.assertIn(b'name="uld_a2_count" min="0" step="1" inputmode="numeric" value="0"', response.data)
+        self.assertIn(b'name="uld_a1_count" min="0" step="1" inputmode="numeric" value="0"', response.data)
+        self.assertIn(b'name="uld_amp_count" min="0" step="1" inputmode="numeric" value="0"', response.data)
+        self.assertIn(b'class="neoermac-label-mobile">PURE</span>', response.data)
+        self.assertIn(b'class="neoermac-label-mobile">1ST</span>', response.data)
+        self.assertIn(b'class="neoermac-label-mobile">2ND</span>', response.data)
+
+    def test_door_view_request_inputs_remain_clean_after_submission(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "save_uld_request",
+                "uld_a2_count": "2",
+                "uld_a1_count": "0",
+                "uld_amp_count": "1",
+                "setup_needed": "on",
+            },
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"SETUP", response.data)
+        self.assertIn(b"name=\"uld_a2_count\" min=\"0\" step=\"1\" inputmode=\"numeric\" value=\"0\"", response.data)
+        self.assertIn(b"name=\"uld_a1_count\" min=\"0\" step=\"1\" inputmode=\"numeric\" value=\"0\"", response.data)
+        self.assertIn(b"name=\"uld_amp_count\" min=\"0\" step=\"1\" inputmode=\"numeric\" value=\"0\"", response.data)
+        form_html = self._element_html(response.data, b"neoermac-uld-form")
+        self.assertIn(b"name=\"setup_needed\"", form_html)
+        self.assertNotIn(b"checked", form_html)
+
+    def test_door_view_displays_setup_and_standard_requests_for_same_door(self):
+        setup_time = datetime(2026, 6, 24, 1, 5)
+        standard_time = datetime(2026, 6, 24, 1, 2)
+        db.session.add_all(
+            [
+                NeoErmacUldRequest(
+                    gateway_id=self.gateway.id,
+                    door="D34",
+                    a2_count=2,
+                    a1_count=0,
+                    amp_count=1,
+                    setup_needed=True,
+                    created_at=setup_time,
+                    updated_at=setup_time,
+                ),
+                NeoErmacUldRequest(
+                    gateway_id=self.gateway.id,
+                    door="D34",
+                    a2_count=0,
+                    a1_count=3,
+                    amp_count=0,
+                    setup_needed=False,
+                    created_at=standard_time,
+                    updated_at=standard_time,
+                ),
+            ]
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+        rendered_html = response.data.split(b"<script>")[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(rendered_html.count(b"data-uld-request-row"), 2)
+        self.assertIn(b"SETUP", response.data)
+        self.assertIn(b"STANDARD", response.data)
+        self.assertLess(response.data.index(b"SETUP"), response.data.index(b"STANDARD"))
+        self.assertIn(b"01:05", response.data)
+        self.assertIn(b"01:02", response.data)
+
     def test_door_view_state_reflects_request_changes_from_another_update_cycle(self):
         request_record = NeoErmacUldRequest(
             gateway_id=self.gateway.id,
@@ -778,6 +867,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(len(payload["state"]["on_the_way_events"]), 1)
         self.assertEqual(payload["state"]["on_the_way_events"][0]["uld_type"], "A2")
         self.assertIn("1 A2 sent at", payload["state"]["on_the_way_events"][0]["label"])
+        self.assertEqual(payload["state"]["requests"], [])
 
     def test_door_view_state_requires_view_permission(self):
         view_rule = PermissionRule.query.filter_by(permission_key="neoermac.door_view.view").one()
@@ -811,6 +901,26 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(f"2 A2s sent at {sent_at:%H:%M}".encode(), response.data)
+
+    def test_door_view_displays_oversent_on_the_way_totals_exactly(self):
+        sent_at = datetime.utcnow()
+        db.session.add(
+            NeoSektorUldOnTheWayEvent(
+                gateway_id=self.gateway.id,
+                door="D34",
+                uld_type="AMP",
+                quantity=5,
+                sent_at_utc=sent_at,
+                expires_at_utc=sent_at + timedelta(minutes=5),
+            )
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(f"5 AMPs sent at {sent_at:%H:%M}".encode(), response.data)
 
     def test_door_view_uld_request_edits_do_not_clear_on_the_way_events(self):
         sent_at = datetime.utcnow()
@@ -1458,6 +1568,17 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
     def _door_select_html(self, response):
         match = re.search(rb'<select id="door-select".*?</select>', response.data, re.S)
+        self.assertIsNotNone(match)
+        return match.group(0)
+
+    def _element_html(self, html, class_name):
+        class_name = class_name if isinstance(class_name, bytes) else class_name.encode()
+        pattern = (
+            rb'<(?P<tag>[a-zA-Z0-9]+)[^>]*class="[^"]*'
+            + re.escape(class_name)
+            + rb'[^"]*"[^>]*>.*?</(?P=tag)>'
+        )
+        match = re.search(pattern, html, re.S)
         self.assertIsNotNone(match)
         return match.group(0)
 

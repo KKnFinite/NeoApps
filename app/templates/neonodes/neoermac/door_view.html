@@ -2,9 +2,19 @@
 
 {% block title %}DOOR VIEW | NeoErmac{% endblock %}
 
+{% macro uld_request_row(request_record) -%}
+    <div class="neoermac-uld-request-row{% if request_record.setup_needed %} is-setup-needed{% endif %}" data-uld-request-row>
+        <span class="neoermac-uld-request-priority">{{ "SETUP" if request_record.setup_needed else "STANDARD" }}</span>
+        <span>A2 <strong>{{ request_record.a2_count }}</strong></span>
+        <span>A1 <strong>{{ request_record.a1_count }}</strong></span>
+        <span>AMP <strong>{{ request_record.amp_count }}</strong></span>
+        <time>{{ request_record.updated_at.strftime("%H:%M") if request_record.updated_at else "-" }}</time>
+    </div>
+{%- endmacro %}
+
 {% block content %}
 <section
-    class="neoermac-shell neoermac-door-shell"
+    class="neoermac-shell neoermac-door-shell neoermac-door-mobile-tight"
     aria-labelledby="neoermac-door-title"
     {% if selected_door %}
     data-door-view
@@ -89,7 +99,8 @@
                         {% for pull in pull_fields %}
                         <section class="neoermac-door-pull-row">
                             <div class="neoermac-door-planned">
-                                <span>PLANNED {{ pull.label }}</span>
+                                <span class="neoermac-label-desktop">PLANNED {{ pull.label }}</span>
+                                <span class="neoermac-label-mobile">{{ pull.short_label }}</span>
                                 <strong>{{ card.planned[pull.key] or "-" }}</strong>
                                 {% if card.window_minutes and card.base_planned[pull.key] and card.base_planned[pull.key] != card.planned[pull.key] %}
                                 <em>BASE {{ card.base_planned[pull.key] }} +{{ card.window_minutes }} MIN</em>
@@ -97,7 +108,8 @@
                             </div>
                             {% if can_edit %}
                             <label class="neoermac-door-actual">
-                                <span>ACTUAL {{ pull.label }}</span>
+                                <span class="neoermac-label-desktop">ACTUAL {{ pull.label }}</span>
+                                <span class="neoermac-label-mobile">ACTUAL</span>
                                 <input
                                     type="time"
                                     name="{{ pull.actual_field }}_{{ destination_index }}"
@@ -113,11 +125,13 @@
                                     data-no-pull-toggle="{{ pull.key }}-{{ destination_index }}"
                                     {% if card.no_pull[pull.key] %}checked{% endif %}
                                 >
-                                <span>No {{ pull.label }}</span>
+                                <span class="neoermac-label-desktop">No {{ pull.label }}</span>
+                                <span class="neoermac-label-mobile">NO</span>
                             </label>
                             {% else %}
                             <div class="neoermac-door-actual neoermac-door-static">
-                                <span>ACTUAL {{ pull.label }}</span>
+                                <span class="neoermac-label-desktop">ACTUAL {{ pull.label }}</span>
+                                <span class="neoermac-label-mobile">ACTUAL</span>
                                 <strong>{{ "NO " ~ pull.label if card.no_pull[pull.key] else (card.actual[pull.key] or "-") }}</strong>
                             </div>
                             {% endif %}
@@ -153,7 +167,7 @@
     <section class="neoermac-door-panel" aria-label="ULD request">
         <h2>REQUEST ULDS</h2>
         {% if can_edit %}
-        <form method="post" class="neoermac-uld-form">
+        <form method="post" class="neoermac-uld-form" data-uld-request-form>
             <input type="hidden" name="door" value="{{ selected_door }}">
             <input type="hidden" name="action" value="save_uld_request">
             <div class="neoermac-uld-grid">
@@ -171,27 +185,35 @@
                 </label>
             </div>
             <label class="neoermac-door-toggle neoermac-setup-toggle">
-                <input type="checkbox" name="setup_needed" data-uld-setup {% if uld_request and uld_request.setup_needed %}checked{% endif %}>
+                <input type="checkbox" name="setup_needed" data-uld-setup>
                 <span>Needed for setup</span>
             </label>
             <div class="neoermac-door-action-row">
-                <button class="neoermac-menu-link" type="submit">SAVE ULD REQUEST</button>
+                <button class="neoermac-menu-link" type="submit">REQUEST ULDS</button>
                 <button class="neoermac-menu-link neoermac-menu-link-secondary neoermac-clear-request" type="submit" name="clear_uld_request" value="1">CLEAR REQUEST</button>
             </div>
         </form>
+        {% else %}
+        <p class="neoermac-door-empty">View-only access. ULD request controls are disabled.</p>
         {% endif %}
-        <div class="neoermac-uld-status">
-            <span>A2 <strong data-uld-status-count="A2">{{ uld_request.a2_count if uld_request else 0 }}</strong></span>
-            <span>A1 <strong data-uld-status-count="A1">{{ uld_request.a1_count if uld_request else 0 }}</strong></span>
-            <span>AMP <strong data-uld-status-count="AMP">{{ uld_request.amp_count if uld_request else 0 }}</strong></span>
-            <span data-uld-status-setup>{{ "Needed for setup" if uld_request and uld_request.setup_needed else "Setup priority off" }}</span>
-        </div>
+        <section class="neoermac-uld-request-list" aria-label="Active ULD request state" data-uld-request-list>
+            <h3>ACTIVE REQUESTS</h3>
+            {% if uld_requests %}
+            <div class="neoermac-uld-request-rows">
+                {% for request_record in uld_requests %}
+                {{ uld_request_row(request_record) }}
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="neoermac-door-empty">No active ULD requests for {{ selected_door }}.</p>
+            {% endif %}
+        </section>
     </section>
 
     <section class="neoermac-door-panel" aria-label="ULDs on the way" data-uld-events>
         <h2>ON THE WAY</h2>
         {% if on_the_way_events %}
-        <ul class="neoermac-door-simple-list">
+        <ul class="neoermac-door-simple-list neoermac-uld-event-list">
             {% for event in on_the_way_events %}
             <li>{{ event.label }}</li>
             {% endfor %}
@@ -242,7 +264,6 @@
     }
 
     const stateUrl = root.dataset.stateUrl;
-    const uldTypes = ["A2", "A1", "AMP"];
 
     const renderEvents = (events) => {
         const panel = root.querySelector("[data-uld-events]");
@@ -252,7 +273,7 @@
 
         let body = "<h2>ON THE WAY</h2>";
         if (events && events.length) {
-            body += `<ul class="neoermac-door-simple-list">${events
+            body += `<ul class="neoermac-door-simple-list neoermac-uld-event-list">${events
                 .map((event) => `<li>${escapeHtml(event.label || "")}</li>`)
                 .join("")}</ul>`;
         } else {
@@ -261,24 +282,36 @@
         panel.innerHTML = body;
     };
 
-    const applyState = (state) => {
-        const request = state.request || {};
-        const counts = request.counts || {};
-
-        uldTypes.forEach((uldType) => {
-            const count = counts[uldType] ?? 0;
-            const status = root.querySelector(`[data-uld-status-count="${uldType}"]`);
-            if (status) {
-                status.textContent = count;
-            }
-        });
-
-        const setupNeeded = Boolean(request.setup_needed);
-        const setupStatus = root.querySelector("[data-uld-status-setup]");
-        if (setupStatus) {
-            setupStatus.textContent = setupNeeded ? "Needed for setup" : "Setup priority off";
+    const renderRequests = (requests) => {
+        const panel = root.querySelector("[data-uld-request-list]");
+        if (!panel) {
+            return;
         }
 
+        let body = "<h3>ACTIVE REQUESTS</h3>";
+        if (requests && requests.length) {
+            body += `<div class="neoermac-uld-request-rows">${requests
+                .map((requestRow) => {
+                    const counts = requestRow.counts || {};
+                    return `
+                        <div class="neoermac-uld-request-row${requestRow.setup_needed ? " is-setup-needed" : ""}" data-uld-request-row>
+                            <span class="neoermac-uld-request-priority">${requestRow.setup_needed ? "SETUP" : "STANDARD"}</span>
+                            <span>A2 <strong>${Number.parseInt(counts.A2 ?? 0, 10) || 0}</strong></span>
+                            <span>A1 <strong>${Number.parseInt(counts.A1 ?? 0, 10) || 0}</strong></span>
+                            <span>AMP <strong>${Number.parseInt(counts.AMP ?? 0, 10) || 0}</strong></span>
+                            <time>${formatTime(requestRow.updated_at)}</time>
+                        </div>
+                    `;
+                })
+                .join("")}</div>`;
+        } else {
+            body += `<p class="neoermac-door-empty">No active ULD requests for ${escapeHtml(root.querySelector('[name="door"]')?.value || "")}.</p>`;
+        }
+        panel.innerHTML = body;
+    };
+
+    const applyState = (state) => {
+        renderRequests(state.requests || []);
         renderEvents(state.on_the_way_events || []);
         renderDestinations(state.destinations || []);
     };
@@ -330,6 +363,14 @@
         '"': "&quot;",
         "'": "&#39;",
     }[character]));
+
+    const formatTime = (value) => {
+        if (!value) {
+            return "-";
+        }
+        const match = String(value).match(/T(\d{2}:\d{2})/);
+        return match ? match[1] : String(value).slice(0, 5);
+    };
 
     window.setInterval(refreshState, 3000);
 })();
