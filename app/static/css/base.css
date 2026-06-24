@@ -3002,6 +3002,15 @@ a {
         font-size: 0.68rem;
     }
 
+    .neoermac-door-actual input.neoermac-ios-safe-input,
+    .neoermac-uld-grid input.neoermac-ios-safe-input {
+        min-height: 32px;
+        padding: 2px 3px;
+        font-size: 16px;
+        line-height: 1;
+        font-weight: 950;
+    }
+
     .neoermac-door-toggle {
         grid-template-columns: 13px minmax(0, 1fr);
         gap: 3px;

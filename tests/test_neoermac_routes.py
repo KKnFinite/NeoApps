@@ -1,6 +1,7 @@
 import re
 import unittest
 from datetime import date, datetime, time, timedelta
+from pathlib import Path
 
 from app import create_app
 from app.extensions import db
@@ -862,6 +863,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'class="neoermac-label-mobile">PURE</span>', response.data)
         self.assertIn(b'class="neoermac-label-mobile">1ST</span>', response.data)
         self.assertIn(b'class="neoermac-label-mobile">2ND</span>', response.data)
+        self.assertGreaterEqual(response.data.count(b"neoermac-ios-safe-input"), 6)
+        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        self.assertIn(".neoermac-door-actual input.neoermac-ios-safe-input", css)
+        self.assertIn(".neoermac-uld-grid input.neoermac-ios-safe-input", css)
+        self.assertIn("font-size: 16px", css)
 
     def test_door_view_request_inputs_remain_clean_after_submission(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")

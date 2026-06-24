@@ -128,6 +128,7 @@
                                 <span class="neoermac-label-desktop">ACTUAL {{ pull.label }}</span>
                                 <span class="neoermac-label-mobile">ACTUAL</span>
                                 <input
+                                    class="neoermac-ios-safe-input"
                                     type="text"
                                     name="{{ pull.actual_field }}_{{ destination_index }}"
                                     value="{{ card.actual[pull.key] }}"
@@ -200,15 +201,15 @@
             <div class="neoermac-uld-grid">
                 <label>
                     <span>A2</span>
-                    <input type="number" name="uld_a2_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="A2">
+                    <input class="neoermac-ios-safe-input" type="number" name="uld_a2_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="A2">
                 </label>
                 <label>
                     <span>A1</span>
-                    <input type="number" name="uld_a1_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="A1">
+                    <input class="neoermac-ios-safe-input" type="number" name="uld_a1_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="A1">
                 </label>
                 <label>
                     <span>AMP</span>
-                    <input type="number" name="uld_amp_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="AMP">
+                    <input class="neoermac-ios-safe-input" type="number" name="uld_amp_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="AMP">
                 </label>
             </div>
             <label class="neoermac-door-toggle neoermac-setup-toggle">
