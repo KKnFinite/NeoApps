@@ -5964,6 +5964,35 @@ body.blueprint-neostaffing {
     margin: 18px 0 24px;
 }
 
+.alp-mobile-only {
+    display: none;
+}
+
+.alp-desktop-only-message {
+    gap: 6px;
+    width: min(100%, 560px);
+    margin: 16px auto 0;
+    padding: 16px;
+    border: 1px solid rgba(var(--node-rgb), 0.45);
+    border-radius: 6px;
+    background:
+        linear-gradient(180deg, rgba(var(--node-rgb), 0.16), rgba(14, 16, 22, 0.92)),
+        rgba(14, 16, 22, 0.92);
+    color: var(--text);
+    text-align: center;
+    box-shadow: 0 0 22px rgba(var(--node-rgb), 0.16);
+}
+
+.alp-desktop-only-message strong,
+.alp-desktop-only-message span {
+    display: block;
+}
+
+.alp-desktop-only-message span {
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
 .action-button,
 .operation-form button,
 .parking-mobile-assignment button {
@@ -7708,6 +7737,14 @@ select::-ms-expand {
     .flight-api-auto-poll-widget [data-flight-api-auto-poll-success] {
         justify-self: stretch;
         text-align: left;
+    }
+
+    .alp-desktop-only {
+        display: none !important;
+    }
+
+    .alp-mobile-only {
+        display: block;
     }
 
     .parking-plan-page {

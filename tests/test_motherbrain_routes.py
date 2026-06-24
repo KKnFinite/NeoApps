@@ -3932,6 +3932,53 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"CURRENT OPERATION FLIGHTS MISSING FROM PASTE", response.data)
         self.assertIn(b"UPS0856", response.data)
 
+    def test_alp_paste_links_remain_available_on_desktop_and_marked_desktop_only(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        db.session.add(operation)
+        db.session.commit()
+
+        pages = [
+            f"/motherbrain/operations/{operation.id}",
+            f"/motherbrain/operations/{operation.id}/arrivals",
+            f"/motherbrain/operations/{operation.id}/departures",
+        ]
+
+        for page in pages:
+            with self.subTest(page=page):
+                response = self.client.get(page)
+                html = response.data.decode()
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("alp-desktop-only", html)
+                self.assertIn("/alp/", html)
+
+    def test_alp_import_page_has_mobile_desktop_only_message_and_desktop_form(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        db.session.add(operation)
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("ALP paste import is desktop-only.", html)
+        self.assertIn("alp-mobile-only", html)
+        self.assertIn("alp-desktop-only", html)
+        self.assertIn('textarea name="paste_text"', html)
+        self.assertIn('name="alp_action" value="preview"', html)
+
+    def test_alp_mobile_css_hides_import_links_and_controls_without_overflow(self):
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertIn(".alp-mobile-only", css)
+        self.assertIn(".alp-desktop-only", css)
+        self.assertIn("@media (max-width: 760px)", css)
+        mobile_css = css.split("@media (max-width: 760px)", 1)[1]
+        self.assertIn(".alp-desktop-only", mobile_css)
+        self.assertIn("display: none !important;", mobile_css)
+        self.assertIn(".alp-mobile-only", mobile_css)
+        self.assertIn("display: block;", mobile_css)
+
     def test_window_update_rejects_negative_values(self):
         operation = self._operation()
         db.session.add(operation)

@@ -15,193 +15,200 @@
         <a class="action-button" href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">DEPARTURE BOARD</a>
     </div>
 
-    <form class="operation-form" method="post">
-        <label>
-            <span>ALP {{ label|upper }} PASTE</span>
-            <textarea name="paste_text" rows="10" spellcheck="false" placeholder="Date&#9;Flight&#9;Airport&#9;Tail&#9;Parking&#9;Status&#9;Time">{{ paste_text }}</textarea>
-        </label>
-        <p class="muted">
-            Columns: Date, Flight, Airport, Tail, Parking, Status, Time. Parking and Status are ignored. ALP times are treated as Zulu and previewed in RFD local time.
-        </p>
-        <div class="action-row">
-            <button class="action-button" type="submit" name="alp_action" value="preview">PREVIEW</button>
-            {% if preview %}
-            <button class="action-button" type="submit" name="alp_action" value="apply">APPLY PREVIEW</button>
+    <div class="alp-mobile-only alp-desktop-only-message" role="status">
+        <strong>ALP paste import is desktop-only.</strong>
+        <span>Use Arrival Board, Departure Board, or Operation Overview on mobile.</span>
+    </div>
+
+    <div class="alp-desktop-only">
+        <form class="operation-form" method="post">
+            <label>
+                <span>ALP {{ label|upper }} PASTE</span>
+                <textarea name="paste_text" rows="10" spellcheck="false" placeholder="Date&#9;Flight&#9;Airport&#9;Tail&#9;Parking&#9;Status&#9;Time">{{ paste_text }}</textarea>
+            </label>
+            <p class="muted">
+                Columns: Date, Flight, Airport, Tail, Parking, Status, Time. Parking and Status are ignored. ALP times are treated as Zulu and previewed in RFD local time.
+            </p>
+            <div class="action-row">
+                <button class="action-button" type="submit" name="alp_action" value="preview">PREVIEW</button>
+                {% if preview %}
+                <button class="action-button" type="submit" name="alp_action" value="apply">APPLY PREVIEW</button>
+                {% endif %}
+            </div>
+        </form>
+
+        {% if preview %}
+        <div class="metric-grid">
+            <article class="metric-tile">
+                <span>MATCHED</span>
+                <strong>{{ preview.summary.matched }}</strong>
+            </article>
+            <article class="metric-tile">
+                <span>UNMATCHED ALP</span>
+                <strong>{{ preview.summary.unmatched }}</strong>
+            </article>
+            <article class="metric-tile">
+                <span>MISSING CURRENT</span>
+                <strong>{{ preview.summary.missing }}</strong>
+            </article>
+            <article class="metric-tile">
+                <span>DUPLICATES</span>
+                <strong>{{ preview.summary.duplicates }}</strong>
+            </article>
+            <article class="metric-tile">
+                <span>INVALID</span>
+                <strong>{{ preview.summary.invalid }}</strong>
+            </article>
+            {% if preview.applied_count is defined %}
+            <article class="metric-tile">
+                <span>APPLIED</span>
+                <strong>{{ preview.applied_count }}</strong>
+            </article>
             {% endif %}
         </div>
-    </form>
 
-    {% if preview %}
-    <div class="metric-grid">
-        <article class="metric-tile">
-            <span>MATCHED</span>
-            <strong>{{ preview.summary.matched }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>UNMATCHED ALP</span>
-            <strong>{{ preview.summary.unmatched }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>MISSING CURRENT</span>
-            <strong>{{ preview.summary.missing }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>DUPLICATES</span>
-            <strong>{{ preview.summary.duplicates }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>INVALID</span>
-            <strong>{{ preview.summary.invalid }}</strong>
-        </article>
-        {% if preview.applied_count is defined %}
-        <article class="metric-tile">
-            <span>APPLIED</span>
-            <strong>{{ preview.applied_count }}</strong>
-        </article>
+        <h2>MATCHED ROWS</h2>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>LINE</th>
+                        <th>ALP FLIGHT</th>
+                        <th>CURRENT FLIGHT</th>
+                        <th>AIRPORT</th>
+                        <th>TAIL CHANGE</th>
+                        <th>ALP UTC</th>
+                        <th>RFD LOCAL</th>
+                        <th>WARNING</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in preview.matched_rows %}
+                    <tr>
+                        <td>{{ row.line_number }}</td>
+                        <td>{{ row.normalized_flight_number }}</td>
+                        <td>{{ row.current_flight_number|upper }}</td>
+                        <td>{{ row.airport }}</td>
+                        <td>{{ row.tail_change }}</td>
+                        <td>{{ row.utc_display }}</td>
+                        <td>{{ row.local_display }}</td>
+                        <td>{{ row.warning or "-" }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8">NO MATCHED ALP ROWS.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <h2>UNMATCHED ALP ROWS</h2>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>LINE</th>
+                        <th>FLIGHT</th>
+                        <th>AIRPORT</th>
+                        <th>TAIL</th>
+                        <th>RFD LOCAL</th>
+                        <th>REASON</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in preview.unmatched_rows %}
+                    <tr>
+                        <td>{{ row.line_number }}</td>
+                        <td>{{ row.normalized_flight_number or row.flight_number }}</td>
+                        <td>{{ row.airport }}</td>
+                        <td>{{ row.tail_number }}</td>
+                        <td>{{ row.local_display }}</td>
+                        <td>{{ row.reason }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6">NO UNMATCHED ALP ROWS.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <h2>CURRENT OPERATION FLIGHTS MISSING FROM PASTE</h2>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>FLIGHT</th>
+                        <th>KEY</th>
+                        <th>AIRPORT</th>
+                        <th>CURRENT TAIL</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in preview.missing_missions %}
+                    <tr>
+                        <td>{{ row.flight_number|upper }}</td>
+                        <td>{{ row.flight_key }}</td>
+                        <td>{{ row.airport|upper }}</td>
+                        <td>{{ row.tail_number|upper }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4">NO CURRENT {{ label|upper }} MISSIONS MISSING FROM PASTE.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <h2>DUPLICATE ROWS</h2>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>LINE</th>
+                        <th>FLIGHT</th>
+                        <th>TAIL</th>
+                        <th>RFD LOCAL</th>
+                        <th>REASON</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in preview.duplicate_rows %}
+                    <tr>
+                        <td>{{ row.line_number }}</td>
+                        <td>{{ row.normalized_flight_number }}</td>
+                        <td>{{ row.tail_number }}</td>
+                        <td>{{ row.local_display }}</td>
+                        <td>{{ row.reason }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5">NO DUPLICATE ALP FLIGHTS.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <h2>INVALID ROWS</h2>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>LINE</th>
+                        <th>ROW</th>
+                        <th>ERROR</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in preview.invalid_rows %}
+                    <tr>
+                        <td>{{ row.line_number }}</td>
+                        <td>{{ row.raw }}</td>
+                        <td>{{ row.error }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="3">NO INVALID ALP ROWS.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% endif %}
     </div>
-
-    <h2>MATCHED ROWS</h2>
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>LINE</th>
-                    <th>ALP FLIGHT</th>
-                    <th>CURRENT FLIGHT</th>
-                    <th>AIRPORT</th>
-                    <th>TAIL CHANGE</th>
-                    <th>ALP UTC</th>
-                    <th>RFD LOCAL</th>
-                    <th>WARNING</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in preview.matched_rows %}
-                <tr>
-                    <td>{{ row.line_number }}</td>
-                    <td>{{ row.normalized_flight_number }}</td>
-                    <td>{{ row.current_flight_number|upper }}</td>
-                    <td>{{ row.airport }}</td>
-                    <td>{{ row.tail_change }}</td>
-                    <td>{{ row.utc_display }}</td>
-                    <td>{{ row.local_display }}</td>
-                    <td>{{ row.warning or "-" }}</td>
-                </tr>
-                {% else %}
-                <tr><td colspan="8">NO MATCHED ALP ROWS.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <h2>UNMATCHED ALP ROWS</h2>
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>LINE</th>
-                    <th>FLIGHT</th>
-                    <th>AIRPORT</th>
-                    <th>TAIL</th>
-                    <th>RFD LOCAL</th>
-                    <th>REASON</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in preview.unmatched_rows %}
-                <tr>
-                    <td>{{ row.line_number }}</td>
-                    <td>{{ row.normalized_flight_number or row.flight_number }}</td>
-                    <td>{{ row.airport }}</td>
-                    <td>{{ row.tail_number }}</td>
-                    <td>{{ row.local_display }}</td>
-                    <td>{{ row.reason }}</td>
-                </tr>
-                {% else %}
-                <tr><td colspan="6">NO UNMATCHED ALP ROWS.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <h2>CURRENT OPERATION FLIGHTS MISSING FROM PASTE</h2>
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>FLIGHT</th>
-                    <th>KEY</th>
-                    <th>AIRPORT</th>
-                    <th>CURRENT TAIL</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in preview.missing_missions %}
-                <tr>
-                    <td>{{ row.flight_number|upper }}</td>
-                    <td>{{ row.flight_key }}</td>
-                    <td>{{ row.airport|upper }}</td>
-                    <td>{{ row.tail_number|upper }}</td>
-                </tr>
-                {% else %}
-                <tr><td colspan="4">NO CURRENT {{ label|upper }} MISSIONS MISSING FROM PASTE.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <h2>DUPLICATE ROWS</h2>
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>LINE</th>
-                    <th>FLIGHT</th>
-                    <th>TAIL</th>
-                    <th>RFD LOCAL</th>
-                    <th>REASON</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in preview.duplicate_rows %}
-                <tr>
-                    <td>{{ row.line_number }}</td>
-                    <td>{{ row.normalized_flight_number }}</td>
-                    <td>{{ row.tail_number }}</td>
-                    <td>{{ row.local_display }}</td>
-                    <td>{{ row.reason }}</td>
-                </tr>
-                {% else %}
-                <tr><td colspan="5">NO DUPLICATE ALP FLIGHTS.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <h2>INVALID ROWS</h2>
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>LINE</th>
-                    <th>ROW</th>
-                    <th>ERROR</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in preview.invalid_rows %}
-                <tr>
-                    <td>{{ row.line_number }}</td>
-                    <td>{{ row.raw }}</td>
-                    <td>{{ row.error }}</td>
-                </tr>
-                {% else %}
-                <tr><td colspan="3">NO INVALID ALP ROWS.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
 </section>
 {% endblock %}
