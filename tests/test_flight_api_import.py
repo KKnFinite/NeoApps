@@ -4196,9 +4196,137 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"N555UP", response.data)
         self.assertIn(b"A300", response.data)
         self.assertIn(b"Expected", response.data)
-        self.assertIn(b">ADD</button>", response.data)
+        self.assertIn(b">ADD TO CURRENT SORT</button>", response.data)
         self.assertIn(b"Ignore 5X555 for this sort operation", response.data)
         self.assertIn(b"&times; IGNORE", response.data)
+
+    def test_flight_api_review_shows_provider_unmatched_ups_rows_only(self):
+        operation, _settings = self._setup_auto_poll_operation()
+        payload = {
+            "arrivals": [
+                self._provider_flight("arrival", "5X777", "UPS777", operation.sort_date),
+                self._provider_flight(
+                    "arrival",
+                    "AA123",
+                    "AAL123",
+                    operation.sort_date,
+                    airline_icao="AAL",
+                    airline_iata="AA",
+                ),
+            ],
+            "departures": [
+                self._provider_flight("departure", "5X888", "UPS888", operation.sort_date)
+            ],
+        }
+
+        result = run_flight_api_import(
+            self.gateway,
+            operation,
+            client=FakeFlightClient(payload),
+        )
+        self._login_motherbrain_role("review_provider_rows", "simulator")
+        response = self.client.get(
+            f"/motherbrain/flight-api-review?operation_id={operation.id}"
+        )
+
+        self.assertEqual(len(result["review_items"]), 2)
+        self.assertEqual(result["non_ups_ignored"], 1)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"ARRIVAL", response.data)
+        self.assertIn(b"5X777", response.data)
+        self.assertIn(b"UPS777", response.data)
+        self.assertIn(b"SDF / RFD", response.data)
+        self.assertIn(b"DEPARTURE", response.data)
+        self.assertIn(b"5X888", response.data)
+        self.assertIn(b"UPS888", response.data)
+        self.assertIn(b"RFD / SDF", response.data)
+        self.assertIn(b"API 02:25 Local", response.data)
+        self.assertIn(b"no matching mission", response.data)
+        self.assertIn(b">ADD TO CURRENT SORT</button>", response.data)
+        self.assertIn(b"&times; IGNORE", response.data)
+        self.assertNotIn(b"AA123", response.data)
+        self.assertNotIn(b"AAL123", response.data)
+
+    def test_flight_api_review_add_provider_unmatched_arrival_and_departure(self):
+        operation, _settings = self._setup_auto_poll_operation()
+        result = run_flight_api_import(
+            self.gateway,
+            operation,
+            client=FakeFlightClient(
+                {
+                    "arrivals": [
+                        self._provider_flight(
+                            "arrival",
+                            "5X777",
+                            "UPS777",
+                            operation.sort_date,
+                        )
+                    ],
+                    "departures": [
+                        self._provider_flight(
+                            "departure",
+                            "5X888",
+                            "UPS888",
+                            operation.sort_date,
+                        )
+                    ],
+                }
+            ),
+        )
+        self._login_motherbrain_role("review_provider_add", "simulator")
+
+        for item in result["review_items"]:
+            response = self.client.post(
+                f"/motherbrain/flight-api-review/{item.id}/add",
+                data={"operation_id": str(operation.id)},
+                follow_redirects=False,
+            )
+            db.session.refresh(item)
+            mission = SortDateMission.query.filter_by(
+                sort_date_operation_id=operation.id,
+                mission_type=item.mission_type,
+                flight_number=item.flight_number,
+            ).one()
+
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(item.review_status, "accepted")
+            self.assertEqual(item.accepted_mission_id, mission.id)
+            self.assertEqual(mission.mission_source, "api")
+            self.assertTrue(mission.api_added_current_sort_only)
+            self.assertIsNone(mission.master_flight_schedule_id)
+
+    def test_flight_api_review_ignore_provider_unmatched_hides_future_polls_for_operation(self):
+        operation, _settings = self._setup_auto_poll_operation()
+        payload = {
+            "arrivals": [
+                self._provider_flight("arrival", "5X777", "UPS777", operation.sort_date)
+            ]
+        }
+        first = run_flight_api_import(
+            self.gateway,
+            operation,
+            client=FakeFlightClient(payload),
+        )
+        review_item = first["review_items"][0]
+        self._login_motherbrain_role("review_provider_ignore", "simulator")
+
+        response = self.client.post(
+            f"/motherbrain/flight-api-review/{review_item.id}/ignore",
+            data={"operation_id": str(operation.id)},
+            follow_redirects=False,
+        )
+        second = run_flight_api_import(
+            self.gateway,
+            operation,
+            client=FakeFlightClient(payload),
+        )
+
+        db.session.refresh(review_item)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(review_item.review_status, "ignored")
+        self.assertEqual(second["suppressed_review_count"], 1)
+        self.assertEqual(second["review_items"], [])
+        self.assertEqual(pending_review_items_for_operation(operation), [])
 
     def test_flight_api_review_departure_rows_show_schedule_api_local_times_and_diff(self):
         local_date = date.today()
@@ -4281,7 +4409,7 @@ class FlightApiTestPageTest(unittest.TestCase):
         db.session.refresh(review_item)
         self.assertEqual(page_response.status_code, 200)
         self.assertIn(b"VIEW ONLY", page_response.data)
-        self.assertNotIn(b">ADD</button>", page_response.data)
+        self.assertNotIn(b">ADD TO CURRENT SORT</button>", page_response.data)
         self.assertEqual(add_response.status_code, 302)
         self.assertEqual(add_response.location, "/rfd")
         self.assertEqual(review_item.review_status, "pending")

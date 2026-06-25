@@ -84,16 +84,18 @@
                     <td>
                         {% if item.mission_type == "departure" %}
                         <span class="flight-api-time-stack">
-                            <strong>SCHED {{ local_dt(departure_diagnostics.scheduled_local) }}</strong>
-                            <br><span class="muted">API {{ local_dt(departure_diagnostics.api_local) }}</span>
+                            <strong>API {{ local_dt(departure_diagnostics.api_local) }}</strong>
+                            {% if departure_diagnostics.scheduled_local %}
+                            <br><span class="muted">SCHED {{ local_dt(departure_diagnostics.scheduled_local) }}</span>
+                            {% endif %}
                             {% if item.review_reason == "departure time mismatch" and departure_diagnostics.minute_difference is not none %}
                             <br><span class="muted">DIFF {{ departure_diagnostics.minute_difference }} MIN</span>
                             {% endif %}
                         </span>
                         {% else %}
-                        <strong>{{ format_flight_api_time(operational_time, gateway) }}</strong>
+                        <strong>API {{ format_flight_api_time(provider_time or operational_time, gateway) }}</strong>
                         {% if item.mission_type == "arrival" and provider_time and provider_time != operational_time %}
-                        <br><span class="muted">PROVIDER {{ format_flight_api_time(provider_time, gateway) }}</span>
+                        <br><span class="muted">OPERATIONAL {{ format_flight_api_time(operational_time, gateway) }}</span>
                         {% endif %}
                         {% if item.mission_type == "arrival" and item.runway_time_utc %}
                         <br><span class="muted">RUNWAY {{ format_flight_api_time(item.runway_time_utc, gateway) }}</span>
@@ -108,7 +110,7 @@
                         {% if can_edit %}
                         <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.add_flight_api_review_item', review_item_id=item.id) }}">
                             <input type="hidden" name="operation_id" value="{{ selected_operation.id }}">
-                            <button class="table-row-button" type="submit">ADD</button>
+                            <button class="table-row-button" type="submit">ADD TO CURRENT SORT</button>
                         </form>
                         <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.ignore_flight_api_review_item', review_item_id=item.id) }}">
                             <input type="hidden" name="operation_id" value="{{ selected_operation.id }}">
