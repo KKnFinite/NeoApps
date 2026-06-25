@@ -7827,13 +7827,13 @@ select::-ms-expand {
 
 .data-table.motherbrain-board-table th,
 .data-table.motherbrain-board-table td {
-    padding: 7px 8px;
-    line-height: 1.15;
+    padding: 4px 7px;
+    line-height: 1.1;
     vertical-align: middle;
 }
 
 .data-table.motherbrain-board-table th {
-    font-size: 0.7rem;
+    font-size: 0.68rem;
 }
 
 .planning-review-section {

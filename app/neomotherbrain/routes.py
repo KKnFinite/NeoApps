@@ -3125,8 +3125,14 @@ def _arrival_eta_delta_minutes(mission, arrival_display):
     if not has_operational_eta:
         return None
 
+    display_time = _nearest_operational_datetime(display_time, planned_local)
     delta = display_time - planned_local
     return int(round(delta.total_seconds() / 60))
+
+
+def _nearest_operational_datetime(value, reference):
+    candidates = [value + timedelta(days=offset) for offset in (-1, 0, 1)]
+    return min(candidates, key=lambda candidate: abs(candidate - reference))
 
 
 def _arrival_manual_time(mission, operation=None, timezone_name=None):

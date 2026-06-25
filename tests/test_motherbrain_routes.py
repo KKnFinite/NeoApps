@@ -1,6 +1,7 @@
 from datetime import date, datetime, time, timezone
 import json
 from pathlib import Path
+import re
 from types import SimpleNamespace
 import unittest
 
@@ -3767,14 +3768,82 @@ class MotherBrainRoutesTest(unittest.TestCase):
         response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
         html = response.data.decode()
         header = html.split("<thead>", 1)[1].split("</thead>", 1)[0]
+        header_labels = re.findall(r"<th>(.*?)</th>", header)
 
-        self.assertLess(header.index("<th>WAVE</th>"), header.index("<th>FLIGHT</th>"))
-        self.assertLess(header.index("<th>ETA</th>"), header.index("<th>+/-</th>"))
+        self.assertEqual(
+            header_labels,
+            [
+                "WAVE",
+                "FLIGHT",
+                "TAIL",
+                "ORIGIN",
+                "PARKING",
+                "ETA",
+                "+/-",
+                "STATUS",
+                "LINKS",
+            ],
+        )
         self.assertIn(">-10</td>", html)
         self.assertIn(">+12</td>", html)
         self.assertIn(">0</td>", html)
+        self.assertIsNone(re.search(r"\b\d{1,2}:\d{2}\s*(AM|PM)\b", html))
         missing_row = html.split("UPSMISSING", 1)[1].split("</tr>", 1)[0]
         self.assertIn(">-</td>", missing_row)
+
+    def test_arrival_board_eta_delta_handles_midnight_operational_times(self):
+        operation = self._operation(sort_date=date(2026, 6, 1))
+        db.session.add(operation)
+        db.session.add_all(
+            [
+                self._mission(
+                    operation=operation,
+                    mission_type="arrival",
+                    flight_number="UPS0005",
+                    planned_datetime_local=datetime(2026, 6, 2, 0, 5),
+                    planned_datetime_utc=datetime(2026, 6, 2, 5, 5),
+                    eta_datetime_utc=datetime(2026, 6, 2, 5, 5),
+                    eta_source="api",
+                ),
+                self._mission(
+                    operation=operation,
+                    mission_type="arrival",
+                    flight_number="UPS0010",
+                    planned_datetime_local=datetime(2026, 6, 2, 0, 5),
+                    planned_datetime_utc=datetime(2026, 6, 2, 5, 5),
+                    eta_datetime_utc=datetime(2026, 6, 2, 5, 10),
+                    eta_source="api",
+                ),
+                self._mission(
+                    operation=operation,
+                    mission_type="arrival",
+                    flight_number="UPS2355",
+                    planned_datetime_local=datetime(2026, 6, 2, 0, 5),
+                    planned_datetime_utc=datetime(2026, 6, 2, 5, 5),
+                    eta_datetime_utc=datetime(2026, 6, 3, 4, 55),
+                    eta_source="api",
+                ),
+            ]
+        )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
+        html = response.data.decode()
+
+        self.assertIn("UPS0005", html)
+        self.assertIn("UPS0010", html)
+        self.assertIn("UPS2355", html)
+        self.assertIn("00:05", html)
+        self.assertIn("00:10", html)
+        self.assertIn("23:55", html)
+        on_time_row = html.split("UPS0005", 1)[1].split("</tr>", 1)[0]
+        late_row = html.split("UPS0010", 1)[1].split("</tr>", 1)[0]
+        early_row = html.split("UPS2355", 1)[1].split("</tr>", 1)[0]
+        self.assertIn(">0</td>", on_time_row)
+        self.assertIn(">+5</td>", late_row)
+        self.assertIn(">-10</td>", early_row)
+        self.assertNotIn("+1440", html)
+        self.assertIsNone(re.search(r"\b\d{1,2}:\d{2}\s*(AM|PM)\b", html))
 
     def test_departure_board_shows_only_departure_missions(self):
         operation = self._operation_with_missions()
