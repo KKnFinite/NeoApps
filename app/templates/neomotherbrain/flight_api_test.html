@@ -5,6 +5,9 @@
 {% macro dt(value) -%}
 {{ value.strftime("%Y-%m-%d %H:%M") if value else "-" }}
 {%- endmacro %}
+{% macro local_dt(value) -%}
+{{ value.strftime("%H:%M Local %b") ~ " " ~ value.day if value else "-" }}
+{%- endmacro %}
 
 {% block content %}
 {% set lookup_window = import_result if import_result and import_result.lookup_window_start_local else selected_lookup_window %}
@@ -475,7 +478,7 @@
                     <th>CURRENT FLIGHT</th>
                     <th>CURRENT KEY</th>
                     <th>CURRENT DEST</th>
-                    <th>CURRENT STD</th>
+                    <th>SCHEDULED LOCAL</th>
                     <th>CURRENT TAIL</th>
                     <th>API CANDIDATE</th>
                     <th>MATCHED</th>
@@ -483,7 +486,7 @@
                     <th>API CALLSIGN</th>
                     <th>API KEYS</th>
                     <th>API DEST</th>
-                    <th>API DEPARTURE TIME</th>
+                    <th>API LOCAL TIME</th>
                     <th>INSIDE MATCH WINDOW</th>
                     <th>API TAIL</th>
                     <th>REASON / TAIL DEBUG</th>
@@ -495,7 +498,7 @@
                     <td>{{ row.current_flight_number or "-" }}</td>
                     <td><strong>{{ row.current_flight_key or "-" }}</strong></td>
                     <td>{{ row.current_destination or "-" }}</td>
-                    <td>{{ format_flight_api_time(row.current_std_utc, gateway) }}</td>
+                    <td>{{ local_dt(row.current_std_local) }}</td>
                     <td>{{ row.current_tail or "-" }}</td>
                     <td>{{ "YES" if row.api_candidate_found else "NO" }}</td>
                     <td>{{ "YES" if row.matched else "NO" }}</td>
@@ -504,7 +507,7 @@
                     <td>{{ row.matched_api_normalized_keys or "-" }}</td>
                     <td>{{ row.matched_api_destination or "-" }}</td>
                     <td>
-                        {{ format_flight_api_time(row.matched_api_departure_time_utc, gateway) }}
+                        {{ local_dt(row.matched_api_departure_time_local) }}
                         {% if row.minute_difference is not none %}
                         <br><span class="muted">DIFF {{ row.minute_difference }} MIN / WINDOW {{ row.time_tolerance_minutes }} MIN</span>
                         {% endif %}
@@ -539,7 +542,7 @@
                     <th>CALLSIGN</th>
                     <th>KEYS TRIED</th>
                     <th>DESTINATION</th>
-                    <th>DEPARTURE TIME</th>
+                    <th>SCHEDULED / API LOCAL</th>
                     <th>INSIDE MATCH WINDOW</th>
                     <th>TAIL / REG</th>
                     <th>STATUS</th>
@@ -555,7 +558,8 @@
                     <td>{{ row.normalized_keys or "-" }}</td>
                     <td>{{ row.destination or "-" }}</td>
                     <td>
-                        {{ format_flight_api_time(row.departure_time_utc, gateway) }}
+                        <strong>SCHED {{ local_dt(row.scheduled_time_local) }}</strong>
+                        <br><span class="muted">API {{ local_dt(row.departure_time_local) }}</span>
                         {% if row.minute_difference is not none %}
                         <br><span class="muted">DIFF {{ row.minute_difference }} MIN / WINDOW {{ row.time_tolerance_minutes }} MIN</span>
                         {% endif %}

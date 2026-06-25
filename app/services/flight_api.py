@@ -468,6 +468,7 @@ def process_api_flights_for_operation(
                 normalized["inside_departure_match_window"] = (
                     departure_inside_match_window(mission, normalized)
                 )
+                _annotate_departure_time_diagnostics(normalized, mission)
             if apply:
                 apply_api_data_to_mission(mission, normalized, settings, now=now_utc)
             matched.append(
@@ -512,6 +513,7 @@ def process_api_flights_for_operation(
                 if audit_mission
                 else None
             )
+            _annotate_departure_time_diagnostics(normalized, audit_mission)
         if apply:
             review_item, was_ignored = upsert_review_item(gateway, operation, normalized)
         else:
@@ -1104,6 +1106,7 @@ def normalize_api_flight(api_flight, operation=None, gateway=None):
         ),
         "origin": origin,
         "destination": destination,
+        "timezone_name": timezone_name,
         "revised_time_utc": revised_time_utc,
         "scheduled_time_utc": scheduled_time_utc,
         "runway_time_utc": runway_time_utc,
@@ -1261,10 +1264,7 @@ def _mission_timezone_name(mission):
 
 
 def _departure_api_time_local(mission, normalized):
-    api_time = flight_api_provider_time_utc(normalized)
-    if not api_time:
-        return None
-    return _utc_to_local_naive(_utc_naive(api_time), _mission_timezone_name(mission))
+    return flight_api_provider_time_local(normalized, mission=mission)
 
 
 def _departure_mission_time_local(mission):
@@ -1285,6 +1285,34 @@ def _departure_time_difference_minutes(mission, normalized):
     api_time = _departure_api_time_local(mission, normalized)
     mission_time = _departure_mission_time_local(mission)
     return _local_datetime_difference_minutes(api_time, mission_time)
+
+
+def _annotate_departure_time_diagnostics(normalized, mission):
+    normalized["candidate_departure_time_local"] = (
+        _departure_mission_time_local(mission) if mission else None
+    )
+    normalized["api_departure_time_local"] = (
+        flight_api_provider_time_local(normalized, mission=mission)
+        if mission
+        else flight_api_provider_time_local(normalized)
+    )
+
+
+def _normalized_review_item_record(item, operation=None):
+    gateway = getattr(operation, "gateway", None) if operation else None
+    timezone_name = gateway_timezone(gateway) if gateway else "America/Chicago"
+    return {
+        "mission_type": _record_value(item, "mission_type"),
+        "flight_number": _record_value(item, "flight_number"),
+        "provider_flight_number": _record_value(item, "flight_number"),
+        "call_sign": _record_value(item, "call_sign"),
+        "origin": _record_value(item, "origin"),
+        "destination": _record_value(item, "destination"),
+        "timezone_name": timezone_name,
+        "revised_time_utc": _record_value(item, "revised_time_utc"),
+        "scheduled_time_utc": _record_value(item, "scheduled_time_utc"),
+        "runway_time_utc": _record_value(item, "runway_time_utc"),
+    }
 
 
 def departure_time_difference_minutes(mission, normalized):
@@ -1374,6 +1402,7 @@ def build_departure_match_audit(missions, ups_departure_candidates, diagnostics=
                 "current_flight_key": current_key or "-",
                 "current_destination": mission.destination,
                 "current_std_utc": mission.planned_datetime_utc,
+                "current_std_local": _departure_mission_time_local(mission),
                 "current_tail": mission.assigned_tail_number,
                 "api_candidate_found": bool(api_candidate),
                 "matched": bool(matched_api),
@@ -1387,6 +1416,11 @@ def build_departure_match_audit(missions, ups_departure_candidates, diagnostics=
                 "matched_api_destination": api_candidate.get("destination") if api_candidate else None,
                 "matched_api_departure_time_utc": (
                     flight_api_provider_time_utc(api_candidate) if api_candidate else None
+                ),
+                "matched_api_departure_time_local": (
+                    flight_api_provider_time_local(api_candidate, mission=mission)
+                    if api_candidate
+                    else None
                 ),
                 "matched_api_tail": api_candidate.get("tail_number") if api_candidate else None,
                 "identity_warning": (
@@ -1432,6 +1466,8 @@ def api_ups_departure_audit_row(normalized):
         "normalized_keys": normalized_cores_display(normalized.get("normalized_cores_tried")),
         "destination": normalized.get("destination"),
         "departure_time_utc": flight_api_provider_time_utc(normalized),
+        "departure_time_local": normalized.get("api_departure_time_local"),
+        "scheduled_time_local": normalized.get("candidate_departure_time_local"),
         "tail_number": normalized.get("tail_number"),
         "api_status": normalized.get("api_status_raw"),
         "matched_current_mission": normalized.get("matched_mission_flight_number")
@@ -1539,12 +1575,73 @@ def flight_api_provider_time_utc(record):
     )
 
 
+def flight_api_provider_time_local(record, mission=None, timezone_name=None):
+    provider_time = flight_api_provider_time_utc(record)
+    if not provider_time:
+        return None
+    timezone_name = (
+        timezone_name
+        or (_mission_timezone_name(mission) if mission else None)
+        or _record_value(record, "timezone_name")
+        or "America/Chicago"
+    )
+    return _utc_to_local_naive(_utc_naive(provider_time), timezone_name)
+
+
 def format_flight_api_local_time(value, gateway=None, timezone_name=None):
     if not value:
         return "-"
     timezone_name = timezone_name or (gateway_timezone(gateway) if gateway else "America/Chicago")
     local_value = _utc_to_local_naive(_utc_naive(value), timezone_name)
     return f"{local_value:%H:%M Local %b} {local_value.day}"
+
+
+def flight_api_review_display_rows(items, operation):
+    missions = []
+    if operation:
+        missions = SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id,
+        ).all()
+    return [
+        {
+            "item": item,
+            "departure_diagnostics": flight_api_review_departure_diagnostics(
+                item,
+                operation,
+                missions,
+            ),
+        }
+        for item in items
+    ]
+
+
+def flight_api_review_departure_diagnostics(item, operation=None, missions=None):
+    if _record_value(item, "mission_type") != "departure":
+        return {}
+    missions = missions if missions is not None else []
+    normalized = _normalized_review_item_record(item, operation)
+    candidate = departure_audit_candidate_mission(normalized, missions)
+    timezone_name = (
+        _mission_timezone_name(candidate)
+        if candidate
+        else (
+            gateway_timezone(operation.gateway)
+            if operation and getattr(operation, "gateway", None)
+            else _record_value(normalized, "timezone_name") or "America/Chicago"
+        )
+    )
+    api_local = flight_api_provider_time_local(normalized, timezone_name=timezone_name)
+    scheduled_local = _departure_mission_time_local(candidate) if candidate else None
+    minute_difference = (
+        departure_time_difference_minutes(candidate, normalized) if candidate else None
+    )
+    return {
+        "scheduled_local": scheduled_local,
+        "api_local": api_local,
+        "minute_difference": minute_difference,
+        "candidate_flight_number": getattr(candidate, "flight_number", None),
+        "timezone_name": timezone_name,
+    }
 
 
 def upsert_review_item(gateway, operation, normalized):

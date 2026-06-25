@@ -34,6 +34,7 @@ from app.services.flight_api import (
     flight_api_auto_poll_status,
     flight_api_operational_time_utc,
     flight_api_provider_time_utc,
+    flight_api_review_display_rows,
     format_flight_api_local_time,
     ignore_review_item,
     ops_node_online_window_snapshot,
@@ -450,6 +451,7 @@ def flight_api_review():
     operations = operations_for_gateway_date(gateway, sort_date)
     selected_operation = _selected_current_operation(operations)
     pending_items = pending_review_items_for_operation(selected_operation)
+    pending_item_rows = flight_api_review_display_rows(pending_items, selected_operation)
     settings = ensure_sort_timeline_settings(gateway)
     return render_template(
         "neomotherbrain/flight_api_review.html",
@@ -458,6 +460,7 @@ def flight_api_review():
         operations=operations,
         selected_operation=selected_operation,
         pending_review_items=pending_items,
+        pending_review_item_rows=pending_item_rows,
         can_edit=access["can_edit"],
         sort_timeline_settings=settings,
         flight_api_operational_time=flight_api_operational_time_utc,

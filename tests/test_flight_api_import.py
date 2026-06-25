@@ -1907,6 +1907,15 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(result["matched"][0]["mission"].id, mission.id)
         self.assertEqual(result["departure_match_audit"][0]["minute_difference"], 0)
         self.assertTrue(result["departure_match_audit"][0]["inside_departure_match_window"])
+        self.assertEqual(
+            result["api_ups_departures"][0]["scheduled_time_local"],
+            datetime(2026, 6, 1, 23, 30),
+        )
+        self.assertEqual(
+            result["api_ups_departures"][0]["departure_time_local"],
+            datetime(2026, 6, 1, 23, 30),
+        )
+        self.assertEqual(result["api_ups_departures"][0]["unmatched_reason"], "")
         self.assertEqual(len(result["review_items"]), 0)
 
     def test_departure_provider_utc_time_offset_still_flags_mismatch(self):
@@ -1945,6 +1954,14 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(result["departure_match_audit"][0]["reason"], "departure time mismatch")
         self.assertEqual(result["departure_match_audit"][0]["minute_difference"], 510)
         self.assertFalse(result["departure_match_audit"][0]["inside_departure_match_window"])
+        self.assertEqual(
+            result["api_ups_departures"][0]["scheduled_time_local"],
+            datetime(2026, 6, 1, 23, 30),
+        )
+        self.assertEqual(
+            result["api_ups_departures"][0]["departure_time_local"],
+            datetime(2026, 6, 2, 8, 0),
+        )
 
     def test_departure_overnight_provider_time_uses_local_operation_date(self):
         mission = self._mission(
@@ -4183,6 +4200,50 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"Ignore 5X555 for this sort operation", response.data)
         self.assertIn(b"&times; IGNORE", response.data)
 
+    def test_flight_api_review_departure_rows_show_schedule_api_local_times_and_diff(self):
+        local_date = date.today()
+        next_date = local_date + timedelta(days=1)
+        operation = self._review_operation(sort_date=local_date)
+        mission = self._mission_for_operation(
+            operation,
+            mission_type="departure",
+            flight_number="UPS0910",
+            origin="RFD",
+            destination="SDF",
+            planned_datetime_local=datetime.combine(local_date, time(23, 30)),
+            planned_datetime_utc=datetime.combine(local_date, time(4, 30)),
+            arrival_status=None,
+        )
+        db.session.add(mission)
+        self._review_item(
+            operation,
+            mission_type="departure",
+            flight_number="5X910",
+            call_sign="UPS910",
+            origin="RFD",
+            destination="SDF",
+            revised_time_utc=datetime.combine(next_date, time(13, 0)),
+            review_reason="departure time mismatch",
+        )
+        db.session.commit()
+        self._login_motherbrain_role("review_departure_diagnostics", "simulator")
+
+        response = self.client.get(
+            f"/motherbrain/flight-api-review?operation_id={operation.id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            f"SCHED 23:30 Local {local_date:%b} {local_date.day}".encode(),
+            response.data,
+        )
+        self.assertIn(
+            f"API 08:00 Local {next_date:%b} {next_date.day}".encode(),
+            response.data,
+        )
+        self.assertIn(b"DIFF 510 MIN", response.data)
+        self.assertIn(b"departure time mismatch", response.data)
+
     def test_flight_api_review_page_does_not_leak_api_key_value(self):
         operation = self._review_operation()
         self._review_item(operation)
@@ -4350,6 +4411,10 @@ class FlightApiTestPageTest(unittest.TestCase):
         call_sign="UPS555",
         review_key=None,
         tail_number="N555UP",
+        origin=None,
+        destination=None,
+        revised_time_utc=None,
+        review_reason="no matching mission",
     ):
         item = FlightApiReviewItem(
             sort_date_operation_id=operation.id,
@@ -4362,13 +4427,14 @@ class FlightApiTestPageTest(unittest.TestCase):
             review_status="pending",
             flight_number=flight_number,
             call_sign=call_sign,
-            origin="SDF" if mission_type == "arrival" else "RFD",
-            destination="RFD" if mission_type == "arrival" else "SDF",
-            revised_time_utc=datetime(2026, 6, 1, 7, 25),
+            origin=origin or ("SDF" if mission_type == "arrival" else "RFD"),
+            destination=destination or ("RFD" if mission_type == "arrival" else "SDF"),
+            revised_time_utc=revised_time_utc or datetime(2026, 6, 1, 7, 25),
             tail_number=tail_number,
             aircraft_model="A300",
             api_status="Expected",
         )
+        item.review_reason = review_reason
         db.session.add(item)
         db.session.commit()
         return item
