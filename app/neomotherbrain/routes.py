@@ -1405,6 +1405,7 @@ def alp_import(operation_id, mission_type):
         preview=preview,
         planning_rows=planning_rows,
         mission_rows=mission_rows,
+        tail_swap_options=_tail_swap_options_for_operation(operation),
         can_edit=_planning_can_edit(gateway),
         sort_timeline_settings=settings,
         flight_api_operational_time=flight_api_operational_time_utc,
@@ -1736,6 +1737,84 @@ def restore_mission(operation_id, mission_id):
     _restore_mission(mission)
     db.session.commit()
     flash(f"{mission.flight_number.upper()} restored for this sort.", "info")
+    return redirect(_planning_url(operation.id, mission.mission_type))
+
+
+@bp.route(
+    "/motherbrain/operations/<int:operation_id>/missions/<int:mission_id>/tail-swap",
+    methods=["POST"],
+)
+@gateway_node_required("motherbrain")
+def tail_swap_mission(operation_id, mission_id):
+    gateway = get_current_gateway()
+    operation = _operation_or_404(operation_id)
+    mission = _mission_or_404(operation, mission_id)
+    if not _planning_can_edit(gateway):
+        flash("Access denied.", "error")
+        return redirect(_planning_url(operation.id, mission.mission_type))
+    if mission.mission_type != "departure":
+        flash("Tail Swap is only available for departure missions.", "error")
+        return redirect(_planning_url(operation.id, mission.mission_type))
+    if _is_cancelled_mission(mission):
+        flash("Restore the departure before swapping its tail.", "error")
+        return redirect(_planning_url(operation.id, mission.mission_type))
+
+    try:
+        replacement_tail = _normalize_tail_swap_tail(
+            request.form.get("replacement_tail")
+        )
+    except ValueError as error:
+        flash(str(error), "error")
+        return redirect(_planning_url(operation.id, mission.mission_type))
+
+    current_tail = (mission.assigned_tail_number or "").strip().upper()
+    if current_tail == replacement_tail:
+        flash(f"{mission.flight_number.upper()} already uses {replacement_tail}.", "info")
+        return redirect(_planning_url(operation.id, mission.mission_type))
+
+    conflicts = _tail_swap_departure_conflicts(operation, mission, replacement_tail)
+    if conflicts and not _truthy_form_value(request.form.get("confirm_tail_swap")):
+        conflict_list = ", ".join(
+            _tail_swap_conflict_label(conflict) for conflict in conflicts
+        )
+        flash(
+            f"{replacement_tail} is already chained to {conflict_list}. "
+            "Check CONFIRM to cancel that chained departure and finish Tail Swap.",
+            "error",
+        )
+        return redirect(_planning_url(operation.id, mission.mission_type))
+
+    old_tail_number = mission.assigned_tail_number
+    old_aircraft_type = _aircraft_type_for_tail(operation, old_tail_number)
+    for conflict in conflicts:
+        _set_mission_cancelled(conflict)
+
+    mission.assigned_tail_number = replacement_tail
+    mission.tail_source = "manual"
+    mission.tail_updated_at = datetime.utcnow()
+    db.session.flush()
+    _sync_tail_state_and_crew_slots(
+        mission,
+        old_tail_number=old_tail_number,
+        old_aircraft_type=old_aircraft_type,
+    )
+    db.session.commit()
+
+    if conflicts:
+        conflict_list = ", ".join(
+            _tail_swap_conflict_label(conflict) for conflict in conflicts
+        )
+        flash(
+            f"Tail Swap complete. {mission.flight_number.upper()} now uses "
+            f"{replacement_tail}; cancelled chained departure {conflict_list}.",
+            "info",
+        )
+    else:
+        flash(
+            f"Tail Swap complete. {mission.flight_number.upper()} now uses "
+            f"{replacement_tail}.",
+            "info",
+        )
     return redirect(_planning_url(operation.id, mission.mission_type))
 
 
@@ -3445,6 +3524,81 @@ def _set_mission_cancelled(mission):
 def _restore_mission(mission):
     if _is_cancelled_mission(mission):
         setattr(mission, _mission_status_field(mission), None)
+
+
+def _normalize_tail_swap_tail(value):
+    tail_number = re.sub(r"\s+", "", value or "").strip().upper()
+    if not tail_number:
+        raise ValueError("Replacement tail is required.")
+    if len(tail_number) > 32:
+        raise ValueError("Replacement tail is too long.")
+    return tail_number
+
+
+def _tail_swap_departure_conflicts(operation, mission, replacement_tail):
+    conflicts = (
+        SortDateMission.query.filter(
+            SortDateMission.sort_date_operation_id == operation.id,
+            SortDateMission.mission_type == "departure",
+            func.upper(SortDateMission.assigned_tail_number) == replacement_tail,
+            SortDateMission.id != mission.id,
+        )
+        .order_by(SortDateMission.planned_datetime_utc.asc(), SortDateMission.id.asc())
+        .all()
+    )
+    active_conflicts = [
+        conflict for conflict in conflicts if not _is_cancelled_mission(conflict)
+    ]
+    return sorted(
+        active_conflicts,
+        key=lambda conflict: (
+            not _tail_swap_conflict_is_hot(operation, conflict),
+            getattr(conflict, "planned_datetime_utc", None) or datetime.max,
+            getattr(conflict, "id", 0) or 0,
+        ),
+    )
+
+
+def _tail_swap_conflict_is_hot(operation, mission):
+    tail_number = (mission.assigned_tail_number or "").strip().upper()
+    if not tail_number:
+        return False
+    assignment = SortDateParkingAssignment.query.filter_by(
+        sort_date_operation_id=operation.id,
+        tail_number=tail_number,
+    ).first()
+    return bool(assignment and assignment.is_hot)
+
+
+def _tail_swap_conflict_label(mission):
+    flight = (mission.flight_number or "").strip().upper() or f"MISSION {mission.id}"
+    tail = (mission.assigned_tail_number or "").strip().upper()
+    if tail:
+        return f"{flight} ({tail})"
+    return flight
+
+
+def _tail_swap_options_for_operation(operation):
+    tails = set()
+    for mission in SortDateMission.query.filter_by(sort_date_operation_id=operation.id):
+        tail = (mission.assigned_tail_number or "").strip().upper()
+        if tail:
+            tails.add(tail)
+    for assignment in SortDateParkingAssignment.query.filter_by(
+        sort_date_operation_id=operation.id
+    ):
+        tail = (assignment.tail_number or "").strip().upper()
+        if tail:
+            tails.add(tail)
+    for state in SortDateTailState.query.filter_by(
+        sort_date=operation.sort_date,
+        gateway_code=operation.gateway_code,
+        sort_name=operation.sort_name,
+    ):
+        tail = (state.tail_number or "").strip().upper()
+        if tail:
+            tails.add(tail)
+    return sorted(tails)
 
 
 def _parking_assignments_for_operation(operation):

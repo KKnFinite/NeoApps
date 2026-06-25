@@ -8029,6 +8029,35 @@ select::-ms-expand {
     font-size: 0.66rem;
 }
 
+.planning-tail-swap-form {
+    gap: 5px;
+}
+
+.planning-tail-swap-input {
+    width: 86px;
+    min-height: 28px;
+    padding: 5px 7px;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+}
+
+.planning-tail-swap-confirm {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    min-height: 28px;
+    color: var(--muted);
+    font-size: 0.62rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.planning-tail-swap-confirm input {
+    width: 14px;
+    min-height: 14px;
+    accent-color: var(--node-primary);
+}
+
 .planning-review-table .table-actions a,
 .planning-review-table .table-actions .inline-button-form button {
     min-height: 28px;

@@ -4032,6 +4032,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
             mission_section,
         )
         self.assertIn(">TAILSWAP</button>", mission_section)
+        self.assertNotIn(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/tail-swap",
+            mission_section,
+        )
         self.assertIn(
             f"/motherbrain/operations/{operation.id}/missions/{mission.id}/cancel",
             mission_section,
@@ -4076,6 +4080,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
             mission_section,
         )
         self.assertIn(">TAILSWAP</button>", mission_section)
+        self.assertIn(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/tail-swap",
+            mission_section,
+        )
+        self.assertIn('name="replacement_tail"', mission_section)
+        self.assertIn('name="confirm_tail_swap"', mission_section)
         self.assertIn(
             f"/motherbrain/operations/{operation.id}/missions/{mission.id}/cancel",
             mission_section,
@@ -4350,6 +4360,153 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(">CANCEL</button>", planning_html)
         self.assertNotIn(">RESTORE</button>", planning_html)
         self.assertIn("UPS0856", board.data.decode())
+
+    def test_tail_swap_updates_selected_departure_tail(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="UPS0856",
+            assigned_tail_number="N111UP",
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/tail-swap",
+            data={"replacement_tail": "N222UP"},
+            follow_redirects=True,
+        )
+        db.session.refresh(mission)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mission.assigned_tail_number, "N222UP")
+        self.assertEqual(mission.tail_source, "manual")
+        self.assertIn("Tail Swap complete.", response.data.decode())
+
+    def test_tail_swap_respects_current_sort_scope(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        other_operation = self._operation(sort_date=date(2026, 6, 25))
+        mission = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="UPS0856",
+            assigned_tail_number="N111UP",
+        )
+        other_mission = self._mission(
+            operation=other_operation,
+            mission_type="departure",
+            flight_number="UPS0910",
+            assigned_tail_number="N222UP",
+        )
+        db.session.add_all([operation, other_operation, mission, other_mission])
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/tail-swap",
+            data={"replacement_tail": "N222UP"},
+            follow_redirects=True,
+        )
+        db.session.refresh(mission)
+        db.session.refresh(other_mission)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mission.assigned_tail_number, "N222UP")
+        self.assertNotEqual(other_mission.departure_status, "cancelled")
+
+    def test_tail_swap_requires_confirmation_before_cancelling_chained_departure(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        selected = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="UPS0856",
+            assigned_tail_number="N111UP",
+        )
+        chained = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="UPS0910",
+            assigned_tail_number="N222UP",
+        )
+        db.session.add_all([operation, selected, chained])
+        db.session.commit()
+
+        blocked = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{selected.id}/tail-swap",
+            data={"replacement_tail": "N222UP"},
+            follow_redirects=True,
+        )
+        db.session.refresh(selected)
+        db.session.refresh(chained)
+
+        self.assertEqual(blocked.status_code, 200)
+        self.assertEqual(selected.assigned_tail_number, "N111UP")
+        self.assertNotEqual(chained.departure_status, "cancelled")
+        self.assertIn("Check CONFIRM", blocked.data.decode())
+
+        confirmed = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{selected.id}/tail-swap",
+            data={"replacement_tail": "N222UP", "confirm_tail_swap": "1"},
+            follow_redirects=True,
+        )
+        db.session.refresh(selected)
+        db.session.refresh(chained)
+
+        self.assertEqual(confirmed.status_code, 200)
+        self.assertEqual(selected.assigned_tail_number, "N222UP")
+        self.assertEqual(chained.departure_status, "cancelled")
+        self.assertIsNotNone(db.session.get(SortDateMission, chained.id))
+        self.assertIn("cancelled chained departure UPS0910", confirmed.data.decode())
+
+    def test_tail_swap_hot_duplicate_conflict_cancels_hot_departure(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        selected = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="UPS0856",
+            assigned_tail_number="N111UP",
+        )
+        hot_duplicate = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="UPS0999",
+            assigned_tail_number="N222UP",
+        )
+        db.session.add_all([operation, selected, hot_duplicate])
+        db.session.flush()
+        db.session.add(
+            SortDateParkingAssignment(
+                sort_date_operation_id=operation.id,
+                tail_number="N222UP",
+                ramp_code="R",
+                position_code="R01",
+                lane_number=1,
+                is_hot=True,
+            )
+        )
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{selected.id}/tail-swap",
+            data={"replacement_tail": "N222UP", "confirm_tail_swap": "1"},
+            follow_redirects=True,
+        )
+        db.session.refresh(selected)
+        db.session.refresh(hot_duplicate)
+        active_n222_departures = [
+            mission
+            for mission in SortDateMission.query.filter_by(
+                sort_date_operation_id=operation.id,
+                mission_type="departure",
+                assigned_tail_number="N222UP",
+            ).all()
+            if mission.departure_status != "cancelled"
+        ]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(selected.assigned_tail_number, "N222UP")
+        self.assertEqual(hot_duplicate.departure_status, "cancelled")
+        self.assertEqual(active_n222_departures, [selected])
 
     def test_view_only_user_cannot_cancel_mission_by_post(self):
         operation = self._operation(sort_date=date(2026, 6, 24))

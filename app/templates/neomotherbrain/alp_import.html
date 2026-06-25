@@ -24,6 +24,14 @@
 
 {% block content %}
 <section class="panel centered-command-page">
+    {% if can_edit and mission_type == "departure" %}
+    <datalist id="tail-swap-options">
+        {% for tail in tail_swap_options %}
+        <option value="{{ tail }}"></option>
+        {% endfor %}
+    </datalist>
+    {% endif %}
+
     <div class="section-heading">
         <h1>{{ planning_title|upper }}</h1>
         <p>{{ operation.gateway_code }} {{ operation.sort_name|title }} {{ operation.sort_date }}</p>
@@ -353,7 +361,7 @@
                         <td class="table-actions planning-mission-actions">
                             {% if can_edit %}
                             <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT</a>
-                            <button class="table-row-button" type="button" disabled title="Tail swap will be added in a future planning update.">TAILSWAP</button>
+                            <button class="table-row-button" type="button" disabled title="Tail Swap is available for departure planning rows.">TAILSWAP</button>
                             {% if row.is_cancelled %}
                             <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.restore_mission', operation_id=operation.id, mission_id=mission.id) }}">
                                 <button class="table-row-button" type="submit">RESTORE</button>
@@ -381,7 +389,18 @@
                         <td class="table-actions planning-mission-actions">
                             {% if can_edit %}
                             <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT</a>
-                            <button class="table-row-button" type="button" disabled title="Tail swap will be added in a future planning update.">TAILSWAP</button>
+                            {% if row.is_cancelled %}
+                            <button class="table-row-button" type="button" disabled title="Restore this departure before using Tail Swap.">TAILSWAP</button>
+                            {% else %}
+                            <form class="inline-button-form planning-tail-swap-form" method="post" action="{{ url_for('neomotherbrain.tail_swap_mission', operation_id=operation.id, mission_id=mission.id) }}">
+                                <input class="compact-action-input planning-tail-swap-input" type="text" name="replacement_tail" list="tail-swap-options" placeholder="TAIL" aria-label="Replacement tail for {{ mission.flight_number|upper }}" required>
+                                <label class="planning-tail-swap-confirm">
+                                    <input type="checkbox" name="confirm_tail_swap" value="1">
+                                    CONFIRM
+                                </label>
+                                <button class="table-row-button" type="submit">TAILSWAP</button>
+                            </form>
+                            {% endif %}
                             {% if row.is_cancelled %}
                             <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.restore_mission', operation_id=operation.id, mission_id=mission.id) }}">
                                 <button class="table-row-button" type="submit">RESTORE</button>
