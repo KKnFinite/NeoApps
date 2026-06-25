@@ -3885,18 +3885,30 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"01:40", response.data)
         self.assertNotIn(b"02:15", response.data)
 
-    def test_departure_board_columns_start_with_wave_and_omit_status(self):
+    def test_departure_board_columns_use_requested_order_and_omit_status(self):
         operation = self._operation_with_missions()
         db.session.commit()
 
         response = self.client.get(f"/motherbrain/operations/{operation.id}/departures")
         html = response.data.decode()
         header = html.split("<thead>", 1)[1].split("</thead>", 1)[0]
+        header_labels = re.findall(r"<th>(.*?)</th>", header)
 
-        self.assertLess(header.index("<th>WAVE</th>"), header.index("<th>FLIGHT</th>"))
-        self.assertLess(header.index("<th>STD</th>"), header.index("<th>LINKS</th>"))
+        self.assertEqual(
+            header_labels,
+            [
+                "WAVE",
+                "FLIGHT",
+                "TAIL",
+                "DESTINATION",
+                "PARKING",
+                "STD",
+                "LINKS",
+            ],
+        )
         self.assertNotIn("<th>STATUS</th>", header)
         self.assertNotIn("<th>+/-</th>", header)
+        self.assertIsNone(re.search(r"\b\d{1,2}:\d{2}\s*(AM|PM)\b", html))
 
     def test_alp_arrival_paste_preview_matches_and_converts_zulu_times(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
