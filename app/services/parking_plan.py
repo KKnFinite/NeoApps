@@ -189,6 +189,11 @@ def tail_rows_for_operation(gateway, operation):
     for tail, mission_group in sorted(grouped.items()):
         arrival = _first_mission(mission_group["arrivals"])
         departure = _first_mission(mission_group["departures"])
+        tail_missions = mission_group["arrivals"] + mission_group["departures"]
+        active_missions = _active_missions_for_tail(
+            mission_group["arrivals"],
+            mission_group["departures"],
+        )
         tail_state = tail_states.get(tail)
         assignment = assignments.get(tail)
         block_in_local, arrival_source = _operational_block_in_local(
@@ -218,6 +223,17 @@ def tail_rows_for_operation(gateway, operation):
                 "ground_time": _format_ground_time(ground_minutes),
                 "aircraft_type": aircraft_type,
                 "quick_turn": quick_turn,
+                "active_mission_lines": [
+                    _mission_display_line(mission) for mission in active_missions
+                ],
+                "has_active_mission": bool(active_missions),
+                "has_cancelled_mission": any(
+                    _mission_is_cancelled(mission) for mission in tail_missions
+                ),
+                "mission_attachment_label": _mission_attachment_label(
+                    len(tail_missions),
+                    active_missions,
+                ),
                 "assignment": assignment,
                 "assigned_position": assigned_position,
                 "is_hot": bool(assignment and assignment.is_hot),
@@ -578,6 +594,63 @@ def _first_mission(missions):
     return missions[0] if missions else None
 
 
+def _active_missions_for_tail(arrivals, departures):
+    active = []
+    active.extend(
+        mission for mission in arrivals if not _mission_is_cancelled(mission)
+    )
+    active.extend(
+        mission for mission in departures if not _mission_is_cancelled(mission)
+    )
+    return sorted(
+        active,
+        key=lambda mission: (
+            getattr(mission, "planned_datetime_local", None) or datetime.max,
+            getattr(mission, "id", 0) or 0,
+        ),
+    )
+
+
+def _mission_is_cancelled(mission):
+    if not mission:
+        return False
+    status = (
+        mission.arrival_status
+        if mission.mission_type == "arrival"
+        else mission.departure_status
+    )
+    return str(status or "").strip().lower() == "cancelled"
+
+
+def _mission_display_line(mission):
+    if not mission:
+        return ""
+    mission_label = "ARR" if mission.mission_type == "arrival" else "DEP"
+    route = (
+        f"{_mission_origin(mission)}-{_mission_destination(mission)}"
+        if (_mission_origin(mission) or _mission_destination(mission))
+        else "-"
+    )
+    return " ".join(
+        part
+        for part in (
+            mission_label,
+            _normalize_flight_display(mission.flight_number),
+            route,
+            _format_local_time(mission.planned_datetime_local),
+        )
+        if part
+    )
+
+
+def _mission_attachment_label(mission_count, active_missions):
+    if active_missions:
+        return ""
+    if mission_count:
+        return "NO ACTIVE MISSION"
+    return "UNATTACHED TAIL"
+
+
 def _operational_block_in_local(mission, timezone_name, taxi_minutes):
     if not mission:
         return None, "missing"
@@ -685,6 +758,10 @@ def _format_local_time(value):
     if not value:
         return "-"
     return value.strftime("%H:%M")
+
+
+def _normalize_flight_display(value):
+    return str(value or "").strip().upper() or "-"
 
 
 def _format_ground_time(minutes):

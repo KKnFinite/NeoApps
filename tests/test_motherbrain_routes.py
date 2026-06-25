@@ -5192,6 +5192,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("N457UP", html)
         self.assertIn('data-occupied-tail="N457UP"', html)
+        self.assertIn("MISSION CANCELLED", html)
+        self.assertIn("NO ACTIVE MISSION", html)
         self.assertIn("TOTAL 1", html)
         self.assertIn("ASSIGNED 1", html)
         self.assertIn("UNASSIGNED 0", html)
@@ -5227,6 +5229,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(assignment.lane_number, 1)
         self.assertIn("parking-tail-card is-oos", html)
         self.assertIn("parking-badge parking-badge-oos", html)
+        self.assertIn("OOS / RED", html)
         self.assertIn("RESTORE / GREEN", html)
         self.assertIn('data-occupied-tail="N457UP"', html)
 
@@ -5306,6 +5309,31 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(assignment.lane_number, 1)
         self.assertIn("parking-tail-card is-oos", html)
         self.assertIn('data-occupied-tail="N457UP"', html)
+
+    def test_parking_plan_unattached_tail_label_renders_for_parked_tail_without_mission(self):
+        operation = self._parking_operation()
+        db.session.add(
+            SortDateParkingAssignment(
+                sort_date_operation_id=operation.id,
+                tail_number="N999UP",
+                ramp_code="A",
+                position_code="A01",
+                lane_number=1,
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+        slot_html = html.split('data-occupied-tail="N999UP"', 1)[1].split(
+            "</article>",
+            1,
+        )[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("N999UP", slot_html)
+        self.assertIn("UNATTACHED TAIL", slot_html)
+        self.assertIn('data-occupied-tail="N999UP"', html)
 
     def test_parking_plan_status_panel_counts_and_unassigned_tails(self):
         operation = self._parking_operation()
@@ -5638,9 +5666,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("parking-badge parking-badge-qt", slot_html)
         self.assertIn("parking-badge parking-badge-hot", slot_html)
         self.assertIn('class="parking-order">1</span>', slot_html)
-        self.assertIn("ONT 00:00", slot_html)
         self.assertIn("N457UP", slot_html)
-        self.assertIn("LAX 00:40", slot_html)
+        self.assertIn("ARR ARR57 ONT-RFD 23:50", slot_html)
+        self.assertIn("DEP DEP57 RFD-LAX 00:40", slot_html)
         self.assertIn("GT 0:40", slot_html)
         self.assertNotIn("757", slot_html)
 

@@ -5,7 +5,9 @@
 {% macro tail_badges(row) %}
     {% if row.quick_turn %}<span class="parking-badge parking-badge-qt">QT</span>{% endif %}
     {% if row.is_hot %}<span class="parking-badge parking-badge-hot">HOT</span>{% endif %}
-    {% if row.is_out_of_service %}<span class="parking-badge parking-badge-oos">OOS</span>{% endif %}
+    {% if row.is_out_of_service %}<span class="parking-badge parking-badge-oos">OOS / RED</span>{% endif %}
+    {% if row.has_cancelled_mission %}<span class="parking-badge parking-badge-mission-cancelled">MISSION CANCELLED</span>{% endif %}
+    {% if row.assigned_position and row.mission_attachment_label %}<span class="parking-badge parking-badge-unattached">{{ row.mission_attachment_label }}</span>{% endif %}
 {% endmacro %}
 
 {% macro tail_card(row) %}
@@ -16,18 +18,31 @@
     data-tail-number="{{ row.tail }}"
     data-parking-tail-assigned="{{ '1' if row.assigned_position else '0' }}"
 >
-    <div class="parking-tail-line">
-        <span>{{ row.arrival_origin }} {{ row.arrival_time }}</span>
-        {% if row.ground_time %}<small>{{ row.ground_time }}</small>{% endif %}
-    </div>
     <div class="parking-tail-main">
         <strong>{{ row.tail }}</strong>
         <span class="parking-tail-badges">{{ tail_badges(row) }}</span>
         {% if row.departure_order %}<span class="parking-order">{{ row.departure_order }}</span>{% endif %}
     </div>
+    {% if row.assigned_position and row.active_mission_lines %}
+    <div class="parking-tail-mission-lines" aria-label="Active mission details for {{ row.tail }}">
+        {% for mission_line in row.active_mission_lines %}
+        <span>{{ mission_line }}</span>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="parking-tail-line">
+        <span>{{ row.arrival_origin }} {{ row.arrival_time }}</span>
+        {% if row.ground_time %}<small>{{ row.ground_time }}</small>{% endif %}
+    </div>
     <div class="parking-tail-line">
         <span>{{ row.departure_destination }} {{ row.departure_time }}</span>
     </div>
+    {% endif %}
+    {% if row.assigned_position and row.active_mission_lines and row.ground_time %}
+    <div class="parking-tail-line parking-tail-gt-line">
+        <small>{{ row.ground_time }}</small>
+    </div>
+    {% endif %}
     {% if row.assigned_position %}
     <form
         class="parking-tail-status-form"
