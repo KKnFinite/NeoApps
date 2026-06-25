@@ -10,6 +10,7 @@ class MotherBrainAlert(db.Model):
     gateway_id = db.Column(db.Integer, db.ForeignKey("gateways.id"), nullable=False, index=True)
     gateway_code = db.Column(db.String(8), nullable=False, index=True)
     scope = db.Column(db.String(32), nullable=False, default="motherbrain", index=True)
+    alert_key = db.Column(db.String(160), nullable=False, default="", index=True)
     severity = db.Column(db.String(16), nullable=False, default="info", index=True)
     title = db.Column(db.String(120), nullable=False)
     message = db.Column(db.Text, nullable=False, default="")

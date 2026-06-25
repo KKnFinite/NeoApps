@@ -182,6 +182,22 @@
         </div>
         {% endif %}
 
+        {% if parking_status.physical_conflicts %}
+        <div class="parking-status-line">
+            <strong>PHYSICAL PARKING RULES</strong>
+            <ul>
+                {% for conflict in parking_status.physical_conflicts %}
+                <li>
+                    <span>
+                        {{ conflict.position }}{% if conflict.tail %} / {{ conflict.tail }}{% endif %}: {{ conflict.message }}
+                    </span>
+                    {% if conflict.position %}<a class="parking-status-jump" href="#PARKING-POSITION-{{ conflict.position }}">VIEW</a>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
         {% if parking_status.parked_unlinked_tails %}
         <div class="parking-status-line">
             <strong>PARKED TAILS WITHOUT ACTIVE MISSION</strong>
@@ -228,7 +244,7 @@
         {% endif %}
 
         {% if parking_status.is_clean %}
-        <p class="parking-status-clean">All current-sort tails are assigned and no duplicate conflicts were found.</p>
+        <p class="parking-status-clean">All current-sort tails are assigned and no parking conflicts were found.</p>
         {% endif %}
     </section>
 

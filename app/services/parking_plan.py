@@ -17,6 +17,10 @@ from app.services.gateway_matrix import (
     gateway_timezone,
     operation_is_active_at,
 )
+from app.services.parking_physical_validator import (
+    parking_physical_validation_context,
+    sync_parking_physical_alerts,
+)
 
 
 PARKING_RAMP_GROUPS = (
@@ -95,6 +99,18 @@ def parking_plan_context(gateway, operation=None):
         if not row["assigned_position"]
     ]
     parking_status = parking_status_for_rows(tail_rows, assignments)
+    physical_validation = parking_physical_validation_context(operation, tail_rows=tail_rows)
+    parking_status["physical_conflicts"] = physical_validation["conflicts"]
+    parking_status["physical_conflict_count"] = physical_validation["conflict_count"]
+    parking_status["conflict_count"] += physical_validation["conflict_count"]
+    parking_status["has_conflicts"] = parking_status["has_conflicts"] or physical_validation[
+        "has_conflicts"
+    ]
+    parking_status["has_warnings"] = parking_status["has_warnings"] or physical_validation[
+        "has_conflicts"
+    ]
+    parking_status["is_clean"] = not parking_status["has_warnings"]
+    alert_sync = sync_parking_physical_alerts(gateway, operation, physical_validation)
     summary = _summary_for_rows(tail_rows)
     summary["conflict_count"] = parking_status["conflict_count"]
 
@@ -102,6 +118,8 @@ def parking_plan_context(gateway, operation=None):
         "operation": operation,
         "summary": summary,
         "parking_status": parking_status,
+        "parking_physical_validation": physical_validation,
+        "parking_physical_alert_sync": alert_sync,
         "tail_rows": tail_rows,
         "unassigned_tail_rows": unassigned,
         "ramp_groups": ramp_groups,

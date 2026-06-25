@@ -554,6 +554,8 @@ def parking_plan_operation(operation_id):
     gateway = get_current_gateway()
     operation = _parking_plan_operation_or_404(gateway, operation_id)
     context = parking_plan_context(gateway, operation=operation)
+    if context.get("parking_physical_alert_sync", {}).get("changed"):
+        db.session.commit()
     return render_template(
         "neomotherbrain/parking_plan.html",
         gateway=gateway,
