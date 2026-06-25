@@ -248,6 +248,89 @@
         {% endif %}
     </section>
 
+    <section class="parking-optimizer-panel" aria-label="Parking optimizer preview">
+        <div class="parking-optimizer-heading">
+            <div>
+                <span>PREVIEW ONLY</span>
+                <h2>OPTIMIZE / SUGGEST PLAN</h2>
+            </div>
+            <p>Hard physical rules only. Suggestions do not change the saved Parking Plan.</p>
+        </div>
+        {% if can_run_parking_optimizer %}
+        <form class="parking-optimizer-form" method="post" action="{{ url_for('neomotherbrain.optimize_parking_plan', operation_id=operation.id) }}">
+            <label class="parking-checkbox">
+                <input type="checkbox" name="include_remote" value="1" {% if optimizer_defaults.include_remote %}checked{% endif %}>
+                <span>Include Remote</span>
+            </label>
+            <label class="parking-checkbox">
+                <input type="checkbox" name="include_throat" value="1" {% if optimizer_defaults.include_throat %}checked{% endif %}>
+                <span>Include 9/10</span>
+            </label>
+            <button class="action-button" type="submit">SUGGEST PLAN</button>
+        </form>
+        {% else %}
+        <p class="muted">Your current permissions allow viewing Parking Plan, but not running optimizer previews.</p>
+        {% endif %}
+
+        {% if optimizer_preview %}
+        <div class="parking-optimizer-results" aria-label="Parking optimizer preview results">
+            <div class="parking-optimizer-result-head">
+                <span>Solver {{ optimizer_preview.solver_status }}</span>
+                <span>Remote {{ "ON" if optimizer_preview.runtime_toggles.include_remote else "OFF" }}</span>
+                <span>9/10 {{ "ON" if optimizer_preview.runtime_toggles.include_throat else "OFF" }}</span>
+                {% if optimizer_preview.wall_time_seconds is not none %}
+                <span>{{ "%.3f"|format(optimizer_preview.wall_time_seconds) }} sec</span>
+                {% endif %}
+            </div>
+            <p class="parking-optimizer-note">{{ optimizer_preview.summary }}</p>
+
+            {% if optimizer_preview.locked_assignments %}
+            <div class="parking-optimizer-section">
+                <h3>LOCKED / PRESERVED</h3>
+                <ul>
+                    {% for assignment in optimizer_preview.locked_assignments %}
+                    <li><strong>{{ assignment.tail }}</strong> {{ assignment.label }} / {{ assignment.aircraft_type }} / {{ assignment.parking_window }} <span>{{ assignment.reason }}</span></li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if optimizer_preview.suggested_assignments %}
+            <div class="parking-optimizer-section">
+                <h3>SUGGESTED ASSIGNMENTS</h3>
+                <ul>
+                    {% for assignment in optimizer_preview.suggested_assignments %}
+                    <li><strong>{{ assignment.tail }}</strong> {{ assignment.label }} / {{ assignment.origin }} / {{ assignment.aircraft_type }} / {{ assignment.parking_window }} <span>{{ assignment.reason }}</span></li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if optimizer_preview.unassigned_tails %}
+            <div class="parking-optimizer-section">
+                <h3>UNASSIGNED / UNRESOLVED</h3>
+                <ul>
+                    {% for row in optimizer_preview.unassigned_tails %}
+                    <li><strong>{{ row.tail }}</strong> {{ row.origin }} / {{ row.aircraft_type }} / {{ row.parking_window }} <span>{{ row.reason }}</span></li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if optimizer_preview.conflicts %}
+            <div class="parking-optimizer-section">
+                <h3>LOCKED CONFLICTS</h3>
+                <ul>
+                    {% for conflict in optimizer_preview.conflicts %}
+                    <li><strong>{{ conflict.position }}</strong>{% if conflict.tail %} / {{ conflict.tail }}{% endif %} <span>{{ conflict.message }}</span></li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </section>
+
     <section class="parking-layout">
         <aside class="parking-tail-panel" aria-label="Current sort tail checklist" data-parking-unassign-drop>
             <div class="parking-panel-heading">

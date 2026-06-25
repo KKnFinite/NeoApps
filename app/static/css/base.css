@@ -4258,6 +4258,139 @@ h2 {
     color: var(--muted);
 }
 
+.parking-optimizer-panel {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid rgba(var(--node-rgb), 0.3);
+    border-radius: 7px;
+    background:
+        linear-gradient(135deg, rgba(var(--node-rgb), 0.1), transparent 42%),
+        rgba(5, 6, 9, 0.82);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 22px rgba(var(--node-rgb), 0.1);
+}
+
+.parking-optimizer-heading,
+.parking-optimizer-form,
+.parking-optimizer-result-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.parking-optimizer-heading span,
+.parking-optimizer-section h3,
+.parking-optimizer-result-head span {
+    color: var(--muted);
+    font-size: 0.64rem;
+    font-weight: 950;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+}
+
+.parking-optimizer-heading h2 {
+    margin: 2px 0 0;
+    color: var(--steel);
+    font-size: 1rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.parking-optimizer-heading p,
+.parking-optimizer-note {
+    margin: 0;
+    max-width: 560px;
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 800;
+    line-height: 1.35;
+}
+
+.parking-optimizer-form {
+    justify-content: flex-start;
+}
+
+.parking-optimizer-form .parking-checkbox {
+    min-height: 34px;
+    padding: 7px 9px;
+    border: 1px solid rgba(var(--node-rgb), 0.26);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.24);
+    color: var(--steel);
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.parking-optimizer-results {
+    display: grid;
+    gap: 9px;
+    padding: 10px;
+    border: 1px solid rgba(var(--node-highlight-rgb), 0.34);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.26);
+}
+
+.parking-optimizer-result-head {
+    justify-content: flex-start;
+}
+
+.parking-optimizer-result-head span {
+    min-height: 24px;
+    padding: 5px 8px;
+    border: 1px solid rgba(var(--node-rgb), 0.3);
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.26);
+    color: var(--steel);
+}
+
+.parking-optimizer-section {
+    display: grid;
+    gap: 5px;
+}
+
+.parking-optimizer-section h3 {
+    margin: 0;
+    color: var(--steel);
+}
+
+.parking-optimizer-section ul {
+    display: grid;
+    gap: 5px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.parking-optimizer-section li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-items: center;
+    min-width: 0;
+    padding: 7px 8px;
+    border: 1px solid rgba(var(--node-rgb), 0.2);
+    border-radius: 5px;
+    background: rgba(0, 0, 0, 0.22);
+    color: var(--steel);
+    font-size: 0.75rem;
+    font-weight: 850;
+    line-height: 1.35;
+}
+
+.parking-optimizer-section li strong {
+    color: var(--text);
+}
+
+.parking-optimizer-section li span {
+    color: var(--muted);
+}
+
 .parking-layout {
     display: grid;
     grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
@@ -8887,6 +9020,33 @@ select::-ms-expand {
     .parking-status-clean,
     .parking-status-line li {
         font-size: 0.72rem;
+    }
+
+    .parking-optimizer-panel {
+        gap: 8px;
+        padding: 10px;
+    }
+
+    .parking-optimizer-heading,
+    .parking-optimizer-form,
+    .parking-optimizer-result-head {
+        display: grid;
+        grid-template-columns: 1fr;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .parking-optimizer-heading h2 {
+        font-size: 0.9rem;
+    }
+
+    .parking-optimizer-form .parking-checkbox {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .parking-optimizer-section li {
+        font-size: 0.7rem;
     }
 
     .parking-layout {
