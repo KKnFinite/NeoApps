@@ -3061,8 +3061,17 @@ def _arrival_eta_display_time(mission, operation=None):
             getattr(mission, "timezone", None)
             or _gateway_timezone(getattr(operation, "gateway", None))
         )
-        return flight_api_utc_to_local_naive(mission.eta_datetime_utc, timezone_name)
+        eta_datetime_utc = mission.eta_datetime_utc
+        if _arrival_eta_uses_taxi_offset(mission):
+            eta_datetime_utc = eta_datetime_utc + timedelta(
+                minutes=_arrival_board_taxi_minutes(operation)
+            )
+        return flight_api_utc_to_local_naive(eta_datetime_utc, timezone_name)
     return mission.planned_datetime_local
+
+
+def _arrival_eta_uses_taxi_offset(mission):
+    return (getattr(mission, "eta_source", "") or "").strip().lower() == "api"
 
 
 def _arrival_board_display(mission, operation=None):
@@ -3085,7 +3094,7 @@ def _arrival_board_display(mission, operation=None):
         )
         return {
             "time": _arrival_local_time(parking_time, timezone_name),
-            "time_note": f"Est parking +{taxi_minutes} min",
+            "time_note": "",
             "status_label": "On Ground",
         }
 
@@ -3153,10 +3162,9 @@ def _arrival_manual_time(mission, operation=None, timezone_name=None):
         getattr(mission, "timezone", None)
         or _gateway_timezone(getattr(operation, "gateway", None))
     )
-    display_time = mission.actual_block_in_datetime_utc or mission.eta_datetime_utc
-    return _arrival_local_time(display_time, timezone_name) or _arrival_eta_display_time(
-        mission, operation
-    )
+    if mission.actual_block_in_datetime_utc:
+        return _arrival_local_time(mission.actual_block_in_datetime_utc, timezone_name)
+    return _arrival_eta_display_time(mission, operation)
 
 
 def _arrival_local_time(value, timezone_name):

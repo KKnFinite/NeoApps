@@ -3525,6 +3525,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_arrival_board_eta_displays_api_eta_as_local_time(self):
         operation = self._operation(sort_date=date(2026, 6, 1))
+        settings = ensure_sort_timeline_settings(self.rfd_gateway)
+        settings.taxi_to_ramp_minutes = 4
         db.session.add(operation)
         db.session.add(
             self._mission(
@@ -3545,9 +3547,39 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"UPS555", response.data)
-        self.assertIn(b"22:08", response.data)
+        self.assertIn(b"22:12", response.data)
         self.assertIn(b"Expected", response.data)
         self.assertNotIn(b"03:08", response.data)
+
+    def test_arrival_board_eta_applies_taxi_minutes_to_api_eta_and_delta(self):
+        operation = self._operation(sort_date=date(2026, 6, 1))
+        settings = ensure_sort_timeline_settings(self.rfd_gateway)
+        settings.taxi_to_ramp_minutes = 4
+        db.session.add(operation)
+        db.session.add(
+            self._mission(
+                operation=operation,
+                mission_type="arrival",
+                flight_number="UPS0001",
+                planned_datetime_local=datetime(2026, 6, 2, 0, 5),
+                planned_datetime_utc=datetime(2026, 6, 2, 5, 5),
+                eta_datetime_utc=datetime(2026, 6, 2, 5, 1),
+                eta_source="api",
+                api_status="Scheduled",
+                api_status_raw="Expected",
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
+        html = response.data.decode()
+        row = html.split("UPS0001", 1)[1].split("</tr>", 1)[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("00:05", row)
+        self.assertIn(">0</td>", row)
+        self.assertNotIn("00:01", row)
+        self.assertNotIn("Est parking", html)
 
     def test_arrival_board_runway_time_displays_on_ground_parking_estimate(self):
         operation = self._operation(sort_date=date(2026, 6, 1))
@@ -3577,7 +3609,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"UPS777", response.data)
         self.assertIn(b"22:12", response.data)
         self.assertIn(b"On Ground", response.data)
-        self.assertIn(b"Est parking +4 min", response.data)
+        self.assertNotIn(b"Est parking", response.data)
         self.assertNotIn(b"Actual runway", response.data)
         self.assertNotIn(b"22:18", response.data)
         self.assertNotIn(b"03:12", response.data)
@@ -3673,7 +3705,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"UPS890", response.data)
         self.assertIn(b"00:02", response.data)
         self.assertIn(b"On Ground", response.data)
-        self.assertIn(b"Est parking +4 min", response.data)
+        self.assertNotIn(b"Est parking", response.data)
         self.assertNotIn(b"05:02", response.data)
 
     def test_arrival_board_eta_falls_back_to_scheduled_local_time(self):
@@ -3700,6 +3732,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_arrival_board_eta_displays_crossing_midnight_local_time(self):
         operation = self._operation(sort_date=date(2026, 6, 1))
+        settings = ensure_sort_timeline_settings(self.rfd_gateway)
+        settings.taxi_to_ramp_minutes = 4
         db.session.add(operation)
         db.session.add(
             self._mission(
@@ -3718,11 +3752,13 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"UPS999", response.data)
-        self.assertIn(b"00:09", response.data)
+        self.assertIn(b"00:13", response.data)
         self.assertNotIn(b"05:09", response.data)
 
     def test_arrival_board_columns_start_with_wave_and_show_eta_delta(self):
         operation = self._operation(sort_date=date(2026, 6, 1))
+        settings = ensure_sort_timeline_settings(self.rfd_gateway)
+        settings.taxi_to_ramp_minutes = 4
         db.session.add(operation)
         db.session.add_all(
             [
@@ -3750,7 +3786,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                     flight_number="UPSONTIME",
                     planned_datetime_local=datetime(2026, 6, 1, 22, 0),
                     planned_datetime_utc=datetime(2026, 6, 2, 3, 0),
-                    eta_datetime_utc=datetime(2026, 6, 2, 3, 0),
+                    eta_datetime_utc=datetime(2026, 6, 2, 2, 56),
                     eta_source="api",
                 ),
                 self._mission(
@@ -3784,15 +3820,18 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "LINKS",
             ],
         )
-        self.assertIn(">-10</td>", html)
-        self.assertIn(">+12</td>", html)
+        self.assertIn(">-6</td>", html)
+        self.assertIn(">+16</td>", html)
         self.assertIn(">0</td>", html)
+        self.assertNotIn("Est parking", html)
         self.assertIsNone(re.search(r"\b\d{1,2}:\d{2}\s*(AM|PM)\b", html))
         missing_row = html.split("UPSMISSING", 1)[1].split("</tr>", 1)[0]
         self.assertIn(">-</td>", missing_row)
 
     def test_arrival_board_eta_delta_handles_midnight_operational_times(self):
         operation = self._operation(sort_date=date(2026, 6, 1))
+        settings = ensure_sort_timeline_settings(self.rfd_gateway)
+        settings.taxi_to_ramp_minutes = 4
         db.session.add(operation)
         db.session.add_all(
             [
@@ -3802,7 +3841,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                     flight_number="UPS0005",
                     planned_datetime_local=datetime(2026, 6, 2, 0, 5),
                     planned_datetime_utc=datetime(2026, 6, 2, 5, 5),
-                    eta_datetime_utc=datetime(2026, 6, 2, 5, 5),
+                    eta_datetime_utc=datetime(2026, 6, 2, 5, 1),
                     eta_source="api",
                 ),
                 self._mission(
@@ -3811,7 +3850,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                     flight_number="UPS0010",
                     planned_datetime_local=datetime(2026, 6, 2, 0, 5),
                     planned_datetime_utc=datetime(2026, 6, 2, 5, 5),
-                    eta_datetime_utc=datetime(2026, 6, 2, 5, 10),
+                    eta_datetime_utc=datetime(2026, 6, 2, 5, 6),
                     eta_source="api",
                 ),
                 self._mission(
@@ -3820,7 +3859,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                     flight_number="UPS2355",
                     planned_datetime_local=datetime(2026, 6, 2, 0, 5),
                     planned_datetime_utc=datetime(2026, 6, 2, 5, 5),
-                    eta_datetime_utc=datetime(2026, 6, 3, 4, 55),
+                    eta_datetime_utc=datetime(2026, 6, 2, 4, 51),
                     eta_source="api",
                 ),
             ]
@@ -3939,7 +3978,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("N910UP", mission_section)
         self.assertIn("SDF", mission_section)
         self.assertIn("02:10", mission_section)
-        self.assertIn("02:24", mission_section)
+        self.assertIn("02:34", mission_section)
         self.assertIn("En Route", mission_section)
         self.assertIn(
             f"/motherbrain/operations/{operation.id}/missions/{mission.id}/edit",
