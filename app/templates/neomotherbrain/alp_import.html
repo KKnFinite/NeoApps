@@ -169,7 +169,12 @@
                         <td>{{ row.normalized_flight_number }}</td>
                         <td>{{ row.tail_number }}</td>
                         <td>{{ row.local_display }}</td>
-                        <td>{{ row.reason }}</td>
+                        <td>
+                            {{ row.reason }}
+                            {% if row.reason_detail %}
+                            <br><span class="muted">{{ row.reason_detail }}</span>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% else %}
                     <tr><td colspan="5">NO DUPLICATE ALP FLIGHTS.</td></tr>
@@ -230,7 +235,12 @@
                         <td>{{ row.airport }}</td>
                         <td>{{ row.tail }}</td>
                         <td>{{ row.local_time }}</td>
-                        <td>{{ row.reason }}</td>
+                        <td>
+                            {{ row.reason }}
+                            {% if row.reason_detail %}
+                            <br><span class="muted">{{ row.reason_detail }}</span>
+                            {% endif %}
+                        </td>
                         <td class="table-actions">
                             {% if can_edit %}
                                 {% if row.kind == "alp" %}
@@ -242,6 +252,7 @@
                                     <input type="hidden" name="tail_number" value="{{ row.tail_value }}">
                                     <input type="hidden" name="utc_datetime" value="{{ row.utc_datetime.isoformat() if row.utc_datetime else '' }}">
                                     <input type="hidden" name="reason" value="{{ row.reason }}">
+                                    <input type="hidden" name="reason_detail" value="{{ row.reason_detail }}">
                                     <button class="table-row-button" type="submit">ADD TO CURRENT SORT</button>
                                 </form>
                                 <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.hot_alp_planning_row', operation_id=operation.id, mission_type=mission_type) }}">
@@ -252,6 +263,7 @@
                                     <input type="hidden" name="tail_number" value="{{ row.tail_value }}">
                                     <input type="hidden" name="utc_datetime" value="{{ row.utc_datetime.isoformat() if row.utc_datetime else '' }}">
                                     <input type="hidden" name="reason" value="{{ row.reason }}">
+                                    <input type="hidden" name="reason_detail" value="{{ row.reason_detail }}">
                                     <button class="table-row-button" type="submit">HOT</button>
                                 </form>
                                 <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.ignore_alp_planning_row', operation_id=operation.id, mission_type=mission_type) }}">
@@ -262,6 +274,7 @@
                                     <input type="hidden" name="tail_number" value="{{ row.tail_value }}">
                                     <input type="hidden" name="utc_datetime" value="{{ row.utc_datetime.isoformat() if row.utc_datetime else '' }}">
                                     <input type="hidden" name="reason" value="{{ row.reason }}">
+                                    <input type="hidden" name="reason_detail" value="{{ row.reason_detail }}">
                                     <button class="table-row-button table-row-delete-button" type="submit">IGNORE</button>
                                 </form>
                                 {% else %}

@@ -4750,6 +4750,37 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b">HOT</button>", persisted.data)
         self.assertIn(b"IGNORE", persisted.data)
 
+    def test_alp_planning_mismatch_detail_shows_current_and_alp_flights(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS1234",
+            origin="SDF",
+            planned_datetime_local=datetime(2026, 6, 24, 2, 30),
+            planned_datetime_utc=datetime(2026, 6, 24, 7, 30),
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            data={
+                "paste_text": "24-JUN-2026\tUPS5678\tSDF\tN567UP\tA01\tScheduled\t07:24 (S)",
+                "alp_action": "preview",
+            },
+        )
+        persisted = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
+
+        marker = FlightApiReviewItem.query.filter_by(review_status="pending").one()
+        payload = json.loads(marker.raw_payload)
+        self.assertEqual(payload["reason"], "No current operation mission match.")
+        self.assertEqual(
+            payload["reason_detail"],
+            "Current flight: UPS1234 / ALP flight: UPS5678",
+        )
+        self.assertIn(b"Current flight: UPS1234 / ALP flight: UPS5678", persisted.data)
+
     def test_alp_unmatched_apply_persists_in_planning_review(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
         mission = self._mission(
@@ -4986,6 +5017,59 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"ADD TO CURRENT SORT", response.data)
         self.assertIn(b">HOT</button>", response.data)
         self.assertIn(b"IGNORE", response.data)
+
+    def test_api_planning_time_mismatch_detail_shows_current_and_api_times(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="UPS0910",
+            destination="SDF",
+            planned_datetime_local=datetime(2026, 6, 24, 4, 10),
+            planned_datetime_utc=datetime(2026, 6, 24, 9, 10),
+        )
+        db.session.add_all([operation, mission])
+        db.session.flush()
+        item = self._api_review_item(
+            operation,
+            mission_type="departure",
+            flight_number="UPS0910",
+            destination="SDF",
+            revised_time_utc=datetime(2026, 6, 24, 18, 25),
+        )
+        db.session.add(item)
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/departure")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"departure time mismatch", response.data)
+        self.assertIn(b"Current STD: 04:10 / API STD: 13:25", response.data)
+
+    def test_api_planning_destination_mismatch_detail_shows_both_destinations(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="UPS0910",
+            destination="SDF",
+        )
+        db.session.add_all([operation, mission])
+        db.session.flush()
+        item = self._api_review_item(
+            operation,
+            mission_type="departure",
+            flight_number="UPS0910",
+            destination="ONT",
+        )
+        db.session.add(item)
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/departure")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"destination mismatch", response.data)
+        self.assertIn(b"Current destination: SDF / API destination: ONT", response.data)
 
     def test_planning_view_only_user_cannot_use_unmatched_actions(self):
         operation = self._operation(sort_date=date(2026, 6, 24))

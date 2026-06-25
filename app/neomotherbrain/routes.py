@@ -35,6 +35,7 @@ from app.services.flight_api import (
     flight_api_operational_time_utc,
     flight_api_provider_time_utc,
     flight_api_review_display_rows,
+    flight_api_review_reason_detail,
     format_flight_api_local_time,
     ignore_review_item,
     ops_node_online_window_snapshot,
@@ -1838,6 +1839,7 @@ def _alp_planning_rows_from_preview(operation, mission_type, preview):
     rows = []
     for row in preview.get("unmatched_rows", []):
         review_key = _alp_planning_review_key(operation, mission_type, row)
+        reason_detail = _alp_planning_mismatch_detail(operation, mission_type, row)
         existing = FlightApiReviewItem.query.filter_by(
             sort_date_operation_id=operation.id,
             review_key=review_key,
@@ -1855,6 +1857,7 @@ def _alp_planning_rows_from_preview(operation, mission_type, preview):
                 "tail": row.get("tail_number") or "-",
                 "local_time": row.get("local_display") or "-",
                 "reason": row.get("reason") or "-",
+                "reason_detail": reason_detail,
                 "review_key": review_key,
                 "line_number": row.get("line_number"),
                 "utc_datetime": row.get("utc_datetime"),
@@ -1880,6 +1883,11 @@ def _api_planning_row(operation, item, settings):
         "tail": item.tail_number or "-",
         "local_time": format_flight_api_local_time(operational_time, operation.gateway),
         "reason": getattr(item, "review_reason", None) or "no matching mission",
+        "reason_detail": flight_api_review_reason_detail(
+            item,
+            operation,
+            SortDateMission.query.filter_by(sort_date_operation_id=operation.id).all(),
+        ),
         "review_key": item.review_key,
     }
 
@@ -1905,6 +1913,7 @@ def _alp_planning_row_from_item(operation, item, payload):
         "tail": item.tail_number or "-",
         "local_time": format_flight_api_local_time(item.revised_time_utc, operation.gateway),
         "reason": payload.get("reason") or "No current operation mission match.",
+        "reason_detail": payload.get("reason_detail") or "",
         "review_key": item.review_key,
         "line_number": line_number,
         "utc_datetime": item.revised_time_utc,
@@ -1929,6 +1938,82 @@ def _planning_row_sort_key(row):
         str(row.get("flight") or ""),
         str(row.get("reference") or ""),
     )
+
+
+def _alp_planning_mismatch_detail(operation, mission_type, row):
+    reason = str(row.get("reason") or "").strip().lower()
+    if reason not in {
+        "no current operation mission match.",
+        "multiple current operation missions share this flight.",
+    }:
+        return ""
+    candidates = _alp_planning_candidate_missions(operation, mission_type, row)
+    if not candidates:
+        return ""
+    if reason == "multiple current operation missions share this flight.":
+        current_flights = ", ".join(
+            sorted(
+                {
+                    _clean_planning_value(getattr(mission, "flight_number", None))
+                    for mission in candidates
+                }
+            )
+        )
+        return (
+            f"Current flight: {current_flights or '-'} / "
+            f"ALP flight: {_clean_planning_value(row.get('normalized_flight_number') or row.get('flight_number'))}"
+        )
+    current_mission = _nearest_alp_planning_candidate(candidates, row)
+    if not current_mission:
+        return ""
+    return (
+        f"Current flight: {_clean_planning_value(getattr(current_mission, 'flight_number', None))} / "
+        f"ALP flight: {_clean_planning_value(row.get('normalized_flight_number') or row.get('flight_number'))}"
+    )
+
+
+def _alp_planning_candidate_missions(operation, mission_type, row):
+    airport = str(row.get("airport") or "").strip().upper()
+    query = SortDateMission.query.filter_by(
+        sort_date_operation_id=operation.id,
+        mission_type=mission_type,
+    )
+    if airport:
+        if mission_type == "arrival":
+            query = query.filter(func.upper(SortDateMission.origin) == airport)
+        else:
+            query = query.filter(func.upper(SortDateMission.destination) == airport)
+    candidates = query.all()
+    row_key = alp_flight_key(row.get("flight_number"))
+    exact = [
+        mission
+        for mission in candidates
+        if alp_flight_key(getattr(mission, "flight_number", None)) == row_key
+    ]
+    return exact or candidates
+
+
+def _nearest_alp_planning_candidate(candidates, row):
+    row_time = row.get("utc_datetime")
+    if not row_time:
+        return sorted(candidates, key=lambda mission: getattr(mission, "id", 0) or 0)[0]
+    return sorted(
+        candidates,
+        key=lambda mission: (
+            abs(
+                (
+                    (getattr(mission, "planned_datetime_utc", None) or row_time)
+                    - row_time
+                ).total_seconds()
+            ),
+            getattr(mission, "id", 0) or 0,
+        ),
+    )[0]
+
+
+def _clean_planning_value(value):
+    text = str(value or "").strip()
+    return text or "-"
 
 
 def _alp_planning_review_key(operation, mission_type, row):
@@ -1985,6 +2070,7 @@ def _alp_planning_row_from_form(operation, mission_type):
         "tail_number": tail_number,
         "utc_datetime": utc_datetime,
         "reason": request.form.get("reason") or "",
+        "reason_detail": request.form.get("reason_detail") or "",
     }
     expected_key = _alp_planning_review_key(operation, mission_type, row)
     submitted_key = request.form.get("review_key") or expected_key
@@ -2122,6 +2208,8 @@ def _record_alp_planning_marker(operation, row, review_status, mission=None):
             "source": "ALP",
             "line_number": row.get("line_number"),
             "reason": row.get("reason"),
+            "reason_detail": row.get("reason_detail")
+            or _alp_planning_mismatch_detail(operation, row["mission_type"], row),
         },
         sort_keys=True,
     )

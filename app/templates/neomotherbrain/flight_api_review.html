@@ -105,7 +105,12 @@
                     <td>{{ item.tail_number or "-" }}</td>
                     <td>{{ item.aircraft_model or "-" }}</td>
                     <td>{{ item.api_status or "-" }}</td>
-                    <td>{{ item.review_reason|default("-", true) }}</td>
+                    <td>
+                        {{ item.review_reason|default("-", true) }}
+                        {% if row.reason_detail %}
+                        <br><span class="muted">{{ row.reason_detail }}</span>
+                        {% endif %}
+                    </td>
                     <td class="table-actions">
                         {% if can_edit %}
                         <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.add_flight_api_review_item', review_item_id=item.id) }}">

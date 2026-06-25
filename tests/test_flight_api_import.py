@@ -4371,6 +4371,7 @@ class FlightApiTestPageTest(unittest.TestCase):
         )
         self.assertIn(b"DIFF 510 MIN", response.data)
         self.assertIn(b"departure time mismatch", response.data)
+        self.assertIn(b"Current STD: 23:30 / API STD: 08:00", response.data)
 
     def test_flight_api_review_page_does_not_leak_api_key_value(self):
         operation = self._review_operation()

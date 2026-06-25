@@ -1610,9 +1610,59 @@ def flight_api_review_display_rows(items, operation):
                 operation,
                 missions,
             ),
+            "reason_detail": flight_api_review_reason_detail(
+                item,
+                operation,
+                missions,
+            ),
         }
         for item in items
     ]
+
+
+def flight_api_review_reason_detail(item, operation=None, missions=None):
+    missions = missions if missions is not None else []
+    normalized = _normalized_review_item_record(item, operation)
+    reason = (getattr(item, "review_reason", None) or "").strip().lower()
+    if reason == "destination mismatch":
+        candidate = departure_audit_candidate_mission(normalized, missions)
+        if candidate:
+            return _mismatch_pair_detail(
+                "Current destination",
+                getattr(candidate, "destination", None),
+                "API destination",
+                normalized.get("destination"),
+            )
+    if reason == "departure time mismatch":
+        candidate = departure_audit_candidate_mission(normalized, missions)
+        if candidate:
+            timezone_name = _mission_timezone_name(candidate)
+            api_local = flight_api_provider_time_local(
+                normalized,
+                timezone_name=timezone_name,
+            )
+            scheduled_local = _departure_mission_time_local(candidate)
+            detail = _mismatch_pair_detail(
+                "Current STD",
+                _hhmm_or_dash(scheduled_local),
+                "API STD",
+                _hhmm_or_dash(api_local),
+            )
+            difference = departure_time_difference_minutes(candidate, normalized)
+            if difference is not None:
+                detail = f"{detail} (diff {difference} min)"
+            return detail
+    if "flight number mismatch" in reason:
+        candidate = flight_number_mismatch_candidate(normalized, missions)
+        if candidate:
+            source_label = "API flight"
+            return _mismatch_pair_detail(
+                "Current flight",
+                _clean_flight_number(getattr(candidate, "flight_number", None)),
+                source_label,
+                _provider_ups_display(normalized),
+            )
+    return ""
 
 
 def flight_api_review_departure_diagnostics(item, operation=None, missions=None):
@@ -1834,21 +1884,32 @@ def review_reason_for_item(review_item, missions):
 
 
 def flight_number_mismatch_diagnostic(normalized, missions):
+    current_mission = flight_number_mismatch_candidate(normalized, missions)
+    if not current_mission:
+        return ""
+    return (
+        f"Provider has {_provider_ups_display(normalized)} / "
+        f"{_provider_raw_identity_display(normalized)}, current mission is "
+        f"{_clean_flight_number(current_mission.flight_number)} \u2014 flight number mismatch."
+    )
+
+
+def flight_number_mismatch_candidate(normalized, missions):
     mission_type = normalized.get("mission_type")
     if mission_type != "arrival":
-        return ""
+        return None
     provider_key = _ups_numeric_core(normalized.get("provider_flight_number")) or _ups_numeric_core(
         normalized.get("call_sign")
     )
     if not provider_key:
-        return ""
+        return None
     type_missions = [
         mission
         for mission in missions
         if getattr(mission, "mission_type", None) == mission_type
     ]
     if _missions_matching_ups_key(type_missions, provider_key):
-        return ""
+        return None
     same_route_candidates = [
         mission
         for mission in type_missions
@@ -1859,15 +1920,26 @@ def flight_number_mismatch_diagnostic(normalized, missions):
         )
     ]
     if not same_route_candidates:
-        return ""
-    current_mission = _nearest_mission_by_provider_time(same_route_candidates, normalized)
-    if not current_mission:
-        return ""
+        return None
+    return _nearest_mission_by_provider_time(same_route_candidates, normalized)
+
+
+def _mismatch_pair_detail(current_label, current_value, provider_label, provider_value):
     return (
-        f"Provider has {_provider_ups_display(normalized)} / "
-        f"{_provider_raw_identity_display(normalized)}, current mission is "
-        f"{_clean_flight_number(current_mission.flight_number)} \u2014 flight number mismatch."
+        f"{current_label}: {_clean_display_value(current_value)} / "
+        f"{provider_label}: {_clean_display_value(provider_value)}"
     )
+
+
+def _clean_display_value(value):
+    text = str(value or "").strip()
+    return text or "-"
+
+
+def _hhmm_or_dash(value):
+    if not value:
+        return "-"
+    return f"{value:%H:%M}"
 
 
 def _mission_matches_provider_route(mission, normalized):
