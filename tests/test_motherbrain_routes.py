@@ -3989,6 +3989,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
             mission_section,
         )
         self.assertIn(">CANCEL</button>", mission_section)
+        self.assertNotIn(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/restore",
+            mission_section,
+        )
+        self.assertNotIn(">RESTORE</button>", mission_section)
 
     def test_departure_planning_renders_current_sort_departure_mission_list(self):
         operation = self._operation(sort_date=date(2026, 6, 24), window_minutes=20)
@@ -4027,6 +4032,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
             mission_section,
         )
         self.assertIn(">CANCEL</button>", mission_section)
+        self.assertNotIn(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/restore",
+            mission_section,
+        )
+        self.assertNotIn(">RESTORE</button>", mission_section)
 
     def test_planning_mission_rows_hide_edit_for_view_only_user(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
@@ -4055,7 +4065,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
             f"/motherbrain/operations/{operation.id}/missions/{mission.id}/cancel",
             mission_section,
         )
+        self.assertNotIn(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/restore",
+            mission_section,
+        )
         self.assertNotIn(">CANCEL</button>", mission_section)
+        self.assertNotIn(">RESTORE</button>", mission_section)
 
     def test_cancel_arrival_marks_mission_cancelled_and_keeps_planning_row(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
@@ -4086,7 +4101,46 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(mission.arrival_status, "cancelled")
         self.assertIn("UPS0910", planning_html)
         self.assertIn("CANCELLED", planning_html)
+        self.assertIn(">RESTORE</button>", planning_html)
+        self.assertNotIn(">CANCEL</button>", planning_html)
         self.assertNotIn("UPS0910", board.data.decode())
+
+    def test_restore_arrival_returns_mission_to_active_board(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS0910",
+            assigned_tail_number="N910UP",
+            arrival_status="en_route",
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/cancel",
+            follow_redirects=True,
+        )
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/restore",
+            follow_redirects=True,
+        )
+        db.session.refresh(mission)
+        repeated = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/restore",
+            follow_redirects=True,
+        )
+        board = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
+        planning_html = repeated.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(repeated.status_code, 200)
+        self.assertIsNone(mission.arrival_status)
+        self.assertIn("UPS0910", planning_html)
+        self.assertNotIn("CANCELLED", planning_html)
+        self.assertIn(">CANCEL</button>", planning_html)
+        self.assertNotIn(">RESTORE</button>", planning_html)
+        self.assertIn("UPS0910", board.data.decode())
 
     def test_cancel_departure_marks_mission_cancelled_and_keeps_planning_row(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
@@ -4117,7 +4171,46 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(mission.departure_status, "cancelled")
         self.assertIn("UPS0856", planning_html)
         self.assertIn("CANCELLED", planning_html)
+        self.assertIn(">RESTORE</button>", planning_html)
+        self.assertNotIn(">CANCEL</button>", planning_html)
         self.assertNotIn("UPS0856", board.data.decode())
+
+    def test_restore_departure_returns_mission_to_active_board(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="UPS0856",
+            assigned_tail_number="N856UP",
+            departure_status="loading",
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/cancel",
+            follow_redirects=True,
+        )
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/restore",
+            follow_redirects=True,
+        )
+        db.session.refresh(mission)
+        repeated = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/restore",
+            follow_redirects=True,
+        )
+        board = self.client.get(f"/motherbrain/operations/{operation.id}/departures")
+        planning_html = repeated.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(repeated.status_code, 200)
+        self.assertIsNone(mission.departure_status)
+        self.assertIn("UPS0856", planning_html)
+        self.assertNotIn("CANCELLED", planning_html)
+        self.assertIn(">CANCEL</button>", planning_html)
+        self.assertNotIn(">RESTORE</button>", planning_html)
+        self.assertIn("UPS0856", board.data.decode())
 
     def test_view_only_user_cannot_cancel_mission_by_post(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
@@ -4139,6 +4232,28 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mission.arrival_status, "en_route")
+        self.assertIn("Access denied.", response.data.decode())
+
+    def test_view_only_user_cannot_restore_mission_by_post(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS0910",
+            arrival_status="cancelled",
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+        self._login_motherbrain_role("simulator-restore-user", "simulator")
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/restore",
+            follow_redirects=True,
+        )
+        db.session.refresh(mission)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mission.arrival_status, "cancelled")
         self.assertIn("Access denied.", response.data.decode())
 
     def test_alp_apply_does_not_reactivate_cancelled_arrival(self):
@@ -5048,6 +5163,38 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"parking-mobile-assignment", response.data)
         self.assertIn(b'href="/motherbrain/parking-plan"', response.data)
         self.assertIn(f'action="/motherbrain/parking-plan/{operation.id}/assign"'.encode(), response.data)
+
+    def test_parking_tail_visibility_is_not_removed_by_mission_cancellation(self):
+        operation = self._parking_operation()
+        arrival, departure = self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{arrival.id}/cancel",
+            follow_redirects=True,
+        )
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{departure.id}/cancel",
+            follow_redirects=True,
+        )
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("N457UP", html)
+        self.assertIn('data-occupied-tail="N457UP"', html)
+        self.assertIn("TOTAL 1", html)
+        self.assertIn("ASSIGNED 1", html)
+        self.assertIn("UNASSIGNED 0", html)
 
     def test_parking_plan_status_panel_counts_and_unassigned_tails(self):
         operation = self._parking_operation()

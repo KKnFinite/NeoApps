@@ -1669,6 +1669,25 @@ def cancel_mission(operation_id, mission_id):
     return redirect(_planning_url(operation.id, mission.mission_type))
 
 
+@bp.route(
+    "/motherbrain/operations/<int:operation_id>/missions/<int:mission_id>/restore",
+    methods=["POST"],
+)
+@gateway_node_required("motherbrain")
+def restore_mission(operation_id, mission_id):
+    gateway = get_current_gateway()
+    operation = _operation_or_404(operation_id)
+    mission = _mission_or_404(operation, mission_id)
+    if not _planning_can_edit(gateway):
+        flash("Access denied.", "error")
+        return redirect(_planning_url(operation.id, mission.mission_type))
+
+    _restore_mission(mission)
+    db.session.commit()
+    flash(f"{mission.flight_number.upper()} restored for this sort.", "info")
+    return redirect(_planning_url(operation.id, mission.mission_type))
+
+
 def _operation_or_404(operation_id):
     gateway = get_current_gateway()
     return SortDateOperation.query.filter_by(
@@ -3041,6 +3060,7 @@ def _arrival_row(mission, operation=None, parking_assignments=None):
     arrival_display = _arrival_board_display(mission, operation)
     return {
         "mission": mission,
+        "is_cancelled": _is_cancelled_mission(mission),
         "parking_position": _parking_position_for_mission(mission, parking_assignments),
         "eta_time": arrival_display["time"],
         "eta_time_note": arrival_display["time_note"],
@@ -3053,6 +3073,7 @@ def _arrival_row(mission, operation=None, parking_assignments=None):
 def _departure_row(mission, operation, parking_assignments=None):
     return {
         "mission": mission,
+        "is_cancelled": _is_cancelled_mission(mission),
         "timing": mission_display_timing_data(mission, operation),
         "parking_position": _parking_position_for_mission(mission, parking_assignments),
         "crew_covered": is_mission_crew_covered(mission.crew_assignments),
@@ -3227,6 +3248,11 @@ def _is_cancelled_mission(mission):
 
 def _set_mission_cancelled(mission):
     setattr(mission, _mission_status_field(mission), CANCELLED_MISSION_STATUS)
+
+
+def _restore_mission(mission):
+    if _is_cancelled_mission(mission):
+        setattr(mission, _mission_status_field(mission), None)
 
 
 def _parking_assignments_for_operation(operation):
