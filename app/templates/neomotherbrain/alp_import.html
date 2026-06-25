@@ -353,6 +353,7 @@
                         <td class="table-actions planning-mission-actions">
                             {% if can_edit %}
                             <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT</a>
+                            <button class="table-row-button" type="button" disabled title="Tail swap will be added in a future planning update.">TAILSWAP</button>
                             {% if row.is_cancelled %}
                             <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.restore_mission', operation_id=operation.id, mission_id=mission.id) }}">
                                 <button class="table-row-button" type="submit">RESTORE</button>
@@ -380,6 +381,7 @@
                         <td class="table-actions planning-mission-actions">
                             {% if can_edit %}
                             <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT</a>
+                            <button class="table-row-button" type="button" disabled title="Tail swap will be added in a future planning update.">TAILSWAP</button>
                             {% if row.is_cancelled %}
                             <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.restore_mission', operation_id=operation.id, mission_id=mission.id) }}">
                                 <button class="table-row-button" type="submit">RESTORE</button>

@@ -24,7 +24,6 @@
                     <th>DESTINATION</th>
                     <th>PARKING</th>
                     <th>STD</th>
-                    <th>LINKS</th>
                 </tr>
             </thead>
             <tbody>
@@ -38,13 +37,10 @@
                     <td>{{ mission.destination|upper }}</td>
                     <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>
                     <td>{{ timing.adjusted_planned_departure_time.strftime("%H:%M") if timing.adjusted_planned_departure_time else "-" }}</td>
-                    <td class="table-actions">
-                        <span class="muted">-</span>
-                    </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7">NO DEPARTURE MISSIONS FOUND.</td>
+                    <td colspan="6">NO DEPARTURE MISSIONS FOUND.</td>
                 </tr>
                 {% endfor %}
             </tbody>

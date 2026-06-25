@@ -26,7 +26,6 @@
                     <th>ETA</th>
                     <th>+/-</th>
                     <th>STATUS</th>
-                    <th>LINKS</th>
                 </tr>
             </thead>
             <tbody>
@@ -46,13 +45,10 @@
                     </td>
                     <td>{{ row.eta_delta_display }}</td>
                     <td>{{ row.status_label }}</td>
-                    <td class="table-actions">
-                        <span class="muted">-</span>
-                    </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="9">NO ARRIVAL MISSIONS FOUND.</td>
+                    <td colspan="8">NO ARRIVAL MISSIONS FOUND.</td>
                 </tr>
                 {% endfor %}
             </tbody>

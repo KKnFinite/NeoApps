@@ -3866,7 +3866,6 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "ETA",
                 "+/-",
                 "STATUS",
-                "LINKS",
             ],
         )
         self.assertIn(">-6</td>", html)
@@ -3991,7 +3990,6 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "DESTINATION",
                 "PARKING",
                 "STD",
-                "LINKS",
             ],
         )
         self.assertNotIn("<th>STATUS</th>", header)
@@ -4033,6 +4031,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             f"/motherbrain/operations/{operation.id}/missions/{mission.id}/edit",
             mission_section,
         )
+        self.assertIn(">TAILSWAP</button>", mission_section)
         self.assertIn(
             f"/motherbrain/operations/{operation.id}/missions/{mission.id}/cancel",
             mission_section,
@@ -4076,6 +4075,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             f"/motherbrain/operations/{operation.id}/missions/{mission.id}/edit",
             mission_section,
         )
+        self.assertIn(">TAILSWAP</button>", mission_section)
         self.assertIn(
             f"/motherbrain/operations/{operation.id}/missions/{mission.id}/cancel",
             mission_section,
@@ -4118,6 +4118,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             f"/motherbrain/operations/{operation.id}/missions/{mission.id}/restore",
             mission_section,
         )
+        self.assertNotIn(">TAILSWAP</button>", mission_section)
         self.assertNotIn(">CANCEL</button>", mission_section)
         self.assertNotIn(">RESTORE</button>", mission_section)
 
