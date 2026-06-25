@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}ALP {{ label }} Paste | NeoApps{% endblock %}
+{% block title %}{{ planning_title }} | NeoApps{% endblock %}
 
 {% block content %}
 <section class="panel centered-command-page">
     <div class="section-heading">
-        <h1>ALP {{ label|upper }} PASTE</h1>
+        <h1>{{ planning_title|upper }}</h1>
         <p>{{ operation.gateway_code }} {{ operation.sort_name|title }} {{ operation.sort_date }}</p>
     </div>
 
@@ -16,14 +16,14 @@
     </div>
 
     <div class="alp-mobile-only alp-desktop-only-message" role="status">
-        <strong>ALP paste import is desktop-only.</strong>
-        <span>Use Arrival Board, Departure Board, or Operation Overview on mobile.</span>
+        <strong>ALP paste entry is desktop-only.</strong>
+        <span>Planning review rows remain visible below.</span>
     </div>
 
     <div class="alp-desktop-only">
         <form class="operation-form" method="post">
             <label>
-                <span>ALP {{ label|upper }} PASTE</span>
+                <span>PASTE ALP {{ label|upper }} ROWS</span>
                 <textarea name="paste_text" rows="10" spellcheck="false" placeholder="Date&#9;Flight&#9;Airport&#9;Tail&#9;Parking&#9;Status&#9;Time">{{ paste_text }}</textarea>
             </label>
             <p class="muted">
@@ -96,36 +96,6 @@
                     </tr>
                     {% else %}
                     <tr><td colspan="8">NO MATCHED ALP ROWS.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <h2>UNMATCHED ALP ROWS</h2>
-        <div class="table-wrap">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>LINE</th>
-                        <th>FLIGHT</th>
-                        <th>AIRPORT</th>
-                        <th>TAIL</th>
-                        <th>RFD LOCAL</th>
-                        <th>REASON</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in preview.unmatched_rows %}
-                    <tr>
-                        <td>{{ row.line_number }}</td>
-                        <td>{{ row.normalized_flight_number or row.flight_number }}</td>
-                        <td>{{ row.airport }}</td>
-                        <td>{{ row.tail_number }}</td>
-                        <td>{{ row.local_display }}</td>
-                        <td>{{ row.reason }}</td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="6">NO UNMATCHED ALP ROWS.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -210,5 +180,96 @@
         </div>
         {% endif %}
     </div>
+
+    <section class="planning-review-section" aria-labelledby="planning-review-title">
+        <h2 id="planning-review-title">{{ label|upper }} PLANNING REVIEW</h2>
+        <p class="muted">Unmatched ALP paste rows and unmatched Flight API rows for this current sort operation.</p>
+        <div class="table-wrap">
+            <table class="data-table planning-review-table">
+                <thead>
+                    <tr>
+                        <th>SOURCE</th>
+                        <th>REF</th>
+                        <th>FLIGHT</th>
+                        <th>{% if mission_type == "arrival" %}ORIGIN{% else %}DEST{% endif %}</th>
+                        <th>TAIL</th>
+                        <th>RFD LOCAL</th>
+                        <th>REASON</th>
+                        <th>ACTIONS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in planning_rows %}
+                    <tr>
+                        <td>{{ row.source }}</td>
+                        <td>{{ row.reference }}</td>
+                        <td>{{ row.flight }}</td>
+                        <td>{{ row.airport }}</td>
+                        <td>{{ row.tail }}</td>
+                        <td>{{ row.local_time }}</td>
+                        <td>{{ row.reason }}</td>
+                        <td class="table-actions">
+                            {% if can_edit %}
+                                {% if row.kind == "alp" %}
+                                <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.add_alp_planning_row', operation_id=operation.id, mission_type=mission_type) }}">
+                                    <input type="hidden" name="review_key" value="{{ row.review_key }}">
+                                    <input type="hidden" name="line_number" value="{{ row.line_number }}">
+                                    <input type="hidden" name="flight_number" value="{{ row.flight }}">
+                                    <input type="hidden" name="airport" value="{{ row.airport_value }}">
+                                    <input type="hidden" name="tail_number" value="{{ row.tail_value }}">
+                                    <input type="hidden" name="utc_datetime" value="{{ row.utc_datetime.isoformat() if row.utc_datetime else '' }}">
+                                    <input type="hidden" name="reason" value="{{ row.reason }}">
+                                    <button class="table-row-button" type="submit">ADD TO CURRENT SORT</button>
+                                </form>
+                                {% if mission_type == "departure" %}
+                                <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.hot_alp_planning_row', operation_id=operation.id, mission_type=mission_type) }}">
+                                    <input type="hidden" name="review_key" value="{{ row.review_key }}">
+                                    <input type="hidden" name="line_number" value="{{ row.line_number }}">
+                                    <input type="hidden" name="flight_number" value="{{ row.flight }}">
+                                    <input type="hidden" name="airport" value="{{ row.airport_value }}">
+                                    <input type="hidden" name="tail_number" value="{{ row.tail_value }}">
+                                    <input type="hidden" name="utc_datetime" value="{{ row.utc_datetime.isoformat() if row.utc_datetime else '' }}">
+                                    <input type="hidden" name="reason" value="{{ row.reason }}">
+                                    <button class="table-row-button" type="submit">HOT</button>
+                                </form>
+                                {% endif %}
+                                <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.ignore_alp_planning_row', operation_id=operation.id, mission_type=mission_type) }}">
+                                    <input type="hidden" name="review_key" value="{{ row.review_key }}">
+                                    <input type="hidden" name="line_number" value="{{ row.line_number }}">
+                                    <input type="hidden" name="flight_number" value="{{ row.flight }}">
+                                    <input type="hidden" name="airport" value="{{ row.airport_value }}">
+                                    <input type="hidden" name="tail_number" value="{{ row.tail_value }}">
+                                    <input type="hidden" name="utc_datetime" value="{{ row.utc_datetime.isoformat() if row.utc_datetime else '' }}">
+                                    <input type="hidden" name="reason" value="{{ row.reason }}">
+                                    <button class="table-row-button table-row-delete-button" type="submit">IGNORE</button>
+                                </form>
+                                {% else %}
+                                <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.add_api_planning_row', operation_id=operation.id, review_item_id=row.item.id) }}">
+                                    <input type="hidden" name="mission_type" value="{{ mission_type }}">
+                                    <button class="table-row-button" type="submit">ADD TO CURRENT SORT</button>
+                                </form>
+                                {% if mission_type == "departure" %}
+                                <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.hot_api_planning_row', operation_id=operation.id, review_item_id=row.item.id) }}">
+                                    <input type="hidden" name="mission_type" value="{{ mission_type }}">
+                                    <button class="table-row-button" type="submit">HOT</button>
+                                </form>
+                                {% endif %}
+                                <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.ignore_api_planning_row', operation_id=operation.id, review_item_id=row.item.id) }}">
+                                    <input type="hidden" name="mission_type" value="{{ mission_type }}">
+                                    <button class="table-row-button table-row-delete-button" type="submit">IGNORE</button>
+                                </form>
+                                {% endif %}
+                            {% else %}
+                            <span class="muted">VIEW ONLY</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8">NO UNMATCHED {{ label|upper }} PLANNING ROWS.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
 </section>
 {% endblock %}

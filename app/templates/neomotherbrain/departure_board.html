@@ -10,22 +10,21 @@
 
     <div class="action-row">
         <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">ADD MISSION</a>
-        <a class="action-button alp-desktop-only" href="{{ url_for('neomotherbrain.alp_import', operation_id=operation.id, mission_type='departure') }}">ALP DEPARTURE PASTE</a>
+        <a class="action-button alp-desktop-only" href="{{ url_for('neomotherbrain.alp_import', operation_id=operation.id, mission_type='departure') }}">DEPARTURE PLANNING</a>
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">OPERATION OVERVIEW</a>
         <a class="action-button" href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">ARRIVAL BOARD</a>
     </div>
 
     <div class="table-wrap">
-        <table class="data-table">
+        <table class="data-table motherbrain-board-table">
             <thead>
                 <tr>
-                    <th>FLIGHT</th>
                     <th>WAVE</th>
+                    <th>FLIGHT</th>
                     <th>TAIL</th>
                     <th>DESTINATION</th>
                     <th>PARKING</th>
-                    <th>ETD</th>
-                    <th>STATUS</th>
+                    <th>STD</th>
                     <th>LINKS</th>
                 </tr>
             </thead>
@@ -34,13 +33,12 @@
                 {% set mission = row.mission %}
                 {% set timing = row.timing %}
                 <tr>
-                    <td>{{ mission.flight_number|upper }}</td>
                     <td>{{ mission.wave|wave_label }}</td>
+                    <td>{{ mission.flight_number|upper }}</td>
                     <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
                     <td>{{ mission.destination|upper }}</td>
                     <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>
                     <td>{{ timing.adjusted_planned_departure_time.strftime("%H:%M") if timing.adjusted_planned_departure_time else "-" }}</td>
-                    <td>{{ mission.departure_status|status_label }}</td>
                     <td class="table-actions">
                         <a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=mission.id) }}">VIEW</a>
                         <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT</a>
@@ -48,7 +46,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8">NO DEPARTURE MISSIONS FOUND.</td>
+                    <td colspan="7">NO DEPARTURE MISSIONS FOUND.</td>
                 </tr>
                 {% endfor %}
             </tbody>

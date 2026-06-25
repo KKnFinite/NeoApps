@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
+import json
 import re
 
 from flask import abort, current_app, flash, jsonify, redirect, render_template, request, url_for
@@ -8,6 +9,7 @@ from sqlalchemy import func
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
 from app.models import (
+    FlightApiReviewItem,
     MasterFlightSchedule,
     SortDateCrewAssignment,
     SortDateMission,
@@ -16,6 +18,7 @@ from app.models import (
     SortDateTailState,
     SortTimelineSettings,
 )
+from app.models.user import ROLE_LEVELS
 from app.neomotherbrain import bp
 from app.services.flight_rules import (
     crew_sections_for_tail_swap,
@@ -50,7 +53,12 @@ from app.services.access_control import (
     user_can_access_node,
     user_has_gateway_access,
 )
-from app.services.alp_import import apply_alp_paste, preview_alp_paste
+from app.services.alp_import import (
+    alp_flight_key,
+    apply_alp_paste,
+    normalize_alp_flight_number,
+    preview_alp_paste,
+)
 from app.services.sort_date_operations import (
     ensure_tail_state_for_mission,
     generate_sort_date_operation_from_master,
@@ -1284,6 +1292,7 @@ def departure_board(operation_id):
 @bp.route("/motherbrain/operations/<int:operation_id>/alp/<mission_type>", methods=["GET", "POST"])
 @gateway_node_required("motherbrain")
 def alp_import(operation_id, mission_type):
+    gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
     mission_type = (mission_type or "").strip().lower()
     if mission_type not in {"arrival", "departure"}:
@@ -1310,14 +1319,183 @@ def alp_import(operation_id, mission_type):
         except ValueError as exc:
             flash(str(exc), "error")
 
+    settings = ensure_sort_timeline_settings(gateway)
+    planning_rows = _planning_review_rows(
+        operation,
+        mission_type,
+        preview=preview,
+        settings=settings,
+    )
     return render_template(
         "neomotherbrain/alp_import.html",
         operation=operation,
         mission_type=mission_type,
         label="Arrival" if mission_type == "arrival" else "Departure",
+        planning_title=_planning_title(mission_type),
         paste_text=paste_text,
         preview=preview,
+        planning_rows=planning_rows,
+        can_edit=_planning_can_edit(gateway),
+        sort_timeline_settings=settings,
+        flight_api_operational_time=flight_api_operational_time_utc,
+        format_flight_api_time=format_flight_api_local_time,
     )
+
+
+@bp.route(
+    "/motherbrain/operations/<int:operation_id>/planning/<mission_type>/alp/add",
+    methods=["POST"],
+)
+@gateway_node_required("motherbrain")
+def add_alp_planning_row(operation_id, mission_type):
+    gateway = get_current_gateway()
+    operation = _operation_or_404(operation_id)
+    mission_type = _planning_mission_type_or_404(mission_type)
+    if not _planning_can_edit(gateway):
+        flash("Access denied.", "error")
+        return redirect(_planning_url(operation.id, mission_type))
+
+    try:
+        row = _alp_planning_row_from_form(operation, mission_type)
+        mission = _create_mission_from_alp_planning_row(operation, row)
+        _record_alp_planning_marker(operation, row, "accepted", mission)
+        db.session.commit()
+        flash(f"{row['normalized_flight_number']} added to current sort.", "info")
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), "error")
+    return redirect(_planning_url(operation.id, mission_type))
+
+
+@bp.route(
+    "/motherbrain/operations/<int:operation_id>/planning/<mission_type>/alp/hot",
+    methods=["POST"],
+)
+@gateway_node_required("motherbrain")
+def hot_alp_planning_row(operation_id, mission_type):
+    gateway = get_current_gateway()
+    operation = _operation_or_404(operation_id)
+    mission_type = _planning_mission_type_or_404(mission_type)
+    if mission_type != "departure":
+        abort(404)
+    if not _planning_can_edit(gateway):
+        flash("Access denied.", "error")
+        return redirect(_planning_url(operation.id, mission_type))
+
+    try:
+        row = _alp_planning_row_from_form(operation, mission_type)
+        mission = _create_mission_from_alp_planning_row(operation, row)
+        set_tail_hot(operation, mission.assigned_tail_number, True, user=current_user)
+        _record_alp_planning_marker(operation, row, "accepted", mission)
+        db.session.commit()
+        flash(f"{row['normalized_flight_number']} added as HOT.", "info")
+    except (ParkingPlanError, ValueError) as error:
+        db.session.rollback()
+        flash(str(error), "error")
+    return redirect(_planning_url(operation.id, mission_type))
+
+
+@bp.route(
+    "/motherbrain/operations/<int:operation_id>/planning/<mission_type>/alp/ignore",
+    methods=["POST"],
+)
+@gateway_node_required("motherbrain")
+def ignore_alp_planning_row(operation_id, mission_type):
+    gateway = get_current_gateway()
+    operation = _operation_or_404(operation_id)
+    mission_type = _planning_mission_type_or_404(mission_type)
+    if not _planning_can_edit(gateway):
+        flash("Access denied.", "error")
+        return redirect(_planning_url(operation.id, mission_type))
+
+    try:
+        row = _alp_planning_row_from_form(operation, mission_type)
+        _record_alp_planning_marker(operation, row, "ignored")
+        db.session.commit()
+        flash(f"{row['normalized_flight_number']} ignored for this sort.", "info")
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), "error")
+    return redirect(_planning_url(operation.id, mission_type))
+
+
+@bp.route(
+    "/motherbrain/operations/<int:operation_id>/planning/api/<int:review_item_id>/add",
+    methods=["POST"],
+)
+@gateway_node_required("motherbrain")
+def add_api_planning_row(operation_id, review_item_id):
+    gateway = get_current_gateway()
+    operation = _operation_or_404(operation_id)
+    if not _planning_can_edit(gateway):
+        flash("Access denied.", "error")
+        return redirect(_planning_url(operation.id, request.form.get("mission_type", "arrival")))
+
+    review_item = review_item_or_404(gateway, review_item_id)
+    if review_item.sort_date_operation_id != operation.id:
+        flash("Review item is not part of this sort operation.", "error")
+        return redirect(_planning_url(operation.id, request.form.get("mission_type", "arrival")))
+
+    mission_type = review_item.mission_type
+    accept_review_item(review_item)
+    db.session.commit()
+    flash("API flight added to current sort operation.", "info")
+    return redirect(_planning_url(operation.id, mission_type))
+
+
+@bp.route(
+    "/motherbrain/operations/<int:operation_id>/planning/api/<int:review_item_id>/hot",
+    methods=["POST"],
+)
+@gateway_node_required("motherbrain")
+def hot_api_planning_row(operation_id, review_item_id):
+    gateway = get_current_gateway()
+    operation = _operation_or_404(operation_id)
+    if not _planning_can_edit(gateway):
+        flash("Access denied.", "error")
+        return redirect(_planning_url(operation.id, "departure"))
+
+    review_item = review_item_or_404(gateway, review_item_id)
+    if review_item.sort_date_operation_id != operation.id or review_item.mission_type != "departure":
+        flash("Review item is not a departure for this sort operation.", "error")
+        return redirect(_planning_url(operation.id, "departure"))
+    if not review_item.tail_number:
+        flash("A tail is required to mark a planning row HOT.", "error")
+        return redirect(_planning_url(operation.id, "departure"))
+
+    try:
+        mission = accept_review_item(review_item)
+        set_tail_hot(operation, mission.assigned_tail_number, True, user=current_user)
+        db.session.commit()
+        flash("API departure added as HOT.", "info")
+    except ParkingPlanError as error:
+        db.session.rollback()
+        flash(str(error), "error")
+    return redirect(_planning_url(operation.id, "departure"))
+
+
+@bp.route(
+    "/motherbrain/operations/<int:operation_id>/planning/api/<int:review_item_id>/ignore",
+    methods=["POST"],
+)
+@gateway_node_required("motherbrain")
+def ignore_api_planning_row(operation_id, review_item_id):
+    gateway = get_current_gateway()
+    operation = _operation_or_404(operation_id)
+    if not _planning_can_edit(gateway):
+        flash("Access denied.", "error")
+        return redirect(_planning_url(operation.id, request.form.get("mission_type", "arrival")))
+
+    review_item = review_item_or_404(gateway, review_item_id)
+    mission_type = review_item.mission_type
+    if review_item.sort_date_operation_id != operation.id:
+        flash("Review item is not part of this sort operation.", "error")
+        return redirect(_planning_url(operation.id, mission_type))
+
+    ignore_review_item(review_item)
+    db.session.commit()
+    flash("Planning row ignored for this sort operation.", "info")
+    return redirect(_planning_url(operation.id, mission_type))
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>/window", methods=["POST"])
@@ -1505,6 +1683,258 @@ def _selected_current_operation(operations, operation_id=None):
             if selected:
                 return selected
     return operations[0] if operations else None
+
+
+def _planning_mission_type_or_404(mission_type):
+    mission_type = str(mission_type or "").strip().lower()
+    if mission_type not in {"arrival", "departure"}:
+        abort(404)
+    return mission_type
+
+
+def _planning_title(mission_type):
+    return "Arrival Planning" if mission_type == "arrival" else "Departure Planning"
+
+
+def _planning_url(operation_id, mission_type):
+    mission_type = _planning_mission_type_or_404(mission_type)
+    return url_for(
+        "neomotherbrain.alp_import",
+        operation_id=operation_id,
+        mission_type=mission_type,
+    )
+
+
+def _planning_can_edit(gateway):
+    node_role = get_user_node_role(current_user, gateway.code, "motherbrain")
+    return ROLE_LEVELS.get(node_role or "", 0) >= ROLE_LEVELS["master"]
+
+
+def _planning_review_rows(operation, mission_type, preview=None, settings=None):
+    rows = []
+    if preview:
+        rows.extend(
+            _alp_planning_rows_from_preview(operation, mission_type, preview)
+        )
+
+    api_items = [
+        item
+        for item in pending_review_items_for_operation(operation)
+        if item.mission_type == mission_type
+    ]
+    rows.extend(
+        _api_planning_row(operation, item, settings)
+        for item in api_items
+    )
+    return sorted(rows, key=_planning_row_sort_key)
+
+
+def _alp_planning_rows_from_preview(operation, mission_type, preview):
+    rows = []
+    for row in preview.get("unmatched_rows", []):
+        review_key = _alp_planning_review_key(operation, mission_type, row)
+        existing = FlightApiReviewItem.query.filter_by(
+            sort_date_operation_id=operation.id,
+            review_key=review_key,
+        ).first()
+        if existing and existing.review_status in {"ignored", "accepted"}:
+            continue
+        rows.append(
+            {
+                "source": "ALP",
+                "kind": "alp",
+                "mission_type": mission_type,
+                "reference": f"LINE {row.get('line_number', '-')}",
+                "flight": row.get("normalized_flight_number") or row.get("flight_number") or "-",
+                "airport": row.get("airport") or "-",
+                "tail": row.get("tail_number") or "-",
+                "local_time": row.get("local_display") or "-",
+                "reason": row.get("reason") or "-",
+                "review_key": review_key,
+                "line_number": row.get("line_number"),
+                "utc_datetime": row.get("utc_datetime"),
+                "airport_value": row.get("airport") or "",
+                "tail_value": row.get("tail_number") or "",
+            }
+        )
+    return rows
+
+
+def _api_planning_row(operation, item, settings):
+    operational_time = flight_api_operational_time_utc(item, settings)
+    return {
+        "source": "API",
+        "kind": "api",
+        "item": item,
+        "mission_type": item.mission_type,
+        "reference": f"API #{item.id}",
+        "flight": (item.flight_number or "-").upper(),
+        "airport": (
+            item.origin if item.mission_type == "arrival" else item.destination
+        ) or "-",
+        "tail": item.tail_number or "-",
+        "local_time": format_flight_api_local_time(operational_time, operation.gateway),
+        "reason": getattr(item, "review_reason", None) or "no matching mission",
+        "review_key": item.review_key,
+    }
+
+
+def _planning_row_sort_key(row):
+    return (
+        str(row.get("mission_type") or ""),
+        str(row.get("source") or ""),
+        str(row.get("local_time") or ""),
+        str(row.get("flight") or ""),
+        str(row.get("reference") or ""),
+    )
+
+
+def _alp_planning_review_key(operation, mission_type, row):
+    flight_key = row.get("flight_key") or alp_flight_key(row.get("flight_number"))
+    airport = str(row.get("airport") or "").strip().upper()
+    tail = str(row.get("tail_number") or "").strip().upper()
+    utc_value = row.get("utc_datetime")
+    utc_key = utc_value.strftime("%Y%m%d%H%M") if hasattr(utc_value, "strftime") else ""
+    return f"alp:{mission_type}:{flight_key or ''}:{airport}:{tail}:{utc_key}"
+
+
+def _alp_planning_row_from_form(operation, mission_type):
+    flight_number = (
+        request.form.get("flight_number")
+        or request.form.get("normalized_flight_number")
+        or ""
+    )
+    normalized_flight_number = normalize_alp_flight_number(flight_number)
+    if not normalized_flight_number:
+        raise ValueError("Flight number is required.")
+
+    airport = str(request.form.get("airport") or "").strip().upper()
+    if not airport:
+        raise ValueError("Airport is required.")
+
+    tail_number = str(request.form.get("tail_number") or "").strip().upper()
+    if not tail_number:
+        raise ValueError("Tail is required.")
+
+    utc_datetime = _parse_planning_utc_datetime(request.form.get("utc_datetime"))
+    row = {
+        "line_number": request.form.get("line_number") or "",
+        "mission_type": mission_type,
+        "flight_number": flight_number,
+        "normalized_flight_number": normalized_flight_number,
+        "flight_key": alp_flight_key(normalized_flight_number),
+        "airport": airport,
+        "tail_number": tail_number,
+        "utc_datetime": utc_datetime,
+        "reason": request.form.get("reason") or "",
+    }
+    expected_key = _alp_planning_review_key(operation, mission_type, row)
+    submitted_key = request.form.get("review_key") or expected_key
+    if submitted_key != expected_key:
+        raise ValueError("Planning row identity no longer matches.")
+    row["review_key"] = expected_key
+    return row
+
+
+def _parse_planning_utc_datetime(value):
+    value = str(value or "").strip()
+    if not value:
+        raise ValueError("Planning time is required.")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        raise ValueError("Planning time is invalid.") from None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def _create_mission_from_alp_planning_row(operation, row):
+    mission_type = row["mission_type"]
+    timezone_name = _gateway_timezone(operation.gateway)
+    planned_utc = row["utc_datetime"]
+    planned_local = flight_api_utc_to_local_naive(planned_utc, timezone_name)
+    airport = row["airport"]
+    mission = SortDateMission(
+        sort_date_operation=operation,
+        sort_date=operation.sort_date,
+        gateway_code=operation.gateway_code,
+        sort_name=operation.sort_name,
+        mission_type=mission_type,
+        mission_source="manual",
+        wave="1",
+        master_flight_schedule_id=None,
+        flight_number=row["normalized_flight_number"],
+        origin=airport if mission_type == "arrival" else operation.gateway_code,
+        destination=operation.gateway_code if mission_type == "arrival" else airport,
+        timezone=timezone_name,
+        planned_datetime_local=planned_local,
+        planned_datetime_utc=planned_utc,
+        planned_source="alp",
+        assigned_tail_number=row["tail_number"],
+        tail_source="alp",
+        tail_updated_at=datetime.utcnow(),
+        api_added_current_sort_only=True,
+    )
+    if mission_type == "arrival":
+        mission.eta_datetime_utc = planned_utc
+        mission.eta_source = "alp"
+        mission.arrival_status = "scheduled"
+    else:
+        mission.actual_block_out_datetime_utc = planned_utc
+        mission.actual_block_out_source = "alp"
+        mission.departure_status = "loading"
+
+    _raise_for_duplicate_operation_flight_number(operation, mission)
+    db.session.add(mission)
+    db.session.flush()
+    _sync_tail_state_and_crew_slots(mission)
+    db.session.flush()
+    return mission
+
+
+def _record_alp_planning_marker(operation, row, review_status, mission=None):
+    review_key = row.get("review_key") or _alp_planning_review_key(
+        operation,
+        row["mission_type"],
+        row,
+    )
+    item = FlightApiReviewItem.query.filter_by(
+        sort_date_operation_id=operation.id,
+        review_key=review_key,
+    ).first()
+    if not item:
+        item = FlightApiReviewItem(
+            sort_date_operation_id=operation.id,
+            gateway_id=operation.gateway_id,
+            gateway_code=operation.gateway_code,
+            sort_date=operation.sort_date,
+            sort_name=operation.sort_name,
+            mission_type=row["mission_type"],
+            review_key=review_key,
+        )
+        db.session.add(item)
+    item.review_status = review_status
+    item.flight_number = row["normalized_flight_number"]
+    item.call_sign = None
+    item.origin = row["airport"] if row["mission_type"] == "arrival" else operation.gateway_code
+    item.destination = operation.gateway_code if row["mission_type"] == "arrival" else row["airport"]
+    item.revised_time_utc = row["utc_datetime"]
+    item.runway_time_utc = None
+    item.tail_number = row["tail_number"]
+    item.aircraft_model = None
+    item.api_status = "ALP"
+    item.accepted_mission_id = getattr(mission, "id", None)
+    item.raw_payload = json.dumps(
+        {
+            "source": "ALP",
+            "line_number": row.get("line_number"),
+            "reason": row.get("reason"),
+        },
+        sort_keys=True,
+    )
+    db.session.flush()
+    return item
 
 
 def _review_item_matches_selected_operation(gateway, review_item):
@@ -2489,6 +2919,7 @@ def _arrival_row(mission, operation=None, parking_assignments=None):
         "parking_position": _parking_position_for_mission(mission, parking_assignments),
         "eta_time": arrival_display["time"],
         "eta_time_note": arrival_display["time_note"],
+        "eta_delta_display": _arrival_eta_delta_display(mission, arrival_display),
         "status_label": arrival_display["status_label"],
         "crew_covered": is_mission_crew_covered(mission.crew_assignments),
     }
@@ -2578,6 +3009,36 @@ def _arrival_board_display(mission, operation=None):
         "time_note": "",
         "status_label": status_label,
     }
+
+
+def _arrival_eta_delta_display(mission, arrival_display):
+    delta = _arrival_eta_delta_minutes(mission, arrival_display)
+    if delta is None:
+        return "-"
+    if delta > 0:
+        return f"+{delta}"
+    return str(delta)
+
+
+def _arrival_eta_delta_minutes(mission, arrival_display):
+    planned_local = getattr(mission, "planned_datetime_local", None)
+    display_time = (arrival_display or {}).get("time")
+    if not planned_local or not display_time:
+        return None
+
+    has_operational_eta = any(
+        getattr(mission, attr, None)
+        for attr in (
+            "actual_block_in_datetime_utc",
+            "api_runway_time_utc",
+            "eta_datetime_utc",
+        )
+    )
+    if not has_operational_eta:
+        return None
+
+    delta = display_time - planned_local
+    return int(round(delta.total_seconds() / 60))
 
 
 def _arrival_manual_time(mission, operation=None, timezone_name=None):

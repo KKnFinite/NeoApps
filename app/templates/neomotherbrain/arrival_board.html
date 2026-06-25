@@ -10,21 +10,22 @@
 
     <div class="action-row">
         <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">ADD MISSION</a>
-        <a class="action-button alp-desktop-only" href="{{ url_for('neomotherbrain.alp_import', operation_id=operation.id, mission_type='arrival') }}">ALP ARRIVAL PASTE</a>
+        <a class="action-button alp-desktop-only" href="{{ url_for('neomotherbrain.alp_import', operation_id=operation.id, mission_type='arrival') }}">ARRIVAL PLANNING</a>
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">OPERATION OVERVIEW</a>
         <a class="action-button" href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">DEPARTURE BOARD</a>
     </div>
 
     <div class="table-wrap">
-        <table class="data-table">
+        <table class="data-table motherbrain-board-table">
             <thead>
                 <tr>
-                    <th>FLIGHT</th>
                     <th>WAVE</th>
+                    <th>FLIGHT</th>
                     <th>TAIL</th>
                     <th>ORIGIN</th>
                     <th>PARKING</th>
                     <th>ETA</th>
+                    <th>+/-</th>
                     <th>STATUS</th>
                     <th>LINKS</th>
                 </tr>
@@ -33,8 +34,8 @@
                 {% for row in rows %}
                 {% set mission = row.mission %}
                 <tr>
-                    <td>{{ mission.flight_number|upper }}</td>
                     <td>{{ mission.wave|wave_label }}</td>
+                    <td>{{ mission.flight_number|upper }}</td>
                     <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
                     <td>{{ mission.origin|upper }}</td>
                     <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>
@@ -44,6 +45,7 @@
                         <br><span class="muted">{{ row.eta_time_note }}</span>
                         {% endif %}
                     </td>
+                    <td>{{ row.eta_delta_display }}</td>
                     <td>{{ row.status_label }}</td>
                     <td class="table-actions">
                         <a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=mission.id) }}">VIEW</a>
@@ -52,7 +54,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8">NO ARRIVAL MISSIONS FOUND.</td>
+                    <td colspan="9">NO ARRIVAL MISSIONS FOUND.</td>
                 </tr>
                 {% endfor %}
             </tbody>

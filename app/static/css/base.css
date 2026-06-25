@@ -7821,6 +7821,37 @@ select::-ms-expand {
     line-height: 1.05;
 }
 
+.data-table.motherbrain-board-table {
+    min-width: 0;
+}
+
+.data-table.motherbrain-board-table th,
+.data-table.motherbrain-board-table td {
+    padding: 7px 8px;
+    line-height: 1.15;
+    vertical-align: middle;
+}
+
+.data-table.motherbrain-board-table th {
+    font-size: 0.7rem;
+}
+
+.planning-review-section {
+    margin-top: 22px;
+}
+
+.planning-review-table .table-actions {
+    justify-content: flex-start;
+    gap: 6px;
+}
+
+.planning-review-table .table-actions a,
+.planning-review-table .table-actions .inline-button-form button {
+    min-height: 28px;
+    padding: 5px 7px;
+    font-size: 0.66rem;
+}
+
 .table-actions {
     display: flex;
     flex-wrap: wrap;
