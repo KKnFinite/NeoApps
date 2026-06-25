@@ -1873,6 +1873,115 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertFalse(result["departure_match_audit"][0]["inside_departure_match_window"])
         self.assertIsNone(mission.assigned_tail_number)
 
+    def test_departure_provider_utc_time_matching_local_schedule_does_not_mismatch(self):
+        mission = self._mission(
+            "departure",
+            "UPS0910",
+            destination="SDF",
+            planned_datetime_local=datetime(2026, 6, 1, 23, 30),
+            planned_datetime_utc=datetime(2026, 6, 1, 4, 30),
+        )
+        db.session.add(mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "departures": [
+                        self._api_flight(
+                            mission_type="departure",
+                            number="5X910",
+                            call_sign="UPS910",
+                            destination="SDF",
+                            revised_time="2026-06-02T04:30:00+00:00",
+                            tail="N910UP",
+                        )
+                    ]
+                }
+            ),
+        )
+
+        self.assertEqual(result["matched_departures_count"], 1)
+        self.assertEqual(result["matched"][0]["mission"].id, mission.id)
+        self.assertEqual(result["departure_match_audit"][0]["minute_difference"], 0)
+        self.assertTrue(result["departure_match_audit"][0]["inside_departure_match_window"])
+        self.assertEqual(len(result["review_items"]), 0)
+
+    def test_departure_provider_utc_time_offset_still_flags_mismatch(self):
+        mission = self._mission(
+            "departure",
+            "UPS0910",
+            destination="SDF",
+            planned_datetime_local=datetime(2026, 6, 1, 23, 30),
+            planned_datetime_utc=datetime(2026, 6, 1, 4, 30),
+        )
+        db.session.add(mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "departures": [
+                        self._api_flight(
+                            mission_type="departure",
+                            number="5X910",
+                            call_sign="UPS910",
+                            destination="SDF",
+                            revised_time="2026-06-02T13:00:00+00:00",
+                            tail="N910UP",
+                        )
+                    ]
+                }
+            ),
+        )
+
+        self.assertEqual(len(result["matched"]), 0)
+        self.assertEqual(len(result["review_items"]), 1)
+        self.assertEqual(result["review_items"][0].review_reason, "departure time mismatch")
+        self.assertEqual(result["departure_match_audit"][0]["reason"], "departure time mismatch")
+        self.assertEqual(result["departure_match_audit"][0]["minute_difference"], 510)
+        self.assertFalse(result["departure_match_audit"][0]["inside_departure_match_window"])
+
+    def test_departure_overnight_provider_time_uses_local_operation_date(self):
+        mission = self._mission(
+            "departure",
+            "UPS0637",
+            destination="DFW",
+            planned_datetime_local=datetime(2026, 6, 19, 0, 30),
+            planned_datetime_utc=datetime(2026, 6, 18, 0, 30),
+        )
+        db.session.add(mission)
+        db.session.commit()
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(
+                {
+                    "departures": [
+                        self._api_flight(
+                            mission_type="departure",
+                            number="UPS637",
+                            call_sign="UPS637",
+                            destination="DFW",
+                            revised_time="2026-06-19T05:30:00+00:00",
+                            tail="N637UP",
+                        )
+                    ]
+                }
+            ),
+        )
+
+        self.assertEqual(result["matched_departures_count"], 1)
+        self.assertEqual(result["matched"][0]["mission"].id, mission.id)
+        self.assertEqual(result["departure_match_audit"][0]["minute_difference"], 0)
+        self.assertTrue(result["departure_match_audit"][0]["inside_departure_match_window"])
+        self.assertEqual(mission.assigned_tail_number, "N637UP")
+
     def test_departure_seven_to_eight_hours_out_matches_and_fills_tail(self):
         mission = self._mission(
             "departure",

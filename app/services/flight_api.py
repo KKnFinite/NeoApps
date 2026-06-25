@@ -1214,27 +1214,25 @@ def _departure_destination_mismatches(mission, normalized):
 
 
 def _departure_time_mismatches(mission, normalized):
-    api_time = flight_api_provider_time_utc(normalized)
-    mission_time = getattr(mission, "planned_datetime_utc", None)
-    if not api_time or not mission_time:
+    difference = _departure_time_difference_minutes(mission, normalized)
+    if difference is None:
         return False
-    return _datetime_difference_minutes(api_time, mission_time) > DEPARTURE_LOOKAHEAD_MATCH_WINDOW_MINUTES
+    return difference > DEPARTURE_LOOKAHEAD_MATCH_WINDOW_MINUTES
 
 
 def _departure_destination_time_matches(candidates, normalized):
     api_destination = _clean_upper(normalized.get("destination"))
-    api_time = flight_api_provider_time_utc(normalized)
-    if not api_destination or not api_time:
+    if not api_destination:
         return []
     matches = []
     for mission in candidates:
         mission_destination = _clean_upper(getattr(mission, "destination", None))
-        mission_time = getattr(mission, "planned_datetime_utc", None)
-        if not mission_destination or not mission_time:
+        difference = _departure_time_difference_minutes(mission, normalized)
+        if not mission_destination or difference is None:
             continue
         if mission_destination != api_destination:
             continue
-        if _datetime_difference_minutes(api_time, mission_time) <= DEPARTURE_LOOKAHEAD_MATCH_WINDOW_MINUTES:
+        if difference <= DEPARTURE_LOOKAHEAD_MATCH_WINDOW_MINUTES:
             matches.append(mission)
     return matches
 
@@ -1243,14 +1241,57 @@ def _datetime_difference_minutes(left, right):
     return abs((_utc_naive(left) - _utc_naive(right)).total_seconds()) / 60
 
 
-def departure_time_difference_minutes(mission, normalized):
+def _local_datetime_difference_minutes(left, right):
+    if not left or not right:
+        return None
+    if left.tzinfo:
+        left = left.replace(tzinfo=None)
+    if right.tzinfo:
+        right = right.replace(tzinfo=None)
+    differences = [
+        abs((left - right).total_seconds()) / 60,
+        abs(((left + timedelta(days=1)) - right).total_seconds()) / 60,
+        abs(((left - timedelta(days=1)) - right).total_seconds()) / 60,
+    ]
+    return min(differences)
+
+
+def _mission_timezone_name(mission):
+    return getattr(mission, "timezone", None) or "America/Chicago"
+
+
+def _departure_api_time_local(mission, normalized):
+    api_time = flight_api_provider_time_utc(normalized)
+    if not api_time:
+        return None
+    return _utc_to_local_naive(_utc_naive(api_time), _mission_timezone_name(mission))
+
+
+def _departure_mission_time_local(mission):
+    local_time = getattr(mission, "planned_datetime_local", None)
+    if local_time:
+        if local_time.tzinfo:
+            return local_time.replace(tzinfo=None)
+        return local_time
+    utc_time = getattr(mission, "planned_datetime_utc", None)
+    if not utc_time:
+        return None
+    return _utc_to_local_naive(_utc_naive(utc_time), _mission_timezone_name(mission))
+
+
+def _departure_time_difference_minutes(mission, normalized):
     if not mission:
         return None
-    api_time = flight_api_provider_time_utc(normalized)
-    mission_time = getattr(mission, "planned_datetime_utc", None)
-    if not api_time or not mission_time:
+    api_time = _departure_api_time_local(mission, normalized)
+    mission_time = _departure_mission_time_local(mission)
+    return _local_datetime_difference_minutes(api_time, mission_time)
+
+
+def departure_time_difference_minutes(mission, normalized):
+    difference = _departure_time_difference_minutes(mission, normalized)
+    if difference is None:
         return None
-    return int(round(_datetime_difference_minutes(api_time, mission_time)))
+    return int(round(difference))
 
 
 def departure_inside_match_window(mission, normalized):
