@@ -3995,6 +3995,14 @@ h2 {
     box-shadow: 0 0 18px rgba(var(--node-highlight-rgb), 0.22);
 }
 
+.parking-tail-card.is-oos {
+    border-color: rgba(255, 90, 96, 0.9);
+    background:
+        linear-gradient(180deg, rgba(176, 21, 37, 0.32), transparent 46%),
+        linear-gradient(180deg, rgba(35, 8, 13, 0.98), rgba(7, 3, 5, 0.96));
+    box-shadow: 0 0 18px rgba(255, 42, 54, 0.2);
+}
+
 .parking-tail-line span,
 .parking-tail-line small,
 .parking-tail-main strong {
@@ -4044,16 +4052,49 @@ h2 {
 }
 
 .parking-badge-qt,
-.parking-badge-hot {
+.parking-badge-hot,
+.parking-badge-oos {
     border: 1px solid rgba(var(--node-highlight-rgb), 0.7);
     color: var(--text);
     background: rgba(var(--node-rgb), 0.78);
     box-shadow: 0 0 12px rgba(var(--node-rgb), 0.28);
 }
 
+.parking-badge-oos {
+    border-color: rgba(255, 90, 96, 0.84);
+    background: rgba(176, 21, 37, 0.86);
+    box-shadow: 0 0 12px rgba(255, 42, 54, 0.3);
+}
+
 .parking-order {
     color: #07080a;
     background: var(--steel);
+}
+
+.parking-tail-status-form {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 2px;
+}
+
+.parking-tail-status-button {
+    min-height: 22px;
+    padding: 3px 7px;
+    border: 1px solid rgba(255, 90, 96, 0.72);
+    border-radius: 4px;
+    background: linear-gradient(180deg, rgba(152, 19, 32, 0.88), rgba(52, 4, 10, 0.92));
+    color: var(--text);
+    font-size: 0.58rem;
+    font-weight: 950;
+    line-height: 1;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.parking-tail-status-button.is-restore {
+    border-color: rgba(var(--node-highlight-rgb), 0.78);
+    background: linear-gradient(180deg, rgba(var(--node-rgb), 0.72), rgba(7, 18, 18, 0.94));
 }
 
 .parking-ramp-layout {

@@ -86,6 +86,7 @@ from app.services.parking_plan import (
     current_active_sort_operation,
     parking_plan_context,
     parking_plan_landing_context,
+    set_tail_out_of_service,
     set_tail_hot,
     unassign_tail,
 )
@@ -650,6 +651,39 @@ def update_parking_plan_hot(operation_id=None):
     return _parking_plan_response(
         True,
         f"{assignment.tail_number} marked {state}.",
+        operation_id=operation.id,
+    )
+
+
+@bp.route("/motherbrain/parking-plan/tail-status", methods=["POST"])
+@bp.route("/motherbrain/parking-plan/<int:operation_id>/tail-status", methods=["POST"])
+@gateway_node_required("motherbrain")
+def update_parking_plan_tail_status(operation_id=None):
+    gateway = get_current_gateway()
+    operation = _parking_plan_operation_for_action(gateway, operation_id)
+    if not operation:
+        return _parking_plan_response(
+            False,
+            "Select a sort operation before updating tail status.",
+            status=400,
+        )
+
+    try:
+        tail_state = set_tail_out_of_service(
+            operation,
+            request.form.get("tail_number"),
+            _truthy_form_value(request.form.get("is_out_of_service")),
+            user=current_user,
+        )
+        db.session.commit()
+    except ParkingPlanError as error:
+        db.session.rollback()
+        return _parking_plan_response(False, str(error), status=400)
+
+    state = "RED / OOS" if tail_state.is_out_of_service else "GREEN"
+    return _parking_plan_response(
+        True,
+        f"{tail_state.tail_number} marked {state}.",
         operation_id=operation.id,
     )
 

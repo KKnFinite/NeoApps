@@ -5196,6 +5196,117 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("ASSIGNED 1", html)
         self.assertIn("UNASSIGNED 0", html)
 
+    def test_parking_tail_oos_action_marks_red_and_keeps_assignment_and_mission_active(self):
+        operation = self._parking_operation()
+        arrival, _departure = self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/tail-status",
+            data={"tail_number": "N457UP", "is_out_of_service": "1"},
+            follow_redirects=True,
+        )
+        db.session.refresh(arrival)
+        tail_state = SortDateTailState.query.filter_by(tail_number="N457UP").one()
+        assignment = SortDateParkingAssignment.query.filter_by(tail_number="N457UP").one()
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(tail_state.is_out_of_service)
+        self.assertNotEqual(arrival.arrival_status, "cancelled")
+        self.assertEqual(assignment.position_code, "A01")
+        self.assertEqual(assignment.lane_number, 1)
+        self.assertIn("parking-tail-card is-oos", html)
+        self.assertIn("parking-badge parking-badge-oos", html)
+        self.assertIn("RESTORE / GREEN", html)
+        self.assertIn('data-occupied-tail="N457UP"', html)
+
+    def test_parking_tail_restore_green_does_not_restore_cancelled_mission(self):
+        operation = self._parking_operation()
+        arrival, _departure = self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/tail-status",
+            data={"tail_number": "N457UP", "is_out_of_service": "1"},
+        )
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{arrival.id}/cancel",
+            follow_redirects=True,
+        )
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/tail-status",
+            data={"tail_number": "N457UP", "is_out_of_service": "0"},
+            follow_redirects=True,
+        )
+        db.session.refresh(arrival)
+        tail_state = SortDateTailState.query.filter_by(tail_number="N457UP").one()
+        assignment = SortDateParkingAssignment.query.filter_by(tail_number="N457UP").one()
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(tail_state.is_out_of_service)
+        self.assertEqual(arrival.arrival_status, "cancelled")
+        self.assertEqual(assignment.position_code, "A01")
+        self.assertIn("RED / OOS", html)
+        self.assertIn('data-occupied-tail="N457UP"', html)
+
+    def test_mission_cancel_and_restore_do_not_change_parking_tail_oos_status(self):
+        operation = self._parking_operation()
+        arrival, _departure = self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/tail-status",
+            data={"tail_number": "N457UP", "is_out_of_service": "1"},
+        )
+
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{arrival.id}/cancel",
+            follow_redirects=True,
+        )
+        after_cancel = SortDateTailState.query.filter_by(tail_number="N457UP").one()
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{arrival.id}/restore",
+            follow_redirects=True,
+        )
+        db.session.refresh(after_cancel)
+        assignment = SortDateParkingAssignment.query.filter_by(tail_number="N457UP").one()
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+
+        self.assertTrue(after_cancel.is_out_of_service)
+        self.assertEqual(assignment.position_code, "A01")
+        self.assertEqual(assignment.lane_number, 1)
+        self.assertIn("parking-tail-card is-oos", html)
+        self.assertIn('data-occupied-tail="N457UP"', html)
+
     def test_parking_plan_status_panel_counts_and_unassigned_tails(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", destination="LAX")

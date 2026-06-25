@@ -5,11 +5,12 @@
 {% macro tail_badges(row) %}
     {% if row.quick_turn %}<span class="parking-badge parking-badge-qt">QT</span>{% endif %}
     {% if row.is_hot %}<span class="parking-badge parking-badge-hot">HOT</span>{% endif %}
+    {% if row.is_out_of_service %}<span class="parking-badge parking-badge-oos">OOS</span>{% endif %}
 {% endmacro %}
 
 {% macro tail_card(row) %}
 <article
-    class="parking-tail-card{% if row.quick_turn %} is-quick-turn{% endif %}{% if row.is_hot %} is-hot{% endif %}"
+    class="parking-tail-card{% if row.quick_turn %} is-quick-turn{% endif %}{% if row.is_hot %} is-hot{% endif %}{% if row.is_out_of_service %} is-oos{% endif %}"
     draggable="true"
     data-parking-tail
     data-tail-number="{{ row.tail }}"
@@ -27,6 +28,21 @@
     <div class="parking-tail-line">
         <span>{{ row.departure_destination }} {{ row.departure_time }}</span>
     </div>
+    {% if row.assigned_position %}
+    <form
+        class="parking-tail-status-form"
+        method="post"
+        action="{{ url_for('neomotherbrain.update_parking_plan_tail_status', operation_id=operation.id) }}"
+        data-tail-action
+    >
+        <input type="hidden" name="operation_id" value="{{ operation.id }}">
+        <input type="hidden" name="tail_number" value="{{ row.tail }}">
+        <input type="hidden" name="is_out_of_service" value="{{ 0 if row.is_out_of_service else 1 }}">
+        <button class="parking-tail-status-button{% if row.is_out_of_service %} is-restore{% endif %}" type="submit">
+            {{ "RESTORE / GREEN" if row.is_out_of_service else "RED / OOS" }}
+        </button>
+    </form>
+    {% endif %}
 </article>
 {% endmacro %}
 
@@ -486,6 +502,9 @@
             event.dataTransfer.effectAllowed = "move";
         });
         card.addEventListener("click", (event) => {
+            if (event.target.closest("[data-tail-action]")) {
+                return;
+            }
             if (card.dataset.parkingTailAssigned === "1") {
                 return;
             }

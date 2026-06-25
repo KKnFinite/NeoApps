@@ -83,6 +83,9 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "staffing_leadership_assignments": {
         "active": "BOOLEAN DEFAULT 1",
     },
+    "sort_date_tail_states": {
+        "is_out_of_service": "BOOLEAN DEFAULT 0",
+    },
 }
 
 POSTGRES_OPTIONAL_COLUMNS = {
@@ -137,6 +140,9 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "staffing_leadership_assignments": {
         "active": "BOOLEAN DEFAULT TRUE",
+    },
+    "sort_date_tail_states": {
+        "is_out_of_service": "BOOLEAN DEFAULT FALSE",
     },
 }
 

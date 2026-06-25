@@ -26,6 +26,7 @@ class SortDateTailState(db.Model):
     parking_position = db.Column(db.String(64), nullable=True)
     fuel_onboard = db.Column(db.Integer, nullable=True)
     mechanical_status = db.Column(db.Boolean, nullable=False, default=False)
+    is_out_of_service = db.Column(db.Boolean, nullable=False, default=False)
     pushback_status = db.Column(db.Boolean, nullable=False, default=False)
     deice_status = db.Column(db.String(32), nullable=False, default="unknown")
     pretreat_status = db.Column(db.Boolean, nullable=False, default=False)

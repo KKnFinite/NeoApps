@@ -147,12 +147,10 @@ def current_active_sort_operation(gateway):
 
 
 def tail_rows_for_operation(gateway, operation):
-    assignments = {
-        assignment.tail_number: assignment
-        for assignment in SortDateParkingAssignment.query.filter_by(
-            sort_date_operation_id=operation.id
-        ).all()
-    }
+    assignment_rows = SortDateParkingAssignment.query.filter_by(
+        sort_date_operation_id=operation.id
+    ).all()
+    assignments = {assignment.tail_number: assignment for assignment in assignment_rows}
     tail_states = {
         state.tail_number.strip().upper(): state
         for state in SortDateTailState.query.filter_by(
@@ -179,6 +177,11 @@ def tail_rows_for_operation(gateway, operation):
             grouped[tail]["arrivals"].append(mission)
         elif mission.mission_type == "departure":
             grouped[tail]["departures"].append(mission)
+
+    for assignment in assignment_rows:
+        tail = _normalize_tail(assignment.tail_number)
+        if tail and assignment.position_code:
+            grouped.setdefault(tail, {"arrivals": [], "departures": []})
 
     rows = []
     taxi_minutes = _taxi_to_ramp_minutes(gateway)
@@ -218,6 +221,7 @@ def tail_rows_for_operation(gateway, operation):
                 "assignment": assignment,
                 "assigned_position": assigned_position,
                 "is_hot": bool(assignment and assignment.is_hot),
+                "is_out_of_service": bool(tail_state and tail_state.is_out_of_service),
                 "note": assignment.note if assignment else "",
                 "status": _row_status(assignment),
                 "departure_order": None,
@@ -286,7 +290,7 @@ def unassign_tail(operation, tail_number, user=None):
 
 def set_tail_hot(operation, tail_number, is_hot, user=None, note=None):
     tail_number = _normalize_tail(tail_number)
-    if tail_number not in _current_operation_tails(operation):
+    if tail_number not in _current_operation_tail_assets(operation):
         raise ParkingPlanError(f"{tail_number or 'Tail'} is not in the current sort.")
     assignment = _assignment_for_tail(operation, tail_number, create=True)
     if is_hot is not None:
@@ -297,6 +301,17 @@ def set_tail_hot(operation, tail_number, is_hot, user=None, note=None):
     assignment.assigned_at = _utc_now()
     db.session.flush()
     return assignment
+
+
+def set_tail_out_of_service(operation, tail_number, is_out_of_service, user=None):
+    tail_number = _normalize_tail(tail_number)
+    if tail_number not in _current_operation_tail_assets(operation):
+        raise ParkingPlanError(f"{tail_number or 'Tail'} is not in the current sort.")
+
+    tail_state = _tail_state_for_operation(operation, tail_number, create=True)
+    tail_state.is_out_of_service = bool(is_out_of_service)
+    db.session.flush()
+    return tail_state
 
 
 def parking_position_options():
@@ -498,6 +513,41 @@ def _current_operation_tails(operation):
         .all()
         if _normalize_tail(tail)
     }
+
+
+def _current_operation_tail_assets(operation):
+    tails = _current_operation_tails(operation)
+    if not operation:
+        return tails
+    assigned_tails = {
+        _normalize_tail(tail)
+        for tail, in db.session.query(SortDateParkingAssignment.tail_number)
+        .filter_by(sort_date_operation_id=operation.id)
+        .filter(SortDateParkingAssignment.position_code.isnot(None))
+        .all()
+        if _normalize_tail(tail)
+    }
+    return tails | assigned_tails
+
+
+def _tail_state_for_operation(operation, tail_number, create=False):
+    tail_number = _normalize_tail(tail_number)
+    tail_state = SortDateTailState.query.filter_by(
+        sort_date=operation.sort_date,
+        gateway_code=operation.gateway_code,
+        sort_name=operation.sort_name,
+        tail_number=tail_number,
+    ).first()
+    if not tail_state and create:
+        tail_state = SortDateTailState(
+            sort_date=operation.sort_date,
+            gateway_code=operation.gateway_code,
+            sort_name=operation.sort_name,
+            tail_number=tail_number,
+            aircraft_type_source="unknown",
+        )
+        db.session.add(tail_state)
+    return tail_state
 
 
 def _assignment_for_tail(operation, tail_number, create=False):
