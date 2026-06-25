@@ -772,6 +772,99 @@ a {
     padding-top: 118px;
 }
 
+@media (min-width: 761px) {
+    .topbar {
+        min-height: 72px;
+        gap: 14px;
+        padding: 10px 14px;
+    }
+
+    .rfd-hub-page .topbar {
+        width: min(1440px, 100%);
+        margin-right: auto;
+        margin-left: auto;
+    }
+
+    .topbar-actions {
+        gap: 10px;
+    }
+
+    .character-switcher-trigger,
+    .logout-link,
+    .nav a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        line-height: 1.05;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .logout-link {
+        padding: 8px 11px;
+    }
+
+    .user-chip {
+        align-content: center;
+        height: 42px;
+        min-height: 42px;
+    }
+
+    .motherbrain-fixed-header .topbar {
+        min-height: 72px;
+        padding: 8px 14px;
+        grid-template-columns: 82px minmax(0, 1fr);
+        gap: 14px;
+    }
+
+    .motherbrain-fixed-header .motherbrain-header-logo {
+        width: 68px;
+        height: 68px;
+    }
+
+    .motherbrain-fixed-header .neoermac-header-logo {
+        width: 74px;
+        height: 74px;
+    }
+
+    .motherbrain-fixed-header .topbar-actions {
+        grid-template-columns: minmax(136px, auto) minmax(0, 1fr) minmax(116px, auto);
+        gap: 10px;
+    }
+
+    .motherbrain-fixed-header .nav {
+        grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+        gap: 7px;
+    }
+
+    .motherbrain-fixed-header .nav a {
+        display: flex;
+        min-height: 42px;
+        padding: 8px 9px;
+        font-size: 0.7rem;
+        line-height: 1.05;
+        white-space: normal;
+    }
+
+    .motherbrain-fixed-header .character-switcher-trigger {
+        min-height: 42px;
+        padding: 8px 10px;
+        font-size: 0.64rem;
+    }
+
+    .motherbrain-fixed-header .user-chip {
+        height: 42px;
+        min-height: 42px;
+        min-width: 116px;
+        padding: 6px 10px;
+    }
+
+    .motherbrain-fixed-header .content {
+        padding-top: 104px;
+    }
+}
+
 .motherbrain-main-menu-return {
     display: flex;
     justify-content: center;
