@@ -7936,6 +7936,58 @@ select::-ms-expand {
     gap: 6px;
 }
 
+.planning-parking-context {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.planning-parking-position,
+.planning-parking-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.planning-parking-position {
+    border: 1px solid rgba(190, 230, 210, 0.42);
+    background: rgba(22, 68, 50, 0.55);
+    color: #e7fff3;
+}
+
+.planning-parking-position.is-not-parked {
+    border-color: rgba(236, 190, 96, 0.5);
+    background: rgba(88, 58, 18, 0.5);
+    color: #ffe4a7;
+}
+
+.planning-parking-badge.is-oos {
+    border: 1px solid rgba(255, 86, 86, 0.65);
+    background: rgba(106, 16, 24, 0.72);
+    color: #ffd1d1;
+}
+
+.planning-parking-badge.is-cancelled {
+    border: 1px solid rgba(160, 167, 180, 0.5);
+    background: rgba(44, 48, 58, 0.68);
+    color: #e1e6ef;
+}
+
+.planning-parking-context .planning-parking-link {
+    min-height: 22px;
+    padding: 3px 6px;
+    font-size: 0.6rem;
+}
+
 .planning-mission-table .table-actions a,
 .planning-mission-table .table-actions .inline-button-form button {
     min-height: 28px;

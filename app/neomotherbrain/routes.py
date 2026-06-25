@@ -1364,15 +1364,28 @@ def alp_import(operation_id, mission_type):
 
     settings = ensure_sort_timeline_settings(gateway)
     parking_assignments = _parking_assignments_for_operation(operation)
+    tail_states = _tail_states_for_operation(operation)
     missions = _missions_for_operation(operation, mission_type)
     if mission_type == "arrival":
         mission_rows = [
-            _arrival_row(mission, operation, parking_assignments)
+            _arrival_row(
+                mission,
+                operation,
+                parking_assignments,
+                include_parking_context=True,
+                tail_states=tail_states,
+            )
             for mission in missions
         ]
     else:
         mission_rows = [
-            _departure_row(mission, operation, parking_assignments)
+            _departure_row(
+                mission,
+                operation,
+                parking_assignments,
+                include_parking_context=True,
+                tail_states=tail_states,
+            )
             for mission in missions
         ]
     planning_rows = _planning_review_rows(
@@ -3093,9 +3106,15 @@ def _mission_count(operation, mission_type):
     ).count()
 
 
-def _arrival_row(mission, operation=None, parking_assignments=None):
+def _arrival_row(
+    mission,
+    operation=None,
+    parking_assignments=None,
+    include_parking_context=False,
+    tail_states=None,
+):
     arrival_display = _arrival_board_display(mission, operation)
-    return {
+    row = {
         "mission": mission,
         "is_cancelled": _is_cancelled_mission(mission),
         "parking_position": _parking_position_for_mission(mission, parking_assignments),
@@ -3105,16 +3124,36 @@ def _arrival_row(mission, operation=None, parking_assignments=None):
         "status_label": arrival_display["status_label"],
         "crew_covered": is_mission_crew_covered(mission.crew_assignments),
     }
+    if include_parking_context:
+        row["parking_context"] = _planning_parking_context_for_mission(
+            mission,
+            parking_assignments=parking_assignments,
+            tail_states=tail_states,
+        )
+    return row
 
 
-def _departure_row(mission, operation, parking_assignments=None):
-    return {
+def _departure_row(
+    mission,
+    operation,
+    parking_assignments=None,
+    include_parking_context=False,
+    tail_states=None,
+):
+    row = {
         "mission": mission,
         "is_cancelled": _is_cancelled_mission(mission),
         "timing": mission_display_timing_data(mission, operation),
         "parking_position": _parking_position_for_mission(mission, parking_assignments),
         "crew_covered": is_mission_crew_covered(mission.crew_assignments),
     }
+    if include_parking_context:
+        row["parking_context"] = _planning_parking_context_for_mission(
+            mission,
+            parking_assignments=parking_assignments,
+            tail_states=tail_states,
+        )
+    return row
 
 
 def _mission_list_row(mission, operation, parking_assignments=None):
@@ -3298,10 +3337,11 @@ def _parking_assignments_for_operation(operation):
         return {}
 
     return {
-        assignment.tail_number: assignment
+        (assignment.tail_number or "").strip().upper(): assignment
         for assignment in SortDateParkingAssignment.query.filter_by(
             sort_date_operation_id=operation_id
         ).all()
+        if assignment.tail_number
     }
 
 
@@ -3320,6 +3360,65 @@ def _parking_position_for_mission(mission, parking_assignments=None):
 
     tail_state = _tail_state_for_mission(mission)
     return tail_state.parking_position if tail_state else None
+
+
+def _planning_parking_context_for_mission(
+    mission,
+    parking_assignments=None,
+    tail_states=None,
+):
+    tail_number = (mission.assigned_tail_number or "").strip().upper()
+    if not tail_number:
+        return {
+            "has_tail": False,
+            "tail_number": "",
+            "label": "-",
+            "position": None,
+            "is_assigned": False,
+            "is_oos": False,
+            "is_cancelled": _is_cancelled_mission(mission),
+        }
+
+    if parking_assignments is None:
+        parking_assignments = _parking_assignments_for_operation(
+            mission.sort_date_operation_id
+        )
+    tail_states = tail_states or {}
+    assignment = parking_assignments.get(tail_number)
+    position = None
+    if assignment and assignment.position_code:
+        position = assignment.position_code
+
+    tail_state = tail_states.get(tail_number)
+    if tail_state is None:
+        tail_state = _tail_state_for_mission(mission)
+    if not position and tail_state and tail_state.parking_position:
+        position = tail_state.parking_position
+
+    return {
+        "has_tail": True,
+        "tail_number": tail_number,
+        "label": (position or "NOT PARKED"),
+        "position": position,
+        "is_assigned": bool(position),
+        "is_oos": bool(tail_state and tail_state.is_out_of_service),
+        "is_cancelled": _is_cancelled_mission(mission),
+    }
+
+
+def _tail_states_for_operation(operation):
+    if not operation:
+        return {}
+
+    return {
+        (state.tail_number or "").strip().upper(): state
+        for state in SortDateTailState.query.filter_by(
+            sort_date=operation.sort_date,
+            gateway_code=operation.gateway_code,
+            sort_name=operation.sort_name,
+        ).all()
+        if state.tail_number
+    }
 
 
 def _tail_state_for_mission(mission):

@@ -4072,6 +4072,95 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(">CANCEL</button>", mission_section)
         self.assertNotIn(">RESTORE</button>", mission_section)
 
+    def test_arrival_planning_row_shows_assigned_parking_context_link(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.add(
+            SortDateParkingAssignment(
+                sort_date_operation_id=operation.id,
+                tail_number="N457UP",
+                ramp_code="A",
+                position_code="A03",
+                lane_number=1,
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
+        html = response.data.decode()
+        mission_section = html.split("CURRENT ARRIVAL MISSIONS", 1)[1]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("A03", mission_section)
+        self.assertIn("VIEW PARKING", mission_section)
+        self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"', mission_section)
+        self.assertNotIn("NOT PARKED", mission_section)
+
+    def test_departure_planning_row_shows_not_parked_for_known_tail(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/departure")
+        html = response.data.decode()
+        mission_section = html.split("CURRENT DEPARTURE MISSIONS", 1)[1]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("N457UP", mission_section)
+        self.assertIn("NOT PARKED", mission_section)
+        self.assertIn("VIEW PARKING", mission_section)
+        self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"', mission_section)
+
+    def test_planning_row_shows_oos_red_badge(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.flush()
+        tail_state = SortDateTailState.query.filter_by(tail_number="N457UP").one()
+        tail_state.is_out_of_service = True
+        db.session.add(
+            SortDateParkingAssignment(
+                sort_date_operation_id=operation.id,
+                tail_number="N457UP",
+                ramp_code="R",
+                position_code="R01",
+                lane_number=1,
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
+        html = response.data.decode()
+        mission_section = html.split("CURRENT ARRIVAL MISSIONS", 1)[1]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("R01", mission_section)
+        self.assertIn("OOS / RED", mission_section)
+
+    def test_cancelled_planning_row_still_shows_parking_context(self):
+        operation = self._parking_operation()
+        arrival, _departure = self._parking_pair(operation, "N457UP", destination="LAX")
+        arrival.arrival_status = "cancelled"
+        db.session.add(
+            SortDateParkingAssignment(
+                sort_date_operation_id=operation.id,
+                tail_number="N457UP",
+                ramp_code="A",
+                position_code="A03",
+                lane_number=1,
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
+        html = response.data.decode()
+        mission_section = html.split("CURRENT ARRIVAL MISSIONS", 1)[1]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("N457UP", mission_section)
+        self.assertIn("A03", mission_section)
+        self.assertIn("MISSION CANCELLED", mission_section)
+        self.assertIn("VIEW PARKING", mission_section)
+
     def test_cancel_arrival_marks_mission_cancelled_and_keeps_planning_row(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
         mission = self._mission(

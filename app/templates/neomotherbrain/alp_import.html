@@ -2,6 +2,26 @@
 
 {% block title %}{{ planning_title }} | NeoApps{% endblock %}
 
+{% macro planning_parking_cell(row, operation) -%}
+    {% set parking = row.parking_context %}
+    {% if parking and parking.has_tail %}
+    <div class="planning-parking-context">
+        <span class="planning-parking-position{% if not parking.is_assigned %} is-not-parked{% endif %}">
+            {{ parking.label|upper }}
+        </span>
+        {% if parking.is_oos %}
+        <span class="planning-parking-badge is-oos">OOS / RED</span>
+        {% endif %}
+        {% if parking.is_cancelled %}
+        <span class="planning-parking-badge is-cancelled">MISSION CANCELLED</span>
+        {% endif %}
+        <a class="table-row-button planning-parking-link" href="{{ url_for('neomotherbrain.parking_plan_operation', operation_id=operation.id) }}">VIEW PARKING</a>
+    </div>
+    {% else %}
+    <span class="muted">-</span>
+    {% endif %}
+{%- endmacro %}
+
 {% block content %}
 <section class="panel centered-command-page">
     <div class="section-heading">
@@ -315,7 +335,7 @@
                         <td>{{ mission.origin|upper if mission.origin else "-" }}</td>
                         <td>{{ mission.planned_datetime_local.strftime("%H:%M") if mission.planned_datetime_local else "-" }}</td>
                         <td>{{ row.eta_time.strftime("%H:%M") if row.eta_time else "-" }}</td>
-                        <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>
+                        <td>{{ planning_parking_cell(row, operation) }}</td>
                         <td>{{ row.status_label }}</td>
                         <td class="table-actions planning-mission-actions">
                             {% if can_edit %}
@@ -342,7 +362,7 @@
                         <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
                         <td>{{ mission.destination|upper if mission.destination else "-" }}</td>
                         <td>{{ timing.adjusted_planned_departure_time.strftime("%H:%M") if timing.adjusted_planned_departure_time else "-" }}</td>
-                        <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>
+                        <td>{{ planning_parking_cell(row, operation) }}</td>
                         <td>{{ "CANCELLED" if mission.departure_status == "cancelled" else (mission.departure_status|status_label if mission.departure_status else "-") }}</td>
                         <td class="table-actions planning-mission-actions">
                             {% if can_edit %}
