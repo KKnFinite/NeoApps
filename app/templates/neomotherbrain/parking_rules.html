@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}Parking Rules | NeoApps{% endblock %}
+
+{% macro ramp_select(name, selected, disabled=False) %}
+<select name="{{ name }}" {% if disabled %}disabled{% endif %}>
+    <option value="">SELECT RAMP</option>
+    {% for code, label in ramp_options %}
+    <option value="{{ code }}" {% if selected == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+</select>
+{% endmacro %}
+
+{% macro rule_table(title, rules, subject_label, category, placeholder) %}
+<section class="parking-rules-card" aria-label="{{ title }}">
+    <div class="section-heading parking-rules-card-heading">
+        <h2>{{ title|upper }}</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="data-table wide-data-table parking-rules-table">
+            <thead>
+                <tr>
+                    <th>{{ subject_label }}</th>
+                    <th>RAMP</th>
+                    <th>ACTIVE</th>
+                    <th>NOTE</th>
+                    {% if can_edit_parking_rules %}<th>REMOVE</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for rule in rules %}
+                <tr>
+                    <td data-label="{{ subject_label }}">
+                        <input type="hidden" name="rule_ids" value="{{ rule.id }}">
+                        <input name="subject_value_{{ rule.id }}" value="{{ rule.subject_value }}" autocomplete="off" {% if not can_edit_parking_rules %}disabled{% endif %}>
+                    </td>
+                    <td data-label="Ramp">{{ ramp_select("ramp_code_" ~ rule.id, rule.ramp_code, not can_edit_parking_rules) }}</td>
+                    <td data-label="Active">
+                        <label class="parking-rules-check">
+                            <input type="checkbox" name="active_{{ rule.id }}" value="1" {% if rule.active %}checked{% endif %} {% if not can_edit_parking_rules %}disabled{% endif %}>
+                            <span>{{ "ACTIVE" if rule.active else "INACTIVE" }}</span>
+                        </label>
+                    </td>
+                    <td data-label="Note">
+                        <input name="note_{{ rule.id }}" value="{{ rule.note or '' }}" autocomplete="off" {% if not can_edit_parking_rules %}disabled{% endif %}>
+                    </td>
+                    {% if can_edit_parking_rules %}
+                    <td data-label="Remove">
+                        <label class="parking-rules-check">
+                            <input type="checkbox" name="delete_rule_{{ rule.id }}" value="1">
+                            <span>DELETE</span>
+                        </label>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{{ 5 if can_edit_parking_rules else 4 }}">NO RULES CONFIGURED.</td>
+                </tr>
+                {% endfor %}
+                {% if can_edit_parking_rules %}
+                <tr class="parking-rules-new-row">
+                    <td data-label="{{ subject_label }}">
+                        <input name="new_{{ category }}_subject" placeholder="{{ placeholder }}" autocomplete="off">
+                    </td>
+                    <td data-label="Ramp">{{ ramp_select("new_" ~ category ~ "_ramp", "") }}</td>
+                    <td data-label="Active">NEW</td>
+                    <td data-label="Note">
+                        <input name="new_{{ category }}_note" placeholder="OPTIONAL NOTE" autocomplete="off">
+                    </td>
+                    <td data-label="Remove">-</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endmacro %}
+
+{% block content %}
+<section class="parking-rules-page">
+    <div class="section-heading">
+        <h1>PARKING RULES</h1>
+        <p class="muted">FOUNDATION SETTINGS FOR FUTURE PARKING PLAN OPTIMIZATION. MANUAL PARKING ASSIGNMENTS ARE UNCHANGED.</p>
+        {% if operation %}
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.parking_plan_operation', operation_id=operation.id) }}">BACK TO PARKING PLAN</a>
+        {% else %}
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.parking_plan') }}">BACK TO PARKING PLAN</a>
+        {% endif %}
+    </div>
+
+    {% if not can_edit_parking_rules %}
+    <section class="panel parking-rules-readonly-note">
+        <strong>VIEW ONLY</strong>
+        <span>Your current permissions allow viewing Parking Rules, but not editing them.</span>
+    </section>
+    {% endif %}
+
+    <form class="operation-form parking-rules-form" method="post">
+        {% if operation %}<input type="hidden" name="operation_id" value="{{ operation.id }}">{% endif %}
+        <div class="parking-rules-grid">
+            <section class="parking-rules-card" aria-label="Origin Ramp Rules">
+                <div class="section-heading parking-rules-card-heading">
+                    <h2>ORIGIN RAMP RULES</h2>
+                    <p class="muted">Restrictions forbid an origin from a ramp. Preferences give the optimizer a preferred ramp target.</p>
+                </div>
+                {{ rule_table("Origin Ramp Restrictions", rules_by_category[categories.origin_restrictions], "ORIGIN", categories.origin_restrictions, "ONT") }}
+                {{ rule_table("Origin Ramp Preferences", rules_by_category[categories.origin_preferences], "ORIGIN", categories.origin_preferences, "SDF") }}
+            </section>
+
+            {{ rule_table("Aircraft Type Restrictions", rules_by_category[categories.aircraft_restrictions], "AIRCRAFT TYPE", categories.aircraft_restrictions, "767") }}
+            {{ rule_table("Aircraft Type Preferences", rules_by_category[categories.aircraft_preferences], "AIRCRAFT TYPE", categories.aircraft_preferences, "757") }}
+
+            <section class="parking-rules-card" aria-label="Optimizer Defaults">
+                <div class="section-heading parking-rules-card-heading">
+                    <h2>OPTIMIZER DEFAULTS</h2>
+                </div>
+                <div class="parking-rules-toggle-grid">
+                    <label class="parking-rules-toggle">
+                        <span>INCLUDE REMOTE</span>
+                        <input type="checkbox" name="include_remote_default" value="1" {% if settings.include_remote_default %}checked{% endif %} {% if not can_edit_parking_rules %}disabled{% endif %}>
+                    </label>
+                    <label class="parking-rules-toggle">
+                        <span>INCLUDE 9/10 THROAT PARKING</span>
+                        <input type="checkbox" name="include_throat_default" value="1" {% if settings.include_throat_default %}checked{% endif %} {% if not can_edit_parking_rules %}disabled{% endif %}>
+                    </label>
+                    <label class="parking-rules-field">
+                        <span>DEICE SPACING THRESHOLD MINUTES</span>
+                        <input type="number" min="0" name="deice_spacing_threshold_minutes" value="{{ settings.deice_spacing_threshold_minutes }}" {% if not can_edit_parking_rules %}disabled{% endif %}>
+                    </label>
+                </div>
+            </section>
+
+            <section class="parking-rules-card" aria-label="Physical Parking Rules">
+                <div class="section-heading parking-rules-card-heading">
+                    <h2>PHYSICAL PARKING RULES</h2>
+                    <p class="muted">READ-ONLY FOUNDATION FOR FUTURE OPTIMIZER GEOMETRY.</p>
+                </div>
+                <ul class="parking-physical-rules">
+                    {% for rule_text in physical_rules %}
+                    <li>{{ rule_text }}</li>
+                    {% endfor %}
+                </ul>
+            </section>
+        </div>
+
+        {% if can_edit_parking_rules %}
+        <div class="action-row">
+            <button class="action-button" type="submit">SAVE PARKING RULES</button>
+        </div>
+        {% endif %}
+    </form>
+</section>
+{% endblock %}

@@ -46,6 +46,31 @@ DEFAULT_PERMISSION_RULES = (
         "Trigger one passive Flight API auto-poll eligibility check.",
     ),
     (
+        "motherbrain.parking_rules.view",
+        "simulator",
+        "View NeoMotherBrain Parking Rules settings.",
+    ),
+    (
+        "motherbrain.parking_rules.edit",
+        "master",
+        "Edit NeoMotherBrain Parking Rules settings.",
+    ),
+    (
+        "motherbrain.parking_optimizer.run",
+        "master",
+        "Run future NeoMotherBrain Parking Plan optimizer previews.",
+    ),
+    (
+        "motherbrain.parking_optimizer.apply",
+        "master",
+        "Apply future NeoMotherBrain Parking Plan optimizer results.",
+    ),
+    (
+        "motherbrain.parking_conflicts.view",
+        "operator",
+        "View NeoMotherBrain Parking Plan conflict alerts.",
+    ),
+    (
         "neoermac.building_lineup.view",
         "operator",
         "View NeoErmac Building Lineup screens.",

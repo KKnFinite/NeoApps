@@ -14,6 +14,9 @@ from app.models import (
     GatewaySortMatrix,
     FlightApiReviewItem,
     MasterFlightSchedule,
+    MotherBrainParkingRule,
+    MotherBrainParkingSettings,
+    PermissionRule,
     SortTimelineApiParticipation,
     SortTimelineMonthVariance,
     SortTimelineSettings,
@@ -31,6 +34,7 @@ from app.services.gateway_matrix import current_gateway_local_date
 from app.services.gateway_matrix import current_operations_for_gateway
 from app.services.night_sorting import night_sort_time_key
 from app.services.parking_plan import parking_status_for_rows
+from app.services.permission_rules import ensure_default_permission_rules
 from app.services.sort_timeline import (
     ensure_sort_timeline_settings,
     record_sort_timeline_api_attempt,
@@ -5549,7 +5553,142 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(f'data-unassign-url="/motherbrain/parking-plan/{operation.id}/unassign"'.encode(), response.data)
         self.assertIn(b"parking-mobile-assignment", response.data)
         self.assertIn(b'href="/motherbrain/parking-plan"', response.data)
+        self.assertIn(
+            f'href="/motherbrain/parking-rules?operation_id={operation.id}"'.encode(),
+            response.data,
+        )
+        self.assertIn(b"PARKING RULES", response.data)
         self.assertIn(f'action="/motherbrain/parking-plan/{operation.id}/assign"'.encode(), response.data)
+
+    def test_parking_rules_page_renders_and_persists_settings(self):
+        operation = self._parking_operation()
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"PARKING RULES", response.data)
+        self.assertIn(b"ORIGIN RAMP RULES", response.data)
+        self.assertIn(b"AIRCRAFT TYPE RESTRICTIONS", response.data)
+        self.assertIn(b"AIRCRAFT TYPE PREFERENCES", response.data)
+        self.assertIn(b"OPTIMIZER DEFAULTS", response.data)
+        self.assertIn(b"PHYSICAL PARKING RULES", response.data)
+        self.assertIn(b"09/10 throat parking is optional, with 10 filled before 9.", response.data)
+        self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"'.encode(), response.data)
+
+        save_response = self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data={
+                "operation_id": str(operation.id),
+                "include_remote_default": "1",
+                "deice_spacing_threshold_minutes": "22",
+                "new_origin_ramp_restriction_subject": "ont",
+                "new_origin_ramp_restriction_ramp": "A",
+                "new_origin_ramp_preference_subject": "sdf",
+                "new_origin_ramp_preference_ramp": "B",
+                "new_aircraft_type_ramp_restriction_subject": "767",
+                "new_aircraft_type_ramp_restriction_ramp": "R",
+                "new_aircraft_type_ramp_preference_subject": "a300",
+                "new_aircraft_type_ramp_preference_ramp": "THROAT",
+            },
+        )
+
+        self.assertEqual(save_response.status_code, 302)
+        settings = MotherBrainParkingSettings.query.filter_by(
+            gateway_id=self.rfd_gateway.id,
+        ).one()
+        self.assertTrue(settings.include_remote_default)
+        self.assertFalse(settings.include_throat_default)
+        self.assertEqual(settings.deice_spacing_threshold_minutes, 22)
+        rules = {
+            (
+                rule.rule_category,
+                rule.subject_type,
+                rule.subject_value,
+                rule.ramp_code,
+                rule.rule_behavior,
+            )
+            for rule in MotherBrainParkingRule.query.filter_by(
+                gateway_id=self.rfd_gateway.id,
+            ).all()
+        }
+        self.assertIn(
+            ("origin_ramp_restriction", "origin", "ONT", "A", "forbidden"),
+            rules,
+        )
+        self.assertIn(
+            ("origin_ramp_preference", "origin", "SDF", "B", "preferred"),
+            rules,
+        )
+        self.assertIn(
+            ("aircraft_type_ramp_restriction", "aircraft_type", "767", "R", "forbidden"),
+            rules,
+        )
+        self.assertIn(
+            ("aircraft_type_ramp_preference", "aircraft_type", "A300", "THROAT", "preferred"),
+            rules,
+        )
+
+        reload_response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
+        self.assertIn(b"value=\"ONT\"", reload_response.data)
+        self.assertIn(b"value=\"767\"", reload_response.data)
+        self.assertIn(b"value=\"22\"", reload_response.data)
+
+    def test_parking_rules_view_permission_is_enforced(self):
+        ensure_default_permission_rules()
+        view_rule = PermissionRule.query.filter_by(
+            permission_key="motherbrain.parking_rules.view",
+        ).one()
+        view_rule.minimum_role = "master"
+        db.session.commit()
+        self._login_motherbrain_role("ParkingRulesSimulator", "simulator")
+
+        response = self.client.get("/motherbrain/parking-rules")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/rfd", response.headers["Location"])
+
+    def test_parking_rules_edit_permission_is_enforced(self):
+        ensure_default_permission_rules()
+        view_rule = PermissionRule.query.filter_by(
+            permission_key="motherbrain.parking_rules.view",
+        ).one()
+        edit_rule = PermissionRule.query.filter_by(
+            permission_key="motherbrain.parking_rules.edit",
+        ).one()
+        view_rule.minimum_role = "simulator"
+        edit_rule.minimum_role = "master"
+        db.session.commit()
+        self._login_motherbrain_role("ParkingRulesViewOnly", "simulator")
+
+        get_response = self.client.get("/motherbrain/parking-rules")
+        self.assertEqual(get_response.status_code, 200)
+        self.assertIn(b"VIEW ONLY", get_response.data)
+        self.assertNotIn(b"SAVE PARKING RULES", get_response.data)
+
+        post_response = self.client.post(
+            "/motherbrain/parking-rules",
+            data={
+                "include_remote_default": "1",
+                "new_origin_ramp_restriction_subject": "ONT",
+                "new_origin_ramp_restriction_ramp": "A",
+            },
+        )
+
+        self.assertEqual(post_response.status_code, 302)
+        self.assertEqual(MotherBrainParkingRule.query.count(), 0)
+
+    def test_parking_optimizer_permission_keys_render_in_permission_matrix(self):
+        ensure_default_permission_rules()
+
+        response = self.client.get("/admin/permissions")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"motherbrain.parking_rules.view", response.data)
+        self.assertIn(b"motherbrain.parking_rules.edit", response.data)
+        self.assertIn(b"motherbrain.parking_optimizer.run", response.data)
+        self.assertIn(b"motherbrain.parking_optimizer.apply", response.data)
+        self.assertIn(b"motherbrain.parking_conflicts.view", response.data)
 
     def test_parking_tail_visibility_is_not_removed_by_mission_cancellation(self):
         operation = self._parking_operation()

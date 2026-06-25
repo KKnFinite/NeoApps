@@ -68,6 +68,9 @@
         <h1>PARKING PLAN</h1>
         {% if operation %}
         <p class="muted">{{ operation.gateway_code }} {{ operation.sort_name|upper }} SORT DATE {{ operation.sort_date }}</p>
+        {% if user_can("motherbrain.parking_rules.view") %}
+        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.parking_rules', operation_id=operation.id) }}">PARKING RULES</a>
+        {% endif %}
         {% elif selection_mode %}
         <p class="muted">{{ gateway.code }} LOCAL DATE {{ local_date }}. SELECT A PLANNED OR CURRENT SORT OPERATION.</p>
         {% else %}

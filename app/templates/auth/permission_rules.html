@@ -30,6 +30,7 @@
                             <tr>
                                 <td data-label="Description">
                                     <input type="hidden" name="rule_ids" value="{{ rule.id }}">
+                                    <small class="permission-rule-key">{{ rule.permission_key }}</small>
                                     <input name="description_{{ rule.id }}" value="{{ rule.description or '' }}" autocomplete="off">
                                 </td>
                                 <td data-label="Minimum Role">

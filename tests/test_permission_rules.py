@@ -43,6 +43,11 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertEqual(
             rules,
             {
+                "motherbrain.parking_conflicts.view": "operator",
+                "motherbrain.parking_optimizer.apply": "master",
+                "motherbrain.parking_optimizer.run": "master",
+                "motherbrain.parking_rules.edit": "master",
+                "motherbrain.parking_rules.view": "simulator",
                 "neomotherbrain.dashboard.view": "operator",
                 "neomotherbrain.flight_api_auto_poll.trigger": "simulator",
                 "neomotherbrain.flight_api_review.edit": "simulator",
@@ -107,7 +112,7 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertIn(b"NeoSub-Zero", response.data)
         self.assertIn(b"NeoRain", response.data)
         self.assertNotIn(b"PERMISSION KEY", response.data)
-        self.assertNotIn(b"neoermac.building_lineup.edit", response.data)
+        self.assertIn(b"neoermac.building_lineup.edit", response.data)
         self.assertEqual(response.data.count(b'aria-label="BACK TO NeoMotherBrain MAIN MENU"'), 1)
         self.assertEqual(updated.minimum_role, "master")
         self.assertEqual(updated.description, "Updated Building Lineup rule.")

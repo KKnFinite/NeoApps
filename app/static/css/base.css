@@ -1305,6 +1305,15 @@ a {
     vertical-align: middle;
 }
 
+.permission-rule-key {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--muted);
+    font-size: 0.62rem;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+}
+
 .command-card {
     min-height: 150px;
     padding: 20px;
@@ -3712,6 +3721,106 @@ h2 {
     gap: 18px;
     width: min(100%, 2040px);
     margin-inline: auto;
+}
+
+.parking-rules-page {
+    display: grid;
+    gap: 18px;
+    width: min(100%, 1280px);
+    margin-inline: auto;
+}
+
+.parking-rules-form,
+.parking-rules-grid,
+.parking-rules-card {
+    display: grid;
+    gap: 16px;
+}
+
+.parking-rules-card {
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid rgba(var(--node-rgb), 0.28);
+    border-radius: 7px;
+    background:
+        linear-gradient(145deg, rgba(var(--node-rgb), 0.1), transparent 42%),
+        rgba(7, 8, 11, 0.86);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 24px rgba(var(--node-rgb), 0.1);
+}
+
+.parking-rules-card-heading {
+    margin-bottom: 0;
+}
+
+.parking-rules-card-heading h2 {
+    margin: 0;
+    color: var(--steel);
+    font-size: 0.98rem;
+    letter-spacing: 0.08em;
+}
+
+.parking-rules-table input,
+.parking-rules-table select,
+.parking-rules-field input {
+    width: 100%;
+    min-width: 0;
+}
+
+.parking-rules-check,
+.parking-rules-toggle,
+.parking-rules-field {
+    display: grid;
+    gap: 6px;
+    align-items: center;
+    color: var(--steel);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.parking-rules-check {
+    grid-template-columns: auto minmax(0, 1fr);
+}
+
+.parking-rules-toggle-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.parking-rules-toggle {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 12px;
+    border: 1px solid rgba(var(--node-rgb), 0.22);
+    border-radius: 6px;
+    background: rgba(3, 4, 6, 0.44);
+}
+
+.parking-rules-readonly-note {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+}
+
+.parking-rules-readonly-note strong {
+    color: var(--node-highlight);
+}
+
+.parking-physical-rules {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding-left: 18px;
+    color: var(--steel);
+    font-size: 0.86rem;
+    font-weight: 750;
+    line-height: 1.4;
 }
 
 .parking-empty-state {

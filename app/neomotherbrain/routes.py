@@ -92,6 +92,14 @@ from app.services.parking_plan import (
     set_tail_hot,
     unassign_tail,
 )
+from app.services.parking_rules import (
+    AIRCRAFT_TYPE_RAMP_PREFERENCE,
+    AIRCRAFT_TYPE_RAMP_RESTRICTION,
+    ORIGIN_RAMP_PREFERENCE,
+    ORIGIN_RAMP_RESTRICTION,
+    parking_rules_context,
+    save_parking_rules_from_form,
+)
 from app.services.sort_timeline import (
     DAY_OPTIONS as TIMELINE_DAY_OPTIONS,
     SORT_OPTIONS as TIMELINE_SORT_OPTIONS,
@@ -114,6 +122,8 @@ ACTIVE_DAY_OPTIONS = (
 FLIGHT_API_REVIEW_VIEW_PERMISSION = "neomotherbrain.flight_api_review.view"
 FLIGHT_API_REVIEW_EDIT_PERMISSION = "neomotherbrain.flight_api_review.edit"
 FLIGHT_API_AUTO_POLL_TRIGGER_PERMISSION = "neomotherbrain.flight_api_auto_poll.trigger"
+PARKING_RULES_VIEW_PERMISSION = "motherbrain.parking_rules.view"
+PARKING_RULES_EDIT_PERMISSION = "motherbrain.parking_rules.edit"
 CANCELLED_MISSION_STATUS = "cancelled"
 
 SORT_NAME_OPTIONS = (
@@ -553,6 +563,43 @@ def parking_plan_operation(operation_id):
     )
 
 
+@bp.route("/motherbrain/parking-rules", methods=["GET", "POST"])
+@gateway_node_required("motherbrain")
+def parking_rules():
+    gateway = get_current_gateway()
+    if not user_can(PARKING_RULES_VIEW_PERMISSION):
+        flash("Access denied.", "error")
+        return redirect(url_for("neomotherbrain.rfd_hub"))
+
+    can_edit = user_can(PARKING_RULES_EDIT_PERMISSION)
+    operation = _parking_rules_operation_context(gateway)
+    if request.method == "POST":
+        if not can_edit:
+            db.session.rollback()
+            flash("Access denied.", "error")
+            return redirect(_parking_rules_redirect(operation))
+        save_parking_rules_from_form(gateway, request.form)
+        db.session.commit()
+        flash("Parking rules saved.", "info")
+        return redirect(_parking_rules_redirect(operation))
+
+    context = parking_rules_context(gateway)
+    return render_template(
+        "neomotherbrain/parking_rules.html",
+        gateway=gateway,
+        operation=operation,
+        can_edit_parking_rules=can_edit,
+        categories={
+            "origin_restrictions": ORIGIN_RAMP_RESTRICTION,
+            "origin_preferences": ORIGIN_RAMP_PREFERENCE,
+            "aircraft_restrictions": AIRCRAFT_TYPE_RAMP_RESTRICTION,
+            "aircraft_preferences": AIRCRAFT_TYPE_RAMP_PREFERENCE,
+        },
+        **context,
+        **_flight_api_auto_poll_timer_context(gateway, operation=operation),
+    )
+
+
 @bp.route("/motherbrain/parking-plan/assign", methods=["POST"])
 @bp.route("/motherbrain/parking-plan/<int:operation_id>/assign", methods=["POST"])
 @gateway_node_required("motherbrain")
@@ -712,6 +759,22 @@ def _parking_plan_operation_for_action(gateway, operation_id=None):
         except (TypeError, ValueError):
             abort(404)
     return current_active_sort_operation(gateway)
+
+
+def _parking_rules_operation_context(gateway):
+    operation_id = request.values.get("operation_id")
+    if not operation_id:
+        return None
+    try:
+        return _parking_plan_operation_or_404(gateway, int(operation_id))
+    except (TypeError, ValueError):
+        abort(404)
+
+
+def _parking_rules_redirect(operation=None):
+    if operation:
+        return url_for("neomotherbrain.parking_rules", operation_id=operation.id)
+    return url_for("neomotherbrain.parking_rules")
 
 
 def _parking_plan_response(success, message, status=200, payload=None, operation_id=None):

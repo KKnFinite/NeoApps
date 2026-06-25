@@ -89,6 +89,11 @@ class DatabaseBootstrapTest(unittest.TestCase):
                 for rule in PermissionRule.query.order_by(PermissionRule.permission_key).all()
             },
             {
+                "motherbrain.parking_conflicts.view": "operator",
+                "motherbrain.parking_optimizer.apply": "master",
+                "motherbrain.parking_optimizer.run": "master",
+                "motherbrain.parking_rules.edit": "master",
+                "motherbrain.parking_rules.view": "simulator",
                 "neomotherbrain.dashboard.view": "operator",
                 "neomotherbrain.flight_api_auto_poll.trigger": "simulator",
                 "neomotherbrain.flight_api_review.edit": "simulator",
@@ -157,7 +162,7 @@ class DatabaseBootstrapTest(unittest.TestCase):
         self.assertFalse(second_result["password_applied"])
         self.assertEqual(Gateway.query.filter_by(code="RFD").count(), 1)
         self.assertEqual(NeoNode.query.count(), len(DEFAULT_NEONODES))
-        self.assertEqual(PermissionRule.query.count(), 22)
+        self.assertEqual(PermissionRule.query.count(), 27)
         self.assertEqual(User.query.filter_by(username="Kessler").count(), 1)
         self.assertEqual(GatewayMembership.query.filter_by(user_id=user.id).count(), 1)
         self.assertEqual(
