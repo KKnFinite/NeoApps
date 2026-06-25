@@ -9,7 +9,6 @@
     </div>
 
     <div class="action-row">
-        <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">ADD MISSION</a>
         <a class="action-button alp-desktop-only" href="{{ url_for('neomotherbrain.alp_import', operation_id=operation.id, mission_type='departure') }}">DEPARTURE PLANNING</a>
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">OPERATION OVERVIEW</a>
         <a class="action-button" href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">ARRIVAL BOARD</a>
@@ -40,8 +39,7 @@
                     <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>
                     <td>{{ timing.adjusted_planned_departure_time.strftime("%H:%M") if timing.adjusted_planned_departure_time else "-" }}</td>
                     <td class="table-actions">
-                        <a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=mission.id) }}">VIEW</a>
-                        <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT</a>
+                        <span class="muted">-</span>
                     </td>
                 </tr>
                 {% else %}

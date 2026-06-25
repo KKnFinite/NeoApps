@@ -1323,6 +1323,18 @@ def alp_import(operation_id, mission_type):
             flash(str(exc), "error")
 
     settings = ensure_sort_timeline_settings(gateway)
+    parking_assignments = _parking_assignments_for_operation(operation)
+    missions = _missions_for_operation(operation, mission_type)
+    if mission_type == "arrival":
+        mission_rows = [
+            _arrival_row(mission, operation, parking_assignments)
+            for mission in missions
+        ]
+    else:
+        mission_rows = [
+            _departure_row(mission, operation, parking_assignments)
+            for mission in missions
+        ]
     planning_rows = _planning_review_rows(
         operation,
         mission_type,
@@ -1338,6 +1350,7 @@ def alp_import(operation_id, mission_type):
         paste_text=paste_text,
         preview=preview,
         planning_rows=planning_rows,
+        mission_rows=mission_rows,
         can_edit=_planning_can_edit(gateway),
         sort_timeline_settings=settings,
         flight_api_operational_time=flight_api_operational_time_utc,

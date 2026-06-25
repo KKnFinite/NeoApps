@@ -10,6 +10,9 @@
     </div>
 
     <div class="action-row">
+        {% if can_edit %}
+        <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">ADD MISSION</a>
+        {% endif %}
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">OPERATION OVERVIEW</a>
         <a class="action-button" href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">ARRIVAL BOARD</a>
         <a class="action-button" href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">DEPARTURE BOARD</a>
@@ -264,6 +267,87 @@
                     </tr>
                     {% else %}
                     <tr><td colspan="8">NO UNMATCHED {{ label|upper }} PLANNING ROWS.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="planning-mission-section" aria-labelledby="planning-mission-title">
+        <h2 id="planning-mission-title">CURRENT {{ label|upper }} MISSIONS</h2>
+        <p class="muted">Current sort {{ label|lower }} missions. Mission editing lives here so board screens stay data-view only.</p>
+        <div class="table-wrap">
+            <table class="data-table planning-mission-table">
+                <thead>
+                    {% if mission_type == "arrival" %}
+                    <tr>
+                        <th>WAVE</th>
+                        <th>FLIGHT</th>
+                        <th>TAIL</th>
+                        <th>ORIGIN</th>
+                        <th>STA</th>
+                        <th>ETA</th>
+                        <th>PARKING</th>
+                        <th>STATUS</th>
+                        <th>ACTIONS</th>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <th>WAVE</th>
+                        <th>FLIGHT</th>
+                        <th>TAIL</th>
+                        <th>DESTINATION</th>
+                        <th>STD</th>
+                        <th>PARKING</th>
+                        <th>STATUS</th>
+                        <th>ACTIONS</th>
+                    </tr>
+                    {% endif %}
+                </thead>
+                <tbody>
+                    {% for row in mission_rows %}
+                    {% set mission = row.mission %}
+                    {% if mission_type == "arrival" %}
+                    <tr>
+                        <td>{{ mission.wave|wave_label }}</td>
+                        <td>{{ mission.flight_number|upper }}</td>
+                        <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
+                        <td>{{ mission.origin|upper if mission.origin else "-" }}</td>
+                        <td>{{ mission.planned_datetime_local.strftime("%H:%M") if mission.planned_datetime_local else "-" }}</td>
+                        <td>{{ row.eta_time.strftime("%H:%M") if row.eta_time else "-" }}</td>
+                        <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>
+                        <td>{{ row.status_label }}</td>
+                        <td class="table-actions planning-mission-actions">
+                            {% if can_edit %}
+                            <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT</a>
+                            {% else %}
+                            <span class="muted">VIEW ONLY</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    {% set timing = row.timing %}
+                    <tr>
+                        <td>{{ mission.wave|wave_label }}</td>
+                        <td>{{ mission.flight_number|upper }}</td>
+                        <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
+                        <td>{{ mission.destination|upper if mission.destination else "-" }}</td>
+                        <td>{{ timing.adjusted_planned_departure_time.strftime("%H:%M") if timing.adjusted_planned_departure_time else "-" }}</td>
+                        <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>
+                        <td>{{ mission.departure_status|status_label if mission.departure_status else "-" }}</td>
+                        <td class="table-actions planning-mission-actions">
+                            {% if can_edit %}
+                            <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT</a>
+                            {% else %}
+                            <span class="muted">VIEW ONLY</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% else %}
+                    <tr>
+                        <td colspan="{{ 9 if mission_type == 'arrival' else 8 }}">NO CURRENT {{ label|upper }} MISSIONS FOUND.</td>
+                    </tr>
                     {% endfor %}
                 </tbody>
             </table>

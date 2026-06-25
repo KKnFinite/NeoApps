@@ -3910,6 +3910,125 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn("<th>+/-</th>", header)
         self.assertIsNone(re.search(r"\b\d{1,2}:\d{2}\s*(AM|PM)\b", html))
 
+    def test_arrival_planning_renders_current_sort_arrival_mission_list(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS0910",
+            wave="2",
+            origin="SDF",
+            assigned_tail_number="N910UP",
+            planned_datetime_local=datetime(2026, 6, 24, 2, 10),
+            planned_datetime_utc=datetime(2026, 6, 24, 7, 10),
+            eta_datetime_utc=datetime(2026, 6, 24, 7, 24),
+            eta_source="api",
+            arrival_status="en_route",
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
+        html = response.data.decode()
+        mission_section = html.split("CURRENT ARRIVAL MISSIONS", 1)[1]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("ARRIVAL PLANNING REVIEW", html)
+        self.assertIn("CURRENT ARRIVAL MISSIONS", html)
+        self.assertIn("UPS0910", mission_section)
+        self.assertIn("N910UP", mission_section)
+        self.assertIn("SDF", mission_section)
+        self.assertIn("02:10", mission_section)
+        self.assertIn("02:24", mission_section)
+        self.assertIn("En Route", mission_section)
+        self.assertIn(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/edit",
+            mission_section,
+        )
+
+    def test_departure_planning_renders_current_sort_departure_mission_list(self):
+        operation = self._operation(sort_date=date(2026, 6, 24), window_minutes=20)
+        mission = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="UPS0856",
+            wave="1",
+            destination="DFW",
+            assigned_tail_number="N856UP",
+            planned_datetime_local=datetime(2026, 6, 24, 2, 10),
+            planned_datetime_utc=datetime(2026, 6, 24, 7, 10),
+            departure_status="ramp_load_complete",
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/departure")
+        html = response.data.decode()
+        mission_section = html.split("CURRENT DEPARTURE MISSIONS", 1)[1]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("DEPARTURE PLANNING REVIEW", html)
+        self.assertIn("CURRENT DEPARTURE MISSIONS", html)
+        self.assertIn("UPS0856", mission_section)
+        self.assertIn("N856UP", mission_section)
+        self.assertIn("DFW", mission_section)
+        self.assertIn("02:30", mission_section)
+        self.assertIn("Ramp Load Complete", mission_section)
+        self.assertIn(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/edit",
+            mission_section,
+        )
+
+    def test_planning_mission_rows_hide_edit_for_view_only_user(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS0910",
+            assigned_tail_number="N910UP",
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+        self._login_motherbrain_role("simulator-user", "simulator")
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
+        html = response.data.decode()
+        mission_section = html.split("CURRENT ARRIVAL MISSIONS", 1)[1]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("UPS0910", mission_section)
+        self.assertIn("VIEW ONLY", mission_section)
+        self.assertNotIn(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/edit",
+            mission_section,
+        )
+
+    def test_arrival_board_rows_are_data_view_only(self):
+        operation = self._operation_with_missions()
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
+        html = response.data.decode()
+        body = html.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(">VIEW</a>", body)
+        self.assertNotIn(">EDIT</a>", body)
+        self.assertNotIn("/missions/", body)
+
+    def test_departure_board_rows_are_data_view_only(self):
+        operation = self._operation_with_missions()
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/departures")
+        html = response.data.decode()
+        body = html.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(">VIEW</a>", body)
+        self.assertNotIn(">EDIT</a>", body)
+        self.assertNotIn("/missions/", body)
+
     def test_alp_arrival_paste_preview_matches_and_converts_zulu_times(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
         db.session.add(operation)

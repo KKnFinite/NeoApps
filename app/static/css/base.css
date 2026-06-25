@@ -7840,9 +7840,35 @@ select::-ms-expand {
     margin-top: 22px;
 }
 
+.planning-mission-section {
+    margin-top: 22px;
+}
+
 .planning-review-table .table-actions {
     justify-content: flex-start;
     gap: 6px;
+}
+
+.data-table.planning-mission-table {
+    min-width: 0;
+}
+
+.data-table.planning-mission-table th,
+.data-table.planning-mission-table td {
+    padding: 6px 7px;
+    line-height: 1.15;
+    vertical-align: middle;
+}
+
+.planning-mission-table .table-actions {
+    justify-content: flex-start;
+    gap: 6px;
+}
+
+.planning-mission-table .table-actions a {
+    min-height: 28px;
+    padding: 5px 8px;
+    font-size: 0.66rem;
 }
 
 .planning-review-table .table-actions a,
