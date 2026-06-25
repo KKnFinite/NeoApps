@@ -4099,8 +4099,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"API", response.data)
         self.assertIn(b"UPS0856", response.data)
         self.assertIn(b"ADD TO CURRENT SORT", response.data)
+        self.assertIn(b">HOT</button>", response.data)
         self.assertIn(b"IGNORE", response.data)
-        self.assertNotIn(b">HOT</button>", response.data)
 
     def test_alp_unmatched_preview_persists_in_planning_review(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
@@ -4128,6 +4128,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"UPS0999", persisted.data)
         self.assertIn(b"N999UP", persisted.data)
         self.assertIn(b"02:24 Local Jun 24", persisted.data)
+        self.assertIn(b"ADD TO CURRENT SORT", persisted.data)
+        self.assertIn(b">HOT</button>", persisted.data)
+        self.assertIn(b"IGNORE", persisted.data)
 
     def test_alp_unmatched_apply_persists_in_planning_review(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
@@ -4165,6 +4168,173 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"UPS0999", persisted.data)
         self.assertIn(b"N999UP", persisted.data)
         self.assertIn(b"02:56 Local Jun 24", persisted.data)
+
+    def test_add_persisted_alp_planning_row_creates_mission_and_removes_row(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        db.session.add(operation)
+        db.session.commit()
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            data={
+                "paste_text": "24-JUN-2026\tUPS999\tSDF\tN999UP\tA01\tScheduled\t07:24 (S)",
+                "alp_action": "preview",
+            },
+        )
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/planning/arrival/alp/add",
+            data={
+                "line_number": "1",
+                "flight_number": "UPS0999",
+                "airport": "SDF",
+                "tail_number": "N999UP",
+                "utc_datetime": "2026-06-24T07:24:00",
+                "reason": "No current operation mission match.",
+            },
+            follow_redirects=False,
+        )
+        persisted = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
+
+        mission = SortDateMission.query.filter_by(flight_number="UPS0999").one()
+        marker = FlightApiReviewItem.query.filter_by(review_status="accepted").one()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(mission.sort_date_operation_id, operation.id)
+        self.assertEqual(marker.accepted_mission_id, mission.id)
+        self.assertEqual(FlightApiReviewItem.query.filter_by(review_status="pending").count(), 0)
+        self.assertIn(b"NO UNMATCHED ARRIVAL PLANNING ROWS.", persisted.data)
+        self.assertNotIn(b"ADD TO CURRENT SORT</button>", persisted.data)
+
+    def test_hot_persisted_alp_planning_row_marks_hot_and_removes_row(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        db.session.add(operation)
+        db.session.commit()
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/departure",
+            data={
+                "paste_text": "24-JUN-2026\tUPS999\tSDF\tN999UP\tA01\tScheduled\t07:24 (S)",
+                "alp_action": "preview",
+            },
+        )
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/planning/departure/alp/hot",
+            data={
+                "line_number": "1",
+                "flight_number": "UPS0999",
+                "airport": "SDF",
+                "tail_number": "N999UP",
+                "utc_datetime": "2026-06-24T07:24:00",
+                "reason": "No current operation mission match.",
+            },
+            follow_redirects=False,
+        )
+        persisted = self.client.get(f"/motherbrain/operations/{operation.id}/alp/departure")
+
+        mission = SortDateMission.query.filter_by(flight_number="UPS0999").one()
+        marker = FlightApiReviewItem.query.filter_by(review_status="accepted").one()
+        hot_state = SortDateParkingAssignment.query.filter_by(
+            sort_date_operation_id=operation.id,
+            tail_number="N999UP",
+        ).one()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(mission.mission_type, "departure")
+        self.assertEqual(marker.accepted_mission_id, mission.id)
+        self.assertTrue(hot_state.is_hot)
+        self.assertEqual(FlightApiReviewItem.query.filter_by(review_status="pending").count(), 0)
+        self.assertIn(b"NO UNMATCHED DEPARTURE PLANNING ROWS.", persisted.data)
+        self.assertNotIn(b"ADD TO CURRENT SORT</button>", persisted.data)
+
+    def test_ignore_persisted_alp_planning_row_removes_row_for_current_operation(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        db.session.add(operation)
+        db.session.commit()
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            data={
+                "paste_text": "24-JUN-2026\tUPS999\tSDF\tN999UP\tA01\tScheduled\t07:24 (S)",
+                "alp_action": "preview",
+            },
+        )
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/planning/arrival/alp/ignore",
+            data={
+                "line_number": "1",
+                "flight_number": "UPS0999",
+                "airport": "SDF",
+                "tail_number": "N999UP",
+                "utc_datetime": "2026-06-24T07:24:00",
+                "reason": "No current operation mission match.",
+            },
+            follow_redirects=False,
+        )
+        persisted = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
+
+        marker = FlightApiReviewItem.query.filter_by(review_status="ignored").one()
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("alp:arrival:0999:SDF:N999UP:202606240724", marker.review_key)
+        self.assertEqual(SortDateMission.query.count(), 0)
+        self.assertEqual(FlightApiReviewItem.query.filter_by(review_status="pending").count(), 0)
+        self.assertIn(b"NO UNMATCHED ARRIVAL PLANNING ROWS.", persisted.data)
+        self.assertNotIn(b"ADD TO CURRENT SORT</button>", persisted.data)
+
+    def test_duplicate_alp_add_reuses_existing_current_sort_mission(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS0999",
+            origin="SDF",
+        )
+        db.session.add_all([operation, mission])
+        db.session.flush()
+        db.session.add(
+            FlightApiReviewItem(
+                sort_date_operation_id=operation.id,
+                gateway_id=operation.gateway_id,
+                gateway_code=operation.gateway_code,
+                sort_date=operation.sort_date,
+                sort_name=operation.sort_name,
+                mission_type="arrival",
+                review_key="alp:arrival:0999:SDF:N999UP:202606240724",
+                review_status="pending",
+                flight_number="UPS0999",
+                origin="SDF",
+                destination="RFD",
+                revised_time_utc=datetime(2026, 6, 24, 7, 24),
+                tail_number="N999UP",
+                api_status="ALP",
+                raw_payload=json.dumps(
+                    {
+                        "source": "ALP",
+                        "line_number": "1",
+                        "reason": "No current operation mission match.",
+                    }
+                ),
+            )
+        )
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/planning/arrival/alp/add",
+            data={
+                "line_number": "1",
+                "flight_number": "UPS0999",
+                "airport": "SDF",
+                "tail_number": "N999UP",
+                "utc_datetime": "2026-06-24T07:24:00",
+                "reason": "No current operation mission match.",
+            },
+            follow_redirects=False,
+        )
+
+        marker = FlightApiReviewItem.query.filter_by(review_status="accepted").one()
+        db.session.refresh(mission)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(SortDateMission.query.filter_by(flight_number="UPS0999").count(), 1)
+        self.assertEqual(marker.accepted_mission_id, mission.id)
+        self.assertEqual(mission.assigned_tail_number, "N999UP")
+        self.assertEqual(mission.tail_source, "alp")
 
     def test_departure_planning_renders_alp_and_api_unmatched_rows_with_hot(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
@@ -4211,6 +4381,13 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         db.session.add(item)
         db.session.commit()
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            data={
+                "paste_text": "24-JUN-2026\tUPS999\tSDF\tN999UP\tA01\tScheduled\t07:24 (S)",
+                "alp_action": "preview",
+            },
+        )
         self._login_motherbrain_role("simulator-user", "simulator")
 
         response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
@@ -4222,7 +4399,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"VIEW ONLY", response.data)
+        self.assertIn(b"UPS0999", response.data)
         self.assertNotIn(b"ADD TO CURRENT SORT", response.data)
+        self.assertNotIn(b">HOT</button>", response.data)
+        self.assertNotIn(b"IGNORE</button>", response.data)
         self.assertIn(b"Access denied.", blocked.data)
         self.assertEqual(SortDateMission.query.count(), 0)
 

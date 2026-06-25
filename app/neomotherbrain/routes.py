@@ -1360,7 +1360,7 @@ def add_alp_planning_row(operation_id, mission_type):
 
     try:
         row = _alp_planning_row_from_form(operation, mission_type)
-        mission = _create_mission_from_alp_planning_row(operation, row)
+        mission = _create_or_update_mission_from_alp_planning_row(operation, row)
         _record_alp_planning_marker(operation, row, "accepted", mission)
         db.session.commit()
         flash(f"{row['normalized_flight_number']} added to current sort.", "info")
@@ -1379,15 +1379,13 @@ def hot_alp_planning_row(operation_id, mission_type):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
     mission_type = _planning_mission_type_or_404(mission_type)
-    if mission_type != "departure":
-        abort(404)
     if not _planning_can_edit(gateway):
         flash("Access denied.", "error")
         return redirect(_planning_url(operation.id, mission_type))
 
     try:
         row = _alp_planning_row_from_form(operation, mission_type)
-        mission = _create_mission_from_alp_planning_row(operation, row)
+        mission = _create_or_update_mission_from_alp_planning_row(operation, row)
         set_tail_hot(operation, mission.assigned_tail_number, True, user=current_user)
         _record_alp_planning_marker(operation, row, "accepted", mission)
         db.session.commit()
@@ -1947,6 +1945,40 @@ def _create_mission_from_alp_planning_row(operation, row):
     _sync_tail_state_and_crew_slots(mission)
     db.session.flush()
     return mission
+
+
+def _create_or_update_mission_from_alp_planning_row(operation, row):
+    existing = _existing_operation_mission_for_alp_row(operation, row)
+    if not existing:
+        return _create_mission_from_alp_planning_row(operation, row)
+
+    old_tail_number = existing.assigned_tail_number
+    old_aircraft_type = _aircraft_type_for_tail(operation, old_tail_number)
+    existing.assigned_tail_number = row["tail_number"]
+    existing.tail_source = "alp"
+    existing.tail_updated_at = datetime.utcnow()
+    if existing.mission_type == "arrival":
+        existing.eta_datetime_utc = row["utc_datetime"]
+        existing.eta_source = "alp"
+    else:
+        existing.actual_block_out_datetime_utc = row["utc_datetime"]
+        existing.actual_block_out_source = "alp"
+    db.session.flush()
+    _sync_tail_state_and_crew_slots(
+        existing,
+        old_tail_number=old_tail_number,
+        old_aircraft_type=old_aircraft_type,
+    )
+    db.session.flush()
+    return existing
+
+
+def _existing_operation_mission_for_alp_row(operation, row):
+    return SortDateMission.query.filter(
+        SortDateMission.sort_date_operation_id == operation.id,
+        func.upper(SortDateMission.flight_number)
+        == row["normalized_flight_number"].upper(),
+    ).first()
 
 
 def _record_alp_planning_marker(operation, row, review_status, mission=None):

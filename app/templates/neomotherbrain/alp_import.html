@@ -221,7 +221,6 @@
                                     <input type="hidden" name="reason" value="{{ row.reason }}">
                                     <button class="table-row-button" type="submit">ADD TO CURRENT SORT</button>
                                 </form>
-                                {% if mission_type == "departure" %}
                                 <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.hot_alp_planning_row', operation_id=operation.id, mission_type=mission_type) }}">
                                     <input type="hidden" name="review_key" value="{{ row.review_key }}">
                                     <input type="hidden" name="line_number" value="{{ row.line_number }}">
@@ -232,7 +231,6 @@
                                     <input type="hidden" name="reason" value="{{ row.reason }}">
                                     <button class="table-row-button" type="submit">HOT</button>
                                 </form>
-                                {% endif %}
                                 <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.ignore_alp_planning_row', operation_id=operation.id, mission_type=mission_type) }}">
                                     <input type="hidden" name="review_key" value="{{ row.review_key }}">
                                     <input type="hidden" name="line_number" value="{{ row.line_number }}">
