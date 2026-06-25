@@ -37,7 +37,7 @@
                 <div class="wave-metrics">
                     <div>
                         <span>Left to Arrive</span>
-                        <strong data-wave="{{ wave_key }}" data-metric="left_to_arrive">{{ wave.planned }}</strong>
+                        <strong data-wave="{{ wave_key }}" data-metric="left_to_arrive">{{ wave.left_to_arrive }}</strong>
                     </div>
                     <div>
                         <span>Left to Unload</span>
@@ -65,7 +65,7 @@
                             type="number"
                             inputmode="numeric"
                             min="0"
-                            max="9999"
+                            max="99"
                             value="{{ wave.count }}"
                             class="counter-number"
                             data-wave-count="{{ wave.key }}"
@@ -90,7 +90,7 @@
                             type="number"
                             inputmode="numeric"
                             min="0"
-                            max="12"
+                            max="99"
                             value="{{ side.open_bays }}"
                             class="counter-number"
                             data-open-bays
@@ -195,7 +195,22 @@
         element.className = `neosektor-status neosektor-status-${String(status).toLowerCase()}`;
     };
 
+    const setText = (selector, value) => {
+        const element = root.querySelector(selector);
+        if (element) {
+            element.textContent = value;
+        }
+    };
+
+    const waveKey = (name) => String(name || "").startsWith("1ST") ? "first" : "second";
+
     const applyState = (state) => {
+        (state.waves || []).forEach((wave) => {
+            const key = waveKey(wave.name);
+            setText(`[data-wave="${key}"][data-metric="left_to_arrive"]`, wave.left_to_arrive ?? wave.planned ?? 0);
+            setText(`[data-wave="${key}"][data-metric="left_to_unload"]`, wave.left ?? 0);
+        });
+
         Object.entries(state.sides || {}).forEach(([sideKey, side]) => {
             const panel = root.querySelector(`[data-ballmat-side="${sideKey}"]`);
             if (!panel) {
@@ -335,7 +350,7 @@
         }
     });
 
-    window.setInterval(refreshState, 3000);
+    window.setInterval(refreshState, 5000);
 })();
 </script>
 {% endblock %}

@@ -68,7 +68,7 @@
                                 type="number"
                                 inputmode="numeric"
                                 min="0"
-                                max="9999"
+                                max="99"
                                 value="{{ wave.count }}"
                                 class="counter-number"
                                 data-wave-count="{{ wave.key }}"
@@ -90,7 +90,7 @@
                                 type="number"
                                 inputmode="numeric"
                                 min="0"
-                                max="12"
+                                max="99"
                                 value="{{ side.open_bays }}"
                                 class="counter-number"
                                 data-open-bays
@@ -131,7 +131,7 @@
                         type="number"
                         inputmode="numeric"
                         min="0"
-                        max="999"
+                        max="20"
                         value="{{ state.routing.west_offset }}"
                         data-tunnel-offset-input
                         aria-label="West route offset"
@@ -392,7 +392,7 @@
         }
     });
 
-    window.setInterval(refreshState, 3000);
+    window.setInterval(refreshState, 5000);
 })();
 </script>
 {% endblock %}

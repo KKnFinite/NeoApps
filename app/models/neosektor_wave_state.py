@@ -23,6 +23,7 @@ class NeoSektorWaveState(db.Model):
     wave_name = db.Column(db.String(32), nullable=False, index=True)
     planned_count = db.Column(db.Integer, nullable=False, default=0)
     unloaded_count = db.Column(db.Integer, nullable=False, default=0)
+    all_up_started_at = db.Column(db.DateTime, nullable=True)
     status = db.Column(db.String(32), nullable=False, default="Empty")
     display_order = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

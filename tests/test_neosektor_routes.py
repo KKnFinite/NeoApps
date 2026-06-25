@@ -1418,6 +1418,136 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(east_state["waves"][0]["count"], 0)
         self.assertEqual(east_state["open_bays"], 0)
 
+    def test_ballmat_main_counts_and_open_bays_clamp_to_99(self):
+        self._login_approved_user(role="operator")
+        self.client.get("/neosektor/ebm")
+
+        response = self.client.post(
+            "/neosektor/ballmat/update?side=east",
+            json={
+                "side": "east",
+                "waves": {
+                    "first": {"count": 250, "status": "Light"},
+                    "second": {"count": 125, "status": "Moderate"},
+                },
+                "open_bays": 150,
+                "bay_statuses": {},
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        east_state = response.get_json()["state"]["sides"]["east"]
+        self.assertEqual(east_state["waves"][0]["count"], 99)
+        self.assertEqual(east_state["waves"][1]["count"], 99)
+        self.assertEqual(east_state["open_bays"], 99)
+
+    def test_tunnel_left_to_arrive_clamps_to_999_and_offset_to_20(self):
+        self._login_approved_user(role="simulator")
+
+        wave_response = self.client.post(
+            "/neosektor/tunnel-conductor/wave",
+            json={"wave": "first", "delta": 1500},
+        )
+        offset_response = self.client.post(
+            "/neosektor/tunnel-conductor/offset",
+            json={"west_offset": 99},
+        )
+
+        self.assertEqual(wave_response.status_code, 200)
+        self.assertEqual(wave_response.get_json()["state"]["waves"][0]["planned"], 999)
+        self.assertEqual(offset_response.status_code, 200)
+        self.assertEqual(offset_response.get_json()["state"]["routing"]["west_offset"], 20)
+
+    def test_left_to_unload_matches_standalone_open_bay_modifier_math(self):
+        self._login_approved_user(role="simulator")
+        self.client.post(
+            "/neosektor/tunnel-conductor/wave",
+            json={"wave": "first", "delta": 10},
+        )
+        self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "east",
+                "waves": {"first": {"count": 3}, "second": {"count": 0}},
+                "open_bays": 2,
+                "bay_statuses": {},
+            },
+        )
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "west",
+                "waves": {"first": {"count": 4}, "second": {"count": 0}},
+                "open_bays": 1,
+                "bay_statuses": {},
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        first_wave = response.get_json()["state"]["waves"][0]
+        self.assertEqual(first_wave["left"], 59)
+
+    def test_all_up_transitions_to_down_after_15_minutes(self):
+        self._login_approved_user(role="watcher")
+        initial_response = self.client.get("/neosektor/live-counts/state")
+        self.assertEqual(initial_response.status_code, 200)
+        self.assertEqual(initial_response.get_json()["state"]["waves"][0]["left"], "ALL UP")
+
+        first_wave = NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one()
+        first_wave.all_up_started_at = datetime.utcnow() - timedelta(minutes=16)
+        db.session.commit()
+
+        response = self.client.get("/neosektor/live-counts/state")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["state"]["waves"][0]["left"], "DOWN")
+
+    def test_second_wave_waits_on_first_wave_all_up_timer(self):
+        self._login_approved_user(role="simulator")
+        self.client.get("/neosektor/live-counts/state")
+        self.client.post(
+            "/neosektor/tunnel-conductor/wave",
+            json={"wave": "second", "delta": 5},
+        )
+
+        response = self.client.get("/neosektor/live-counts/state")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["state"]["waves"][1]["left"], "-")
+
+    def test_second_wave_uses_open_bays_and_modifier_after_first_wave_down(self):
+        self._login_approved_user(role="simulator")
+        self.client.get("/neosektor/live-counts/state")
+        first_wave = NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one()
+        first_wave.all_up_started_at = datetime.utcnow() - timedelta(minutes=16)
+        db.session.commit()
+        self.client.post(
+            "/neosektor/tunnel-conductor/wave",
+            json={"wave": "second", "delta": 10},
+        )
+        self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "east",
+                "waves": {"first": {"count": 0}, "second": {"count": 5}},
+                "open_bays": 2,
+                "bay_statuses": {},
+            },
+        )
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "west",
+                "waves": {"first": {"count": 0}, "second": {"count": 5}},
+                "open_bays": 1,
+                "bay_statuses": {},
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["state"]["waves"][0]["left"], "DOWN")
+        self.assertEqual(response.get_json()["state"]["waves"][1]["left"], 54)
+
     def test_live_json_endpoint_returns_updated_ballmat_state(self):
         self._login_approved_user(role="operator")
         self.client.post(
@@ -1451,7 +1581,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"Live Counts", response.data)
         self.assertIn(b"data-live-counts", response.data)
         self.assertIn(b"ALL IN", response.data)
-        self.assertIn(b"DOWN", response.data)
+        self.assertIn(b"ALL UP", response.data)
         self.assertEqual(response.data.count(b'class="is-word"'), 4)
         self.assertIn(b"Left to Unload", response.data)
         self.assertIn(b"1ST WAVE", response.data)

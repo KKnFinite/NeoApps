@@ -33,11 +33,11 @@
                 <div class="wave-metrics">
                     <div>
                         <span>Left to Arrive</span>
-                        <strong class="{% if wave.planned == 0 %}is-word{% endif %}" data-wave="{{ wave_key }}" data-metric="left_to_arrive">{{ "ALL IN" if wave.planned == 0 else wave.planned }}</strong>
+                        <strong class="{% if wave.left_to_arrive is string %}is-word{% endif %}" data-wave="{{ wave_key }}" data-metric="left_to_arrive">{{ wave.left_to_arrive }}</strong>
                     </div>
                     <div>
                         <span>Left to Unload</span>
-                        <strong class="{% if wave.left == 0 %}is-word{% endif %}" data-wave="{{ wave_key }}" data-metric="left_to_unload">{{ "DOWN" if wave.left == 0 else wave.left }}</strong>
+                        <strong class="{% if wave.left is string %}is-word{% endif %}" data-wave="{{ wave_key }}" data-metric="left_to_unload">{{ wave.left }}</strong>
                     </div>
                 </div>
             </article>
@@ -91,6 +91,10 @@
     const stateUrl = root.dataset.stateUrl;
 
     const formatWaveMetric = (metric, value) => {
+        const raw = String(value ?? "").trim();
+        if (raw && Number.isNaN(Number(raw))) {
+            return raw;
+        }
         const count = Number.parseInt(value, 10);
         const normalized = Number.isFinite(count) && count > 0 ? count : 0;
         if (metric === "left_to_arrive" && normalized === 0) {
@@ -116,7 +120,7 @@
         (state.waves || []).forEach((wave) => {
             const key = waveKey(wave.name);
             ["left_to_arrive", "left_to_unload"].forEach((metric) => {
-                const value = metric === "left_to_arrive" ? wave.planned : wave.left;
+                const value = metric === "left_to_arrive" ? wave.left_to_arrive : wave.left;
                 setText(
                     `[data-wave="${key}"][data-metric="${metric}"]`,
                     formatWaveMetric(metric, value)
@@ -163,7 +167,7 @@
         }
     };
 
-    window.setInterval(refreshState, 3000);
+    window.setInterval(refreshState, 5000);
 })();
 </script>
 {% endblock %}

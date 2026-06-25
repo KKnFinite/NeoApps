@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 from app.extensions import db
 from app.models import (
@@ -39,6 +39,12 @@ DEFAULT_DRIVER_ROUTES = (
     DRIVER_ROUTE_SECOND_WAVE_NAME,
     DRIVER_ROUTE_WEST_OFFSET_NAME,
 )
+FIRST_WAVE_UNLOAD_MODIFIER = 45
+SECOND_WAVE_UNLOAD_MODIFIER = 37
+ALL_UP_TO_DOWN_DELAY = timedelta(minutes=15)
+MAIN_BALLMAT_COUNT_MAX = 99
+LEFT_TO_ARRIVE_MAX = 999
+DRIVER_OFFSET_MAX = 20
 TUNNEL_CONDUCTOR_VIEW_PERMISSION = "neosektor.conductor.view"
 TUNNEL_CONDUCTOR_EDIT_PERMISSION = "neosektor.tunnel_conductor.edit"
 
@@ -56,6 +62,7 @@ def live_counts_context(gateway, sort_date=None, sort_name=None):
     driver_routes = _get_or_create_driver_routes(sort_state)
     _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats)
     side_views = _side_state_views(ballmat_wave_counts, ballmats, open_bays, bay_statuses)
+    wave_views = _wave_views(waves, side_views)
     routing = _driver_routing_calculation(sort_state, side_views, driver_routes)
     _sync_driver_route_values(driver_routes, routing)
     db.session.flush()
@@ -76,7 +83,7 @@ def live_counts_context(gateway, sort_date=None, sort_name=None):
             "left_to_unload": left_to_unload,
             "completion_percent": _completion_percent(planned_total, unloaded_total),
         },
-        "waves": [_wave_view(row) for row in waves],
+        "waves": wave_views,
         "sides": side_views,
         "ballmats": [_ballmat_view(row) for row in ballmats],
         "open_bays": [_open_bay_view(row) for row in open_bays],
@@ -109,6 +116,13 @@ def ballmat_state_payload(gateway, sort_date=None, sort_name=None):
     open_bays = _get_or_create_open_bays(sort_state)
     bay_statuses = _get_or_create_bay_statuses(sort_state)
     _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats)
+    side_views = _side_state_views(
+        ballmat_wave_counts,
+        ballmats,
+        open_bays,
+        bay_statuses,
+    )
+    wave_views = _wave_views(waves, side_views)
     db.session.flush()
 
     planned_total = max(0, sort_state.planned_total or 0)
@@ -124,13 +138,8 @@ def ballmat_state_payload(gateway, sort_date=None, sort_name=None):
             "left_to_unload": max(planned_total - unloaded_total, 0),
             "completion_percent": _completion_percent(planned_total, unloaded_total),
         },
-        "sides": _side_state_views(
-            ballmat_wave_counts,
-            ballmats,
-            open_bays,
-            bay_statuses,
-        ),
-        "waves": [_wave_view(row) for row in waves],
+        "sides": side_views,
+        "waves": wave_views,
     }
 
 
@@ -162,6 +171,7 @@ def update_ballmat_side(gateway, selected_side, payload, sort_date=None, sort_na
         row.count = _clean_count(
             (wave_payload.get(wave_key) or {}).get("count"),
             default=row.count,
+            maximum=MAIN_BALLMAT_COUNT_MAX,
         )
         row.status = _status((wave_payload.get(wave_key) or {}).get("status") or row.status)
 
@@ -169,7 +179,7 @@ def update_ballmat_side(gateway, selected_side, payload, sort_date=None, sort_na
     open_bay_row.open_count = _clean_count(
         (payload or {}).get("open_bays"),
         default=open_bay_row.open_count,
-        maximum=12,
+        maximum=MAIN_BALLMAT_COUNT_MAX,
     )
 
     bay_payload = (payload or {}).get("bay_statuses") or {}
@@ -236,7 +246,10 @@ def adjust_tunnel_wave_arrivals(gateway, wave, delta, sort_date=None, sort_name=
     waves = _get_or_create_waves(sort_state)
 
     target_row = next(row for row in waves if row.wave_name == wave_name)
-    target_row.planned_count = max((target_row.planned_count or 0) + _clean_delta(delta), 0)
+    target_row.planned_count = min(
+        max((target_row.planned_count or 0) + _clean_delta(delta), 0),
+        LEFT_TO_ARRIVE_MAX,
+    )
     db.session.flush()
     return driver_routing_state_payload(gateway, sort_date, sort_name)
 
@@ -426,16 +439,123 @@ def _completion_percent(planned_total, unloaded_total):
     return min(round((unloaded_total / planned_total) * 100), 100)
 
 
-def _wave_view(row):
+def _wave_view(row, left_to_unload=None):
     planned = max(row.planned_count or 0, 0)
     unloaded = max(row.unloaded_count or 0, 0)
+    left = max(planned - unloaded, 0) if left_to_unload is None else left_to_unload
     return {
         "name": row.wave_name,
         "planned": planned,
+        "left_to_arrive": _wave_left_to_arrive_display(planned),
         "unloaded": unloaded,
-        "left": max(planned - unloaded, 0),
+        "left": left,
+        "left_to_unload": left,
         "status": _status(row.status),
     }
+
+
+def _wave_views(waves, sides, now=None):
+    rows_by_name = {row.wave_name: row for row in waves}
+    first_row = rows_by_name["1ST WAVE"]
+    second_row = rows_by_name["2ND WAVE"]
+    east = sides["east"]
+    west = sides["west"]
+
+    east_open_bays = max(east["open_bays"], 0)
+    west_open_bays = max(west["open_bays"], 0)
+
+    first_left_to_arrive = max(first_row.planned_count or 0, 0)
+    second_left_to_arrive = max(second_row.planned_count or 0, 0)
+
+    first_remaining = _remaining_wave_load(
+        first_left_to_arrive,
+        _side_wave_count(east, "first"),
+        _side_wave_count(west, "first"),
+        east_open_bays,
+        west_open_bays,
+    )
+    first_is_all_up = first_left_to_arrive == 0 and first_remaining == 0
+    first_timer_done = _sync_wave_all_up_timer(first_row, first_is_all_up, now)
+    if first_is_all_up and first_timer_done:
+        first_left_to_unload = "DOWN"
+    elif first_is_all_up:
+        first_left_to_unload = "ALL UP"
+    else:
+        first_left_to_unload = first_remaining + FIRST_WAVE_UNLOAD_MODIFIER
+
+    second_waiting_on_first_wave = first_is_all_up and not first_timer_done
+    second_base_remaining = _wave_load_without_open_bays(
+        second_left_to_arrive,
+        _side_wave_count(east, "second"),
+        _side_wave_count(west, "second"),
+    )
+    second_open_bay_remaining = _remaining_wave_load(
+        second_left_to_arrive,
+        _side_wave_count(east, "second"),
+        _side_wave_count(west, "second"),
+        east_open_bays,
+        west_open_bays,
+    )
+    second_can_use_open_bays = (
+        first_left_to_arrive == 0
+        and first_left_to_unload in {0, "DOWN"}
+    )
+    second_remaining = (
+        second_open_bay_remaining
+        if second_can_use_open_bays
+        else second_base_remaining
+    )
+    second_is_all_up = second_left_to_arrive == 0 and second_remaining == 0
+    second_timer_done = _sync_wave_all_up_timer(second_row, second_is_all_up, now)
+
+    if second_is_all_up and second_timer_done:
+        second_left_to_unload = "DOWN"
+    elif second_is_all_up:
+        second_left_to_unload = "ALL UP"
+    elif second_waiting_on_first_wave:
+        second_left_to_unload = "-"
+    elif not first_is_all_up:
+        second_left_to_unload = second_remaining
+    else:
+        second_left_to_unload = second_remaining + SECOND_WAVE_UNLOAD_MODIFIER
+
+    return [
+        _wave_view(first_row, first_left_to_unload),
+        _wave_view(second_row, second_left_to_unload),
+    ]
+
+
+def _wave_left_to_arrive_display(value):
+    return "ALL IN" if max(value or 0, 0) == 0 else max(value or 0, 0)
+
+
+def _remaining_wave_load(left_to_arrive, east_wave, west_wave, east_open_bays, west_open_bays):
+    open_bays_total = east_open_bays + west_open_bays
+    return max(0, left_to_arrive + east_wave + west_wave - open_bays_total)
+
+
+def _wave_load_without_open_bays(left_to_arrive, east_wave, west_wave):
+    return max(0, left_to_arrive + east_wave + west_wave)
+
+
+def _sync_wave_all_up_timer(row, is_timer_active, now=None):
+    if now is None:
+        now = datetime.utcnow()
+    elif now.tzinfo is not None:
+        now = now.astimezone(timezone.utc).replace(tzinfo=None)
+
+    if is_timer_active:
+        if row.all_up_started_at is None:
+            row.all_up_started_at = now
+            return False
+        started_at = row.all_up_started_at
+        if started_at.tzinfo is not None:
+            started_at = started_at.astimezone(timezone.utc).replace(tzinfo=None)
+        return now - started_at >= ALL_UP_TO_DOWN_DELAY
+
+    if row.all_up_started_at is not None:
+        row.all_up_started_at = None
+    return False
 
 
 def _ballmat_view(row):
@@ -736,7 +856,7 @@ def _clean_offset(value):
         cleaned = int(value)
     except (TypeError, ValueError):
         cleaned = 0
-    return min(max(cleaned, 0), 999)
+    return min(max(cleaned, 0), DRIVER_OFFSET_MAX)
 
 
 def _status(value):
