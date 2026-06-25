@@ -1472,8 +1472,15 @@ class MotherBrainRoutesTest(unittest.TestCase):
         html = first_response.data.decode()
         main_html = html.split('<main class="content">', 1)[1].split("</main>", 1)[0]
         workflow_html = main_html.split('class="motherbrain-main-menu-return"', 1)[0]
-        self.assertNotIn('href="/motherbrain/gateway-matrix"', workflow_html)
-        self.assertNotIn('href="/motherbrain/master-schedule"', workflow_html)
+        self.assertIn("Current / Selected Sort Operation", workflow_html)
+        self.assertIn("Sort Operation Settings", workflow_html)
+        self.assertIn("Gateway Matrix / Schedule Source Controls", workflow_html)
+        self.assertIn("API Polling Configuration", workflow_html)
+        self.assertIn("Generate / Rebuild / Save Actions", workflow_html)
+        self.assertIn("Warnings / Preview", workflow_html)
+        self.assertIn('href="/motherbrain/gateway-matrix"', workflow_html)
+        self.assertIn('href="/motherbrain/master-schedule"', workflow_html)
+        self.assertIn('href="/motherbrain/sort-timeline"', workflow_html)
         self.assertNotIn('href="/motherbrain"', workflow_html)
         self.assertIn('class="motherbrain-main-menu-return"', main_html)
         self.assertIn('href="/motherbrain"', main_html)

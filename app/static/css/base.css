@@ -7941,6 +7941,116 @@ select::-ms-expand {
     font-size: 0.68rem;
 }
 
+.manage-sort-page {
+    max-width: min(1380px, calc(100vw - 32px));
+}
+
+.manage-sort-section,
+.manage-sort-selected-card,
+.manage-sort-card {
+    border: 1px solid rgba(var(--node-rgb), 0.28);
+    border-radius: 6px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 34%),
+        rgba(4, 6, 10, 0.56);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 22px rgba(var(--node-rgb), 0.09);
+}
+
+.manage-sort-section,
+.manage-sort-selected-card {
+    margin-top: 16px;
+    padding: 14px;
+}
+
+.manage-sort-section-heading,
+.manage-sort-selected-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.manage-sort-section-heading {
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
+.manage-sort-section h2,
+.manage-sort-selected-card h2,
+.manage-sort-card h2 {
+    margin: 2px 0 0;
+    font-size: 1rem;
+    letter-spacing: 0.08em;
+}
+
+.manage-sort-selected-card p,
+.manage-sort-card p {
+    margin: 6px 0 0;
+}
+
+.manage-sort-status-grid,
+.manage-sort-grid {
+    display: grid;
+    gap: 12px;
+}
+
+.manage-sort-status-grid {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.manage-sort-grid {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    margin-top: 16px;
+}
+
+.manage-sort-card {
+    padding: 14px;
+}
+
+.manage-sort-rebuild-card {
+    border-color: rgba(236, 190, 96, 0.38);
+    background:
+        linear-gradient(180deg, rgba(236, 190, 96, 0.08), transparent 34%),
+        rgba(18, 11, 8, 0.58);
+}
+
+.manage-sort-primary-actions,
+.manage-sort-card .action-row {
+    justify-content: flex-start;
+    margin-top: 12px;
+}
+
+.manage-sort-detail-list {
+    display: grid;
+    gap: 8px;
+    margin: 10px 0 0;
+}
+
+.manage-sort-detail-list div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid rgba(235, 241, 246, 0.09);
+    padding-bottom: 7px;
+}
+
+.manage-sort-detail-list dt {
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.manage-sort-detail-list dd {
+    margin: 0;
+    color: var(--text);
+    font-weight: 900;
+}
+
 .planning-review-section {
     margin-top: 22px;
 }

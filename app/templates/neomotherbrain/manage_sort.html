@@ -3,76 +3,179 @@
 {% block title %}Manage Sort | NeoApps{% endblock %}
 
 {% block content %}
-<section class="panel centered-command-page">
+<section class="panel centered-command-page manage-sort-page">
     <div class="section-heading">
         <h1>MANAGE SORT</h1>
         <p class="muted">{{ gateway.code }} LOCAL DATE {{ sort_date }}. MISSING ACTIVE SORTS ARE CREATED AUTOMATICALLY FROM THE MASTER SCHEDULE.</p>
     </div>
 
-    {% if errors %}
-    <div class="flash-stack" aria-live="polite">
-        {% for error in errors %}
-        <div class="flash flash-error">{{ error }}</div>
-        {% endfor %}
-    </div>
-    {% endif %}
+    <section class="manage-sort-section manage-sort-warning-section" aria-labelledby="manage-sort-warnings-title">
+        <div class="manage-sort-section-heading">
+            <span class="eyebrow">Warnings / Preview</span>
+            <h2 id="manage-sort-warnings-title">SORT GENERATION STATUS</h2>
+        </div>
+        {% if errors %}
+        <div class="flash-stack" aria-live="polite">
+            {% for error in errors %}
+            <div class="flash flash-error">{{ error }}</div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="manage-sort-status-grid">
+            <article class="status-card">
+                <span>Created On This Load</span>
+                <strong>{{ created_count }}</strong>
+            </article>
+            <article class="status-card">
+                <span>Current / Planned Sorts</span>
+                <strong>{{ operations|length }}</strong>
+            </article>
+            <article class="status-card">
+                <span>Schedule Source</span>
+                <strong>MASTER SCHEDULE</strong>
+            </article>
+        </div>
+        {% endif %}
+    </section>
 
     {% if operations %}
-    <nav class="sort-selector action-row" aria-label="Select sort">
-        {% for operation in operations %}
-        <a class="action-button{% if selected_operation and selected_operation.id == operation.id %}{% else %} action-button-secondary{% endif %}" href="{{ url_for('neomotherbrain.manage_sort', sort=operation.sort_name) }}">
-            {{ operation.sort_name|upper }}
-        </a>
-        {% endfor %}
-    </nav>
+    <section class="manage-sort-section" aria-labelledby="manage-sort-select-title">
+        <div class="manage-sort-section-heading">
+            <span class="eyebrow">Current / Selected Sort Operation</span>
+            <h2 id="manage-sort-select-title">SELECT SORT</h2>
+        </div>
+        <nav class="sort-selector action-row" aria-label="Select sort">
+            {% for operation in operations %}
+            <a class="action-button{% if selected_operation and selected_operation.id == operation.id %}{% else %} action-button-secondary{% endif %}" href="{{ url_for('neomotherbrain.manage_sort', sort=operation.sort_name) }}">
+                {{ operation.sort_name|upper }}
+            </a>
+            {% endfor %}
+        </nav>
+    </section>
 
     {% if selected_operation %}
-    <section class="node-strip">
-        <article>
+    <section class="manage-sort-selected-card" aria-labelledby="manage-sort-selected-title">
+        <div class="manage-sort-selected-summary">
             <span class="node-light"></span>
-            <h2>{{ selected_operation.gateway_code }} {{ selected_operation.sort_name|title }}</h2>
-            <p>SORT DATE {{ selected_operation.sort_date }}. {{ selected_operation.missions|length }} MISSION(S), {{ selected_operation.window_minutes }} MINUTE WINDOW.</p>
+            <div>
+                <span class="eyebrow">Selected Operation</span>
+                <h2 id="manage-sort-selected-title">{{ selected_operation.gateway_code }} {{ selected_operation.sort_name|title }}</h2>
+                <p>SORT DATE {{ selected_operation.sort_date }}. {{ selected_operation.missions|length }} MISSION(S), {{ selected_operation.window_minutes }} MINUTE WINDOW.</p>
+            </div>
+        </div>
+        <div class="action-row manage-sort-primary-actions" aria-label="Most used sort actions">
+            <a class="action-button" href="{{ url_for('neomotherbrain.operation_detail', operation_id=selected_operation.id) }}">OPEN SORT OPERATION</a>
+            <a class="action-button" href="{{ url_for('neomotherbrain.alp_import', operation_id=selected_operation.id, mission_type='arrival') }}">ARRIVAL PLANNING</a>
+            <a class="action-button" href="{{ url_for('neomotherbrain.alp_import', operation_id=selected_operation.id, mission_type='departure') }}">DEPARTURE PLANNING</a>
+            <a class="action-button" href="{{ url_for('neomotherbrain.parking_plan_operation', operation_id=selected_operation.id) }}">PARKING PLAN</a>
+            <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=selected_operation.id) }}">ADD SPECIAL FLIGHT</a>
+        </div>
+    </section>
+
+    <div class="manage-sort-grid">
+        <section class="manage-sort-card" aria-labelledby="manage-sort-settings-title">
+            <span class="eyebrow">Sort Operation Settings</span>
+            <h2 id="manage-sort-settings-title">OPERATION SETTINGS</h2>
+            <dl class="manage-sort-detail-list">
+                <div>
+                    <dt>Default Window</dt>
+                    <dd>{{ selected_operation.window_minutes }} MIN</dd>
+                </div>
+                <div>
+                    <dt>1st Wave Window</dt>
+                    <dd>{{ selected_operation.first_wave_window_minutes if selected_operation.first_wave_window_minutes is not none else selected_operation.window_minutes }} MIN</dd>
+                </div>
+                <div>
+                    <dt>2nd Wave Window</dt>
+                    <dd>{{ selected_operation.second_wave_window_minutes if selected_operation.second_wave_window_minutes is not none else selected_operation.window_minutes }} MIN</dd>
+                </div>
+            </dl>
             <div class="action-row">
-                <a class="action-button" href="{{ url_for('neomotherbrain.operation_detail', operation_id=selected_operation.id) }}">OPEN SORT OPERATION</a>
-                <a class="action-button" href="{{ url_for('neomotherbrain.parking_plan_operation', operation_id=selected_operation.id) }}">PARKING PLAN</a>
-                <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=selected_operation.id) }}">ADD SPECIAL FLIGHT</a>
+                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=selected_operation.id) }}">EDIT WINDOWS</a>
                 <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.arrival_board', operation_id=selected_operation.id) }}">ARRIVAL BOARD</a>
                 <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.departure_board', operation_id=selected_operation.id) }}">DEPARTURE BOARD</a>
             </div>
-        </article>
-    </section>
+        </section>
+
+        <section class="manage-sort-card" aria-labelledby="manage-sort-source-title">
+            <span class="eyebrow">Gateway Matrix / Schedule Source Controls</span>
+            <h2 id="manage-sort-source-title">SCHEDULE SOURCE</h2>
+            <p class="muted">Gateway Matrix decides which sorts are planned. Master Schedule rows generate and sync current-sort missions.</p>
+            <div class="action-row">
+                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.gateway_matrix') }}">GATEWAY MATRIX</a>
+                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">MASTER SCHEDULE</a>
+            </div>
+        </section>
+
+        <section class="manage-sort-card" aria-labelledby="manage-sort-api-title">
+            <span class="eyebrow">API Polling Configuration</span>
+            <h2 id="manage-sort-api-title">FLIGHT API READINESS</h2>
+            <p class="muted">Sort Timeline owns provider settings, API windows, polling budgets, and auto-poll readiness.</p>
+            <div class="action-row">
+                {% if can_manage_system(current_user) %}
+                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.sort_timeline') }}">SORT TIMELINE</a>
+                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.flight_api_test') }}">FLIGHT API TEST</a>
+                {% endif %}
+                {% if user_can("neomotherbrain.flight_api_review.view") %}
+                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.flight_api_review') }}">FLIGHT API REVIEW</a>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="manage-sort-card manage-sort-rebuild-card" aria-labelledby="manage-sort-actions-title">
+            <span class="eyebrow">Generate / Rebuild / Save Actions</span>
+            <h2 id="manage-sort-actions-title">SYNC CONTROLS</h2>
+            <p class="muted">Reloading this page rechecks Gateway Matrix and syncs current operations from Master Schedule. Rebuild-style actions are separated from normal operation actions.</p>
+            <div class="action-row">
+                <a class="action-button" href="{{ url_for('neomotherbrain.manage_sort', sort=selected_operation.sort_name) }}">REFRESH / SYNC NOW</a>
+                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=selected_operation.id) }}">SAVE OPERATION SETTINGS</a>
+            </div>
+        </section>
+    </div>
     {% endif %}
 
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>SORT</th>
-                    <th>SORT DATE</th>
-                    <th>WINDOW</th>
-                    <th>MISSIONS</th>
-                    <th>LINKS</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for operation in operations %}
-                <tr>
-                    <td>{{ operation.sort_name|upper }}</td>
-                    <td>{{ operation.sort_date }}</td>
-                    <td>{{ operation.window_minutes }} MIN</td>
-                    <td>{{ operation.missions|length }}</td>
-                    <td class="table-actions">
-                        <a href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">MANAGE</a>
-                        <a href="{{ url_for('neomotherbrain.parking_plan_operation', operation_id=operation.id) }}">PARKING PLAN</a>
-                        <a href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">ADD FLIGHT</a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <section class="manage-sort-section" aria-labelledby="manage-sort-summary-title">
+        <div class="manage-sort-section-heading">
+            <span class="eyebrow">Current Sort Operations</span>
+            <h2 id="manage-sort-summary-title">OPERATIONS SUMMARY</h2>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>SORT</th>
+                        <th>SORT DATE</th>
+                        <th>WINDOW</th>
+                        <th>MISSIONS</th>
+                        <th>LINKS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for operation in operations %}
+                    <tr>
+                        <td>{{ operation.sort_name|upper }}</td>
+                        <td>{{ operation.sort_date }}</td>
+                        <td>{{ operation.window_minutes }} MIN</td>
+                        <td>{{ operation.missions|length }}</td>
+                        <td class="table-actions">
+                            <a href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">MANAGE</a>
+                            <a href="{{ url_for('neomotherbrain.parking_plan_operation', operation_id=operation.id) }}">PARKING PLAN</a>
+                            <a href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">ADD FLIGHT</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
 {% else %}
-    <p class="muted centered-empty-message">No active sorts today.</p>
+    <section class="manage-sort-section manage-sort-warning-section" aria-labelledby="manage-sort-empty-title">
+        <div class="manage-sort-section-heading">
+            <span class="eyebrow">Warnings / Preview</span>
+            <h2 id="manage-sort-empty-title">NO SORT OPERATIONS</h2>
+        </div>
+        <p class="muted centered-empty-message">No active sorts today.</p>
+    </section>
 {% endif %}
 </section>
 {% endblock %}
