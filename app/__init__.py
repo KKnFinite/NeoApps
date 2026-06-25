@@ -129,6 +129,11 @@ def register_template_helpers(app):
     def format_local_time(value, timezone_name=None):
         return format_local_hhmm(value, timezone_name)
 
+    def format_motherbrain_alert_severity(value):
+        from app.services.motherbrain_alerts import alert_severity_label
+
+        return alert_severity_label(value)
+
     def current_pwa_manifest_key():
         path = request.path.rstrip("/") or "/"
         if path == "/rfd" or path.startswith("/rfd/"):
@@ -253,6 +258,7 @@ def register_template_helpers(app):
 
     app.jinja_env.filters["local_datetime"] = format_local_datetime
     app.jinja_env.filters["local_time"] = format_local_time
+    app.jinja_env.filters["motherbrain_alert_severity"] = format_motherbrain_alert_severity
     app.jinja_env.filters["role_label"] = format_role_label
     app.jinja_env.filters["status_label"] = format_status_label
     app.jinja_env.filters["wave_label"] = format_wave_label
@@ -270,6 +276,25 @@ def register_template_helpers(app):
             "permission_access": permission_access,
             "change_character_targets": change_character_targets,
             "current_pwa_manifest_key": current_pwa_manifest_key,
+        }
+
+    @app.context_processor
+    def motherbrain_alerts():
+        if (
+            not current_user.is_authenticated
+            or request.blueprint != "neomotherbrain"
+            or not request.path.startswith("/motherbrain")
+        ):
+            return {"motherbrain_alert_tray": None}
+
+        from app.services.access_control import get_current_gateway
+        from app.services.motherbrain_alerts import motherbrain_alert_context
+
+        return {
+            "motherbrain_alert_tray": motherbrain_alert_context(
+                get_current_gateway(),
+                can_view_permission=user_can,
+            )
         }
 
     @app.context_processor

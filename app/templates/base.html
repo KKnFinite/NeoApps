@@ -97,6 +97,9 @@
                 {% set character_switcher_modifier = "character-switcher-header" %}
                 {% include "_change_characters.html" %}
                 <div class="topbar-user-row">
+                    {% if is_motherbrain_page %}
+                    {% include "neomotherbrain/_alert_tray.html" %}
+                    {% endif %}
                     <div class="user-chip" aria-label="Logged in user">
                         <span>Logged in</span>
                         <strong>{{ current_user.display_name }}</strong>

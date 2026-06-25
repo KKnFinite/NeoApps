@@ -14,6 +14,7 @@ from app.models import (
     GatewaySortMatrix,
     FlightApiReviewItem,
     MasterFlightSchedule,
+    MotherBrainAlert,
     MotherBrainParkingRule,
     MotherBrainParkingSettings,
     PermissionRule,
@@ -5559,6 +5560,91 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         self.assertIn(b"PARKING RULES", response.data)
         self.assertIn(f'action="/motherbrain/parking-plan/{operation.id}/assign"'.encode(), response.data)
+
+    def test_motherbrain_alert_tray_renders_empty_state_on_key_pages(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        pages = [
+            "/motherbrain",
+            "/motherbrain/manage-sort",
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            f"/motherbrain/operations/{operation.id}/alp/departure",
+            f"/motherbrain/operations/{operation.id}/arrivals",
+            f"/motherbrain/operations/{operation.id}/departures",
+            f"/motherbrain/parking-plan/{operation.id}",
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+        ]
+
+        for path in pages:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b'data-motherbrain-alert-tray', response.data)
+                self.assertIn(b"MotherBrain Alerts", response.data)
+                self.assertIn(b"No active MotherBrain alerts", response.data)
+
+    def test_motherbrain_alert_tray_does_not_render_outside_motherbrain_pages(self):
+        response = self.client.get("/rfd")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b'data-motherbrain-alert-tray', response.data)
+        self.assertNotIn(b"MotherBrain Alerts", response.data)
+
+    def test_motherbrain_alert_tray_renders_active_alert_rows(self):
+        db.session.add(
+            MotherBrainAlert(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                severity="warning",
+                title="Parking plan needs review",
+                message="One tail needs conflict review.",
+                related_url="/motherbrain/parking-plan",
+                related_label="VIEW PARKING PLAN",
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get("/motherbrain")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Parking plan needs review", response.data)
+        self.assertIn(b"One tail needs conflict review.", response.data)
+        self.assertIn(b"WARNING", response.data)
+        self.assertIn(b"VIEW PARKING PLAN", response.data)
+        self.assertNotIn(b"No active MotherBrain alerts", response.data)
+
+    def test_motherbrain_restricted_alerts_respect_future_permission_key(self):
+        from app.services.motherbrain_alerts import motherbrain_alert_context
+
+        db.session.add(
+            MotherBrainAlert(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                severity="critical",
+                title="Restricted parking conflict",
+                message="Future parking conflict detail.",
+                permission_key="motherbrain.parking_conflicts.view",
+            )
+        )
+        db.session.commit()
+
+        denied = motherbrain_alert_context(
+            self.rfd_gateway,
+            can_view_permission=lambda _permission_key: False,
+        )
+        allowed = motherbrain_alert_context(
+            self.rfd_gateway,
+            can_view_permission=lambda _permission_key: True,
+        )
+
+        self.assertFalse(denied["has_alerts"])
+        self.assertEqual(denied["count"], 0)
+        self.assertTrue(allowed["has_alerts"])
+        self.assertEqual(allowed["count"], 1)
+        self.assertEqual(allowed["alerts"][0].title, "Restricted parking conflict")
 
     def test_parking_rules_page_renders_and_persists_settings(self):
         operation = self._parking_operation()

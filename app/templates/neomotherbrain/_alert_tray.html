@@ -1,0 +1,36 @@
+{% set tray = motherbrain_alert_tray %}
+{% if tray %}
+<details class="motherbrain-alert-tray" data-motherbrain-alert-tray>
+    <summary class="motherbrain-alert-button" aria-label="MotherBrain alerts">
+        <span class="motherbrain-alert-button-label">Alerts</span>
+        <span class="motherbrain-alert-count">{{ tray.count }}</span>
+    </summary>
+    <aside class="motherbrain-alert-panel" aria-label="MotherBrain alert tray">
+        <header class="motherbrain-alert-panel-head">
+            <strong>MotherBrain Alerts</strong>
+            <span>{{ tray.count }} active</span>
+        </header>
+        {% if tray.has_alerts %}
+        <div class="motherbrain-alert-list">
+            {% for alert in tray.alerts %}
+            <article class="motherbrain-alert-item motherbrain-alert-item-{{ alert.severity|default('info')|lower }}">
+                <div class="motherbrain-alert-item-top">
+                    <span class="motherbrain-alert-severity">{{ alert.severity|motherbrain_alert_severity }}</span>
+                    <time datetime="{{ alert.created_at.isoformat() }}">{{ alert.created_at|local_datetime }}</time>
+                </div>
+                <h3>{{ alert.title }}</h3>
+                {% if alert.message %}
+                <p>{{ alert.message }}</p>
+                {% endif %}
+                {% if alert.related_url %}
+                <a class="motherbrain-alert-link" href="{{ alert.related_url }}">{{ alert.related_label or "VIEW" }}</a>
+                {% endif %}
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="motherbrain-alert-empty">{{ tray.empty_message }}</p>
+        {% endif %}
+    </aside>
+</details>
+{% endif %}
