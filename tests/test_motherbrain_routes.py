@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from app import create_app
 from app.extensions import db
@@ -3603,7 +3604,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         db.session.commit()
 
-        response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
+        with patch(
+            "app.neomotherbrain.routes._current_utc_naive",
+            return_value=datetime(2026, 6, 2, 3, 10),
+        ):
+            response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"UPS777", response.data)
@@ -3613,6 +3618,42 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"Actual runway", response.data)
         self.assertNotIn(b"22:18", response.data)
         self.assertNotIn(b"03:12", response.data)
+
+    def test_arrival_board_on_ground_becomes_assumed_arrived_after_adjusted_eta(self):
+        operation = self._operation(sort_date=date(2026, 6, 1))
+        settings = ensure_sort_timeline_settings(self.rfd_gateway)
+        settings.taxi_to_ramp_minutes = 4
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS779",
+            planned_datetime_local=datetime(2026, 6, 1, 21, 55),
+            planned_datetime_utc=datetime(2026, 6, 2, 2, 55),
+            eta_datetime_utc=datetime(2026, 6, 2, 3, 8),
+            eta_source="api",
+            api_status="On Ground",
+            api_status_raw="Expected",
+            api_runway_time_utc=datetime(2026, 6, 2, 3, 8),
+        )
+        db.session.add(operation)
+        db.session.add(mission)
+        db.session.commit()
+
+        with patch(
+            "app.neomotherbrain.routes._current_utc_naive",
+            return_value=datetime(2026, 6, 2, 3, 13),
+        ):
+            response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
+
+        html = response.data.decode()
+        row = html.split("UPS779", 1)[1].split("</tr>", 1)[0]
+        refreshed = db.session.get(SortDateMission, mission.id)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("22:12", row)
+        self.assertIn("Assumed Arrived", row)
+        self.assertNotIn("On Ground", row)
+        self.assertNotEqual(refreshed.arrival_status, "arrived")
 
     def test_arrival_board_api_arrived_with_runway_still_displays_on_ground_estimate(self):
         operation = self._operation(sort_date=date(2026, 6, 1))
@@ -3636,7 +3677,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         db.session.commit()
 
-        response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
+        with patch(
+            "app.neomotherbrain.routes._current_utc_naive",
+            return_value=datetime(2026, 6, 2, 3, 10),
+        ):
+            response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"UPS888", response.data)
@@ -3699,7 +3744,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         db.session.commit()
 
-        response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
+        with patch(
+            "app.neomotherbrain.routes._current_utc_naive",
+            return_value=datetime(2026, 6, 2, 5, 0),
+        ):
+            response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"UPS890", response.data)

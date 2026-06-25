@@ -3216,14 +3216,11 @@ def _arrival_board_display(mission, operation=None):
         }
 
     if mission.api_runway_time_utc:
-        taxi_minutes = _arrival_board_taxi_minutes(operation)
-        parking_time = mission.api_runway_time_utc + timedelta(
-            minutes=taxi_minutes
-        )
+        parking_time = _arrival_assumed_arrived_time_utc(mission, operation)
         return {
             "time": _arrival_local_time(parking_time, timezone_name),
             "time_note": "",
-            "status_label": "On Ground",
+            "status_label": _arrival_runway_status_label(mission, parking_time),
         }
 
     raw_status = (getattr(mission, "api_status_raw", None) or "").strip().lower()
@@ -3247,6 +3244,25 @@ def _arrival_board_display(mission, operation=None):
         "time_note": "",
         "status_label": status_label,
     }
+
+
+def _arrival_assumed_arrived_time_utc(mission, operation=None):
+    if not getattr(mission, "api_runway_time_utc", None):
+        return None
+    return mission.api_runway_time_utc + timedelta(
+        minutes=_arrival_board_taxi_minutes(operation)
+    )
+
+
+def _arrival_runway_status_label(mission, assumed_arrived_time_utc):
+    api_status = (getattr(mission, "api_status", None) or "").strip().lower()
+    if api_status == "assumed arrived":
+        return "Assumed Arrived"
+    if assumed_arrived_time_utc:
+        now_utc = _coerce_utc_naive(_current_utc_naive())
+        if now_utc and now_utc >= _coerce_utc_naive(assumed_arrived_time_utc):
+            return "Assumed Arrived"
+    return "On Ground"
 
 
 def _arrival_eta_delta_display(mission, arrival_display):
@@ -3299,6 +3315,18 @@ def _arrival_local_time(value, timezone_name):
     if not value:
         return None
     return flight_api_utc_to_local_naive(value, timezone_name)
+
+
+def _current_utc_naive():
+    return datetime.utcnow()
+
+
+def _coerce_utc_naive(value):
+    if not value:
+        return None
+    if getattr(value, "tzinfo", None) is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
 
 
 def _arrival_board_taxi_minutes(operation=None):
