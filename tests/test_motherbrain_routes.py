@@ -4102,6 +4102,70 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"IGNORE", response.data)
         self.assertNotIn(b">HOT</button>", response.data)
 
+    def test_alp_unmatched_preview_persists_in_planning_review(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        db.session.add(operation)
+        db.session.commit()
+
+        preview = self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            data={
+                "paste_text": "24-JUN-2026\tUPS999\tSDF\tN999UP\tA01\tScheduled\t07:24 (S)",
+                "alp_action": "preview",
+            },
+        )
+        persisted = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
+
+        marker = FlightApiReviewItem.query.filter_by(review_status="pending").one()
+        payload = json.loads(marker.raw_payload)
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(marker.review_key, "alp:arrival:0999:SDF:N999UP:202606240724")
+        self.assertEqual(payload["source"], "ALP")
+        self.assertEqual(payload["reason"], "No current operation mission match.")
+        self.assertIn(b"ARRIVAL PLANNING REVIEW", persisted.data)
+        self.assertIn(b"ALP", persisted.data)
+        self.assertIn(b"LINE 1", persisted.data)
+        self.assertIn(b"UPS0999", persisted.data)
+        self.assertIn(b"N999UP", persisted.data)
+        self.assertIn(b"02:24 Local Jun 24", persisted.data)
+
+    def test_alp_unmatched_apply_persists_in_planning_review(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS0910",
+            origin="SDF",
+            planned_datetime_local=datetime(2026, 6, 24, 2, 34),
+            planned_datetime_utc=datetime(2026, 6, 24, 7, 34),
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            data={
+                "paste_text": "\n".join(
+                    [
+                        "24-JUN-2026\tUPS910\tSDF\tN910UP\tA01\tScheduled\t07:24 (S)",
+                        "24-JUN-2026\tUPS999\tDFW\tN999UP\tA02\tScheduled\t07:56 (S)",
+                    ]
+                ),
+                "alp_action": "apply",
+            },
+        )
+        persisted = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
+
+        db.session.refresh(mission)
+        marker = FlightApiReviewItem.query.filter_by(review_status="pending").one()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mission.assigned_tail_number, "N910UP")
+        self.assertEqual(mission.tail_source, "alp")
+        self.assertEqual(marker.review_key, "alp:arrival:0999:DFW:N999UP:202606240756")
+        self.assertIn(b"UPS0999", persisted.data)
+        self.assertIn(b"N999UP", persisted.data)
+        self.assertIn(b"02:56 Local Jun 24", persisted.data)
+
     def test_departure_planning_renders_alp_and_api_unmatched_rows_with_hot(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
         db.session.add(operation)

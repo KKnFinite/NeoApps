@@ -1316,7 +1316,10 @@ def alp_import(operation_id, mission_type):
                 )
             else:
                 preview = preview_alp_paste(operation, mission_type, paste_text)
+            _persist_alp_unmatched_rows(operation, mission_type, preview)
+            db.session.commit()
         except ValueError as exc:
+            db.session.rollback()
             flash(str(exc), "error")
 
     settings = ensure_sort_timeline_settings(gateway)
@@ -1712,20 +1715,20 @@ def _planning_can_edit(gateway):
 
 def _planning_review_rows(operation, mission_type, preview=None, settings=None):
     rows = []
-    if preview:
-        rows.extend(
-            _alp_planning_rows_from_preview(operation, mission_type, preview)
-        )
-
-    api_items = [
+    persisted_keys = set()
+    pending_items = [
         item
         for item in pending_review_items_for_operation(operation)
         if item.mission_type == mission_type
     ]
-    rows.extend(
-        _api_planning_row(operation, item, settings)
-        for item in api_items
-    )
+    for item in pending_items:
+        rows.append(_review_item_planning_row(operation, item, settings))
+        persisted_keys.add(item.review_key)
+
+    if preview:
+        for row in _alp_planning_rows_from_preview(operation, mission_type, preview):
+            if row["review_key"] not in persisted_keys:
+                rows.append(row)
     return sorted(rows, key=_planning_row_sort_key)
 
 
@@ -1779,6 +1782,43 @@ def _api_planning_row(operation, item, settings):
     }
 
 
+def _review_item_planning_row(operation, item, settings):
+    payload = _planning_review_payload(item)
+    if str(payload.get("source") or "").strip().upper() == "ALP":
+        return _alp_planning_row_from_item(operation, item, payload)
+    return _api_planning_row(operation, item, settings)
+
+
+def _alp_planning_row_from_item(operation, item, payload):
+    airport = (item.origin if item.mission_type == "arrival" else item.destination) or ""
+    line_number = payload.get("line_number") or ""
+    reference = f"LINE {line_number}" if line_number else f"ALP #{item.id}"
+    return {
+        "source": "ALP",
+        "kind": "alp",
+        "mission_type": item.mission_type,
+        "reference": reference,
+        "flight": item.flight_number or "-",
+        "airport": airport or "-",
+        "tail": item.tail_number or "-",
+        "local_time": format_flight_api_local_time(item.revised_time_utc, operation.gateway),
+        "reason": payload.get("reason") or "No current operation mission match.",
+        "review_key": item.review_key,
+        "line_number": line_number,
+        "utc_datetime": item.revised_time_utc,
+        "airport_value": airport,
+        "tail_value": item.tail_number or "",
+    }
+
+
+def _planning_review_payload(item):
+    try:
+        payload = json.loads(item.raw_payload or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def _planning_row_sort_key(row):
     return (
         str(row.get("mission_type") or ""),
@@ -1796,6 +1836,22 @@ def _alp_planning_review_key(operation, mission_type, row):
     utc_value = row.get("utc_datetime")
     utc_key = utc_value.strftime("%Y%m%d%H%M") if hasattr(utc_value, "strftime") else ""
     return f"alp:{mission_type}:{flight_key or ''}:{airport}:{tail}:{utc_key}"
+
+
+def _persist_alp_unmatched_rows(operation, mission_type, preview):
+    if not preview:
+        return
+    for row in preview.get("unmatched_rows", []):
+        row = {**row, "mission_type": mission_type}
+        review_key = _alp_planning_review_key(operation, mission_type, row)
+        existing = FlightApiReviewItem.query.filter_by(
+            sort_date_operation_id=operation.id,
+            review_key=review_key,
+        ).first()
+        if existing and existing.review_status in {"ignored", "accepted"}:
+            continue
+        row["review_key"] = review_key
+        _record_alp_planning_marker(operation, row, "pending")
 
 
 def _alp_planning_row_from_form(operation, mission_type):
