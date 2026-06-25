@@ -15,6 +15,7 @@ from app.services.neosektor_live_counts import (
     live_counts_context,
     normalize_ballmat_side,
     tunnel_conductor_context,
+    update_neosektor_operational_settings,
     update_tunnel_driver_offset,
     update_ballmat_side,
 )
@@ -181,6 +182,22 @@ def tunnel_conductor_offset():
 
     payload = request.get_json(silent=True) or request.form
     state = update_tunnel_driver_offset(get_current_gateway(), payload)
+    db.session.commit()
+    return jsonify({"ok": True, "state": state})
+
+
+@bp.route("/tunnel-conductor/settings", methods=["POST"])
+@gateway_node_required("sektor")
+def tunnel_conductor_settings():
+    access = _neosektor_access(
+        TUNNEL_CONDUCTOR_VIEW_PERMISSION,
+        TUNNEL_CONDUCTOR_EDIT_PERMISSION,
+    )
+    if not access["can_edit"]:
+        return jsonify({"ok": False, "error": "Edit access denied."}), 403
+
+    payload = request.get_json(silent=True) or request.form
+    state = update_neosektor_operational_settings(get_current_gateway(), payload)
     db.session.commit()
     return jsonify({"ok": True, "state": state})
 

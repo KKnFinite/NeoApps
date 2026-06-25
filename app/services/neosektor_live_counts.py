@@ -7,6 +7,7 @@ from app.models import (
     NeoSektorBayStatus,
     NeoSektorDriverRouteSetting,
     NeoSektorOpenBayState,
+    NeoSektorOperationalSetting,
     NeoSektorSortState,
     NeoSektorWaveState,
 )
@@ -39,9 +40,11 @@ DEFAULT_DRIVER_ROUTES = (
     DRIVER_ROUTE_SECOND_WAVE_NAME,
     DRIVER_ROUTE_WEST_OFFSET_NAME,
 )
-FIRST_WAVE_UNLOAD_MODIFIER = 45
-SECOND_WAVE_UNLOAD_MODIFIER = 37
-ALL_UP_TO_DOWN_DELAY = timedelta(minutes=15)
+DEFAULT_FIRST_WAVE_UNLOAD_MODIFIER = 45
+DEFAULT_SECOND_WAVE_UNLOAD_MODIFIER = 37
+DEFAULT_ALL_UP_TO_DOWN_MINUTES = 15
+UNLOAD_MODIFIER_MAX = 999
+ALL_UP_TO_DOWN_MINUTES_MAX = 120
 MAIN_BALLMAT_COUNT_MAX = 99
 LEFT_TO_ARRIVE_MAX = 999
 DRIVER_OFFSET_MAX = 20
@@ -60,9 +63,10 @@ def live_counts_context(gateway, sort_date=None, sort_name=None):
     open_bays = _get_or_create_open_bays(sort_state)
     bay_statuses = _get_or_create_bay_statuses(sort_state)
     driver_routes = _get_or_create_driver_routes(sort_state)
+    operational_settings = get_or_create_operational_settings(gateway)
     _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats)
     side_views = _side_state_views(ballmat_wave_counts, ballmats, open_bays, bay_statuses)
-    wave_views = _wave_views(waves, side_views)
+    wave_views = _wave_views(waves, side_views, operational_settings)
     routing = _driver_routing_calculation(sort_state, side_views, driver_routes)
     _sync_driver_route_values(driver_routes, routing)
     db.session.flush()
@@ -89,6 +93,7 @@ def live_counts_context(gateway, sort_date=None, sort_name=None):
         "open_bays": [_open_bay_view(row) for row in open_bays],
         "bay_statuses": [_bay_status_view(row) for row in bay_statuses],
         "driver_routes": [_driver_route_view(row) for row in driver_routes],
+        "operational_settings": _operational_settings_view(operational_settings),
     }
 
 
@@ -115,6 +120,7 @@ def ballmat_state_payload(gateway, sort_date=None, sort_name=None):
     ballmats = _get_or_create_ballmats(sort_state)
     open_bays = _get_or_create_open_bays(sort_state)
     bay_statuses = _get_or_create_bay_statuses(sort_state)
+    operational_settings = get_or_create_operational_settings(gateway)
     _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats)
     side_views = _side_state_views(
         ballmat_wave_counts,
@@ -122,7 +128,7 @@ def ballmat_state_payload(gateway, sort_date=None, sort_name=None):
         open_bays,
         bay_statuses,
     )
-    wave_views = _wave_views(waves, side_views)
+    wave_views = _wave_views(waves, side_views, operational_settings)
     db.session.flush()
 
     planned_total = max(0, sort_state.planned_total or 0)
@@ -140,6 +146,7 @@ def ballmat_state_payload(gateway, sort_date=None, sort_name=None):
         },
         "sides": side_views,
         "waves": wave_views,
+        "operational_settings": _operational_settings_view(operational_settings),
     }
 
 
@@ -235,6 +242,28 @@ def update_tunnel_driver_offset(gateway, payload, sort_date=None, sort_name=None
     return update_driver_routing_settings(gateway, payload, sort_date, sort_name)
 
 
+def update_neosektor_operational_settings(gateway, payload, sort_date=None, sort_name=None):
+    settings = get_or_create_operational_settings(gateway)
+    settings.first_wave_unload_modifier = _clean_count(
+        (payload or {}).get("first_modifier"),
+        default=settings.first_wave_unload_modifier,
+        maximum=UNLOAD_MODIFIER_MAX,
+    )
+    settings.second_wave_unload_modifier = _clean_count(
+        (payload or {}).get("second_modifier"),
+        default=settings.second_wave_unload_modifier,
+        maximum=UNLOAD_MODIFIER_MAX,
+    )
+    settings.all_up_to_down_minutes = _clean_count(
+        (payload or {}).get("down_timer_minutes"),
+        default=settings.all_up_to_down_minutes,
+        minimum=1,
+        maximum=ALL_UP_TO_DOWN_MINUTES_MAX,
+    )
+    db.session.flush()
+    return driver_routing_state_payload(gateway, sort_date, sort_name)
+
+
 def adjust_tunnel_wave_arrivals(gateway, wave, delta, sort_date=None, sort_name=None):
     _wave_key, wave_name = normalize_wave_key(wave)
     if not wave_name:
@@ -273,6 +302,25 @@ def get_or_create_sort_state(gateway, sort_date, sort_name):
     db.session.add(sort_state)
     db.session.flush()
     return sort_state
+
+
+def get_or_create_operational_settings(gateway):
+    settings = NeoSektorOperationalSetting.query.filter_by(
+        gateway_id=gateway.id,
+    ).first()
+    if settings:
+        return settings
+
+    settings = NeoSektorOperationalSetting(
+        gateway_id=gateway.id,
+        gateway_code=gateway.code,
+        first_wave_unload_modifier=DEFAULT_FIRST_WAVE_UNLOAD_MODIFIER,
+        second_wave_unload_modifier=DEFAULT_SECOND_WAVE_UNLOAD_MODIFIER,
+        all_up_to_down_minutes=DEFAULT_ALL_UP_TO_DOWN_MINUTES,
+    )
+    db.session.add(settings)
+    db.session.flush()
+    return settings
 
 
 def normalize_sort_name(sort_name):
@@ -454,7 +502,7 @@ def _wave_view(row, left_to_unload=None):
     }
 
 
-def _wave_views(waves, sides, now=None):
+def _wave_views(waves, sides, operational_settings, now=None):
     rows_by_name = {row.wave_name: row for row in waves}
     first_row = rows_by_name["1ST WAVE"]
     second_row = rows_by_name["2ND WAVE"]
@@ -475,13 +523,21 @@ def _wave_views(waves, sides, now=None):
         west_open_bays,
     )
     first_is_all_up = first_left_to_arrive == 0 and first_remaining == 0
-    first_timer_done = _sync_wave_all_up_timer(first_row, first_is_all_up, now)
+    first_timer_done = _sync_wave_all_up_timer(
+        first_row,
+        first_is_all_up,
+        operational_settings,
+        now,
+    )
     if first_is_all_up and first_timer_done:
         first_left_to_unload = "DOWN"
     elif first_is_all_up:
         first_left_to_unload = "ALL UP"
     else:
-        first_left_to_unload = first_remaining + FIRST_WAVE_UNLOAD_MODIFIER
+        first_left_to_unload = (
+            first_remaining
+            + _settings_first_modifier(operational_settings)
+        )
 
     second_waiting_on_first_wave = first_is_all_up and not first_timer_done
     second_base_remaining = _wave_load_without_open_bays(
@@ -506,7 +562,12 @@ def _wave_views(waves, sides, now=None):
         else second_base_remaining
     )
     second_is_all_up = second_left_to_arrive == 0 and second_remaining == 0
-    second_timer_done = _sync_wave_all_up_timer(second_row, second_is_all_up, now)
+    second_timer_done = _sync_wave_all_up_timer(
+        second_row,
+        second_is_all_up,
+        operational_settings,
+        now,
+    )
 
     if second_is_all_up and second_timer_done:
         second_left_to_unload = "DOWN"
@@ -517,7 +578,10 @@ def _wave_views(waves, sides, now=None):
     elif not first_is_all_up:
         second_left_to_unload = second_remaining
     else:
-        second_left_to_unload = second_remaining + SECOND_WAVE_UNLOAD_MODIFIER
+        second_left_to_unload = (
+            second_remaining
+            + _settings_second_modifier(operational_settings)
+        )
 
     return [
         _wave_view(first_row, first_left_to_unload),
@@ -538,7 +602,7 @@ def _wave_load_without_open_bays(left_to_arrive, east_wave, west_wave):
     return max(0, left_to_arrive + east_wave + west_wave)
 
 
-def _sync_wave_all_up_timer(row, is_timer_active, now=None):
+def _sync_wave_all_up_timer(row, is_timer_active, operational_settings=None, now=None):
     if now is None:
         now = datetime.utcnow()
     elif now.tzinfo is not None:
@@ -551,7 +615,8 @@ def _sync_wave_all_up_timer(row, is_timer_active, now=None):
         started_at = row.all_up_started_at
         if started_at.tzinfo is not None:
             started_at = started_at.astimezone(timezone.utc).replace(tzinfo=None)
-        return now - started_at >= ALL_UP_TO_DOWN_DELAY
+        delay = timedelta(minutes=_settings_down_timer_minutes(operational_settings))
+        return now - started_at >= delay
 
     if row.all_up_started_at is not None:
         row.all_up_started_at = None
@@ -586,6 +651,39 @@ def _driver_route_view(row):
         "route_name": row.route_name,
         "route_value": row.route_value or "-",
     }
+
+
+def _operational_settings_view(settings):
+    return {
+        "first_modifier": _settings_first_modifier(settings),
+        "second_modifier": _settings_second_modifier(settings),
+        "down_timer_minutes": _settings_down_timer_minutes(settings),
+    }
+
+
+def _settings_first_modifier(settings):
+    return _clean_count(
+        getattr(settings, "first_wave_unload_modifier", None),
+        default=DEFAULT_FIRST_WAVE_UNLOAD_MODIFIER,
+        maximum=UNLOAD_MODIFIER_MAX,
+    )
+
+
+def _settings_second_modifier(settings):
+    return _clean_count(
+        getattr(settings, "second_wave_unload_modifier", None),
+        default=DEFAULT_SECOND_WAVE_UNLOAD_MODIFIER,
+        maximum=UNLOAD_MODIFIER_MAX,
+    )
+
+
+def _settings_down_timer_minutes(settings):
+    return _clean_count(
+        getattr(settings, "all_up_to_down_minutes", None),
+        default=DEFAULT_ALL_UP_TO_DOWN_MINUTES,
+        minimum=1,
+        maximum=ALL_UP_TO_DOWN_MINUTES_MAX,
+    )
 
 
 def _driver_route_default_value(route_name):
@@ -835,12 +933,12 @@ def _wave_key(wave_name):
     return normalized.lower().replace(" ", "_")
 
 
-def _clean_count(value, default=0, maximum=9999):
+def _clean_count(value, default=0, minimum=0, maximum=9999):
     try:
         cleaned = int(value)
     except (TypeError, ValueError):
         cleaned = default or 0
-    return min(max(cleaned, 0), maximum)
+    return min(max(cleaned, minimum), maximum)
 
 
 def _clean_delta(value):

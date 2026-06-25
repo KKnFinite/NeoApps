@@ -12201,6 +12201,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .blueprint-neosektor .tunnel-panel,
 .blueprint-neosektor .tunnel-readonly-card,
 .blueprint-neosektor .tunnel-bay-card,
+.blueprint-neosektor .tunnel-setting-card,
 .blueprint-neosektor .driver-priority-card {
     min-width: 0;
     border: 1px solid rgba(216, 220, 224, 0.22);
@@ -12216,7 +12217,8 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .blueprint-neosektor .view-bay-card,
 .blueprint-neosektor .tunnel-metric:not(.tunnel-editable),
 .blueprint-neosektor .tunnel-readonly-card,
-.blueprint-neosektor .tunnel-bay-card {
+.blueprint-neosektor .tunnel-bay-card,
+.blueprint-neosektor .tunnel-setting-card {
     border-color: rgba(var(--node-sektor-primary-rgb), 0.38);
     background:
         linear-gradient(135deg, rgba(244, 246, 248, 0.05), transparent 28%),
@@ -12269,6 +12271,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .blueprint-neosektor .tunnel-metric span,
 .blueprint-neosektor .tunnel-readonly-card span,
 .blueprint-neosektor .tunnel-bay-card span,
+.blueprint-neosektor .tunnel-setting-card span,
 .blueprint-neosektor .view-bay-card span {
     color: rgba(238, 246, 255, 0.66);
     font-size: 0.62rem;
@@ -12331,6 +12334,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .blueprint-neosektor .neosektor-inline-status select,
 .blueprint-neosektor .neosektor-driver-offset-control button,
 .blueprint-neosektor .neosektor-driver-offset-control input,
+.blueprint-neosektor .tunnel-setting-card input,
 .blueprint-neosektor .neosektor-discharge-send-form input,
 .blueprint-neosektor .neosektor-discharge-count-card button {
     min-width: 0;
@@ -12356,6 +12360,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .blueprint-neosektor .readonly-count,
 .blueprint-neosektor .neosektor-inline-status select,
 .blueprint-neosektor .neosektor-driver-offset-control input,
+.blueprint-neosektor .tunnel-setting-card input,
 .blueprint-neosektor .neosektor-discharge-send-form input {
     display: grid;
     place-items: center;
@@ -12402,6 +12407,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .blueprint-neosektor .counter-number:focus,
 .blueprint-neosektor .neosektor-inline-status select:focus,
 .blueprint-neosektor .neosektor-driver-offset-control input:focus,
+.blueprint-neosektor .tunnel-setting-card input:focus,
 .blueprint-neosektor .neosektor-discharge-send-form input:focus {
     border-color: var(--node-sektor-highlight);
     outline: none;
@@ -12415,6 +12421,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .blueprint-neosektor .neosektor-inline-status select:disabled,
 .blueprint-neosektor .neosektor-driver-offset-control button:disabled,
 .blueprint-neosektor .neosektor-driver-offset-control input:disabled,
+.blueprint-neosektor .tunnel-setting-card input:disabled,
 .blueprint-neosektor .neosektor-discharge-send-form input:disabled,
 .blueprint-neosektor .neosektor-discharge-count-card button:disabled {
     cursor: not-allowed;
@@ -12754,6 +12761,10 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     grid-column: 1 / -1;
 }
 
+.blueprint-neosektor .tunnel-settings-panel {
+    grid-column: 1 / -1;
+}
+
 .blueprint-neosektor .tunnel-panel {
     display: grid;
     gap: 7px;
@@ -12842,6 +12853,37 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 
 .blueprint-neosektor .tunnel-bay-panel {
     gap: 8px;
+}
+
+.blueprint-neosektor .tunnel-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.blueprint-neosektor .tunnel-setting-card {
+    display: grid;
+    align-content: center;
+    gap: 4px;
+    min-width: 0;
+    min-height: 58px;
+    padding: 6px;
+    text-align: center;
+}
+
+.blueprint-neosektor .tunnel-setting-card input {
+    min-height: 34px;
+    font-size: clamp(1rem, 2.4vw, 1.32rem);
+}
+
+.blueprint-neosektor .tunnel-setting-card em {
+    color: rgba(238, 246, 255, 0.58);
+    font-size: 0.56rem;
+    font-style: normal;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-transform: uppercase;
 }
 
 .blueprint-neosektor .tunnel-bay-card {
@@ -13553,9 +13595,24 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
         gap: 5px;
     }
 
+    .blueprint-neosektor .tunnel-settings-grid {
+        gap: 5px;
+    }
+
+    .blueprint-neosektor .tunnel-setting-card {
+        min-height: 50px;
+        padding: 5px;
+    }
+
+    .blueprint-neosektor .tunnel-setting-card input {
+        min-height: 30px;
+        font-size: 1rem;
+    }
+
     .blueprint-neosektor .tunnel-metric,
     .blueprint-neosektor .tunnel-readonly-card,
-    .blueprint-neosektor .tunnel-bay-card {
+    .blueprint-neosektor .tunnel-bay-card,
+    .blueprint-neosektor .tunnel-setting-card {
         padding: 5px;
     }
 

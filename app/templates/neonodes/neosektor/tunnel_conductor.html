@@ -12,6 +12,7 @@
     data-wave-url="{{ url_for('neosektor.tunnel_conductor_wave') }}"
     data-ballmat-url="{{ url_for('neosektor.tunnel_conductor_ballmat') }}"
     data-offset-url="{{ url_for('neosektor.tunnel_conductor_offset') }}"
+    data-settings-url="{{ url_for('neosektor.tunnel_conductor_settings') }}"
 >
     <header class="app-header tunnel-header neosektor-standalone-header">
         <div class="header-title">
@@ -121,6 +122,52 @@
             </div>
         </section>
 
+        <section class="tunnel-panel tunnel-settings-panel" aria-label="Left to unload settings">
+            <h2>Unload Settings</h2>
+            <div class="tunnel-settings-grid">
+                <label class="tunnel-setting-card">
+                    <span>MOD 1</span>
+                    <input
+                        type="number"
+                        inputmode="numeric"
+                        min="0"
+                        max="999"
+                        value="{{ state.operational_settings.first_modifier }}"
+                        data-tunnel-setting="first_modifier"
+                        aria-label="First wave left to unload modifier"
+                        {% if not can_edit %}disabled{% endif %}
+                    >
+                </label>
+                <label class="tunnel-setting-card">
+                    <span>MOD 2</span>
+                    <input
+                        type="number"
+                        inputmode="numeric"
+                        min="0"
+                        max="999"
+                        value="{{ state.operational_settings.second_modifier }}"
+                        data-tunnel-setting="second_modifier"
+                        aria-label="Second wave left to unload modifier"
+                        {% if not can_edit %}disabled{% endif %}
+                    >
+                </label>
+                <label class="tunnel-setting-card">
+                    <span>DOWN TIMER</span>
+                    <input
+                        type="number"
+                        inputmode="numeric"
+                        min="1"
+                        max="120"
+                        value="{{ state.operational_settings.down_timer_minutes }}"
+                        data-tunnel-setting="down_timer_minutes"
+                        aria-label="All up to down timer minutes"
+                        {% if not can_edit %}disabled{% endif %}
+                    >
+                    <em>min</em>
+                </label>
+            </div>
+        </section>
+
         <section class="tunnel-panel tunnel-offset-panel" aria-label="Driver route offset">
             <h2>Driver Route Offset</h2>
             <div class="tunnel-offset-control-card">
@@ -155,9 +202,14 @@
     const waveUrl = root.dataset.waveUrl;
     const ballmatUrl = root.dataset.ballmatUrl;
     const offsetUrl = root.dataset.offsetUrl;
+    const settingsUrl = root.dataset.settingsUrl;
     const canEdit = root.dataset.canEdit === "true";
     const offsetInput = root.querySelector("[data-tunnel-offset-input]");
+    const settingInputs = Array.from(root.querySelectorAll("[data-tunnel-setting]"));
     const ballmatSaveTimers = {};
+    let settingsSaveTimer = null;
+    let settingsSaveSequence = 0;
+    const dirtySettings = new Set();
 
     const setText = (selector, value) => {
         const element = root.querySelector(selector);
@@ -171,9 +223,21 @@
         return Number.isFinite(value) && value > 0 ? value : 0;
     };
 
+    const readClampedNumber = (input) => {
+        const minimum = Number.parseInt(input?.min, 10);
+        const maximum = Number.parseInt(input?.max, 10);
+        const fallback = Number.isFinite(minimum) ? minimum : 0;
+        const parsed = Number.parseInt(input?.value, 10);
+        const value = Number.isFinite(parsed) ? parsed : fallback;
+        return Math.min(
+            Math.max(value, fallback),
+            Number.isFinite(maximum) ? maximum : value,
+        );
+    };
+
     const readOffset = () => {
         const value = readNumber(offsetInput);
-        return Math.min(value, 999);
+        return Math.min(value, 20);
     };
 
     const applyState = (state) => {
@@ -187,6 +251,14 @@
         if (offsetInput && document.activeElement !== offsetInput) {
             offsetInput.value = routing.west_offset ?? 0;
         }
+
+        const settings = state.operational_settings || {};
+        settingInputs.forEach((input) => {
+            const settingKey = input.dataset.tunnelSetting;
+            if (document.activeElement !== input && !dirtySettings.has(settingKey)) {
+                input.value = settings[input.dataset.tunnelSetting] ?? input.value;
+            }
+        });
 
         Object.entries(state.sides || {}).forEach(([sideKey, side]) => {
             const panel = root.querySelector(`[data-tunnel-side="${sideKey}"]`);
@@ -288,6 +360,44 @@
         ballmatSaveTimers[side] = window.setTimeout(() => saveBallmatSide(panel), 250);
     };
 
+    const collectSettingsPayload = () => {
+        const payload = {};
+        settingInputs.forEach((input) => {
+            payload[input.dataset.tunnelSetting] = readClampedNumber(input);
+        });
+        return payload;
+    };
+
+    const saveSettings = async () => {
+        if (!canEdit || !settingsUrl) {
+            return;
+        }
+        const saveSequence = ++settingsSaveSequence;
+
+        try {
+            const response = await fetch(settingsUrl, {
+                method: "POST",
+                cache: "no-store",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(collectSettingsPayload()),
+            });
+            if (!response.ok) {
+                return;
+            }
+            const payload = await response.json();
+            if (payload.ok && saveSequence === settingsSaveSequence) {
+                dirtySettings.clear();
+                applyState(payload.state);
+            }
+        } catch (_error) {}
+    };
+
+    const queueSettingsSave = () => {
+        window.clearTimeout(settingsSaveTimer);
+        settingsSaveTimer = window.setTimeout(saveSettings, 250);
+    };
+
     const applyWaveDelta = async (wave, delta) => {
         if (!canEdit) {
             return;
@@ -370,7 +480,7 @@
         }
         offsetInput.value = Math.min(
             Math.max(readOffset() + Number.parseInt(offsetButton.dataset.tunnelOffsetStep, 10), 0),
-            999,
+            20,
         );
         saveOffset();
     });
@@ -383,12 +493,25 @@
 
         if (event.target.matches("[data-wave-count], [data-open-bays]") && !event.target.disabled) {
             queueBallmatSave(event.target.closest("[data-tunnel-side]"));
+            return;
+        }
+
+        if (event.target.matches("[data-tunnel-setting]") && !event.target.disabled) {
+            event.target.value = readClampedNumber(event.target);
+            dirtySettings.add(event.target.dataset.tunnelSetting);
+            saveSettings();
         }
     });
 
     root.addEventListener("input", (event) => {
         if (event.target.matches("[data-wave-count], [data-open-bays]") && !event.target.disabled) {
             queueBallmatSave(event.target.closest("[data-tunnel-side]"));
+            return;
+        }
+
+        if (event.target.matches("[data-tunnel-setting]") && !event.target.disabled) {
+            dirtySettings.add(event.target.dataset.tunnelSetting);
+            queueSettingsSave();
         }
     });
 

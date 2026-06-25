@@ -14,6 +14,7 @@ from app.models import (
     NeoSektorBayStatus,
     NeoSektorDriverRouteSetting,
     NeoSektorOpenBayState,
+    NeoSektorOperationalSetting,
     NeoSektorSortState,
     NeoSektorUldOnTheWayEvent,
     NeoSektorWaveState,
@@ -1015,6 +1016,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"Ballmat Counts", response.data)
         self.assertIn(b"Driver Route Offset", response.data)
         self.assertIn(b"data-tunnel-offset-input", response.data)
+        self.assertIn(b"Unload Settings", response.data)
+        self.assertIn(b"data-tunnel-setting=\"first_modifier\"", response.data)
+        self.assertIn(b"data-settings-url=\"/neosektor/tunnel-conductor/settings\"", response.data)
         self.assertIn(b'href="/logout"', response.data)
         self.assertNotIn(b'aria-label="BACK TO NeoSektor MENU"', response.data)
         self.assertNotIn(b"motherbrain-header-nav", response.data)
@@ -1078,6 +1082,178 @@ class NeoSektorRoutesTest(unittest.TestCase):
             NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one().planned_count,
             6,
         )
+
+    def test_neosektor_operational_settings_default_when_missing(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neosektor/tunnel-conductor/state")
+
+        self.assertEqual(response.status_code, 200)
+        settings = response.get_json()["state"]["operational_settings"]
+        self.assertEqual(settings["first_modifier"], 45)
+        self.assertEqual(settings["second_modifier"], 37)
+        self.assertEqual(settings["down_timer_minutes"], 15)
+        self.assertEqual(NeoSektorOperationalSetting.query.count(), 1)
+
+    def test_neosektor_operational_settings_save_persists_values(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/settings",
+            json={
+                "first_modifier": 52,
+                "second_modifier": 31,
+                "down_timer_minutes": 22,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        settings = response.get_json()["state"]["operational_settings"]
+        self.assertEqual(settings["first_modifier"], 52)
+        self.assertEqual(settings["second_modifier"], 31)
+        self.assertEqual(settings["down_timer_minutes"], 22)
+        saved = NeoSektorOperationalSetting.query.one()
+        self.assertEqual(saved.first_wave_unload_modifier, 52)
+        self.assertEqual(saved.second_wave_unload_modifier, 31)
+        self.assertEqual(saved.all_up_to_down_minutes, 22)
+
+    def test_neosektor_operational_settings_clamp_invalid_values(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/settings",
+            json={
+                "first_modifier": -10,
+                "second_modifier": 5000,
+                "down_timer_minutes": 0,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        settings = response.get_json()["state"]["operational_settings"]
+        self.assertEqual(settings["first_modifier"], 0)
+        self.assertEqual(settings["second_modifier"], 999)
+        self.assertEqual(settings["down_timer_minutes"], 1)
+
+    def test_view_only_tunnel_conductor_user_cannot_update_settings(self):
+        edit_rule = PermissionRule.query.filter_by(
+            permission_key="neosektor.tunnel_conductor.edit"
+        ).one()
+        edit_rule.minimum_role = "master"
+        db.session.commit()
+        self._login_approved_user(role="simulator")
+
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/settings",
+            json={
+                "first_modifier": 12,
+                "second_modifier": 13,
+                "down_timer_minutes": 14,
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(NeoSektorOperationalSetting.query.count(), 0)
+
+    def test_left_to_unload_uses_custom_first_modifier(self):
+        self._login_approved_user(role="simulator")
+        self.client.post(
+            "/neosektor/tunnel-conductor/settings",
+            json={
+                "first_modifier": 20,
+                "second_modifier": 37,
+                "down_timer_minutes": 15,
+            },
+        )
+        self.client.post(
+            "/neosektor/tunnel-conductor/wave",
+            json={"wave": "first", "delta": 10},
+        )
+        self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "east",
+                "waves": {"first": {"count": 3}, "second": {"count": 0}},
+                "open_bays": 2,
+                "bay_statuses": {},
+            },
+        )
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "west",
+                "waves": {"first": {"count": 4}, "second": {"count": 0}},
+                "open_bays": 1,
+                "bay_statuses": {},
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["state"]["waves"][0]["left"], 34)
+
+    def test_second_wave_uses_custom_second_modifier_after_first_down(self):
+        self._login_approved_user(role="simulator")
+        self.client.post(
+            "/neosektor/tunnel-conductor/settings",
+            json={
+                "first_modifier": 45,
+                "second_modifier": 11,
+                "down_timer_minutes": 15,
+            },
+        )
+        self.client.get("/neosektor/live-counts/state")
+        first_wave = NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one()
+        first_wave.all_up_started_at = datetime.utcnow() - timedelta(minutes=16)
+        db.session.commit()
+        self.client.post(
+            "/neosektor/tunnel-conductor/wave",
+            json={"wave": "second", "delta": 10},
+        )
+        self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "east",
+                "waves": {"first": {"count": 0}, "second": {"count": 5}},
+                "open_bays": 2,
+                "bay_statuses": {},
+            },
+        )
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "west",
+                "waves": {"first": {"count": 0}, "second": {"count": 5}},
+                "open_bays": 1,
+                "bay_statuses": {},
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["state"]["waves"][1]["left"], 28)
+
+    def test_all_up_to_down_transition_uses_custom_timer_minutes(self):
+        self._login_approved_user(role="simulator")
+        self.client.post(
+            "/neosektor/tunnel-conductor/settings",
+            json={
+                "first_modifier": 45,
+                "second_modifier": 37,
+                "down_timer_minutes": 20,
+            },
+        )
+        self.client.get("/neosektor/live-counts/state")
+        first_wave = NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one()
+        first_wave.all_up_started_at = datetime.utcnow() - timedelta(minutes=19)
+        db.session.commit()
+
+        early_response = self.client.get("/neosektor/live-counts/state")
+        self.assertEqual(early_response.get_json()["state"]["waves"][0]["left"], "ALL UP")
+
+        first_wave.all_up_started_at = datetime.utcnow() - timedelta(minutes=21)
+        db.session.commit()
+        late_response = self.client.get("/neosektor/live-counts/state")
+
+        self.assertEqual(late_response.get_json()["state"]["waves"][0]["left"], "DOWN")
 
     def test_tunnel_conductor_can_update_shared_ballmat_counts(self):
         self._login_approved_user(role="simulator")
