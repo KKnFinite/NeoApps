@@ -3984,6 +3984,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
             f"/motherbrain/operations/{operation.id}/missions/{mission.id}/edit",
             mission_section,
         )
+        self.assertIn(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/cancel",
+            mission_section,
+        )
+        self.assertIn(">CANCEL</button>", mission_section)
 
     def test_departure_planning_renders_current_sort_departure_mission_list(self):
         operation = self._operation(sort_date=date(2026, 6, 24), window_minutes=20)
@@ -4017,6 +4022,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
             f"/motherbrain/operations/{operation.id}/missions/{mission.id}/edit",
             mission_section,
         )
+        self.assertIn(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/cancel",
+            mission_section,
+        )
+        self.assertIn(">CANCEL</button>", mission_section)
 
     def test_planning_mission_rows_hide_edit_for_view_only_user(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
@@ -4041,6 +4051,122 @@ class MotherBrainRoutesTest(unittest.TestCase):
             f"/motherbrain/operations/{operation.id}/missions/{mission.id}/edit",
             mission_section,
         )
+        self.assertNotIn(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/cancel",
+            mission_section,
+        )
+        self.assertNotIn(">CANCEL</button>", mission_section)
+
+    def test_cancel_arrival_marks_mission_cancelled_and_keeps_planning_row(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS0910",
+            assigned_tail_number="N910UP",
+            arrival_status="en_route",
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/cancel",
+            follow_redirects=True,
+        )
+        db.session.refresh(mission)
+        repeated = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/cancel",
+            follow_redirects=True,
+        )
+        board = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
+        planning_html = repeated.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(repeated.status_code, 200)
+        self.assertEqual(mission.arrival_status, "cancelled")
+        self.assertIn("UPS0910", planning_html)
+        self.assertIn("CANCELLED", planning_html)
+        self.assertNotIn("UPS0910", board.data.decode())
+
+    def test_cancel_departure_marks_mission_cancelled_and_keeps_planning_row(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="UPS0856",
+            assigned_tail_number="N856UP",
+            departure_status="loading",
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/cancel",
+            follow_redirects=True,
+        )
+        db.session.refresh(mission)
+        repeated = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/cancel",
+            follow_redirects=True,
+        )
+        board = self.client.get(f"/motherbrain/operations/{operation.id}/departures")
+        planning_html = repeated.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(repeated.status_code, 200)
+        self.assertEqual(mission.departure_status, "cancelled")
+        self.assertIn("UPS0856", planning_html)
+        self.assertIn("CANCELLED", planning_html)
+        self.assertNotIn("UPS0856", board.data.decode())
+
+    def test_view_only_user_cannot_cancel_mission_by_post(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS0910",
+            arrival_status="en_route",
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+        self._login_motherbrain_role("simulator-cancel-user", "simulator")
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/{mission.id}/cancel",
+            follow_redirects=True,
+        )
+        db.session.refresh(mission)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mission.arrival_status, "en_route")
+        self.assertIn("Access denied.", response.data.decode())
+
+    def test_alp_apply_does_not_reactivate_cancelled_arrival(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS0910",
+            assigned_tail_number="NOLDUP",
+            arrival_status="cancelled",
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            data={
+                "paste_text": "24-JUN-2026\tUPS910\tSDF\tN910UP\tA01\tArrived\t07:24 (A)",
+                "alp_action": "apply",
+            },
+            follow_redirects=True,
+        )
+        db.session.refresh(mission)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mission.arrival_status, "cancelled")
+        self.assertEqual(mission.assigned_tail_number, "N910UP")
+        self.assertIn("CANCELLED", response.data.decode())
 
     def test_arrival_board_rows_are_data_view_only(self):
         operation = self._operation_with_missions()

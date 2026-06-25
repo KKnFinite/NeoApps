@@ -111,6 +111,7 @@ ACTIVE_DAY_OPTIONS = (
 FLIGHT_API_REVIEW_VIEW_PERMISSION = "neomotherbrain.flight_api_review.view"
 FLIGHT_API_REVIEW_EDIT_PERMISSION = "neomotherbrain.flight_api_review.edit"
 FLIGHT_API_AUTO_POLL_TRIGGER_PERMISSION = "neomotherbrain.flight_api_auto_poll.trigger"
+CANCELLED_MISSION_STATUS = "cancelled"
 
 SORT_NAME_OPTIONS = (
     ("night", "Night"),
@@ -141,6 +142,7 @@ ARRIVAL_STATUSES = (
     "en_route",
     "arrived",
     "unloaded",
+    CANCELLED_MISSION_STATUS,
 )
 DEPARTURE_STATUSES = (
     "",
@@ -149,6 +151,7 @@ DEPARTURE_STATUSES = (
     "ramp_load_complete",
     "crew_load_complete",
     "blocked_out",
+    CANCELLED_MISSION_STATUS,
 )
 MASTER_SCHEDULE_BLANK_ROW_INDEX = "__index__"
 
@@ -1259,7 +1262,7 @@ def operation_detail(operation_id):
 def arrival_board(operation_id):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
-    missions = _missions_for_operation(operation, "arrival")
+    missions = _missions_for_operation(operation, "arrival", include_cancelled=False)
     parking_assignments = _parking_assignments_for_operation(operation)
     rows = [_arrival_row(mission, operation, parking_assignments) for mission in missions]
     return render_template(
@@ -1275,7 +1278,7 @@ def arrival_board(operation_id):
 def departure_board(operation_id):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
-    missions = _missions_for_operation(operation, "departure")
+    missions = _missions_for_operation(operation, "departure", include_cancelled=False)
     parking_assignments = _parking_assignments_for_operation(operation)
     rows = [
         _departure_row(mission, operation, parking_assignments)
@@ -1645,6 +1648,25 @@ def delete_mission(operation_id, mission_id):
     db.session.commit()
     flash("Mission deleted.", "info")
     return redirect(url_for("neomotherbrain.operation_detail", operation_id=operation.id))
+
+
+@bp.route(
+    "/motherbrain/operations/<int:operation_id>/missions/<int:mission_id>/cancel",
+    methods=["POST"],
+)
+@gateway_node_required("motherbrain")
+def cancel_mission(operation_id, mission_id):
+    gateway = get_current_gateway()
+    operation = _operation_or_404(operation_id)
+    mission = _mission_or_404(operation, mission_id)
+    if not _planning_can_edit(gateway):
+        flash("Access denied.", "error")
+        return redirect(_planning_url(operation.id, mission.mission_type))
+
+    _set_mission_cancelled(mission)
+    db.session.commit()
+    flash(f"{mission.flight_number.upper()} cancelled for this sort.", "info")
+    return redirect(_planning_url(operation.id, mission.mission_type))
 
 
 def _operation_or_404(operation_id):
@@ -2994,7 +3016,7 @@ def _all_missions_for_operation(operation):
     return sorted(missions, key=mission_board_sort_key)
 
 
-def _missions_for_operation(operation, mission_type):
+def _missions_for_operation(operation, mission_type, include_cancelled=True):
     missions = (
         SortDateMission.query.filter_by(
             sort_date_operation_id=operation.id,
@@ -3003,6 +3025,8 @@ def _missions_for_operation(operation, mission_type):
         .order_by(SortDateMission.planned_datetime_utc.asc())
         .all()
     )
+    if not include_cancelled:
+        missions = [mission for mission in missions if not _is_cancelled_mission(mission)]
     return sorted(missions, key=mission_board_sort_key)
 
 
@@ -3080,6 +3104,13 @@ def _arrival_board_display(mission, operation=None):
         or _gateway_timezone(getattr(operation, "gateway", None))
     )
     manual_status = (mission.arrival_status or "").strip().lower()
+    if manual_status == CANCELLED_MISSION_STATUS:
+        return {
+            "time": _arrival_eta_display_time(mission, operation),
+            "time_note": "",
+            "status_label": "CANCELLED",
+        }
+
     if manual_status in {"arrived", "unloaded"}:
         return {
             "time": _arrival_manual_time(mission, operation, timezone_name),
@@ -3183,6 +3214,19 @@ def _arrival_board_taxi_minutes(operation=None):
 
 def _status_label(value):
     return str(value or "").replace("_", " ").title()
+
+
+def _mission_status_field(mission):
+    return "arrival_status" if mission.mission_type == "arrival" else "departure_status"
+
+
+def _is_cancelled_mission(mission):
+    status = getattr(mission, _mission_status_field(mission), None)
+    return (status or "").strip().lower() == CANCELLED_MISSION_STATUS
+
+
+def _set_mission_cancelled(mission):
+    setattr(mission, _mission_status_field(mission), CANCELLED_MISSION_STATUS)
 
 
 def _parking_assignments_for_operation(operation):

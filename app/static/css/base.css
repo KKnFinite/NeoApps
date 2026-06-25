@@ -7865,7 +7865,8 @@ select::-ms-expand {
     gap: 6px;
 }
 
-.planning-mission-table .table-actions a {
+.planning-mission-table .table-actions a,
+.planning-mission-table .table-actions .inline-button-form button {
     min-height: 28px;
     padding: 5px 8px;
     font-size: 0.66rem;

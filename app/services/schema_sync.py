@@ -175,6 +175,7 @@ def sync_local_sqlite_schema(app):
                 text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
             )
 
+    _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names)
     _sync_uld_request_unique_constraint_sqlite(inspector, table_names)
     db.session.flush()
 
@@ -207,8 +208,122 @@ def sync_database_schema(app):
                 )
             )
 
+    _sync_sort_date_mission_status_constraints_postgres(table_names)
     _sync_uld_request_unique_constraint_postgres(table_names)
     db.session.flush()
+
+
+def _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names):
+    table_name = "sort_date_missions"
+    legacy_table = "sort_date_missions_status_legacy"
+    all_tables = set(inspector.get_table_names())
+    if table_name not in table_names:
+        return
+
+    create_sql = db.session.execute(
+        text(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'sort_date_missions'"
+        )
+    ).scalar() or ""
+    if "'cancelled'" in create_sql:
+        return
+
+    if legacy_table in all_tables:
+        db.session.execute(text(f"DROP TABLE {legacy_table}"))
+
+    from app.models import SortDateMission
+
+    db.session.execute(text("PRAGMA legacy_alter_table=ON"))
+    db.session.execute(text(f"ALTER TABLE {table_name} RENAME TO {legacy_table}"))
+    _drop_sqlite_indexes_for_table(legacy_table)
+    SortDateMission.__table__.create(bind=db.engine, checkfirst=True)
+
+    legacy_columns = {
+        row[1]
+        for row in db.session.execute(text(f"PRAGMA table_info({legacy_table})")).all()
+    }
+    copy_columns = [
+        column.name
+        for column in SortDateMission.__table__.columns
+        if column.name in legacy_columns
+    ]
+    quoted_columns = ", ".join(_quote_sqlite_identifier(column) for column in copy_columns)
+    db.session.execute(
+        text(
+            f"INSERT INTO {table_name} ({quoted_columns}) "
+            f"SELECT {quoted_columns} FROM {legacy_table}"
+        )
+    )
+    db.session.execute(text(f"DROP TABLE {legacy_table}"))
+    db.session.execute(text("PRAGMA legacy_alter_table=OFF"))
+
+
+def _sync_sort_date_mission_status_constraints_postgres(table_names):
+    if "sort_date_missions" not in table_names:
+        return
+
+    db.session.execute(
+        text(
+            "ALTER TABLE sort_date_missions "
+            "DROP CONSTRAINT IF EXISTS ck_sort_date_missions_arrival_status"
+        )
+    )
+    db.session.execute(
+        text(
+            """
+            ALTER TABLE sort_date_missions
+            ADD CONSTRAINT ck_sort_date_missions_arrival_status
+            CHECK (
+                arrival_status IS NULL OR arrival_status IN (
+                    'scheduled',
+                    'en_route',
+                    'arrived',
+                    'unloaded',
+                    'cancelled'
+                )
+            )
+            """
+        )
+    )
+    db.session.execute(
+        text(
+            "ALTER TABLE sort_date_missions "
+            "DROP CONSTRAINT IF EXISTS ck_sort_date_missions_departure_status"
+        )
+    )
+    db.session.execute(
+        text(
+            """
+            ALTER TABLE sort_date_missions
+            ADD CONSTRAINT ck_sort_date_missions_departure_status
+            CHECK (
+                departure_status IS NULL OR departure_status IN (
+                    'loading',
+                    'last_uld_enroute',
+                    'ramp_load_complete',
+                    'crew_load_complete',
+                    'blocked_out',
+                    'cancelled'
+                )
+            )
+            """
+        )
+    )
+
+
+def _drop_sqlite_indexes_for_table(table_name):
+    for row in db.session.execute(text(f"PRAGMA index_list({table_name})")).all():
+        index_name = row[1]
+        if str(index_name).startswith("sqlite_autoindex"):
+            continue
+        db.session.execute(
+            text(f"DROP INDEX IF EXISTS {_quote_sqlite_identifier(index_name)}")
+        )
+
+
+def _quote_sqlite_identifier(value):
+    return '"' + str(value).replace('"', '""') + '"'
 
 
 def _sync_uld_request_unique_constraint_sqlite(inspector, table_names):
