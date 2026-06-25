@@ -3825,6 +3825,40 @@ h2 {
     line-height: 1.35;
 }
 
+.parking-status-line li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+}
+
+.parking-status-line li span {
+    min-width: 0;
+}
+
+.parking-status-jump {
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    padding: 2px 6px;
+    border: 1px solid rgba(var(--node-rgb), 0.38);
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.24);
+    color: var(--steel);
+    font-size: 0.58rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-decoration: none;
+    text-transform: uppercase;
+}
+
+.parking-status-jump:hover,
+.parking-status-jump:focus-visible {
+    border-color: rgba(var(--node-highlight-rgb), 0.62);
+    color: var(--text);
+}
+
 .parking-status-line ul {
     display: grid;
     gap: 4px;

@@ -14,6 +14,7 @@
 <article
     class="parking-tail-card{% if row.quick_turn %} is-quick-turn{% endif %}{% if row.is_hot %} is-hot{% endif %}{% if row.is_out_of_service %} is-oos{% endif %}"
     draggable="true"
+    id="PARKING-TAIL-{{ row.tail }}"
     data-parking-tail
     data-tail-number="{{ row.tail }}"
     data-parking-tail-assigned="{{ '1' if row.assigned_position else '0' }}"
@@ -130,11 +131,11 @@
         <article><span>CONFLICTS</span><strong>{{ summary.conflict_count }}</strong></article>
     </section>
 
-    <section class="parking-status-panel{% if parking_status.has_conflicts or parking_status.unassigned_tails %} has-warnings{% else %} is-clean{% endif %}" aria-label="Parking warnings and status">
+    <section class="parking-status-panel{% if parking_status.has_warnings %} has-warnings{% else %} is-clean{% endif %}" aria-label="Parking warnings and status">
         <div class="parking-status-heading">
             <div>
                 <span>PARKING STATUS</span>
-                <h2>{{ "CHECK ASSIGNMENTS" if parking_status.has_conflicts or parking_status.unassigned_tails else "NO PARKING CONFLICTS" }}</h2>
+                <h2>{{ "CHECK ASSIGNMENTS" if parking_status.has_warnings else "NO PARKING CONFLICTS" }}</h2>
             </div>
             <div class="parking-status-counts" aria-label="Parking assignment counts">
                 <span>TOTAL {{ parking_status.summary.total_tails_needing_parking }}</span>
@@ -155,7 +156,10 @@
             <strong>DUPLICATE TAIL ASSIGNMENTS</strong>
             <ul>
                 {% for conflict in parking_status.duplicate_tail_conflicts %}
-                <li>{{ conflict.tail }}: {{ conflict.locations|join(", ") }}</li>
+                <li>
+                    <span>{{ conflict.tail }}: {{ conflict.locations|join(", ") }}</span>
+                    {% if conflict.anchor %}<a class="parking-status-jump" href="#{{ conflict.anchor }}">VIEW</a>{% endif %}
+                </li>
                 {% endfor %}
             </ul>
         </div>
@@ -166,7 +170,55 @@
             <strong>DUPLICATE POSITION / SLOT</strong>
             <ul>
                 {% for conflict in parking_status.duplicate_slot_conflicts %}
-                <li>{{ conflict.position }}: {{ conflict.tails|join(", ") }}</li>
+                <li>
+                    <span>{{ conflict.position }}: {{ conflict.tails|join(", ") }}</span>
+                    {% if conflict.anchor %}<a class="parking-status-jump" href="#{{ conflict.anchor }}">JUMP</a>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if parking_status.parked_unlinked_tails %}
+        <div class="parking-status-line">
+            <strong>PARKED TAILS WITHOUT ACTIVE MISSION</strong>
+            <ul>
+                {% for warning in parking_status.parked_unlinked_tails %}
+                <li>
+                    <span>
+                        {{ warning.tail }} at {{ warning.position }}: {{ warning.status }}
+                        {% if warning.mission_lines %} / {{ warning.mission_lines|join(" / ") }}{% endif %}
+                    </span>
+                    {% if warning.anchor %}<a class="parking-status-jump" href="#{{ warning.anchor }}">VIEW</a>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if parking_status.not_parked_missions %}
+        <div class="parking-status-line">
+            <strong>NOT PARKED ACTIVE MISSIONS</strong>
+            <ul>
+                {% for warning in parking_status.not_parked_missions %}
+                <li>
+                    <span>{{ warning.tail }}: {{ warning.mission_lines|join(" / ") }}</span>
+                    {% if warning.anchor %}<a class="parking-status-jump" href="#{{ warning.anchor }}">VIEW</a>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if parking_status.oos_active_missions %}
+        <div class="parking-status-line">
+            <strong>OOS / RED TAILS WITH ACTIVE MISSIONS</strong>
+            <ul>
+                {% for warning in parking_status.oos_active_missions %}
+                <li>
+                    <span>{{ warning.tail }} at {{ warning.position }}: {{ warning.mission_lines|join(" / ") }}</span>
+                    {% if warning.anchor %}<a class="parking-status-jump" href="#{{ warning.anchor }}">VIEW</a>{% endif %}
+                </li>
                 {% endfor %}
             </ul>
         </div>
@@ -355,6 +407,7 @@
                     {% for position in ramp.positions %}
                     <section
                         class="parking-position-card parking-position-{{ position.side }} parking-position-slot-{{ position.slot }}"
+                        id="PARKING-POSITION-{{ position.code }}"
                         aria-label="{{ position.code }}"
                         data-position-side="{{ position.side }}"
                         data-position-slot="{{ position.slot }}"

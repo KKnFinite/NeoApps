@@ -122,6 +122,17 @@ def parking_status_for_rows(tail_rows, assignments=None):
     ]
     duplicate_tail_conflicts = _duplicate_tail_conflicts(assignments)
     duplicate_slot_conflicts = _duplicate_slot_conflicts(assignments)
+    parked_unlinked_tails = _parked_unlinked_tail_warnings(tail_rows)
+    not_parked_missions = _not_parked_mission_warnings(tail_rows)
+    oos_active_missions = _oos_active_mission_warnings(tail_rows)
+    has_warnings = bool(
+        unassigned_rows
+        or duplicate_tail_conflicts
+        or duplicate_slot_conflicts
+        or parked_unlinked_tails
+        or not_parked_missions
+        or oos_active_missions
+    )
 
     return {
         "summary": {
@@ -132,9 +143,13 @@ def parking_status_for_rows(tail_rows, assignments=None):
         "unassigned_tails": [row["tail"] for row in unassigned_rows],
         "duplicate_tail_conflicts": duplicate_tail_conflicts,
         "duplicate_slot_conflicts": duplicate_slot_conflicts,
+        "parked_unlinked_tails": parked_unlinked_tails,
+        "not_parked_missions": not_parked_missions,
+        "oos_active_missions": oos_active_missions,
         "conflict_count": len(duplicate_tail_conflicts) + len(duplicate_slot_conflicts),
         "has_conflicts": bool(duplicate_tail_conflicts or duplicate_slot_conflicts),
-        "is_clean": not unassigned_rows and not duplicate_tail_conflicts and not duplicate_slot_conflicts,
+        "has_warnings": has_warnings,
+        "is_clean": not has_warnings,
     }
 
 
@@ -225,6 +240,14 @@ def tail_rows_for_operation(gateway, operation):
                 "quick_turn": quick_turn,
                 "active_mission_lines": [
                     _mission_display_line(mission) for mission in active_missions
+                ],
+                "all_mission_lines": [
+                    _mission_display_line(mission) for mission in tail_missions
+                ],
+                "cancelled_mission_lines": [
+                    _mission_display_line(mission)
+                    for mission in tail_missions
+                    if _mission_is_cancelled(mission)
                 ],
                 "has_active_mission": bool(active_missions),
                 "has_cancelled_mission": any(
@@ -478,6 +501,7 @@ def _duplicate_tail_conflicts(assignments):
                     _assignment_location_label(assignment)
                     for assignment in tail_assignments
                 ],
+                "anchor": _parking_anchor_fragment(f"parking-tail-{tail}"),
             }
         )
     return conflicts
@@ -500,6 +524,9 @@ def _duplicate_slot_conflicts(assignments):
         conflicts.append(
             {
                 "position": f"{position_code} Slot {lane_number}",
+                "position_code": position_code,
+                "lane_number": lane_number,
+                "anchor": _parking_anchor_fragment(f"parking-position-{position_code}"),
                 "tails": [
                     _normalize_tail(getattr(assignment, "tail_number", ""))
                     for assignment in slot_assignments
@@ -510,12 +537,85 @@ def _duplicate_slot_conflicts(assignments):
     return conflicts
 
 
+def _parked_unlinked_tail_warnings(tail_rows):
+    warnings = []
+    for row in tail_rows:
+        if not row.get("assigned_position") or row.get("has_active_mission"):
+            continue
+        tail = _normalize_tail(row.get("tail"))
+        if not tail:
+            continue
+        warnings.append(
+            {
+                "tail": tail,
+                "position": row.get("assigned_position") or "-",
+                "status": row.get("mission_attachment_label") or "NO ACTIVE MISSION",
+                "mission_lines": _row_mission_lines(row, active_only=False),
+                "anchor": _parking_anchor_fragment(f"parking-tail-{tail}"),
+            }
+        )
+    return warnings
+
+
+def _not_parked_mission_warnings(tail_rows):
+    warnings = []
+    for row in tail_rows:
+        if row.get("assigned_position") or not row.get("has_active_mission"):
+            continue
+        tail = _normalize_tail(row.get("tail"))
+        if not tail:
+            continue
+        warnings.append(
+            {
+                "tail": tail,
+                "mission_lines": _row_mission_lines(row),
+                "anchor": _parking_anchor_fragment(f"parking-tail-{tail}"),
+            }
+        )
+    return warnings
+
+
+def _oos_active_mission_warnings(tail_rows):
+    warnings = []
+    for row in tail_rows:
+        if not row.get("is_out_of_service") or not row.get("has_active_mission"):
+            continue
+        tail = _normalize_tail(row.get("tail"))
+        if not tail:
+            continue
+        warnings.append(
+            {
+                "tail": tail,
+                "position": row.get("assigned_position") or "-",
+                "mission_lines": _row_mission_lines(row),
+                "anchor": _parking_anchor_fragment(f"parking-tail-{tail}"),
+            }
+        )
+    return warnings
+
+
+def _row_mission_lines(row, active_only=True):
+    key = "active_mission_lines" if active_only else "all_mission_lines"
+    lines = [line for line in (row.get(key) or []) if line]
+    if lines:
+        return lines
+    if not active_only:
+        return [line for line in (row.get("cancelled_mission_lines") or []) if line]
+    return []
+
+
 def _assignment_location_label(assignment):
     position_code = _normalize_position_code(getattr(assignment, "position_code", ""))
     lane_number = getattr(assignment, "lane_number", None)
     if position_code and lane_number:
         return f"{position_code} Slot {lane_number}"
     return "UNASSIGNED"
+
+
+def _parking_anchor_fragment(value):
+    text = str(value or "").strip().upper()
+    cleaned = "".join(character if character.isalnum() else "-" for character in text)
+    return "-".join(part for part in cleaned.split("-") if part)
 
 
 def _current_operation_tails(operation):

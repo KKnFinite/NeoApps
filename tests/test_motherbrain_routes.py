@@ -5321,6 +5321,15 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("OOS / RED", html)
         self.assertIn("RESTORE / GREEN", html)
         self.assertIn('data-occupied-tail="N457UP"', html)
+        status_html = html.split('class="parking-status-panel', 1)[1].split(
+            'class="parking-layout"',
+            1,
+        )[0]
+        self.assertIn("OOS / RED TAILS WITH ACTIVE MISSIONS", status_html)
+        self.assertIn("N457UP", status_html)
+        self.assertIn("A01-1", status_html)
+        self.assertIn("ARR57", status_html)
+        self.assertIn("DEP57", status_html)
 
     def test_parking_tail_restore_green_does_not_restore_cancelled_mission(self):
         operation = self._parking_operation()
@@ -5423,6 +5432,15 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("N999UP", slot_html)
         self.assertIn("UNATTACHED TAIL", slot_html)
         self.assertIn('data-occupied-tail="N999UP"', html)
+        status_html = html.split('class="parking-status-panel', 1)[1].split(
+            'class="parking-layout"',
+            1,
+        )[0]
+        self.assertIn("PARKED TAILS WITHOUT ACTIVE MISSION", status_html)
+        self.assertIn("N999UP", status_html)
+        self.assertIn("A01-1", status_html)
+        self.assertIn("UNATTACHED TAIL", status_html)
+        self.assertIn('href="#PARKING-TAIL-N999UP"', status_html)
 
     def test_parking_plan_status_panel_counts_and_unassigned_tails(self):
         operation = self._parking_operation()
@@ -5453,6 +5471,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("UNASSIGNED 1", status_html)
         self.assertIn("UNASSIGNED TAILS", status_html)
         self.assertIn("N349UP", status_html)
+        self.assertIn("NOT PARKED ACTIVE MISSIONS", status_html)
+        self.assertIn("ARR49", status_html)
+        self.assertIn("DEP49", status_html)
+        self.assertIn('href="#PARKING-TAIL-N349UP"', status_html)
         self.assertNotIn("No parking conflicts", status_html)
 
     def test_parking_plan_status_panel_shows_clean_state_when_all_assigned(self):
@@ -5522,12 +5544,20 @@ class MotherBrainRoutesTest(unittest.TestCase):
             ["A01 Slot 1", "B02 Slot 2"],
         )
         self.assertEqual(
+            status["duplicate_tail_conflicts"][0]["anchor"],
+            "PARKING-TAIL-N111UP",
+        )
+        self.assertEqual(
             status["duplicate_slot_conflicts"][0]["position"],
             "A01 Slot 1",
         )
         self.assertEqual(
             status["duplicate_slot_conflicts"][0]["tails"],
             ["N111UP", "N333UP"],
+        )
+        self.assertEqual(
+            status["duplicate_slot_conflicts"][0]["anchor"],
+            "PARKING-POSITION-A01",
         )
 
     def test_parking_plan_ramp_layout_renders_physical_rows_and_slots(self):
