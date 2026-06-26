@@ -101,6 +101,7 @@ from app.services.parking_optimizer import (
 from app.services.parking_rules import (
     AIRCRAFT_TYPE_RAMP_PREFERENCE,
     AIRCRAFT_TYPE_RAMP_RESTRICTION,
+    BLOCKED_PARKING_POSITION,
     ORIGIN_RAMP_PREFERENCE,
     parking_rules_context,
     save_parking_rules_from_form,
@@ -683,6 +684,7 @@ def parking_rules():
             "origin_requirements": ORIGIN_RAMP_PREFERENCE,
             "aircraft_restrictions": AIRCRAFT_TYPE_RAMP_RESTRICTION,
             "aircraft_preferences": AIRCRAFT_TYPE_RAMP_PREFERENCE,
+            "blocked_positions": BLOCKED_PARKING_POSITION,
         },
         **context,
         **_flight_api_auto_poll_timer_context(gateway, operation=operation),

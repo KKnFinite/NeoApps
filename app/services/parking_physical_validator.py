@@ -1,12 +1,16 @@
 from dataclasses import dataclass
 
 from app.extensions import db
-from app.models import MotherBrainAlert, SortDateParkingAssignment
+from app.models import MotherBrainAlert, MotherBrainParkingRule, SortDateParkingAssignment
 from app.services.motherbrain_alerts import (
     MOTHERBRAIN_ALERT_SCOPE,
     PARKING_CONFLICT_ALERT_PERMISSION,
 )
 from app.services.parking_aircraft import resolve_parking_aircraft_type_from_tail
+from app.services.parking_rules import (
+    BLOCKED_PARKING_POSITION,
+    normalize_parking_position_code,
+)
 
 
 NORMAL_RAMP_CODES = ("A", "B", "C", "D", "E")
@@ -50,6 +54,7 @@ def validate_parking_physical_rules(operation, tail_rows=None):
     blocked = _blocked_positions(assignments, aircraft_type_by_tail)
     conflicts = []
 
+    conflicts.extend(_parking_rule_blocked_position_conflicts(assignments, operation))
     conflicts.extend(_normal_fill_order_conflicts(occupancy, blocked))
     conflicts.extend(_remote_fill_order_conflicts(occupancy, blocked))
     conflicts.extend(_normal_767_conflicts(assignments, aircraft_type_by_tail, occupancy))
@@ -57,6 +62,49 @@ def validate_parking_physical_rules(operation, tail_rows=None):
     conflicts.extend(_slot_2_overflow_conflicts(assignments, tail_rows))
     conflicts.extend(_eta_order_conflicts(assignments, aircraft_type_by_tail, tail_rows))
     return _dedupe_conflicts(conflicts)
+
+
+def _parking_rule_blocked_position_conflicts(assignments, operation):
+    blocked_positions = _active_rule_blocked_positions(operation)
+    if not blocked_positions:
+        return []
+
+    conflicts = []
+    for assignment in assignments:
+        position = _normalize_position(getattr(assignment, "position_code", ""))
+        if position not in blocked_positions:
+            continue
+        tail = _normalize_tail(getattr(assignment, "tail_number", ""))
+        conflicts.append(
+            _conflict(
+                "critical",
+                "Blocked parking position",
+                position,
+                tail,
+                f"{position} is blocked by Parking Rules.",
+                "parking_rules_blocked_position",
+            )
+        )
+    return conflicts
+
+
+def _active_rule_blocked_positions(operation):
+    if not operation:
+        return set()
+    query = MotherBrainParkingRule.query.filter_by(
+        rule_category=BLOCKED_PARKING_POSITION,
+        subject_type="position",
+        active=True,
+    )
+    if getattr(operation, "gateway_id", None):
+        query = query.filter(MotherBrainParkingRule.gateway_id == operation.gateway_id)
+    else:
+        query = query.filter(MotherBrainParkingRule.gateway_code == operation.gateway_code)
+    return {
+        normalize_parking_position_code(rule.subject_value)
+        for rule in query.all()
+        if normalize_parking_position_code(rule.subject_value)
+    }
 
 
 def sync_parking_physical_alerts(gateway, operation, validation_context):

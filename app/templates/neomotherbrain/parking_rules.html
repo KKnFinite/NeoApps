@@ -99,6 +99,70 @@
 </section>
 {% endmacro %}
 
+{% macro blocked_position_table(rules, category) %}
+<section class="parking-rules-card" aria-label="Blocked Parking Positions">
+    <div class="section-heading parking-rules-card-heading">
+        <h2>BLOCKED PARKING POSITIONS</h2>
+        <p class="muted">Blocked positions are hard rules. The optimizer will never suggest these positions, and saved manual assignments there will show conflict alerts.</p>
+    </div>
+    <div class="table-wrap">
+        <table class="data-table wide-data-table parking-rules-table">
+            <thead>
+                <tr>
+                    <th>POSITION</th>
+                    <th>ACTIVE</th>
+                    <th>NOTE</th>
+                    {% if can_edit_parking_rules %}<th>REMOVE</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for rule in rules %}
+                <tr>
+                    <td data-label="Position">
+                        <input type="hidden" name="rule_ids" value="{{ rule.id }}">
+                        <input name="subject_value_{{ rule.id }}" value="{{ rule.subject_value }}" placeholder="D01" autocomplete="off" {% if not can_edit_parking_rules %}disabled{% endif %}>
+                    </td>
+                    <td data-label="Active">
+                        <label class="parking-rules-check">
+                            <input type="checkbox" name="active_{{ rule.id }}" value="1" {% if rule.active %}checked{% endif %} {% if not can_edit_parking_rules %}disabled{% endif %}>
+                            <span>{{ "ACTIVE" if rule.active else "INACTIVE" }}</span>
+                        </label>
+                    </td>
+                    <td data-label="Note">
+                        <input name="note_{{ rule.id }}" value="{{ rule.note or '' }}" autocomplete="off" {% if not can_edit_parking_rules %}disabled{% endif %}>
+                    </td>
+                    {% if can_edit_parking_rules %}
+                    <td data-label="Remove">
+                        <label class="parking-rules-check">
+                            <input type="checkbox" name="delete_rule_{{ rule.id }}" value="1">
+                            <span>DELETE</span>
+                        </label>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{{ 4 if can_edit_parking_rules else 3 }}">NO BLOCKED POSITIONS CONFIGURED.</td>
+                </tr>
+                {% endfor %}
+                {% if can_edit_parking_rules %}
+                <tr class="parking-rules-new-row">
+                    <td data-label="Position">
+                        <input name="new_{{ category }}_subject" placeholder="D1, D01, R1, A9, A10" autocomplete="off">
+                    </td>
+                    <td data-label="Active">NEW</td>
+                    <td data-label="Note">
+                        <input name="new_{{ category }}_note" placeholder="OPTIONAL NOTE" autocomplete="off">
+                    </td>
+                    <td data-label="Remove">-</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endmacro %}
+
 {% block content %}
 <section class="parking-rules-page">
     <div class="section-heading">
@@ -131,6 +195,7 @@
 
             {{ rule_table("Aircraft Type Restrictions", rules_by_category[categories.aircraft_restrictions], "AIRCRAFT TYPE", categories.aircraft_restrictions, "767", "Restrictions are hard rules. The optimizer will never assign this aircraft type to the selected ramp. A restriction row means this aircraft type is not allowed on that ramp.", "aircraft_type") }}
             {{ rule_table("Aircraft Type Preferences", rules_by_category[categories.aircraft_preferences], "AIRCRAFT TYPE", categories.aircraft_preferences, "757", "Preferences are soft rules. The optimizer tries to use these ramps for the selected aircraft type when possible, but hard rules still win. Preferences are not required.", "aircraft_type") }}
+            {{ blocked_position_table(rules_by_category[categories.blocked_positions], categories.blocked_positions) }}
 
             <section class="parking-rules-card" aria-label="Optimizer Defaults">
                 <div class="section-heading parking-rules-card-heading">
@@ -162,6 +227,64 @@
                     <li>{{ rule_text }}</li>
                     {% endfor %}
                 </ul>
+            </section>
+
+            <section class="parking-rules-card" aria-label="Optimizer Rule Report">
+                <div class="section-heading parking-rules-card-heading">
+                    <h2>OPTIMIZER RULE REPORT</h2>
+                    <p class="muted">READ-ONLY SUMMARY OF THE RULES AND SETTINGS THE OPTIMIZER USES.</p>
+                </div>
+                <div class="parking-rules-report-grid">
+                    <div class="parking-rules-report-block">
+                        <h3>HARD RULES</h3>
+                        <ul class="parking-physical-rules">
+                            {% for rule_text in rule_report.hard_rules %}
+                            <li>{{ rule_text }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <div class="parking-rules-report-block">
+                        <h3>SOFT RULES</h3>
+                        <ul class="parking-physical-rules">
+                            {% for rule_text in rule_report.soft_rules %}
+                            <li>{{ rule_text }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <div class="parking-rules-report-block">
+                        <h3>CURRENT SETTINGS</h3>
+                        <dl class="parking-rules-current-settings">
+                            <div>
+                                <dt>Include Remote Default</dt>
+                                <dd>{{ rule_report.current_settings.include_remote_default }}</dd>
+                            </div>
+                            <div>
+                                <dt>Include 9/10 Default</dt>
+                                <dd>{{ rule_report.current_settings.include_throat_default }}</dd>
+                            </div>
+                            <div>
+                                <dt>Deice Threshold</dt>
+                                <dd>{{ rule_report.current_settings.deice_threshold }}</dd>
+                            </div>
+                            <div>
+                                <dt>Active Blocked Positions</dt>
+                                <dd>{{ rule_report.current_settings.active_blocked_positions|join(", ") }}</dd>
+                            </div>
+                            <div>
+                                <dt>Active Origin Requirements</dt>
+                                <dd>{{ rule_report.current_settings.active_origin_requirements|join(", ") }}</dd>
+                            </div>
+                            <div>
+                                <dt>Active Aircraft Restrictions</dt>
+                                <dd>{{ rule_report.current_settings.active_aircraft_restrictions|join(", ") }}</dd>
+                            </div>
+                            <div>
+                                <dt>Active Aircraft Preferences</dt>
+                                <dd>{{ rule_report.current_settings.active_aircraft_preferences|join(", ") }}</dd>
+                            </div>
+                        </dl>
+                    </div>
+                </div>
             </section>
         </div>
 

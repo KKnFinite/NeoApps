@@ -23,9 +23,12 @@ from app.services.parking_plan import parking_position_options, tail_rows_for_op
 from app.services.parking_rules import (
     AIRCRAFT_TYPE_RAMP_RESTRICTION,
     AIRCRAFT_TYPE_RAMP_PREFERENCE,
+    BLOCKED_PARKING_POSITION,
     ORIGIN_RAMP_RESTRICTION,
     ORIGIN_RAMP_PREFERENCE,
     DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES,
+    active_blocked_parking_positions,
+    normalize_parking_position_code,
 )
 
 
@@ -311,6 +314,7 @@ def apply_parking_optimizer_plan(
         for assignment in assignment_by_tail.values()
         if _normalize_position(assignment.position_code) and assignment.lane_number
     }
+    blocked_positions = active_blocked_parking_positions(gateway)
 
     for suggestion in suggestions:
         tail = _normalize_tail(suggestion.get("tail"))
@@ -319,6 +323,12 @@ def apply_parking_optimizer_plan(
         if not tail or not position or lane not in (1, 2):
             result["skipped"].append(
                 {"tail": tail or "-", "reason": "Suggestion was incomplete."}
+            )
+            continue
+
+        if position in blocked_positions:
+            result["skipped"].append(
+                {"tail": tail, "reason": f"{position} is blocked by Parking Rules."}
             )
             continue
 
@@ -428,6 +438,8 @@ def _active_rule_sets(gateway):
             if behavior not in soft_rules:
                 continue
             soft_rules[behavior].append(rule)
+        elif category == BLOCKED_PARKING_POSITION:
+            hard_rules["forbidden"].append(rule)
     return {"hard": hard_rules, "soft": soft_rules}
 
 
@@ -904,6 +916,11 @@ def _suggestion_row(placement, row, deice_threshold=0, deice_reasons=()):
 
 
 def _rule_blocks_row(row, aircraft_type, position, ramp, rules):
+    if any(
+        _rule_matches_position(rule, position, ramp)
+        for rule in _blocked_position_rules(rules.get("forbidden", []))
+    ):
+        return True
     required_rules = _rules_for_row(row, aircraft_type, rules.get("required", []))
     if required_rules and not any(_rule_matches_position(rule, position, ramp) for rule in required_rules):
         return True
@@ -914,6 +931,12 @@ def _rule_blocks_row(row, aircraft_type, position, ramp, rules):
 
 
 def _rule_block_reason(row, aircraft_type, position, ramp, rules):
+    if any(
+        _rule_matches_position(rule, position, ramp)
+        for rule in _blocked_position_rules(rules.get("forbidden", []))
+    ):
+        return f"{position} is blocked by Parking Rules."
+
     required_rules = _rules_for_row(row, aircraft_type, rules.get("required", []))
     if required_rules and not any(_rule_matches_position(rule, position, ramp) for rule in required_rules):
         if any(str(rule.subject_type or "").strip().lower() == "aircraft_type" for rule in required_rules):
@@ -1179,7 +1202,18 @@ def _rules_for_row(row, aircraft_type, rules):
     return matching
 
 
+def _blocked_position_rules(rules):
+    return [
+        rule
+        for rule in rules
+        if str(rule.subject_type or "").strip().lower() == "position"
+    ]
+
+
 def _rule_matches_position(rule, position, ramp):
+    subject_type = str(rule.subject_type or "").strip().lower()
+    if subject_type == "position":
+        return normalize_parking_position_code(rule.subject_value) == _normalize_position(position)
     rule_ramp = str(rule.ramp_code or "").strip().upper()
     if rule_ramp == "THROAT":
         return _position_number(position) in (9, 10)

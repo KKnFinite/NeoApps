@@ -46,6 +46,7 @@ from app.services.parking_physical_validator import (
 from app.services.parking_rules import (
     AIRCRAFT_TYPE_RAMP_RESTRICTION,
     AIRCRAFT_TYPE_RAMP_PREFERENCE,
+    BLOCKED_PARKING_POSITION,
     ORIGIN_RAMP_RESTRICTION,
     ORIGIN_RAMP_PREFERENCE,
 )
@@ -5808,8 +5809,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"ORIGIN RAMP PREFERENCES", response.data)
         self.assertIn(b"AIRCRAFT TYPE RESTRICTIONS", response.data)
         self.assertIn(b"AIRCRAFT TYPE PREFERENCES", response.data)
+        self.assertIn(b"BLOCKED PARKING POSITIONS", response.data)
         self.assertIn(b"OPTIMIZER DEFAULTS", response.data)
         self.assertIn(b"PHYSICAL PARKING RULES", response.data)
+        self.assertIn(b"OPTIMIZER RULE REPORT", response.data)
+        self.assertIn(b"HARD RULES", response.data)
+        self.assertIn(b"SOFT RULES", response.data)
+        self.assertIn(b"CURRENT SETTINGS", response.data)
+        self.assertIn(b"Hard-blocked parking positions", response.data)
         self.assertIn(
             b"Restrictions are hard rules. The optimizer will never assign this aircraft type to the selected ramp.",
             response.data,
@@ -5844,6 +5851,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "new_aircraft_type_ramp_restriction_ramp": "R",
                 "new_aircraft_type_ramp_preference_subject": "a300",
                 "new_aircraft_type_ramp_preference_ramp": "THROAT",
+                "new_blocked_parking_position_subject": "d1",
             },
         )
 
@@ -5878,11 +5886,43 @@ class MotherBrainRoutesTest(unittest.TestCase):
             ("aircraft_type_ramp_preference", "aircraft_type", "A300", "THROAT", "preferred"),
             rules,
         )
+        self.assertIn(
+            ("blocked_parking_position", "position", "D01", "D", "forbidden"),
+            rules,
+        )
 
         reload_response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
         self.assertIn(b"value=\"ONT\"", reload_response.data)
         self.assertIn(b"value=\"767\"", reload_response.data)
+        self.assertIn(b"value=\"D01\"", reload_response.data)
         self.assertIn(b"value=\"22\"", reload_response.data)
+
+    def test_parking_rules_blocked_positions_normalize_and_reload(self):
+        operation = self._parking_operation()
+        db.session.commit()
+
+        cases = ("D1", "R1", "A9", "A10")
+        for raw_position in cases:
+            self.client.post(
+                f"/motherbrain/parking-rules?operation_id={operation.id}",
+                data={"new_blocked_parking_position_subject": raw_position},
+            )
+
+        saved = {
+            rule.subject_value
+            for rule in MotherBrainParkingRule.query.filter_by(
+                gateway_id=self.rfd_gateway.id,
+                rule_category=BLOCKED_PARKING_POSITION,
+            ).all()
+        }
+        response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
+
+        self.assertEqual(saved, {"D01", "R01", "A09", "A10"})
+        self.assertIn(b"Active Blocked Positions", response.data)
+        self.assertIn(b"D01", response.data)
+        self.assertIn(b"R01", response.data)
+        self.assertIn(b"A09", response.data)
+        self.assertIn(b"A10", response.data)
 
     def test_parking_rules_legacy_origin_restrictions_do_not_render_editor(self):
         db.session.add(
@@ -6332,6 +6372,35 @@ class MotherBrainRoutesTest(unittest.TestCase):
         messages = [conflict.message for conflict in conflicts]
 
         self.assertIn("A03 cannot be used until A01, A02 are filled.", messages)
+
+    def test_parking_validator_detects_parking_rules_blocked_position(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        self._parking_rule(
+            BLOCKED_PARKING_POSITION,
+            "position",
+            "D01",
+            "D",
+            behavior="forbidden",
+        )
+        db.session.flush()
+        self._parking_assignment(operation, "N457UP", "D01")
+        db.session.commit()
+        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
+
+        conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
+        messages = [conflict.message for conflict in conflicts]
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+
+        self.assertIn("D01 is blocked by Parking Rules.", messages)
+        self.assertIn(b"D01 is blocked by Parking Rules.", response.data)
+        self.assertEqual(
+            MotherBrainAlert.query.filter_by(
+                title="Blocked parking position",
+                active=True,
+            ).count(),
+            1,
+        )
 
     def test_parking_validator_detects_remote_fill_order_conflict(self):
         operation = self._parking_operation()
@@ -7333,6 +7402,47 @@ class MotherBrainRoutesTest(unittest.TestCase):
         preview = self._parking_optimizer_preview(operation)
 
         self.assertNotEqual(preview["suggested_assignments"][0]["position"][:1], "A")
+
+    def test_parking_optimizer_never_suggests_blocked_position(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        self._parking_rule(
+            BLOCKED_PARKING_POSITION,
+            "position",
+            "A01",
+            "A",
+            behavior="forbidden",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        positions = {row["position"] for row in preview["suggested_assignments"]}
+
+        self.assertNotIn("A01", positions)
+        self.assertGreater(len(positions), 0)
+
+    def test_parking_optimizer_apply_never_writes_blocked_position(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        self._parking_rule(
+            BLOCKED_PARKING_POSITION,
+            "position",
+            "A01",
+            "A",
+            behavior="forbidden",
+        )
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+            data={"confirm_apply": "1"},
+            follow_redirects=True,
+        )
+        assignment = self._parking_assignment_for_tail(operation, "N457UP")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(assignment)
+        self.assertNotEqual(assignment.position_code, "A01")
 
     def test_parking_optimizer_uses_tail_resolver_for_aircraft_rules(self):
         operation = self._parking_operation()

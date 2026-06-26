@@ -3997,6 +3997,58 @@ h2 {
     color: var(--node-highlight);
 }
 
+.parking-rules-report-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+}
+
+.parking-rules-report-block {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid rgba(var(--node-rgb), 0.18);
+    border-radius: 6px;
+    background: rgba(3, 4, 6, 0.38);
+}
+
+.parking-rules-report-block h3 {
+    margin: 0;
+    color: var(--node-highlight);
+    font-size: 0.74rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.parking-rules-current-settings {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+}
+
+.parking-rules-current-settings div {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.parking-rules-current-settings dt {
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.parking-rules-current-settings dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--steel);
+    font-size: 0.84rem;
+    font-weight: 800;
+}
+
 .parking-physical-rules {
     display: grid;
     gap: 8px;
