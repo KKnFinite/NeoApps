@@ -4314,6 +4314,20 @@ h2 {
     justify-content: flex-start;
 }
 
+.parking-optimizer-apply-form {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 9px;
+    border: 1px solid rgba(var(--node-highlight-rgb), 0.42);
+    border-radius: 6px;
+    background:
+        linear-gradient(90deg, rgba(var(--node-highlight-rgb), 0.12), transparent 72%),
+        rgba(0, 0, 0, 0.28);
+}
+
 .parking-optimizer-form .parking-checkbox {
     min-height: 34px;
     padding: 7px 9px;
@@ -4325,6 +4339,14 @@ h2 {
     font-weight: 950;
     letter-spacing: 0.08em;
     text-transform: uppercase;
+}
+
+.parking-optimizer-apply-form .parking-checkbox {
+    min-width: min(100%, 390px);
+    color: var(--steel);
+    font-size: 0.7rem;
+    font-weight: 900;
+    line-height: 1.3;
 }
 
 .parking-optimizer-results {
@@ -9029,6 +9051,7 @@ select::-ms-expand {
 
     .parking-optimizer-heading,
     .parking-optimizer-form,
+    .parking-optimizer-apply-form,
     .parking-optimizer-result-head {
         display: grid;
         grid-template-columns: 1fr;
@@ -9041,6 +9064,11 @@ select::-ms-expand {
     }
 
     .parking-optimizer-form .parking-checkbox {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .parking-optimizer-apply-form .parking-checkbox {
         min-width: 0;
         width: 100%;
     }

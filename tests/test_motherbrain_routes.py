@@ -35,7 +35,10 @@ from app.services.gateway_matrix import current_gateway_local_date
 from app.services.gateway_matrix import current_operations_for_gateway
 from app.services.night_sorting import night_sort_time_key
 from app.services.parking_plan import parking_plan_context, parking_status_for_rows
-from app.services.parking_optimizer import parking_optimizer_preview
+from app.services.parking_optimizer import (
+    apply_parking_optimizer_plan as service_apply_parking_optimizer_plan,
+    parking_optimizer_preview,
+)
 from app.services.parking_physical_validator import (
     validate_parking_physical_rules,
 )
@@ -6519,6 +6522,212 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"N457UP", response.data)
         self.assertEqual(SortDateParkingAssignment.query.count(), 0)
 
+    def test_parking_optimizer_apply_permission_is_enforced(self):
+        ensure_default_permission_rules()
+        apply_rule = PermissionRule.query.filter_by(
+            permission_key="motherbrain.parking_optimizer.apply",
+        ).first()
+        apply_rule.minimum_role = "grandmaster"
+        db.session.commit()
+        self._login_motherbrain_role("ParkingOptimizerMaster", "master")
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+            data={"confirm_apply": "1"},
+            follow_redirects=True,
+        )
+
+        self.assertIn(b"Access denied.", response.data)
+        self.assertEqual(SortDateParkingAssignment.query.count(), 0)
+
+    def test_parking_optimizer_apply_requires_confirmation(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+            data={},
+            follow_redirects=True,
+        )
+
+        self.assertIn(b"Confirm optimizer apply", response.data)
+        self.assertEqual(SortDateParkingAssignment.query.count(), 0)
+
+    def test_parking_optimizer_apply_reruns_server_side_before_writing(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        db.session.commit()
+
+        with patch(
+            "app.neomotherbrain.routes.apply_parking_optimizer_plan",
+            wraps=service_apply_parking_optimizer_plan,
+        ) as apply_mock:
+            response = self.client.post(
+                f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+                data={"confirm_apply": "1"},
+                follow_redirects=True,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(apply_mock.call_count, 1)
+        self.assertEqual(self._parking_assignment_for_tail(operation, "N457UP").position_code, "A01")
+
+    def test_parking_optimizer_apply_writes_valid_suggestions(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+            data={"confirm_apply": "1"},
+            follow_redirects=True,
+        )
+        assignment = self._parking_assignment_for_tail(operation, "N457UP")
+
+        self.assertIn(b"Applied 1 optimizer assignment", response.data)
+        self.assertEqual(assignment.position_code, "A01")
+        self.assertEqual(assignment.lane_number, 1)
+
+    def test_parking_optimizer_apply_does_not_write_when_solver_not_successful(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        db.session.commit()
+
+        with patch("app.neomotherbrain.routes.apply_parking_optimizer_plan") as apply_mock:
+            apply_mock.return_value = {
+                "ok": False,
+                "message": "Optimizer returned UNKNOWN; no assignments were applied.",
+                "preview": {"unassigned_tails": []},
+                "skipped": [],
+            }
+            response = self.client.post(
+                f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+                data={"confirm_apply": "1"},
+                follow_redirects=True,
+            )
+
+        self.assertIn(b"Optimizer returned UNKNOWN", response.data)
+        self.assertEqual(SortDateParkingAssignment.query.count(), 0)
+
+    def test_parking_optimizer_apply_preserves_manual_locked_assignments(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        self._parking_pair(operation, "N349UP", aircraft_type="757", destination="SDF")
+        db.session.flush()
+        self._parking_assignment(operation, "N457UP", "A01")
+        db.session.commit()
+
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+            data={"confirm_apply": "1"},
+            follow_redirects=True,
+        )
+
+        locked = self._parking_assignment_for_tail(operation, "N457UP")
+        suggested = self._parking_assignment_for_tail(operation, "N349UP")
+        self.assertEqual((locked.position_code, locked.lane_number), ("A01", 1))
+        self.assertEqual((suggested.position_code, suggested.lane_number), ("A01", 2))
+
+    def test_parking_optimizer_apply_does_not_overwrite_manual_assignment_created_after_preview(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        db.session.commit()
+        preview = self._parking_optimizer_preview(operation)
+        self.assertEqual(preview["suggested_assignments"][0]["label"], "A01 Slot 1")
+        self._parking_assignment(operation, "N457UP", "B01")
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+            data={"confirm_apply": "1"},
+            follow_redirects=True,
+        )
+        assignment = self._parking_assignment_for_tail(operation, "N457UP")
+
+        self.assertIn(b"No candidate parking positions", response.data)
+        self.assertEqual((assignment.position_code, assignment.lane_number), ("B01", 1))
+
+    def test_parking_optimizer_apply_does_not_create_duplicate_tail_assignments(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        db.session.commit()
+
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+            data={"confirm_apply": "1"},
+            follow_redirects=True,
+        )
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+            data={"confirm_apply": "1"},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(
+            SortDateParkingAssignment.query.filter_by(
+                sort_date_operation_id=operation.id,
+                tail_number="N457UP",
+            ).count(),
+            1,
+        )
+
+    def test_parking_optimizer_apply_ignores_cancelled_missions(self):
+        operation = self._parking_operation()
+        arrival, departure = self._parking_pair(operation, "N457UP", aircraft_type="757")
+        arrival.arrival_status = "cancelled"
+        departure.departure_status = "cancelled"
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+            data={"confirm_apply": "1"},
+            follow_redirects=True,
+        )
+
+        self.assertIn(b"No candidate parking positions", response.data)
+        self.assertEqual(SortDateParkingAssignment.query.count(), 0)
+
+    def test_parking_optimizer_apply_is_scoped_to_selected_operation(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        other_operation = self._operation(sort_date=date(2026, 6, 19))
+        db.session.add(other_operation)
+        db.session.flush()
+        self._parking_pair(other_operation, "N349UP", aircraft_type="757", destination="SDF")
+        db.session.commit()
+
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+            data={"confirm_apply": "1"},
+            follow_redirects=True,
+        )
+
+        self.assertIsNotNone(self._parking_assignment_for_tail(operation, "N457UP"))
+        self.assertIsNone(self._parking_assignment_for_tail(other_operation, "N349UP"))
+
+    def test_parking_optimizer_apply_surfaces_physical_validator_conflicts(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        self._parking_pair(operation, "N349UP", aircraft_type="757", destination="SDF")
+        db.session.flush()
+        self._parking_assignment(operation, "N457UP", "A03")
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+            data={"confirm_apply": "1"},
+            follow_redirects=True,
+        )
+
+        self.assertIn(b"PHYSICAL PARKING RULES", response.data)
+        self.assertIn(b"A03 cannot be used until", response.data)
+        self.assertIn(b"are filled.", response.data)
+        self.assertGreaterEqual(MotherBrainAlert.query.filter_by(active=True).count(), 1)
+
     def test_parking_plan_ramp_layout_renders_physical_rows_and_slots(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", destination="LAX")
@@ -7293,6 +7502,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         db.session.add(assignment)
         return assignment
+
+    def _parking_assignment_for_tail(self, operation, tail_number):
+        return SortDateParkingAssignment.query.filter_by(
+            sort_date_operation_id=operation.id,
+            tail_number=tail_number,
+        ).first()
 
     def _parking_rule(
         self,

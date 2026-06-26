@@ -93,6 +93,7 @@ from app.services.parking_plan import (
     unassign_tail,
 )
 from app.services.parking_optimizer import (
+    apply_parking_optimizer_plan,
     parking_optimizer_default_options,
     parking_optimizer_preview,
 )
@@ -129,6 +130,7 @@ FLIGHT_API_AUTO_POLL_TRIGGER_PERMISSION = "neomotherbrain.flight_api_auto_poll.t
 PARKING_RULES_VIEW_PERMISSION = "motherbrain.parking_rules.view"
 PARKING_RULES_EDIT_PERMISSION = "motherbrain.parking_rules.edit"
 PARKING_OPTIMIZER_RUN_PERMISSION = "motherbrain.parking_optimizer.run"
+PARKING_OPTIMIZER_APPLY_PERMISSION = "motherbrain.parking_optimizer.apply"
 CANCELLED_MISSION_STATUS = "cancelled"
 
 SORT_NAME_OPTIONS = (
@@ -568,6 +570,7 @@ def parking_plan_operation(operation_id):
         optimizer_defaults=parking_optimizer_default_options(gateway),
         optimizer_preview=None,
         can_run_parking_optimizer=user_can(PARKING_OPTIMIZER_RUN_PERMISSION),
+        can_apply_parking_optimizer=user_can(PARKING_OPTIMIZER_APPLY_PERMISSION),
         **context,
         **_flight_api_auto_poll_timer_context(gateway, operation=context["operation"]),
     )
@@ -605,9 +608,46 @@ def optimize_parking_plan(operation_id):
         },
         optimizer_preview=optimizer_preview,
         can_run_parking_optimizer=True,
+        can_apply_parking_optimizer=user_can(PARKING_OPTIMIZER_APPLY_PERMISSION),
         **context,
         **_flight_api_auto_poll_timer_context(gateway, operation=context["operation"]),
     )
+
+
+@bp.route("/motherbrain/parking-plan/<int:operation_id>/optimize/apply", methods=["POST"])
+@gateway_node_required("motherbrain")
+def apply_parking_plan_optimizer(operation_id):
+    gateway = get_current_gateway()
+    operation = _parking_plan_operation_or_404(gateway, operation_id)
+    if not user_can(PARKING_OPTIMIZER_APPLY_PERMISSION):
+        flash("Access denied.", "error")
+        return redirect(url_for("neomotherbrain.parking_plan_operation", operation_id=operation.id))
+
+    include_remote = request.form.get("include_remote") == "1"
+    include_throat = request.form.get("include_throat") == "1"
+    if request.form.get("confirm_apply") != "1":
+        flash("Confirm optimizer apply before writing suggested assignments.", "error")
+        return redirect(url_for("neomotherbrain.parking_plan_operation", operation_id=operation.id))
+
+    result = apply_parking_optimizer_plan(
+        gateway,
+        operation,
+        include_remote=include_remote,
+        include_throat=include_throat,
+        user=current_user,
+    )
+    context = parking_plan_context(gateway, operation=operation)
+    category = "info" if result["ok"] else "error"
+    flash(result["message"], category)
+    for skipped in result.get("skipped", [])[:3]:
+        flash(f"{skipped['tail']}: {skipped['reason']}", "warning")
+    if result.get("preview", {}).get("unassigned_tails"):
+        flash(
+            f"{len(result['preview']['unassigned_tails'])} tail(s) remain unresolved by optimizer.",
+            "warning",
+        )
+    db.session.commit()
+    return redirect(url_for("neomotherbrain.parking_plan_operation", operation_id=operation.id))
 
 
 @bp.route("/motherbrain/parking-rules", methods=["GET", "POST"])

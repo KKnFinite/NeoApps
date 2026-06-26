@@ -1,7 +1,9 @@
 from dataclasses import dataclass
+from datetime import datetime
 
 from ortools.sat.python import cp_model
 
+from app.extensions import db
 from app.models import MotherBrainParkingRule, MotherBrainParkingSettings, SortDateParkingAssignment
 from app.services.parking_physical_validator import (
     NORMAL_BANKS,
@@ -19,6 +21,7 @@ from app.services.parking_rules import (
 
 
 PARKING_OPTIMIZER_TIME_LIMIT_SECONDS = 3.0
+SUCCESS_SOLVER_STATUSES = {"OPTIMAL", "FEASIBLE"}
 
 
 @dataclass(frozen=True)
@@ -166,6 +169,111 @@ def parking_optimizer_preview(
         summary,
         wall_time=solver.WallTime() if status else None,
     )
+
+
+def apply_parking_optimizer_plan(
+    gateway,
+    operation,
+    include_remote=None,
+    include_throat=None,
+    user=None,
+):
+    preview = parking_optimizer_preview(
+        gateway,
+        operation,
+        include_remote=include_remote,
+        include_throat=include_throat,
+    )
+    result = {
+        "preview": preview,
+        "applied_count": 0,
+        "skipped": [],
+        "ok": False,
+        "message": "",
+    }
+    if preview["solver_status"] not in SUCCESS_SOLVER_STATUSES:
+        result["message"] = preview.get("summary") or (
+            f"Optimizer returned {preview['solver_status']}; no assignments were applied."
+        )
+        return result
+
+    suggestions = list(preview.get("suggested_assignments") or [])
+    if not suggestions:
+        result["message"] = "No suggested assignments were available to apply."
+        return result
+
+    assignment_by_tail = {
+        _normalize_tail(assignment.tail_number): assignment
+        for assignment in SortDateParkingAssignment.query.filter_by(
+            sort_date_operation_id=operation.id
+        ).all()
+        if _normalize_tail(assignment.tail_number)
+    }
+    occupied_lanes = {
+        (
+            _normalize_position(assignment.position_code),
+            int(assignment.lane_number or 1),
+        )
+        for assignment in assignment_by_tail.values()
+        if _normalize_position(assignment.position_code) and assignment.lane_number
+    }
+
+    for suggestion in suggestions:
+        tail = _normalize_tail(suggestion.get("tail"))
+        position = _normalize_position(suggestion.get("position"))
+        lane = _normalize_lane(suggestion.get("lane"))
+        if not tail or not position or lane not in (1, 2):
+            result["skipped"].append(
+                {"tail": tail or "-", "reason": "Suggestion was incomplete."}
+            )
+            continue
+
+        current_assignment = assignment_by_tail.get(tail)
+        if current_assignment and _normalize_position(current_assignment.position_code):
+            result["skipped"].append(
+                {
+                    "tail": tail,
+                    "reason": f"Current assignment preserved at {current_assignment.position_code} Slot {current_assignment.lane_number}.",
+                }
+            )
+            continue
+
+        if (position, lane) in occupied_lanes:
+            result["skipped"].append(
+                {"tail": tail, "reason": f"{position} Slot {lane} is no longer open."}
+            )
+            continue
+
+        assignment = current_assignment or SortDateParkingAssignment(
+            sort_date_operation_id=operation.id,
+            tail_number=tail,
+        )
+        if not current_assignment:
+            db.session.add(assignment)
+            assignment_by_tail[tail] = assignment
+
+        assignment.ramp_code = _ramp_from_position(position)
+        assignment.position_code = position
+        assignment.lane_number = lane
+        assignment.assigned_by_user_id = getattr(user, "id", None)
+        assignment.assigned_at = datetime.utcnow()
+        occupied_lanes.add((position, lane))
+        result["applied_count"] += 1
+
+    db.session.flush()
+    unresolved_count = len(preview.get("unassigned_tails") or [])
+    result["ok"] = result["applied_count"] > 0
+    result["message"] = (
+        f"Applied {result['applied_count']} optimizer assignment"
+        f"{'' if result['applied_count'] == 1 else 's'}."
+    )
+    if unresolved_count:
+        result["message"] += f" {unresolved_count} unresolved tail{'s' if unresolved_count != 1 else ''} remain."
+    if result["skipped"]:
+        result["message"] += f" {len(result['skipped'])} suggestion{'s' if len(result['skipped']) != 1 else ''} skipped."
+    if result["applied_count"] == 0 and result["skipped"]:
+        result["message"] = "No assignments were applied; current manual assignments were preserved."
+    return result
 
 
 def _preview_result(
@@ -579,5 +687,12 @@ def _ramp_from_position(position):
 def _position_number(position):
     try:
         return int(str(position or "")[1:])
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_lane(value):
+    try:
+        return int(value)
     except (TypeError, ValueError):
         return None

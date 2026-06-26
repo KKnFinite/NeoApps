@@ -304,6 +304,19 @@
                     {% endfor %}
                 </ul>
             </div>
+            {% if can_apply_parking_optimizer %}
+            <form class="parking-optimizer-apply-form" method="post" action="{{ url_for('neomotherbrain.apply_parking_plan_optimizer', operation_id=operation.id) }}">
+                <input type="hidden" name="include_remote" value="{{ 1 if optimizer_preview.runtime_toggles.include_remote else 0 }}">
+                <input type="hidden" name="include_throat" value="{{ 1 if optimizer_preview.runtime_toggles.include_throat else 0 }}">
+                <label class="parking-checkbox">
+                    <input type="checkbox" name="confirm_apply" value="1" required>
+                    <span>I understand this writes the suggested assignments to the current Parking Plan.</span>
+                </label>
+                <button class="action-button" type="submit">APPLY SUGGESTED PLAN</button>
+            </form>
+            {% else %}
+            <p class="parking-optimizer-note">Your current permissions allow previewing suggestions, but not applying them.</p>
+            {% endif %}
             {% endif %}
 
             {% if optimizer_preview.unassigned_tails %}
