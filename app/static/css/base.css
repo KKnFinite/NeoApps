@@ -9519,16 +9519,16 @@ select::-ms-expand {
         width: 100%;
         margin-top: 0;
         overflow: visible;
-        padding: 6px 8px;
+        padding: 6px;
         transform: none;
-        grid-template-columns: minmax(96px, 1fr) minmax(64px, auto) minmax(86px, auto) auto;
+        grid-template-columns: minmax(92px, 1fr) minmax(58px, 76px) minmax(68px, 84px) 40px;
         grid-template-rows: auto;
         align-items: center;
-        gap: 5px;
+        gap: 4px;
     }
 
     body.blueprint-neomotherbrain.motherbrain-fixed-header .topbar {
-        grid-template-columns: minmax(74px, 1fr) 38px minmax(54px, 74px) minmax(76px, 86px) auto;
+        grid-template-columns: minmax(82px, 1fr) 36px minmax(52px, 68px) minmax(64px, 82px) 40px;
     }
 
     .motherbrain-fixed-header .motherbrain-header-logo {
@@ -9663,16 +9663,16 @@ select::-ms-expand {
         grid-row: 1;
         justify-items: start;
         min-width: 0;
-        max-width: 90px;
+        max-width: 76px;
         height: var(--mobile-node-banner-button-height);
         min-height: var(--mobile-node-banner-button-height);
-        padding: 4px 7px;
+        padding: 4px 6px;
         text-align: left;
     }
 
     body.blueprint-neomotherbrain.motherbrain-fixed-header .user-chip {
         grid-column: 3;
-        max-width: 74px;
+        max-width: 68px;
     }
 
     .motherbrain-fixed-header .user-chip span,
@@ -9710,8 +9710,17 @@ select::-ms-expand {
         width: 100%;
         height: var(--mobile-node-banner-button-height);
         min-height: var(--mobile-node-banner-button-height);
-        padding: 6px 8px;
-        font-size: 0.56rem;
+        padding: 4px 5px;
+        overflow: hidden;
+        font-size: 0.52rem;
+        line-height: 0.92;
+        text-align: center;
+        text-wrap: balance;
+        white-space: normal;
+    }
+
+    .motherbrain-fixed-header .character-switcher-trigger::after {
+        display: none;
     }
 
     .motherbrain-fixed-header .character-switcher-panel {
@@ -9728,8 +9737,8 @@ select::-ms-expand {
         gap: 3px;
         height: var(--mobile-node-banner-button-height);
         min-height: var(--mobile-node-banner-button-height);
-        min-width: 42px;
-        padding: 5px 7px;
+        min-width: 40px;
+        padding: 5px 6px;
         border: 1px solid rgba(var(--node-highlight-rgb), 0.5);
         border-radius: 5px;
         color: var(--text);
@@ -14542,7 +14551,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     body.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-standalone-header.app-header,
     body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-standalone-header.app-header {
         display: grid;
-        grid-template-columns: minmax(94px, 1fr) minmax(64px, auto) minmax(86px, auto) auto;
+        grid-template-columns: minmax(92px, 1fr) minmax(58px, 76px) minmax(68px, 84px) 40px;
         align-items: center;
         width: 100%;
     }
@@ -14579,7 +14588,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-standalone-header .user-chip {
         grid-column: 2;
         min-width: 0;
-        max-width: 82px;
+        max-width: 76px;
         height: var(--mobile-node-banner-button-height);
         min-height: var(--mobile-node-banner-button-height);
         margin-left: 0;
@@ -14662,9 +14671,16 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     body.blueprint-neosektor.neosektor-tunnel-operator-page .character-switcher-standalone .character-switcher-trigger {
         width: 100%;
         padding-inline: 5px;
-        font-size: 0.45rem;
+        font-size: 0.52rem;
         letter-spacing: 0.035em;
-        white-space: nowrap;
+        line-height: 0.92;
+        text-wrap: balance;
+        white-space: normal;
+    }
+
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .character-switcher-standalone .character-switcher-trigger::after,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .character-switcher-standalone .character-switcher-trigger::after {
+        display: none;
     }
 
     .blueprint-neosektor .character-switcher-standalone .character-switcher-panel {
@@ -14920,10 +14936,10 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     }
 
     body.blueprint-neosektor.neosektor-fixed-header .topbar {
-        grid-template-columns: minmax(96px, 1fr) minmax(64px, auto) minmax(86px, auto) auto;
+        grid-template-columns: minmax(92px, 1fr) minmax(58px, 76px) minmax(68px, 84px) 40px;
         grid-template-rows: auto;
         gap: 4px;
-        padding: 6px 8px;
+        padding: 6px;
     }
 
     body.blueprint-neosektor.neosektor-fixed-header .motherbrain-header-logo-link {
@@ -14957,10 +14973,10 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
         grid-column: 2;
         grid-row: 1;
         min-width: 0;
-        max-width: 90px;
+        max-width: 76px;
         height: var(--mobile-node-banner-button-height);
         min-height: var(--mobile-node-banner-button-height);
-        padding: 4px 7px;
+        padding: 4px 6px;
     }
 
     body.blueprint-neosektor.neosektor-fixed-header .character-switcher {
@@ -14974,13 +14990,16 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     body.blueprint-neosektor.neosektor-fixed-header .logout-link {
         height: var(--mobile-node-banner-button-height);
         min-height: var(--mobile-node-banner-button-height);
-        padding-inline: 6px;
-        font-size: 0.54rem;
+        padding-inline: 5px;
+        font-size: 0.52rem;
         letter-spacing: 0.04em;
     }
 
     body.blueprint-neosektor.neosektor-fixed-header .character-switcher-trigger {
         width: 100%;
+        line-height: 0.92;
+        text-wrap: balance;
+        white-space: normal;
     }
 
     body.blueprint-neosektor.neosektor-fixed-header .logout-link {
@@ -14990,10 +15009,10 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     body.blueprint-neosektor.neosektor-fixed-header .motherbrain-menu-button {
         grid-column: 4;
         grid-row: 1;
-        min-width: 38px;
+        min-width: 40px;
         height: var(--mobile-node-banner-button-height);
         min-height: var(--mobile-node-banner-button-height);
-        padding: 4px 6px;
+        padding: 4px 5px;
         font-size: 0.5rem;
     }
 

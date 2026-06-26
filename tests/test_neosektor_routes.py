@@ -1996,6 +1996,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )[1].split("}", 1)[0]
 
         self.assertIn("grid-template-rows: auto;", topbar_block)
+        self.assertIn("grid-template-columns: minmax(92px, 1fr) minmax(58px, 76px) minmax(68px, 84px) 40px;", topbar_block)
         self.assertIn("display: none;", logo_block)
         self.assertIn("grid-column: 3;", switcher_block)
         self.assertIn("grid-row: 1;", switcher_block)
@@ -2003,12 +2004,17 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("display: none;", logout_block)
         self.assertIn("grid-column: 4;", menu_button_block)
         self.assertIn("height: var(--mobile-node-banner-button-height);", menu_button_block)
+        self.assertIn("min-width: 40px;", menu_button_block)
+        self.assertIn("text-wrap: balance;", css)
+        self.assertIn("white-space: normal;", css)
         self.assertIn("display: grid;", operator_header_block)
-        self.assertIn("grid-template-columns: minmax(94px, 1fr)", operator_header_block)
-        self.assertIn("minmax(86px, auto) auto;", operator_header_block)
+        self.assertIn("grid-template-columns: minmax(92px, 1fr)", operator_header_block)
+        self.assertIn("minmax(68px, 84px) 40px;", operator_header_block)
         self.assertIn("grid-column: 3;", css)
+        self.assertIn(".character-switcher-standalone .character-switcher-trigger::after", css)
         self.assertIn(".mobile-banner-logout {\n        display: none !important;", css)
-        self.assertIn("white-space: nowrap;", operator_switcher_block)
+        self.assertIn("text-wrap: balance;", operator_switcher_block)
+        self.assertIn("white-space: normal;", operator_switcher_block)
 
     def test_ballmat_operator_css_keeps_open_bays_equal_to_wave_rows(self):
         css = Path("app/static/css/base.css").read_text()

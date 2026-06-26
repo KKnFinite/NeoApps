@@ -74,6 +74,11 @@ class User(UserMixin, db.Model):
         return name or self.full_name or self.email or self.username
 
     @property
+    def header_display_name(self):
+        last_name = (self.last_name or "").strip()
+        return last_name or self.display_name
+
+    @property
     def role_level(self):
         return ROLE_LEVELS.get(self.role, 0)
 

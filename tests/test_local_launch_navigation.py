@@ -7,7 +7,7 @@ from flask import Flask
 
 from app import create_app
 from app.extensions import db
-from app.models import SortDateOperation
+from app.models import SortDateOperation, User
 from scripts.seed_dev_user import seed_dev_grandmaster
 
 
@@ -100,7 +100,10 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));", css)
         self.assertIn(".motherbrain-fixed-header .topbar-user-row", css)
         self.assertIn("--mobile-node-banner-button-height: 36px;", css)
-        self.assertIn("grid-template-columns: minmax(96px, 1fr) minmax(64px, auto) minmax(86px, auto) auto;", css)
+        self.assertIn("grid-template-columns: minmax(92px, 1fr) minmax(58px, 76px) minmax(68px, 84px) 40px;", css)
+        self.assertIn("grid-template-columns: minmax(82px, 1fr) 36px minmax(52px, 68px) minmax(64px, 82px) 40px;", css)
+        self.assertIn(".motherbrain-fixed-header .character-switcher-trigger::after", css)
+        self.assertIn("white-space: normal;", css)
         self.assertIn(".mobile-banner-logout {\n        display: none !important;", css)
         self.assertIn(".motherbrain-header-identity .neo-node-name", css)
         self.assertIn(".motherbrain-menu-button", css)
@@ -382,6 +385,45 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.location, "/portal")
+
+    def test_logged_in_header_shows_last_name_only(self):
+        seed_dev_grandmaster(self.app)
+        user = User.query.filter_by(username="Kessler").first()
+        user.first_name = "Khris"
+        user.last_name = "Kessler"
+        user.full_name = "Khris Kessler"
+        db.session.commit()
+
+        self.client.post(
+            "/login",
+            data={"username": "Kessler", "password": "1313"},
+        )
+        response = self.client.get("/portal")
+        html = response.data.decode()
+        user_chip = html.split('aria-label="Logged in user"', 1)[1].split("</div>", 1)[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("<strong>Kessler</strong>", user_chip)
+        self.assertNotIn("Khris Kessler", user_chip)
+
+    def test_logged_in_header_falls_back_when_last_name_is_missing(self):
+        seed_dev_grandmaster(self.app)
+        user = User.query.filter_by(username="Kessler").first()
+        user.first_name = ""
+        user.last_name = ""
+        user.full_name = "Fallback Display"
+        db.session.commit()
+
+        self.client.post(
+            "/login",
+            data={"username": "Kessler", "password": "1313"},
+        )
+        response = self.client.get("/portal")
+        html = response.data.decode()
+        user_chip = html.split('aria-label="Logged in user"', 1)[1].split("</div>", 1)[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("<strong>Fallback Display</strong>", user_chip)
 
     def test_seeded_kessler_grandmaster_accesses_motherbrain_routes(self):
         seed_dev_grandmaster(self.app)

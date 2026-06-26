@@ -19,7 +19,7 @@
         </div>
         <div class="user-chip" aria-label="Logged in user">
             <span>Logged in</span>
-            <strong>{{ current_user.display_name }}</strong>
+            <strong>{{ current_user.header_display_name }}</strong>
         </div>
         {% set character_switcher_modifier = "character-switcher-standalone" %}
         {% include "_change_characters.html" %}
