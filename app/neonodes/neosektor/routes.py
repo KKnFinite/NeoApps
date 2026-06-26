@@ -162,6 +162,7 @@ def tunnel_conductor_wave():
             get_current_gateway(),
             payload.get("wave"),
             payload.get("delta"),
+            value=payload.get("value") if "value" in payload else None,
         )
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400

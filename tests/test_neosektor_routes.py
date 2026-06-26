@@ -1026,6 +1026,49 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"data-can-edit=\"true\"", response.data)
         self.assertNotIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
 
+    def test_tunnel_conductor_left_to_arrive_renders_typeable_numeric_controls(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neosektor/tunnel-conductor")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"data-tunnel-wave-input=\"first\"", response.data)
+        self.assertIn(b"data-tunnel-wave-input=\"second\"", response.data)
+        self.assertIn(b"data-neosektor-edit-key=\"wave:first\"", response.data)
+        self.assertIn(b"data-neosektor-edit-key=\"routing:west_offset\"", response.data)
+        self.assertIn(b"neosektor-inline-edit-error", response.data)
+
+    def test_neosektor_numeric_inputs_render_no_spinner_class_and_css(self):
+        self._login_approved_user(role="simulator")
+
+        tunnel = self.client.get("/neosektor/tunnel-conductor")
+        self.client.get("/neosektor/ebm")
+        ballmat = self.client.get("/neosektor/ebm")
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertIn(b"neosektor-numeric-input", tunnel.data)
+        self.assertIn(b"neosektor-numeric-input", ballmat.data)
+        self.assertIn(".neosektor-numeric-input::-webkit-inner-spin-button", css)
+        self.assertIn("-moz-appearance: textfield;", css)
+
+    def test_neosektor_edit_scripts_guard_pending_values_from_stale_polling(self):
+        tunnel_template = Path(
+            "app/templates/neonodes/neosektor/tunnel_conductor.html"
+        ).read_text()
+        ballmat_template = Path(
+            "app/templates/neonodes/neosektor/ballmat.html"
+        ).read_text()
+
+        for template in (tunnel_template, ballmat_template):
+            self.assertIn("const pendingEdits = new Map();", template)
+            self.assertIn("const setEditableValue = (input, value)", template)
+            self.assertIn("restoreAfterFailure", template)
+            self.assertIn("Restored the latest server value", template)
+
+        self.assertIn("queueOffsetSave", tunnel_template)
+        self.assertIn("queueWaveSave", tunnel_template)
+        self.assertIn("hasPending(control)", ballmat_template)
+
     def test_tunnel_conductor_blocks_user_without_view_permission(self):
         self._login_approved_user(role="operator")
 
@@ -1081,6 +1124,22 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(
             NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one().planned_count,
             6,
+        )
+
+    def test_tunnel_conductor_wave_value_sets_left_to_arrive_from_typed_input(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/wave",
+            json={"wave": "first", "value": 42},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["state"]["waves"][0]["planned"], 42)
+        self.assertEqual(
+            NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one().planned_count,
+            42,
         )
 
     def test_neosektor_operational_settings_default_when_missing(self):

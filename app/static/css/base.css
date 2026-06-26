@@ -2307,6 +2307,35 @@ a {
     overflow-x: hidden;
 }
 
+.blueprint-neosektor .neosektor-numeric-input {
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+.blueprint-neosektor .neosektor-numeric-input::-webkit-inner-spin-button,
+.blueprint-neosektor .neosektor-numeric-input::-webkit-outer-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
+}
+
+.blueprint-neosektor .neosektor-inline-edit-error {
+    width: 100%;
+    padding: 7px 9px;
+    border: 1px solid rgba(255, 118, 118, 0.55);
+    border-radius: 6px;
+    background: rgba(90, 10, 10, 0.66);
+    color: #ffd9d9;
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-inline-edit-error[hidden] {
+    display: none;
+}
+
 .neosektor-ballmat-operator-page .topbar,
 .neosektor-tunnel-operator-page .topbar,
 .neosektor-live-counts-page .topbar {

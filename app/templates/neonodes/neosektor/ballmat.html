@@ -30,6 +30,7 @@
     </header>
 
     <main class="counts-wrap">
+        <div class="neosektor-inline-edit-error" data-neosektor-edit-error hidden aria-live="polite"></div>
         <section class="wave-strip" aria-label="Wave summary">
             {% for wave_key, wave in [("first", state.waves[0]), ("second", state.waves[1])] %}
             <article class="wave-card">
@@ -67,8 +68,9 @@
                             min="0"
                             max="99"
                             value="{{ wave.count }}"
-                            class="counter-number"
+                            class="counter-number neosektor-numeric-input"
                             data-wave-count="{{ wave.key }}"
+                            data-neosektor-edit-key="ballmat:{{ side.key }}:{{ wave.key }}"
                             aria-label="Set {{ side.label }} {{ wave.name }}"
                         >
                         <button type="button" data-count-step="1" aria-label="Increase {{ side.label }} {{ wave.name }}">+</button>
@@ -92,8 +94,9 @@
                             min="0"
                             max="99"
                             value="{{ side.open_bays }}"
-                            class="counter-number"
+                            class="counter-number neosektor-numeric-input"
                             data-open-bays
+                            data-neosektor-edit-key="ballmat:{{ side.key }}:open_bays"
                             aria-label="Set {{ side.label }} open bays"
                         >
                         <button type="button" data-count-step="1" aria-label="Increase {{ side.label }} open bays">+</button>
@@ -121,6 +124,7 @@
                             step="1"
                             value="{{ status_labels.index(bay.status) }}"
                             data-bay-status="{{ bay.bay_name }}"
+                            data-neosektor-edit-key="ballmat:{{ side.key }}:bay:{{ bay.bay_name }}"
                             aria-label="{{ bay.bay_name }} status"
                         >
                         {% else %}
@@ -148,7 +152,70 @@
     const canEdit = root.dataset.canEdit === "true";
     const selectedPanel = root.querySelector(`[data-ballmat-side="${selectedSide}"]`);
     const statusLabels = {{ status_labels|list|tojson }};
+    const pendingEdits = new Map();
+    const editError = root.querySelector("[data-neosektor-edit-error]");
+    let pendingSequence = 0;
     let saveTimer = null;
+
+    const editKeyFor = (input) => input?.dataset?.neosektorEditKey || "";
+
+    const markPending = (key, value) => {
+        if (!key) {
+            return null;
+        }
+        const sequence = ++pendingSequence;
+        pendingEdits.set(key, { sequence, value: String(value ?? "") });
+        return sequence;
+    };
+
+    const markInputPending = (input) => markPending(editKeyFor(input), input?.value);
+
+    const pendingToken = (key) => pendingEdits.get(key)?.sequence ?? null;
+
+    const captureTokens = (inputs) => inputs
+        .map((input) => [editKeyFor(input), pendingToken(editKeyFor(input))])
+        .filter(([key, token]) => key && token !== null);
+
+    const clearPendingTokens = (tokens) => {
+        tokens.forEach(([key, token]) => {
+            if (pendingEdits.get(key)?.sequence === token) {
+                pendingEdits.delete(key);
+            }
+        });
+    };
+
+    const hasPending = (input) => {
+        const key = editKeyFor(input);
+        return Boolean(key && pendingEdits.has(key));
+    };
+
+    const showEditError = (message) => {
+        if (!editError) {
+            return;
+        }
+        editError.textContent = message || "Update failed. Restored the latest server value.";
+        editError.hidden = false;
+        window.clearTimeout(showEditError.timer);
+        showEditError.timer = window.setTimeout(() => {
+            editError.hidden = true;
+        }, 5200);
+    };
+
+    const restoreAfterFailure = (tokens, message) => {
+        clearPendingTokens(tokens);
+        showEditError(message);
+        refreshState();
+    };
+
+    const setEditableValue = (input, value) => {
+        if (!input) {
+            return;
+        }
+        if (document.activeElement === input || hasPending(input)) {
+            return;
+        }
+        input.value = value ?? 0;
+    };
 
     const readNumber = (input) => {
         const value = Number.parseInt(input?.value, 10);
@@ -222,7 +289,7 @@
                 const statusControl = panel.querySelector(`[data-wave-status="${wave.key}"]`);
                 if (countInput && document.activeElement !== countInput) {
                     if (countInput.tagName === "INPUT") {
-                        countInput.value = wave.count;
+                        setEditableValue(countInput, wave.count);
                     } else {
                         countInput.textContent = wave.count;
                     }
@@ -238,9 +305,7 @@
 
             const openBays = panel.querySelector("[data-open-bays]");
             const openBaysValue = panel.querySelector("[data-open-bays-value]");
-            if (openBays && document.activeElement !== openBays) {
-                openBays.value = side.open_bays;
-            }
+            setEditableValue(openBays, side.open_bays);
             if (openBaysValue) {
                 openBaysValue.textContent = side.open_bays;
             }
@@ -248,7 +313,7 @@
             side.bays.forEach((bay) => {
                 const control = panel.querySelector(`[data-bay-status="${bay.bay_name}"]`);
                 const readout = panel.querySelector(`[data-bay-field="${bay.bay_name}"]`);
-                if (control && document.activeElement !== control) {
+                if (control && document.activeElement !== control && !hasPending(control)) {
                     if (control.type === "range") {
                         control.value = Math.max(statusLabels.indexOf(bay.status), 0);
                     } else {
@@ -279,6 +344,8 @@
         if (!canEdit || !selectedPanel) {
             return;
         }
+        const controls = Array.from(selectedPanel.querySelectorAll("[data-wave-count], [data-open-bays], [data-bay-status]"));
+        const tokens = captureTokens(controls);
 
         try {
             const response = await fetch(updateUrl, {
@@ -288,14 +355,18 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(collectPayload()),
             });
-            if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload.ok) {
+                restoreAfterFailure(tokens, payload.error || "Ballmat update failed. Restored the latest server value.");
                 return;
             }
-            const payload = await response.json();
             if (payload.ok) {
+                clearPendingTokens(tokens);
                 applyState(payload.state);
             }
-        } catch (_error) {}
+        } catch (_error) {
+            restoreAfterFailure(tokens, "Ballmat update failed. Restored the latest server value.");
+        }
     };
 
     const queueSave = () => {
@@ -316,6 +387,7 @@
         const max = Number.parseInt(input.max, 10);
         const nextValue = Math.max(readNumber(input) + Number.parseInt(button.dataset.countStep, 10), 0);
         input.value = Number.isFinite(max) ? Math.min(nextValue, max) : nextValue;
+        markInputPending(input);
         queueSave();
     });
 
@@ -325,6 +397,7 @@
             return;
         }
         if (target.matches("[data-wave-count], [data-open-bays], [data-bay-status]")) {
+            markInputPending(target);
             const openBaysValue = target.closest(".neosektor-open-bay-control")?.querySelector("[data-open-bays-value]");
             if (openBaysValue) {
                 openBaysValue.textContent = readNumber(target);
@@ -346,6 +419,7 @@
             return;
         }
         if (target.matches("[data-wave-status], [data-open-bays], [data-bay-status]")) {
+            markInputPending(target);
             queueSave();
         }
     });

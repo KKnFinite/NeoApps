@@ -40,7 +40,23 @@
                     <span>Left to Arrive</span>
                     <div class="counter-control tunnel-control" aria-label="{{ wave.name }} left to arrive controls">
                         <button type="button" data-tunnel-wave-delta="-1" {% if not can_edit %}disabled{% endif %}>-</button>
+                        {% if can_edit %}
+                        <input
+                            type="number"
+                            inputmode="numeric"
+                            min="0"
+                            max="999"
+                            value="{{ wave.planned }}"
+                            class="counter-number neosektor-numeric-input"
+                            data-wave-summary="{{ wave_key }}"
+                            data-metric="left_to_arrive"
+                            data-tunnel-wave-input="{{ wave_key }}"
+                            data-neosektor-edit-key="wave:{{ wave_key }}"
+                            aria-label="Set {{ wave.name }} left to arrive"
+                        >
+                        {% else %}
                         <strong class="counter-number" data-wave-summary="{{ wave_key }}" data-metric="left_to_arrive">{{ wave.planned }}</strong>
+                        {% endif %}
                         <button type="button" data-tunnel-wave-delta="1" {% if not can_edit %}disabled{% endif %}>+</button>
                     </div>
                 </div>
@@ -71,8 +87,9 @@
                                 min="0"
                                 max="99"
                                 value="{{ wave.count }}"
-                                class="counter-number"
+                                class="counter-number neosektor-numeric-input"
                                 data-wave-count="{{ wave.key }}"
+                                data-neosektor-edit-key="ballmat:{{ side.key }}:{{ wave.key }}"
                                 aria-label="Set {{ side.label }} {{ wave.name }}"
                             >
                             <button type="button" data-tunnel-count-step="1" aria-label="Increase {{ side.label }} {{ wave.name }}">+</button>
@@ -93,8 +110,9 @@
                                 min="0"
                                 max="99"
                                 value="{{ side.open_bays }}"
-                                class="counter-number"
+                                class="counter-number neosektor-numeric-input"
                                 data-open-bays
+                                data-neosektor-edit-key="ballmat:{{ side.key }}:open_bays"
                                 aria-label="Set {{ side.label }} open bays"
                             >
                             <button type="button" data-tunnel-count-step="1" aria-label="Increase {{ side.label }} open bays">+</button>
@@ -133,7 +151,9 @@
                         min="0"
                         max="999"
                         value="{{ state.operational_settings.first_modifier }}"
+                        class="neosektor-numeric-input"
                         data-tunnel-setting="first_modifier"
+                        data-neosektor-edit-key="setting:first_modifier"
                         aria-label="First wave left to unload modifier"
                         {% if not can_edit %}disabled{% endif %}
                     >
@@ -146,7 +166,9 @@
                         min="0"
                         max="999"
                         value="{{ state.operational_settings.second_modifier }}"
+                        class="neosektor-numeric-input"
                         data-tunnel-setting="second_modifier"
+                        data-neosektor-edit-key="setting:second_modifier"
                         aria-label="Second wave left to unload modifier"
                         {% if not can_edit %}disabled{% endif %}
                     >
@@ -159,7 +181,9 @@
                         min="1"
                         max="120"
                         value="{{ state.operational_settings.down_timer_minutes }}"
+                        class="neosektor-numeric-input"
                         data-tunnel-setting="down_timer_minutes"
+                        data-neosektor-edit-key="setting:down_timer_minutes"
                         aria-label="All up to down timer minutes"
                         {% if not can_edit %}disabled{% endif %}
                     >
@@ -180,7 +204,9 @@
                         min="0"
                         max="20"
                         value="{{ state.routing.west_offset }}"
+                        class="neosektor-numeric-input"
                         data-tunnel-offset-input
+                        data-neosektor-edit-key="routing:west_offset"
                         aria-label="West route offset"
                         {% if not can_edit %}disabled{% endif %}
                     >
@@ -188,6 +214,7 @@
                 </div>
             </div>
         </section>
+        <div class="neosektor-inline-edit-error" data-neosektor-edit-error hidden aria-live="polite"></div>
     </main>
 </section>
 
@@ -207,15 +234,84 @@
     const offsetInput = root.querySelector("[data-tunnel-offset-input]");
     const settingInputs = Array.from(root.querySelectorAll("[data-tunnel-setting]"));
     const ballmatSaveTimers = {};
+    const waveSaveTimers = {};
+    const pendingEdits = new Map();
+    const editError = root.querySelector("[data-neosektor-edit-error]");
+    let pendingSequence = 0;
+    let offsetSaveTimer = null;
     let settingsSaveTimer = null;
     let settingsSaveSequence = 0;
-    const dirtySettings = new Set();
 
     const setText = (selector, value) => {
         const element = root.querySelector(selector);
         if (element) {
             element.textContent = value;
         }
+    };
+
+    const editKeyFor = (input) => input?.dataset?.neosektorEditKey || "";
+
+    const markPending = (key, value) => {
+        if (!key) {
+            return null;
+        }
+        const sequence = ++pendingSequence;
+        pendingEdits.set(key, { sequence, value: String(value ?? "") });
+        return sequence;
+    };
+
+    const markInputPending = (input) => markPending(editKeyFor(input), input?.value);
+
+    const pendingToken = (key) => pendingEdits.get(key)?.sequence ?? null;
+
+    const clearPending = (key, token) => {
+        if (!key || token === null) {
+            return;
+        }
+        if (pendingEdits.get(key)?.sequence === token) {
+            pendingEdits.delete(key);
+        }
+    };
+
+    const clearPendingTokens = (tokens) => {
+        tokens.forEach(([key, token]) => clearPending(key, token));
+    };
+
+    const hasPending = (input) => {
+        const key = editKeyFor(input);
+        return Boolean(key && pendingEdits.has(key));
+    };
+
+    const captureTokens = (inputs) => inputs
+        .map((input) => [editKeyFor(input), pendingToken(editKeyFor(input))])
+        .filter(([key, token]) => key && token !== null);
+
+    const showEditError = (message) => {
+        if (!editError) {
+            return;
+        }
+        editError.textContent = message || "Update failed. Restored the latest server value.";
+        editError.hidden = false;
+        window.clearTimeout(showEditError.timer);
+        showEditError.timer = window.setTimeout(() => {
+            editError.hidden = true;
+        }, 5200);
+    };
+
+    const restoreAfterFailure = (tokens, message) => {
+        clearPendingTokens(tokens);
+        showEditError(message);
+        refreshState();
+    };
+
+    const setEditableValue = (input, value) => {
+        if (!input) {
+            return;
+        }
+        if (document.activeElement === input || hasPending(input)) {
+            return;
+        }
+        input.value = value ?? 0;
     };
 
     const readNumber = (input) => {
@@ -240,24 +336,26 @@
         return Math.min(value, 20);
     };
 
+    const waveInputFor = (waveKey) => root.querySelector(`[data-tunnel-wave-input="${waveKey}"]`);
+
     const applyState = (state) => {
         (state.waves || []).forEach((wave) => {
             const waveKey = wave.name === "1ST WAVE" ? "first" : "second";
-            setText(`[data-wave-summary="${waveKey}"][data-metric="left_to_arrive"]`, wave.planned ?? 0);
+            const arriveControl = root.querySelector(`[data-wave-summary="${waveKey}"][data-metric="left_to_arrive"]`);
+            if (arriveControl?.tagName === "INPUT") {
+                setEditableValue(arriveControl, wave.planned ?? 0);
+            } else if (arriveControl) {
+                arriveControl.textContent = wave.planned ?? 0;
+            }
             setText(`[data-wave-summary="${waveKey}"][data-metric="left_to_unload"]`, wave.left ?? 0);
         });
 
         const routing = state.routing || {};
-        if (offsetInput && document.activeElement !== offsetInput) {
-            offsetInput.value = routing.west_offset ?? 0;
-        }
+        setEditableValue(offsetInput, routing.west_offset ?? 0);
 
         const settings = state.operational_settings || {};
         settingInputs.forEach((input) => {
-            const settingKey = input.dataset.tunnelSetting;
-            if (document.activeElement !== input && !dirtySettings.has(settingKey)) {
-                input.value = settings[input.dataset.tunnelSetting] ?? input.value;
-            }
+            setEditableValue(input, settings[input.dataset.tunnelSetting] ?? input.value);
         });
 
         Object.entries(state.sides || {}).forEach(([sideKey, side]) => {
@@ -270,9 +368,7 @@
                 const count = panel.querySelector(`[data-wave-count="${wave.key}"]`);
                 if (count) {
                     if (count.tagName === "INPUT") {
-                        if (document.activeElement !== count) {
-                            count.value = wave.count;
-                        }
+                        setEditableValue(count, wave.count);
                     } else {
                         count.textContent = wave.count;
                     }
@@ -281,9 +377,7 @@
 
             const openBays = panel.querySelector("[data-open-bays]");
             const openBaysValue = panel.querySelector("[data-open-bays-value]");
-            if (openBays && document.activeElement !== openBays) {
-                openBays.value = side.open_bays;
-            }
+            setEditableValue(openBays, side.open_bays);
             if (openBaysValue) {
                 openBaysValue.textContent = side.open_bays;
             }
@@ -332,6 +426,8 @@
         if (!canEdit || !panel || !ballmatUrl) {
             return;
         }
+        const controls = Array.from(panel.querySelectorAll("[data-wave-count], [data-open-bays]"));
+        const tokens = captureTokens(controls);
 
         try {
             const response = await fetch(ballmatUrl, {
@@ -341,14 +437,18 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(collectBallmatPayload(panel)),
             });
-            if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload.ok) {
+                restoreAfterFailure(tokens, payload.error || "Ballmat update failed. Restored the latest server value.");
                 return;
             }
-            const payload = await response.json();
             if (payload.ok) {
+                clearPendingTokens(tokens);
                 applyState(payload.state);
             }
-        } catch (_error) {}
+        } catch (_error) {
+            restoreAfterFailure(tokens, "Ballmat update failed. Restored the latest server value.");
+        }
     };
 
     const queueBallmatSave = (panel) => {
@@ -373,6 +473,7 @@
             return;
         }
         const saveSequence = ++settingsSaveSequence;
+        const tokens = captureTokens(settingInputs);
 
         try {
             const response = await fetch(settingsUrl, {
@@ -382,15 +483,18 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(collectSettingsPayload()),
             });
-            if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload.ok) {
+                restoreAfterFailure(tokens, payload.error || "Settings update failed. Restored the latest server value.");
                 return;
             }
-            const payload = await response.json();
             if (payload.ok && saveSequence === settingsSaveSequence) {
-                dirtySettings.clear();
+                clearPendingTokens(tokens);
                 applyState(payload.state);
             }
-        } catch (_error) {}
+        } catch (_error) {
+            restoreAfterFailure(tokens, "Settings update failed. Restored the latest server value.");
+        }
     };
 
     const queueSettingsSave = () => {
@@ -398,10 +502,12 @@
         settingsSaveTimer = window.setTimeout(saveSettings, 250);
     };
 
-    const applyWaveDelta = async (wave, delta) => {
+    const saveWaveValue = async (wave, input) => {
         if (!canEdit) {
             return;
         }
+        const key = editKeyFor(input);
+        const tokens = key ? [[key, pendingToken(key)]] : [];
 
         try {
             const response = await fetch(waveUrl, {
@@ -409,22 +515,49 @@
                 cache: "no-store",
                 credentials: "same-origin",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ wave, delta }),
+                body: JSON.stringify({ wave, value: readClampedNumber(input) }),
             });
-            if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload.ok) {
+                restoreAfterFailure(tokens, payload.error || "Left to arrive update failed. Restored the latest server value.");
                 return;
             }
-            const payload = await response.json();
             if (payload.ok) {
+                clearPendingTokens(tokens);
                 applyState(payload.state);
             }
-        } catch (_error) {}
+        } catch (_error) {
+            restoreAfterFailure(tokens, "Left to arrive update failed. Restored the latest server value.");
+        }
+    };
+
+    const queueWaveSave = (waveKey, input) => {
+        if (!waveKey || !input) {
+            return;
+        }
+        window.clearTimeout(waveSaveTimers[waveKey]);
+        waveSaveTimers[waveKey] = window.setTimeout(() => saveWaveValue(waveKey, input), 250);
+    };
+
+    const applyWaveDelta = (wave, delta) => {
+        const input = waveInputFor(wave);
+        if (!canEdit || !input) {
+            return;
+        }
+        const nextValue = Math.min(
+            Math.max(readNumber(input) + Number.parseInt(delta, 10), 0),
+            Number.parseInt(input.max, 10) || 999,
+        );
+        input.value = nextValue;
+        markInputPending(input);
+        saveWaveValue(wave, input);
     };
 
     const saveOffset = async () => {
         if (!canEdit || !offsetInput) {
             return;
         }
+        const tokens = [[editKeyFor(offsetInput), pendingToken(editKeyFor(offsetInput))]];
 
         try {
             const response = await fetch(offsetUrl, {
@@ -434,14 +567,23 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ west_offset: readOffset() }),
             });
-            if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload.ok) {
+                restoreAfterFailure(tokens, payload.error || "Driver route offset update failed. Restored the latest server value.");
                 return;
             }
-            const payload = await response.json();
             if (payload.ok) {
+                clearPendingTokens(tokens);
                 applyState(payload.state);
             }
-        } catch (_error) {}
+        } catch (_error) {
+            restoreAfterFailure(tokens, "Driver route offset update failed. Restored the latest server value.");
+        }
+    };
+
+    const queueOffsetSave = () => {
+        window.clearTimeout(offsetSaveTimer);
+        offsetSaveTimer = window.setTimeout(saveOffset, 250);
     };
 
     root.addEventListener("click", (event) => {
@@ -469,6 +611,7 @@
                     0,
                 );
                 input.value = Number.isFinite(max) ? Math.min(nextValue, max) : nextValue;
+                markInputPending(input);
                 queueBallmatSave(panel);
             }
             return;
@@ -482,36 +625,61 @@
             Math.max(readOffset() + Number.parseInt(offsetButton.dataset.tunnelOffsetStep, 10), 0),
             20,
         );
+        markInputPending(offsetInput);
         saveOffset();
     });
 
     root.addEventListener("change", (event) => {
+        if (event.target.matches("[data-tunnel-wave-input]") && !event.target.disabled) {
+            event.target.value = readClampedNumber(event.target);
+            markInputPending(event.target);
+            saveWaveValue(event.target.dataset.tunnelWaveInput, event.target);
+            return;
+        }
+
         if (event.target.matches("[data-tunnel-offset-input]") && !event.target.disabled) {
+            event.target.value = readClampedNumber(event.target);
+            markInputPending(event.target);
             saveOffset();
             return;
         }
 
         if (event.target.matches("[data-wave-count], [data-open-bays]") && !event.target.disabled) {
+            event.target.value = readClampedNumber(event.target);
+            markInputPending(event.target);
             queueBallmatSave(event.target.closest("[data-tunnel-side]"));
             return;
         }
 
         if (event.target.matches("[data-tunnel-setting]") && !event.target.disabled) {
             event.target.value = readClampedNumber(event.target);
-            dirtySettings.add(event.target.dataset.tunnelSetting);
+            markInputPending(event.target);
             saveSettings();
         }
     });
 
     root.addEventListener("input", (event) => {
+        if (event.target.matches("[data-tunnel-wave-input]") && !event.target.disabled) {
+            markInputPending(event.target);
+            queueWaveSave(event.target.dataset.tunnelWaveInput, event.target);
+            return;
+        }
+
         if (event.target.matches("[data-wave-count], [data-open-bays]") && !event.target.disabled) {
+            markInputPending(event.target);
             queueBallmatSave(event.target.closest("[data-tunnel-side]"));
             return;
         }
 
         if (event.target.matches("[data-tunnel-setting]") && !event.target.disabled) {
-            dirtySettings.add(event.target.dataset.tunnelSetting);
+            markInputPending(event.target);
             queueSettingsSave();
+            return;
+        }
+
+        if (event.target.matches("[data-tunnel-offset-input]") && !event.target.disabled) {
+            markInputPending(event.target);
+            queueOffsetSave();
         }
     });
 

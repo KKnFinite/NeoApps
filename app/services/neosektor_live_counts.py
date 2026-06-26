@@ -264,7 +264,7 @@ def update_neosektor_operational_settings(gateway, payload, sort_date=None, sort
     return driver_routing_state_payload(gateway, sort_date, sort_name)
 
 
-def adjust_tunnel_wave_arrivals(gateway, wave, delta, sort_date=None, sort_name=None):
+def adjust_tunnel_wave_arrivals(gateway, wave, delta=None, value=None, sort_date=None, sort_name=None):
     _wave_key, wave_name = normalize_wave_key(wave)
     if not wave_name:
         raise ValueError("Invalid wave.")
@@ -275,10 +275,17 @@ def adjust_tunnel_wave_arrivals(gateway, wave, delta, sort_date=None, sort_name=
     waves = _get_or_create_waves(sort_state)
 
     target_row = next(row for row in waves if row.wave_name == wave_name)
-    target_row.planned_count = min(
-        max((target_row.planned_count or 0) + _clean_delta(delta), 0),
-        LEFT_TO_ARRIVE_MAX,
-    )
+    if value is not None:
+        target_row.planned_count = _clean_count(
+            value,
+            default=target_row.planned_count,
+            maximum=LEFT_TO_ARRIVE_MAX,
+        )
+    else:
+        target_row.planned_count = min(
+            max((target_row.planned_count or 0) + _clean_delta(delta), 0),
+            LEFT_TO_ARRIVE_MAX,
+        )
     db.session.flush()
     return driver_routing_state_payload(gateway, sort_date, sort_name)
 
