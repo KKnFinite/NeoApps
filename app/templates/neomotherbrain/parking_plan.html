@@ -276,6 +276,7 @@
         <div class="parking-optimizer-results" aria-label="Parking optimizer preview results">
             <div class="parking-optimizer-result-head">
                 <span>Solver {{ optimizer_preview.solver_status }}</span>
+                <span>Candidates {{ optimizer_preview.candidate_tail_count }}</span>
                 <span>Remote {{ "ON" if optimizer_preview.runtime_toggles.include_remote else "OFF" }}</span>
                 <span>9/10 {{ "ON" if optimizer_preview.runtime_toggles.include_throat else "OFF" }}</span>
                 <span>Deice {{ optimizer_preview.runtime_toggles.deice_spacing_threshold_minutes }} min</span>

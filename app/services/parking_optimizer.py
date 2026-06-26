@@ -14,6 +14,11 @@ from app.services.parking_physical_validator import (
     VALID_767_NORMAL_ANCHORS,
     validate_parking_physical_rules,
 )
+from app.services.parking_aircraft import (
+    UNKNOWN_PARKING_AIRCRAFT_TYPE,
+    normalize_parking_aircraft_type,
+    resolve_parking_aircraft_type_from_tail,
+)
 from app.services.parking_plan import parking_position_options, tail_rows_for_operation
 from app.services.parking_rules import (
     AIRCRAFT_TYPE_RAMP_RESTRICTION,
@@ -127,9 +132,18 @@ def parking_optimizer_preview(
             include_remote,
             include_throat,
             deice_threshold,
+            len(candidate_rows),
             locked_assignments,
             [],
-            _unassigned_rows(candidate_rows, {}, placements),
+            _unassigned_rows(
+                candidate_rows,
+                {},
+                placements,
+                include_remote=include_remote,
+                include_throat=include_throat,
+                locked_conflicts=locked_conflicts,
+                hard_rules=rules["hard"],
+            ),
             locked_conflicts,
             "No candidate parking positions are available under the selected toggles and hard rules.",
         )
@@ -199,7 +213,15 @@ def parking_optimizer_preview(
                 )
             )
 
-    unassigned = _unassigned_rows(candidate_rows, selected_by_tail, placements)
+    unassigned = _unassigned_rows(
+        candidate_rows,
+        selected_by_tail,
+        placements,
+        include_remote=include_remote,
+        include_throat=include_throat,
+        locked_conflicts=locked_conflicts,
+        hard_rules=rules["hard"],
+    )
     summary = (
         "Preview generated. Saved assignments were not changed."
         if suggestions or locked_assignments
@@ -210,6 +232,7 @@ def parking_optimizer_preview(
         include_remote,
         include_throat,
         deice_threshold,
+        len(candidate_rows),
         locked_assignments,
         suggestions,
         unassigned,
@@ -334,6 +357,7 @@ def _preview_result(
     include_remote,
     include_throat,
     deice_threshold,
+    candidate_tail_count,
     locked_assignments,
     suggestions,
     unassigned_tails,
@@ -347,6 +371,7 @@ def _preview_result(
         "suggested_assignments": suggestions,
         "locked_assignments": locked_assignments,
         "unassigned_tails": unassigned_tails,
+        "candidate_tail_count": candidate_tail_count,
         "conflicts": conflicts,
         "has_conflicts": bool(conflicts or unassigned_tails),
         "runtime_toggles": {
@@ -433,7 +458,7 @@ def _locked_assignment_rows(assignments, tail_rows):
                 "lane": int(assignment.lane_number or 1),
                 "label": f"{_normalize_position(assignment.position_code)} Slot {int(assignment.lane_number or 1)}",
                 "origin": row.get("arrival_origin") or "-",
-                "aircraft_type": row.get("aircraft_type") or "-",
+                "aircraft_type": _parking_aircraft_type_for_row(row),
                 "parking_window": _parking_window_label(row),
                 "reason": "Existing manual assignment preserved.",
             }
@@ -467,7 +492,7 @@ def _build_candidate_placements(
     placements = []
     for row in sorted(candidate_rows, key=lambda item: (_parking_window_sort_key(item), item["tail"])):
         tail = _normalize_tail(row.get("tail"))
-        aircraft_type = _normalize_aircraft_type(row.get("aircraft_type"))
+        aircraft_type = _parking_aircraft_type_for_row(row)
         for order, (position, ramp) in enumerate(candidate_positions):
             if position in locked_blocked_positions:
                 continue
@@ -645,23 +670,36 @@ def _add_eta_order_constraints(model, variables, locked_eta_by_position):
                             model.Add(lower_variable == 0)
 
 
-def _unassigned_rows(candidate_rows, selected_by_tail, placements):
+def _unassigned_rows(
+    candidate_rows,
+    selected_by_tail,
+    placements,
+    include_remote=False,
+    include_throat=False,
+    locked_conflicts=None,
+    hard_rules=None,
+):
     placement_tails = {placement.tail for placement in placements}
     rows = []
     for row in sorted(candidate_rows, key=lambda item: (_parking_window_sort_key(item), item["tail"])):
         tail = _normalize_tail(row.get("tail"))
         if tail in selected_by_tail:
             continue
+        aircraft_type = _parking_aircraft_type_for_row(row)
         rows.append(
             {
                 "tail": tail,
                 "origin": row.get("arrival_origin") or "-",
-                "aircraft_type": row.get("aircraft_type") or "-",
+                "aircraft_type": aircraft_type,
                 "parking_window": _parking_window_label(row),
-                "reason": (
-                    "No feasible parking position under hard rules."
-                    if tail in placement_tails
-                    else "No candidate position allowed by runtime toggles or hard restrictions."
+                "reason": _unresolved_reason(
+                    row,
+                    aircraft_type,
+                    has_candidate=tail in placement_tails,
+                    include_remote=include_remote,
+                    include_throat=include_throat,
+                    locked_conflicts=locked_conflicts or [],
+                    hard_rules=hard_rules or {},
                 ),
             }
         )
@@ -682,7 +720,7 @@ def _suggestion_row(placement, row, deice_threshold=0, deice_reasons=()):
         "lane": placement.lane,
         "label": placement.label,
         "origin": row.get("arrival_origin") or "-",
-        "aircraft_type": row.get("aircraft_type") or "-",
+        "aircraft_type": placement.aircraft_type,
         "parking_window": _parking_window_label(row),
         "reason": " ".join(reasons),
     }
@@ -939,7 +977,7 @@ def _placement_allows_aircraft(aircraft_type, position, locked_filled_positions)
 
 def _locked_blocked_positions(assignments, tail_rows):
     aircraft_type_by_tail = {
-        _normalize_tail(row.get("tail")): _normalize_aircraft_type(row.get("aircraft_type"))
+        _normalize_tail(row.get("tail")): resolve_parking_aircraft_type_from_tail(row.get("tail"))
         for row in tail_rows
     }
     blocked = set()
@@ -974,7 +1012,7 @@ def _locked_eta_by_position(assignments, tail_rows):
             continue
         locked_eta.setdefault(position, []).append(eta)
 
-        aircraft_type = _normalize_aircraft_type(row.get("aircraft_type"))
+        aircraft_type = _parking_aircraft_type_for_row(row)
         if aircraft_type != "767":
             continue
         blocked_position = _blocked_position_for_values(aircraft_type, position)
@@ -1071,14 +1109,64 @@ def _normalize_subject(value):
 
 
 def _normalize_aircraft_type(value):
-    text = str(value or "").strip().upper()
-    if "767" in text:
-        return "767"
-    if "757" in text:
-        return "757"
-    if "A300" in text or "A-300" in text:
-        return "A300"
-    return text
+    normalized = normalize_parking_aircraft_type(value, allow_unknown=True)
+    return normalized or str(value or "").strip().upper()
+
+
+def _parking_aircraft_type_for_row(row):
+    tail = row.get("tail") if row else ""
+    return resolve_parking_aircraft_type_from_tail(tail)
+
+
+def _unresolved_reason(
+    row,
+    aircraft_type,
+    has_candidate,
+    include_remote,
+    include_throat,
+    locked_conflicts,
+    hard_rules,
+):
+    if has_candidate:
+        return "No feasible parking position under hard rules, ETA order, and scoring constraints."
+
+    reasons = []
+    if locked_conflicts:
+        reasons.append("Current Parking Plan conflicts must be resolved first.")
+    if aircraft_type == UNKNOWN_PARKING_AIRCRAFT_TYPE:
+        reasons.append("Unknown aircraft type.")
+
+    matching_required = _rules_for_row(row, aircraft_type, hard_rules.get("required", []))
+    if matching_required:
+        required_ramps = {_rule_ramp_label(rule) for rule in matching_required}
+        if not include_remote and "Remote" in required_ramps:
+            reasons.append("Remote disabled.")
+        if not include_throat and "9/10 throat parking" in required_ramps:
+            reasons.append("9/10 throat parking disabled.")
+
+    matching_forbidden = _rules_for_row(row, aircraft_type, hard_rules.get("forbidden", []))
+    if any(str(rule.subject_type or "").strip().lower() == "aircraft_type" for rule in matching_forbidden):
+        reasons.append("Aircraft type restricted from available ramps.")
+    if any(str(rule.subject_type or "").strip().lower() == "origin" for rule in matching_forbidden):
+        reasons.append("Origin restricted from available ramps.")
+    if aircraft_type == "767":
+        reasons.append("767 footprint cannot fit in available slots.")
+    if not include_remote:
+        reasons.append("Remote disabled.")
+    if not include_throat:
+        reasons.append("9/10 throat parking disabled.")
+    if not reasons:
+        reasons.append("No valid parking position found.")
+    return " ".join(dict.fromkeys(reasons))
+
+
+def _rule_ramp_label(rule):
+    ramp = str(rule.ramp_code or "").strip().upper()
+    if ramp == "R":
+        return "Remote"
+    if ramp == "THROAT":
+        return "9/10 throat parking"
+    return ramp
 
 
 def _ramp_from_position(position):

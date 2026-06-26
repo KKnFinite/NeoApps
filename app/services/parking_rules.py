@@ -1,5 +1,9 @@
 from app.extensions import db
 from app.models import MotherBrainParkingRule, MotherBrainParkingSettings
+from app.services.parking_aircraft import (
+    PARKING_AIRCRAFT_TYPE_OPTIONS,
+    normalize_parking_aircraft_type,
+)
 
 
 ORIGIN_RAMP_RESTRICTION = "origin_ramp_restriction"
@@ -78,6 +82,7 @@ def parking_rules_context(gateway):
         "settings": settings,
         "rules_by_category": grouped,
         "ramp_options": RAMP_OPTIONS,
+        "aircraft_type_options": PARKING_AIRCRAFT_TYPE_OPTIONS,
         "physical_rules": PHYSICAL_PARKING_RULES,
     }
 
@@ -118,7 +123,11 @@ def _update_existing_rules(gateway, form):
         if form.get(f"delete_rule_{rule.id}") == "1":
             db.session.delete(rule)
             continue
-        subject = _normalize_subject(rule.subject_type, form.get(f"subject_value_{rule.id}"))
+        subject = _normalize_subject(
+            rule.subject_type,
+            form.get(f"subject_value_{rule.id}"),
+            existing_value=rule.subject_value,
+        )
         ramp_code = _normalize_ramp(form.get(f"ramp_code_{rule.id}"))
         if not subject or not ramp_code:
             db.session.delete(rule)
@@ -173,13 +182,19 @@ def _behavior_for_category(category):
     return "preferred"
 
 
-def _normalize_subject(subject_type, value):
+def _normalize_subject(subject_type, value, existing_value=None):
     text = str(value or "").strip().upper()
     if not text:
         return ""
     if subject_type == "origin":
         return "".join(character for character in text if character.isalnum())[:8]
-    return text[:32]
+    normalized = normalize_parking_aircraft_type(text, allow_unknown=False)
+    if normalized:
+        return normalized
+    existing = str(existing_value or "").strip().upper()
+    if existing and text == existing:
+        return existing[:32]
+    return ""
 
 
 def _normalize_ramp(value):

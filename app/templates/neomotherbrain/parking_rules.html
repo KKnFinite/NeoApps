@@ -11,10 +11,24 @@
 </select>
 {% endmacro %}
 
-{% macro rule_table(title, rules, subject_label, category, placeholder) %}
+{% macro aircraft_type_select(name, selected, disabled=False) %}
+{% set selected_value = (selected or '')|upper %}
+<select name="{{ name }}" {% if disabled %}disabled{% endif %}>
+    <option value="">SELECT AIRCRAFT TYPE</option>
+    {% if selected_value and selected_value not in aircraft_type_options %}
+    <option value="{{ selected_value }}" selected>LEGACY {{ selected_value }}</option>
+    {% endif %}
+    {% for aircraft_type in aircraft_type_options %}
+    <option value="{{ aircraft_type }}" {% if selected_value == aircraft_type %}selected{% endif %}>{{ aircraft_type }}</option>
+    {% endfor %}
+</select>
+{% endmacro %}
+
+{% macro rule_table(title, rules, subject_label, category, placeholder, helper_text='', subject_kind='text') %}
 <section class="parking-rules-card" aria-label="{{ title }}">
     <div class="section-heading parking-rules-card-heading">
         <h2>{{ title|upper }}</h2>
+        {% if helper_text %}<p class="muted">{{ helper_text }}</p>{% endif %}
     </div>
     <div class="table-wrap">
         <table class="data-table wide-data-table parking-rules-table">
@@ -32,7 +46,11 @@
                 <tr>
                     <td data-label="{{ subject_label }}">
                         <input type="hidden" name="rule_ids" value="{{ rule.id }}">
+                        {% if subject_kind == 'aircraft_type' %}
+                        {{ aircraft_type_select("subject_value_" ~ rule.id, rule.subject_value, not can_edit_parking_rules) }}
+                        {% else %}
                         <input name="subject_value_{{ rule.id }}" value="{{ rule.subject_value }}" autocomplete="off" {% if not can_edit_parking_rules %}disabled{% endif %}>
+                        {% endif %}
                     </td>
                     <td data-label="Ramp">{{ ramp_select("ramp_code_" ~ rule.id, rule.ramp_code, not can_edit_parking_rules) }}</td>
                     <td data-label="Active">
@@ -61,7 +79,11 @@
                 {% if can_edit_parking_rules %}
                 <tr class="parking-rules-new-row">
                     <td data-label="{{ subject_label }}">
+                        {% if subject_kind == 'aircraft_type' %}
+                        {{ aircraft_type_select("new_" ~ category ~ "_subject", "") }}
+                        {% else %}
                         <input name="new_{{ category }}_subject" placeholder="{{ placeholder }}" autocomplete="off">
+                        {% endif %}
                     </td>
                     <td data-label="Ramp">{{ ramp_select("new_" ~ category ~ "_ramp", "") }}</td>
                     <td data-label="Active">NEW</td>
@@ -102,14 +124,14 @@
             <section class="parking-rules-card" aria-label="Origin Ramp Rules">
                 <div class="section-heading parking-rules-card-heading">
                     <h2>ORIGIN RAMP RULES</h2>
-                    <p class="muted">Restrictions forbid an origin from a ramp. Preferences give the optimizer a preferred ramp target.</p>
+                    <p class="muted">Origin restrictions are hard rules. Origin preferences are soft rules the optimizer tries to follow when hard rules allow it.</p>
                 </div>
-                {{ rule_table("Origin Ramp Restrictions", rules_by_category[categories.origin_restrictions], "ORIGIN", categories.origin_restrictions, "ONT") }}
-                {{ rule_table("Origin Ramp Preferences", rules_by_category[categories.origin_preferences], "ORIGIN", categories.origin_preferences, "SDF") }}
+                {{ rule_table("Origin Ramp Restrictions", rules_by_category[categories.origin_restrictions], "ORIGIN", categories.origin_restrictions, "ONT", "Restrictions are hard rules. The optimizer will never assign this origin to a forbidden ramp, and required ramp rules must be obeyed.") }}
+                {{ rule_table("Origin Ramp Preferences", rules_by_category[categories.origin_preferences], "ORIGIN", categories.origin_preferences, "SDF", "Preferences are soft rules. The optimizer tries to follow them when possible, but hard rules win.") }}
             </section>
 
-            {{ rule_table("Aircraft Type Restrictions", rules_by_category[categories.aircraft_restrictions], "AIRCRAFT TYPE", categories.aircraft_restrictions, "767") }}
-            {{ rule_table("Aircraft Type Preferences", rules_by_category[categories.aircraft_preferences], "AIRCRAFT TYPE", categories.aircraft_preferences, "757") }}
+            {{ rule_table("Aircraft Type Restrictions", rules_by_category[categories.aircraft_restrictions], "AIRCRAFT TYPE", categories.aircraft_restrictions, "767", "Restrictions are hard rules. The optimizer will never assign this aircraft type to the selected ramp. A restriction row means NOT ALLOWED, not allowed.", "aircraft_type") }}
+            {{ rule_table("Aircraft Type Preferences", rules_by_category[categories.aircraft_preferences], "AIRCRAFT TYPE", categories.aircraft_preferences, "757", "Preferences are soft rules. The optimizer tries to follow them when possible, but hard rules win.", "aircraft_type") }}
 
             <section class="parking-rules-card" aria-label="Optimizer Defaults">
                 <div class="section-heading parking-rules-card-heading">

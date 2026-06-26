@@ -39,6 +39,7 @@ from app.services.parking_optimizer import (
     apply_parking_optimizer_plan as service_apply_parking_optimizer_plan,
     parking_optimizer_preview,
 )
+from app.services.parking_aircraft import resolve_parking_aircraft_type_from_tail
 from app.services.parking_physical_validator import (
     validate_parking_physical_rules,
 )
@@ -5672,6 +5673,21 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"AIRCRAFT TYPE PREFERENCES", response.data)
         self.assertIn(b"OPTIMIZER DEFAULTS", response.data)
         self.assertIn(b"PHYSICAL PARKING RULES", response.data)
+        self.assertIn(
+            b"Restrictions are hard rules. The optimizer will never assign this aircraft type to the selected ramp.",
+            response.data,
+        )
+        self.assertIn(b"A restriction row means NOT ALLOWED, not allowed.", response.data)
+        self.assertIn(
+            b"Preferences are soft rules. The optimizer tries to follow them when possible, but hard rules win.",
+            response.data,
+        )
+        self.assertIn(b'<select name="new_aircraft_type_ramp_restriction_subject"', response.data)
+        self.assertIn(b'<select name="new_aircraft_type_ramp_preference_subject"', response.data)
+        self.assertIn(b'<option value="A300"', response.data)
+        self.assertIn(b'<option value="747"', response.data)
+        self.assertIn(b'<option value="757"', response.data)
+        self.assertIn(b'<option value="767"', response.data)
         self.assertIn(b"09/10 throat parking is optional, with 10 filled before 9.", response.data)
         self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"'.encode(), response.data)
 
@@ -5732,6 +5748,26 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"value=\"ONT\"", reload_response.data)
         self.assertIn(b"value=\"767\"", reload_response.data)
         self.assertIn(b"value=\"22\"", reload_response.data)
+
+    def test_parking_aircraft_type_resolver_maps_tail_digits(self):
+        cases = {
+            "N123UP": "A300",
+            "N312UP": "767",
+            "N412UP": "757",
+            "N512UP": "747",
+            "N612UP": "747",
+            "N912UP": "767",
+            "TAIL": "UNKNOWN",
+            "N712UP": "UNKNOWN",
+            "": "UNKNOWN",
+        }
+
+        for tail_number, expected_type in cases.items():
+            with self.subTest(tail_number=tail_number):
+                self.assertEqual(
+                    resolve_parking_aircraft_type_from_tail(tail_number),
+                    expected_type,
+                )
 
     def test_parking_rules_view_permission_is_enforced(self):
         ensure_default_permission_rules()
@@ -6124,9 +6160,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_parking_validator_detects_767_invalid_normal_anchor(self):
         operation = self._parking_operation()
-        for index, position in enumerate(("A01", "A02", "A03", "A04"), start=1):
-            tail = f"N76{index}UP"
-            aircraft_type = "767" if position == "A04" else "757"
+        for tail, position, aircraft_type in (
+            ("N451UP", "A01", "757"),
+            ("N452UP", "A02", "757"),
+            ("N453UP", "A03", "757"),
+            ("N964UP", "A04", "757"),
+        ):
             self._parking_pair(operation, tail, aircraft_type=aircraft_type, destination=position)
             db.session.flush()
             self._parking_assignment(operation, tail, position)
@@ -6143,11 +6182,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_parking_validator_detects_slot_occupied_while_blocked_by_767(self):
         operation = self._parking_operation()
-        self._parking_pair(operation, "N767UP", aircraft_type="767")
-        self._parking_pair(operation, "N757UP", aircraft_type="757", destination="SDF")
+        self._parking_pair(operation, "N967UP", aircraft_type="757")
+        self._parking_pair(operation, "N457UP", aircraft_type="757", destination="SDF")
         db.session.flush()
-        self._parking_assignment(operation, "N767UP", "A01")
-        self._parking_assignment(operation, "N757UP", "A02")
+        self._parking_assignment(operation, "N967UP", "A01")
+        self._parking_assignment(operation, "N457UP", "A02")
         db.session.commit()
         tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
 
@@ -6158,11 +6197,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_parking_validator_remote_767_does_not_block_adjacent_remote(self):
         operation = self._parking_operation()
-        self._parking_pair(operation, "N767UP", aircraft_type="767")
-        self._parking_pair(operation, "N757UP", aircraft_type="757", destination="SDF")
+        self._parking_pair(operation, "N967UP", aircraft_type="757")
+        self._parking_pair(operation, "N457UP", aircraft_type="757", destination="SDF")
         db.session.flush()
-        self._parking_assignment(operation, "N767UP", "R01", ramp_code="R")
-        self._parking_assignment(operation, "N757UP", "R02", ramp_code="R")
+        self._parking_assignment(operation, "N967UP", "R01", ramp_code="R")
+        self._parking_assignment(operation, "N457UP", "R02", ramp_code="R")
         db.session.commit()
         tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
 
@@ -6174,11 +6213,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_parking_validator_throat_767_does_not_block_another_slot(self):
         operation = self._parking_operation()
-        self._parking_pair(operation, "N767UP", aircraft_type="767")
-        self._parking_pair(operation, "N757UP", aircraft_type="757", destination="SDF")
+        self._parking_pair(operation, "N967UP", aircraft_type="757")
+        self._parking_pair(operation, "N457UP", aircraft_type="757", destination="SDF")
         db.session.flush()
-        self._parking_assignment(operation, "N767UP", "A10")
-        self._parking_assignment(operation, "N757UP", "A09")
+        self._parking_assignment(operation, "N967UP", "A10")
+        self._parking_assignment(operation, "N457UP", "A09")
         db.session.commit()
         tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
 
@@ -6334,8 +6373,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         operation = self._parking_operation()
         self._parking_pair(
             operation,
-            "N767UP",
-            aircraft_type="767",
+            "N967UP",
+            aircraft_type="757",
             arrival_local=datetime(2026, 6, 19, 0, 10),
             destination="A01",
         )
@@ -6347,7 +6386,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             destination="A03",
         )
         db.session.flush()
-        self._parking_assignment(operation, "N767UP", "A01")
+        self._parking_assignment(operation, "N967UP", "A01")
         self._parking_assignment(operation, "N003UP", "A03")
         db.session.commit()
         tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
@@ -6358,7 +6397,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertTrue(
             any(
                 "A03 cannot arrive before A01/A02 are parked." in message
-                and "N767UP at A01 ETA 00:20" in message
+                and "N967UP at A01 ETA 00:20" in message
                 for message in messages
             )
         )
@@ -6692,16 +6731,16 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_parking_optimizer_767_at_normal_01_blocks_02(self):
         operation = self._parking_operation()
-        self._parking_pair(operation, "N767UP", aircraft_type="767")
-        self._parking_pair(operation, "N757UP", aircraft_type="757", destination="SDF")
+        self._parking_pair(operation, "N967UP", aircraft_type="757")
+        self._parking_pair(operation, "N457UP", aircraft_type="757", destination="SDF")
         db.session.flush()
-        self._parking_assignment(operation, "N767UP", "A01")
+        self._parking_assignment(operation, "N967UP", "A01")
         db.session.commit()
 
         preview = self._parking_optimizer_preview(operation)
         suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
 
-        self.assertNotEqual(suggestions["N757UP"]["position"], "A02")
+        self.assertNotEqual(suggestions["N457UP"]["position"], "A02")
 
     def test_parking_optimizer_767_cannot_anchor_at_04_or_08(self):
         operation = self._parking_operation()
@@ -6711,44 +6750,44 @@ class MotherBrainRoutesTest(unittest.TestCase):
             db.session.flush()
             self._parking_assignment(operation, tail, position, lane_number=1)
             self._parking_assignment(operation, f"X{position[-2:]}2UP", position, lane_number=2)
-        self._parking_pair(operation, "N767UP", origin="ONT", aircraft_type="767", destination="SDF")
+        self._parking_pair(operation, "N967UP", origin="ONT", aircraft_type="757", destination="SDF")
         self._parking_rule(ORIGIN_RAMP_RESTRICTION, "origin", "ONT", "A", behavior="required")
         db.session.commit()
 
         preview = self._parking_optimizer_preview(operation)
         suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
 
-        self.assertNotIn(suggestions["N767UP"]["position"], {"A04", "A08"})
+        self.assertNotIn(suggestions["N967UP"]["position"], {"A04", "A08"})
 
     def test_parking_optimizer_remote_767_does_not_block_adjacent_remote(self):
         operation = self._parking_operation()
-        self._parking_pair(operation, "N767UP", aircraft_type="767")
-        self._parking_pair(operation, "N757UP", origin="ONT", aircraft_type="757", destination="SDF")
+        self._parking_pair(operation, "N967UP", aircraft_type="757")
+        self._parking_pair(operation, "N457UP", origin="ONT", aircraft_type="757", destination="SDF")
         self._parking_rule(ORIGIN_RAMP_RESTRICTION, "origin", "ONT", "R", behavior="required")
         db.session.flush()
-        self._parking_assignment(operation, "N767UP", "R01", ramp_code="R", lane_number=1)
+        self._parking_assignment(operation, "N967UP", "R01", ramp_code="R", lane_number=1)
         self._parking_assignment(operation, "XREMUP", "R01", ramp_code="R", lane_number=2)
         db.session.commit()
 
         preview = self._parking_optimizer_preview(operation, include_remote=True)
         suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
 
-        self.assertEqual(suggestions["N757UP"]["position"], "R02")
+        self.assertEqual(suggestions["N457UP"]["position"], "R02")
 
     def test_parking_optimizer_throat_767_does_not_block_adjacent_throat(self):
         operation = self._parking_operation()
-        self._parking_pair(operation, "N767UP", aircraft_type="767")
-        self._parking_pair(operation, "N757UP", origin="ONT", aircraft_type="757", destination="SDF")
+        self._parking_pair(operation, "N967UP", aircraft_type="757")
+        self._parking_pair(operation, "N457UP", origin="ONT", aircraft_type="757", destination="SDF")
         self._parking_rule(ORIGIN_RAMP_RESTRICTION, "origin", "ONT", "THROAT", behavior="required")
         db.session.flush()
-        self._parking_assignment(operation, "N767UP", "A10", lane_number=1)
+        self._parking_assignment(operation, "N967UP", "A10", lane_number=1)
         self._parking_assignment(operation, "XTHRUP", "A10", lane_number=2)
         db.session.commit()
 
         preview = self._parking_optimizer_preview(operation, include_throat=True)
         suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
 
-        self.assertEqual(suggestions["N757UP"]["position"], "A09")
+        self.assertEqual(suggestions["N457UP"]["position"], "A09")
 
     def test_parking_optimizer_enforces_10_before_9(self):
         operation = self._parking_operation()
@@ -6773,6 +6812,22 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         preview = self._parking_optimizer_preview(operation)
 
+        self.assertNotEqual(preview["suggested_assignments"][0]["position"][:1], "A")
+
+    def test_parking_optimizer_uses_tail_resolver_for_aircraft_rules(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N967UP", aircraft_type="757")
+        self._parking_rule(
+            AIRCRAFT_TYPE_RAMP_RESTRICTION,
+            "aircraft_type",
+            "767",
+            "A",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+
+        self.assertEqual(preview["suggested_assignments"][0]["aircraft_type"], "767")
         self.assertNotEqual(preview["suggested_assignments"][0]["position"][:1], "A")
 
     def test_parking_optimizer_enforces_origin_hard_restriction(self):
@@ -7077,9 +7132,31 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"OPTIMIZE / SUGGEST PLAN", response.data)
         self.assertIn(b"PREVIEW ONLY", response.data)
+        self.assertIn(b"Candidates 1", response.data)
         self.assertIn(b"SUGGESTED ASSIGNMENTS", response.data)
         self.assertIn(b"N457UP", response.data)
         self.assertEqual(SortDateParkingAssignment.query.count(), 0)
+
+    def test_parking_optimizer_preview_renders_unresolved_reason_when_no_suggestions(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="A300")
+        for ramp in ("A", "B", "C", "D", "E"):
+            self._parking_rule(
+                AIRCRAFT_TYPE_RAMP_RESTRICTION,
+                "aircraft_type",
+                "757",
+                ramp,
+            )
+        db.session.commit()
+
+        response = self.client.post(f"/motherbrain/parking-plan/{operation.id}/optimize")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Candidates 1", response.data)
+        self.assertIn(b"UNASSIGNED / UNRESOLVED", response.data)
+        self.assertIn(b"N457UP", response.data)
+        self.assertIn(b"Aircraft type restricted from available ramps.", response.data)
+        self.assertIn(b"Remote disabled.", response.data)
 
     def test_parking_optimizer_apply_permission_is_enforced(self):
         ensure_default_permission_rules()

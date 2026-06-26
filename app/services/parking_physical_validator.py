@@ -6,6 +6,7 @@ from app.services.motherbrain_alerts import (
     MOTHERBRAIN_ALERT_SCOPE,
     PARKING_CONFLICT_ALERT_PERMISSION,
 )
+from app.services.parking_aircraft import resolve_parking_aircraft_type_from_tail
 
 
 NORMAL_RAMP_CODES = ("A", "B", "C", "D", "E")
@@ -127,7 +128,7 @@ def _active_assignments(operation):
 
 def _aircraft_type_by_tail(tail_rows):
     return {
-        _normalize_tail(row.get("tail")): _normalize_aircraft_type(row.get("aircraft_type"))
+        _normalize_tail(row.get("tail")): resolve_parking_aircraft_type_from_tail(row.get("tail"))
         for row in (tail_rows or [])
         if _normalize_tail(row.get("tail"))
     }
@@ -564,17 +565,6 @@ def _position_number(position):
         return int(str(position or "")[1:])
     except (TypeError, ValueError):
         return None
-
-
-def _normalize_aircraft_type(value):
-    text = str(value or "").strip().upper()
-    if "767" in text:
-        return "767"
-    if "757" in text:
-        return "757"
-    if "A300" in text or "A-300" in text:
-        return "A300"
-    return text
 
 
 def _format_local_time(value):
