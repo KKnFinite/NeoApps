@@ -81,6 +81,52 @@ NEOSEKTOR_INTERNAL_MENU = (
 )
 
 
+NEOSEKTOR_MOBILE_DASHBOARD = (
+    (
+        "Live Counts",
+        "neosektor.index",
+        None,
+        "live-counts",
+        "Live flow and bay status.",
+    ),
+    (
+        "Tunnel Conductor",
+        "neosektor.tunnel_conductor",
+        TUNNEL_CONDUCTOR_VIEW_PERMISSION,
+        "tunnel",
+        "Tunnel counts and down timer.",
+    ),
+    (
+        "EBM",
+        "neosektor.ebm",
+        EBM_VIEW_PERMISSION,
+        "ebm",
+        "East ballmat count entry.",
+    ),
+    (
+        "WBM",
+        "neosektor.wbm",
+        WBM_VIEW_PERMISSION,
+        "wbm",
+        "West ballmat count entry.",
+    ),
+    (
+        "Discharge",
+        "neosektor.discharge",
+        "neosektor.discharge.view",
+        "discharge",
+        "ULD request queue.",
+    ),
+    (
+        "Driver Routing",
+        "neosektor.driver_routing",
+        "neosektor.driver_routing.view",
+        "driver-routing",
+        "Driver need and route board.",
+    ),
+)
+
+
 @bp.context_processor
 def inject_neosektor_navigation():
     return {
@@ -98,6 +144,7 @@ def index():
         "neonodes/neosektor/live_counts.html",
         gateway=gateway,
         can_view=True,
+        mobile_dashboard_items=_visible_neosektor_mobile_dashboard_items(),
         **context,
     )
 
@@ -476,6 +523,23 @@ def _visible_neosektor_menu_items():
             {
                 "label": label,
                 "endpoint": endpoint,
+                "active": request.endpoint == endpoint,
+            }
+        )
+    return items
+
+
+def _visible_neosektor_mobile_dashboard_items():
+    items = []
+    for label, endpoint, view_permission, key, description in NEOSEKTOR_MOBILE_DASHBOARD:
+        if view_permission and not user_can(view_permission):
+            continue
+        items.append(
+            {
+                "label": label,
+                "endpoint": endpoint,
+                "key": key,
+                "description": description,
                 "active": request.endpoint == endpoint,
             }
         )

@@ -90,6 +90,35 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("font-size: clamp(1.3rem, 3.9vw, 1.9rem);", css)
         self.assertIn("font-size: clamp(1.9rem, 5.7vw, 2.95rem);", css)
 
+    def test_neosektor_mobile_dashboard_tiles_render(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neosektor")
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"data-neosektor-mobile-dashboard", response.data)
+        self.assertIn(b"neosektor-mobile-dashboard-grid", response.data)
+        self.assertIn(b'data-neosektor-mobile-tile="live-counts"', response.data)
+        self.assertIn(b'data-neosektor-mobile-tile="tunnel"', response.data)
+        self.assertIn(b'data-neosektor-mobile-tile="ebm"', response.data)
+        self.assertIn(b'data-neosektor-mobile-tile="wbm"', response.data)
+        self.assertIn(b'data-neosektor-mobile-tile="discharge"', response.data)
+        self.assertIn(b'data-neosektor-mobile-tile="driver-routing"', response.data)
+        self.assertIn(b'href="/neosektor#neosektor-live-counts-panel"', response.data)
+        self.assertIn(b'href="/neosektor/tunnel-conductor"', response.data)
+        self.assertIn(b'href="/neosektor/ebm"', response.data)
+        self.assertIn(b'href="/neosektor/wbm"', response.data)
+        self.assertIn(b'href="/neosektor/discharge"', response.data)
+        self.assertIn(b'href="/neosektor/driver-routing"', response.data)
+        self.assertNotIn(b"System Status", response.data)
+        self.assertIn(".blueprint-neosektor .neosektor-mobile-dashboard {\n    display: none;", css)
+        self.assertIn(
+            "body.blueprint-neosektor.neosektor-live-counts-page .neosektor-mobile-dashboard {\n"
+            "        display: grid;",
+            css,
+        )
+
     def test_neosektor_internal_menu_filters_links_by_role(self):
         expectations = {
             "watcher": {
