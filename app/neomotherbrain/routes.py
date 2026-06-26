@@ -101,7 +101,6 @@ from app.services.parking_rules import (
     AIRCRAFT_TYPE_RAMP_PREFERENCE,
     AIRCRAFT_TYPE_RAMP_RESTRICTION,
     ORIGIN_RAMP_PREFERENCE,
-    ORIGIN_RAMP_RESTRICTION,
     parking_rules_context,
     save_parking_rules_from_form,
 )
@@ -677,8 +676,7 @@ def parking_rules():
         operation=operation,
         can_edit_parking_rules=can_edit,
         categories={
-            "origin_restrictions": ORIGIN_RAMP_RESTRICTION,
-            "origin_preferences": ORIGIN_RAMP_PREFERENCE,
+            "origin_requirements": ORIGIN_RAMP_PREFERENCE,
             "aircraft_restrictions": AIRCRAFT_TYPE_RAMP_RESTRICTION,
             "aircraft_preferences": AIRCRAFT_TYPE_RAMP_PREFERENCE,
         },

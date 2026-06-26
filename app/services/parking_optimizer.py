@@ -400,11 +400,20 @@ def _active_rule_sets(gateway):
     for rule in rules:
         category = str(rule.rule_category or "").strip().lower()
         behavior = _normalize_rule_behavior(rule.rule_behavior)
-        if category in (ORIGIN_RAMP_RESTRICTION, AIRCRAFT_TYPE_RAMP_RESTRICTION):
+        if category == ORIGIN_RAMP_RESTRICTION:
             if behavior not in hard_rules:
                 continue
             hard_rules[behavior].append(rule)
-        elif category in (ORIGIN_RAMP_PREFERENCE, AIRCRAFT_TYPE_RAMP_PREFERENCE):
+        elif category == ORIGIN_RAMP_PREFERENCE:
+            if behavior in {"required", "preferred"}:
+                hard_rules["required"].append(rule)
+            elif behavior in soft_rules:
+                soft_rules[behavior].append(rule)
+        elif category == AIRCRAFT_TYPE_RAMP_RESTRICTION:
+            if behavior not in hard_rules:
+                continue
+            hard_rules[behavior].append(rule)
+        elif category == AIRCRAFT_TYPE_RAMP_PREFERENCE:
             if behavior not in soft_rules:
                 continue
             soft_rules[behavior].append(rule)

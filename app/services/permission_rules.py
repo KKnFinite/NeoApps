@@ -52,7 +52,7 @@ DEFAULT_PERMISSION_RULES = (
     ),
     (
         "motherbrain.parking_rules.edit",
-        "master",
+        "simulator",
         "Edit NeoMotherBrain Parking Rules settings.",
     ),
     (

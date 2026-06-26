@@ -46,7 +46,7 @@ class PermissionRulesTest(unittest.TestCase):
                 "motherbrain.parking_conflicts.view": "operator",
                 "motherbrain.parking_optimizer.apply": "master",
                 "motherbrain.parking_optimizer.run": "master",
-                "motherbrain.parking_rules.edit": "master",
+                "motherbrain.parking_rules.edit": "simulator",
                 "motherbrain.parking_rules.view": "simulator",
                 "neomotherbrain.dashboard.view": "operator",
                 "neomotherbrain.flight_api_auto_poll.trigger": "simulator",

@@ -124,14 +124,13 @@
             <section class="parking-rules-card" aria-label="Origin Ramp Rules">
                 <div class="section-heading parking-rules-card-heading">
                     <h2>ORIGIN RAMP RULES</h2>
-                    <p class="muted">Origin restrictions are hard rules. Origin preferences are soft rules the optimizer tries to follow when hard rules allow it.</p>
+                    <p class="muted">Origin ramp requirements are hard rules. Aircraft arriving from an origin listed here must be parked on the selected ramp when the optimizer suggests a plan.</p>
                 </div>
-                {{ rule_table("Origin Ramp Restrictions", rules_by_category[categories.origin_restrictions], "ORIGIN", categories.origin_restrictions, "ONT", "Restrictions are hard rules. The optimizer will never assign this origin to a forbidden ramp, and required ramp rules must be obeyed.") }}
-                {{ rule_table("Origin Ramp Preferences", rules_by_category[categories.origin_preferences], "ORIGIN", categories.origin_preferences, "SDF", "Preferences are soft rules. The optimizer tries to follow them when possible, but hard rules win.") }}
+                {{ rule_table("Origin Ramp Requirements", rules_by_category[categories.origin_requirements], "ORIGIN", categories.origin_requirements, "ONT", "Requirements are hard rules. Aircraft arriving from this origin must be parked on the selected ramp. This is not a soft preference.") }}
             </section>
 
-            {{ rule_table("Aircraft Type Restrictions", rules_by_category[categories.aircraft_restrictions], "AIRCRAFT TYPE", categories.aircraft_restrictions, "767", "Restrictions are hard rules. The optimizer will never assign this aircraft type to the selected ramp. A restriction row means NOT ALLOWED, not allowed.", "aircraft_type") }}
-            {{ rule_table("Aircraft Type Preferences", rules_by_category[categories.aircraft_preferences], "AIRCRAFT TYPE", categories.aircraft_preferences, "757", "Preferences are soft rules. The optimizer tries to follow them when possible, but hard rules win.", "aircraft_type") }}
+            {{ rule_table("Aircraft Type Restrictions", rules_by_category[categories.aircraft_restrictions], "AIRCRAFT TYPE", categories.aircraft_restrictions, "767", "Restrictions are hard rules. The optimizer will never assign this aircraft type to the selected ramp. A restriction row means this aircraft type is not allowed on that ramp.", "aircraft_type") }}
+            {{ rule_table("Aircraft Type Preferences", rules_by_category[categories.aircraft_preferences], "AIRCRAFT TYPE", categories.aircraft_preferences, "757", "Preferences are soft rules. The optimizer tries to use these ramps for the selected aircraft type when possible, but hard rules still win. Preferences are not required.", "aircraft_type") }}
 
             <section class="parking-rules-card" aria-label="Optimizer Defaults">
                 <div class="section-heading parking-rules-card-heading">

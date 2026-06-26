@@ -8,6 +8,7 @@ from app.services.parking_aircraft import (
 
 ORIGIN_RAMP_RESTRICTION = "origin_ramp_restriction"
 ORIGIN_RAMP_PREFERENCE = "origin_ramp_preference"
+ORIGIN_RAMP_REQUIREMENT = ORIGIN_RAMP_PREFERENCE
 AIRCRAFT_TYPE_RAMP_RESTRICTION = "aircraft_type_ramp_restriction"
 AIRCRAFT_TYPE_RAMP_PREFERENCE = "aircraft_type_ramp_preference"
 
@@ -134,6 +135,8 @@ def _update_existing_rules(gateway, form):
             continue
         rule.subject_value = subject
         rule.ramp_code = ramp_code
+        if rule.rule_category == ORIGIN_RAMP_REQUIREMENT:
+            rule.rule_behavior = "required"
         rule.active = form.get(f"active_{rule.id}") == "1"
         rule.note = _clean_note(form.get(f"note_{rule.id}"))
 
@@ -177,6 +180,8 @@ def _subject_type_for_category(category):
 
 
 def _behavior_for_category(category):
+    if category == ORIGIN_RAMP_REQUIREMENT:
+        return "required"
     if category in (ORIGIN_RAMP_RESTRICTION, AIRCRAFT_TYPE_RAMP_RESTRICTION):
         return "forbidden"
     return "preferred"

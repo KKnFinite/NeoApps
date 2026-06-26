@@ -5669,6 +5669,17 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"PARKING RULES", response.data)
         self.assertIn(b"ORIGIN RAMP RULES", response.data)
+        self.assertIn(b"ORIGIN RAMP REQUIREMENTS", response.data)
+        self.assertIn(
+            b"Origin ramp requirements are hard rules.",
+            response.data,
+        )
+        self.assertIn(
+            b"This is not a soft preference.",
+            response.data,
+        )
+        self.assertNotIn(b"ORIGIN RAMP RESTRICTIONS", response.data)
+        self.assertNotIn(b"ORIGIN RAMP PREFERENCES", response.data)
         self.assertIn(b"AIRCRAFT TYPE RESTRICTIONS", response.data)
         self.assertIn(b"AIRCRAFT TYPE PREFERENCES", response.data)
         self.assertIn(b"OPTIMIZER DEFAULTS", response.data)
@@ -5677,9 +5688,13 @@ class MotherBrainRoutesTest(unittest.TestCase):
             b"Restrictions are hard rules. The optimizer will never assign this aircraft type to the selected ramp.",
             response.data,
         )
-        self.assertIn(b"A restriction row means NOT ALLOWED, not allowed.", response.data)
         self.assertIn(
-            b"Preferences are soft rules. The optimizer tries to follow them when possible, but hard rules win.",
+            b"A restriction row means this aircraft type is not allowed on that ramp.",
+            response.data,
+        )
+        self.assertNotIn(b"NOT ALLOWED, not allowed", response.data)
+        self.assertIn(
+            b"Preferences are soft rules. The optimizer tries to use these ramps for the selected aircraft type when possible",
             response.data,
         )
         self.assertIn(b'<select name="new_aircraft_type_ramp_restriction_subject"', response.data)
@@ -5697,10 +5712,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "operation_id": str(operation.id),
                 "include_remote_default": "1",
                 "deice_spacing_threshold_minutes": "22",
-                "new_origin_ramp_restriction_subject": "ont",
-                "new_origin_ramp_restriction_ramp": "A",
-                "new_origin_ramp_preference_subject": "sdf",
-                "new_origin_ramp_preference_ramp": "B",
+                "new_origin_ramp_preference_subject": "ont",
+                "new_origin_ramp_preference_ramp": "A",
                 "new_aircraft_type_ramp_restriction_subject": "767",
                 "new_aircraft_type_ramp_restriction_ramp": "R",
                 "new_aircraft_type_ramp_preference_subject": "a300",
@@ -5728,11 +5741,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             ).all()
         }
         self.assertIn(
-            ("origin_ramp_restriction", "origin", "ONT", "A", "forbidden"),
-            rules,
-        )
-        self.assertIn(
-            ("origin_ramp_preference", "origin", "SDF", "B", "preferred"),
+            ("origin_ramp_preference", "origin", "ONT", "A", "required"),
             rules,
         )
         self.assertIn(
@@ -5748,6 +5757,41 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"value=\"ONT\"", reload_response.data)
         self.assertIn(b"value=\"767\"", reload_response.data)
         self.assertIn(b"value=\"22\"", reload_response.data)
+
+    def test_parking_rules_legacy_origin_restrictions_do_not_render_editor(self):
+        db.session.add(
+            MotherBrainParkingRule(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                rule_category=ORIGIN_RAMP_RESTRICTION,
+                subject_type="origin",
+                subject_value="DFW",
+                ramp_code="E",
+                rule_behavior="forbidden",
+                active=True,
+            )
+        )
+        db.session.add(
+            MotherBrainParkingRule(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                rule_category=ORIGIN_RAMP_PREFERENCE,
+                subject_type="origin",
+                subject_value="ONT",
+                ramp_code="A",
+                rule_behavior="preferred",
+                active=True,
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get("/motherbrain/parking-rules")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"ORIGIN RAMP REQUIREMENTS", response.data)
+        self.assertIn(b"value=\"ONT\"", response.data)
+        self.assertNotIn(b"ORIGIN RAMP RESTRICTIONS", response.data)
+        self.assertNotIn(b"value=\"DFW\"", response.data)
 
     def test_parking_aircraft_type_resolver_maps_tail_digits(self):
         cases = {
@@ -5805,13 +5849,42 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "/motherbrain/parking-rules",
             data={
                 "include_remote_default": "1",
-                "new_origin_ramp_restriction_subject": "ONT",
-                "new_origin_ramp_restriction_ramp": "A",
+                "new_origin_ramp_preference_subject": "ONT",
+                "new_origin_ramp_preference_ramp": "A",
             },
         )
 
         self.assertEqual(post_response.status_code, 302)
         self.assertEqual(MotherBrainParkingRule.query.count(), 0)
+
+    def test_parking_rules_edit_permission_defaults_to_simulator(self):
+        ensure_default_permission_rules()
+        edit_rule = PermissionRule.query.filter_by(
+            permission_key="motherbrain.parking_rules.edit",
+        ).one()
+        self.assertEqual(edit_rule.minimum_role, "simulator")
+
+        self._login_motherbrain_role("ParkingRulesDefaultSimulator", "simulator")
+        get_response = self.client.get("/motherbrain/parking-rules")
+        self.assertEqual(get_response.status_code, 200)
+        self.assertIn(b"SAVE PARKING RULES", get_response.data)
+
+        post_response = self.client.post(
+            "/motherbrain/parking-rules",
+            data={
+                "new_origin_ramp_preference_subject": "ONT",
+                "new_origin_ramp_preference_ramp": "A",
+            },
+        )
+
+        self.assertEqual(post_response.status_code, 302)
+        saved_rule = MotherBrainParkingRule.query.filter_by(
+            gateway_id=self.rfd_gateway.id,
+            rule_category=ORIGIN_RAMP_PREFERENCE,
+            subject_value="ONT",
+            ramp_code="A",
+        ).one()
+        self.assertEqual(saved_rule.rule_behavior, "required")
 
     def test_parking_optimizer_permission_keys_render_in_permission_matrix(self):
         ensure_default_permission_rules()
@@ -6933,23 +7006,23 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertNotEqual(preview["suggested_assignments"][0]["position"][:1], "A")
 
-    def test_parking_optimizer_origin_ramp_preference_affects_scoring(self):
+    def test_parking_optimizer_origin_ramp_requirement_is_hard(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", origin="SDF", aircraft_type="757")
+        self._parking_pair(operation, "N349UP", origin="ONT", aircraft_type="757", destination="SDF")
         self._parking_rule(
             ORIGIN_RAMP_PREFERENCE,
             "origin",
             "SDF",
             "B",
-            behavior="preferred",
+            behavior="required",
         )
         db.session.commit()
 
         preview = self._parking_optimizer_preview(operation)
-        suggestion = preview["suggested_assignments"][0]
+        suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
 
-        self.assertEqual(suggestion["position"], "B01")
-        self.assertIn("Origin SDF prefers ramp B.", suggestion["reason"])
+        self.assertEqual(suggestions["N457UP"]["position"][:1], "B")
 
     def test_parking_optimizer_origin_avoid_ramp_reduces_scoring(self):
         operation = self._parking_operation()
@@ -7009,16 +7082,16 @@ class MotherBrainRoutesTest(unittest.TestCase):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", origin="SDF", aircraft_type="757")
         self._parking_rule(
-            ORIGIN_RAMP_PREFERENCE,
-            "origin",
-            "SDF",
+            AIRCRAFT_TYPE_RAMP_PREFERENCE,
+            "aircraft_type",
+            "757",
             "B",
             behavior="preferred",
         )
         self._parking_rule(
-            ORIGIN_RAMP_RESTRICTION,
-            "origin",
-            "SDF",
+            AIRCRAFT_TYPE_RAMP_RESTRICTION,
+            "aircraft_type",
+            "757",
             "B",
             behavior="forbidden",
         )
@@ -7138,9 +7211,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", origin="SDF", aircraft_type="757")
         self._parking_rule(
-            ORIGIN_RAMP_PREFERENCE,
-            "origin",
-            "SDF",
+            AIRCRAFT_TYPE_RAMP_PREFERENCE,
+            "aircraft_type",
+            "757",
             "B",
             behavior="preferred",
         )
