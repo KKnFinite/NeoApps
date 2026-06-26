@@ -14091,8 +14091,9 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 }
 
 .blueprint-neosektor .tunnel-bay-card {
-    min-height: 64px;
-    padding: 8px 5px;
+    min-height: 48px;
+    padding: 5px 4px;
+    gap: 3px;
 }
 
 .blueprint-neosektor .tunnel-bay-card strong {
@@ -14512,7 +14513,8 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 
     .blueprint-neosektor .tunnel-wave-grid {
         grid-template-columns: 1fr;
-        grid-template-rows: minmax(0, 1.16fr) minmax(0, 1.16fr) minmax(0, 0.82fr);
+        grid-template-rows: repeat(2, auto);
+        align-content: start;
     }
 
     .blueprint-neosektor .tunnel-offset-panel {
@@ -14520,8 +14522,9 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     }
 
     .blueprint-neosektor .tunnel-bay-grid {
-        grid-template-columns: 1fr;
-        grid-template-rows: repeat(5, minmax(0, 1fr));
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-rows: none;
+        align-content: start;
     }
 }
 
@@ -14797,6 +14800,8 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     .blueprint-neosektor .tunnel-bay-grid {
         grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 5px;
+        grid-auto-rows: auto;
+        align-content: start;
     }
 
     .blueprint-neosektor .tunnel-settings-grid {
@@ -14847,8 +14852,9 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     }
 
     .blueprint-neosektor .tunnel-bay-card {
-        min-height: 60px;
-        padding: 7px 4px;
+        min-height: 44px;
+        padding: 5px 4px;
+        gap: 2px;
     }
 
     .blueprint-neosektor .tunnel-bay-card strong {

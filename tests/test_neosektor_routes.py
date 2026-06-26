@@ -1038,6 +1038,20 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"data-neosektor-edit-key=\"routing:west_offset\"", response.data)
         self.assertIn(b"neosektor-inline-edit-error", response.data)
 
+    def test_tunnel_conductor_bay_status_uses_compact_layout_rules(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neosektor/tunnel-conductor")
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Bay Status", response.data)
+        self.assertIn(b"class=\"tunnel-bay-card\"", response.data)
+        self.assertIn("grid-template-rows: repeat(2, auto);", css)
+        self.assertIn("grid-template-columns: repeat(5, minmax(0, 1fr));", css)
+        self.assertIn("align-content: start;", css)
+        self.assertIn("min-height: 44px;", css)
+
     def test_neosektor_numeric_inputs_render_no_spinner_class_and_css(self):
         self._login_approved_user(role="simulator")
 
