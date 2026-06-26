@@ -289,8 +289,9 @@ def _parking_rule_report(settings, grouped):
             "Aircraft type preferences",
             "Ramp balancing: active soft rule across Alpha, Bravo, Charlie, Delta, and Echo",
             "Preferred Max Per Ramp: active soft limit when set; it can be exceeded if needed",
-            "757 preference for 04/08: planned / inactive",
-            "Avoid 04/08: planned / inactive",
+            "757 preferred on 04/08 positions: active soft rule",
+            "Avoid 04/08 when valid alternatives exist: active soft rule",
+            "Blocked-position relief for 04/08: active soft rule",
             "Deice spacing setting/status",
         ),
         "current_settings": {

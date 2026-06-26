@@ -40,6 +40,9 @@ DEICE_CLOSE_PAIR_PENALTY = 400
 PARKING_WINDOW_PRIORITY_SCORE = 2000
 RAMP_BALANCE_PAIR_PENALTY = 260
 PREFERRED_MAX_PER_RAMP_PENALTY = 1200
+FOUR_EIGHT_AVOID_PENALTY = 280
+FOUR_EIGHT_757_PREFERENCE_SCORE = 420
+FOUR_EIGHT_BLOCKED_POSITION_RELIEF = 110
 
 
 @dataclass(frozen=True)
@@ -567,6 +570,7 @@ def _build_candidate_placements(
     before_positions = sorted({_normalize_position(position) for position, _ramp in candidate_positions})
     allowed_lanes = tuple(lane for lane in allowed_lanes if lane in (1, 2))
     slot_1_timing_by_position = slot_1_timing_by_position or {}
+    blocked_position_counts = _blocked_position_counts_by_ramp(hard_rules)
     ordered_rows = sorted(candidate_rows, key=lambda item: (_parking_window_sort_key(item), item["tail"]))
     row_count = len(ordered_rows)
     for row_index, row in enumerate(ordered_rows):
@@ -629,6 +633,13 @@ def _build_candidate_placements(
                     )
                     if not slot_2_allowed:
                         continue
+                slot_policy_score, slot_policy_reasons = _four_eight_slot_score(
+                    aircraft_type,
+                    position,
+                    ramp,
+                    lane,
+                    blocked_position_counts.get(ramp, 0),
+                )
                 placements.append(
                     ParkingPlacement(
                         tail=tail,
@@ -639,8 +650,8 @@ def _build_candidate_placements(
                         aircraft_type=aircraft_type,
                         eta=row.get("arrival_block_in_local"),
                         departure=_departure_time_for_deice(row, timezone_name),
-                        soft_score=soft_score + parking_window_priority,
-                        preference_reasons=tuple(preference_reasons),
+                        soft_score=soft_score + slot_policy_score + parking_window_priority,
+                        preference_reasons=tuple(preference_reasons + slot_policy_reasons),
                     )
                 )
         diagnostics[tail] = {
@@ -1035,6 +1046,24 @@ def _soft_rule_reason(rule, verb):
     return f"Aircraft {subject} {verb} {ramp_label}."
 
 
+def _four_eight_slot_score(aircraft_type, position, ramp, lane, blocked_position_count=0):
+    if lane != 1 or ramp not in NORMAL_RAMP_CODES or _position_number(position) not in (4, 8):
+        return 0, []
+
+    relief = min(
+        FOUR_EIGHT_AVOID_PENALTY,
+        max(0, int(blocked_position_count or 0)) * FOUR_EIGHT_BLOCKED_POSITION_RELIEF,
+    )
+    score = -(FOUR_EIGHT_AVOID_PENALTY - relief)
+    reasons = []
+    if aircraft_type == "757":
+        score += FOUR_EIGHT_757_PREFERENCE_SCORE
+        reasons.append("757 preferred on 04/08 position.")
+    if relief:
+        reasons.append("04/08 used because this ramp has blocked positions.")
+    return score, reasons
+
+
 def _ramp_balance_penalty_terms(
     model,
     variables,
@@ -1304,6 +1333,16 @@ def _rules_for_row(row, aircraft_type, rules):
         elif subject_type == "aircraft_type" and subject == aircraft_type:
             matching.append(rule)
     return matching
+
+
+def _blocked_position_counts_by_ramp(rules):
+    counts = {}
+    for rule in _blocked_position_rules(rules.get("forbidden", [])):
+        position = normalize_parking_position_code(rule.subject_value)
+        ramp = _ramp_from_position(position)
+        if ramp in NORMAL_RAMP_CODES:
+            counts[ramp] = counts.get(ramp, 0) + 1
+    return counts
 
 
 def _blocked_position_rules(rules):

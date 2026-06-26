@@ -36,6 +36,7 @@ from app.services.gateway_matrix import current_operations_for_gateway
 from app.services.night_sorting import night_sort_time_key
 from app.services.parking_plan import parking_plan_context, parking_status_for_rows
 from app.services.parking_optimizer import (
+    _four_eight_slot_score,
     apply_parking_optimizer_plan as service_apply_parking_optimizer_plan,
     parking_optimizer_preview,
 )
@@ -5819,6 +5820,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Ramp balancing: active soft rule", response.data)
         self.assertIn(b"Preferred Max Per Ramp", response.data)
         self.assertIn(b"active soft limit when set", response.data)
+        self.assertIn(b"757 preferred on 04/08 positions", response.data)
+        self.assertIn(b"Avoid 04/08 when valid alternatives exist", response.data)
+        self.assertIn(b"Blocked-position relief for 04/08", response.data)
+        self.assertNotIn(b"757 preference for 04/08: planned / inactive", response.data)
+        self.assertNotIn(b"Avoid 04/08: planned / inactive", response.data)
         self.assertIn(b"Hard-blocked parking positions", response.data)
         self.assertIn(
             b"Restrictions are hard rules. The optimizer will never assign this aircraft type to the selected ramp.",
@@ -7105,6 +7111,140 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(len(preview["suggested_assignments"]), 3)
         self.assertEqual(ramps, {"A"})
+
+    def test_parking_optimizer_prefers_757_on_four_eight_over_other_aircraft_when_valid(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=0,
+            )
+        )
+        for index, position in enumerate(("A01", "A02", "A03")):
+            tail = f"N40{index}UP"
+            self._parking_pair(
+                operation,
+                tail,
+                arrival_local=datetime(2026, 6, 18, 22, 0) + timedelta(minutes=index * 5),
+                departure_local=datetime(2026, 6, 19, 0, 30) + timedelta(minutes=index * 5),
+                origin="SDF",
+                destination=position,
+            )
+            self._parking_assignment(operation, tail, position, "A")
+        self._parking_pair(
+            operation,
+            "N457UP",
+            arrival_local=datetime(2026, 6, 18, 23, 0),
+            departure_local=datetime(2026, 6, 19, 1, 30),
+            origin="ONT",
+            destination="LAX",
+        )
+        self._parking_pair(
+            operation,
+            "N157UP",
+            arrival_local=datetime(2026, 6, 18, 23, 10),
+            departure_local=datetime(2026, 6, 19, 1, 40),
+            origin="ONT",
+            destination="SDF",
+        )
+        self._parking_rule(ORIGIN_RAMP_PREFERENCE, "origin", "ONT", "A", behavior="required")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        by_tail = {row["tail"]: row for row in preview["suggested_assignments"]}
+
+        self.assertEqual(by_tail["N457UP"]["position"], "A04")
+        self.assertEqual(by_tail["N157UP"]["position"], "A05")
+        self.assertIn("757 preferred on 04/08 position.", by_tail["N457UP"]["reason"])
+
+    def test_parking_optimizer_avoids_four_eight_when_other_valid_positions_exist(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=0,
+            )
+        )
+        for index, position in enumerate(("A01", "A02", "A03")):
+            tail = f"N41{index}UP"
+            self._parking_pair(
+                operation,
+                tail,
+                arrival_local=datetime(2026, 6, 18, 22, 0) + timedelta(minutes=index * 5),
+                destination=position,
+            )
+            self._parking_assignment(operation, tail, position, "A")
+        self._parking_pair(operation, "N157UP", origin="ONT", aircraft_type="A300")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = next(row for row in preview["suggested_assignments"] if row["tail"] == "N157UP")
+
+        self.assertNotIn(suggestion["position"], {"A04", "A08", "B04", "B08", "C04", "C08", "D04", "D08", "E04", "E08"})
+
+    def test_parking_optimizer_four_eight_is_soft_and_can_be_exceeded_when_needed(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=0,
+            )
+        )
+        for index, position in enumerate(("A01", "A02", "A03", "A05", "A06", "A07", "A08")):
+            tail = f"N42{index}UP"
+            self._parking_pair(
+                operation,
+                tail,
+                arrival_local=datetime(2026, 6, 18, 22, 0) + timedelta(minutes=index * 5),
+                destination=position,
+            )
+            self._parking_assignment(operation, tail, position, "A")
+        self._parking_pair(operation, "N157UP", origin="ONT", aircraft_type="A300")
+        self._parking_rule(ORIGIN_RAMP_PREFERENCE, "origin", "ONT", "A", behavior="required")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = next(row for row in preview["suggested_assignments"] if row["tail"] == "N157UP")
+
+        self.assertEqual(suggestion["position"], "A04")
+
+    def test_parking_optimizer_blocked_positions_reduce_four_eight_avoidance_for_ramp(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=0,
+            )
+        )
+        for index, position in enumerate(("D01", "D02", "D03", "D05", "D06", "D07", "D08")):
+            tail = f"N43{index}UP"
+            self._parking_pair(
+                operation,
+                tail,
+                arrival_local=datetime(2026, 6, 18, 22, 0) + timedelta(minutes=index * 5),
+                destination=position,
+            )
+            self._parking_assignment(operation, tail, position, "D")
+        self._parking_pair(operation, "N157UP", origin="ONT", aircraft_type="A300")
+        self._parking_rule(BLOCKED_PARKING_POSITION, "position", "D10", "D", behavior="forbidden")
+        self._parking_rule(ORIGIN_RAMP_PREFERENCE, "origin", "ONT", "D", behavior="required")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = next(row for row in preview["suggested_assignments"] if row["tail"] == "N157UP")
+
+        self.assertEqual(suggestion["position"], "D04")
+        self.assertIn("04/08 used because this ramp has blocked positions.", suggestion["reason"])
+
+    def test_parking_optimizer_four_eight_scoring_is_position_only(self):
+        self.assertEqual(_four_eight_slot_score("757", "A04", "A", 2, 0), (0, []))
+        self.assertEqual(_four_eight_slot_score("757", "R04", "R", 1, 0), (0, []))
+        self.assertEqual(_four_eight_slot_score("757", "A09", "A", 1, 0), (0, []))
+        self.assertEqual(_four_eight_slot_score("757", "A10", "A", 1, 0), (0, []))
 
     def test_parking_optimizer_does_not_use_slot_2_when_slot_1_available(self):
         operation = self._parking_operation()
