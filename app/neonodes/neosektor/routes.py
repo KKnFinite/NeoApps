@@ -72,7 +72,7 @@ NEOSEKTOR_PAGES = (
 )
 
 NEOSEKTOR_INTERNAL_MENU = (
-    ("Live Counts", "neosektor.index", None),
+    ("Live Counts", "neosektor.live_counts", None),
     ("Tunnel Conductor", "neosektor.tunnel_conductor", TUNNEL_CONDUCTOR_VIEW_PERMISSION),
     ("East Ballmat", "neosektor.ebm", EBM_VIEW_PERMISSION),
     ("West Ballmat", "neosektor.wbm", WBM_VIEW_PERMISSION),
@@ -84,7 +84,7 @@ NEOSEKTOR_INTERNAL_MENU = (
 NEOSEKTOR_MOBILE_DASHBOARD = (
     (
         "Live Counts",
-        "neosektor.index",
+        "neosektor.live_counts",
         None,
         "live-counts",
         "Live flow and bay status.",
@@ -138,14 +138,12 @@ def inject_neosektor_navigation():
 @gateway_node_required("sektor")
 def index():
     gateway = get_current_gateway()
-    context = live_counts_context(gateway)
-    db.session.commit()
     return render_template(
-        "neonodes/neosektor/live_counts.html",
+        "neonodes/neosektor/index.html",
         gateway=gateway,
         can_view=True,
+        menu_items=_visible_neosektor_page_items(),
         mobile_dashboard_items=_visible_neosektor_mobile_dashboard_items(),
-        **context,
     )
 
 
@@ -449,7 +447,15 @@ def discharge_send():
 @bp.route("/live-counts")
 @gateway_node_required("sektor")
 def live_counts():
-    return redirect(url_for("neosektor.index"))
+    gateway = get_current_gateway()
+    context = live_counts_context(gateway)
+    db.session.commit()
+    return render_template(
+        "neonodes/neosektor/live_counts.html",
+        gateway=gateway,
+        can_view=True,
+        **context,
+    )
 
 
 def _has_multi_uld_send_payload(payload):

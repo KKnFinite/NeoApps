@@ -48,7 +48,7 @@
 {% set is_neosektor_wbm_page = request.path.startswith("/neosektor/wbm") or (request.path.startswith("/neosektor/ballmat") and neosektor_ballmat_side == "west") %}
 {% set is_neosektor_ballmat_operator_page = is_neosektor_ebm_page or is_neosektor_wbm_page %}
 {% set is_neosektor_tunnel_operator_page = is_neosektor_page and request.path.startswith("/neosektor/tunnel-conductor") %}
-{% set is_neosektor_live_counts_page = is_neosektor_page and (is_neosektor_landing or request.path.startswith("/neosektor/live-counts")) %}
+{% set is_neosektor_live_counts_page = is_neosektor_page and request.path.startswith("/neosektor/live-counts") %}
 {% set is_neosektor_driver_page = is_neosektor_page and request.path.startswith("/neosektor/driver-routing") %}
 {% set is_neosektor_standalone_operator_page = is_neosektor_ballmat_operator_page or is_neosektor_tunnel_operator_page or is_neosektor_live_counts_page %}
 {% set uses_node_header = uses_motherbrain_header or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page or (is_neosektor_page and not is_neosektor_standalone_operator_page and not is_neosektor_driver_page) %}

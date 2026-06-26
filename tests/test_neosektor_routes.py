@@ -75,22 +75,24 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"neo-brand__node node-word", response.data)
         self.assertNotIn(b"<h1>NeoSektor</h1>", response.data)
         self.assertIn(b"Live Counts", response.data)
-        self.assertIn(b"data-live-counts", response.data)
-        self.assertNotIn(b"Operations Menu", response.data)
-        self.assertNotIn(b"neosektor-menu-link", response.data)
-        self.assertNotIn(b'href="/neosektor/live-counts"', response.data)
-        self.assertNotIn(b"Tunnel Conductor</a>", response.data)
-        self.assertNotIn(b"motherbrain-header-nav", response.data)
-        self.assertIn(b"data-neosektor-internal-menu", response.data)
+        self.assertNotIn(b"data-live-counts", response.data)
+        self.assertIn(b"Operations Menu", response.data)
+        self.assertNotIn(b"class=\"readonly-count\"", response.data)
+        self.assertIn(b'href="/neosektor/live-counts"', response.data)
+        self.assertIn(b'data-neosektor-mobile-tile="ebm"', response.data)
+        self.assertIn(b"motherbrain-header-nav", response.data)
+        self.assertNotIn(b"data-neosektor-internal-menu", response.data)
 
     def test_live_counts_uses_balanced_count_number_sizing(self):
         self._login_approved_user(role="operator")
 
-        response = self.client.get("/neosektor")
+        response = self.client.get("/neosektor/live-counts")
         css = Path("app/static/css/base.css").read_text()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"class=\"readonly-count\"", response.data)
+        self.assertIn(b"data-live-counts", response.data)
+        self.assertIn(b"neosektor-count-screen-compact", response.data)
         self.assertIn("font-size: clamp(1.3rem, 3.9vw, 1.9rem);", css)
         self.assertIn("font-size: clamp(1.9rem, 5.7vw, 2.95rem);", css)
 
@@ -109,16 +111,18 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b'data-neosektor-mobile-tile="wbm"', response.data)
         self.assertIn(b'data-neosektor-mobile-tile="discharge"', response.data)
         self.assertIn(b'data-neosektor-mobile-tile="driver-routing"', response.data)
-        self.assertIn(b'href="/neosektor#neosektor-live-counts-panel"', response.data)
+        self.assertIn(b'href="/neosektor/live-counts"', response.data)
         self.assertIn(b'href="/neosektor/tunnel-conductor"', response.data)
         self.assertIn(b'href="/neosektor/ebm"', response.data)
         self.assertIn(b'href="/neosektor/wbm"', response.data)
         self.assertIn(b'href="/neosektor/discharge"', response.data)
         self.assertIn(b'href="/neosektor/driver-routing"', response.data)
         self.assertNotIn(b"System Status", response.data)
+        self.assertNotIn(b"data-live-counts", response.data)
+        self.assertNotIn(b"class=\"readonly-count\"", response.data)
         self.assertIn(".blueprint-neosektor .neosektor-mobile-dashboard {\n    display: none;", css)
         self.assertIn(
-            "body.blueprint-neosektor.neosektor-live-counts-page .neosektor-mobile-dashboard {\n"
+            "body.blueprint-neosektor.neosektor-fixed-header .neosektor-dashboard-shell .neosektor-mobile-dashboard {\n"
             "        display: grid;",
             css,
         )
@@ -146,18 +150,18 @@ class NeoSektorRoutesTest(unittest.TestCase):
     def test_neosektor_internal_menu_filters_links_by_role(self):
         expectations = {
             "watcher": {
-                b'href="/neosektor"',
+                b'href="/neosektor/live-counts"',
                 b'href="/neosektor/driver-routing"',
             },
             "operator": {
-                b'href="/neosektor"',
+                b'href="/neosektor/live-counts"',
                 b'href="/neosektor/ebm"',
                 b'href="/neosektor/wbm"',
                 b'href="/neosektor/driver-routing"',
                 b'href="/neosektor/discharge"',
             },
             "simulator": {
-                b'href="/neosektor"',
+                b'href="/neosektor/live-counts"',
                 b'href="/neosektor/tunnel-conductor"',
                 b'href="/neosektor/ebm"',
                 b'href="/neosektor/wbm"',
@@ -200,13 +204,12 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 response = self.client.get("/neosektor")
 
                 self.assertEqual(response.status_code, 200)
-                self.assertNotIn(b"motherbrain-header-nav", response.data)
-                self.assertIn(b"data-neosektor-internal-menu", response.data)
+                self.assertIn(b"motherbrain-header-nav", response.data)
+                self.assertNotIn(b"data-neosektor-internal-menu", response.data)
                 for label in expected_labels[role]:
                     self.assertIn(label, response.data)
                 for link in expected_links:
                     self.assertIn(link, response.data)
-                self.assertNotIn(b'href="/neosektor/live-counts"', response.data)
                 self.assertNotIn(b"NeoSektor Menu", response.data)
                 for link in blocked[role]:
                     self.assertNotIn(link, response.data)
@@ -215,7 +218,6 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="simulator")
 
         standalone_menu_paths = {
-            "/neosektor",
             "/neosektor/tunnel-conductor",
             "/neosektor/ebm",
             "/neosektor/wbm",
@@ -263,7 +265,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                         if path in standalone_menu_paths:
                             self.assertIn(label, response.data)
                         else:
-                            self.assertIn(b'aria-label="NeoSektor menu"', response.data)
+                            self.assertIn(label.upper(), response.data)
                     elif path in standalone_menu_paths:
                         self.assertIn(label, response.data)
                     else:
@@ -283,7 +285,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         expectations = {
             "watcher": {
                 "/neosektor": 200,
-                "/neosektor/live-counts": 302,
+                "/neosektor/live-counts": 200,
                 "/neosektor/driver-routing": 200,
                 "/neosektor/tunnel-conductor": 302,
                 "/neosektor/ebm": 302,
@@ -292,7 +294,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             },
             "operator": {
                 "/neosektor": 200,
-                "/neosektor/live-counts": 302,
+                "/neosektor/live-counts": 200,
                 "/neosektor/driver-routing": 200,
                 "/neosektor/tunnel-conductor": 302,
                 "/neosektor/ebm": 200,
@@ -301,7 +303,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             },
             "simulator": {
                 "/neosektor": 200,
-                "/neosektor/live-counts": 302,
+                "/neosektor/live-counts": 200,
                 "/neosektor/driver-routing": 200,
                 "/neosektor/tunnel-conductor": 200,
                 "/neosektor/ebm": 200,
@@ -310,7 +312,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             },
             "master": {
                 "/neosektor": 200,
-                "/neosektor/live-counts": 302,
+                "/neosektor/live-counts": 200,
                 "/neosektor/driver-routing": 200,
                 "/neosektor/tunnel-conductor": 200,
                 "/neosektor/ebm": 200,
@@ -319,7 +321,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             },
             "grandmaster": {
                 "/neosektor": 200,
-                "/neosektor/live-counts": 302,
+                "/neosektor/live-counts": 200,
                 "/neosektor/driver-routing": 200,
                 "/neosektor/tunnel-conductor": 200,
                 "/neosektor/ebm": 200,
@@ -1523,7 +1525,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
 
         ballmat_state = self.client.get("/neosektor/ballmat/state").get_json()["state"]
-        live_counts = self.client.get("/neosektor")
+        live_counts = self.client.get("/neosektor/live-counts")
         driver_state = self.client.get("/neosektor/driver-routing/state").get_json()["state"]
         ebm_page = self.client.get("/neosektor/ebm")
         wbm_page = self.client.get("/neosektor/wbm")
@@ -1582,10 +1584,12 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn(b'aria-label="BACK TO NeoSektor MENU"', ebm.data)
         self.assertNotIn(b"motherbrain-header-nav", ebm.data)
         self.assertIn(b"neosektor-ballmat-operator-page", ebm.data)
+        self.assertIn(b"neosektor-count-screen-compact", ebm.data)
         self.assertIn(b"data-open-bays", ebm.data)
         self.assertEqual(wbm.status_code, 200)
         self.assertIn(b"WBM | EDIT ENABLED", wbm.data)
         self.assertIn(b"data-selected-side=\"west\"", wbm.data)
+        self.assertIn(b"neosektor-count-screen-compact", wbm.data)
         self.assertEqual(east_compat.status_code, 302)
         self.assertEqual(east_compat.location, "/neosektor/ebm")
         self.assertEqual(west_compat.status_code, 302)
@@ -1904,7 +1908,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
     def test_live_counts_loads_default_database_backed_state(self):
         self._login_approved_user(role="watcher")
 
-        response = self.client.get("/neosektor")
+        response = self.client.get("/neosektor/live-counts")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Live Counts", response.data)
@@ -1922,7 +1926,6 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"Empty", response.data)
         self.assertIn(b'href="/logout"', response.data)
         self.assertIn(b'data-state-url="/neosektor/live-counts/state"', response.data)
-        self.assertNotIn(b'href="/neosektor/live-counts"', response.data)
         self.assertNotIn(b"Operations Menu", response.data)
         self.assertNotIn(b"view-bay-dashboard", response.data)
         self.assertNotIn(b"header-link-static", response.data)
@@ -2115,20 +2118,22 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("font-size: var(--neosektor-ballmat-count-size);", count_size_block)
         self.assertIn("line-height: 0.9;", count_size_block)
 
-    def test_neosektor_index_is_live_counts_and_compat_route_redirects(self):
+    def test_neosektor_dashboard_and_live_counts_are_separate_pages(self):
         self._login_approved_user(role="operator")
 
         dashboard = self.client.get("/neosektor")
         live_counts = self.client.get("/neosektor/live-counts", follow_redirects=False)
 
         self.assertEqual(dashboard.status_code, 200)
-        self.assertIn(b"Live Counts", dashboard.data)
-        self.assertIn(b"data-live-counts", dashboard.data)
-        self.assertIn(b'href="/neosektor"', dashboard.data)
-        self.assertIn(b'aria-current="page"', dashboard.data)
-        self.assertNotIn(b'href="/neosektor/live-counts"', dashboard.data)
-        self.assertEqual(live_counts.status_code, 302)
-        self.assertEqual(live_counts.location, "/neosektor")
+        self.assertIn(b"Operations Menu", dashboard.data)
+        self.assertIn(b"data-neosektor-mobile-dashboard", dashboard.data)
+        self.assertIn(b'href="/neosektor/live-counts"', dashboard.data)
+        self.assertNotIn(b"data-live-counts", dashboard.data)
+        self.assertNotIn(b"class=\"readonly-count\"", dashboard.data)
+        self.assertEqual(live_counts.status_code, 200)
+        self.assertIn(b"data-live-counts", live_counts.data)
+        self.assertIn(b"neosektor-count-screen-compact", live_counts.data)
+        self.assertNotIn(b"data-neosektor-mobile-dashboard", live_counts.data)
 
     def test_watcher_can_open_dashboard_and_live_counts_without_special_view_keys(self):
         self._login_approved_user(role="watcher")
@@ -2161,8 +2166,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(wbm.location, "/neosektor")
         self.assertEqual(discharge.status_code, 302)
         self.assertEqual(discharge.location, "/neosektor")
-        self.assertEqual(live_counts.status_code, 302)
-        self.assertEqual(live_counts.location, "/neosektor")
+        self.assertEqual(live_counts.status_code, 200)
+        self.assertIn(b"data-live-counts", live_counts.data)
 
     def test_rfd_sektor_still_points_to_standalone_service(self):
         self._login_approved_user(role="operator")

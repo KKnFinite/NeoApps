@@ -5,7 +5,7 @@
 
 {% block content %}
 <section
-    class="neosektor-standalone-page neosektor-live-shell mode-view"
+    class="neosektor-standalone-page neosektor-live-shell neosektor-count-screen-compact mode-view"
     aria-labelledby="neosektor-live-title"
     data-live-counts
     data-state-url="{{ url_for('neosektor.live_counts_state') }}"
@@ -27,45 +27,6 @@
     </header>
 
     <main class="counts-wrap neosektor-live-counts-grid" id="neosektor-live-counts-panel">
-        <section class="neosektor-mobile-dashboard" data-neosektor-mobile-dashboard aria-label="NeoSektor mobile dashboard">
-            <div class="neosektor-mobile-dashboard-head">
-                <span>OPERATIONS</span>
-                <strong>{{ gateway.code }}</strong>
-            </div>
-            <nav class="neosektor-mobile-dashboard-grid" aria-label="NeoSektor mobile actions">
-                {% for item in mobile_dashboard_items %}
-                {% set tile_url = url_for(item.endpoint) ~ ("#neosektor-live-counts-panel" if item.endpoint == "neosektor.index" else "") %}
-                <a
-                    class="neosektor-mobile-dashboard-tile neosektor-mobile-dashboard-tile-{{ item.key }}{% if item.active %} is-active{% endif %}"
-                    href="{{ tile_url }}"
-                    data-neosektor-mobile-tile="{{ item.key }}"
-                    {% if item.active %}aria-current="page"{% endif %}
-                >
-                    <span class="neosektor-mobile-dashboard-icon" aria-hidden="true">
-                        {% if item.key == "live-counts" %}
-                        <svg viewBox="0 0 24 24"><path d="M4 17h3V8H4v9Zm6 0h3V4h-3v13Zm6 0h4v-6h-4v6ZM3 20h18v-2H3v2Z"/></svg>
-                        {% elif item.key == "tunnel" %}
-                        <svg viewBox="0 0 24 24"><path d="M4 20V9.2L12 4l8 5.2V20h-2v-9.7L12 6.4l-6 3.9V20H4Zm4 0v-7h8v7h-2v-5h-4v5H8Z"/></svg>
-                        {% elif item.key == "ebm" %}
-                        <svg viewBox="0 0 24 24"><path d="M5 5h10v4H5V5Zm0 6h14v4H5v-4Zm0 6h10v2H5v-2Zm12-12 3 3-3 3V5Z"/></svg>
-                        {% elif item.key == "wbm" %}
-                        <svg viewBox="0 0 24 24"><path d="M9 5h10v4H9V5ZM5 8l3-3v6L5 8Zm0 3h14v4H5v-4Zm4 6h10v2H9v-2Z"/></svg>
-                        {% elif item.key == "discharge" %}
-                        <svg viewBox="0 0 24 24"><path d="M4 6h16v9H4V6Zm2 2v5h12V8H6Zm1 9h3v2H7v-2Zm7 0h3v2h-3v-2Zm-3-1h2v4h-2v-4Z"/></svg>
-                        {% else %}
-                        <svg viewBox="0 0 24 24"><path d="M4 7h9.6l-2-2L13 3.6 17.4 8 13 12.4 11.6 11l2-2H4V7Zm16 10h-9.6l2 2-1.4 1.4L6.6 16l4.4-4.4 1.4 1.4-2 2H20v2Z"/></svg>
-                        {% endif %}
-                    </span>
-                    <span class="neosektor-mobile-dashboard-copy">
-                        <strong>{{ item.label }}</strong>
-                        <small>{{ item.description }}</small>
-                    </span>
-                    <span class="neosektor-mobile-dashboard-action">OPEN</span>
-                </a>
-                {% endfor %}
-            </nav>
-        </section>
-
         <section class="wave-strip neosektor-live-wave-row" aria-label="Wave summary">
             {% for wave_key, wave in [("first", waves[0]), ("second", waves[1])] %}
             <article class="wave-card">
