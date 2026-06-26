@@ -214,6 +214,11 @@
                         <span>DEICE SPACING THRESHOLD MINUTES</span>
                         <input type="number" min="0" name="deice_spacing_threshold_minutes" value="{{ settings.deice_spacing_threshold_minutes }}" {% if not can_edit_parking_rules %}disabled{% endif %}>
                     </label>
+                    <label class="parking-rules-field">
+                        <span>PREFERRED MAX PER RAMP</span>
+                        <input type="number" min="0" name="preferred_max_per_ramp" value="{{ settings.preferred_max_per_ramp if settings.preferred_max_per_ramp is not none else '' }}" placeholder="NO LIMIT" {% if not can_edit_parking_rules %}disabled{% endif %}>
+                        <small class="muted">Soft limit. The optimizer tries not to exceed it, but hard rules and valid assignment count win.</small>
+                    </label>
                 </div>
             </section>
 
@@ -265,6 +270,10 @@
                             <div>
                                 <dt>Deice Threshold</dt>
                                 <dd>{{ rule_report.current_settings.deice_threshold }}</dd>
+                            </div>
+                            <div>
+                                <dt>Preferred Max Per Ramp</dt>
+                                <dd>{{ rule_report.current_settings.preferred_max_per_ramp }}</dd>
                             </div>
                             <div>
                                 <dt>Active Blocked Positions</dt>

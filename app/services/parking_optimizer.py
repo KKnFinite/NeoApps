@@ -38,6 +38,8 @@ PREFERRED_RAMP_SCORE = 600
 AVOID_RAMP_PENALTY = 350
 DEICE_CLOSE_PAIR_PENALTY = 400
 PARKING_WINDOW_PRIORITY_SCORE = 2000
+RAMP_BALANCE_PAIR_PENALTY = 260
+PREFERRED_MAX_PER_RAMP_PENALTY = 1200
 
 
 @dataclass(frozen=True)
@@ -68,6 +70,11 @@ def parking_optimizer_default_options(gateway):
             if settings and settings.deice_spacing_threshold_minutes is not None
             else DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES
         ),
+        "preferred_max_per_ramp": (
+            settings.preferred_max_per_ramp
+            if settings and settings.preferred_max_per_ramp is not None
+            else None
+        ),
     }
 
 
@@ -85,6 +92,7 @@ def parking_optimizer_preview(
         defaults.get("deice_spacing_threshold_minutes"),
         DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES,
     )
+    preferred_max_per_ramp = _safe_optional_int(defaults.get("preferred_max_per_ramp"))
     tail_rows = tail_rows if tail_rows is not None else tail_rows_for_operation(gateway, operation)
     rules = _active_rule_sets(gateway)
     assignments = _active_assignments(operation)
@@ -106,6 +114,7 @@ def parking_optimizer_preview(
         conflict.__dict__
         for conflict in validate_parking_physical_rules(operation, tail_rows=tail_rows)
     ]
+    locked_normal_ramp_counts = _normal_ramp_counts_for_assignments(assignments)
     candidate_positions = _candidate_positions(include_remote, include_throat)
     locked_lane_keys = {
         (_normalize_position(assignment.position_code), int(assignment.lane_number or 1))
@@ -138,8 +147,10 @@ def parking_optimizer_preview(
             tail_rows,
             timezone_name,
             deice_threshold,
+            preferred_max_per_ramp,
             locked_filled_positions | locked_blocked_positions,
             locked_eta_by_position,
+            locked_normal_ramp_counts,
         )
         if slot_1_placements
         else {
@@ -173,6 +184,10 @@ def parking_optimizer_preview(
                 locked_eta_by_position,
                 _eta_by_position_for_placements(selected_by_tail.values()),
             )
+            stage_normal_ramp_counts = _merge_ramp_counts(
+                locked_normal_ramp_counts,
+                _normal_ramp_counts_for_placements(selected_by_tail.values()),
+            )
             slot_1_timing = _slot_1_timing_by_position(
                 assignments,
                 tail_rows,
@@ -201,8 +216,10 @@ def parking_optimizer_preview(
                     tail_rows,
                     timezone_name,
                     deice_threshold,
+                    preferred_max_per_ramp,
                     stage_filled_positions,
                     stage_eta_by_position,
+                    stage_normal_ramp_counts,
                 )
                 wall_time += slot_2_result["wall_time"]
                 if slot_2_result["status_name"] in SUCCESS_SOLVER_STATUSES:
@@ -234,6 +251,7 @@ def parking_optimizer_preview(
                 placement,
                 row,
                 deice_threshold,
+                preferred_max_per_ramp,
                 selected_deice_reasons.get(placement.tail, ()),
             )
         )
@@ -252,6 +270,7 @@ def parking_optimizer_preview(
         include_remote,
         include_throat,
         deice_threshold,
+        preferred_max_per_ramp,
         len(candidate_rows),
         locked_assignments,
         suggestions,
@@ -385,6 +404,7 @@ def _preview_result(
     include_remote,
     include_throat,
     deice_threshold,
+    preferred_max_per_ramp,
     candidate_tail_count,
     locked_assignments,
     suggestions,
@@ -408,6 +428,7 @@ def _preview_result(
             "include_remote": bool(include_remote),
             "include_throat": bool(include_throat),
             "deice_spacing_threshold_minutes": deice_threshold,
+            "preferred_max_per_ramp": preferred_max_per_ramp,
         },
         "wall_time_seconds": wall_time,
         "preview_only": True,
@@ -461,6 +482,15 @@ def _safe_int(value, default=0):
         return max(0, int(value))
     except (TypeError, ValueError):
         return default
+
+
+def _safe_optional_int(value):
+    if value is None:
+        return None
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return None
 
 
 def _active_assignments(operation):
@@ -629,8 +659,10 @@ def _solve_optimizer_stage(
     tail_rows,
     timezone_name,
     deice_threshold,
+    preferred_max_per_ramp,
     filled_positions,
     eta_by_position,
+    locked_normal_ramp_counts=None,
 ):
     if not placements:
         return {
@@ -668,6 +700,14 @@ def _solve_optimizer_stage(
             tail_rows,
             timezone_name,
             deice_threshold,
+        )
+    )
+    objective_terms.extend(
+        _ramp_balance_penalty_terms(
+            model,
+            variables,
+            locked_normal_ramp_counts or {},
+            preferred_max_per_ramp,
         )
     )
     model.Maximize(sum(objective_terms))
@@ -891,12 +931,26 @@ def _unassigned_rows(
     return rows
 
 
-def _suggestion_row(placement, row, deice_threshold=0, deice_reasons=()):
+def _suggestion_row(
+    placement,
+    row,
+    deice_threshold=0,
+    preferred_max_per_ramp=None,
+    deice_reasons=(),
+):
     reasons = ["Suggested by optimizer preview."]
     if placement.lane == 2:
         reasons.append(
             "Slot 2 used because no valid Slot 1 position remained and Slot 1 departs before this tail arrives."
         )
+    if placement.ramp in NORMAL_RAMP_CODES:
+        reasons.append(
+            "Ramp balancing considered across Alpha, Bravo, Charlie, Delta, and Echo."
+        )
+        if preferred_max_per_ramp is not None:
+            reasons.append(
+                f"Preferred Max Per Ramp {preferred_max_per_ramp} considered as a soft limit."
+            )
     reasons.extend(placement.preference_reasons)
     if deice_threshold and placement.departure:
         reasons.append(
@@ -979,6 +1033,56 @@ def _soft_rule_reason(rule, verb):
     if subject_type == "origin":
         return f"Origin {subject} {verb} {ramp_label}."
     return f"Aircraft {subject} {verb} {ramp_label}."
+
+
+def _ramp_balance_penalty_terms(
+    model,
+    variables,
+    locked_normal_ramp_counts,
+    preferred_max_per_ramp,
+):
+    terms = []
+    normal_entries = [
+        (placement, variable)
+        for placement, variable in variables.items()
+        if placement.ramp in NORMAL_RAMP_CODES
+    ]
+    if not normal_entries:
+        return terms
+
+    by_ramp = {ramp: [] for ramp in sorted(NORMAL_RAMP_CODES)}
+    for placement, variable in normal_entries:
+        by_ramp.setdefault(placement.ramp, []).append((placement, variable))
+
+    for ramp, entries in by_ramp.items():
+        locked_count = max(0, int(locked_normal_ramp_counts.get(ramp, 0) or 0))
+        if locked_count:
+            for _placement, variable in entries:
+                terms.append(variable * -(locked_count * RAMP_BALANCE_PAIR_PENALTY))
+
+        for index, (_placement, variable) in enumerate(entries):
+            for other_index, (_other_placement, other_variable) in enumerate(
+                entries[index + 1 :],
+                start=index + 1,
+            ):
+                both = model.NewBoolVar(f"ramp_balance_{ramp}_{index}_{other_index}")
+                model.Add(both <= variable)
+                model.Add(both <= other_variable)
+                model.Add(both >= variable + other_variable - 1)
+                terms.append(both * -RAMP_BALANCE_PAIR_PENALTY)
+
+        if preferred_max_per_ramp is None:
+            continue
+        preferred_max = max(0, int(preferred_max_per_ramp))
+        candidate_variables = [variable for _placement, variable in entries]
+        max_possible_excess = max(0, locked_count + len(candidate_variables) - preferred_max)
+        if max_possible_excess <= 0:
+            continue
+        excess = model.NewIntVar(0, max_possible_excess, f"preferred_max_excess_{ramp}")
+        model.Add(excess >= sum(candidate_variables) + locked_count - preferred_max)
+        terms.append(excess * -PREFERRED_MAX_PER_RAMP_PENALTY)
+
+    return terms
 
 
 def _deice_spacing_penalty_terms(
@@ -1310,6 +1414,34 @@ def _merge_eta_by_position(*sources):
     for source in sources:
         for position, values in (source or {}).items():
             merged.setdefault(position, []).extend(values)
+    return merged
+
+
+def _normal_ramp_counts_for_assignments(assignments):
+    counts = {}
+    for assignment in assignments:
+        position = _normalize_position(assignment.position_code)
+        ramp = _ramp_from_position(position)
+        if ramp not in NORMAL_RAMP_CODES:
+            continue
+        counts[ramp] = counts.get(ramp, 0) + 1
+    return counts
+
+
+def _normal_ramp_counts_for_placements(placements):
+    counts = {}
+    for placement in placements:
+        if placement.ramp not in NORMAL_RAMP_CODES:
+            continue
+        counts[placement.ramp] = counts.get(placement.ramp, 0) + 1
+    return counts
+
+
+def _merge_ramp_counts(*sources):
+    merged = {}
+    for source in sources:
+        for ramp, count in (source or {}).items():
+            merged[ramp] = merged.get(ramp, 0) + max(0, int(count or 0))
     return merged
 
 

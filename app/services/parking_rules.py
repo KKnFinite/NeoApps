@@ -58,6 +58,7 @@ def ensure_parking_settings(gateway):
             include_remote_default=False,
             include_throat_default=False,
             deice_spacing_threshold_minutes=DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES,
+            preferred_max_per_ramp=None,
         )
         db.session.add(settings)
         db.session.flush()
@@ -102,6 +103,9 @@ def save_parking_rules_from_form(gateway, form):
     settings.deice_spacing_threshold_minutes = _nonnegative_int(
         form.get("deice_spacing_threshold_minutes"),
         default=DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES,
+    )
+    settings.preferred_max_per_ramp = _optional_nonnegative_int(
+        form.get("preferred_max_per_ramp")
     )
 
     _update_existing_rules(gateway, form)
@@ -283,8 +287,8 @@ def _parking_rule_report(settings, grouped):
         ),
         "soft_rules": (
             "Aircraft type preferences",
-            "Ramp balancing: planned / inactive",
-            "Preferred max per ramp: planned / inactive",
+            "Ramp balancing: active soft rule across Alpha, Bravo, Charlie, Delta, and Echo",
+            "Preferred Max Per Ramp: active soft limit when set; it can be exceeded if needed",
             "757 preference for 04/08: planned / inactive",
             "Avoid 04/08: planned / inactive",
             "Deice spacing setting/status",
@@ -293,6 +297,11 @@ def _parking_rule_report(settings, grouped):
             "include_remote_default": "ON" if settings.include_remote_default else "OFF",
             "include_throat_default": "ON" if settings.include_throat_default else "OFF",
             "deice_threshold": f"{settings.deice_spacing_threshold_minutes} min",
+            "preferred_max_per_ramp": (
+                str(settings.preferred_max_per_ramp)
+                if settings.preferred_max_per_ramp is not None
+                else "NONE"
+            ),
             "active_blocked_positions": active_blocked or ("NONE",),
             "active_origin_requirements": active_origin_requirements or ("NONE",),
             "active_aircraft_restrictions": active_aircraft_restrictions or ("NONE",),
@@ -328,6 +337,13 @@ def _nonnegative_int(value, default=0):
         return max(0, int(value))
     except (TypeError, ValueError):
         return default
+
+
+def _optional_nonnegative_int(value):
+    text = str(value or "").strip()
+    if not text:
+        return None
+    return _nonnegative_int(text, default=0)
 
 
 def _int_or_none(value):

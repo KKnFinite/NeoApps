@@ -46,6 +46,10 @@ class MotherBrainParkingSettings(db.Model):
             "deice_spacing_threshold_minutes >= 0",
             name="ck_motherbrain_parking_settings_deice_nonnegative",
         ),
+        db.CheckConstraint(
+            "preferred_max_per_ramp IS NULL OR preferred_max_per_ramp >= 0",
+            name="ck_motherbrain_parking_settings_preferred_max_nonnegative",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -54,6 +58,7 @@ class MotherBrainParkingSettings(db.Model):
     include_remote_default = db.Column(db.Boolean, nullable=False, default=False)
     include_throat_default = db.Column(db.Boolean, nullable=False, default=False)
     deice_spacing_threshold_minutes = db.Column(db.Integer, nullable=False, default=15)
+    preferred_max_per_ramp = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
