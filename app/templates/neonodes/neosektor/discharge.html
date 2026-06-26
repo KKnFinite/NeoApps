@@ -12,9 +12,9 @@
 
 {% macro count_strip(request_row) -%}
     <div class="neosektor-discharge-count-strip" aria-label="Remaining ULD counts">
-        <span>A2 <strong>{{ request_row.counts["A2"] }}</strong></span>
-        <span>A1 <strong>{{ request_row.counts["A1"] }}</strong></span>
-        <span>AMP <strong>{{ request_row.counts["AMP"] }}</strong></span>
+        <span><span class="neosektor-discharge-uld-label">A2</span> <strong>{{ request_row.counts["A2"] }}</strong></span>
+        <span><span class="neosektor-discharge-uld-label">A1</span> <strong>{{ request_row.counts["A1"] }}</strong></span>
+        <span><span class="neosektor-discharge-uld-label">AMP</span> <strong>{{ request_row.counts["AMP"] }}</strong></span>
     </div>
 {%- endmacro %}
 
@@ -29,7 +29,9 @@
             <p><span class="neo-node-name node-sektor" aria-label="NeoSektor"><span class="neo-word">Neo</span><span class="node-word">Sektor</span></span></p>
             <h1 id="neosektor-discharge-title">Discharge</h1>
         </div>
-        <span class="header-link header-link-static">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
+        {% if not can_edit %}
+        <span class="header-link header-link-static">VIEW ONLY</span>
+        {% endif %}
     </header>
 
     <main class="counts-wrap neosektor-discharge-wrap">
@@ -55,15 +57,15 @@
                 <input type="hidden" name="door" value="{{ selected_request.door }}">
                 <input type="hidden" name="request_id" value="{{ selected_request.id }}">
                 <label>
-                    <span>A2 SENT</span>
+                    <span><span class="neosektor-discharge-uld-label">A2</span> SENT</span>
                     <input type="number" name="send_a2_count" min="0" step="1" inputmode="numeric" value="0" class="neosektor-numeric-input">
                 </label>
                 <label>
-                    <span>A1 SENT</span>
+                    <span><span class="neosektor-discharge-uld-label">A1</span> SENT</span>
                     <input type="number" name="send_a1_count" min="0" step="1" inputmode="numeric" value="0" class="neosektor-numeric-input">
                 </label>
                 <label>
-                    <span>AMP SENT</span>
+                    <span><span class="neosektor-discharge-uld-label">AMP</span> SENT</span>
                     <input type="number" name="send_amp_count" min="0" step="1" inputmode="numeric" value="0" class="neosektor-numeric-input">
                 </label>
                 <button type="submit">SEND ON THE WAY</button>

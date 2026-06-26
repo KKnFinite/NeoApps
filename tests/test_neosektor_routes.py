@@ -79,6 +79,17 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn(b"motherbrain-header-nav", response.data)
         self.assertIn(b"data-neosektor-internal-menu", response.data)
 
+    def test_live_counts_uses_balanced_count_number_sizing(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neosektor")
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"class=\"readonly-count\"", response.data)
+        self.assertIn("font-size: clamp(1.3rem, 3.9vw, 1.9rem);", css)
+        self.assertIn("font-size: clamp(1.9rem, 5.7vw, 2.95rem);", css)
+
     def test_neosektor_internal_menu_filters_links_by_role(self):
         expectations = {
             "watcher": {
@@ -326,7 +337,23 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"D34", response.data)
         self.assertIn(b"A2", response.data)
         self.assertIn(b"SETUP", response.data)
+        self.assertNotIn(b"EDIT ENABLED", response.data)
         self.assertNotIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
+
+    def test_discharge_uld_labels_use_larger_label_hook(self):
+        self._login_approved_user(role="operator")
+        self._add_uld_request("D34", a2_count=2, a1_count=1, amp_count=3)
+        db.session.commit()
+
+        response = self.client.get("/neosektor/discharge")
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'class="neosektor-discharge-uld-label">A2</span>', response.data)
+        self.assertIn(b'class="neosektor-discharge-uld-label">A1</span>', response.data)
+        self.assertIn(b'class="neosektor-discharge-uld-label">AMP</span>', response.data)
+        self.assertIn(".neosektor-discharge-uld-label", css)
+        self.assertIn("font-size: 0.62rem;", css)
 
     def test_discharge_selected_request_renders_compact_send_form(self):
         request_record = self._add_uld_request("D34", a2_count=2, a1_count=1, amp_count=3)

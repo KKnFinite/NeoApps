@@ -13885,7 +13885,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 }
 
 .blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong {
-    font-size: clamp(1.45rem, 4.5vw, 2.15rem);
+    font-size: clamp(1.3rem, 3.9vw, 1.9rem);
     line-height: 0.98;
 }
 
@@ -13896,7 +13896,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .blueprint-neosektor .neosektor-live-ballmat-row .readonly-count {
     width: 100%;
     color: var(--neo-bright-silver);
-    font-size: clamp(2.15rem, 6.5vw, 3.35rem);
+    font-size: clamp(1.9rem, 5.7vw, 2.95rem);
     line-height: 0.9;
     text-align: center;
     text-shadow: 0 0 14px rgba(244, 247, 251, 0.2);
@@ -15302,8 +15302,8 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     grid-area: auto;
 }
 
-.blueprint-neosektor .neosektor-discharge-count-strip span,
-.neosektor-discharge-count-strip span {
+.blueprint-neosektor .neosektor-discharge-count-strip > span,
+.neosektor-discharge-count-strip > span {
     display: grid;
     justify-items: center;
     gap: 2px;
@@ -15325,6 +15325,12 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     color: #fff;
     font-size: 1rem;
     line-height: 1;
+}
+
+.blueprint-neosektor .neosektor-discharge-uld-label,
+.neosektor-discharge-uld-label {
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
 }
 
 .blueprint-neosektor .neosektor-discharge-time,
@@ -15512,8 +15518,8 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         padding: 7px;
     }
 
-    .blueprint-neosektor .neosektor-discharge-count-strip span,
-    .neosektor-discharge-count-strip span {
+    .blueprint-neosektor .neosektor-discharge-count-strip > span,
+    .neosektor-discharge-count-strip > span {
         padding-inline: 2px;
         font-size: 0.5rem;
     }
