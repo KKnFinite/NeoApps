@@ -303,6 +303,8 @@ def assign_tail_to_lane(
     ramp_code = _normalize_ramp_code(ramp_code)
     position_code = _normalize_position_code(position_code)
     lane_number = _normalize_lane(lane_number)
+    if not tail_number:
+        raise ParkingPlanError("Select a tail before assigning parking.")
     _validate_position(ramp_code, position_code)
 
     if tail_number not in _current_operation_tails(operation):
@@ -928,7 +930,13 @@ def _normalize_ramp_code(value):
 
 
 def _normalize_position_code(value):
-    return str(value or "").strip().upper()
+    value = str(value or "").strip().upper().replace(" ", "")
+    if len(value) >= 2:
+        ramp_code = value[0]
+        slot_digits = value[1:]
+        if ramp_code in {"A", "B", "C", "D", "E", "R"} and slot_digits.isdigit():
+            return f"{ramp_code}{int(slot_digits):02d}"
+    return value
 
 
 def _normalize_lane(value):

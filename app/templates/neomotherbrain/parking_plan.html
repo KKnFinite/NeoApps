@@ -427,6 +427,39 @@
                 <span>SELECTED <strong data-selected-tail-label></strong></span>
                 <button type="button" data-clear-selected-tail>CANCEL</button>
             </div>
+            <form
+                class="parking-typed-assign-form"
+                data-parking-typed-assign-form
+                method="post"
+                action="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) }}"
+                hidden
+            >
+                <input type="hidden" name="tail_number" data-typed-tail-number>
+                <input type="hidden" name="ramp_code" data-typed-ramp-code>
+                <input type="hidden" name="replace_occupied" value="0">
+                <label>
+                    <span>TYPE POSITION</span>
+                    <input
+                        type="text"
+                        name="position_code"
+                        inputmode="text"
+                        autocomplete="off"
+                        autocapitalize="characters"
+                        placeholder="A01"
+                        maxlength="3"
+                        data-typed-position-input
+                    >
+                </label>
+                <label>
+                    <span>SLOT</span>
+                    <select name="lane_number" data-typed-slot-select>
+                        <option value="1">SLOT 1</option>
+                        <option value="2">SLOT 2</option>
+                    </select>
+                </label>
+                <button type="submit">ASSIGN</button>
+                <p class="parking-typed-assign-error" data-typed-assign-error hidden></p>
+            </form>
 
             <div class="parking-unassigned" aria-label="Unassigned tails">
                 <h3>UNASSIGNED</h3>
@@ -592,16 +625,43 @@
         updateSlotChoices();
     }
 
-    const dragEnabled = window.matchMedia("(min-width: 721px) and (pointer: fine)").matches;
-    if (!dragEnabled) {
-        return;
-    }
-
-    let draggedTail = "";
     let selectedTail = "";
     const selectionStatus = page.querySelector("[data-parking-selection-status]");
     const selectedTailLabel = page.querySelector("[data-selected-tail-label]");
     const clearSelectedTailButton = page.querySelector("[data-clear-selected-tail]");
+    const typedAssignForm = page.querySelector("[data-parking-typed-assign-form]");
+    const typedPositionInput = page.querySelector("[data-typed-position-input]");
+    const typedTailInput = page.querySelector("[data-typed-tail-number]");
+    const typedRampInput = page.querySelector("[data-typed-ramp-code]");
+    const typedSlotSelect = page.querySelector("[data-typed-slot-select]");
+    const typedAssignError = page.querySelector("[data-typed-assign-error]");
+    const normalizeTypedPosition = (value) => {
+        const cleaned = String(value || "").trim().toUpperCase().replace(/\s+/g, "");
+        const match = cleaned.match(/^([A-ER])0*(\d{1,2})$/);
+        if (!match) {
+            return cleaned;
+        }
+        return `${match[1]}${String(Number(match[2])).padStart(2, "0")}`;
+    };
+    const laneForTypedPosition = (positionCode, slotNumber) => {
+        return Array.from(page.querySelectorAll("[data-parking-lane]")).find((lane) => {
+            return lane.dataset.positionCode === positionCode && lane.dataset.laneNumber === slotNumber;
+        });
+    };
+    const showTypedError = (message) => {
+        if (!typedAssignError) {
+            window.alert(message);
+            return;
+        }
+        typedAssignError.textContent = message;
+        typedAssignError.hidden = false;
+    };
+    const clearTypedError = () => {
+        if (typedAssignError) {
+            typedAssignError.textContent = "";
+            typedAssignError.hidden = true;
+        }
+    };
     const setSelectedTail = (tail) => {
         selectedTail = tail || "";
         page.classList.toggle("has-selected-tail", Boolean(selectedTail));
@@ -614,14 +674,25 @@
         if (selectedTailLabel) {
             selectedTailLabel.textContent = selectedTail;
         }
+        if (typedAssignForm) {
+            typedAssignForm.hidden = !selectedTail;
+        }
+        if (typedTailInput) {
+            typedTailInput.value = selectedTail;
+        }
+        clearTypedError();
     };
-    const assignTailToLane = async (lane, tail) => {
+    const assignTailToLane = async (lane, tail, options = {}) => {
+        const reportError = options.errorTarget ? showTypedError : (message) => window.alert(message);
         const occupiedTail = lane.dataset.occupiedTail || "";
         let replaceOccupied = "0";
         if (occupiedTail && occupiedTail !== tail) {
             const confirmed = window.confirm(`${occupiedTail} is already in ${lane.dataset.positionCode} Slot ${lane.dataset.slotNumber}. Replace it with ${tail}?`);
             if (!confirmed) {
-                return;
+                if (options.errorTarget) {
+                    reportError(`${occupiedTail} remains in ${lane.dataset.positionCode} Slot ${lane.dataset.slotNumber}. Assignment cancelled.`);
+                }
+                return false;
             }
             replaceOccupied = "1";
         }
@@ -644,21 +715,42 @@
         });
         const payload = await response.json();
         if (!response.ok || !payload.ok) {
-            window.alert(payload.message || "Parking assignment failed.");
-            return;
+            reportError(payload.message || "Parking assignment failed.");
+            return false;
         }
         window.location.reload();
+        return true;
     };
     clearSelectedTailButton?.addEventListener("click", () => {
         setSelectedTail("");
     });
+    typedAssignForm?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        clearTypedError();
+        if (!selectedTail) {
+            showTypedError("Select an unparked tail before assigning parking.");
+            return;
+        }
+        const normalizedPosition = normalizeTypedPosition(typedPositionInput?.value || "");
+        if (typedPositionInput) {
+            typedPositionInput.value = normalizedPosition;
+        }
+        const slotNumber = typedSlotSelect?.value || "1";
+        const lane = laneForTypedPosition(normalizedPosition, slotNumber);
+        if (!lane) {
+            showTypedError("Enter a valid parking position.");
+            return;
+        }
+        if (typedRampInput) {
+            typedRampInput.value = lane.dataset.rampCode || "";
+        }
+        if (typedTailInput) {
+            typedTailInput.value = selectedTail;
+        }
+        await assignTailToLane(lane, selectedTail, { errorTarget: typedAssignError });
+    });
 
     page.querySelectorAll("[data-parking-tail]").forEach((card) => {
-        card.addEventListener("dragstart", (event) => {
-            draggedTail = card.dataset.tailNumber || "";
-            event.dataTransfer.setData("text/plain", draggedTail);
-            event.dataTransfer.effectAllowed = "move";
-        });
         card.addEventListener("click", (event) => {
             if (event.target.closest("[data-tail-action]")) {
                 return;
@@ -668,6 +760,20 @@
             }
             event.preventDefault();
             setSelectedTail(card.dataset.tailNumber || "");
+        });
+    });
+
+    const dragEnabled = window.matchMedia("(min-width: 721px) and (pointer: fine)").matches;
+    if (!dragEnabled) {
+        return;
+    }
+
+    let draggedTail = "";
+    page.querySelectorAll("[data-parking-tail]").forEach((card) => {
+        card.addEventListener("dragstart", (event) => {
+            draggedTail = card.dataset.tailNumber || "";
+            event.dataTransfer.setData("text/plain", draggedTail);
+            event.dataTransfer.effectAllowed = "move";
         });
     });
 

@@ -7542,6 +7542,140 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("await assignTailToLane(lane, selectedTail)", html)
         self.assertIn("window.confirm(`${occupiedTail} is already", html)
 
+    def test_parking_plan_typed_assignment_controls_render_for_selected_tail(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+
+        self.assertIn("data-parking-typed-assign-form", html)
+        self.assertIn("data-typed-position-input", html)
+        self.assertIn("TYPE POSITION", html)
+        self.assertIn("placeholder=\"A01\"", html)
+        self.assertIn("typedAssignForm.hidden = !selectedTail", html)
+        self.assertIn("normalizeTypedPosition", html)
+        self.assertIn("laneForTypedPosition", html)
+        self.assertIn("Select an unparked tail before assigning parking.", html)
+        self.assertIn("Enter a valid parking position.", html)
+
+    def test_parking_plan_typed_assignment_normalizes_position_codes(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        self._parking_pair(operation, "N349UP", destination="ONT")
+        self._parking_pair(operation, "N171UP", destination="SDF")
+        db.session.commit()
+
+        cases = [
+            ("N457UP", "A", "A1", "A01"),
+            ("N349UP", "R", "R1", "R01"),
+            ("N171UP", "A", "A9", "A09"),
+        ]
+        for tail, ramp, raw_position, normalized_position in cases:
+            with self.subTest(raw_position=raw_position):
+                response = self.client.post(
+                    f"/motherbrain/parking-plan/{operation.id}/assign",
+                    data={
+                        "tail_number": tail,
+                        "ramp_code": ramp,
+                        "position_code": raw_position,
+                        "lane_number": "1",
+                    },
+                    headers={"Accept": "application/json"},
+                )
+                self.assertEqual(response.status_code, 200)
+                assignment = SortDateParkingAssignment.query.filter_by(
+                    sort_date_operation_id=operation.id,
+                    tail_number=tail,
+                ).one()
+                self.assertEqual(assignment.position_code, normalized_position)
+
+    def test_parking_plan_typed_assignment_invalid_position_returns_error(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A99",
+                "lane_number": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["message"], "Select a valid parking position.")
+
+    def test_parking_plan_typed_assignment_occupied_slot_requires_confirmation(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        self._parking_pair(operation, "N349UP", destination="ONT")
+        db.session.commit()
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A1",
+                "lane_number": "1",
+            },
+        )
+
+        conflict = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N349UP",
+                "ramp_code": "A",
+                "position_code": "A1",
+                "lane_number": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+        confirmed = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N349UP",
+                "ramp_code": "A",
+                "position_code": "A1",
+                "lane_number": "1",
+                "replace_occupied": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(conflict.status_code, 409)
+        self.assertEqual(conflict.get_json()["occupied_tail"], "N457UP")
+        self.assertEqual(confirmed.status_code, 200)
+        previous = SortDateParkingAssignment.query.filter_by(tail_number="N457UP").one()
+        current = SortDateParkingAssignment.query.filter_by(tail_number="N349UP").one()
+        self.assertIsNone(previous.position_code)
+        self.assertEqual(current.position_code, "A01")
+
+    def test_parking_plan_physical_validator_runs_after_typed_assignment(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A3",
+                "lane_number": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"PHYSICAL PARKING RULES", response.data)
+        self.assertIn(b"A03 cannot be used until A01, A02 are filled.", response.data)
+
     def test_parking_tail_card_compact_flags_and_order_render(self):
         operation = self._parking_operation()
         self._parking_pair(
