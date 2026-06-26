@@ -4482,6 +4482,34 @@ h2 {
     text-transform: uppercase;
 }
 
+.parking-panel-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.parking-panel-actions form {
+    margin: 0;
+}
+
+.parking-clear-button {
+    min-height: 28px;
+    padding: 5px 8px;
+    border: 1px solid rgba(255, 90, 96, 0.68);
+    border-radius: 5px;
+    background:
+        linear-gradient(180deg, rgba(168, 25, 37, 0.84), rgba(58, 5, 12, 0.9)),
+        rgba(0, 0, 0, 0.28);
+    color: #ffd8dc;
+    font-size: 0.66rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
 .parking-mobile-assignment {
     display: none;
 }

@@ -347,6 +347,27 @@ def unassign_tail(operation, tail_number, user=None):
     return assignment
 
 
+def clear_parking_assignments(operation, user=None):
+    assignments = SortDateParkingAssignment.query.filter_by(
+        sort_date_operation_id=operation.id,
+    ).all()
+    assigned = [
+        assignment
+        for assignment in assignments
+        if assignment.ramp_code or assignment.position_code or assignment.lane_number
+    ]
+    now = _utc_now()
+    user_id = getattr(user, "id", None)
+    for assignment in assigned:
+        assignment.ramp_code = None
+        assignment.position_code = None
+        assignment.lane_number = None
+        assignment.assigned_by_user_id = user_id
+        assignment.assigned_at = now
+    db.session.flush()
+    return len(assigned)
+
+
 def set_tail_hot(operation, tail_number, is_hot, user=None, note=None):
     tail_number = _normalize_tail(tail_number)
     if tail_number not in _current_operation_tail_assets(operation):

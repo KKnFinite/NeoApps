@@ -5575,6 +5575,61 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"PARKING RULES", response.data)
         self.assertIn(f'action="/motherbrain/parking-plan/{operation.id}/assign"'.encode(), response.data)
 
+    def test_parking_plan_clear_button_renders_when_tails_are_parked(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.flush()
+        self._parking_assignment(operation, "N457UP", "A01")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"CLEAR PARKING", response.data)
+        self.assertIn(
+            f'action="/motherbrain/parking-plan/{operation.id}/clear"'.encode(),
+            response.data,
+        )
+
+    def test_parking_plan_clear_button_unassigns_current_operation_only(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        self._parking_pair(operation, "N349UP", destination="ONT")
+        other_operation = self._operation(sort_date=date(2026, 6, 19))
+        db.session.add(other_operation)
+        db.session.flush()
+        self._parking_pair(other_operation, "N999UP", destination="SDF")
+        self._parking_assignment(operation, "N457UP", "A01")
+        self._parking_assignment(operation, "N349UP", "A02")
+        other_assignment = self._parking_assignment(other_operation, "N999UP", "B01")
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/clear",
+            follow_redirects=True,
+        )
+        first_assignment = self._parking_assignment_for_tail(operation, "N457UP")
+        second_assignment = self._parking_assignment_for_tail(operation, "N349UP")
+        db.session.refresh(other_assignment)
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Cleared 2 parked tail assignment(s) for this sort.", html)
+        self.assertIsNone(first_assignment.position_code)
+        self.assertIsNone(first_assignment.ramp_code)
+        self.assertIsNone(first_assignment.lane_number)
+        self.assertIsNone(second_assignment.position_code)
+        self.assertIsNone(second_assignment.ramp_code)
+        self.assertIsNone(second_assignment.lane_number)
+        self.assertEqual(other_assignment.position_code, "B01")
+        self.assertEqual(other_assignment.ramp_code, "B")
+        self.assertEqual(other_assignment.lane_number, 1)
+        self.assertIn("N457UP", html)
+        self.assertIn("N349UP", html)
+        self.assertIn("data-parking-tail-assigned=\"0\"", html)
+        self.assertNotIn('data-occupied-tail="N457UP"', html)
+        self.assertNotIn('data-occupied-tail="N349UP"', html)
+
     def test_motherbrain_alert_tray_renders_empty_state_on_key_pages(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", destination="LAX")

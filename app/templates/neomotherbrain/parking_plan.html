@@ -337,7 +337,19 @@
         <aside class="parking-tail-panel" aria-label="Unparked tails and parking assignment controls" data-parking-unassign-drop>
             <div class="parking-panel-heading">
                 <h2>UNPARKED TAILS</h2>
-                <span>{{ summary.assigned_tails }}/{{ summary.total_tails }} ASSIGNED</span>
+                <div class="parking-panel-actions">
+                    <span>{{ summary.assigned_tails }}/{{ summary.total_tails }} ASSIGNED</span>
+                    {% if summary.assigned_tails %}
+                    <form
+                        method="post"
+                        action="{{ url_for('neomotherbrain.clear_parking_plan_assignments', operation_id=operation.id) }}"
+                        onsubmit="return window.confirm('Clear all parked tails for this sort operation?');"
+                    >
+                        <input type="hidden" name="operation_id" value="{{ operation.id }}">
+                        <button class="parking-clear-button" type="submit">CLEAR PARKING</button>
+                    </form>
+                    {% endif %}
+                </div>
             </div>
             <div class="parking-mobile-assignment" aria-label="Mobile parking assignment controls">
                 <form class="parking-mobile-action-section parking-mobile-assign-controls" method="post" action="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) }}">

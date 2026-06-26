@@ -85,6 +85,7 @@ from app.services.parking_plan import (
     ParkingLaneOccupied,
     ParkingPlanError,
     assign_tail_to_lane,
+    clear_parking_assignments,
     current_active_sort_operation,
     parking_plan_context,
     parking_plan_landing_context,
@@ -751,6 +752,28 @@ def unassign_parking_plan_tail(operation_id=None):
     return _parking_plan_response(
         True,
         f"{str(tail_number or '').strip().upper()} unassigned.",
+        operation_id=operation.id,
+    )
+
+
+@bp.route("/motherbrain/parking-plan/clear", methods=["POST"])
+@bp.route("/motherbrain/parking-plan/<int:operation_id>/clear", methods=["POST"])
+@gateway_node_required("motherbrain")
+def clear_parking_plan_assignments(operation_id=None):
+    gateway = get_current_gateway()
+    operation = _parking_plan_operation_for_action(gateway, operation_id)
+    if not operation:
+        return _parking_plan_response(
+            False,
+            "Select a sort operation before clearing parking.",
+            status=400,
+        )
+
+    cleared_count = clear_parking_assignments(operation, user=current_user)
+    db.session.commit()
+    return _parking_plan_response(
+        True,
+        f"Cleared {cleared_count} parked tail assignment(s) for this sort.",
         operation_id=operation.id,
     )
 
