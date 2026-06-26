@@ -54,6 +54,7 @@ def validate_parking_physical_rules(operation, tail_rows=None):
     conflicts.extend(_remote_fill_order_conflicts(occupancy, blocked))
     conflicts.extend(_normal_767_conflicts(assignments, aircraft_type_by_tail, occupancy))
     conflicts.extend(_throat_conflicts(occupancy, blocked))
+    conflicts.extend(_slot_2_overflow_conflicts(assignments, tail_rows))
     conflicts.extend(_eta_order_conflicts(assignments, aircraft_type_by_tail, tail_rows))
     return _dedupe_conflicts(conflicts)
 
@@ -339,6 +340,107 @@ def _eta_order_conflicts(assignments, aircraft_type_by_tail, tail_rows):
     return conflicts
 
 
+def _slot_2_overflow_conflicts(assignments, tail_rows):
+    assignments_by_lane = {}
+    for assignment in assignments:
+        position = _normalize_position(getattr(assignment, "position_code", ""))
+        try:
+            lane = int(getattr(assignment, "lane_number", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if not position or lane not in (1, 2):
+            continue
+        assignments_by_lane.setdefault((position, lane), assignment)
+
+    timing_by_tail = _parking_window_timing_by_tail(tail_rows)
+    conflicts = []
+    for (position, lane), slot_2_assignment in sorted(assignments_by_lane.items()):
+        if lane != 2:
+            continue
+        tail = _normalize_tail(getattr(slot_2_assignment, "tail_number", ""))
+        slot_1_assignment = assignments_by_lane.get((position, 1))
+        if not slot_1_assignment:
+            conflicts.append(
+                _slot_2_conflict(
+                    position,
+                    tail,
+                    "",
+                    f"{position} Slot 2 cannot be used while {position} Slot 1 is empty.",
+                    "slot_2_empty_slot_1",
+                )
+            )
+            continue
+
+        slot_1_tail = _normalize_tail(getattr(slot_1_assignment, "tail_number", ""))
+        slot_1_timing = timing_by_tail.get(slot_1_tail, {})
+        slot_2_timing = timing_by_tail.get(tail, {})
+        slot_1_departure = slot_1_timing.get("departure")
+        slot_2_arrival = slot_2_timing.get("arrival")
+        if not slot_1_departure:
+            conflicts.append(
+                _slot_2_conflict(
+                    position,
+                    tail,
+                    slot_1_tail,
+                    f"{position} Slot 2 cannot be used because {position} Slot 1 has no known departure time.",
+                    "slot_2_unknown_slot_1_departure",
+                )
+            )
+            continue
+        if not slot_2_arrival:
+            conflicts.append(
+                _slot_2_conflict(
+                    position,
+                    tail,
+                    slot_1_tail,
+                    f"{position} Slot 2 cannot be used because Slot 2 arrival time is unknown.",
+                    "slot_2_unknown_arrival",
+                )
+            )
+            continue
+        if slot_1_departure > slot_2_arrival:
+            conflicts.append(
+                _slot_2_conflict(
+                    position,
+                    tail,
+                    slot_1_tail,
+                    (
+                        f"{position} Slot 2 cannot be used because Slot 1 departure "
+                        f"{_format_local_time(slot_1_departure)} is after Slot 2 arrival "
+                        f"{_format_local_time(slot_2_arrival)}."
+                    ),
+                    "slot_2_timing_overlap",
+                    blocking_eta=_format_local_time(slot_1_departure),
+                    eta=_format_local_time(slot_2_arrival),
+                )
+            )
+    return conflicts
+
+
+def _slot_2_conflict(
+    position,
+    tail,
+    blocking_tail,
+    message,
+    reason,
+    eta="",
+    blocking_eta="",
+):
+    return ParkingPhysicalConflict(
+        conflict_key=_stable_conflict_key(reason, f"{position}-slot-2", tail, message),
+        severity="warning",
+        title="Slot 2 overflow conflict",
+        message=message,
+        reason=reason,
+        position=f"{position} Slot 2",
+        tail=tail,
+        blocking_position=f"{position} Slot 1",
+        blocking_tail=blocking_tail,
+        eta=eta,
+        blocking_eta=blocking_eta,
+    )
+
+
 def _eta_fill_items_by_position(assignments, aircraft_type_by_tail, tail_rows):
     timing_by_tail = _eta_timing_by_tail(tail_rows)
     fill_items = {}
@@ -385,6 +487,19 @@ def _eta_timing_by_tail(tail_rows):
         timing[tail] = {
             "eta": eta,
             "eta_label": _format_local_time(eta),
+        }
+    return timing
+
+
+def _parking_window_timing_by_tail(tail_rows):
+    timing = {}
+    for row in tail_rows or []:
+        tail = _normalize_tail(row.get("tail"))
+        if not tail:
+            continue
+        timing[tail] = {
+            "arrival": row.get("arrival_block_in_local"),
+            "departure": row.get("departure_datetime_local"),
         }
     return timing
 

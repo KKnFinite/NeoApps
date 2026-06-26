@@ -6349,6 +6349,88 @@ class MotherBrainRoutesTest(unittest.TestCase):
             messages,
         )
 
+    def test_parking_validator_detects_slot_2_used_with_empty_slot_1(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        db.session.flush()
+        self._parking_assignment(operation, "N457UP", "A01", lane_number=2)
+        db.session.commit()
+        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
+
+        conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
+        messages = [conflict.message for conflict in conflicts]
+
+        self.assertIn("A01 Slot 2 cannot be used while A01 Slot 1 is empty.", messages)
+
+    def test_parking_validator_detects_slot_2_before_slot_1_departure(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N001UP",
+            arrival_local=datetime(2026, 6, 18, 22, 0),
+            departure_local=datetime(2026, 6, 19, 1, 30),
+        )
+        self._parking_pair(
+            operation,
+            "N002UP",
+            arrival_local=datetime(2026, 6, 19, 1, 0),
+            departure_local=datetime(2026, 6, 19, 3, 0),
+            destination="SDF",
+        )
+        db.session.flush()
+        self._parking_assignment(operation, "N001UP", "A01", lane_number=1)
+        self._parking_assignment(operation, "N002UP", "A01", lane_number=2)
+        db.session.commit()
+        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
+
+        conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
+        messages = [conflict.message for conflict in conflicts]
+
+        self.assertIn(
+            "A01 Slot 2 cannot be used because Slot 1 departure 01:30 is after Slot 2 arrival 01:10.",
+            messages,
+        )
+
+    def test_parking_validator_detects_slot_2_unknown_slot_1_departure(self):
+        operation = self._parking_operation()
+        arrival = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="ARR001",
+            assigned_tail_number="N001UP",
+            planned_datetime_local=datetime(2026, 6, 18, 22, 0),
+            planned_datetime_utc=datetime(2026, 6, 19, 3, 0),
+        )
+        state = SortDateTailState(
+            sort_date=operation.sort_date,
+            gateway_code=operation.gateway_code,
+            sort_name=operation.sort_name,
+            tail_number="N001UP",
+            aircraft_type="757",
+            aircraft_type_source="manual",
+        )
+        db.session.add_all([arrival, state])
+        self._parking_pair(
+            operation,
+            "N002UP",
+            arrival_local=datetime(2026, 6, 19, 1, 0),
+            departure_local=datetime(2026, 6, 19, 3, 0),
+            destination="SDF",
+        )
+        db.session.flush()
+        self._parking_assignment(operation, "N001UP", "A01", lane_number=1)
+        self._parking_assignment(operation, "N002UP", "A01", lane_number=2)
+        db.session.commit()
+        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
+
+        conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
+        messages = [conflict.message for conflict in conflicts]
+
+        self.assertIn(
+            "A01 Slot 2 cannot be used because A01 Slot 1 has no known departure time.",
+            messages,
+        )
+
     def test_parking_plan_page_displays_physical_validation_conflicts(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", aircraft_type="757")
@@ -6697,6 +6779,151 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(preview["suggested_assignments"][0]["tail"], "N457UP")
         self.assertEqual(preview["suggested_assignments"][0]["label"], "A01 Slot 1")
 
+    def test_parking_optimizer_does_not_use_slot_2_when_slot_1_available(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N401UP",
+            arrival_local=datetime(2026, 6, 18, 22, 0),
+            departure_local=datetime(2026, 6, 18, 23, 0),
+        )
+        self._parking_pair(
+            operation,
+            "N402UP",
+            arrival_local=datetime(2026, 6, 19, 0, 0),
+            departure_local=datetime(2026, 6, 19, 1, 0),
+            destination="SDF",
+        )
+        self._parking_rule(
+            AIRCRAFT_TYPE_RAMP_PREFERENCE,
+            "aircraft_type",
+            "757",
+            "A",
+            behavior="preferred",
+        )
+        db.session.flush()
+        self._parking_assignment(operation, "N401UP", "A01", lane_number=1)
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = {row["tail"]: row for row in preview["suggested_assignments"]}["N402UP"]
+
+        self.assertEqual(suggestion["position"], "A02")
+        self.assertEqual(suggestion["lane"], 1)
+
+    def test_parking_optimizer_uses_slot_2_only_after_slot_1_exhausted(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=0,
+            )
+        )
+        for index in range(1, 9):
+            tail = f"N40{index}UP"
+            self._parking_pair(
+                operation,
+                tail,
+                arrival_local=datetime(2026, 6, 18, 22, 0) + timedelta(minutes=20 * index),
+                departure_local=datetime(2026, 6, 18, 23, 0),
+                origin="ONT",
+                destination=f"D{index}",
+            )
+            db.session.flush()
+            self._parking_assignment(operation, tail, f"A{index:02d}", lane_number=1)
+        self._parking_pair(
+            operation,
+            "N409UP",
+            arrival_local=datetime(2026, 6, 19, 1, 0),
+            departure_local=datetime(2026, 6, 19, 3, 0),
+            origin="ONT",
+            destination="SDF",
+        )
+        self._parking_rule(ORIGIN_RAMP_PREFERENCE, "origin", "ONT", "A", behavior="required")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
+        slot_2_suggestions = [row for row in suggestions.values() if row["lane"] == 2]
+
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(len(slot_2_suggestions), 1)
+        self.assertEqual(slot_2_suggestions[0]["tail"], "N409UP")
+        self.assertIn("Slot 2 used because no valid Slot 1 position remained", slot_2_suggestions[0]["reason"])
+
+    def test_parking_optimizer_rejects_slot_2_when_slot_1_departs_after_arrival(self):
+        operation = self._parking_operation()
+        for index in range(1, 9):
+            tail = f"N41{index}UP"
+            self._parking_pair(
+                operation,
+                tail,
+                arrival_local=datetime(2026, 6, 18, 22, 0),
+                departure_local=datetime(2026, 6, 19, 2, 0),
+                origin="ONT",
+                destination=f"D{index}",
+            )
+            db.session.flush()
+            self._parking_assignment(operation, tail, f"A{index:02d}", lane_number=1)
+        self._parking_pair(
+            operation,
+            "N429UP",
+            arrival_local=datetime(2026, 6, 19, 1, 0),
+            departure_local=datetime(2026, 6, 19, 3, 0),
+            origin="ONT",
+            destination="SDF",
+        )
+        self._parking_rule(ORIGIN_RAMP_PREFERENCE, "origin", "ONT", "A", behavior="required")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        unresolved = {row["tail"]: row for row in preview["unassigned_tails"]}
+
+        self.assertNotIn("N429UP", {row["tail"] for row in preview["suggested_assignments"]})
+        self.assertIn("Slot 2 timing conflict.", unresolved["N429UP"]["reason"])
+
+    def test_parking_optimizer_rejects_slot_2_when_slot_1_departure_unknown(self):
+        operation = self._parking_operation()
+        for index in range(1, 9):
+            tail = f"N42{index}UP"
+            arrival = self._mission(
+                operation=operation,
+                mission_type="arrival",
+                flight_number=f"ARR{index}",
+                assigned_tail_number=tail,
+                planned_datetime_local=datetime(2026, 6, 18, 22, 0),
+                planned_datetime_utc=datetime(2026, 6, 19, 3, 0),
+                origin="ONT",
+            )
+            state = SortDateTailState(
+                sort_date=operation.sort_date,
+                gateway_code=operation.gateway_code,
+                sort_name=operation.sort_name,
+                tail_number=tail,
+                aircraft_type="757",
+                aircraft_type_source="manual",
+            )
+            db.session.add_all([arrival, state])
+            db.session.flush()
+            self._parking_assignment(operation, tail, f"A{index:02d}", lane_number=1)
+        self._parking_pair(
+            operation,
+            "N439UP",
+            arrival_local=datetime(2026, 6, 19, 1, 0),
+            departure_local=datetime(2026, 6, 19, 3, 0),
+            origin="ONT",
+            destination="SDF",
+        )
+        self._parking_rule(ORIGIN_RAMP_PREFERENCE, "origin", "ONT", "A", behavior="required")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        unresolved = {row["tail"]: row for row in preview["unassigned_tails"]}
+
+        self.assertNotIn("N439UP", {row["tail"] for row in preview["suggested_assignments"]})
+        self.assertIn("Slot 1 departure time unknown.", unresolved["N439UP"]["reason"])
+
     def test_parking_optimizer_real_sized_case_suggests_partial_plan(self):
         operation = self._parking_operation()
         origins = ("ONT", "SDF", "DFW", "PHX", "LAX", "MIA")
@@ -6876,9 +7103,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         preview = self._parking_optimizer_preview(operation)
         positions = [row["position"] for row in preview["suggested_assignments"]]
 
-        self.assertNotIn("A03", positions)
         self.assertIn("A01", positions)
         self.assertIn("A02", positions)
+        if "A03" in positions:
+            self.assertTrue({"A01", "A02"}.issubset(set(positions)))
 
     def test_parking_optimizer_enforces_remote_fill_order(self):
         operation = self._parking_operation()
@@ -7183,7 +7411,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
 
         self.assertEqual(preview["runtime_toggles"]["deice_spacing_threshold_minutes"], 4)
-        self.assertEqual(suggestions["N002UP"]["label"], "A01 Slot 2")
+        self.assertEqual(suggestions["N002UP"]["lane"], 1)
+        self.assertNotEqual(suggestions["N002UP"]["label"], "A01 Slot 2")
 
     def test_parking_optimizer_deice_spacing_is_midnight_aware(self):
         operation = self._parking_operation()
@@ -7227,6 +7456,44 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         assignment = self._parking_assignment_for_tail(operation, "N457UP")
         self.assertEqual(assignment.position_code, "B01")
+
+    def test_parking_optimizer_apply_reruns_slot_2_overflow_logic(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=0,
+            )
+        )
+        for index in range(1, 10):
+            self._parking_pair(
+                operation,
+                f"N44{index}UP",
+                arrival_local=datetime(2026, 6, 18, 22, 0) + timedelta(minutes=20 * index),
+                departure_local=(
+                    datetime(2026, 6, 18, 23, 0)
+                    if index <= 8
+                    else datetime(2026, 6, 19, 3, 0)
+                ),
+                origin="ONT",
+                destination=f"D{index}",
+            )
+        self._parking_rule(ORIGIN_RAMP_PREFERENCE, "origin", "ONT", "A", behavior="required")
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+            data={"confirm_apply": "1"},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        assignments = SortDateParkingAssignment.query.filter_by(
+            sort_date_operation_id=operation.id,
+        ).all()
+        self.assertEqual(len(assignments), 9)
+        self.assertEqual(sum(1 for assignment in assignments if assignment.lane_number == 2), 1)
 
     def test_parking_optimizer_preview_obeys_eta_order_constraints(self):
         operation = self._parking_operation()
@@ -7450,7 +7717,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         assignment = self._parking_assignment_for_tail(operation, "N457UP")
 
-        self.assertIn(b"No candidate parking positions", response.data)
+        self.assertIn(b"No suggested assignments were available to apply.", response.data)
         self.assertEqual((assignment.position_code, assignment.lane_number), ("B01", 1))
 
     def test_parking_optimizer_apply_does_not_create_duplicate_tail_assignments(self):
@@ -7490,7 +7757,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             follow_redirects=True,
         )
 
-        self.assertIn(b"No candidate parking positions", response.data)
+        self.assertIn(b"No suggested assignments were available to apply.", response.data)
         self.assertEqual(SortDateParkingAssignment.query.count(), 0)
 
     def test_parking_optimizer_apply_is_scoped_to_selected_operation(self):

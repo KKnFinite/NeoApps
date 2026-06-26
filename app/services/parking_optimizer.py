@@ -34,6 +34,7 @@ SUCCESS_SOLVER_STATUSES = {"OPTIMAL", "FEASIBLE"}
 PREFERRED_RAMP_SCORE = 600
 AVOID_RAMP_PENALTY = 350
 DEICE_CLOSE_PAIR_PENALTY = 400
+PARKING_WINDOW_PRIORITY_SCORE = 2000
 
 
 @dataclass(frozen=True)
@@ -115,7 +116,7 @@ def parking_optimizer_preview(
     }
     locked_blocked_positions = _locked_blocked_positions(assignments, tail_rows)
     locked_eta_by_position = _locked_eta_by_position(assignments, tail_rows)
-    placements, candidate_diagnostics = _build_candidate_placements(
+    slot_1_placements, slot_1_diagnostics = _build_candidate_placements(
         candidate_rows,
         candidate_positions,
         locked_lane_keys,
@@ -124,100 +125,90 @@ def parking_optimizer_preview(
         rules["hard"],
         rules["soft"],
         timezone_name,
+        allowed_lanes=(1,),
     )
 
-    if not placements:
-        return _preview_result(
-            "NO_CANDIDATES",
-            include_remote,
-            include_throat,
-            deice_threshold,
-            len(candidate_rows),
-            locked_assignments,
-            [],
-            _unassigned_rows(
-                candidate_rows,
-                {},
-                placements,
-                include_remote=include_remote,
-                include_throat=include_throat,
-                locked_conflicts=locked_conflicts,
-                hard_rules=rules["hard"],
-                candidate_diagnostics=candidate_diagnostics,
-            ),
-            locked_conflicts,
-            "No candidate parking positions are available under the selected toggles and hard rules.",
-        )
-
-    model = cp_model.CpModel()
-    variables = {
-        placement: model.NewBoolVar(
-            f"assign_{_var_key(placement.tail)}_{placement.position}_{placement.lane}"
-        )
-        for placement in placements
-    }
-
-    _add_tail_constraints(model, variables)
-    _add_lane_constraints(model, variables)
-    fill_exprs = _add_position_fill_constraints(
-        model,
-        variables,
-        locked_filled_positions | locked_blocked_positions,
-    )
-    _add_fill_order_constraints(model, variables, fill_exprs)
-    _add_throat_constraints(model, variables, fill_exprs)
-    _add_767_block_constraints(model, variables, fill_exprs)
-    _add_eta_order_constraints(model, variables, locked_eta_by_position)
-
-    objective_terms = [
-        variable * (100000 + placement.soft_score - placement.cost)
-        for placement, variable in variables.items()
-    ]
-    objective_terms.extend(
-        _deice_spacing_penalty_terms(
-            model,
-            variables,
+    slot_1_result = (
+        _solve_optimizer_stage(
+            slot_1_placements,
             assignments,
             tail_rows,
             timezone_name,
             deice_threshold,
+            locked_filled_positions | locked_blocked_positions,
+            locked_eta_by_position,
         )
+        if slot_1_placements
+        else {
+            "status": None,
+            "status_name": "OPTIMAL",
+            "selected_by_tail": {},
+            "wall_time": 0,
+        }
     )
-    model.Maximize(sum(objective_terms))
 
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = PARKING_OPTIMIZER_TIME_LIMIT_SECONDS
-    status = solver.Solve(model)
-    status_name = solver.StatusName(status)
-    selected_by_tail = {}
-    suggestions = []
-    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        for placement in sorted(placements, key=lambda item: (item.tail, item.cost, item.label)):
-            if solver.Value(variables[placement]) != 1:
-                continue
-            selected_by_tail[placement.tail] = placement
-        selected_deice_reasons = _selected_deice_reasons(
-            selected_by_tail,
-            assignments,
-            tail_rows,
-            timezone_name,
-            deice_threshold,
-        )
-        for placement in sorted(selected_by_tail.values(), key=lambda item: (item.tail, item.cost, item.label)):
-            row = rows_by_tail.get(placement.tail, {})
-            suggestions.append(
-                _suggestion_row(
-                    placement,
-                    row,
-                    deice_threshold,
-                    selected_deice_reasons.get(placement.tail, ()),
-                )
+    selected_by_tail = dict(slot_1_result["selected_by_tail"])
+    reason_placements = slot_1_placements
+    candidate_diagnostics = dict(slot_1_diagnostics)
+    status_name = slot_1_result["status_name"]
+    wall_time = slot_1_result["wall_time"]
+
+    if status_name in SUCCESS_SOLVER_STATUSES:
+        unresolved_rows = [
+            row
+            for row in candidate_rows
+            if _normalize_tail(row.get("tail")) not in selected_by_tail
+        ]
+        if unresolved_rows:
+            stage_filled_positions = locked_filled_positions | locked_blocked_positions
+            stage_filled_positions |= _filled_positions_for_selected(selected_by_tail.values())
+            stage_filled_positions |= _blocked_positions_for_selected(selected_by_tail.values())
+            stage_blocked_positions = locked_blocked_positions | _blocked_positions_for_selected(
+                selected_by_tail.values()
             )
+            stage_eta_by_position = _merge_eta_by_position(
+                locked_eta_by_position,
+                _eta_by_position_for_placements(selected_by_tail.values()),
+            )
+            slot_1_timing = _slot_1_timing_by_position(
+                assignments,
+                tail_rows,
+                selected_by_tail.values(),
+                rows_by_tail,
+                timezone_name,
+            )
+            slot_2_placements, slot_2_diagnostics = _build_candidate_placements(
+                unresolved_rows,
+                candidate_positions,
+                locked_lane_keys,
+                stage_filled_positions,
+                stage_blocked_positions,
+                rules["hard"],
+                rules["soft"],
+                timezone_name,
+                allowed_lanes=(2,),
+                slot_1_timing_by_position=slot_1_timing,
+            )
+            reason_placements = slot_2_placements
+            candidate_diagnostics.update(slot_2_diagnostics)
+            if slot_2_placements:
+                slot_2_result = _solve_optimizer_stage(
+                    slot_2_placements,
+                    assignments,
+                    tail_rows,
+                    timezone_name,
+                    deice_threshold,
+                    stage_filled_positions,
+                    stage_eta_by_position,
+                )
+                wall_time += slot_2_result["wall_time"]
+                if slot_2_result["status_name"] in SUCCESS_SOLVER_STATUSES:
+                    selected_by_tail.update(slot_2_result["selected_by_tail"])
 
     unassigned = _unassigned_rows(
         candidate_rows,
         selected_by_tail,
-        placements,
+        reason_placements,
         solver_status=status_name,
         include_remote=include_remote,
         include_throat=include_throat,
@@ -225,6 +216,25 @@ def parking_optimizer_preview(
         hard_rules=rules["hard"],
         candidate_diagnostics=candidate_diagnostics,
     )
+    selected_deice_reasons = _selected_deice_reasons(
+        selected_by_tail,
+        assignments,
+        tail_rows,
+        timezone_name,
+        deice_threshold,
+    )
+    suggestions = []
+    for placement in sorted(selected_by_tail.values(), key=lambda item: (item.tail, item.cost, item.label)):
+        row = rows_by_tail.get(placement.tail, {})
+        suggestions.append(
+            _suggestion_row(
+                placement,
+                row,
+                deice_threshold,
+                selected_deice_reasons.get(placement.tail, ()),
+            )
+        )
+
     summary = (
         "Preview generated. Saved assignments were not changed."
         if suggestions or locked_assignments
@@ -233,6 +243,7 @@ def parking_optimizer_preview(
     solver_diagnostic = _solver_diagnostic(status_name, suggestions, candidate_rows)
     if solver_diagnostic:
         summary = solver_diagnostic
+
     return _preview_result(
         status_name,
         include_remote,
@@ -244,7 +255,7 @@ def parking_optimizer_preview(
         unassigned,
         locked_conflicts,
         summary,
-        wall_time=solver.WallTime() if status else None,
+        wall_time=wall_time,
         solver_diagnostic=solver_diagnostic,
     )
 
@@ -506,11 +517,18 @@ def _build_candidate_placements(
     hard_rules,
     soft_rules,
     timezone_name,
+    allowed_lanes=(1, 2),
+    slot_1_timing_by_position=None,
 ):
     placements = []
     diagnostics = {}
     before_positions = sorted({_normalize_position(position) for position, _ramp in candidate_positions})
-    for row in sorted(candidate_rows, key=lambda item: (_parking_window_sort_key(item), item["tail"])):
+    allowed_lanes = tuple(lane for lane in allowed_lanes if lane in (1, 2))
+    slot_1_timing_by_position = slot_1_timing_by_position or {}
+    ordered_rows = sorted(candidate_rows, key=lambda item: (_parking_window_sort_key(item), item["tail"]))
+    row_count = len(ordered_rows)
+    for row_index, row in enumerate(ordered_rows):
+        parking_window_priority = (row_count - row_index) * PARKING_WINDOW_PRIORITY_SCORE
         tail = _normalize_tail(row.get("tail"))
         aircraft_type = _parking_aircraft_type_for_row(row)
         after_positions = set()
@@ -528,15 +546,25 @@ def _build_candidate_placements(
                     else "Aircraft cannot use this position."
                 )
             else:
+                slot_2_rejection_reason = ""
                 open_lanes = [
                     lane
-                    for lane in (1, 2)
+                    for lane in allowed_lanes
                     if (position, lane) not in locked_lane_keys
                 ]
+                if 2 in open_lanes:
+                    slot_2_allowed, slot_2_reason = _slot_2_timing_allows(
+                        row,
+                        position,
+                        slot_1_timing_by_position,
+                    )
+                    if not slot_2_allowed:
+                        open_lanes = [lane for lane in open_lanes if lane != 2]
+                        slot_2_rejection_reason = slot_2_reason
                 if open_lanes:
                     after_positions.add(position)
                 else:
-                    rejection_reason = "Blocked by locked/manual assignments."
+                    rejection_reason = slot_2_rejection_reason or "Blocked by locked/manual assignments."
 
             if rejection_reason:
                 rejection_counts[rejection_reason] = rejection_counts.get(rejection_reason, 0) + 1
@@ -548,9 +576,17 @@ def _build_candidate_placements(
                 ramp,
                 soft_rules,
             )
-            for lane in (1, 2):
+            for lane in allowed_lanes:
                 if (position, lane) in locked_lane_keys:
                     continue
+                if lane == 2:
+                    slot_2_allowed, _slot_2_reason = _slot_2_timing_allows(
+                        row,
+                        position,
+                        slot_1_timing_by_position,
+                    )
+                    if not slot_2_allowed:
+                        continue
                 placements.append(
                     ParkingPlacement(
                         tail=tail,
@@ -561,7 +597,7 @@ def _build_candidate_placements(
                         aircraft_type=aircraft_type,
                         eta=row.get("arrival_block_in_local"),
                         departure=_departure_time_for_deice(row, timezone_name),
-                        soft_score=soft_score,
+                        soft_score=soft_score + parking_window_priority,
                         preference_reasons=tuple(preference_reasons),
                     )
                 )
@@ -573,6 +609,73 @@ def _build_candidate_placements(
             "top_rejection_reason": _top_rejection_reason(rejection_counts),
         }
     return placements, diagnostics
+
+
+def _solve_optimizer_stage(
+    placements,
+    assignments,
+    tail_rows,
+    timezone_name,
+    deice_threshold,
+    filled_positions,
+    eta_by_position,
+):
+    if not placements:
+        return {
+            "status": None,
+            "status_name": "NO_CANDIDATES",
+            "selected_by_tail": {},
+            "wall_time": 0,
+        }
+
+    model = cp_model.CpModel()
+    variables = {
+        placement: model.NewBoolVar(
+            f"assign_{_var_key(placement.tail)}_{placement.position}_{placement.lane}"
+        )
+        for placement in placements
+    }
+
+    _add_tail_constraints(model, variables)
+    _add_lane_constraints(model, variables)
+    fill_exprs = _add_position_fill_constraints(model, variables, filled_positions)
+    _add_fill_order_constraints(model, variables, fill_exprs)
+    _add_throat_constraints(model, variables, fill_exprs)
+    _add_767_block_constraints(model, variables, fill_exprs)
+    _add_eta_order_constraints(model, variables, eta_by_position)
+
+    objective_terms = [
+        variable * (100000 + placement.soft_score - placement.cost)
+        for placement, variable in variables.items()
+    ]
+    objective_terms.extend(
+        _deice_spacing_penalty_terms(
+            model,
+            variables,
+            assignments,
+            tail_rows,
+            timezone_name,
+            deice_threshold,
+        )
+    )
+    model.Maximize(sum(objective_terms))
+
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = PARKING_OPTIMIZER_TIME_LIMIT_SECONDS
+    status = solver.Solve(model)
+    status_name = solver.StatusName(status)
+    selected_by_tail = {}
+    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        for placement in sorted(placements, key=lambda item: (item.tail, item.cost, item.label)):
+            if solver.Value(variables[placement]) != 1:
+                continue
+            selected_by_tail[placement.tail] = placement
+    return {
+        "status": status,
+        "status_name": status_name,
+        "selected_by_tail": selected_by_tail,
+        "wall_time": solver.WallTime() if status else 0,
+    }
 
 
 def _add_tail_constraints(model, variables):
@@ -778,6 +881,10 @@ def _unassigned_rows(
 
 def _suggestion_row(placement, row, deice_threshold=0, deice_reasons=()):
     reasons = ["Suggested by optimizer preview."]
+    if placement.lane == 2:
+        reasons.append(
+            "Slot 2 used because no valid Slot 1 position remained and Slot 1 departs before this tail arrives."
+        )
     reasons.extend(placement.preference_reasons)
     if deice_threshold and placement.departure:
         reasons.append(
@@ -1009,7 +1116,7 @@ def _top_rejection_reason(rejection_counts):
         return ""
     return sorted(
         rejection_counts.items(),
-        key=lambda item: (-item[1], item[0]),
+        key=lambda item: (0 if str(item[0]).startswith("Slot ") else 1, -item[1], item[0]),
     )[0][0]
 
 
@@ -1136,6 +1243,95 @@ def _locked_eta_by_position(assignments, tail_rows):
         if blocked_position:
             locked_eta.setdefault(blocked_position, []).append(eta)
     return locked_eta
+
+
+def _filled_positions_for_selected(placements):
+    filled = set()
+    for placement in placements:
+        filled.update(_filled_positions_for_placement(placement))
+    return filled
+
+
+def _blocked_positions_for_selected(placements):
+    blocked = set()
+    for placement in placements:
+        blocked_position = _blocked_position_for_placement(placement)
+        if blocked_position:
+            blocked.add(blocked_position)
+    return blocked
+
+
+def _eta_by_position_for_placements(placements):
+    eta_by_position = {}
+    for placement in placements:
+        if not placement.eta:
+            continue
+        for position in _filled_positions_for_placement(placement):
+            eta_by_position.setdefault(position, []).append(placement.eta)
+    return eta_by_position
+
+
+def _merge_eta_by_position(*sources):
+    merged = {}
+    for source in sources:
+        for position, values in (source or {}).items():
+            merged.setdefault(position, []).extend(values)
+    return merged
+
+
+def _slot_1_timing_by_position(assignments, tail_rows, selected_placements, rows_by_tail, timezone_name):
+    rows_by_tail = rows_by_tail or {}
+    timing = {}
+    locked_rows_by_tail = {
+        _normalize_tail(row.get("tail")): row
+        for row in tail_rows
+        if _normalize_tail(row.get("tail"))
+    }
+    for assignment in assignments:
+        if int(assignment.lane_number or 0) != 1:
+            continue
+        position = _normalize_position(assignment.position_code)
+        tail = _normalize_tail(assignment.tail_number)
+        if not position or not tail:
+            continue
+        row = locked_rows_by_tail.get(tail, {})
+        timing[position] = {
+            "tail": tail,
+            "arrival": row.get("arrival_block_in_local"),
+            "departure": _parking_window_end_for_row(row, timezone_name),
+        }
+
+    for placement in selected_placements:
+        if placement.lane != 1:
+            continue
+        row = rows_by_tail.get(placement.tail, {})
+        timing[placement.position] = {
+            "tail": placement.tail,
+            "arrival": placement.eta,
+            "departure": _parking_window_end_for_row(row, timezone_name) or placement.departure,
+        }
+    return timing
+
+
+def _parking_window_end_for_row(row, timezone_name):
+    if not row:
+        return None
+    return _departure_time_for_deice(row, timezone_name) or row.get("departure_datetime_local")
+
+
+def _slot_2_timing_allows(row, position, slot_1_timing_by_position):
+    slot_1 = (slot_1_timing_by_position or {}).get(position)
+    if not slot_1:
+        return False, "Slot 2 cannot be used because Slot 1 is empty."
+    slot_1_departure = slot_1.get("departure")
+    if not slot_1_departure:
+        return False, "Slot 1 departure time unknown."
+    slot_2_arrival = row.get("arrival_block_in_local")
+    if not slot_2_arrival:
+        return False, "Slot 2 arrival time unknown."
+    if slot_1_departure > slot_2_arrival:
+        return False, "Slot 2 timing conflict."
+    return True, ""
 
 
 def _blocked_position_for_placement(placement):
