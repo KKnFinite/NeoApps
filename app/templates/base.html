@@ -59,7 +59,14 @@
 {% set node_header_word = "Sektor" if is_neosektor_page else ("Ermac" if is_neoermac_page else ("Scorpion" if is_neoscorpion_page else ("Reptile" if is_neoreptile_page else ("Sub-Zero" if is_neosubzero_page else ("Rain" if is_neorain_page else "MotherBrain"))))) %}
 {% set node_header_name = "NeoSektor" if is_neosektor_page else ("NeoErmac" if is_neoermac_page else ("NeoScorpion" if is_neoscorpion_page else ("NeoReptile" if is_neoreptile_page else ("NeoSub-Zero" if is_neosubzero_page else ("NeoRain" if is_neorain_page else "MotherBrain"))))) %}
 {% set node_current_label = neosektor_current_label if is_neosektor_page else (neoermac_current_label if is_neoermac_page else motherbrain_current_label) %}
-<body class="blueprint-{{ request.blueprint or 'public' }}{% if is_rfd_hub_page %} rfd-hub-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_standalone_operator_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}">
+{% set mobile_shell_key = node_header_key if (uses_node_header or is_neosektor_page or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page) else ("staffing" if is_neostaffing_page else "gateway") %}
+{% set mobile_shell_name = node_header_name if (uses_node_header or is_neosektor_page or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page) else ("NeoStaffing" if is_neostaffing_page else ("NeoGateway" if is_rfd_hub_page else "NeoApps Portal")) %}
+{% set mobile_shell_label = node_current_label if (uses_node_header or is_neosektor_page or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page) else ("DASHBOARD" if is_rfd_hub_page else ("DASHBOARD" if is_neostaffing_page else "PORTAL")) %}
+{% set mobile_home_endpoint = node_home_endpoint if (uses_node_header or is_neosektor_page or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page) else ("neostaffing.index" if is_neostaffing_page else ("neomotherbrain.rfd_hub" if is_rfd_hub_page else "auth.portal_dashboard")) %}
+{% set mobile_account_icon = "images/account/account-motherbrain-128.png" if uses_motherbrain_header else ("images/account/ninja-ermac-128.png" if is_neoermac_page else ("images/account/ninja-sektor-128.png" if is_neosektor_page else none)) %}
+{% set mobile_account_initial = current_user.header_display_name[:1]|upper if is_authenticated_app and current_user.header_display_name else "?" %}
+{% set uses_mobile_chrome = is_authenticated_app and not is_neosektor_driver_page %}
+<body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_mobile_chrome %} mobile-app-chrome has-mobile-topbar has-mobile-bottom-nav{% endif %}{% if is_rfd_hub_page %} rfd-hub-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_standalone_operator_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}">
     <div class="shell">
         {% if not is_neosektor_driver_page and not is_neosektor_standalone_operator_page %}
         <header class="topbar">
@@ -150,6 +157,77 @@
             </div>
         </header>
         {% endif %}
+        {% if uses_mobile_chrome %}
+        {% set mobile_switch_targets = change_character_targets() %}
+        {% set mobile_show_back = request.endpoint != mobile_home_endpoint %}
+        <header class="mobile-topbar node-{{ mobile_shell_key }}" data-mobile-topbar>
+            <div class="mobile-topbar-left">
+                {% if mobile_show_back %}
+                <a class="mobile-topbar-back" href="{{ url_for(mobile_home_endpoint) }}" aria-label="Back to {{ mobile_shell_name }}">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.8 5.2 8 12l6.8 6.8 1.4-1.4L10.8 12l5.4-5.4-1.4-1.4Z"/></svg>
+                </a>
+                {% endif %}
+                <a class="mobile-topbar-title" href="{{ url_for(mobile_home_endpoint) }}" aria-label="{{ mobile_shell_name }} home">
+                    <span>{{ mobile_shell_name }}</span>
+                    <strong>{{ mobile_shell_label }}</strong>
+                </a>
+            </div>
+            <div class="mobile-topbar-actions">
+                {% if is_motherbrain_page %}
+                {% include "neomotherbrain/_alert_tray.html" %}
+                {% endif %}
+                <details class="mobile-account-menu" data-mobile-account-menu>
+                    <summary class="mobile-account-trigger" aria-label="Account menu">
+                        {% if mobile_account_icon %}
+                        <img class="mobile-account-icon" src="{{ url_for('static', filename=mobile_account_icon) }}" alt="">
+                        {% else %}
+                        <span class="mobile-account-fallback" aria-hidden="true">{{ mobile_account_initial }}</span>
+                        {% endif %}
+                    </summary>
+                    <div class="mobile-account-panel" role="menu" aria-label="Account actions">
+                        <span class="mobile-account-name">{{ current_user.header_display_name }}</span>
+                        {% if not is_portal_page %}
+                        <a href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">Back to NeoPortal</a>
+                        {% endif %}
+                        <a href="{{ url_for('auth.logout') }}" role="menuitem">Logout</a>
+                    </div>
+                </details>
+            </div>
+            <nav class="mobile-topbar-menu-panel" aria-label="Mobile menu" data-mobile-shell-menu-panel>
+                {% if is_neosektor_page %}
+                    {% for item in neosektor_internal_menu_items() %}
+                    <a class="mobile-shell-menu-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
+                    {% endfor %}
+                {% elif is_neoermac_page %}
+                    <a class="mobile-shell-menu-link{% if request.path.startswith('/neoermac/building-lineup') %} is-active{% endif %}" href="{{ url_for('neoermac.building_lineup') }}" {% if request.path.startswith('/neoermac/building-lineup') %}aria-current="page"{% endif %}>Building Lineup</a>
+                    <a class="mobile-shell-menu-link{% if request.path.startswith('/neoermac/door-view') %} is-active{% endif %}" href="{{ url_for('neoermac.door_view') }}" {% if request.path.startswith('/neoermac/door-view') %}aria-current="page"{% endif %}>Door View</a>
+                    <a class="mobile-shell-menu-link{% if is_neoermac_view_outbound_page %} is-active{% endif %}" href="{{ url_for('neoermac.view_outbound') }}" {% if is_neoermac_view_outbound_page %}aria-current="page"{% endif %}>View Outbound</a>
+                    <a class="mobile-shell-menu-link{% if request.path.startswith('/neoermac/tug-assignments') %} is-active{% endif %}" href="{{ url_for('neoermac.tug_assignments') }}" {% if request.path.startswith('/neoermac/tug-assignments') %}aria-current="page"{% endif %}>Tug Assignments</a>
+                {% elif uses_motherbrain_header %}
+                    <a class="mobile-shell-menu-link{% if is_manage_sort_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.manage_sort') }}" {% if is_manage_sort_page %}aria-current="page"{% endif %}>MANAGE SORT</a>
+                    <a class="mobile-shell-menu-link{% if is_parking_plan_page or is_parking_rules_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.parking_plan') }}" {% if is_parking_plan_page or is_parking_rules_page %}aria-current="page"{% endif %}>PARKING PLAN</a>
+                    {% if can_manage_system(current_user) %}
+                    <a class="mobile-shell-menu-link{% if is_sort_timeline_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.sort_timeline') }}" {% if is_sort_timeline_page %}aria-current="page"{% endif %}>SORT TIMELINE</a>
+                    {% endif %}
+                    <a class="mobile-shell-menu-link{% if is_master_schedule_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule') }}" {% if is_master_schedule_page %}aria-current="page"{% endif %}>MASTER SCHEDULE</a>
+                    <a class="mobile-shell-menu-link{% if is_gateway_matrix_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.gateway_matrix') }}" {% if is_gateway_matrix_page %}aria-current="page"{% endif %}>GATEWAY MATRIX</a>
+                    {% if can_manage_system(current_user) %}
+                    <a class="mobile-shell-menu-link{% if is_user_management_page %} is-active{% endif %}" href="{{ url_for('auth.portal_management') }}" {% if is_user_management_page %}aria-current="page"{% endif %}>PORTAL MANAGEMENT</a>
+                    {% endif %}
+                {% elif is_neostaffing_page %}
+                    <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.index') }}">Board</a>
+                    <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.people') }}">People</a>
+                    <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.seniority') }}">Seniority</a>
+                    <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.app_management') }}">Manage</a>
+                {% else %}
+                    <a class="mobile-shell-menu-link" href="{{ url_for('auth.portal_dashboard') }}">NeoPortal</a>
+                    {% if not is_rfd_hub_page %}
+                    <a class="mobile-shell-menu-link" href="{{ url_for('neomotherbrain.rfd_hub') }}">NeoGateway</a>
+                    {% endif %}
+                {% endif %}
+            </nav>
+        </header>
+        {% endif %}
 
         <main class="content">
             {% with messages = get_flashed_messages(with_categories=true) %}
@@ -171,6 +249,45 @@
             </div>
             {% endif %}
         </main>
+        {% if uses_mobile_chrome %}
+        <nav class="mobile-bottom-nav node-{{ mobile_shell_key }}" aria-label="Mobile navigation" data-mobile-bottom-nav>
+            <a class="mobile-bottom-nav-item mobile-bottom-nav-link" href="{{ url_for(mobile_home_endpoint) }}" aria-label="{{ mobile_shell_name }} home">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.2 12 4l9 7.2-1.3 1.5L18 11.3V20h-4.5v-5h-3v5H6v-8.7l-1.7 1.4L3 11.2Z"/></svg>
+                <span>Home</span>
+            </a>
+            {% if is_motherbrain_page %}
+            <button class="mobile-bottom-nav-item mobile-bottom-nav-button" type="button" data-mobile-alert-nav aria-label="Open MotherBrain alerts">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a7 7 0 0 0-7 7v3.6L3.6 16v1h16.8v-1L19 13.6V10a7 7 0 0 0-7-7Zm0 18a2.8 2.8 0 0 0 2.6-1.8H9.4A2.8 2.8 0 0 0 12 21Z"/></svg>
+                <span>Alerts</span>
+            </button>
+            {% endif %}
+            {% if mobile_switch_targets %}
+            <details class="mobile-bottom-nav-item mobile-bottom-switcher" data-mobile-switcher>
+                <summary class="mobile-bottom-nav-button" aria-label="Switch NeoGateway character">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9.2l-2.1-2.1L15.5 3.5 20 8l-4.5 4.5-1.4-1.4L16.2 9H7V7Zm10 10H7.8l2.1 2.1-1.4 1.4L4 16l4.5-4.5 1.4 1.4L7.8 15H17v2Z"/></svg>
+                    <span>Switch</span>
+                </summary>
+                <div class="mobile-bottom-switcher-panel" role="menu" aria-label="Accessible NeoNodes">
+                    {% for target in mobile_switch_targets %}
+                    <a class="mobile-bottom-switcher-link node-{{ target.key }}{% if target.is_current %} is-active{% endif %}" href="{{ target.href }}" role="menuitem" {% if target.is_current %}aria-current="page"{% endif %}>
+                        <span class="neo-node-name brand-inline-name node-{{ target.key }}"><span class="neo-word">Neo</span><span class="node-word">{{ target.node_word }}</span></span>
+                        {% if target.suffix %}<span>{{ target.suffix }}</span>{% endif %}
+                    </a>
+                    {% endfor %}
+                </div>
+            </details>
+            {% else %}
+            <span class="mobile-bottom-nav-item mobile-bottom-nav-disabled" aria-disabled="true">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9.2l-2.1-2.1L15.5 3.5 20 8l-4.5 4.5-1.4-1.4L16.2 9H7V7Zm10 10H7.8l2.1 2.1-1.4 1.4L4 16l4.5-4.5 1.4 1.4L7.8 15H17v2Z"/></svg>
+                <span>Switch</span>
+            </span>
+            {% endif %}
+            <button class="mobile-bottom-nav-item mobile-bottom-nav-button" type="button" data-mobile-shell-menu-button aria-expanded="false" aria-label="Open menu">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h16v2H4v-2Z"/></svg>
+                <span>Menu</span>
+            </button>
+        </nav>
+        {% endif %}
     </div>
     {% if uses_node_header %}
     <script>
@@ -238,6 +355,141 @@
                     }
                 });
             });
+        });
+    })();
+    </script>
+    {% endif %}
+    {% if uses_mobile_chrome %}
+    <script>
+    (() => {
+        const topbar = document.querySelector("[data-mobile-topbar]");
+        const menuPanel = document.querySelector("[data-mobile-shell-menu-panel]");
+        const menuButtons = Array.from(document.querySelectorAll("[data-mobile-shell-menu-button]"));
+        const alertButtons = Array.from(document.querySelectorAll("[data-mobile-alert-nav]"));
+        const switchers = Array.from(document.querySelectorAll("[data-mobile-switcher]"));
+        const accountMenus = Array.from(document.querySelectorAll("[data-mobile-account-menu]"));
+        {% if is_motherbrain_page %}
+        const alertTray = topbar ? topbar.querySelector("[data-motherbrain-alert-tray]") : null;
+        {% else %}
+        const alertTray = null;
+        {% endif %}
+
+        const setMenuOpen = (isOpen) => {
+            if (!topbar || !menuPanel) {
+                return;
+            }
+            topbar.classList.toggle("is-menu-open", isOpen);
+            menuButtons.forEach((button) => {
+                button.setAttribute("aria-expanded", isOpen ? "true" : "false");
+            });
+        };
+
+        menuButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                setMenuOpen(!(topbar && topbar.classList.contains("is-menu-open")));
+                switchers.forEach((switcher) => {
+                    switcher.open = false;
+                });
+                accountMenus.forEach((menu) => {
+                    menu.open = false;
+                });
+                if (alertTray) {
+                    alertTray.open = false;
+                }
+            });
+        });
+
+        if (menuPanel) {
+            menuPanel.addEventListener("click", (event) => {
+                if (event.target.closest("a")) {
+                    setMenuOpen(false);
+                }
+            });
+        }
+
+        alertButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                if (!alertTray) {
+                    return;
+                }
+                alertTray.open = !alertTray.open;
+                setMenuOpen(false);
+                switchers.forEach((switcher) => {
+                    switcher.open = false;
+                });
+                accountMenus.forEach((menu) => {
+                    menu.open = false;
+                });
+            });
+        });
+
+        switchers.forEach((switcher) => {
+            switcher.addEventListener("toggle", () => {
+                if (!switcher.open) {
+                    return;
+                }
+                setMenuOpen(false);
+                accountMenus.forEach((menu) => {
+                    menu.open = false;
+                });
+                if (alertTray) {
+                    alertTray.open = false;
+                }
+                switchers.forEach((other) => {
+                    if (other !== switcher) {
+                        other.open = false;
+                    }
+                });
+            });
+        });
+
+        accountMenus.forEach((menu) => {
+            menu.addEventListener("toggle", () => {
+                if (!menu.open) {
+                    return;
+                }
+                setMenuOpen(false);
+                switchers.forEach((switcher) => {
+                    switcher.open = false;
+                });
+                if (alertTray) {
+                    alertTray.open = false;
+                }
+            });
+        });
+
+        document.addEventListener("click", (event) => {
+            const target = event.target;
+            const insideTopbar = topbar && topbar.contains(target);
+            const insideBottomNav = Boolean(target.closest("[data-mobile-bottom-nav]"));
+            if (!insideTopbar && !insideBottomNav) {
+                setMenuOpen(false);
+                switchers.forEach((switcher) => {
+                    switcher.open = false;
+                });
+                accountMenus.forEach((menu) => {
+                    menu.open = false;
+                });
+                if (alertTray) {
+                    alertTray.open = false;
+                }
+            }
+        });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key !== "Escape") {
+                return;
+            }
+            setMenuOpen(false);
+            switchers.forEach((switcher) => {
+                switcher.open = false;
+            });
+            accountMenus.forEach((menu) => {
+                menu.open = false;
+            });
+            if (alertTray) {
+                alertTray.open = false;
+            }
         });
     })();
     </script>

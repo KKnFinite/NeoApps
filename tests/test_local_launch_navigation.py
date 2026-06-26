@@ -112,6 +112,13 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(".character-switcher", css)
         self.assertIn("padding-top: 76px;", css)
         self.assertIn(".motherbrain-fixed-header .content", css)
+        self.assertIn(".mobile-topbar,\n.mobile-bottom-nav {\n    display: none;", css)
+        self.assertIn("body.mobile-app-chrome.has-mobile-topbar .shell > .topbar", css)
+        self.assertIn("body.mobile-app-chrome.has-mobile-bottom-nav .content", css)
+        self.assertIn(".mobile-account-menu", css)
+        self.assertIn(".mobile-bottom-nav", css)
+        self.assertIn("env(safe-area-inset-bottom)", css)
+        self.assertIn("backdrop-filter: blur(16px);", css)
         self.assertNotIn('content: ">";', css)
         self.assertNotIn("42px 42px", css)
         self.assertNotIn("linear-gradient(90deg, rgba(201, 208, 214, 0.035) 1px", css)
@@ -424,6 +431,80 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("<strong>Fallback Display</strong>", user_chip)
+
+    def test_mobile_shell_renders_motherbrain_topbar_alerts_and_bottom_nav(self):
+        seed_dev_grandmaster(self.app)
+        self.client.post(
+            "/login",
+            data={"username": "Kessler", "password": "1313"},
+        )
+
+        response = self.client.get("/motherbrain")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('class="mobile-topbar node-motherbrain"', html)
+        self.assertIn("data-mobile-bottom-nav", html)
+        self.assertIn("data-mobile-alert-nav", html)
+        self.assertIn("data-mobile-shell-menu-button", html)
+        self.assertIn("account-motherbrain-128.png", html)
+        self.assertIn("Back to NeoPortal", html)
+        self.assertIn('href="/logout"', html)
+        self.assertIn("<span>Home</span>", html)
+        self.assertIn("<span>Alerts</span>", html)
+        self.assertIn("<span>Switch</span>", html)
+        self.assertIn("<span>Menu</span>", html)
+
+    def test_mobile_account_icon_mapping_uses_node_specific_128px_assets(self):
+        seed_dev_grandmaster(self.app)
+        self.client.post(
+            "/login",
+            data={"username": "Kessler", "password": "1313"},
+        )
+
+        expected_icons = {
+            "/motherbrain": "account-motherbrain-128.png",
+            "/neoermac": "ninja-ermac-128.png",
+            "/neosektor": "ninja-sektor-128.png",
+        }
+
+        for path, icon_name in expected_icons.items():
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                html = response.data.decode()
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("data-mobile-topbar", html)
+                self.assertIn("data-mobile-bottom-nav", html)
+                self.assertIn(icon_name, html)
+                self.assertNotIn("-1024.png", html)
+                icon_response = self.client.get(f"/static/images/account/{icon_name}")
+                self.assertEqual(icon_response.status_code, 200)
+                self.assertEqual(icon_response.mimetype, "image/png")
+
+    def test_mobile_shell_uses_safe_fallback_account_avatar_on_portal(self):
+        seed_dev_grandmaster(self.app)
+        self.client.post(
+            "/login",
+            data={"username": "Kessler", "password": "1313"},
+        )
+
+        response = self.client.get("/portal")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("data-mobile-topbar", html)
+        self.assertIn("data-mobile-bottom-nav", html)
+        self.assertIn("mobile-account-fallback", html)
+        self.assertNotIn("Back to NeoPortal", html)
+
+    def test_public_pages_do_not_render_authenticated_mobile_shell(self):
+        response = self.client.get("/")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("data-mobile-topbar", html)
+        self.assertNotIn("data-mobile-bottom-nav", html)
 
     def test_seeded_kessler_grandmaster_accesses_motherbrain_routes(self):
         seed_dev_grandmaster(self.app)
