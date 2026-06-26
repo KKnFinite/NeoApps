@@ -1487,16 +1487,32 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(len(operations), 1)
         self.assertIn(b"MANAGE SORT", first_response.data)
         self.assertIn(b"NIGHT", first_response.data)
-        self.assertIn(b"ADD SPECIAL FLIGHT", first_response.data)
         html = first_response.data.decode()
         main_html = html.split('<main class="content">', 1)[1].split("</main>", 1)[0]
         workflow_html = main_html.split('class="motherbrain-main-menu-return"', 1)[0]
         self.assertIn("Current / Selected Sort Operation", workflow_html)
+        self.assertIn(f"RFD NIGHT {sort_date.month}/{sort_date.day}/{sort_date.year % 100:02d}", workflow_html)
+        self.assertIn("Selected Sort Menu", workflow_html)
+        self.assertIn("SORT SUMMARY", workflow_html)
+        self.assertIn("ARRIVAL PLANNING", workflow_html)
+        self.assertIn("DEPARTURE PLANNING", workflow_html)
+        self.assertIn("PARKING PLAN", workflow_html)
+        self.assertIn("GATEWAY MATRIX", workflow_html)
+        self.assertIn("MASTER SCHEDULE", workflow_html)
+        self.assertIn("SORT TIMELINE", workflow_html)
+        self.assertIn("MANAGE API", workflow_html)
+        self.assertIn("UNMATCHED QUEUE", workflow_html)
         self.assertIn("Sort Operation Settings", workflow_html)
         self.assertIn("Gateway Matrix / Schedule Source Controls", workflow_html)
         self.assertIn("API Polling Configuration", workflow_html)
         self.assertIn("Generate / Rebuild / Save Actions", workflow_html)
-        self.assertIn("Warnings / Preview", workflow_html)
+        self.assertNotIn("Warnings / Preview", workflow_html)
+        self.assertNotIn("Selected Operation", workflow_html)
+        self.assertNotIn("Current Sort Operations", workflow_html)
+        self.assertNotIn("OPEN SORT OPERATION", workflow_html)
+        self.assertNotIn("Flight API Test", workflow_html)
+        self.assertNotIn("Flight API Review", workflow_html)
+        self.assertNotIn("ADD SPECIAL FLIGHT", workflow_html)
         self.assertIn('href="/motherbrain/gateway-matrix"', workflow_html)
         self.assertIn('href="/motherbrain/master-schedule"', workflow_html)
         self.assertIn('href="/motherbrain/sort-timeline"', workflow_html)
@@ -1504,6 +1520,61 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn('class="motherbrain-main-menu-return"', main_html)
         self.assertIn('href="/motherbrain"', main_html)
         self.assertIn('aria-label="BACK TO NeoMotherBrain MAIN MENU"', main_html)
+
+    def test_manage_sort_unmatched_queue_links_selected_operation(self):
+        sort_date = current_gateway_local_date(self.rfd_gateway)
+        day = sort_date.strftime("%A").lower()
+        self._add_matrix_cell(day, "night")
+        self._add_matrix_cell(day, "day")
+        db.session.commit()
+
+        self.client.get("/motherbrain/manage-sort")
+        night_operation = SortDateOperation.query.filter_by(
+            gateway_code="RFD",
+            sort_date=sort_date,
+            sort_name="night",
+        ).one()
+        response = self.client.get(f"/motherbrain/manage-sort?operation_id={night_operation.id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            f'href="/motherbrain/flight-api-review?operation_id={night_operation.id}"'.encode(),
+            response.data,
+        )
+
+    def test_flight_api_review_uses_selected_operation_context(self):
+        sort_date = current_gateway_local_date(self.rfd_gateway)
+        night_operation = self._operation(sort_date=sort_date, sort_name="night")
+        day_operation = self._operation(sort_date=sort_date, sort_name="day")
+        db.session.add_all([night_operation, day_operation])
+        db.session.flush()
+        db.session.add(
+            self._api_review_item(
+                night_operation,
+                mission_type="arrival",
+                flight_number="UPS0111",
+                origin="SDF",
+            )
+        )
+        db.session.add(
+            self._api_review_item(
+                day_operation,
+                mission_type="arrival",
+                flight_number="UPS0222",
+                origin="DFW",
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get(
+            f"/motherbrain/flight-api-review?operation_id={day_operation.id}"
+        )
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("UPS0222", html)
+        self.assertNotIn("UPS0111", html)
+        self.assertIn(f'value="{day_operation.id}" selected', html)
 
     def test_manage_sort_after_midnight_shows_previous_day_active_night_sort(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 19, 0, 30)
@@ -1520,7 +1591,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"MANAGE SORT", response.data)
-        self.assertIn(b"2026-06-18", response.data)
+        self.assertIn(b"RFD NIGHT 6/18/26", response.data)
         self.assertIn(b"NIGHT", response.data)
         self.assertNotIn(b"No active sorts today.", response.data)
 
@@ -1562,7 +1633,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         ).all()
         self.assertEqual(response.status_code, 200)
         self.assertEqual(current_day_operations, [])
-        self.assertIn(b"2026-06-18", response.data)
+        self.assertIn(b"RFD NIGHT 6/18/26", response.data)
 
     def test_manage_sort_syncs_new_master_rows_into_existing_operation(self):
         sort_date = current_gateway_local_date(self.rfd_gateway)

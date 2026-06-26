@@ -467,7 +467,10 @@ def flight_api_review():
     generation_result = _auto_generate_today_sorts(gateway)
     sort_date = generation_result["sort_date"]
     operations = operations_for_gateway_date(gateway, sort_date)
-    selected_operation = _selected_current_operation(operations)
+    selected_operation = _selected_current_operation(
+        operations,
+        operation_id=request.args.get("operation_id"),
+    )
     pending_items = pending_review_items_for_operation(selected_operation)
     pending_item_rows = flight_api_review_display_rows(pending_items, selected_operation)
     settings = ensure_sort_timeline_settings(gateway)
@@ -1089,15 +1092,20 @@ def manage_sort():
     ):
         db.session.commit()
         operations = current_operations_for_gateway(gateway)
-    selected_sort_name = request.args.get("sort", "").strip().lower()
-    selected_operation = next(
-        (
-            operation
-            for operation in operations
-            if operation.sort_name == selected_sort_name
-        ),
-        operations[0] if operations else None,
+    selected_operation = _selected_current_operation(
+        operations,
+        operation_id=request.args.get("operation_id"),
     )
+    if not selected_operation:
+        selected_sort_name = request.args.get("sort", "").strip().lower()
+        selected_operation = next(
+            (
+                operation
+                for operation in operations
+                if operation.sort_name == selected_sort_name
+            ),
+            operations[0] if operations else None,
+        )
 
     return render_template(
         "neomotherbrain/manage_sort.html",
@@ -3103,8 +3111,12 @@ def _render_mission_form(operation, form, mode, mission=None):
 
 
 def _mission_form_from_request(operation):
+    requested_mission_type = request.form.get("mission_type") or request.args.get(
+        "mission_type",
+        "departure",
+    )
     return {
-        "mission_type": request.form.get("mission_type", "departure"),
+        "mission_type": requested_mission_type,
         "wave": request.form.get("wave", "1"),
         "flight_number": request.form.get("flight_number", ""),
         "origin": request.form.get("origin", ""),

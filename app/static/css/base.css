@@ -8669,6 +8669,19 @@ select::-ms-expand {
     margin-top: 12px;
 }
 
+.manage-sort-action-menu {
+    gap: 8px;
+}
+
+.manage-sort-active-button {
+    font-size: 0.72rem;
+    padding-inline: 12px;
+}
+
+.manage-sort-bottom-card {
+    margin-top: 16px;
+}
+
 .manage-sort-detail-list {
     display: grid;
     gap: 8px;
