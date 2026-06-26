@@ -24,6 +24,10 @@ class ParkingPhysicalConflict:
     reason: str
     position: str = ""
     tail: str = ""
+    blocking_position: str = ""
+    blocking_tail: str = ""
+    eta: str = ""
+    blocking_eta: str = ""
 
 
 def parking_physical_validation_context(operation, tail_rows=None):
@@ -49,6 +53,7 @@ def validate_parking_physical_rules(operation, tail_rows=None):
     conflicts.extend(_remote_fill_order_conflicts(occupancy, blocked))
     conflicts.extend(_normal_767_conflicts(assignments, aircraft_type_by_tail, occupancy))
     conflicts.extend(_throat_conflicts(occupancy, blocked))
+    conflicts.extend(_eta_order_conflicts(assignments, aircraft_type_by_tail, tail_rows))
     return _dedupe_conflicts(conflicts)
 
 
@@ -305,6 +310,179 @@ def _throat_conflicts(occupancy, blocked):
     return conflicts
 
 
+def _eta_order_conflicts(assignments, aircraft_type_by_tail, tail_rows):
+    fill_items = _eta_fill_items_by_position(assignments, aircraft_type_by_tail, tail_rows)
+    conflicts = []
+    for ramp in NORMAL_RAMP_CODES:
+        for bank in NORMAL_BANKS:
+            sequence = [f"{ramp}{number:02d}" for number in bank]
+            conflicts.extend(_eta_sequence_conflicts(sequence, fill_items, "normal_bank_eta_order"))
+
+        conflicts.extend(
+            _eta_sequence_conflicts(
+                [f"{ramp}10", f"{ramp}09"],
+                fill_items,
+                "throat_eta_order",
+                throat=True,
+            )
+        )
+
+    conflicts.extend(
+        _eta_sequence_conflicts(
+            list(REMOTE_ORDER),
+            fill_items,
+            "remote_eta_order",
+            remote=True,
+        )
+    )
+    return conflicts
+
+
+def _eta_fill_items_by_position(assignments, aircraft_type_by_tail, tail_rows):
+    timing_by_tail = _eta_timing_by_tail(tail_rows)
+    fill_items = {}
+    for assignment in assignments:
+        tail = _normalize_tail(getattr(assignment, "tail_number", ""))
+        position = _normalize_position(getattr(assignment, "position_code", ""))
+        ramp = _normalize_ramp(getattr(assignment, "ramp_code", ""))
+        number = _position_number(position)
+        timing = timing_by_tail.get(tail)
+        if not tail or not position or not timing:
+            continue
+
+        item = {
+            "tail": tail,
+            "position": position,
+            "assignment_position": position,
+            "eta": timing["eta"],
+            "eta_label": timing["eta_label"],
+        }
+        fill_items.setdefault(position, []).append(item)
+
+        if ramp not in NORMAL_RAMP_CODES or aircraft_type_by_tail.get(tail) != "767":
+            continue
+        blocked_number = VALID_767_NORMAL_ANCHORS.get(number)
+        if not blocked_number:
+            continue
+        blocked_position = f"{ramp}{blocked_number:02d}"
+        fill_items.setdefault(blocked_position, []).append(
+            {
+                **item,
+                "position": blocked_position,
+            }
+        )
+    return fill_items
+
+
+def _eta_timing_by_tail(tail_rows):
+    timing = {}
+    for row in tail_rows or []:
+        tail = _normalize_tail(row.get("tail"))
+        eta = row.get("arrival_block_in_local")
+        if not tail or not eta:
+            continue
+        timing[tail] = {
+            "eta": eta,
+            "eta_label": _format_local_time(eta),
+        }
+    return timing
+
+
+def _eta_sequence_conflicts(sequence, fill_items, reason, remote=False, throat=False):
+    conflicts = []
+    for index, position in enumerate(sequence):
+        lower_positions = sequence[:index]
+        if not lower_positions:
+            continue
+        for item in fill_items.get(position, []):
+            for lower_position in lower_positions:
+                for lower_item in fill_items.get(lower_position, []):
+                    if _same_eta_fill_item(item, lower_item):
+                        continue
+                    if not item["eta"] or not lower_item["eta"]:
+                        continue
+                    if item["eta"] >= lower_item["eta"]:
+                        continue
+                    conflicts.append(
+                        _eta_conflict(
+                            position,
+                            item,
+                            lower_position,
+                            lower_item,
+                            lower_positions,
+                            reason,
+                            remote=remote,
+                            throat=throat,
+                        )
+                    )
+    return conflicts
+
+
+def _same_eta_fill_item(item, other):
+    return (
+        item.get("tail") == other.get("tail")
+        and item.get("assignment_position") == other.get("assignment_position")
+    )
+
+
+def _eta_conflict(
+    position,
+    item,
+    blocking_position,
+    blocking_item,
+    required_prior_positions,
+    reason,
+    remote=False,
+    throat=False,
+):
+    prior_label = "/".join(required_prior_positions)
+    tail = item.get("tail") or ""
+    blocking_tail = blocking_item.get("tail") or ""
+    eta = item.get("eta_label") or "-"
+    blocking_eta = blocking_item.get("eta_label") or "-"
+    assignment_position = item.get("assignment_position") or position
+    blocking_assignment_position = blocking_item.get("assignment_position") or blocking_position
+
+    if throat:
+        message = (
+            f"{position} ETA order conflict: {position} cannot arrive before {blocking_position}. "
+            f"{tail} at {assignment_position} ETA {eta} is before "
+            f"{blocking_tail} at {blocking_assignment_position} ETA {blocking_eta}."
+        )
+    elif remote:
+        message = (
+            f"{position} ETA order conflict: {position} arrives before {prior_label}. "
+            f"{tail} at {assignment_position} ETA {eta} is before "
+            f"{blocking_tail} at {blocking_assignment_position} ETA {blocking_eta}."
+        )
+    else:
+        message = (
+            f"{position} cannot arrive before {prior_label} are parked. "
+            f"{tail} at {assignment_position} ETA {eta} is before "
+            f"{blocking_tail} at {blocking_assignment_position} ETA {blocking_eta}."
+        )
+
+    conflict_key = _stable_conflict_key(
+        reason,
+        position,
+        tail,
+        f"{blocking_position}|{blocking_tail}",
+    )
+    return ParkingPhysicalConflict(
+        conflict_key=conflict_key,
+        severity="warning",
+        title="Parking ETA order conflict",
+        message=message,
+        reason=reason,
+        position=position,
+        tail=tail,
+        blocking_position=blocking_position,
+        blocking_tail=blocking_tail,
+        eta=eta,
+        blocking_eta=blocking_eta,
+    )
+
+
 def _has_clear_full_bank(ramp, occupancy, blocked):
     return any(
         all(_is_position_clear(f"{ramp}{number:02d}", occupancy, blocked) for number in bank)
@@ -397,3 +575,9 @@ def _normalize_aircraft_type(value):
     if "A300" in text or "A-300" in text:
         return "A300"
     return text
+
+
+def _format_local_time(value):
+    if not value:
+        return "-"
+    return value.strftime("%H:%M")

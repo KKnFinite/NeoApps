@@ -6259,6 +6259,280 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"PHYSICAL PARKING RULES", response.data)
         self.assertIn(b"A03 cannot be used until A01, A02 are filled.", response.data)
 
+    def test_parking_eta_order_validator_detects_normal_bank_01_04_conflict(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N001UP",
+            arrival_local=datetime(2026, 6, 19, 0, 10),
+            destination="A01",
+        )
+        self._parking_pair(
+            operation,
+            "N002UP",
+            arrival_local=datetime(2026, 6, 19, 0, 12),
+            destination="A02",
+        )
+        self._parking_pair(
+            operation,
+            "N003UP",
+            arrival_local=datetime(2026, 6, 19, 0, 0),
+            destination="A03",
+        )
+        db.session.flush()
+        self._parking_assignment(operation, "N001UP", "A01")
+        self._parking_assignment(operation, "N002UP", "A02")
+        self._parking_assignment(operation, "N003UP", "A03")
+        db.session.commit()
+        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
+
+        conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
+        messages = [conflict.message for conflict in conflicts]
+
+        self.assertTrue(
+            any(
+                "A03 cannot arrive before A01/A02 are parked." in message
+                and "N003UP at A03 ETA 00:10" in message
+                for message in messages
+            )
+        )
+
+    def test_parking_eta_order_validator_detects_normal_bank_05_08_conflict(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N005UP",
+            arrival_local=datetime(2026, 6, 18, 23, 30),
+            destination="A05",
+        )
+        self._parking_pair(
+            operation,
+            "N006UP",
+            arrival_local=datetime(2026, 6, 18, 23, 0),
+            destination="A06",
+        )
+        db.session.flush()
+        self._parking_assignment(operation, "N005UP", "A05")
+        self._parking_assignment(operation, "N006UP", "A06")
+        db.session.commit()
+        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
+
+        conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
+        messages = [conflict.message for conflict in conflicts]
+
+        self.assertTrue(
+            any(
+                "A06 cannot arrive before A05 are parked." in message
+                and "N006UP at A06 ETA 23:10" in message
+                for message in messages
+            )
+        )
+
+    def test_parking_eta_order_validator_respects_767_blocked_fill_positions(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N767UP",
+            aircraft_type="767",
+            arrival_local=datetime(2026, 6, 19, 0, 10),
+            destination="A01",
+        )
+        self._parking_pair(
+            operation,
+            "N003UP",
+            aircraft_type="757",
+            arrival_local=datetime(2026, 6, 19, 0, 0),
+            destination="A03",
+        )
+        db.session.flush()
+        self._parking_assignment(operation, "N767UP", "A01")
+        self._parking_assignment(operation, "N003UP", "A03")
+        db.session.commit()
+        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
+
+        conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
+        messages = [conflict.message for conflict in conflicts]
+
+        self.assertTrue(
+            any(
+                "A03 cannot arrive before A01/A02 are parked." in message
+                and "N767UP at A01 ETA 00:20" in message
+                for message in messages
+            )
+        )
+
+    def test_parking_eta_order_validator_detects_remote_conflict(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N001UP",
+            arrival_local=datetime(2026, 6, 18, 23, 30),
+            destination="R01",
+        )
+        self._parking_pair(
+            operation,
+            "N002UP",
+            arrival_local=datetime(2026, 6, 18, 23, 35),
+            destination="R02",
+        )
+        self._parking_pair(
+            operation,
+            "N003UP",
+            arrival_local=datetime(2026, 6, 18, 23, 0),
+            destination="R03",
+        )
+        db.session.flush()
+        self._parking_assignment(operation, "N001UP", "R01", ramp_code="R")
+        self._parking_assignment(operation, "N002UP", "R02", ramp_code="R")
+        self._parking_assignment(operation, "N003UP", "R03", ramp_code="R")
+        db.session.commit()
+        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
+
+        conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
+        messages = [conflict.message for conflict in conflicts]
+
+        self.assertTrue(
+            any(
+                "R03 ETA order conflict: R03 arrives before R01/R02." in message
+                and "N003UP at R03 ETA 23:10" in message
+                for message in messages
+            )
+        )
+
+    def test_parking_eta_order_validator_detects_09_before_10_conflict(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N010UP",
+            arrival_local=datetime(2026, 6, 18, 23, 30),
+            destination="A10",
+        )
+        self._parking_pair(
+            operation,
+            "N009UP",
+            arrival_local=datetime(2026, 6, 18, 23, 0),
+            destination="A09",
+        )
+        db.session.flush()
+        self._parking_assignment(operation, "N010UP", "A10")
+        self._parking_assignment(operation, "N009UP", "A09")
+        db.session.commit()
+        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
+
+        conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
+        messages = [conflict.message for conflict in conflicts]
+
+        self.assertTrue(
+            any(
+                "A09 ETA order conflict: A09 cannot arrive before A10." in message
+                and "N009UP at A09 ETA 23:10" in message
+                for message in messages
+            )
+        )
+
+    def test_parking_eta_order_validator_is_midnight_aware(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N001UP",
+            arrival_local=datetime(2026, 6, 19, 0, 0),
+            destination="A01",
+        )
+        self._parking_pair(
+            operation,
+            "N002UP",
+            arrival_local=datetime(2026, 6, 18, 23, 45),
+            destination="A02",
+        )
+        db.session.flush()
+        self._parking_assignment(operation, "N001UP", "A01")
+        self._parking_assignment(operation, "N002UP", "A02")
+        db.session.commit()
+        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
+
+        conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
+        messages = [conflict.message for conflict in conflicts]
+
+        self.assertTrue(
+            any(
+                "N002UP at A02 ETA 23:55" in message
+                and "N001UP at A01 ETA 00:10" in message
+                for message in messages
+            )
+        )
+
+    def test_parking_plan_page_displays_eta_order_conflicts(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N001UP",
+            arrival_local=datetime(2026, 6, 19, 0, 10),
+            destination="A01",
+        )
+        self._parking_pair(
+            operation,
+            "N002UP",
+            arrival_local=datetime(2026, 6, 19, 0, 0),
+            destination="A02",
+        )
+        db.session.flush()
+        self._parking_assignment(operation, "N001UP", "A01")
+        self._parking_assignment(operation, "N002UP", "A02")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+
+        self.assertIn(b"PHYSICAL PARKING RULES", response.data)
+        self.assertIn(b"Parking ETA order conflict", response.data)
+        self.assertIn(b"N002UP at A02 ETA 00:10", response.data)
+
+    def test_parking_eta_order_alert_tray_syncs_and_clears(self):
+        operation = self._parking_operation()
+        _late_arrival, _late_departure = self._parking_pair(
+            operation,
+            "N001UP",
+            arrival_local=datetime(2026, 6, 19, 0, 10),
+            destination="A01",
+        )
+        early_arrival, _early_departure = self._parking_pair(
+            operation,
+            "N002UP",
+            arrival_local=datetime(2026, 6, 19, 0, 0),
+            destination="A02",
+        )
+        db.session.flush()
+        self._parking_assignment(operation, "N001UP", "A01")
+        self._parking_assignment(operation, "N002UP", "A02")
+        db.session.commit()
+
+        first_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        second_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+
+        self.assertIn(b"MotherBrain Alerts", first_response.data)
+        self.assertIn(b"Parking ETA order conflict", first_response.data)
+        self.assertIn(b"Parking ETA order conflict", second_response.data)
+        self.assertEqual(
+            MotherBrainAlert.query.filter_by(
+                title="Parking ETA order conflict",
+                active=True,
+            ).count(),
+            1,
+        )
+
+        early_arrival.planned_datetime_local = datetime(2026, 6, 19, 0, 30)
+        early_arrival.planned_datetime_utc = datetime(2026, 6, 19, 0, 30)
+        db.session.commit()
+        resolved_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+
+        self.assertNotIn(b"Parking ETA order conflict", resolved_response.data)
+        self.assertEqual(
+            MotherBrainAlert.query.filter_by(
+                title="Parking ETA order conflict",
+                active=True,
+            ).count(),
+            0,
+        )
+
     def test_parking_validation_alert_tray_syncs_and_does_not_duplicate(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", aircraft_type="757")
@@ -6507,6 +6781,66 @@ class MotherBrainRoutesTest(unittest.TestCase):
         preview = self._parking_optimizer_preview(operation)
 
         self.assertNotEqual(preview["suggested_assignments"][0]["position"][:1], "A")
+
+    def test_parking_optimizer_preview_obeys_eta_order_constraints(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N001UP",
+            origin="SDF",
+            arrival_local=datetime(2026, 6, 19, 0, 10),
+            destination="A01",
+        )
+        self._parking_pair(
+            operation,
+            "N002UP",
+            origin="ONT",
+            arrival_local=datetime(2026, 6, 19, 0, 0),
+            destination="A02",
+        )
+        self._parking_rule(ORIGIN_RAMP_RESTRICTION, "origin", "ONT", "A", behavior="required")
+        db.session.flush()
+        self._parking_assignment(operation, "N001UP", "A01")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
+
+        self.assertNotEqual(suggestions["N002UP"]["position"], "A02")
+
+    def test_parking_optimizer_apply_revalidates_eta_order_before_writing(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N001UP",
+            arrival_local=datetime(2026, 6, 19, 0, 10),
+            destination="A01",
+        )
+        self._parking_pair(
+            operation,
+            "N002UP",
+            arrival_local=datetime(2026, 6, 19, 0, 0),
+            destination="A02",
+        )
+        self._parking_pair(
+            operation,
+            "N003UP",
+            arrival_local=datetime(2026, 6, 19, 0, 20),
+            destination="SDF",
+        )
+        db.session.flush()
+        self._parking_assignment(operation, "N001UP", "A01")
+        self._parking_assignment(operation, "N002UP", "A02")
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+            data={"confirm_apply": "1"},
+            follow_redirects=True,
+        )
+
+        self.assertIn(b"Resolve ETA order conflicts", response.data)
+        self.assertIsNone(self._parking_assignment_for_tail(operation, "N003UP"))
 
     def test_parking_optimizer_preview_renders_on_parking_plan(self):
         operation = self._parking_operation()

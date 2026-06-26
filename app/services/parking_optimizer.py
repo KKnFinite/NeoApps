@@ -32,6 +32,7 @@ class ParkingPlacement:
     lane: int
     cost: int
     aircraft_type: str
+    eta: datetime | None = None
 
     @property
     def label(self):
@@ -93,6 +94,7 @@ def parking_optimizer_preview(
         if _normalize_position(assignment.position_code)
     }
     locked_blocked_positions = _locked_blocked_positions(assignments, tail_rows)
+    locked_eta_by_position = _locked_eta_by_position(assignments, tail_rows)
     placements = _build_candidate_placements(
         candidate_rows,
         candidate_positions,
@@ -132,6 +134,7 @@ def parking_optimizer_preview(
     _add_fill_order_constraints(model, variables, fill_exprs)
     _add_throat_constraints(model, variables, fill_exprs)
     _add_767_block_constraints(model, variables, fill_exprs)
+    _add_eta_order_constraints(model, variables, locked_eta_by_position)
 
     model.Maximize(
         sum(variable * 100000 for variable in variables.values())
@@ -191,6 +194,11 @@ def apply_parking_optimizer_plan(
         "ok": False,
         "message": "",
     }
+    eta_conflicts = _eta_order_conflicts_from_preview(preview)
+    if eta_conflicts:
+        result["message"] = "Resolve ETA order conflicts before applying optimizer suggestions."
+        return result
+
     if preview["solver_status"] not in SUCCESS_SOLVER_STATUSES:
         result["message"] = preview.get("summary") or (
             f"Optimizer returned {preview['solver_status']}; no assignments were applied."
@@ -404,6 +412,7 @@ def _build_candidate_placements(
                         lane=lane,
                         cost=(order * 4) + lane,
                         aircraft_type=aircraft_type,
+                        eta=row.get("arrival_block_in_local"),
                     )
                 )
     return placements
@@ -518,6 +527,40 @@ def _add_767_block_constraints(model, variables, fill_exprs):
             model.Add(variable + blocked_variable <= 1)
 
 
+def _add_eta_order_constraints(model, variables, locked_eta_by_position):
+    contributors_by_position = {}
+    for placement, variable in variables.items():
+        for position in _filled_positions_for_placement(placement):
+            contributors_by_position.setdefault(position, []).append((placement, variable))
+
+    for sequence in _eta_order_sequences():
+        for index, higher_position in enumerate(sequence):
+            lower_positions = sequence[:index]
+            if not lower_positions:
+                continue
+
+            higher_candidates = contributors_by_position.get(higher_position, [])
+            higher_locked = locked_eta_by_position.get(higher_position, [])
+            for lower_position in lower_positions:
+                lower_candidates = contributors_by_position.get(lower_position, [])
+                lower_locked = locked_eta_by_position.get(lower_position, [])
+
+                for higher_placement, higher_variable in higher_candidates:
+                    for lower_eta in lower_locked:
+                        if _eta_before(higher_placement.eta, lower_eta):
+                            model.Add(higher_variable == 0)
+                    for lower_placement, lower_variable in lower_candidates:
+                        if higher_placement == lower_placement:
+                            continue
+                        if _eta_before(higher_placement.eta, lower_placement.eta):
+                            model.Add(higher_variable + lower_variable <= 1)
+
+                for higher_eta in higher_locked:
+                    for lower_placement, lower_variable in lower_candidates:
+                        if _eta_before(higher_eta, lower_placement.eta):
+                            model.Add(lower_variable == 0)
+
+
 def _unassigned_rows(candidate_rows, selected_by_tail, placements):
     placement_tails = {placement.tail for placement in placements}
     rows = []
@@ -619,15 +662,78 @@ def _locked_blocked_positions(assignments, tail_rows):
     return blocked
 
 
+def _locked_eta_by_position(assignments, tail_rows):
+    rows_by_tail = {
+        _normalize_tail(row.get("tail")): row
+        for row in tail_rows
+        if _normalize_tail(row.get("tail"))
+    }
+    locked_eta = {}
+    for assignment in assignments:
+        tail = _normalize_tail(assignment.tail_number)
+        row = rows_by_tail.get(tail, {})
+        eta = row.get("arrival_block_in_local")
+        position = _normalize_position(assignment.position_code)
+        if not eta or not position:
+            continue
+        locked_eta.setdefault(position, []).append(eta)
+
+        aircraft_type = _normalize_aircraft_type(row.get("aircraft_type"))
+        if aircraft_type != "767":
+            continue
+        blocked_position = _blocked_position_for_values(aircraft_type, position)
+        if blocked_position:
+            locked_eta.setdefault(blocked_position, []).append(eta)
+    return locked_eta
+
+
 def _blocked_position_for_placement(placement):
-    if placement.aircraft_type != "767":
+    return _blocked_position_for_values(placement.aircraft_type, placement.position)
+
+
+def _blocked_position_for_values(aircraft_type, position):
+    if aircraft_type != "767":
         return ""
-    ramp = placement.ramp
-    number = _position_number(placement.position)
+    ramp = _ramp_from_position(position)
+    number = _position_number(position)
     if ramp not in NORMAL_RAMP_CODES:
         return ""
     blocked_number = VALID_767_NORMAL_ANCHORS.get(number)
     return f"{ramp}{blocked_number:02d}" if blocked_number else ""
+
+
+def _filled_positions_for_placement(placement):
+    positions = [placement.position]
+    blocked = _blocked_position_for_placement(placement)
+    if blocked:
+        positions.append(blocked)
+    return positions
+
+
+def _eta_order_sequences():
+    sequences = []
+    for ramp in NORMAL_RAMP_CODES:
+        sequences.extend(
+            [f"{ramp}{number:02d}" for number in bank]
+            for bank in NORMAL_BANKS
+        )
+        sequences.append([f"{ramp}10", f"{ramp}09"])
+    sequences.append(list(REMOTE_ORDER))
+    return sequences
+
+
+def _eta_before(first, second):
+    return bool(first and second and first < second)
+
+
+def _eta_order_conflicts_from_preview(preview):
+    return [
+        conflict
+        for conflict in (preview.get("conflicts") or [])
+        if str(conflict.get("reason") or "").startswith(
+            ("normal_bank_eta_order", "remote_eta_order", "throat_eta_order")
+        )
+    ]
 
 
 def _fill_expr(fill_exprs, position):
