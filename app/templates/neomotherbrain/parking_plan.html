@@ -258,6 +258,9 @@
                 {% endif %}
             </div>
             <p class="parking-optimizer-note">{{ optimizer_preview.summary }}</p>
+            {% if optimizer_preview.solver_diagnostic %}
+            <p class="parking-optimizer-note parking-optimizer-diagnostic">{{ optimizer_preview.solver_diagnostic }}</p>
+            {% endif %}
 
             {% if optimizer_preview.locked_assignments %}
             <div class="parking-optimizer-section">
@@ -299,7 +302,18 @@
                 <h3>UNASSIGNED / UNRESOLVED</h3>
                 <ul>
                     {% for row in optimizer_preview.unassigned_tails %}
-                    <li><strong>{{ row.tail }}</strong> {{ row.origin }} / {{ row.aircraft_type }} / {{ row.parking_window }} <span>{{ row.reason }}</span></li>
+                    <li>
+                        <strong>{{ row.tail }}</strong> {{ row.origin }} / {{ row.aircraft_type }} / {{ row.parking_window }}
+                        <span>{{ row.reason }}</span>
+                        <small>
+                            Candidates {{ row.candidate_positions_before_filters }} -> {{ row.candidate_positions_after_hard_filters }}
+                            {% if row.candidate_positions_after_sample %}
+                                / available {{ row.candidate_positions_after_sample }}
+                            {% elif row.top_rejection_reason %}
+                                / {{ row.top_rejection_reason }}
+                            {% endif %}
+                        </small>
+                    </li>
                     {% endfor %}
                 </ul>
             </div>

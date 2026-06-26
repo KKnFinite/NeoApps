@@ -4310,6 +4310,11 @@ h2 {
     line-height: 1.35;
 }
 
+.parking-optimizer-diagnostic {
+    max-width: 760px;
+    color: #ffb3b7;
+}
+
 .parking-optimizer-form {
     justify-content: flex-start;
 }
@@ -4411,6 +4416,13 @@ h2 {
 
 .parking-optimizer-section li span {
     color: var(--muted);
+}
+
+.parking-optimizer-section li small {
+    flex-basis: 100%;
+    color: rgba(209, 214, 222, 0.72);
+    font-size: 0.66rem;
+    font-weight: 850;
 }
 
 .parking-layout {

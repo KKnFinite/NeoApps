@@ -29,7 +29,7 @@ from app.services.parking_rules import (
 )
 
 
-PARKING_OPTIMIZER_TIME_LIMIT_SECONDS = 3.0
+PARKING_OPTIMIZER_TIME_LIMIT_SECONDS = 8.0
 SUCCESS_SOLVER_STATUSES = {"OPTIMAL", "FEASIBLE"}
 PREFERRED_RAMP_SCORE = 600
 AVOID_RAMP_PENALTY = 350
@@ -115,7 +115,7 @@ def parking_optimizer_preview(
     }
     locked_blocked_positions = _locked_blocked_positions(assignments, tail_rows)
     locked_eta_by_position = _locked_eta_by_position(assignments, tail_rows)
-    placements = _build_candidate_placements(
+    placements, candidate_diagnostics = _build_candidate_placements(
         candidate_rows,
         candidate_positions,
         locked_lane_keys,
@@ -143,6 +143,7 @@ def parking_optimizer_preview(
                 include_throat=include_throat,
                 locked_conflicts=locked_conflicts,
                 hard_rules=rules["hard"],
+                candidate_diagnostics=candidate_diagnostics,
             ),
             locked_conflicts,
             "No candidate parking positions are available under the selected toggles and hard rules.",
@@ -217,16 +218,21 @@ def parking_optimizer_preview(
         candidate_rows,
         selected_by_tail,
         placements,
+        solver_status=status_name,
         include_remote=include_remote,
         include_throat=include_throat,
         locked_conflicts=locked_conflicts,
         hard_rules=rules["hard"],
+        candidate_diagnostics=candidate_diagnostics,
     )
     summary = (
         "Preview generated. Saved assignments were not changed."
         if suggestions or locked_assignments
         else "No parking suggestions were generated."
     )
+    solver_diagnostic = _solver_diagnostic(status_name, suggestions, candidate_rows)
+    if solver_diagnostic:
+        summary = solver_diagnostic
     return _preview_result(
         status_name,
         include_remote,
@@ -239,6 +245,7 @@ def parking_optimizer_preview(
         locked_conflicts,
         summary,
         wall_time=solver.WallTime() if status else None,
+        solver_diagnostic=solver_diagnostic,
     )
 
 
@@ -364,10 +371,12 @@ def _preview_result(
     conflicts,
     summary,
     wall_time=None,
+    solver_diagnostic=None,
 ):
     return {
         "solver_status": solver_status,
         "summary": summary,
+        "solver_diagnostic": solver_diagnostic or "",
         "suggested_assignments": suggestions,
         "locked_assignments": locked_assignments,
         "unassigned_tails": unassigned_tails,
@@ -490,15 +499,38 @@ def _build_candidate_placements(
     timezone_name,
 ):
     placements = []
+    diagnostics = {}
+    before_positions = sorted({_normalize_position(position) for position, _ramp in candidate_positions})
     for row in sorted(candidate_rows, key=lambda item: (_parking_window_sort_key(item), item["tail"])):
         tail = _normalize_tail(row.get("tail"))
         aircraft_type = _parking_aircraft_type_for_row(row)
+        after_positions = set()
+        rejection_counts = {}
         for order, (position, ramp) in enumerate(candidate_positions):
+            rejection_reason = ""
             if position in locked_blocked_positions:
-                continue
-            if _rule_blocks_row(row, aircraft_type, position, ramp, hard_rules):
-                continue
-            if not _placement_allows_aircraft(aircraft_type, position, locked_filled_positions):
+                rejection_reason = "Blocked by locked/manual assignments."
+            elif _rule_blocks_row(row, aircraft_type, position, ramp, hard_rules):
+                rejection_reason = _rule_block_reason(row, aircraft_type, position, ramp, hard_rules)
+            elif not _placement_allows_aircraft(aircraft_type, position, locked_filled_positions):
+                rejection_reason = (
+                    "767 footprint cannot fit in available slots."
+                    if aircraft_type == "767"
+                    else "Aircraft cannot use this position."
+                )
+            else:
+                open_lanes = [
+                    lane
+                    for lane in (1, 2)
+                    if (position, lane) not in locked_lane_keys
+                ]
+                if open_lanes:
+                    after_positions.add(position)
+                else:
+                    rejection_reason = "Blocked by locked/manual assignments."
+
+            if rejection_reason:
+                rejection_counts[rejection_reason] = rejection_counts.get(rejection_reason, 0) + 1
                 continue
             soft_score, preference_reasons = _soft_rule_score(
                 row,
@@ -524,7 +556,14 @@ def _build_candidate_placements(
                         preference_reasons=tuple(preference_reasons),
                     )
                 )
-    return placements
+        diagnostics[tail] = {
+            "candidate_positions_before_filters": len(before_positions),
+            "candidate_positions_after_hard_filters": len(after_positions),
+            "candidate_positions_before_sample": _position_sample(before_positions),
+            "candidate_positions_after_sample": _position_sample(after_positions),
+            "top_rejection_reason": _top_rejection_reason(rejection_counts),
+        }
+    return placements, diagnostics
 
 
 def _add_tail_constraints(model, variables):
@@ -674,10 +713,12 @@ def _unassigned_rows(
     candidate_rows,
     selected_by_tail,
     placements,
+    solver_status=None,
     include_remote=False,
     include_throat=False,
     locked_conflicts=None,
     hard_rules=None,
+    candidate_diagnostics=None,
 ):
     placement_tails = {placement.tail for placement in placements}
     rows = []
@@ -686,20 +727,40 @@ def _unassigned_rows(
         if tail in selected_by_tail:
             continue
         aircraft_type = _parking_aircraft_type_for_row(row)
+        diagnostics = (candidate_diagnostics or {}).get(tail, {})
         rows.append(
             {
                 "tail": tail,
                 "origin": row.get("arrival_origin") or "-",
                 "aircraft_type": aircraft_type,
                 "parking_window": _parking_window_label(row),
+                "candidate_positions_before_filters": diagnostics.get(
+                    "candidate_positions_before_filters",
+                    0,
+                ),
+                "candidate_positions_after_hard_filters": diagnostics.get(
+                    "candidate_positions_after_hard_filters",
+                    0,
+                ),
+                "candidate_positions_before_sample": diagnostics.get(
+                    "candidate_positions_before_sample",
+                    "",
+                ),
+                "candidate_positions_after_sample": diagnostics.get(
+                    "candidate_positions_after_sample",
+                    "",
+                ),
+                "top_rejection_reason": diagnostics.get("top_rejection_reason", ""),
                 "reason": _unresolved_reason(
                     row,
                     aircraft_type,
                     has_candidate=tail in placement_tails,
+                    solver_status=solver_status,
                     include_remote=include_remote,
                     include_throat=include_throat,
                     locked_conflicts=locked_conflicts or [],
                     hard_rules=hard_rules or {},
+                    diagnostics=diagnostics,
                 ),
             }
         )
@@ -734,6 +795,25 @@ def _rule_blocks_row(row, aircraft_type, position, ramp, rules):
         _rule_matches_position(rule, position, ramp)
         for rule in _rules_for_row(row, aircraft_type, rules.get("forbidden", []))
     )
+
+
+def _rule_block_reason(row, aircraft_type, position, ramp, rules):
+    required_rules = _rules_for_row(row, aircraft_type, rules.get("required", []))
+    if required_rules and not any(_rule_matches_position(rule, position, ramp) for rule in required_rules):
+        if any(str(rule.subject_type or "").strip().lower() == "aircraft_type" for rule in required_rules):
+            return "Aircraft type required on another ramp."
+        return "Origin required on another ramp."
+
+    matching_forbidden = [
+        rule
+        for rule in _rules_for_row(row, aircraft_type, rules.get("forbidden", []))
+        if _rule_matches_position(rule, position, ramp)
+    ]
+    if any(str(rule.subject_type or "").strip().lower() == "aircraft_type" for rule in matching_forbidden):
+        return "Aircraft type restricted from available ramps."
+    if any(str(rule.subject_type or "").strip().lower() == "origin" for rule in matching_forbidden):
+        return "Origin restricted from available ramps."
+    return "Blocked by hard parking rules."
 
 
 def _soft_rule_score(row, aircraft_type, position, ramp, soft_rules):
@@ -894,6 +974,34 @@ def _minutes_apart(first, second):
         return None
     minutes = int(abs((first - second).total_seconds()) // 60)
     return min(minutes, abs(1440 - minutes)) if minutes > 720 else minutes
+
+
+def _solver_diagnostic(status_name, suggestions, candidate_rows):
+    if status_name != "UNKNOWN" or suggestions or not candidate_rows:
+        return ""
+    return (
+        "Optimizer solver returned UNKNOWN before proving a parking plan. "
+        "This is a solver/model time diagnostic, not proof that no parking is possible."
+    )
+
+
+def _position_sample(positions, limit=8):
+    values = sorted(positions)
+    if not values:
+        return ""
+    sample = ", ".join(values[:limit])
+    if len(values) > limit:
+        sample += f", +{len(values) - limit} more"
+    return sample
+
+
+def _top_rejection_reason(rejection_counts):
+    if not rejection_counts:
+        return ""
+    return sorted(
+        rejection_counts.items(),
+        key=lambda item: (-item[1], item[0]),
+    )[0][0]
 
 
 def _is_deice_position(position):
@@ -1122,13 +1230,24 @@ def _unresolved_reason(
     row,
     aircraft_type,
     has_candidate,
+    solver_status,
     include_remote,
     include_throat,
     locked_conflicts,
     hard_rules,
+    diagnostics=None,
 ):
+    diagnostics = diagnostics or {}
     if has_candidate:
-        return "No feasible parking position under hard rules, ETA order, and scoring constraints."
+        if solver_status == "UNKNOWN":
+            return (
+                "Solver returned UNKNOWN before proving a plan for this tail; "
+                "candidate positions remain after hard filters."
+            )
+        return (
+            "No selected assignment after hard rules and ETA-order optimization; "
+            "other tails used the available feasible positions."
+        )
 
     reasons = []
     if locked_conflicts:
@@ -1151,6 +1270,9 @@ def _unresolved_reason(
         reasons.append("Origin restricted from available ramps.")
     if aircraft_type == "767":
         reasons.append("767 footprint cannot fit in available slots.")
+    top_rejection = diagnostics.get("top_rejection_reason")
+    if top_rejection:
+        reasons.append(top_rejection)
     if not include_remote:
         reasons.append("Remote disabled.")
     if not include_throat:

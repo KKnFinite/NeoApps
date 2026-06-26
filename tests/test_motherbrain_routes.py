@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 import json
 from pathlib import Path
 import re
@@ -6623,6 +6623,110 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(preview["solver_status"], "OPTIMAL")
         self.assertEqual(preview["suggested_assignments"][0]["tail"], "N457UP")
         self.assertEqual(preview["suggested_assignments"][0]["label"], "A01 Slot 1")
+
+    def test_parking_optimizer_real_sized_case_suggests_partial_plan(self):
+        operation = self._parking_operation()
+        origins = ("ONT", "SDF", "DFW", "PHX", "LAX", "MIA")
+        for index in range(26):
+            self._parking_pair(
+                operation,
+                f"N{300 + index}UP",
+                arrival_local=datetime(2026, 6, 18, 22, 0) + timedelta(minutes=5 * index),
+                departure_local=datetime(2026, 6, 19, 1, 0) + timedelta(minutes=3 * index),
+                origin=origins[index % len(origins)],
+                destination=origins[(index + 2) % len(origins)],
+            )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+
+        self.assertIn(preview["solver_status"], {"OPTIMAL", "FEASIBLE"})
+        self.assertEqual(preview["candidate_tail_count"], 26)
+        self.assertGreater(len(preview["suggested_assignments"]), 0)
+        self.assertEqual(
+            len(preview["suggested_assignments"]) + len(preview["unassigned_tails"]),
+            26,
+        )
+        self.assertNotIn("scoring constraints", json.dumps(preview))
+
+    def test_parking_optimizer_can_return_partial_suggestions(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", origin="ONT", aircraft_type="757")
+        self._parking_pair(operation, "N349UP", origin="SDF", aircraft_type="757", destination="SDF")
+        self._parking_rule(ORIGIN_RAMP_RESTRICTION, "origin", "ONT", "R", behavior="required")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation, include_remote=False)
+        suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
+        unresolved = {row["tail"]: row for row in preview["unassigned_tails"]}
+
+        self.assertIn("N349UP", suggestions)
+        self.assertIn("N457UP", unresolved)
+        self.assertIn("Remote disabled.", unresolved["N457UP"]["reason"])
+
+    def test_parking_optimizer_unknown_status_reports_solver_diagnostic(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        db.session.commit()
+
+        from ortools.sat.python import cp_model
+
+        class UnknownSolver:
+            def __init__(self):
+                self.parameters = SimpleNamespace(max_time_in_seconds=None)
+
+            def Solve(self, model):
+                return cp_model.UNKNOWN
+
+            def StatusName(self, status):
+                return "UNKNOWN"
+
+            def WallTime(self):
+                return 0.001
+
+        with patch("app.services.parking_optimizer.cp_model.CpSolver", UnknownSolver):
+            preview = self._parking_optimizer_preview(operation)
+
+        self.assertEqual(preview["solver_status"], "UNKNOWN")
+        self.assertEqual(preview["suggested_assignments"], [])
+        self.assertIn("solver/model time diagnostic", preview["solver_diagnostic"])
+        self.assertIn("candidate positions remain after hard filters", preview["unassigned_tails"][0]["reason"])
+        self.assertNotIn("scoring constraints", preview["unassigned_tails"][0]["reason"])
+
+    def test_parking_optimizer_remote_and_throat_off_still_allow_normal_ramps(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(
+            operation,
+            include_remote=False,
+            include_throat=False,
+        )
+
+        self.assertEqual(preview["suggested_assignments"][0]["position"], "A01")
+
+    def test_parking_optimizer_soft_avoid_rules_do_not_block_feasibility(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", origin="ONT", aircraft_type="757")
+        for ramp in ("A", "B", "C", "D", "E"):
+            self._parking_rule(
+                ORIGIN_RAMP_PREFERENCE,
+                "origin",
+                "ONT",
+                ramp,
+                behavior="avoid",
+            )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(
+            operation,
+            include_remote=False,
+            include_throat=False,
+        )
+
+        self.assertIn(preview["solver_status"], {"OPTIMAL", "FEASIBLE"})
+        self.assertEqual(preview["suggested_assignments"][0]["tail"], "N457UP")
 
     def test_parking_optimizer_preserves_locked_manual_assignments(self):
         operation = self._parking_operation()
