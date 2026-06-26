@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand %}
 
 {% block title %}DISCHARGE | NeoSektor{% endblock %}
 
@@ -26,7 +27,7 @@
 >
     <header class="app-header neosektor-standalone-header">
         <div class="header-title">
-            <p><span class="neo-node-name node-sektor" aria-label="NeoSektor"><span class="neo-word">Neo</span><span class="node-word">Sektor</span></span></p>
+            <p>{{ neo_brand("Sektor", "sektor") }}</p>
             <h1 id="neosektor-discharge-title">Discharge</h1>
         </div>
         {% if not can_edit %}
@@ -115,7 +116,7 @@
             {% else %}
             <div class="neosektor-discharge-empty">
                 <h2>NO ACTIVE ULD REQUESTS</h2>
-                <p>Door requests will appear here when NeoErmac users request A2, A1, or AMP equipment.</p>
+                <p>Door requests will appear here when {{ neo_brand("Ermac", "ermac") }} users request A2, A1, or AMP equipment.</p>
             </div>
             {% endif %}
         </section>

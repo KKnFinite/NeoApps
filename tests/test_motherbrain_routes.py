@@ -108,8 +108,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b'class="motherbrain-header-logo"', response.data)
         self.assertIn(b"motherbrain-screen-logo", response.data)
         self.assertIn(b"neo-node-name neo-node-motherbrain", response.data)
-        self.assertIn(b'<span class="neo-word">Neo</span>', response.data)
-        self.assertIn(b'<span class="node-word">MotherBrain</span>', response.data)
+        self.assertIn(b"neo-brand--motherbrain", response.data)
+        self.assertIn(b"neo-brand__neo neo-word", response.data)
+        self.assertIn(b"neo-brand__node node-word", response.data)
+        self.assertNotIn(b"<h1>NeoMotherBrain</h1>", response.data)
         self.assertIn(b"DASHBOARD", response.data)
         self.assertNotIn(b"NEOMOTHERBRAIN", response.data)
         self.assertNotIn(b">Command<", response.data)
@@ -186,7 +188,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertIn(b"motherbrain-fixed-header", response.data)
                 self.assertIn(b'class="motherbrain-header-logo-link"', response.data)
                 self.assertIn(b'class="motherbrain-header-logo"', response.data)
-                self.assertIn(b"NeoMotherBrain", response.data)
+                self.assertIn(b"neo-brand--motherbrain", response.data)
+                self.assertIn(b"neo-brand__neo neo-word", response.data)
+                self.assertIn(b"neo-brand__node node-word", response.data)
                 self.assertNotIn(b"NEOMOTHERBRAIN", response.data)
                 self.assertNotIn(b">Command<", response.data)
                 self.assertNotIn(b"Command Console", response.data)
@@ -204,7 +208,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertIn(b"MANAGE SORT", response.data)
                 self.assertIn(b"SORT TIMELINE", response.data)
                 self.assertIn(b'href="/motherbrain"', response.data)
-                self.assertIn(b"BACK TO NeoMotherBrain MAIN MENU", response.data)
+                self.assertIn(b"BACK TO", response.data)
+                self.assertIn(b"neo-brand--motherbrain", response.data)
+                self.assertIn(b"MAIN MENU", response.data)
                 self.assertIn(b"motherbrain-main-menu-return", response.data)
                 self.assertIn(b'href="/motherbrain"', response.data)
                 self.assertIn(b'aria-label="BACK TO NeoMotherBrain MAIN MENU"', response.data)
@@ -1373,12 +1379,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
         html = response.data.decode()
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("BACK TO NeoMotherBrain MAIN MENU", html)
+        self.assertIn("BACK TO", html)
+        self.assertIn("neo-brand--motherbrain", html)
+        self.assertIn("MAIN MENU", html)
         footer_html = html.split('class="motherbrain-main-menu-return"', 1)[1].split("</div>", 1)[0]
         self.assertIn('href="/motherbrain"', footer_html)
         self.assertLess(
             html.index("MASTER ARRIVALS"),
-            html.index("BACK TO NeoMotherBrain MAIN MENU"),
+            html.index('class="motherbrain-main-menu-return"'),
         )
 
         home_response = self.client.get("/motherbrain", follow_redirects=False)
@@ -1743,9 +1751,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 else:
                     self.assertNotIn(b"motherbrain-home-page", response.data)
                     self.assertNotIn(b"motherbrain-screen-logo", response.data)
-                    self.assertIn(b"BACK TO NeoMotherBrain MAIN MENU", response.data)
+                    self.assertIn(b"BACK TO", response.data)
+                    self.assertIn(b"neo-brand--motherbrain", response.data)
+                    self.assertIn(b"MAIN MENU", response.data)
                     self.assertIn(b"motherbrain-main-menu-return", response.data)
-                    self.assertIn(b"NeoMotherBrain", response.data)
+                    self.assertIn(b"neo-brand--motherbrain", response.data)
                 self.assertNotIn(b"NEOMOTHERBRAIN", response.data)
                 self.assertNotIn(b">Command<", response.data)
                 self.assertNotIn(b"Command Console", response.data)

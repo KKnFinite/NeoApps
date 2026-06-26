@@ -65,6 +65,24 @@
     --node-staffing-primary-rgb: 36, 214, 199;
     --node-staffing-secondary-rgb: 23, 49, 58;
     --node-staffing-highlight-rgb: 77, 183, 255;
+    --node-portal-primary: #4db7ff;
+    --node-portal-secondary: #20364f;
+    --node-portal-highlight: #c8f4ff;
+    --node-portal-primary-rgb: 77, 183, 255;
+    --node-portal-secondary-rgb: 32, 54, 79;
+    --node-portal-highlight-rgb: 200, 244, 255;
+    --node-apps-primary: #4db7ff;
+    --node-apps-secondary: #20364f;
+    --node-apps-highlight: #c8f4ff;
+    --node-apps-primary-rgb: 77, 183, 255;
+    --node-apps-secondary-rgb: 32, 54, 79;
+    --node-apps-highlight-rgb: 200, 244, 255;
+    --node-bid-primary: #8c96aa;
+    --node-bid-secondary: #343a48;
+    --node-bid-highlight: #d8dde5;
+    --node-bid-primary-rgb: 140, 150, 170;
+    --node-bid-secondary-rgb: 52, 58, 72;
+    --node-bid-highlight-rgb: 216, 221, 229;
     --mobile-node-banner-button-height: 36px;
 }
 
@@ -158,6 +176,36 @@
     --node-rgb: var(--node-staffing-primary-rgb);
     --node-secondary-rgb: var(--node-staffing-secondary-rgb);
     --node-highlight-rgb: var(--node-staffing-highlight-rgb);
+}
+
+.theme-portal,
+.node-portal {
+    --node-primary: var(--node-portal-primary);
+    --node-secondary: var(--node-portal-secondary);
+    --node-highlight: var(--node-portal-highlight);
+    --node-rgb: var(--node-portal-primary-rgb);
+    --node-secondary-rgb: var(--node-portal-secondary-rgb);
+    --node-highlight-rgb: var(--node-portal-highlight-rgb);
+}
+
+.theme-apps,
+.node-apps {
+    --node-primary: var(--node-apps-primary);
+    --node-secondary: var(--node-apps-secondary);
+    --node-highlight: var(--node-apps-highlight);
+    --node-rgb: var(--node-apps-primary-rgb);
+    --node-secondary-rgb: var(--node-apps-secondary-rgb);
+    --node-highlight-rgb: var(--node-apps-highlight-rgb);
+}
+
+.theme-bid,
+.node-bid {
+    --node-primary: var(--node-bid-primary);
+    --node-secondary: var(--node-bid-secondary);
+    --node-highlight: var(--node-bid-highlight);
+    --node-rgb: var(--node-bid-primary-rgb);
+    --node-secondary-rgb: var(--node-bid-secondary-rgb);
+    --node-highlight-rgb: var(--node-bid-highlight-rgb);
 }
 
 .blueprint-public,
@@ -260,7 +308,8 @@
     width: min(2040px, calc(100% - 18px));
 }
 
-.neo-node-name {
+.neo-node-name,
+.neo-brand {
     display: inline-flex;
     align-items: baseline;
     justify-content: center;
@@ -272,7 +321,8 @@
 }
 
 .neo-word,
-.neo-node-prefix {
+.neo-node-prefix,
+.neo-brand__neo {
     color: var(--neo-bright-silver);
     text-shadow:
         0 0 10px rgba(244, 247, 251, 0.3),
@@ -280,7 +330,8 @@
 }
 
 .node-word,
-.neo-node-suffix {
+.neo-node-suffix,
+.neo-brand__node {
     color: var(--node-primary, var(--red));
     text-shadow:
         0 0 12px rgba(var(--node-rgb, 255, 47, 47), 0.5),
@@ -1672,6 +1723,12 @@ a {
     filter:
         drop-shadow(0 18px 30px rgba(0, 0, 0, 0.72))
         drop-shadow(0 0 24px rgba(var(--node-rgb), 0.3));
+}
+
+.neoermac-dashboard-brand {
+    margin: -2px 0 0;
+    font-size: clamp(1rem, 3.8vw, 1.55rem);
+    letter-spacing: 0.08em;
 }
 
 .neoermac-dashboard-panel {
@@ -15791,7 +15848,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         text-shadow: 0 2px 10px rgba(0, 0, 0, 0.72);
     }
 
-    .mobile-topbar-title span,
+    .mobile-topbar-title > span,
     .mobile-topbar-title strong {
         display: block;
         overflow: hidden;
@@ -15800,13 +15857,17 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         white-space: nowrap;
     }
 
-    .mobile-topbar-title span {
+    .mobile-topbar-title > span {
         color: var(--node-highlight);
         font-size: 0.62rem;
         font-weight: 950;
         letter-spacing: 0.06em;
         line-height: 1;
         text-transform: uppercase;
+    }
+
+    .mobile-topbar-title .neo-brand {
+        display: inline-flex;
     }
 
     .mobile-topbar-title strong {
@@ -16085,7 +16146,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 }
 
 @media (max-width: 430px) {
-    .mobile-topbar-title span,
+    .mobile-topbar-title > span,
     .mobile-topbar-title strong {
         max-width: min(50vw, 210px);
     }

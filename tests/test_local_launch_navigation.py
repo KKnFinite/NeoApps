@@ -332,7 +332,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(b"NeoApps", response.data)
         self.assertIn(b"PORTAL", response.data)
         self.assertNotIn(b"NeoRFD", response.data)
-        self.assertIn(b"Powered by NeoApps", response.data)
+        self.assertIn(b"Powered by", response.data)
+        self.assertIn(b"neo-brand--apps", response.data)
         self.assertNotIn(b"Gateway Command Layer", response.data)
         self.assertNotIn(b'class="gateway-context"', response.data)
         self.assertNotIn(b'class="platform-brand"', response.data)
@@ -448,7 +449,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("data-mobile-alert-nav", html)
         self.assertIn("data-mobile-shell-menu-button", html)
         self.assertIn("account-motherbrain-128.png", html)
-        self.assertIn("Back to NeoPortal", html)
+        self.assertIn("Back to", html)
+        self.assertIn("neo-brand--portal", html)
         self.assertIn('href="/logout"', html)
         self.assertIn("<span>Home</span>", html)
         self.assertIn("<span>Alerts</span>", html)
@@ -496,7 +498,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("data-mobile-topbar", html)
         self.assertIn("data-mobile-bottom-nav", html)
         self.assertIn("mobile-account-fallback", html)
-        self.assertNotIn("Back to NeoPortal", html)
+        self.assertNotIn('role="menuitem">Back to', html)
 
     def test_public_pages_do_not_render_authenticated_mobile_shell(self):
         response = self.client.get("/")

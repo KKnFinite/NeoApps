@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand %}
 
 {% block title %}NeoStaffing People Management{% endblock %}
 
@@ -6,7 +7,7 @@
 <section class="neostaffing-page theme-staffing" aria-labelledby="staffing-people-title">
     <div class="neostaffing-hero neostaffing-hero-compact">
         <div class="neostaffing-hero-copy">
-            <p class="neostaffing-eyebrow"><span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span></p>
+            <p class="neostaffing-eyebrow">{{ neo_brand("Staffing", "staffing") }}</p>
             <h1 id="staffing-people-title">PEOPLE</h1>
             <p>Maintain people, classification, seniority date, phone number, and active status.</p>
         </div>

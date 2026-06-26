@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand %}
 
 {% block title %}NeoStaffing Seniority{% endblock %}
 
@@ -53,7 +54,7 @@
             <a href="{{ url_for('neostaffing.management_assignments') }}">LEADERSHIP</a>
             <a href="{{ url_for('neostaffing.app_management') }}">APP MANAGEMENT</a>
             {% endif %}
-            <a class="neostaffing-rail-return" href="{{ url_for('auth.portal_dashboard') }}">NEOAPPS PORTAL</a>
+            <a class="neostaffing-rail-return" href="{{ url_for('auth.portal_dashboard') }}">{{ neo_brand("Apps", "apps") }} PORTAL</a>
         </aside>
 
         <main class="neostaffing-dashboard-main">

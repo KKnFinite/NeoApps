@@ -60,7 +60,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"SENIORITY", response.data)
         self.assertIn(b"MANAGE", response.data)
         self.assertIn(b"APP MANAGEMENT", response.data)
-        self.assertIn(b"NEOAPPS PORTAL", response.data)
+        self.assertIn(b"neo-brand--apps", response.data)
         self.assertNotIn(b"NeoMotherBrain", response.data)
         self.assertNotIn(b"Change Characters", response.data)
 

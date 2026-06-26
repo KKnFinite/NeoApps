@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand %}
 
 {% block title %}NeoStaffing Management Assignments{% endblock %}
 
@@ -6,7 +7,7 @@
 <section class="neostaffing-page theme-staffing" aria-labelledby="staffing-management-assignments-title">
     <div class="neostaffing-hero neostaffing-hero-compact">
         <div class="neostaffing-hero-copy">
-            <p class="neostaffing-eyebrow"><span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span></p>
+            <p class="neostaffing-eyebrow">{{ neo_brand("Staffing", "staffing") }}</p>
             <h1 id="staffing-management-assignments-title">MANAGEMENT ASSIGNMENTS</h1>
             <p>Assign supervisors, specialists, managers, and division managers to their leadership scopes.</p>
         </div>

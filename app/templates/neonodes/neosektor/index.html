@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand %}
 
 {% block title %}NeoSektor | NeoGateway{% endblock %}
 
@@ -6,7 +7,7 @@
 <section class="neosektor-standalone-page neosektor-dashboard-shell mode-view" aria-label="NeoSektor dashboard">
     <header class="app-header neosektor-standalone-header">
         <div class="header-title">
-            <p><span class="neo-node-name node-sektor" aria-label="NeoSektor"><span class="neo-word">Neo</span><span class="node-word">Sektor</span></span></p>
+            <p>{{ neo_brand("Sektor", "sektor") }}</p>
             <h1>Operations Menu</h1>
         </div>
         <span class="header-link header-link-static">{{ gateway.code }}</span>
@@ -16,9 +17,7 @@
         <section class="wave-strip neosektor-dashboard-title-strip" aria-label="NeoSektor status">
             <article class="wave-card">
                 <h2>
-                    <span class="neo-node-name neo-node-sektor node-sektor" aria-label="NeoSektor">
-                        <span class="neo-word">Neo</span><span class="node-word">Sektor</span>
-                    </span>
+                    {{ neo_brand("Sektor", "sektor", "neo-node-sektor") }}
                 </h2>
                 <div class="wave-metrics">
                     <div>

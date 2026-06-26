@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand %}
 
 {% macro node_label(slug, name) -%}
-<span class="neo-node-name rfd-node-name node-{{ slug }}" aria-label="Neo{{ name }}"><span class="neo-word">Neo</span><span class="node-word">{{ name }}</span></span>
+{{ neo_brand(name, slug, "rfd-node-name", "Neo" ~ name) }}
 {%- endmacro %}
 
 {% macro node_card(slug, name, icon_folder, description) -%}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand %}
 
 {% block title %}NeoStaffing Planned Staffing{% endblock %}
 
@@ -7,7 +8,7 @@
 <section class="neostaffing-page theme-staffing" aria-labelledby="staffing-planned-title">
     <div class="neostaffing-hero neostaffing-hero-compact">
         <div class="neostaffing-hero-copy">
-            <p class="neostaffing-eyebrow"><span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span></p>
+            <p class="neostaffing-eyebrow">{{ neo_brand("Staffing", "staffing") }}</p>
             <h1 id="staffing-planned-title">PLANNED STAFFING</h1>
             <p>Set Work Area staffing plans used by the Board. Blank keeps the Board defaulted to assigned staffing.</p>
         </div>

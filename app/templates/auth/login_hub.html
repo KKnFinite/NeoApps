@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand %}
 
 {% set public_landing = true %}
 {% block title %}NeoApps Portal{% endblock %}
@@ -7,9 +8,9 @@
 <section class="motherbrain-command public-command" aria-label="NeoApps Portal login">
     <section class="motherbrain-core">
         <div class="portal-login-brand">
-            <span class="neo-node-name brand-inline-name node-gateway"><span class="neo-word">Neo</span><span class="node-word">Apps</span></span>
+            {{ neo_brand("Apps", "apps") }}
             <strong>PORTAL</strong>
-            <p class="muted">Sign in once, then enter your approved NeoApps systems.</p>
+            <p class="muted">Sign in once, then enter your approved {{ neo_brand("Apps", "apps") }} systems.</p>
         </div>
 
         <form class="command-login-form" method="post" action="{{ url_for('auth.login') }}">

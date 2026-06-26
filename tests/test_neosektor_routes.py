@@ -70,6 +70,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoSektor", response.data)
+        self.assertIn(b"neo-brand--sektor", response.data)
+        self.assertIn(b"neo-brand__neo neo-word", response.data)
+        self.assertIn(b"neo-brand__node node-word", response.data)
+        self.assertNotIn(b"<h1>NeoSektor</h1>", response.data)
         self.assertIn(b"Live Counts", response.data)
         self.assertIn(b"data-live-counts", response.data)
         self.assertNotIn(b"Operations Menu", response.data)

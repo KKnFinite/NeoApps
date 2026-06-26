@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand %}
 
 {% block title %}MotherBrain | NeoApps{% endblock %}
 
@@ -8,7 +9,7 @@
         <img src="{{ url_for('static', filename='images/motherbrain_logo1.png') }}" alt="MotherBrain logo">
     </div>
     <section class="motherbrain-dashboard" aria-labelledby="motherbrain-dashboard-title">
-        <h1 id="motherbrain-dashboard-title"><span class="neo-node-name neo-node-motherbrain node-motherbrain" aria-label="NeoMotherBrain"><span class="neo-word">Neo</span><span class="node-word">MotherBrain</span></span> DASHBOARD</h1>
+        <h1 id="motherbrain-dashboard-title">{{ neo_brand("MotherBrain", "motherbrain", "neo-node-motherbrain") }} DASHBOARD</h1>
         <section class="motherbrain-current-sort-overview" aria-labelledby="current-sort-overview-title">
             <div class="section-heading">
                 <h2 id="current-sort-overview-title">CURRENT SORT OVERVIEW</h2>

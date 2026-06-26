@@ -442,6 +442,10 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoGateway", response.data)
+        self.assertIn(b"neo-brand--gateway", response.data)
+        self.assertIn(b"neo-brand__neo neo-word", response.data)
+        self.assertIn(b"neo-brand__node node-word", response.data)
+        self.assertNotIn(b"<h2>NeoGateway</h2>", response.data)
         self.assertIn(b"APPROVED", response.data)
         self.assertIn(b'href="/rfd"', response.data)
         self.assertIn(b"NeoStaffing", response.data)

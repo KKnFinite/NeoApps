@@ -83,6 +83,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoErmac", response.data)
+        self.assertIn(b'class="neoermac-dashboard-brand"', response.data)
+        self.assertIn(b"neo-brand--ermac", response.data)
+        self.assertIn(b"neo-brand__neo neo-word", response.data)
+        self.assertIn(b"neo-brand__node node-word", response.data)
+        self.assertNotIn(b"<h1>NeoErmac</h1>", response.data)
         self.assertIn(b'src="/static/images/neoermac_logo1_large.png"', response.data)
         self.assertIn(b'srcset="/static/images/neoermac_logo1_medium.png"', response.data)
         self.assertIn(b'srcset="/static/images/neoermac_logo1_small.png"', response.data)

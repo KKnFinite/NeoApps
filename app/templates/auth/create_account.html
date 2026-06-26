@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand, neo_brand_name %}
 
 {% block title %}Create Account | NeoApps Portal{% endblock %}
 
@@ -6,7 +7,7 @@
 <section class="panel compact-panel centered-command-page">
     <div class="section-heading">
         <h1>Create Account</h1>
-        <p class="muted">New accounts request access to one or more NeoApps systems for review.</p>
+        <p class="muted">New accounts request access to one or more {{ neo_brand("Apps", "apps") }} systems for review.</p>
     </div>
 
     <form class="operation-form" method="post">
@@ -41,6 +42,7 @@
         <fieldset class="portal-app-request-fieldset">
             <legend>REQUEST APP ACCESS</legend>
             {% for app in app_definitions %}
+            {% set app_brand_key = "gateway" if app.code == "neogateway" else ("staffing" if app.code == "neostaffing" else ("bid" if app.code == "neobid" else app.code)) %}
             <label class="checkbox-line">
                 <input
                     type="checkbox"
@@ -48,7 +50,7 @@
                     value="{{ app.code }}"
                     {% if app.code in form.app_codes %}checked{% endif %}
                 >
-                <span>{{ app.name }}</span>
+                <span>{{ neo_brand_name(app.name, app_brand_key) }}</span>
             </label>
             {% endfor %}
         </fieldset>

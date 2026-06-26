@@ -62,7 +62,10 @@ class GrandmasterUserManagementTest(unittest.TestCase):
                 self.assertIn(b"motherbrain-fixed-header", response.data)
                 self.assertIn(b'class="motherbrain-header-logo-link"', response.data)
                 self.assertIn(b'class="motherbrain-header-logo"', response.data)
-                self.assertNotIn("NeoMotherBrain", header_html)
+                self.assertIn("neo-brand--motherbrain", header_html)
+                self.assertIn("neo-brand__neo neo-word", header_html)
+                self.assertIn("neo-brand__node node-word", header_html)
+                self.assertNotIn("<strong>NeoMotherBrain</strong>", header_html)
                 self.assertNotIn("NEOMOTHERBRAIN", header_html)
                 self.assertNotIn("NeoRFD command", header_html)
                 self.assertNotIn("NEORFD COMMAND", header_html)
@@ -78,7 +81,9 @@ class GrandmasterUserManagementTest(unittest.TestCase):
                 self.assertIn(b"MASTER SCHEDULE", response.data)
                 self.assertIn(b"MANAGE SORT", response.data)
                 self.assertIn(b'href="/motherbrain"', response.data)
-                self.assertIn(b"BACK TO NeoMotherBrain MAIN MENU", response.data)
+                self.assertIn(b"BACK TO", response.data)
+                self.assertIn(b"neo-brand--motherbrain", response.data)
+                self.assertIn(b"MAIN MENU", response.data)
                 self.assertIn(b"motherbrain-main-menu-return", response.data)
 
     def test_master_cannot_access_grandmaster_user_management(self):

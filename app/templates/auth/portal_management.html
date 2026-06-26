@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand %}
 
 {% block title %}Portal Management | NeoApps{% endblock %}
 
@@ -6,7 +7,7 @@
 <section class="panel users-panel centered-command-page">
     <div class="section-heading">
         <h1>PORTAL MANAGEMENT</h1>
-        <p class="muted">Manage NeoApps users and app-level access.</p>
+        <p class="muted">Manage {{ neo_brand("Apps", "apps") }} users and app-level access.</p>
     </div>
 
     <section class="user-management-stack" aria-labelledby="app-access-requests-title">

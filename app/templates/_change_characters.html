@@ -1,3 +1,4 @@
+{% from "_neo_brand.html" import neo_brand %}
 {% set character_targets = change_character_targets() %}
 {% if character_targets %}
 <details class="character-switcher {{ character_switcher_modifier|default('') }}" data-character-switcher>
@@ -10,9 +11,7 @@
             role="menuitem"
             {% if target.is_current %}aria-current="page"{% endif %}
         >
-            <span class="neo-node-name brand-inline-name node-{{ target.key }}">
-                <span class="neo-word">Neo</span><span class="node-word">{{ target.node_word }}</span>
-            </span>
+            {{ neo_brand(target.node_word, target.key) }}
             {% if target.suffix %}
             <span class="character-switcher-suffix">{{ target.suffix }}</span>
             {% endif %}

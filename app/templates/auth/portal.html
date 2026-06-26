@@ -1,12 +1,13 @@
 {% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand, neo_brand_name %}
 
 {% block title %}NeoApps Portal{% endblock %}
 
 {% block content %}
 <section class="portal-page centered-command-page">
     <div class="section-heading">
-        <h1><span class="neo-word">Neo</span>Apps Portal</h1>
-        <p class="muted">Choose an approved NeoApps system or request access.</p>
+        <h1>{{ neo_brand("Apps", "apps") }} Portal</h1>
+        <p class="muted">Choose an approved {{ neo_brand("Apps", "apps") }} system or request access.</p>
     </div>
 
     <section class="portal-app-grid" aria-label="NeoApps systems">
@@ -14,9 +15,10 @@
         {% set app = row.app %}
         {% set access = row.access %}
         {% set status = access.status if access else "none" %}
+        {% set app_brand_key = "gateway" if app.code == "neogateway" else ("staffing" if app.code == "neostaffing" else ("bid" if app.code == "neobid" else app.code)) %}
         <article class="portal-app-card portal-app-{{ app.code }} is-{{ status }}">
             <div>
-                <h2>{{ app.name }}</h2>
+                <h2>{{ neo_brand_name(app.name, app_brand_key) }}</h2>
                 <p class="muted">{{ app.description }}</p>
             </div>
             <div class="portal-app-state">
@@ -47,15 +49,16 @@
     {% if install_rows %}
     <section class="portal-install-section" aria-labelledby="portal-install-title">
         <div class="section-heading portal-install-heading">
-            <h2 id="portal-install-title">Install NeoApps</h2>
+            <h2 id="portal-install-title">Install {{ neo_brand("Apps", "apps") }}</h2>
             <p class="muted">Install approved apps and nodes on this device. If your browser does not show an install prompt, the button opens the app so you can use the browser install option there.</p>
         </div>
         <div class="portal-install-grid" aria-label="Installable approved apps and nodes">
             {% for install in install_rows %}
+            {% set install_brand_key = "gateway" if install.manifest_key == "neogateway" else ("staffing" if install.manifest_key == "neostaffing" else ("bid" if install.manifest_key == "neobid" else ("portal" if install.manifest_key == "neoportal" else install.manifest_key))) %}
             <article class="portal-install-card portal-install-{{ install.manifest_key }}">
                 <img class="portal-install-icon" src="{{ install.icon_src }}" alt="" loading="lazy" width="64" height="64">
                 <div class="portal-install-copy">
-                    <h3>{{ install.name }}</h3>
+                    <h3>{{ neo_brand_name(install.name, install_brand_key) }}</h3>
                     <p class="muted">{{ install.description }}</p>
                     <p class="portal-install-status" id="install-status-{{ install.manifest_key }}" data-install-status aria-live="polite"></p>
                 </div>
@@ -63,7 +66,6 @@
                     class="action-button portal-install-button"
                     href="{{ install.start_url }}"
                     data-install-button
-                    data-install-name="{{ install.name }}"
                     data-manifest-url="{{ install.manifest_url }}"
                     data-start-url="{{ install.start_url }}"
                     aria-describedby="install-status-{{ install.manifest_key }}"
@@ -112,8 +114,6 @@
             const manifestUrl = button.dataset.manifestUrl || "";
             const targetManifest = new URL(manifestUrl, window.location.origin);
             const targetStartUrl = button.dataset.startUrl || button.getAttribute("href") || "/portal";
-            const targetName = button.dataset.installName || "this app";
-
             if (manifestLink && manifestUrl) {
                 manifestLink.href = manifestUrl;
             }
@@ -122,11 +122,11 @@
                 deferredInstallPrompt.prompt();
                 await deferredInstallPrompt.userChoice.catch(() => null);
                 deferredInstallPrompt = null;
-                setStatus(button, `${targetName} install prompt completed.`);
+                setStatus(button, "Install prompt completed.");
                 return;
             }
 
-            setStatus(button, `Opening ${targetName}. Use your browser install option if no prompt appears.`);
+            setStatus(button, "Opening selected app. Use your browser install option if no prompt appears.");
             window.setTimeout(() => {
                 window.location.assign(targetStartUrl);
             }, 700);

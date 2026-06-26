@@ -1,15 +1,16 @@
 {% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand, neo_brand_name %}
 
 {% block title %}{{ app_name }} | NeoApps{% endblock %}
 
 {% block content %}
 <section class="panel compact-panel centered-command-page">
     <div class="section-heading">
-        <h1>{{ app_name }}</h1>
-        <p class="muted">{{ app_status }}. This NeoApps system shell is ready for future buildout.</p>
+        <h1>{{ neo_brand_name(app_name) }}</h1>
+        <p class="muted">{{ app_status }}. This {{ neo_brand("Apps", "apps") }} system shell is ready for future buildout.</p>
     </div>
     <div class="action-row">
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.portal_dashboard') }}">BACK TO NEOAPPS PORTAL</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.portal_dashboard') }}">BACK TO {{ neo_brand("Apps", "apps") }} PORTAL</a>
     </div>
 </section>
 {% endblock %}

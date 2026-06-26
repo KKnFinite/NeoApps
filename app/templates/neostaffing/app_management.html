@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand %}
 
 {% block title %}NeoStaffing App Management{% endblock %}
 
@@ -53,8 +54,8 @@
     </section>
 
     <div class="action-row">
-        <a class="action-button" href="{{ url_for('neostaffing.index') }}">BACK TO NEOSTAFFING</a>
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.portal_dashboard') }}">BACK TO NEOAPPS PORTAL</a>
+        <a class="action-button" href="{{ url_for('neostaffing.index') }}">BACK TO {{ neo_brand("Staffing", "staffing") }}</a>
+        <a class="action-button action-button-secondary" href="{{ url_for('auth.portal_dashboard') }}">BACK TO {{ neo_brand("Apps", "apps") }} PORTAL</a>
     </div>
         </div>
     </div>

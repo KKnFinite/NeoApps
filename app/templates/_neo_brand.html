@@ -1,0 +1,17 @@
+{% macro neo_brand(node_word, key="gateway", extra_classes="", aria_label=None) -%}
+<span class="neo-brand neo-brand--{{ key }} neo-node-name{% if extra_classes %} {{ extra_classes }}{% endif %} brand-inline-name node-{{ key }}" aria-label="{{ aria_label or ('Neo' ~ node_word) }}"><span class="neo-brand__neo neo-word">Neo</span><span class="neo-brand__node node-word">{{ node_word }}</span></span>
+{%- endmacro %}
+
+{% macro neo_brand_name(name, key=None, extra_classes="") -%}
+{% set label = name|string %}
+{% set display_key = key or label|lower|replace("neo", "")|replace("-", "") %}
+{% if label == "NeoApps Portal" %}
+{{ neo_brand("Apps", "apps", extra_classes, "NeoApps") }} Portal
+{% elif label == "NeoPortal" %}
+{{ neo_brand("Portal", "portal", extra_classes, label) }}
+{% elif label.startswith("Neo") %}
+{{ neo_brand(label[3:], display_key, extra_classes, label) }}
+{% else %}
+{{ label }}
+{% endif %}
+{%- endmacro %}

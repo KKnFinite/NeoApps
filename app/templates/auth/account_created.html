@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand %}
 
 {% block title %}Account Created | NeoApps Portal{% endblock %}
 
@@ -8,7 +9,7 @@
         <h1>Verify Your Email</h1>
     </div>
     <p class="hero-copy">
-        Your NeoApps Portal account request was created. Verify your email address, then wait for app access approval before entering approved systems.
+        Your {{ neo_brand("Apps", "apps") }} Portal account request was created. Verify your email address, then wait for app access approval before entering approved systems.
     </p>
     <div class="action-row">
         <a class="action-button" href="{{ url_for('auth.login') }}">Return to Login</a>
