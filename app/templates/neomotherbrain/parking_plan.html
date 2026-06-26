@@ -134,25 +134,15 @@
         <article><span>CONFLICTS</span><strong>{{ summary.conflict_count }}</strong></article>
     </section>
 
-    <section class="parking-status-panel{% if parking_status.has_warnings %} has-warnings{% else %} is-clean{% endif %}" aria-label="Parking warnings and status">
+    {% set has_parking_conflict_details = parking_status.duplicate_tail_conflicts or parking_status.duplicate_slot_conflicts or parking_status.physical_conflicts or parking_status.parked_unlinked_tails or parking_status.oos_active_missions %}
+    {% if has_parking_conflict_details %}
+    <section class="parking-status-panel has-warnings" aria-label="Parking conflict details">
         <div class="parking-status-heading">
             <div>
-                <span>PARKING STATUS</span>
-                <h2>{{ "CHECK ASSIGNMENTS" if parking_status.has_warnings else "NO PARKING CONFLICTS" }}</h2>
-            </div>
-            <div class="parking-status-counts" aria-label="Parking assignment counts">
-                <span>TOTAL {{ parking_status.summary.total_tails_needing_parking }}</span>
-                <span>ASSIGNED {{ parking_status.summary.assigned_tails }}</span>
-                <span>UNASSIGNED {{ parking_status.summary.unassigned_tails }}</span>
+                <span>PARKING CONFLICTS</span>
+                <h2>REVIEW PARKING DETAILS</h2>
             </div>
         </div>
-
-        {% if parking_status.unassigned_tails %}
-        <div class="parking-status-line">
-            <strong>UNASSIGNED TAILS</strong>
-            <span>{{ parking_status.unassigned_tails|join(", ") }}</span>
-        </div>
-        {% endif %}
 
         {% if parking_status.duplicate_tail_conflicts %}
         <div class="parking-status-line">
@@ -215,20 +205,6 @@
         </div>
         {% endif %}
 
-        {% if parking_status.not_parked_missions %}
-        <div class="parking-status-line">
-            <strong>NOT PARKED ACTIVE MISSIONS</strong>
-            <ul>
-                {% for warning in parking_status.not_parked_missions %}
-                <li>
-                    <span>{{ warning.tail }}: {{ warning.mission_lines|join(" / ") }}</span>
-                    {% if warning.anchor %}<a class="parking-status-jump" href="#{{ warning.anchor }}">VIEW</a>{% endif %}
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-
         {% if parking_status.oos_active_missions %}
         <div class="parking-status-line">
             <strong>OOS / RED TAILS WITH ACTIVE MISSIONS</strong>
@@ -242,11 +218,8 @@
             </ul>
         </div>
         {% endif %}
-
-        {% if parking_status.is_clean %}
-        <p class="parking-status-clean">All current-sort tails are assigned and no parking conflicts were found.</p>
-        {% endif %}
     </section>
+    {% endif %}
 
     <section class="parking-optimizer-panel" aria-label="Parking optimizer preview">
         <div class="parking-optimizer-heading">
@@ -347,9 +320,9 @@
     </section>
 
     <section class="parking-layout">
-        <aside class="parking-tail-panel" aria-label="Current sort tail checklist" data-parking-unassign-drop>
+        <aside class="parking-tail-panel" aria-label="Unparked tails and parking assignment controls" data-parking-unassign-drop>
             <div class="parking-panel-heading">
-                <h2>TAIL CHECKLIST</h2>
+                <h2>UNPARKED TAILS</h2>
                 <span>{{ summary.assigned_tails }}/{{ summary.total_tails }} ASSIGNED</span>
             </div>
             <div class="parking-mobile-assignment" aria-label="Mobile parking assignment controls">

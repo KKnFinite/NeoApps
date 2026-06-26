@@ -48,7 +48,6 @@
         {{ metric_tile("Remaining API Polling Days", "remaining_api_polling_days", preview.remaining_api_polling_days) }}
         {{ metric_tile("Original Daily Poll Cap", "original_daily_poll_cap", preview.original_daily_poll_cap) }}
         {{ metric_tile("Adjusted Daily Poll Cap", "adjusted_daily_poll_cap", preview.adjusted_daily_poll_cap) }}
-        {{ metric_tile("Budget Poll Interval", "budget_poll_interval_minutes", preview.budget_poll_interval_minutes if preview.budget_poll_interval_minutes is not none else "NONE") }}
         {{ metric_tile("Minimum Auto Poll Interval", "minimum_auto_poll_interval_minutes", preview.minimum_auto_poll_interval_minutes) }}
         {{ metric_tile("Actual Auto Poll Interval", "actual_auto_poll_interval_minutes", preview.actual_auto_poll_interval_minutes if preview.actual_auto_poll_interval_minutes is not none else "NONE") }}
         {{ metric_tile("Projected Polls Per Polling Day", "projected_polls_per_polling_day", preview.projected_polls_per_polling_day) }}

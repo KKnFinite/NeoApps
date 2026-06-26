@@ -1330,7 +1330,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Full-Month API Polling Days", response.data)
         self.assertIn(b"Remaining API Polling Days", response.data)
         self.assertIn(b"Adjusted Daily Poll Cap", response.data)
-        self.assertIn(b"Budget Poll Interval", response.data)
+        self.assertNotIn(b"Budget Poll Interval", response.data)
         self.assertIn(b"Minimum Auto Poll Interval", response.data)
         self.assertIn(b"Actual Auto Poll Interval", response.data)
         self.assertIn(b"Projected Polls Per Polling Day", response.data)
@@ -5536,7 +5536,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"NIGHT", response.data)
         self.assertIn(b"SORT DATE 2026-06-18", response.data)
         self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"'.encode(), response.data)
-        self.assertNotIn(b"TAIL CHECKLIST", response.data)
+        self.assertNotIn(b"UNPARKED TAILS", response.data)
         self.assertNotIn(b"NO CURRENT SORT OPERATION", response.data)
 
     def test_parking_plan_selected_operation_renders_board_and_checklist(self):
@@ -5549,7 +5549,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"PARKING PLAN", response.data)
         self.assertIn(b"motherbrain-parking-plan-page", response.data)
-        self.assertIn(b"TAIL CHECKLIST", response.data)
+        self.assertIn(b"UNPARKED TAILS", response.data)
         self.assertIn(b"N457UP", response.data)
         self.assertIn(b"R01", response.data)
         self.assertIn(b"A01", response.data)
@@ -5855,9 +5855,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn('data-occupied-tail="N457UP"', html)
         self.assertIn("MISSION CANCELLED", html)
         self.assertIn("NO ACTIVE MISSION", html)
-        self.assertIn("TOTAL 1", html)
-        self.assertIn("ASSIGNED 1", html)
-        self.assertIn("UNASSIGNED 0", html)
+        self.assertIn("parking-summary-grid", html)
+        self.assertIn("TOTAL TAILS", html)
+        self.assertIn("ASSIGNED", html)
+        self.assertIn("UNPARKED TAILS", html)
+        self.assertNotIn("CHECK ASSIGNMENTS", html)
+        self.assertNotIn("NOT PARKED ACTIVE MISSIONS", html)
 
     def test_parking_tail_oos_action_marks_red_and_keeps_assignment_and_mission_active(self):
         operation = self._parking_operation()
@@ -6014,7 +6017,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("UNATTACHED TAIL", status_html)
         self.assertIn('href="#PARKING-TAIL-N999UP"', status_html)
 
-    def test_parking_plan_status_panel_counts_and_unassigned_tails(self):
+    def test_parking_plan_hides_redundant_status_panel_for_unparked_tails(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", destination="LAX")
         self._parking_pair(operation, "N349UP", destination="ONT")
@@ -6031,25 +6034,16 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
         html = response.data.decode()
-        status_html = html.split('class="parking-status-panel', 1)[1].split(
-            'class="parking-layout"',
-            1,
-        )[0]
 
-        self.assertIn("PARKING STATUS", status_html)
-        self.assertIn("CHECK ASSIGNMENTS", status_html)
-        self.assertIn("TOTAL 2", status_html)
-        self.assertIn("ASSIGNED 1", status_html)
-        self.assertIn("UNASSIGNED 1", status_html)
-        self.assertIn("UNASSIGNED TAILS", status_html)
-        self.assertIn("N349UP", status_html)
-        self.assertIn("NOT PARKED ACTIVE MISSIONS", status_html)
-        self.assertIn("ARR49", status_html)
-        self.assertIn("DEP49", status_html)
-        self.assertIn('href="#PARKING-TAIL-N349UP"', status_html)
-        self.assertNotIn("No parking conflicts", status_html)
+        self.assertNotIn('class="parking-status-panel', html)
+        self.assertIn("UNPARKED TAILS", html)
+        self.assertIn("N349UP", html)
+        self.assertIn("ONT", html)
+        self.assertNotIn("CHECK ASSIGNMENTS", html)
+        self.assertNotIn("UNASSIGNED TAILS", html)
+        self.assertNotIn("NOT PARKED ACTIVE MISSIONS", html)
 
-    def test_parking_plan_status_panel_shows_clean_state_when_all_assigned(self):
+    def test_parking_plan_hides_status_panel_when_all_assigned_and_clean(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", destination="LAX")
         db.session.commit()
@@ -6065,16 +6059,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
         html = response.data.decode()
-        status_html = html.split('class="parking-status-panel', 1)[1].split(
-            'class="parking-layout"',
-            1,
-        )[0]
 
-        self.assertIn("NO PARKING CONFLICTS", status_html)
-        self.assertIn("TOTAL 1", status_html)
-        self.assertIn("ASSIGNED 1", status_html)
-        self.assertIn("UNASSIGNED 0", status_html)
-        self.assertIn("All current-sort tails are assigned", status_html)
+        self.assertNotIn('class="parking-status-panel', html)
+        self.assertIn("UNPARKED TAILS", html)
+        self.assertIn("All current-sort tails are assigned", html)
+        self.assertNotIn("NO PARKING CONFLICTS", html)
 
     def test_parking_status_helper_detects_duplicate_conflicts(self):
         tail_rows = [
