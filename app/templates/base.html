@@ -195,39 +195,6 @@
                     </div>
                 </details>
             </div>
-            <nav class="mobile-topbar-menu-panel" aria-label="Mobile menu" data-mobile-shell-menu-panel>
-                {% if is_neosektor_page %}
-                    {% for item in neosektor_internal_menu_items() %}
-                    <a class="mobile-shell-menu-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
-                    {% endfor %}
-                {% elif is_neoermac_page %}
-                    <a class="mobile-shell-menu-link{% if request.path.startswith('/neoermac/building-lineup') %} is-active{% endif %}" href="{{ url_for('neoermac.building_lineup') }}" {% if request.path.startswith('/neoermac/building-lineup') %}aria-current="page"{% endif %}>Building Lineup</a>
-                    <a class="mobile-shell-menu-link{% if request.path.startswith('/neoermac/door-view') %} is-active{% endif %}" href="{{ url_for('neoermac.door_view') }}" {% if request.path.startswith('/neoermac/door-view') %}aria-current="page"{% endif %}>Door View</a>
-                    <a class="mobile-shell-menu-link{% if is_neoermac_view_outbound_page %} is-active{% endif %}" href="{{ url_for('neoermac.view_outbound') }}" {% if is_neoermac_view_outbound_page %}aria-current="page"{% endif %}>View Outbound</a>
-                    <a class="mobile-shell-menu-link{% if request.path.startswith('/neoermac/tug-assignments') %} is-active{% endif %}" href="{{ url_for('neoermac.tug_assignments') }}" {% if request.path.startswith('/neoermac/tug-assignments') %}aria-current="page"{% endif %}>Tug Assignments</a>
-                {% elif uses_motherbrain_header %}
-                    <a class="mobile-shell-menu-link{% if is_manage_sort_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.manage_sort') }}" {% if is_manage_sort_page %}aria-current="page"{% endif %}>MANAGE SORT</a>
-                    <a class="mobile-shell-menu-link{% if is_parking_plan_page or is_parking_rules_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.parking_plan') }}" {% if is_parking_plan_page or is_parking_rules_page %}aria-current="page"{% endif %}>PARKING PLAN</a>
-                    {% if can_manage_system(current_user) %}
-                    <a class="mobile-shell-menu-link{% if is_sort_timeline_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.sort_timeline') }}" {% if is_sort_timeline_page %}aria-current="page"{% endif %}>SORT TIMELINE</a>
-                    {% endif %}
-                    <a class="mobile-shell-menu-link{% if is_master_schedule_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule') }}" {% if is_master_schedule_page %}aria-current="page"{% endif %}>MASTER SCHEDULE</a>
-                    <a class="mobile-shell-menu-link{% if is_gateway_matrix_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.gateway_matrix') }}" {% if is_gateway_matrix_page %}aria-current="page"{% endif %}>GATEWAY MATRIX</a>
-                    {% if can_manage_system(current_user) %}
-                    <a class="mobile-shell-menu-link{% if is_user_management_page %} is-active{% endif %}" href="{{ url_for('auth.portal_management') }}" {% if is_user_management_page %}aria-current="page"{% endif %}>PORTAL MANAGEMENT</a>
-                    {% endif %}
-                {% elif is_neostaffing_page %}
-                    <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.index') }}">Board</a>
-                    <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.people') }}">People</a>
-                    <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.seniority') }}">Seniority</a>
-                    <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.app_management') }}">Manage</a>
-                {% else %}
-                    <a class="mobile-shell-menu-link" href="{{ url_for('auth.portal_dashboard') }}">{{ neo_brand("Portal", "portal") }}</a>
-                    {% if not is_rfd_hub_page %}
-                    <a class="mobile-shell-menu-link" href="{{ url_for('neomotherbrain.rfd_hub') }}">{{ neo_brand("Gateway", "gateway") }}</a>
-                    {% endif %}
-                {% endif %}
-            </nav>
         </header>
         {% endif %}
 
@@ -264,12 +231,17 @@
             </button>
             {% endif %}
             {% if mobile_switch_targets %}
-            <details class="mobile-bottom-nav-item mobile-bottom-switcher" data-mobile-switcher>
-                <summary class="mobile-bottom-nav-button" aria-label="Switch NeoGateway character">
+            <details class="mobile-bottom-nav-item mobile-bottom-switcher" data-mobile-switcher data-mobile-popover="switch">
+                <summary class="mobile-bottom-nav-button" aria-label="Switch NeoGateway character" data-mobile-switcher-button data-mobile-popover-trigger="switch">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9.2l-2.1-2.1L15.5 3.5 20 8l-4.5 4.5-1.4-1.4L16.2 9H7V7Zm10 10H7.8l2.1 2.1-1.4 1.4L4 16l4.5-4.5 1.4 1.4L7.8 15H17v2Z"/></svg>
                     <span>Switch</span>
                 </summary>
-                <div class="mobile-bottom-switcher-panel" role="menu" aria-label="Accessible NeoNodes">
+                <div class="mobile-bottom-switcher-panel mobile-bottom-popover" role="menu" aria-label="Accessible NeoNodes" data-mobile-popover-anchor="switch">
+                    {% if not is_portal_page %}
+                    <a class="mobile-bottom-switcher-link node-portal" href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">
+                        {{ neo_brand("Portal", "portal") }}
+                    </a>
+                    {% endif %}
                     {% for target in mobile_switch_targets %}
                     <a class="mobile-bottom-switcher-link node-{{ target.key }}{% if target.is_current %} is-active{% endif %}" href="{{ target.href }}" role="menuitem" {% if target.is_current %}aria-current="page"{% endif %}>
                         {{ neo_brand(target.node_word, target.key) }}
@@ -284,10 +256,45 @@
                 <span>Switch</span>
             </span>
             {% endif %}
-            <button class="mobile-bottom-nav-item mobile-bottom-nav-button" type="button" data-mobile-shell-menu-button aria-expanded="false" aria-label="Open menu">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h16v2H4v-2Z"/></svg>
-                <span>Menu</span>
-            </button>
+            <div class="mobile-bottom-nav-item mobile-bottom-menu" data-mobile-menu-anchor>
+                <button class="mobile-bottom-nav-button" type="button" data-mobile-shell-menu-button data-mobile-popover-trigger="menu" aria-expanded="false" aria-controls="mobile-bottom-menu-panel" aria-label="Open menu">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h16v2H4v-2Z"/></svg>
+                    <span>Menu</span>
+                </button>
+                <div class="mobile-bottom-popover mobile-bottom-menu-panel mobile-shell-menu-panel" id="mobile-bottom-menu-panel" role="menu" aria-label="Mobile menu" data-mobile-shell-menu-panel data-mobile-popover-anchor="menu">
+                    {% if is_neosektor_page %}
+                        {% for item in neosektor_internal_menu_items() %}
+                        <a class="mobile-shell-menu-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" role="menuitem" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
+                        {% endfor %}
+                    {% elif is_neoermac_page %}
+                        <a class="mobile-shell-menu-link{% if request.path.startswith('/neoermac/building-lineup') %} is-active{% endif %}" href="{{ url_for('neoermac.building_lineup') }}" role="menuitem" {% if request.path.startswith('/neoermac/building-lineup') %}aria-current="page"{% endif %}>Building Lineup</a>
+                        <a class="mobile-shell-menu-link{% if request.path.startswith('/neoermac/door-view') %} is-active{% endif %}" href="{{ url_for('neoermac.door_view') }}" role="menuitem" {% if request.path.startswith('/neoermac/door-view') %}aria-current="page"{% endif %}>Door View</a>
+                        <a class="mobile-shell-menu-link{% if is_neoermac_view_outbound_page %} is-active{% endif %}" href="{{ url_for('neoermac.view_outbound') }}" role="menuitem" {% if is_neoermac_view_outbound_page %}aria-current="page"{% endif %}>View Outbound</a>
+                        <a class="mobile-shell-menu-link{% if request.path.startswith('/neoermac/tug-assignments') %} is-active{% endif %}" href="{{ url_for('neoermac.tug_assignments') }}" role="menuitem" {% if request.path.startswith('/neoermac/tug-assignments') %}aria-current="page"{% endif %}>Tug Assignments</a>
+                    {% elif uses_motherbrain_header %}
+                        <a class="mobile-shell-menu-link{% if is_manage_sort_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.manage_sort') }}" role="menuitem" {% if is_manage_sort_page %}aria-current="page"{% endif %}>MANAGE SORT</a>
+                        <a class="mobile-shell-menu-link{% if is_parking_plan_page or is_parking_rules_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.parking_plan') }}" role="menuitem" {% if is_parking_plan_page or is_parking_rules_page %}aria-current="page"{% endif %}>PARKING PLAN</a>
+                        {% if can_manage_system(current_user) %}
+                        <a class="mobile-shell-menu-link{% if is_sort_timeline_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.sort_timeline') }}" role="menuitem" {% if is_sort_timeline_page %}aria-current="page"{% endif %}>SORT TIMELINE</a>
+                        {% endif %}
+                        <a class="mobile-shell-menu-link{% if is_master_schedule_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule') }}" role="menuitem" {% if is_master_schedule_page %}aria-current="page"{% endif %}>MASTER SCHEDULE</a>
+                        <a class="mobile-shell-menu-link{% if is_gateway_matrix_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.gateway_matrix') }}" role="menuitem" {% if is_gateway_matrix_page %}aria-current="page"{% endif %}>GATEWAY MATRIX</a>
+                        {% if can_manage_system(current_user) %}
+                        <a class="mobile-shell-menu-link{% if is_user_management_page %} is-active{% endif %}" href="{{ url_for('auth.portal_management') }}" role="menuitem" {% if is_user_management_page %}aria-current="page"{% endif %}>PORTAL MANAGEMENT</a>
+                        {% endif %}
+                    {% elif is_neostaffing_page %}
+                        <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.index') }}" role="menuitem">Board</a>
+                        <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.people') }}" role="menuitem">People</a>
+                        <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.seniority') }}" role="menuitem">Seniority</a>
+                        <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.app_management') }}" role="menuitem">Manage</a>
+                    {% else %}
+                        <a class="mobile-shell-menu-link" href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">{{ neo_brand("Portal", "portal") }}</a>
+                        {% if not is_rfd_hub_page %}
+                        <a class="mobile-shell-menu-link" href="{{ url_for('neomotherbrain.rfd_hub') }}" role="menuitem">{{ neo_brand("Gateway", "gateway") }}</a>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
         </nav>
         {% endif %}
     </div>
@@ -377,10 +384,10 @@
         {% endif %}
 
         const setMenuOpen = (isOpen) => {
-            if (!topbar || !menuPanel) {
+            if (!menuPanel) {
                 return;
             }
-            topbar.classList.toggle("is-menu-open", isOpen);
+            menuPanel.classList.toggle("is-open", isOpen);
             menuButtons.forEach((button) => {
                 button.setAttribute("aria-expanded", isOpen ? "true" : "false");
             });
@@ -388,7 +395,7 @@
 
         menuButtons.forEach((button) => {
             button.addEventListener("click", () => {
-                setMenuOpen(!(topbar && topbar.classList.contains("is-menu-open")));
+                setMenuOpen(!menuPanel.classList.contains("is-open"));
                 switchers.forEach((switcher) => {
                     switcher.open = false;
                 });

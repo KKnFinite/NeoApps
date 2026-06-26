@@ -439,7 +439,7 @@ def _pwa_manifest_definitions():
             "short_name": "NeoBid",
             "description": "NeoBid bid tools placeholder.",
             "start_url": "/neobid",
-            "theme_color": "#8c96aa",
+            "theme_color": "#4db7ff",
             "icon_folder": "neobid",
         },
         "motherbrain": {

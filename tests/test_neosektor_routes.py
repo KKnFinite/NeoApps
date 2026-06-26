@@ -123,6 +123,26 @@ class NeoSektorRoutesTest(unittest.TestCase):
             css,
         )
 
+    def test_neosektor_mobile_menu_is_compact_two_column_list(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neosektor")
+        html = response.data.decode()
+        css = Path("app/static/css/base.css").read_text()
+        menu_html = html.split('data-mobile-shell-menu-panel', 1)[1].split("</div>", 1)[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("mobile-bottom-menu-panel", html)
+        self.assertIn("Live Counts", menu_html)
+        self.assertIn("Tunnel Conductor", menu_html)
+        self.assertIn("East Ballmat", menu_html)
+        self.assertIn("West Ballmat", menu_html)
+        self.assertIn("Driver Routing", menu_html)
+        self.assertIn("Discharge", menu_html)
+        self.assertNotIn("OPEN", menu_html)
+        self.assertNotIn("Inbound operations", menu_html)
+        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", css)
+
     def test_neosektor_internal_menu_filters_links_by_role(self):
         expectations = {
             "watcher": {

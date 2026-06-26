@@ -77,12 +77,12 @@
     --node-apps-primary-rgb: 77, 183, 255;
     --node-apps-secondary-rgb: 32, 54, 79;
     --node-apps-highlight-rgb: 200, 244, 255;
-    --node-bid-primary: #8c96aa;
-    --node-bid-secondary: #343a48;
-    --node-bid-highlight: #d8dde5;
-    --node-bid-primary-rgb: 140, 150, 170;
-    --node-bid-secondary-rgb: 52, 58, 72;
-    --node-bid-highlight-rgb: 216, 221, 229;
+    --node-bid-primary: #4db7ff;
+    --node-bid-secondary: #20364f;
+    --node-bid-highlight: #c8f4ff;
+    --node-bid-primary-rgb: 77, 183, 255;
+    --node-bid-secondary-rgb: 32, 54, 79;
+    --node-bid-highlight-rgb: 200, 244, 255;
     --mobile-node-banner-button-height: 36px;
 }
 
@@ -15911,7 +15911,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     .mobile-account-panel,
-    .mobile-topbar-menu-panel,
+    .mobile-bottom-popover,
     .mobile-bottom-switcher-panel {
         border: 1px solid rgba(var(--node-highlight-rgb), 0.46);
         border-radius: 10px;
@@ -15922,6 +15922,17 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
             0 18px 36px rgba(0, 0, 0, 0.56),
             0 0 24px rgba(var(--node-rgb), 0.18);
         backdrop-filter: blur(14px);
+    }
+
+    @keyframes mobile-bottom-pop {
+        from {
+            opacity: 0;
+            transform: translateY(10px) scale(0.94);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
     }
 
     .mobile-account-panel {
@@ -15961,6 +15972,13 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         font-size: 0.72rem;
         font-weight: 950;
         text-transform: uppercase;
+    }
+
+    .mobile-shell-menu-link {
+        justify-content: center;
+        min-height: 40px;
+        padding: 9px 8px;
+        text-align: center;
     }
 
     .mobile-account-panel a:hover,
@@ -16012,22 +16030,6 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         right: 0;
         width: min(330px, calc(100vw - 18px));
         max-width: calc(100vw - 18px);
-    }
-
-    .mobile-topbar-menu-panel {
-        position: absolute;
-        top: calc(100% + 8px);
-        right: 0;
-        display: none;
-        grid-template-columns: 1fr;
-        gap: 7px;
-        width: min(300px, calc(100vw - 18px));
-        padding: 9px;
-        pointer-events: auto;
-    }
-
-    .mobile-topbar.is-menu-open .mobile-topbar-menu-panel {
-        display: grid;
     }
 
     .mobile-bottom-nav {
@@ -16105,18 +16107,44 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         flex: 1 1 0;
     }
 
+    .mobile-bottom-menu {
+        position: relative;
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
     .mobile-bottom-nav > .mobile-bottom-nav-item {
         flex: 1 1 0;
     }
 
-    .mobile-bottom-switcher-panel {
+    .mobile-bottom-popover {
         position: absolute;
-        right: -60px;
         bottom: calc(100% + 12px);
+        padding: 9px;
+        pointer-events: auto;
+        animation: mobile-bottom-pop 150ms ease-out both;
+        transform-origin: 88% 100%;
+    }
+
+    .mobile-bottom-switcher-panel {
         display: grid;
         gap: 7px;
+        right: 0;
         width: min(280px, calc(100vw - 22px));
-        padding: 9px;
+        transform-origin: 72% 100%;
+    }
+
+    .mobile-bottom-menu-panel {
+        right: 0;
+        display: none;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+        width: min(324px, calc(100vw - 22px));
+        transform-origin: 92% 100%;
+    }
+
+    .mobile-bottom-menu-panel.is-open {
+        display: grid;
     }
 
     .mobile-bottom-switcher-link {
@@ -16132,9 +16160,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     body.mobile-app-chrome .neosektor-standalone-header.app-header {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 8px;
-        padding-top: 0;
+        display: none;
     }
 
     body.mobile-app-chrome .neosektor-standalone-header .user-chip,

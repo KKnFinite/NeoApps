@@ -190,7 +190,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             "neoportal": ("NeoApps Portal", "NeoPortal", "/portal", "#4db7ff", "neoportal"),
             "neogateway": ("NeoGateway", "NeoGateway", "/rfd", "#d95a1f", "neogateway"),
             "neostaffing": ("NeoStaffing", "NeoStaffing", "/neostaffing", "#27d0c2", "neostaffing"),
-            "neobid": ("NeoBid", "NeoBid", "/neobid", "#8c96aa", "neobid"),
+            "neobid": ("NeoBid", "NeoBid", "/neobid", "#4db7ff", "neobid"),
             "motherbrain": ("NeoMotherBrain", "MotherBrain", "/motherbrain", "#cf6a6e", "motherbrain"),
             "sektor": ("NeoSektor", "NeoSektor", "/neosektor", "#b5121b", "sektor"),
             "ermac": ("NeoErmac", "NeoErmac", "/neoermac", "#8f1826", "ermac"),
@@ -456,6 +456,49 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("<span>Alerts</span>", html)
         self.assertIn("<span>Switch</span>", html)
         self.assertIn("<span>Menu</span>", html)
+
+    def test_mobile_bottom_popovers_anchor_to_switch_and_menu_buttons(self):
+        seed_dev_grandmaster(self.app)
+        self.client.post(
+            "/login",
+            data={"username": "Kessler", "password": "1313"},
+        )
+
+        response = self.client.get("/neosektor")
+        html = response.data.decode()
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-mobile-popover-trigger="switch"', html)
+        self.assertIn('data-mobile-popover-anchor="switch"', html)
+        self.assertIn("data-mobile-switcher-button", html)
+        self.assertIn('data-mobile-popover-trigger="menu"', html)
+        self.assertIn('data-mobile-popover-anchor="menu"', html)
+        self.assertIn('aria-controls="mobile-bottom-menu-panel"', html)
+        self.assertIn('id="mobile-bottom-menu-panel"', html)
+        self.assertIn("mobile-bottom-menu-panel mobile-shell-menu-panel", html)
+        self.assertIn("Back to", html)
+        self.assertIn("neo-brand--portal", html)
+        self.assertIn("@keyframes mobile-bottom-pop", css)
+        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", css)
+        self.assertIn(".mobile-bottom-menu-panel.is-open", css)
+
+    def test_neobid_theme_stays_blue(self):
+        css = Path("app/static/css/base.css").read_text()
+        manifest = self.client.get("/manifest/neobid.webmanifest").get_json()
+
+        self.assertIn("--node-bid-primary: #4db7ff;", css)
+        self.assertIn("--node-bid-highlight: #c8f4ff;", css)
+        self.assertEqual(manifest["theme_color"], "#4db7ff")
+
+    def test_mobile_duplicate_neosektor_body_title_is_hidden_by_css(self):
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertIn(
+            "body.mobile-app-chrome .neosektor-standalone-header.app-header {\n"
+            "        display: none;",
+            css,
+        )
 
     def test_mobile_account_icon_mapping_uses_node_specific_128px_assets(self):
         seed_dev_grandmaster(self.app)
