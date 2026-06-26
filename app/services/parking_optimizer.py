@@ -1,10 +1,12 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ortools.sat.python import cp_model
 
 from app.extensions import db
 from app.models import MotherBrainParkingRule, MotherBrainParkingSettings, SortDateParkingAssignment
+from app.services.gateway_matrix import gateway_timezone
 from app.services.parking_physical_validator import (
     NORMAL_BANKS,
     NORMAL_RAMP_CODES,
@@ -15,13 +17,18 @@ from app.services.parking_physical_validator import (
 from app.services.parking_plan import parking_position_options, tail_rows_for_operation
 from app.services.parking_rules import (
     AIRCRAFT_TYPE_RAMP_RESTRICTION,
+    AIRCRAFT_TYPE_RAMP_PREFERENCE,
     ORIGIN_RAMP_RESTRICTION,
+    ORIGIN_RAMP_PREFERENCE,
     DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES,
 )
 
 
 PARKING_OPTIMIZER_TIME_LIMIT_SECONDS = 3.0
 SUCCESS_SOLVER_STATUSES = {"OPTIMAL", "FEASIBLE"}
+PREFERRED_RAMP_SCORE = 600
+AVOID_RAMP_PENALTY = 350
+DEICE_CLOSE_PAIR_PENALTY = 400
 
 
 @dataclass(frozen=True)
@@ -33,6 +40,9 @@ class ParkingPlacement:
     cost: int
     aircraft_type: str
     eta: datetime | None = None
+    departure: datetime | None = None
+    soft_score: int = 0
+    preference_reasons: tuple[str, ...] = ()
 
     @property
     def label(self):
@@ -62,9 +72,14 @@ def parking_optimizer_preview(
     defaults = parking_optimizer_default_options(gateway)
     include_remote = defaults["include_remote"] if include_remote is None else bool(include_remote)
     include_throat = defaults["include_throat"] if include_throat is None else bool(include_throat)
+    deice_threshold = _safe_int(
+        defaults.get("deice_spacing_threshold_minutes"),
+        DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES,
+    )
     tail_rows = tail_rows if tail_rows is not None else tail_rows_for_operation(gateway, operation)
-    rules = _active_hard_rules(gateway)
+    rules = _active_rule_sets(gateway)
     assignments = _active_assignments(operation)
+    timezone_name = gateway_timezone(gateway)
 
     locked_assignments = _locked_assignment_rows(assignments, tail_rows)
     locked_tails = {row["tail"] for row in locked_assignments}
@@ -101,7 +116,9 @@ def parking_optimizer_preview(
         locked_lane_keys,
         locked_filled_positions,
         locked_blocked_positions,
-        rules,
+        rules["hard"],
+        rules["soft"],
+        timezone_name,
     )
 
     if not placements:
@@ -109,6 +126,7 @@ def parking_optimizer_preview(
             "NO_CANDIDATES",
             include_remote,
             include_throat,
+            deice_threshold,
             locked_assignments,
             [],
             _unassigned_rows(candidate_rows, {}, placements),
@@ -136,10 +154,21 @@ def parking_optimizer_preview(
     _add_767_block_constraints(model, variables, fill_exprs)
     _add_eta_order_constraints(model, variables, locked_eta_by_position)
 
-    model.Maximize(
-        sum(variable * 100000 for variable in variables.values())
-        - sum(variable * placement.cost for placement, variable in variables.items())
+    objective_terms = [
+        variable * (100000 + placement.soft_score - placement.cost)
+        for placement, variable in variables.items()
+    ]
+    objective_terms.extend(
+        _deice_spacing_penalty_terms(
+            model,
+            variables,
+            assignments,
+            tail_rows,
+            timezone_name,
+            deice_threshold,
+        )
     )
+    model.Maximize(sum(objective_terms))
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = PARKING_OPTIMIZER_TIME_LIMIT_SECONDS
@@ -151,9 +180,24 @@ def parking_optimizer_preview(
         for placement in sorted(placements, key=lambda item: (item.tail, item.cost, item.label)):
             if solver.Value(variables[placement]) != 1:
                 continue
-            row = rows_by_tail.get(placement.tail, {})
             selected_by_tail[placement.tail] = placement
-            suggestions.append(_suggestion_row(placement, row))
+        selected_deice_reasons = _selected_deice_reasons(
+            selected_by_tail,
+            assignments,
+            tail_rows,
+            timezone_name,
+            deice_threshold,
+        )
+        for placement in sorted(selected_by_tail.values(), key=lambda item: (item.tail, item.cost, item.label)):
+            row = rows_by_tail.get(placement.tail, {})
+            suggestions.append(
+                _suggestion_row(
+                    placement,
+                    row,
+                    deice_threshold,
+                    selected_deice_reasons.get(placement.tail, ()),
+                )
+            )
 
     unassigned = _unassigned_rows(candidate_rows, selected_by_tail, placements)
     summary = (
@@ -165,6 +209,7 @@ def parking_optimizer_preview(
         status_name,
         include_remote,
         include_throat,
+        deice_threshold,
         locked_assignments,
         suggestions,
         unassigned,
@@ -288,6 +333,7 @@ def _preview_result(
     solver_status,
     include_remote,
     include_throat,
+    deice_threshold,
     locked_assignments,
     suggestions,
     unassigned_tails,
@@ -306,23 +352,49 @@ def _preview_result(
         "runtime_toggles": {
             "include_remote": bool(include_remote),
             "include_throat": bool(include_throat),
+            "deice_spacing_threshold_minutes": deice_threshold,
         },
         "wall_time_seconds": wall_time,
         "preview_only": True,
     }
 
 
-def _active_hard_rules(gateway):
+def _active_rule_sets(gateway):
     rules = MotherBrainParkingRule.query.filter_by(gateway_id=gateway.id, active=True).all()
     hard_rules = {"forbidden": [], "required": []}
+    soft_rules = {"preferred": [], "avoid": []}
     for rule in rules:
-        if rule.rule_category not in (ORIGIN_RAMP_RESTRICTION, AIRCRAFT_TYPE_RAMP_RESTRICTION):
-            continue
-        behavior = str(rule.rule_behavior or "").strip().lower()
-        if behavior not in hard_rules:
-            continue
-        hard_rules[behavior].append(rule)
-    return hard_rules
+        category = str(rule.rule_category or "").strip().lower()
+        behavior = _normalize_rule_behavior(rule.rule_behavior)
+        if category in (ORIGIN_RAMP_RESTRICTION, AIRCRAFT_TYPE_RAMP_RESTRICTION):
+            if behavior not in hard_rules:
+                continue
+            hard_rules[behavior].append(rule)
+        elif category in (ORIGIN_RAMP_PREFERENCE, AIRCRAFT_TYPE_RAMP_PREFERENCE):
+            if behavior not in soft_rules:
+                continue
+            soft_rules[behavior].append(rule)
+    return {"hard": hard_rules, "soft": soft_rules}
+
+
+def _normalize_rule_behavior(value):
+    behavior = str(value or "").strip().lower()
+    if behavior in {"forbidden", "restricted", "restriction"}:
+        return "forbidden"
+    if behavior in {"required", "require"}:
+        return "required"
+    if behavior in {"preferred", "prefer", "preference"}:
+        return "preferred"
+    if behavior in {"avoid", "avoided"}:
+        return "avoid"
+    return behavior
+
+
+def _safe_int(value, default=0):
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return default
 
 
 def _active_assignments(operation):
@@ -388,7 +460,9 @@ def _build_candidate_placements(
     locked_lane_keys,
     locked_filled_positions,
     locked_blocked_positions,
-    rules,
+    hard_rules,
+    soft_rules,
+    timezone_name,
 ):
     placements = []
     for row in sorted(candidate_rows, key=lambda item: (_parking_window_sort_key(item), item["tail"])):
@@ -397,10 +471,17 @@ def _build_candidate_placements(
         for order, (position, ramp) in enumerate(candidate_positions):
             if position in locked_blocked_positions:
                 continue
-            if _rule_blocks_row(row, aircraft_type, position, ramp, rules):
+            if _rule_blocks_row(row, aircraft_type, position, ramp, hard_rules):
                 continue
             if not _placement_allows_aircraft(aircraft_type, position, locked_filled_positions):
                 continue
+            soft_score, preference_reasons = _soft_rule_score(
+                row,
+                aircraft_type,
+                position,
+                ramp,
+                soft_rules,
+            )
             for lane in (1, 2):
                 if (position, lane) in locked_lane_keys:
                     continue
@@ -413,6 +494,9 @@ def _build_candidate_placements(
                         cost=(order * 4) + lane,
                         aircraft_type=aircraft_type,
                         eta=row.get("arrival_block_in_local"),
+                        departure=_departure_time_for_deice(row, timezone_name),
+                        soft_score=soft_score,
+                        preference_reasons=tuple(preference_reasons),
                     )
                 )
     return placements
@@ -584,7 +668,14 @@ def _unassigned_rows(candidate_rows, selected_by_tail, placements):
     return rows
 
 
-def _suggestion_row(placement, row):
+def _suggestion_row(placement, row, deice_threshold=0, deice_reasons=()):
+    reasons = ["Suggested by optimizer preview."]
+    reasons.extend(placement.preference_reasons)
+    if deice_threshold and placement.departure:
+        reasons.append(
+            f"Deice spacing checked: same-ramp departures under {deice_threshold} min are penalized."
+        )
+    reasons.extend(deice_reasons or ())
     return {
         "tail": placement.tail,
         "position": placement.position,
@@ -593,7 +684,7 @@ def _suggestion_row(placement, row):
         "origin": row.get("arrival_origin") or "-",
         "aircraft_type": row.get("aircraft_type") or "-",
         "parking_window": _parking_window_label(row),
-        "reason": "Suggested by hard-rule optimizer preview.",
+        "reason": " ".join(reasons),
     }
 
 
@@ -605,6 +696,211 @@ def _rule_blocks_row(row, aircraft_type, position, ramp, rules):
         _rule_matches_position(rule, position, ramp)
         for rule in _rules_for_row(row, aircraft_type, rules.get("forbidden", []))
     )
+
+
+def _soft_rule_score(row, aircraft_type, position, ramp, soft_rules):
+    score = 0
+    reasons = []
+    for rule in _rules_for_row(row, aircraft_type, soft_rules.get("preferred", [])):
+        if not _rule_matches_position(rule, position, ramp):
+            continue
+        score += PREFERRED_RAMP_SCORE
+        reasons.append(_soft_rule_reason(rule, "prefers"))
+    for rule in _rules_for_row(row, aircraft_type, soft_rules.get("avoid", [])):
+        reasons.append(_soft_rule_reason(rule, "avoids"))
+        if not _rule_matches_position(rule, position, ramp):
+            continue
+        score -= AVOID_RAMP_PENALTY
+    return score, reasons
+
+
+def _soft_rule_reason(rule, verb):
+    subject_type = str(rule.subject_type or "").strip().lower()
+    subject = _normalize_subject(rule.subject_value)
+    ramp = str(rule.ramp_code or "").strip().upper()
+    ramp_label = "9/10 throat" if ramp == "THROAT" else f"ramp {ramp}"
+    if subject_type == "origin":
+        return f"Origin {subject} {verb} {ramp_label}."
+    return f"Aircraft {subject} {verb} {ramp_label}."
+
+
+def _deice_spacing_penalty_terms(
+    model,
+    variables,
+    assignments,
+    tail_rows,
+    timezone_name,
+    threshold_minutes,
+):
+    threshold_minutes = _safe_int(threshold_minutes, 0)
+    if threshold_minutes <= 0:
+        return []
+
+    terms = []
+    candidate_entries = [
+        (placement, variable)
+        for placement, variable in variables.items()
+        if _is_deice_position(placement.position) and placement.departure
+    ]
+    locked_entries = _locked_deice_entries(assignments, tail_rows, timezone_name)
+
+    for index, (placement, variable) in enumerate(candidate_entries):
+        for locked in locked_entries:
+            if not _deice_entries_are_close(placement, locked, threshold_minutes):
+                continue
+            terms.append(variable * -_deice_penalty(placement.departure, locked["departure"], threshold_minutes))
+
+        for other_index, (other_placement, other_variable) in enumerate(candidate_entries[index + 1 :], start=index + 1):
+            if not _deice_entries_are_close(placement, other_placement, threshold_minutes):
+                continue
+            both = model.NewBoolVar(
+                f"deice_{_var_key(placement.tail)}_{_var_key(other_placement.tail)}_{index}_{other_index}"
+            )
+            model.Add(both <= variable)
+            model.Add(both <= other_variable)
+            model.Add(both >= variable + other_variable - 1)
+            terms.append(
+                both
+                * -_deice_penalty(
+                    placement.departure,
+                    other_placement.departure,
+                    threshold_minutes,
+                )
+            )
+    return terms
+
+
+def _selected_deice_reasons(
+    selected_by_tail,
+    assignments,
+    tail_rows,
+    timezone_name,
+    threshold_minutes,
+):
+    threshold_minutes = _safe_int(threshold_minutes, 0)
+    if threshold_minutes <= 0:
+        return {}
+
+    selected = list(selected_by_tail.values())
+    locked = _locked_deice_entries(assignments, tail_rows, timezone_name)
+    reasons = {placement.tail: [] for placement in selected}
+    for placement in selected:
+        if not _is_deice_position(placement.position) or not placement.departure:
+            continue
+        for other in selected:
+            if other.tail == placement.tail:
+                continue
+            if not _deice_entries_are_close(placement, other, threshold_minutes):
+                continue
+            diff = _minutes_apart(placement.departure, other.departure)
+            reasons[placement.tail].append(
+                f"Deice warning: {placement.ramp} has {other.tail} within {diff} min."
+            )
+        for other in locked:
+            if not _deice_entries_are_close(placement, other, threshold_minutes):
+                continue
+            diff = _minutes_apart(placement.departure, other["departure"])
+            reasons[placement.tail].append(
+                f"Deice warning: {placement.ramp} has locked {other['tail']} within {diff} min."
+            )
+    return {tail: tuple(values) for tail, values in reasons.items() if values}
+
+
+def _locked_deice_entries(assignments, tail_rows, timezone_name):
+    rows_by_tail = {
+        _normalize_tail(row.get("tail")): row
+        for row in tail_rows
+        if _normalize_tail(row.get("tail"))
+    }
+    entries = []
+    for assignment in assignments:
+        tail = _normalize_tail(assignment.tail_number)
+        position = _normalize_position(assignment.position_code)
+        if not _is_deice_position(position):
+            continue
+        row = rows_by_tail.get(tail, {})
+        departure = _departure_time_for_deice(row, timezone_name)
+        if not departure:
+            continue
+        entries.append(
+            {
+                "tail": tail,
+                "ramp": _ramp_from_position(position),
+                "position": position,
+                "departure": departure,
+            }
+        )
+    return entries
+
+
+def _deice_entries_are_close(first, second, threshold_minutes):
+    first_ramp = first.ramp if isinstance(first, ParkingPlacement) else first["ramp"]
+    second_ramp = second.ramp if isinstance(second, ParkingPlacement) else second["ramp"]
+    if first_ramp != second_ramp:
+        return False
+    first_departure = first.departure if isinstance(first, ParkingPlacement) else first["departure"]
+    second_departure = second.departure if isinstance(second, ParkingPlacement) else second["departure"]
+    diff = _minutes_apart(first_departure, second_departure)
+    return diff is not None and diff < threshold_minutes
+
+
+def _deice_penalty(first_departure, second_departure, threshold_minutes):
+    diff = _minutes_apart(first_departure, second_departure)
+    if diff is None:
+        return 0
+    return DEICE_CLOSE_PAIR_PENALTY + max(0, threshold_minutes - diff)
+
+
+def _minutes_apart(first, second):
+    if not first or not second:
+        return None
+    minutes = int(abs((first - second).total_seconds()) // 60)
+    return min(minutes, abs(1440 - minutes)) if minutes > 720 else minutes
+
+
+def _is_deice_position(position):
+    ramp = _ramp_from_position(position)
+    number = _position_number(position)
+    return ramp in NORMAL_RAMP_CODES and number is not None and 1 <= number <= 8
+
+
+def _departure_time_for_deice(row, timezone_name):
+    departure = row.get("departure")
+    if departure and getattr(departure, "actual_block_out_datetime_utc", None):
+        return _utc_to_local(departure.actual_block_out_datetime_utc, timezone_name)
+    if row.get("departure_datetime_local"):
+        return row.get("departure_datetime_local")
+    for field_name in (
+        "final_mix_pull_time_local",
+        "first_mix_pull_time_local",
+        "pure_pull_time_local",
+    ):
+        pull_time = getattr(departure, field_name, None) if departure else None
+        if pull_time:
+            return _datetime_from_local_time(row, pull_time)
+    return None
+
+
+def _utc_to_local(value, timezone_name):
+    if not value:
+        return None
+    try:
+        zone = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        zone = ZoneInfo("America/Chicago")
+    if value.tzinfo:
+        return value.astimezone(zone).replace(tzinfo=None)
+    return value.replace(tzinfo=timezone.utc).astimezone(zone).replace(tzinfo=None)
+
+
+def _datetime_from_local_time(row, value):
+    base = row.get("departure_datetime_local") or row.get("arrival_block_in_local")
+    if not base:
+        return None
+    candidate = datetime.combine(base.date(), value)
+    if row.get("arrival_block_in_local") and candidate < row["arrival_block_in_local"]:
+        candidate += timedelta(days=1)
+    return candidate
 
 
 def _rules_for_row(row, aircraft_type, rules):

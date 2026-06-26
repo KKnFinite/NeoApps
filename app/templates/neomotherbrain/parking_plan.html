@@ -254,7 +254,7 @@
                 <span>PREVIEW ONLY</span>
                 <h2>OPTIMIZE / SUGGEST PLAN</h2>
             </div>
-            <p>Hard physical rules only. Suggestions do not change the saved Parking Plan.</p>
+            <p>Hard rules stay mandatory. Preferences and deice spacing shape the preview, but suggestions do not change the saved Parking Plan.</p>
         </div>
         {% if can_run_parking_optimizer %}
         <form class="parking-optimizer-form" method="post" action="{{ url_for('neomotherbrain.optimize_parking_plan', operation_id=operation.id) }}">
@@ -278,6 +278,7 @@
                 <span>Solver {{ optimizer_preview.solver_status }}</span>
                 <span>Remote {{ "ON" if optimizer_preview.runtime_toggles.include_remote else "OFF" }}</span>
                 <span>9/10 {{ "ON" if optimizer_preview.runtime_toggles.include_throat else "OFF" }}</span>
+                <span>Deice {{ optimizer_preview.runtime_toggles.deice_spacing_threshold_minutes }} min</span>
                 {% if optimizer_preview.wall_time_seconds is not none %}
                 <span>{{ "%.3f"|format(optimizer_preview.wall_time_seconds) }} sec</span>
                 {% endif %}

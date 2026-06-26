@@ -44,7 +44,9 @@ from app.services.parking_physical_validator import (
 )
 from app.services.parking_rules import (
     AIRCRAFT_TYPE_RAMP_RESTRICTION,
+    AIRCRAFT_TYPE_RAMP_PREFERENCE,
     ORIGIN_RAMP_RESTRICTION,
+    ORIGIN_RAMP_PREFERENCE,
 )
 from app.services.permission_rules import ensure_default_permission_rules
 from app.services.sort_timeline import (
@@ -6607,7 +6609,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
 
         self.assertEqual(locked["N457UP"]["label"], "A01 Slot 1")
-        self.assertEqual(suggestions["N349UP"]["label"], "A01 Slot 2")
+        self.assertEqual(suggestions["N349UP"]["label"], "B01 Slot 1")
         self.assertEqual(SortDateParkingAssignment.query.count(), 1)
 
     def test_parking_optimizer_locked_invalid_assignment_reports_conflict(self):
@@ -6663,6 +6665,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         operation = self._parking_operation()
         for tail in ("N451UP", "N452UP", "N453UP"):
             self._parking_pair(operation, tail, aircraft_type="757", destination=tail)
+        self._parking_rule(ORIGIN_RAMP_RESTRICTION, "origin", "ONT", "A", behavior="required")
         db.session.commit()
 
         preview = self._parking_optimizer_preview(operation)
@@ -6781,6 +6784,228 @@ class MotherBrainRoutesTest(unittest.TestCase):
         preview = self._parking_optimizer_preview(operation)
 
         self.assertNotEqual(preview["suggested_assignments"][0]["position"][:1], "A")
+
+    def test_parking_optimizer_origin_ramp_preference_affects_scoring(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", origin="SDF", aircraft_type="757")
+        self._parking_rule(
+            ORIGIN_RAMP_PREFERENCE,
+            "origin",
+            "SDF",
+            "B",
+            behavior="preferred",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = preview["suggested_assignments"][0]
+
+        self.assertEqual(suggestion["position"], "B01")
+        self.assertIn("Origin SDF prefers ramp B.", suggestion["reason"])
+
+    def test_parking_optimizer_origin_avoid_ramp_reduces_scoring(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", origin="SDF", aircraft_type="757")
+        self._parking_rule(
+            ORIGIN_RAMP_PREFERENCE,
+            "origin",
+            "SDF",
+            "A",
+            behavior="avoid",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = preview["suggested_assignments"][0]
+
+        self.assertNotEqual(suggestion["position"][:1], "A")
+        self.assertIn("Origin SDF avoids ramp A.", suggestion["reason"])
+
+    def test_parking_optimizer_aircraft_type_ramp_preference_affects_scoring(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        self._parking_rule(
+            AIRCRAFT_TYPE_RAMP_PREFERENCE,
+            "aircraft_type",
+            "757",
+            "B",
+            behavior="preferred",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = preview["suggested_assignments"][0]
+
+        self.assertEqual(suggestion["position"], "B01")
+        self.assertIn("Aircraft 757 prefers ramp B.", suggestion["reason"])
+
+    def test_parking_optimizer_aircraft_type_avoid_ramp_reduces_scoring(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        self._parking_rule(
+            AIRCRAFT_TYPE_RAMP_PREFERENCE,
+            "aircraft_type",
+            "757",
+            "A",
+            behavior="avoid",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = preview["suggested_assignments"][0]
+
+        self.assertNotEqual(suggestion["position"][:1], "A")
+        self.assertIn("Aircraft 757 avoids ramp A.", suggestion["reason"])
+
+    def test_parking_optimizer_hard_restriction_overrides_soft_preference(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", origin="SDF", aircraft_type="757")
+        self._parking_rule(
+            ORIGIN_RAMP_PREFERENCE,
+            "origin",
+            "SDF",
+            "B",
+            behavior="preferred",
+        )
+        self._parking_rule(
+            ORIGIN_RAMP_RESTRICTION,
+            "origin",
+            "SDF",
+            "B",
+            behavior="forbidden",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+
+        self.assertNotEqual(preview["suggested_assignments"][0]["position"][:1], "B")
+
+    def test_parking_optimizer_penalizes_same_ramp_close_deice_departures(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N001UP",
+            departure_local=datetime(2026, 6, 19, 1, 0),
+        )
+        self._parking_pair(
+            operation,
+            "N002UP",
+            departure_local=datetime(2026, 6, 19, 1, 5),
+            destination="SDF",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
+
+        self.assertNotEqual(
+            suggestions["N001UP"]["position"][:1],
+            suggestions["N002UP"]["position"][:1],
+        )
+        self.assertIn("Deice spacing checked", suggestions["N001UP"]["reason"])
+
+    def test_parking_optimizer_deice_scoring_is_ramp_level_not_slot_adjacency(self):
+        operation = self._parking_operation()
+        for position, departure_time in (
+            ("A01", datetime(2026, 6, 19, 3, 0)),
+            ("A02", datetime(2026, 6, 19, 3, 5)),
+            ("A03", datetime(2026, 6, 19, 3, 10)),
+            ("A04", datetime(2026, 6, 19, 1, 0)),
+        ):
+            tail = f"N{position[-2:]}1UP"
+            self._parking_pair(
+                operation,
+                tail,
+                departure_local=departure_time,
+                destination=position,
+            )
+            db.session.flush()
+            self._parking_assignment(operation, tail, position)
+        self._parking_pair(
+            operation,
+            "N999UP",
+            departure_local=datetime(2026, 6, 19, 1, 5),
+            destination="SDF",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
+
+        self.assertNotEqual(suggestions["N999UP"]["position"][:1], "A")
+
+    def test_parking_optimizer_uses_deice_threshold_setting(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=4,
+            )
+        )
+        self._parking_pair(
+            operation,
+            "N001UP",
+            departure_local=datetime(2026, 6, 19, 1, 0),
+        )
+        self._parking_pair(
+            operation,
+            "N002UP",
+            departure_local=datetime(2026, 6, 19, 1, 5),
+            destination="SDF",
+        )
+        db.session.flush()
+        self._parking_assignment(operation, "N001UP", "A01")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
+
+        self.assertEqual(preview["runtime_toggles"]["deice_spacing_threshold_minutes"], 4)
+        self.assertEqual(suggestions["N002UP"]["label"], "A01 Slot 2")
+
+    def test_parking_optimizer_deice_spacing_is_midnight_aware(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N001UP",
+            departure_local=datetime(2026, 6, 18, 23, 58),
+        )
+        self._parking_pair(
+            operation,
+            "N002UP",
+            departure_local=datetime(2026, 6, 19, 0, 5),
+            destination="SDF",
+        )
+        db.session.flush()
+        self._parking_assignment(operation, "N001UP", "A01")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
+
+        self.assertEqual(suggestions["N002UP"]["position"], "B01")
+
+    def test_parking_optimizer_apply_uses_soft_scoring(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", origin="SDF", aircraft_type="757")
+        self._parking_rule(
+            ORIGIN_RAMP_PREFERENCE,
+            "origin",
+            "SDF",
+            "B",
+            behavior="preferred",
+        )
+        db.session.commit()
+
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+            data={"confirm_apply": "1"},
+            follow_redirects=True,
+        )
+
+        assignment = self._parking_assignment_for_tail(operation, "N457UP")
+        self.assertEqual(assignment.position_code, "B01")
 
     def test_parking_optimizer_preview_obeys_eta_order_constraints(self):
         operation = self._parking_operation()
@@ -6964,7 +7189,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         locked = self._parking_assignment_for_tail(operation, "N457UP")
         suggested = self._parking_assignment_for_tail(operation, "N349UP")
         self.assertEqual((locked.position_code, locked.lane_number), ("A01", 1))
-        self.assertEqual((suggested.position_code, suggested.lane_number), ("A01", 2))
+        self.assertEqual((suggested.position_code, suggested.lane_number), ("B01", 1))
 
     def test_parking_optimizer_apply_does_not_overwrite_manual_assignment_created_after_preview(self):
         operation = self._parking_operation()
