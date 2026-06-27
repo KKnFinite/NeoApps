@@ -804,6 +804,61 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertFalse(saved.no_pure_pull)
         self.assertEqual(mission.actual_pure_pull_time_local, time(14, 5))
 
+    def test_door_view_pull_entries_render_autosave_without_manual_save_button(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._add_operation_departure("UPS302", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"data-pull-save-url=", response.data)
+        self.assertIn(b"data-door-pull-form", response.data)
+        self.assertIn(b"data-hhmm-input", response.data)
+        self.assertIn(b"data-pull-key=\"pure\"", response.data)
+        self.assertIn(b"data-pull-autosave-error", response.data)
+        self.assertIn(b"data-pull-autosave-status", response.data)
+        self.assertNotIn(b"SAVE PULLS", response.data)
+        self.assertNotIn(b"data-manual-pull-save", response.data)
+
+    def test_door_view_pull_autosave_rejects_invalid_hhmm_without_overwriting_saved_value(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._add_operation_departure("UPS302", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+        ok_response = self.client.post(
+            "/neoermac/door-view/pull-autosave",
+            data={
+                "door": "D34",
+                "destination": "SDF",
+                "pull_key": "pure",
+                "actual_pull": "14:05",
+                "no_pull": "0",
+            },
+        )
+
+        response = self.client.post(
+            "/neoermac/door-view/pull-autosave",
+            data={
+                "door": "D34",
+                "destination": "SDF",
+                "pull_key": "pure",
+                "actual_pull": "2:05 PM",
+                "no_pull": "0",
+            },
+        )
+
+        payload = response.get_json()
+        saved = NeoErmacDoorPull.query.filter_by(door="D34", destination="SDF").one()
+        mission = SortDateMission.query.filter_by(destination="SDF").one()
+        self.assertEqual(ok_response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(payload["ok"])
+        self.assertIn("HH:MM", payload["error"])
+        self.assertEqual(saved.actual_pure_pull_time_local, time(14, 5))
+        self.assertEqual(mission.actual_pure_pull_time_local, time(14, 5))
+
     def test_door_view_pull_autosave_saves_no_checkbox_state(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
         self._add_operation_departure("UPS302", "SDF")
@@ -964,11 +1019,19 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'class="neoermac-label-mobile">PURE</span>', response.data)
         self.assertIn(b'class="neoermac-label-mobile">1ST</span>', response.data)
         self.assertIn(b'class="neoermac-label-mobile">2ND</span>', response.data)
+        self.assertEqual(response.data.count(b"neoermac-uld-type-label"), 3)
+        self.assertIn(b'<span class="neoermac-uld-type-label">A2</span>', response.data)
+        self.assertIn(b'<span class="neoermac-uld-type-label">A1</span>', response.data)
+        self.assertIn(b'<span class="neoermac-uld-type-label">AMP</span>', response.data)
+        self.assertNotIn(b"SAVE PULLS", response.data)
         self.assertGreaterEqual(response.data.count(b"neoermac-ios-safe-input"), 6)
         css = Path("app/static/css/base.css").read_text(encoding="utf-8")
         self.assertIn(".neoermac-door-actual input.neoermac-ios-safe-input", css)
         self.assertIn(".neoermac-uld-grid input.neoermac-ios-safe-input", css)
+        self.assertIn(".neoermac-uld-grid .neoermac-uld-type-label", css)
+        self.assertIn(".neoermac-door-autosave-status", css)
         self.assertIn("font-size: 16px", css)
+        self.assertIn("font-size: 0.74rem", css)
 
     def test_door_view_request_inputs_remain_clean_after_submission(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")

@@ -61,15 +61,15 @@
                     <input type="hidden" name="action" value="save_uld_request">
                     <div class="neoermac-uld-grid">
                         <label>
-                            <span>A2</span>
+                            <span class="neoermac-uld-type-label">A2</span>
                             <input class="neoermac-ios-safe-input" type="number" name="uld_a2_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="A2">
                         </label>
                         <label>
-                            <span>A1</span>
+                            <span class="neoermac-uld-type-label">A1</span>
                             <input class="neoermac-ios-safe-input" type="number" name="uld_a1_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="A1">
                         </label>
                         <label>
-                            <span>AMP</span>
+                            <span class="neoermac-uld-type-label">AMP</span>
                             <input class="neoermac-ios-safe-input" type="number" name="uld_amp_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="AMP">
                         </label>
                     </div>
@@ -170,6 +170,7 @@
                         {% endif %}
                     </div>
                     <p class="neoermac-door-autosave-error" data-pull-autosave-error hidden></p>
+                    <p class="neoermac-door-autosave-status" data-pull-autosave-status aria-live="polite" hidden></p>
 
                     <div class="neoermac-door-pull-grid" data-pull-details>
                         {% for pull in pull_fields %}
@@ -228,10 +229,6 @@
                 </article>
                 {% endfor %}
             </div>
-
-            {% if can_edit %}
-            <button class="neoermac-menu-link neoermac-door-save" type="submit" data-manual-pull-save>SAVE PULLS</button>
-            {% endif %}
         </form>
         {% else %}
         <p class="neoermac-door-empty">NO DESTINATIONS ASSIGNED TO {{ selected_door }}.</p>
@@ -441,20 +438,26 @@
         }
     };
 
-    const updateManualSaveVisibility = () => {
+    const setCardStatus = (card, message, state = "") => {
+        const status = card.querySelector("[data-pull-autosave-status]");
+        if (!status) {
+            return;
+        }
+        status.textContent = message || "";
+        status.dataset.state = state || "";
+        status.hidden = !message;
+    };
+
+    const updatePullFormCompleteState = () => {
         if (!pullForm) {
             return;
         }
-        const button = pullForm.querySelector("[data-manual-pull-save]");
         const cards = Array.from(pullForm.querySelectorAll("[data-door-destination-card]"));
         const allCompleteCollapsed = cards.length > 0 && cards.every((card) => (
             card.classList.contains("is-pulls-complete")
             && card.classList.contains("is-pulls-collapsed")
         ));
         pullForm.classList.toggle("is-all-pulls-complete", allCompleteCollapsed);
-        if (button) {
-            button.hidden = allCompleteCollapsed;
-        }
     };
 
     const summaryText = (cardData) => pullKeys
@@ -512,7 +515,8 @@
         }
 
         setCardError(card, "");
-        updateManualSaveVisibility();
+        setCardStatus(card, "SAVED", "saved");
+        updatePullFormCompleteState();
     };
 
     const savePull = async (card, pullKey) => {
@@ -528,6 +532,7 @@
         const value = input.value.trim();
         if (!toggle.checked && value && !hhmmPattern.test(value)) {
             setCardError(card, "Use HH:MM.");
+            setCardStatus(card, "", "");
             return;
         }
 
@@ -539,6 +544,8 @@
         body.set("no_pull", toggle.checked ? "1" : "0");
 
         card.classList.add("is-pull-saving");
+        setCardError(card, "");
+        setCardStatus(card, "SAVING", "saving");
         try {
             const response = await fetch(saveUrl, {
                 method: "POST",
@@ -555,6 +562,7 @@
             applyCardState(card, payload.card);
         } catch (error) {
             setCardError(card, error.message || "Pull save failed.");
+            setCardStatus(card, "", "");
         } finally {
             card.classList.remove("is-pull-saving");
         }
@@ -587,7 +595,7 @@
         card.classList.remove("is-pulls-collapsed");
         button.setAttribute("aria-expanded", "true");
         button.textContent = "PULL ROWS OPEN";
-        updateManualSaveVisibility();
+        updatePullFormCompleteState();
     });
 
     document.querySelectorAll("[data-hhmm-input]").forEach((input) => {
@@ -599,7 +607,17 @@
                 input.value = digits;
             }
             if (!input.value || hhmmPattern.test(input.value)) {
+                const card = input.closest("[data-door-destination-card]");
+                if (card) {
+                    setCardError(card, "");
+                }
                 scheduleSave(input);
+            } else if (input.value.length >= 5) {
+                const card = input.closest("[data-door-destination-card]");
+                if (card) {
+                    setCardError(card, "Use HH:MM.");
+                    setCardStatus(card, "", "");
+                }
             }
         });
 
@@ -610,6 +628,7 @@
                 const card = input.closest("[data-door-destination-card]");
                 if (card) {
                     setCardError(card, "Use HH:MM.");
+                    setCardStatus(card, "", "");
                 }
             }
         });
@@ -638,7 +657,7 @@
         syncInput();
     });
 
-    updateManualSaveVisibility();
+    updatePullFormCompleteState();
 })();
 </script>
 {% endif %}

@@ -2929,10 +2929,6 @@ a {
     display: none;
 }
 
-.neoermac-door-pull-form.is-all-pulls-complete .neoermac-door-save {
-    display: none;
-}
-
 .neoermac-door-autosave-error {
     margin: 0;
     padding: 5px 7px;
@@ -2946,6 +2942,24 @@ a {
 }
 
 .neoermac-door-autosave-error[hidden] {
+    display: none;
+}
+
+.neoermac-door-autosave-status {
+    margin: 0;
+    min-height: 14px;
+    color: rgba(185, 255, 218, 0.84);
+    font-size: 0.58rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-align: right;
+}
+
+.neoermac-door-autosave-status[data-state="saving"] {
+    color: rgba(234, 245, 255, 0.78);
+}
+
+.neoermac-door-autosave-status[hidden] {
     display: none;
 }
 
@@ -3020,7 +3034,6 @@ a {
     overflow-wrap: anywhere;
 }
 
-.neoermac-door-save,
 .neoermac-staffing-button {
     justify-self: center;
     width: min(100%, 260px);
@@ -3057,6 +3070,12 @@ a {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
+}
+
+.neoermac-uld-grid .neoermac-uld-type-label {
+    color: var(--node-ermac-secondary);
+    font-size: 0.74rem;
+    letter-spacing: 0.1em;
 }
 
 .neoermac-setup-toggle {
