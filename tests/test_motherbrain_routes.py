@@ -204,10 +204,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         css = Path("app/static/css/base.css").read_text()
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'class="motherbrain-dashboard-title"', response.data)
+        self.assertIn(b'class="motherbrain-dashboard-title mobile-shell-duplicate-title"', response.data)
         self.assertIn(b"data-motherbrain-mobile-dashboard", response.data)
         self.assertIn(b'class="motherbrain-dashboard-card-icon"', response.data)
         self.assertIn(b'class="motherbrain-dashboard-card-copy"', response.data)
+        self.assertIn("body.mobile-app-chrome .mobile-shell-duplicate-title", css)
         self.assertIn(
             "body.mobile-app-chrome.motherbrain-home-page .motherbrain-screen-logo,\n"
             "    body.mobile-app-chrome.motherbrain-home-page .motherbrain-dashboard-title {\n"

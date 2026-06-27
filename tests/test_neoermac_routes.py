@@ -137,7 +137,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"class=\"neoermac-shell neoermac-dashboard-shell neoermac-dashboard-home\"", response.data)
+        self.assertIn(b"neoermac-dashboard-hero mobile-shell-duplicate-title", response.data)
         self.assertIn(b"data-neoermac-mobile-dashboard", response.data)
+        self.assertIn("body.mobile-app-chrome .mobile-shell-duplicate-title", css)
         self.assertIn(
             ".neoermac-dashboard-home .neoermac-dashboard-hero {\n"
             "        display: none;",

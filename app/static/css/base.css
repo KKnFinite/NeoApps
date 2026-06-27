@@ -16631,6 +16631,10 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         text-transform: uppercase;
     }
 
+    body.mobile-app-chrome .mobile-shell-duplicate-title {
+        display: none !important;
+    }
+
     body.mobile-app-chrome .neosektor-standalone-header.app-header {
         display: none;
     }

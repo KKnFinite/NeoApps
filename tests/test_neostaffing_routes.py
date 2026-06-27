@@ -61,6 +61,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"MANAGE", response.data)
         self.assertIn(b"APP MANAGEMENT", response.data)
         self.assertIn(b"neo-brand--apps", response.data)
+        self.assertIn(b'class="mobile-shell-duplicate-title"', response.data)
+        self.assertIn(b'id="neostaffing-title">BOARD</h1>', response.data)
         self.assertNotIn(b"NeoMotherBrain", response.data)
         self.assertNotIn(b"Change Characters", response.data)
 

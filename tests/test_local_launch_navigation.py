@@ -511,6 +511,11 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         css = Path("app/static/css/base.css").read_text()
 
         self.assertIn(
+            "body.mobile-app-chrome .mobile-shell-duplicate-title {\n"
+            "        display: none !important;",
+            css,
+        )
+        self.assertIn(
             "body.mobile-app-chrome .neosektor-standalone-header.app-header {\n"
             "        display: none;",
             css,

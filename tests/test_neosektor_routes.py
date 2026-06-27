@@ -77,11 +77,24 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"Live Counts", response.data)
         self.assertNotIn(b"data-live-counts", response.data)
         self.assertIn(b"Operations Menu", response.data)
+        self.assertIn(b"neosektor-standalone-header mobile-shell-duplicate-title", response.data)
         self.assertNotIn(b"class=\"readonly-count\"", response.data)
         self.assertIn(b'href="/neosektor/live-counts"', response.data)
         self.assertIn(b'data-neosektor-mobile-tile="ebm"', response.data)
         self.assertIn(b"motherbrain-header-nav", response.data)
         self.assertNotIn(b"data-neosektor-internal-menu", response.data)
+
+    def test_tunnel_conductor_marks_duplicate_title_for_mobile_shell(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neosektor/tunnel-conductor")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            b"tunnel-header neosektor-standalone-header mobile-shell-duplicate-title",
+            response.data,
+        )
+        self.assertIn(b'id="neosektor-tunnel-title">Tunnel Conductor</h1>', response.data)
 
     def test_live_counts_uses_balanced_count_number_sizing(self):
         self._login_approved_user(role="operator")
