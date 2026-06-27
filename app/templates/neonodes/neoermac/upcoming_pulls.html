@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "_neo_brand.html" import neo_brand %}
+
+{% block title %}Upcoming Pulls | NeoErmac{% endblock %}
+
+{% block content %}
+<section class="neoermac-shell neoermac-dashboard-shell neoermac-upcoming-shell" aria-label="NeoErmac upcoming pulls">
+    <div class="neoermac-hero neoermac-upcoming-hero">
+        <p class="neoermac-kicker">{{ neo_brand("Ermac", "ermac", "neo-node-ermac") }}</p>
+        <h1>UPCOMING PULLS</h1>
+    </div>
+
+    <section class="neoermac-dashboard-panel neoermac-upcoming-panel" aria-label="NeoErmac current sort dashboard">
+        {% include "neonodes/neoermac/_upcoming_pulls_board.html" %}
+        <div class="neoermac-menu neoermac-dashboard-menu" aria-label="NeoErmac pull actions">
+            <a class="neoermac-menu-link" href="{{ url_for('neoermac.door_view') }}">DOOR VIEW</a>
+            <a class="neoermac-menu-link neoermac-menu-link-secondary" href="{{ url_for('neoermac.index') }}">DASHBOARD</a>
+        </div>
+    </section>
+</section>
+{% endblock %}

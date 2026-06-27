@@ -91,12 +91,21 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'src="/static/images/neoermac_logo1_large.png"', response.data)
         self.assertIn(b'srcset="/static/images/neoermac_logo1_medium.png"', response.data)
         self.assertIn(b'srcset="/static/images/neoermac_logo1_small.png"', response.data)
-        self.assertIn(b"UPCOMING OUTBOUND PULLS", response.data)
+        self.assertIn(b"data-neoermac-mobile-dashboard", response.data)
+        self.assertIn(b'data-neoermac-mobile-tile="door-view"', response.data)
+        self.assertIn(b'data-neoermac-mobile-tile="building-lineup"', response.data)
+        self.assertIn(b'data-neoermac-mobile-tile="view-outbound"', response.data)
+        self.assertIn(b'data-neoermac-mobile-tile="upcoming-pulls"', response.data)
+        self.assertIn(b'data-neoermac-mobile-tile="tug-assignments"', response.data)
+        self.assertIn(b"UPCOMING PULLS", response.data)
+        self.assertNotIn(b"UPCOMING OUTBOUND PULLS", response.data)
+        self.assertNotIn(b"neoermac-upcoming-board", response.data)
+        self.assertNotIn(b"System Status", response.data)
         self.assertIn(b"BUILDING LINEUP", response.data)
         self.assertIn(b"VIEW OUTBOUND", response.data)
         self.assertIn(b"DOOR VIEW", response.data)
         self.assertIn(b"TUG ASSIGNMENTS", response.data)
-        self.assertIn(b'<a class="neoermac-menu-link" href="/neoermac/door-view">DOOR VIEW</a>', response.data)
+        self.assertIn(b'href="/neoermac/upcoming-pulls"', response.data)
         self.assertNotIn(b"OPERATIONAL OVERVIEW", response.data)
         self.assertNotIn(b"ACTIVE GATEWAY", response.data)
         self.assertNotIn(b"OUTBOUND</span>", response.data)
@@ -116,19 +125,37 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertGreaterEqual(response.data.count(b'href="/neoermac/building-lineup"'), 1)
         self.assertGreaterEqual(response.data.count(b'href="/neoermac/view-outbound"'), 1)
         self.assertGreaterEqual(response.data.count(b'href="/neoermac/door-view"'), 1)
+        self.assertGreaterEqual(response.data.count(b'href="/neoermac/upcoming-pulls"'), 1)
         self.assertGreaterEqual(response.data.count(b'href="/neoermac/tug-assignments"'), 1)
         self.assertNotIn(b"BACK TO NeoGateway", response.data)
 
-    def test_neoermac_menu_shows_no_current_sort_state_without_operation(self):
+    def test_neoermac_mobile_dashboard_css_hides_duplicate_body_title(self):
         self._login_approved_user()
 
         response = self.client.get("/neoermac")
+        css = Path("app/static/css/base.css").read_text()
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b"class=\"neoermac-shell neoermac-dashboard-shell neoermac-dashboard-home\"", response.data)
+        self.assertIn(b"data-neoermac-mobile-dashboard", response.data)
+        self.assertIn(
+            ".neoermac-dashboard-home .neoermac-dashboard-hero {\n"
+            "        display: none;",
+            css,
+        )
+
+    def test_neoermac_upcoming_pulls_shows_no_current_sort_state_without_operation(self):
+        self._login_approved_user()
+
+        response = self.client.get("/neoermac/upcoming-pulls")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"UPCOMING OUTBOUND PULLS", response.data)
         self.assertIn(b"No current sort operation", response.data)
         self.assertNotIn(b"neoermac-upcoming-row", response.data)
+        self.assertIn(b'href="/neoermac"', response.data)
 
-    def test_neoermac_menu_shows_west_and_east_upcoming_pull_lists(self):
+    def test_neoermac_upcoming_pulls_shows_west_and_east_pull_lists(self):
         self._assign_lineup_destination("runout_4", "east_destination_1", "BOS")
         self._assign_lineup_destination("runout_10", "west_destination_2", "SDF")
         self._add_operation_departure(
@@ -152,7 +179,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login_approved_user(role="operator")
 
-        response = self.client.get("/neoermac")
+        response = self.client.get("/neoermac/upcoming-pulls")
 
         west_html = self._upcoming_side_html(response, "West")
         east_html = self._upcoming_side_html(response, "East")
@@ -169,7 +196,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"D13-D17 EAST BRN/ORG BELT", east_html)
         self.assertNotIn(b"SDF / N702UP / D32", east_html)
 
-    def test_neoermac_menu_combines_duplicate_belt_side_entries(self):
+    def test_neoermac_upcoming_pulls_combines_duplicate_belt_side_entries(self):
         self._assign_lineup_destination("runout_3", "east_destination_2", "DEN")
         self._assign_lineup_destination("runout_3", "west_destination_2", "DEN")
         self._add_operation_departure(
@@ -182,7 +209,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login_approved_user(role="operator")
 
-        response = self.client.get("/neoermac")
+        response = self.client.get("/neoermac/upcoming-pulls")
 
         east_html = self._upcoming_side_html(response, "East")
         self.assertEqual(response.status_code, 200)
@@ -192,7 +219,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"D9-D13 EAST BRN/WHT BELT", east_html)
         self.assertNotIn(b"D9-D13 WEST BRN/WHT BELT", east_html)
 
-    def test_neoermac_menu_keeps_different_destinations_on_same_belt(self):
+    def test_neoermac_upcoming_pulls_keeps_different_destinations_on_same_belt(self):
         self._assign_lineup_destination("runout_3", "east_destination_2", "DEN")
         self._assign_lineup_destination("runout_3", "west_destination_2", "OMA")
         self._add_operation_departure("UPS811", "DEN")
@@ -200,7 +227,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login_approved_user(role="operator")
 
-        response = self.client.get("/neoermac")
+        response = self.client.get("/neoermac/upcoming-pulls")
 
         east_html = self._upcoming_side_html(response, "East")
         self.assertEqual(response.status_code, 200)
@@ -210,7 +237,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"UPS812 / OMA", east_html)
         self.assertEqual(east_html.count(b"D9-D13 BRN/WHT BELT"), 5)
 
-    def test_neoermac_menu_removes_actual_and_no_pull_items(self):
+    def test_neoermac_upcoming_pulls_removes_actual_and_no_pull_items(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
         self._add_operation_departure(
             "UPS703",
@@ -234,7 +261,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             },
             follow_redirects=False,
         )
-        response = self.client.get("/neoermac")
+        response = self.client.get("/neoermac/upcoming-pulls")
 
         west_html = self._upcoming_side_html(response, "West")
         self.assertEqual(save_response.status_code, 302)
@@ -270,7 +297,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             },
             follow_redirects=False,
         )
-        one_side_dashboard = self.client.get("/neoermac")
+        one_side_dashboard = self.client.get("/neoermac/upcoming-pulls")
         one_side_west_html = self._upcoming_side_html(one_side_dashboard, "West")
 
         self.assertEqual(first_side_response.status_code, 302)
@@ -290,7 +317,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             },
             follow_redirects=False,
         )
-        complete_dashboard = self.client.get("/neoermac")
+        complete_dashboard = self.client.get("/neoermac/upcoming-pulls")
         complete_west_html = self._upcoming_side_html(complete_dashboard, "West")
 
         self.assertEqual(second_side_response.status_code, 302)
@@ -316,7 +343,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login_approved_user(role="operator")
 
-        response = self.client.get("/neoermac")
+        response = self.client.get("/neoermac/upcoming-pulls")
 
         west_html = self._upcoming_side_html(response, "West")
         self.assertEqual(response.status_code, 200)
@@ -1896,6 +1923,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
     def _neoermac_paths(self):
         return (
             "/neoermac",
+            "/neoermac/upcoming-pulls",
             "/neoermac/building-lineup",
             "/neoermac/outbound",
             "/neoermac/view-outbound",
@@ -1928,7 +1956,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         if side_name == "West":
             end = response.data.index(b'aria-label="East upcoming pulls"', start)
         else:
-            end = response.data.index(b'<div class="neoermac-menu', start)
+            end = response.data.index(b"</section>", start)
         return response.data[start:end]
 
 

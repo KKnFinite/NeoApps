@@ -4,7 +4,7 @@
 {% block title %}NeoErmac | NeoGateway{% endblock %}
 
 {% block content %}
-<section class="neoermac-shell neoermac-dashboard-shell" aria-label="NeoErmac dashboard">
+<section class="neoermac-shell neoermac-dashboard-shell neoermac-dashboard-home" aria-label="NeoErmac dashboard">
     <div class="neoermac-hero neoermac-dashboard-hero">
         <picture>
             <source media="(max-width: 520px)" srcset="{{ url_for('static', filename='images/neoermac_logo1_small.png') }}">
@@ -14,62 +14,58 @@
         <h1 class="neoermac-dashboard-brand">{{ neo_brand("Ermac", "ermac", "neo-node-ermac") }}</h1>
     </div>
 
-    <section class="neoermac-dashboard-panel" aria-label="NeoErmac current sort dashboard">
-        <section class="neoermac-upcoming-board" aria-label="Upcoming outbound pulls">
-            <h3>UPCOMING OUTBOUND PULLS</h3>
-            {% if not dashboard_context.has_current_sort %}
-            <p class="neoermac-upcoming-empty">No current sort operation</p>
-            {% else %}
-            <div class="neoermac-upcoming-sides">
-                <div class="neoermac-upcoming-side" aria-label="West upcoming pulls">
-                    <div class="neoermac-upcoming-side-header">
-                        <span>WEST</span>
-                        <strong>NEXT {{ dashboard_context.west|length }}</strong>
-                    </div>
-                    {% if dashboard_context.west %}
-                    <ol class="neoermac-upcoming-list">
-                        {% for pull in dashboard_context.west %}
-                        <li class="neoermac-upcoming-row">
-                            <span class="neoermac-upcoming-time">{{ pull.planned_time }}</span>
-                            <span class="neoermac-upcoming-type">{{ pull.pull_type }}</span>
-                            <span class="neoermac-upcoming-detail">{{ pull.destination }} / {{ pull.tail }} / {{ pull.parking }}</span>
-                            <span class="neoermac-upcoming-location">{{ pull.location }}</span>
-                        </li>
-                        {% endfor %}
-                    </ol>
-                    {% else %}
-                    <p class="neoermac-upcoming-side-empty">No upcoming west pulls</p>
-                    {% endif %}
-                </div>
-                <div class="neoermac-upcoming-side" aria-label="East upcoming pulls">
-                    <div class="neoermac-upcoming-side-header">
-                        <span>EAST</span>
-                        <strong>NEXT {{ dashboard_context.east|length }}</strong>
-                    </div>
-                    {% if dashboard_context.east %}
-                    <ol class="neoermac-upcoming-list">
-                        {% for pull in dashboard_context.east %}
-                        <li class="neoermac-upcoming-row">
-                            <span class="neoermac-upcoming-time">{{ pull.planned_time }}</span>
-                            <span class="neoermac-upcoming-type">{{ pull.pull_type }}</span>
-                            <span class="neoermac-upcoming-detail">{{ pull.destination }} / {{ pull.tail }} / {{ pull.parking }}</span>
-                            <span class="neoermac-upcoming-location">{{ pull.location }}</span>
-                        </li>
-                        {% endfor %}
-                    </ol>
-                    {% else %}
-                    <p class="neoermac-upcoming-side-empty">No upcoming east pulls</p>
-                    {% endif %}
-                </div>
-            </div>
-            {% endif %}
-        </section>
-        <div class="neoermac-menu neoermac-dashboard-menu" aria-label="NeoErmac actions">
-            <a class="neoermac-menu-link" href="{{ url_for('neoermac.door_view') }}">DOOR VIEW</a>
-            <a class="neoermac-menu-link" href="{{ url_for('neoermac.building_lineup') }}">BUILDING LINEUP</a>
-            <a class="neoermac-menu-link neoermac-menu-link-secondary" href="{{ url_for('neoermac.view_outbound') }}">VIEW OUTBOUND</a>
-            <a class="neoermac-menu-link neoermac-menu-link-secondary" href="{{ url_for('neoermac.tug_assignments') }}">TUG ASSIGNMENTS</a>
+    <section class="neoermac-dashboard-panel neoermac-tile-dashboard" data-neoermac-mobile-dashboard aria-label="NeoErmac operations">
+        <div class="neoermac-dashboard-head">
+            <span>OPERATIONS</span>
+            <strong>{{ gateway.code }}</strong>
         </div>
+        <nav class="neoermac-dashboard-tiles" aria-label="NeoErmac dashboard actions">
+            <a class="neoermac-dashboard-tile neoermac-dashboard-tile-door-view" href="{{ url_for('neoermac.door_view') }}" data-neoermac-mobile-tile="door-view">
+                <span class="neoermac-dashboard-tile-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M5 4h10v16H5V4Zm2 2v12h6V6H7Zm10 4h2v10h-2V10Zm-7 2h2v2h-2v-2Z"/></svg>
+                </span>
+                <span class="neoermac-dashboard-tile-copy">
+                    <strong>DOOR VIEW</strong>
+                    <small>Door pulls, ULD requests, and on-the-way state.</small>
+                </span>
+            </a>
+            <a class="neoermac-dashboard-tile neoermac-dashboard-tile-lineup" href="{{ url_for('neoermac.building_lineup') }}" data-neoermac-mobile-tile="building-lineup">
+                <span class="neoermac-dashboard-tile-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M4 5h7v5H4V5Zm9 0h7v5h-7V5ZM4 14h7v5H4v-5Zm9 0h7v5h-7v-5Zm-2-2h2v2h-2v-2Z"/></svg>
+                </span>
+                <span class="neoermac-dashboard-tile-copy">
+                    <strong>BUILDING LINEUP</strong>
+                    <small>Assign destinations across doors and belts.</small>
+                </span>
+            </a>
+            <a class="neoermac-dashboard-tile neoermac-dashboard-tile-outbound" href="{{ url_for('neoermac.view_outbound') }}" data-neoermac-mobile-tile="view-outbound">
+                <span class="neoermac-dashboard-tile-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M4 6h12l4 4v8H4V6Zm2 2v8h12v-5h-4V8H6Zm2 2h4v2H8v-2Zm0 3h7v2H8v-2Z"/></svg>
+                </span>
+                <span class="neoermac-dashboard-tile-copy">
+                    <strong>VIEW OUTBOUND</strong>
+                    <small>Outbound flight, pull, and door context.</small>
+                </span>
+            </a>
+            <a class="neoermac-dashboard-tile neoermac-dashboard-tile-upcoming" href="{{ url_for('neoermac.upcoming_pulls') }}" data-neoermac-mobile-tile="upcoming-pulls">
+                <span class="neoermac-dashboard-tile-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-2.1-5H14v2h6V3h-2v2.1A8.9 8.9 0 0 0 12 3Zm-1 4h2v5.2l4 2.3-1 1.7-5-3V7Z"/></svg>
+                </span>
+                <span class="neoermac-dashboard-tile-copy">
+                    <strong>UPCOMING PULLS</strong>
+                    <small>Next 5 pulls by east and west side.</small>
+                </span>
+            </a>
+            <a class="neoermac-dashboard-tile neoermac-dashboard-tile-tugs is-placeholder" href="{{ url_for('neoermac.tug_assignments') }}" data-neoermac-mobile-tile="tug-assignments">
+                <span class="neoermac-dashboard-tile-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M5 8h10l4 4v5h-2a3 3 0 0 1-6 0H9a3 3 0 0 1-6 0H2v-6h3V8Zm2 2v3h7v-3H7Zm9 1.4V13h1.6L16 11.4ZM6 18a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm8 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg>
+                </span>
+                <span class="neoermac-dashboard-tile-copy">
+                    <strong>TUG ASSIGNMENTS</strong>
+                    <small>Placeholder route for future tug workflow.</small>
+                </span>
+            </a>
+        </nav>
     </section>
 </section>
 {% endblock %}

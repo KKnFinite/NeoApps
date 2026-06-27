@@ -1756,6 +1756,134 @@ a {
     letter-spacing: 0.04em;
 }
 
+.neoermac-tile-dashboard {
+    gap: 16px;
+}
+
+.neoermac-dashboard-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(201, 208, 214, 0.16);
+}
+
+.neoermac-dashboard-head span,
+.neoermac-dashboard-head strong {
+    color: var(--steel);
+    font-size: 0.72rem;
+    font-weight: 950;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.neoermac-dashboard-head span {
+    color: var(--node-ermac-secondary);
+}
+
+.neoermac-dashboard-tiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
+}
+
+.neoermac-dashboard-tile {
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+    min-height: 96px;
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid rgba(var(--node-rgb), 0.42);
+    border-radius: 8px;
+    color: #eef6ff;
+    background:
+        radial-gradient(circle at 12% 12%, rgba(54, 226, 123, 0.14), transparent 9rem),
+        linear-gradient(135deg, rgba(238, 246, 255, 0.1), transparent 36%),
+        linear-gradient(180deg, rgba(48, 8, 15, 0.98), rgba(6, 8, 12, 0.98));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        0 18px 28px rgba(0, 0, 0, 0.28),
+        0 0 20px rgba(var(--node-rgb), 0.14);
+    text-align: left;
+    text-decoration: none;
+}
+
+.neoermac-dashboard-tile::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: linear-gradient(180deg, var(--node-ermac-secondary), var(--node-ermac-primary));
+    box-shadow: 0 0 16px rgba(54, 226, 123, 0.32);
+}
+
+.neoermac-dashboard-tile:hover,
+.neoermac-dashboard-tile:focus-visible {
+    border-color: rgba(54, 226, 123, 0.72);
+    outline: none;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.14),
+        0 18px 30px rgba(0, 0, 0, 0.34),
+        0 0 26px rgba(var(--node-rgb), 0.24);
+}
+
+.neoermac-dashboard-tile.is-placeholder {
+    border-style: dashed;
+}
+
+.neoermac-dashboard-tile-icon {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    border: 1px solid rgba(54, 226, 123, 0.34);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 40%),
+        rgba(var(--node-rgb), 0.2);
+    color: var(--node-ermac-secondary);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.neoermac-dashboard-tile-icon svg {
+    width: 29px;
+    height: 29px;
+    fill: currentColor;
+}
+
+.neoermac-dashboard-tile-copy {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.neoermac-dashboard-tile-copy strong {
+    color: #ffffff;
+    font-size: 0.96rem;
+    font-weight: 950;
+    letter-spacing: 0;
+    line-height: 1.08;
+    text-transform: uppercase;
+}
+
+.neoermac-dashboard-tile-copy small {
+    color: rgba(238, 246, 255, 0.68);
+    font-size: 0.73rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    line-height: 1.25;
+}
+
 .neoermac-upcoming-board {
     display: grid;
     gap: 12px;
@@ -10194,6 +10322,10 @@ select::-ms-expand {
         padding-inline: 0;
     }
 
+    .neoermac-dashboard-home .neoermac-dashboard-hero {
+        display: none;
+    }
+
     .neoermac-dashboard-logo {
         width: min(100%, 340px);
         max-height: 240px;
@@ -10202,6 +10334,41 @@ select::-ms-expand {
     .neoermac-dashboard-panel {
         width: 100%;
         padding: 16px 12px;
+    }
+
+    .neoermac-dashboard-head {
+        padding-bottom: 8px;
+    }
+
+    .neoermac-dashboard-tiles {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .neoermac-dashboard-tile {
+        grid-template-columns: 46px minmax(0, 1fr);
+        gap: 10px;
+        min-height: 84px;
+        padding: 11px;
+        border-radius: 7px;
+    }
+
+    .neoermac-dashboard-tile-icon {
+        width: 46px;
+        height: 46px;
+    }
+
+    .neoermac-dashboard-tile-icon svg {
+        width: 25px;
+        height: 25px;
+    }
+
+    .neoermac-dashboard-tile-copy strong {
+        font-size: 0.88rem;
+    }
+
+    .neoermac-dashboard-tile-copy small {
+        font-size: 0.68rem;
     }
 
     .neoermac-upcoming-sides {

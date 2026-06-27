@@ -33,6 +33,7 @@ VIEW_OUTBOUND_VIEW_PERMISSION = "neoermac.view_outbound.view"
 
 
 NEOERMAC_PAGES = (
+    ("UPCOMING PULLS", "neoermac.upcoming_pulls"),
     ("BUILDING LINEUP", "neoermac.building_lineup"),
     ("VIEW OUTBOUND", "neoermac.view_outbound"),
     ("DOOR VIEW", "neoermac.door_view"),
@@ -44,12 +45,10 @@ NEOERMAC_PAGES = (
 @gateway_node_required("ermac")
 def index():
     gateway = get_current_gateway()
-    dashboard_context = neoermac_dashboard_context(gateway)
     db.session.commit()
     return render_template(
         "neonodes/neoermac/index.html",
         gateway=gateway,
-        dashboard_context=dashboard_context,
         menu_items=NEOERMAC_PAGES,
     )
 
@@ -58,6 +57,20 @@ def index():
 @gateway_node_required("ermac")
 def index_slash():
     return redirect(url_for("neoermac.index"))
+
+
+@bp.route("/upcoming-pulls")
+@gateway_node_required("ermac")
+def upcoming_pulls():
+    gateway = get_current_gateway()
+    dashboard_context = neoermac_dashboard_context(gateway)
+    db.session.commit()
+    return render_template(
+        "neonodes/neoermac/upcoming_pulls.html",
+        gateway=gateway,
+        dashboard_context=dashboard_context,
+        menu_items=NEOERMAC_PAGES,
+    )
 
 
 @bp.route("/building-lineup", methods=["GET", "POST"])

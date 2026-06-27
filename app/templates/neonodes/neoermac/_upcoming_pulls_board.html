@@ -1,0 +1,49 @@
+<section class="neoermac-upcoming-board" aria-label="Upcoming outbound pulls">
+    <h3>UPCOMING OUTBOUND PULLS</h3>
+    {% if not dashboard_context.has_current_sort %}
+    <p class="neoermac-upcoming-empty">No current sort operation</p>
+    {% else %}
+    <div class="neoermac-upcoming-sides">
+        <div class="neoermac-upcoming-side" aria-label="West upcoming pulls">
+            <div class="neoermac-upcoming-side-header">
+                <span>WEST</span>
+                <strong>NEXT {{ dashboard_context.west|length }}</strong>
+            </div>
+            {% if dashboard_context.west %}
+            <ol class="neoermac-upcoming-list">
+                {% for pull in dashboard_context.west %}
+                <li class="neoermac-upcoming-row">
+                    <span class="neoermac-upcoming-time">{{ pull.planned_time }}</span>
+                    <span class="neoermac-upcoming-type">{{ pull.pull_type }}</span>
+                    <span class="neoermac-upcoming-detail">{{ pull.destination }} / {{ pull.tail }} / {{ pull.parking }}</span>
+                    <span class="neoermac-upcoming-location">{{ pull.location }}</span>
+                </li>
+                {% endfor %}
+            </ol>
+            {% else %}
+            <p class="neoermac-upcoming-side-empty">No upcoming west pulls</p>
+            {% endif %}
+        </div>
+        <div class="neoermac-upcoming-side" aria-label="East upcoming pulls">
+            <div class="neoermac-upcoming-side-header">
+                <span>EAST</span>
+                <strong>NEXT {{ dashboard_context.east|length }}</strong>
+            </div>
+            {% if dashboard_context.east %}
+            <ol class="neoermac-upcoming-list">
+                {% for pull in dashboard_context.east %}
+                <li class="neoermac-upcoming-row">
+                    <span class="neoermac-upcoming-time">{{ pull.planned_time }}</span>
+                    <span class="neoermac-upcoming-type">{{ pull.pull_type }}</span>
+                    <span class="neoermac-upcoming-detail">{{ pull.destination }} / {{ pull.tail }} / {{ pull.parking }}</span>
+                    <span class="neoermac-upcoming-location">{{ pull.location }}</span>
+                </li>
+                {% endfor %}
+            </ol>
+            {% else %}
+            <p class="neoermac-upcoming-side-empty">No upcoming east pulls</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</section>
