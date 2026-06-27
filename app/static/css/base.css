@@ -7070,7 +7070,35 @@ body.blueprint-neostaffing {
     line-height: 1.1;
 }
 
-.motherbrain-dashboard-card span {
+.motherbrain-dashboard-card-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    border: 1px solid rgba(var(--node-highlight-rgb), 0.48);
+    border-radius: 8px;
+    color: var(--node-highlight);
+    background:
+        radial-gradient(circle at 50% 20%, rgba(var(--node-highlight-rgb), 0.22), transparent 62%),
+        rgba(4, 5, 8, 0.72);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 0 18px rgba(var(--node-rgb), 0.15);
+}
+
+.motherbrain-dashboard-card-icon svg {
+    width: 24px;
+    height: 24px;
+    fill: currentColor;
+}
+
+.motherbrain-dashboard-card-copy {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+
+.motherbrain-dashboard-card-copy > span {
     color: var(--muted);
     font-size: 0.88rem;
     font-weight: 700;
@@ -9920,55 +9948,80 @@ select::-ms-expand {
         width: 100%;
     }
 
-    .motherbrain-screen-logo {
-        margin-top: 6px;
+    body.mobile-app-chrome.motherbrain-home-page .motherbrain-screen-logo,
+    body.mobile-app-chrome.motherbrain-home-page .motherbrain-dashboard-title {
+        display: none;
     }
 
-    .motherbrain-screen-logo img {
-        width: min(100%, 520px);
+    body.mobile-app-chrome.motherbrain-home-page .motherbrain-landing {
+        gap: 0;
+        padding: 0 10px calc(94px + env(safe-area-inset-bottom, 0px));
     }
 
-    .motherbrain-landing {
-        gap: 16px;
-    }
-
-    .motherbrain-dashboard {
+    body.mobile-app-chrome.motherbrain-home-page .motherbrain-dashboard {
         gap: 12px;
-        width: min(100%, 480px);
+        width: min(100%, 430px);
         justify-items: center;
         text-align: center;
     }
 
-    .motherbrain-dashboard h1 {
-        font-size: 1.35rem;
-    }
-
-    .motherbrain-current-sort-overview {
+    body.mobile-app-chrome.motherbrain-home-page .motherbrain-current-sort-overview {
         display: none;
     }
 
-    .motherbrain-dashboard-grid {
+    body.mobile-app-chrome.motherbrain-home-page .motherbrain-dashboard-grid {
         display: grid;
-        grid-template-columns: minmax(0, 360px);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         justify-content: center;
         gap: 10px;
         width: 100%;
     }
 
-    .motherbrain-dashboard-card {
+    body.mobile-app-chrome.motherbrain-home-page .motherbrain-dashboard-card {
+        position: relative;
+        overflow: hidden;
+        align-content: stretch;
+        justify-items: stretch;
         width: 100%;
-        min-height: 92px;
-        padding: 13px 11px;
+        min-width: 0;
+        min-height: 126px;
+        padding: 11px;
         border-radius: 6px;
-        text-align: center;
+        text-align: left;
     }
 
-    .motherbrain-dashboard-card strong {
-        font-size: 0.9rem;
+    body.mobile-app-chrome.motherbrain-home-page .motherbrain-dashboard-card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: linear-gradient(135deg, rgba(var(--node-highlight-rgb), 0.12), transparent 42%);
     }
 
-    .motherbrain-dashboard-card span {
-        font-size: 0.74rem;
+    body.mobile-app-chrome.motherbrain-home-page .motherbrain-dashboard-card-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 7px;
+    }
+
+    body.mobile-app-chrome.motherbrain-home-page .motherbrain-dashboard-card-icon svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    body.mobile-app-chrome.motherbrain-home-page .motherbrain-dashboard-card-copy {
+        align-self: end;
+        gap: 5px;
+    }
+
+    body.mobile-app-chrome.motherbrain-home-page .motherbrain-dashboard-card strong {
+        font-size: 0.8rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    body.mobile-app-chrome.motherbrain-home-page .motherbrain-dashboard-card-copy > span {
+        font-size: 0.68rem;
         line-height: 1.25;
     }
 

@@ -4152,7 +4152,7 @@ class FlightApiTestPageTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'href="/motherbrain/flight-api-review"', response.data)
-        self.assertIn(b"FLIGHT API REVIEW", response.data)
+        self.assertIn(b"UNMATCHED QUEUE", response.data)
 
     def test_flight_api_review_page_permission_can_block_link_and_page(self):
         view_rule = PermissionRule.query.filter_by(
