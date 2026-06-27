@@ -233,11 +233,11 @@
             {% endif %}
             {% if mobile_switch_targets %}
             <details class="mobile-bottom-nav-item mobile-bottom-switcher" data-mobile-switcher data-mobile-popover="switch">
-                <summary class="mobile-bottom-nav-button" aria-label="Switch NeoGateway character" data-mobile-switcher-button data-mobile-popover-trigger="switch">
+                <summary class="mobile-bottom-nav-button" aria-label="Switch NeoGateway character" aria-expanded="false" data-mobile-switcher-button data-mobile-popover-trigger="switch">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9.2l-2.1-2.1L15.5 3.5 20 8l-4.5 4.5-1.4-1.4L16.2 9H7V7Zm10 10H7.8l2.1 2.1-1.4 1.4L4 16l4.5-4.5 1.4 1.4L7.8 15H17v2Z"/></svg>
                     <span>Switch</span>
                 </summary>
-                <div class="mobile-bottom-switcher-panel mobile-bottom-popover" role="menu" aria-label="Accessible NeoNodes" data-mobile-popover-anchor="switch">
+                <div class="mobile-bottom-switcher-panel mobile-bottom-popover mobile-bottom-popover--switch" role="menu" aria-label="Accessible NeoNodes" aria-hidden="true" data-mobile-popover-anchor="switch">
                     {% if not is_portal_page %}
                     <a class="mobile-bottom-switcher-link node-portal" href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">
                         {{ neo_brand("Portal", "portal") }}
@@ -262,7 +262,7 @@
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h16v2H4v-2Z"/></svg>
                     <span>Menu</span>
                 </button>
-                <div class="mobile-bottom-popover mobile-bottom-menu-panel mobile-shell-menu-panel" id="mobile-bottom-menu-panel" role="menu" aria-label="Mobile menu" data-mobile-shell-menu-panel data-mobile-popover-anchor="menu">
+                <div class="mobile-bottom-popover mobile-bottom-popover--menu mobile-bottom-menu-panel mobile-shell-menu-panel" id="mobile-bottom-menu-panel" role="menu" aria-label="Mobile menu" aria-hidden="true" data-mobile-shell-menu-panel data-mobile-popover-anchor="menu">
                     {% if is_neosektor_page %}
                         {% for item in neosektor_internal_menu_items() %}
                         <a class="mobile-shell-menu-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" role="menuitem" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
@@ -385,11 +385,94 @@
         const alertTray = null;
         {% endif %}
 
-        const setMenuOpen = (isOpen) => {
+        const popoverAnimationMs = 180;
+        const popoverTimers = new WeakMap();
+
+        const setPopoverOpen = (panel, isOpen, options = {}) => {
+            if (!panel) {
+                return;
+            }
+            const existingTimer = popoverTimers.get(panel);
+            if (existingTimer) {
+                window.clearTimeout(existingTimer);
+                popoverTimers.delete(panel);
+            }
+
+            if (isOpen) {
+                panel.setAttribute("aria-hidden", "false");
+                panel.classList.remove("is-closing");
+                panel.classList.add("is-opening", "is-open");
+                const timer = window.setTimeout(() => {
+                    panel.classList.remove("is-opening");
+                    popoverTimers.delete(panel);
+                }, popoverAnimationMs);
+                popoverTimers.set(panel, timer);
+                return;
+            }
+
+            const finishClose = () => {
+                panel.classList.remove("is-closing", "is-opening", "is-open");
+                panel.setAttribute("aria-hidden", "true");
+                popoverTimers.delete(panel);
+                if (typeof options.afterClose === "function") {
+                    options.afterClose();
+                }
+            };
+
+            if (options.instant || !panel.classList.contains("is-open")) {
+                finishClose();
+                return;
+            }
+
+            panel.classList.remove("is-opening", "is-open");
+            panel.classList.add("is-closing");
+            const timer = window.setTimeout(finishClose, popoverAnimationMs);
+            popoverTimers.set(panel, timer);
+        };
+
+        const switcherPanel = (switcher) => switcher.querySelector("[data-mobile-popover-anchor='switch']");
+        const isSwitcherOpen = (switcher) => {
+            const panel = switcherPanel(switcher);
+            return Boolean(switcher.open && panel && !panel.classList.contains("is-closing") && panel.classList.contains("is-open"));
+        };
+
+        const setSwitcherOpen = (switcher, isOpen, options = {}) => {
+            const panel = switcherPanel(switcher);
+            const button = switcher.querySelector("[data-mobile-switcher-button]");
+            if (!panel || !button) {
+                return;
+            }
+            if (isOpen) {
+                switcher.open = true;
+                switcher.classList.add("is-popover-open");
+                button.setAttribute("aria-expanded", "true");
+                setPopoverOpen(panel, true);
+                return;
+            }
+
+            switcher.classList.remove("is-popover-open");
+            button.setAttribute("aria-expanded", "false");
+            setPopoverOpen(panel, false, {
+                instant: options.instant,
+                afterClose: () => {
+                    switcher.open = false;
+                },
+            });
+        };
+
+        const closeSwitchers = (except = null, options = {}) => {
+            switchers.forEach((switcher) => {
+                if (switcher !== except) {
+                    setSwitcherOpen(switcher, false, options);
+                }
+            });
+        };
+
+        const setMenuOpen = (isOpen, options = {}) => {
             if (!menuPanel) {
                 return;
             }
-            menuPanel.classList.toggle("is-open", isOpen);
+            setPopoverOpen(menuPanel, isOpen, options);
             menuButtons.forEach((button) => {
                 button.setAttribute("aria-expanded", isOpen ? "true" : "false");
             });
@@ -397,10 +480,9 @@
 
         menuButtons.forEach((button) => {
             button.addEventListener("click", () => {
-                setMenuOpen(!menuPanel.classList.contains("is-open"));
-                switchers.forEach((switcher) => {
-                    switcher.open = false;
-                });
+                const willOpen = !menuPanel.classList.contains("is-open");
+                setMenuOpen(willOpen);
+                closeSwitchers(null, { instant: !willOpen });
                 accountMenus.forEach((menu) => {
                     menu.open = false;
                 });
@@ -425,9 +507,7 @@
                 }
                 alertTray.open = !alertTray.open;
                 setMenuOpen(false);
-                switchers.forEach((switcher) => {
-                    switcher.open = false;
-                });
+                closeSwitchers();
                 accountMenus.forEach((menu) => {
                     menu.open = false;
                 });
@@ -435,10 +515,15 @@
         });
 
         switchers.forEach((switcher) => {
-            switcher.addEventListener("toggle", () => {
-                if (!switcher.open) {
-                    return;
-                }
+            const button = switcher.querySelector("[data-mobile-switcher-button]");
+            const panel = switcherPanel(switcher);
+            if (!button || !panel) {
+                return;
+            }
+
+            button.addEventListener("click", (event) => {
+                event.preventDefault();
+                const willOpen = !isSwitcherOpen(switcher);
                 setMenuOpen(false);
                 accountMenus.forEach((menu) => {
                     menu.open = false;
@@ -446,11 +531,14 @@
                 if (alertTray) {
                     alertTray.open = false;
                 }
-                switchers.forEach((other) => {
-                    if (other !== switcher) {
-                        other.open = false;
-                    }
-                });
+                closeSwitchers(switcher, { instant: !willOpen });
+                setSwitcherOpen(switcher, willOpen);
+            });
+
+            panel.addEventListener("click", (event) => {
+                if (event.target.closest("a")) {
+                    setSwitcherOpen(switcher, false);
+                }
             });
         });
 
@@ -460,9 +548,7 @@
                     return;
                 }
                 setMenuOpen(false);
-                switchers.forEach((switcher) => {
-                    switcher.open = false;
-                });
+                closeSwitchers();
                 if (alertTray) {
                     alertTray.open = false;
                 }
@@ -475,9 +561,7 @@
             const insideBottomNav = Boolean(target.closest("[data-mobile-bottom-nav]"));
             if (!insideTopbar && !insideBottomNav) {
                 setMenuOpen(false);
-                switchers.forEach((switcher) => {
-                    switcher.open = false;
-                });
+                closeSwitchers();
                 accountMenus.forEach((menu) => {
                     menu.open = false;
                 });
@@ -492,9 +576,7 @@
                 return;
             }
             setMenuOpen(false);
-            switchers.forEach((switcher) => {
-                switcher.open = false;
-            });
+            closeSwitchers();
             accountMenus.forEach((menu) => {
                 menu.open = false;
             });

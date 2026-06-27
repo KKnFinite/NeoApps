@@ -16250,11 +16250,22 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     @keyframes mobile-bottom-pop {
         from {
             opacity: 0;
-            transform: translateY(10px) scale(0.94);
+            transform: translateY(13px) scale(0.86);
         }
         to {
             opacity: 1;
             transform: translateY(0) scale(1);
+        }
+    }
+
+    @keyframes mobile-bottom-pop-close {
+        from {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+        to {
+            opacity: 0;
+            transform: translateY(8px) scale(0.92);
         }
     }
 
@@ -16420,6 +16431,12 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         box-shadow: 0 0 18px rgba(var(--node-rgb), 0.18);
     }
 
+    .mobile-bottom-switcher.is-popover-open > summary {
+        background: rgba(var(--node-rgb), 0.24);
+        color: var(--neo-bright-silver);
+        box-shadow: 0 0 20px rgba(var(--node-rgb), 0.22);
+    }
+
     .mobile-bottom-nav-disabled {
         color: rgba(201, 208, 214, 0.42);
         cursor: default;
@@ -16443,31 +16460,77 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     .mobile-bottom-popover {
         position: absolute;
         bottom: calc(100% + 12px);
+        display: grid;
+        opacity: 0;
+        visibility: hidden;
         padding: 9px;
+        pointer-events: none;
+        transform: translateY(13px) scale(0.86);
+        transform-origin: var(--mobile-popover-origin-x, 88%) 100%;
+        transition:
+            opacity 130ms ease,
+            transform 170ms cubic-bezier(0.18, 0.96, 0.32, 1),
+            visibility 0s linear 170ms;
+        will-change: opacity, transform;
+    }
+
+    .mobile-bottom-popover::after {
+        content: "";
+        position: absolute;
+        right: var(--mobile-popover-tail-right, 24px);
+        bottom: -6px;
+        width: 12px;
+        height: 12px;
+        border-right: 1px solid rgba(var(--node-highlight-rgb), 0.42);
+        border-bottom: 1px solid rgba(var(--node-highlight-rgb), 0.42);
+        background: linear-gradient(135deg, rgba(22, 25, 31, 0.94), rgba(5, 5, 6, 0.96));
+        box-shadow: 6px 6px 14px rgba(0, 0, 0, 0.18);
+        transform: rotate(45deg);
+    }
+
+    .mobile-bottom-popover.is-opening,
+    .mobile-bottom-popover.is-open {
+        opacity: 1;
+        visibility: visible;
         pointer-events: auto;
-        animation: mobile-bottom-pop 150ms ease-out both;
-        transform-origin: 88% 100%;
+        transform: translateY(0) scale(1);
+        transition-delay: 0s;
+    }
+
+    .mobile-bottom-popover.is-opening {
+        animation: mobile-bottom-pop 180ms cubic-bezier(0.18, 0.96, 0.32, 1) both;
+    }
+
+    .mobile-bottom-popover.is-closing {
+        opacity: 0;
+        visibility: visible;
+        pointer-events: none;
+        animation: mobile-bottom-pop-close 140ms ease-in both;
+        transition-delay: 0s;
     }
 
     .mobile-bottom-switcher-panel {
-        display: grid;
         gap: 7px;
         right: 0;
         width: min(280px, calc(100vw - 22px));
-        transform-origin: 72% 100%;
+        --mobile-popover-origin-x: 72%;
+        --mobile-popover-tail-right: 70px;
     }
 
     .mobile-bottom-menu-panel {
         right: 0;
-        display: none;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 7px;
         width: min(324px, calc(100vw - 22px));
-        transform-origin: 92% 100%;
+        --mobile-popover-origin-x: 92%;
+        --mobile-popover-tail-right: 22px;
     }
 
     .mobile-bottom-menu-panel.is-open {
-        display: grid;
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transform: translateY(0) scale(1);
     }
 
     .mobile-bottom-switcher-link {
