@@ -5449,13 +5449,28 @@ h2 {
     width: min(100%, 680px);
 }
 
-.portal-dashboard-brand {
-    justify-items: center;
-    margin-bottom: 2px;
+.portal-header-brandline {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
 }
 
-.portal-dashboard-logo {
-    width: min(100%, 560px);
+.portal-header-logo {
+    display: block;
+    width: 132px;
+    max-width: 38vw;
+    height: auto;
+    object-fit: contain;
+    filter: drop-shadow(0 0 12px rgba(var(--node-rgb), 0.18));
+}
+
+.portal-header-word {
+    color: var(--steel);
+    font-size: 1.05rem;
+    font-weight: 950;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
 }
 
 .portal-page {
@@ -5472,7 +5487,7 @@ h2 {
 .portal-app-card {
     display: grid;
     gap: 16px;
-    min-height: 230px;
+    min-height: 178px;
     padding: 20px;
     border: 1px solid rgba(var(--node-rgb), 0.35);
     border-radius: 8px;
@@ -5525,12 +5540,24 @@ h2 {
 }
 
 .portal-install-heading h2 {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
     margin: 0;
     color: var(--steel);
     font-size: clamp(1.35rem, 3vw, 2rem);
     font-weight: 950;
     letter-spacing: 0.1em;
     text-transform: uppercase;
+}
+
+.portal-install-heading-logo {
+    display: inline-block;
+    width: min(220px, 56vw);
+    height: auto;
+    object-fit: contain;
+    filter: drop-shadow(0 0 12px rgba(var(--node-rgb), 0.14));
 }
 
 .portal-install-grid {
@@ -9746,8 +9773,17 @@ select::-ms-expand {
         width: min(100%, 360px);
     }
 
-    .portal-dashboard-logo {
-        width: min(100%, 330px);
+    .portal-header-logo {
+        width: 104px;
+    }
+
+    .portal-header-word {
+        font-size: 0.86rem;
+        letter-spacing: 0.08em;
+    }
+
+    .portal-install-heading-logo {
+        width: min(180px, 52vw);
     }
 
     .portal-app-grid {

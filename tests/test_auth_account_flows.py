@@ -355,6 +355,9 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"portal-brand-logo portal-login-logo", response.data)
         self.assertIn(b'src="/static/images/neoapps_logo_transparent.png"', response.data)
+        self.assertNotIn(b'class="topbar"', response.data)
+        self.assertNotIn(b"mobile-account-trigger", response.data)
+        self.assertNotIn(b"data-mobile-topbar", response.data)
         self.assertNotIn(b"<strong>PORTAL</strong>", response.data)
         self.assertNotIn(b"Sign in once", response.data)
         self.assertIn(b'<button class="command-access-panel command-enter-button" type="submit">', response.data)
@@ -441,11 +444,18 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
         self._login(user.username)
         response = self.client.get("/portal")
+        html = response.get_data(as_text=True)
+        app_card_section = html.split('<section class="portal-app-grid"', 1)[1].split("</section>", 1)[0]
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"portal-brand-logo portal-dashboard-logo", response.data)
-        self.assertIn(b'src="/static/images/neoapps_logo_transparent.png"', response.data)
-        self.assertNotIn(b"Choose an approved", response.data)
+        self.assertIn('class="portal-header-logo"', html)
+        self.assertIn('src="/static/images/neoapps_logo_transparent.png"', html)
+        self.assertIn('<span class="portal-header-word">Portal</span>', html)
+        self.assertNotIn("portal-dashboard-logo", html)
+        self.assertNotIn("Choose an approved", html)
+        self.assertNotIn("Gateway operations and NeoNode systems.", app_card_section)
+        self.assertNotIn("Staffing operations and workforce planning.", app_card_section)
+        self.assertNotIn("Bid tools placeholder for future buildout.", app_card_section)
         self.assertIn(b"NeoGateway", response.data)
         self.assertIn(b"neo-brand--gateway", response.data)
         self.assertIn(b"neo-brand__neo neo-word", response.data)
@@ -477,6 +487,11 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('class="portal-install-section"', html)
+        install_heading = html.split('id="portal-install-title"', 1)[1].split("</h2>", 1)[0]
+        self.assertIn("<span>Install</span>", install_heading)
+        self.assertIn("portal-install-heading-logo", install_heading)
+        self.assertIn('src="/static/images/neoapps_logo_transparent.png"', install_heading)
+        self.assertNotIn('neo-brand--apps', install_heading)
         self.assertIn('data-manifest-url="/manifest/neogateway.webmanifest"', html)
         self.assertIn('data-start-url="/rfd"', html)
         self.assertIn('src="/static/images/icons/neogateway/icon_192.png"', html)

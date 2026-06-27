@@ -5,17 +5,6 @@
 
 {% block content %}
 <section class="portal-page centered-command-page">
-    <div class="section-heading portal-dashboard-brand" aria-label="NeoApps Portal">
-        <img
-            class="portal-brand-logo portal-dashboard-logo"
-            src="{{ url_for('static', filename='images/neoapps_logo_transparent.png') }}"
-            alt="NeoApps Portal"
-            width="1874"
-            height="312"
-            decoding="async"
-        >
-    </div>
-
     <section class="portal-app-grid" aria-label="NeoApps systems">
         {% for row in app_rows %}
         {% set app = row.app %}
@@ -25,7 +14,6 @@
         <article class="portal-app-card portal-app-{{ app.code }} is-{{ status }}">
             <div>
                 <h2>{{ neo_brand_name(app.name, app_brand_key) }}</h2>
-                <p class="muted">{{ app.description }}</p>
             </div>
             <div class="portal-app-state">
                 {% if status == "approved" and access.is_active %}
@@ -55,7 +43,17 @@
     {% if install_rows %}
     <section class="portal-install-section" aria-labelledby="portal-install-title">
         <div class="section-heading portal-install-heading">
-            <h2 id="portal-install-title">Install {{ neo_brand("Apps", "apps") }}</h2>
+            <h2 id="portal-install-title">
+                <span>Install</span>
+                <img
+                    class="portal-install-heading-logo"
+                    src="{{ url_for('static', filename='images/neoapps_logo_transparent.png') }}"
+                    alt="NeoApps"
+                    width="1874"
+                    height="312"
+                    decoding="async"
+                >
+            </h2>
             <p class="muted">Install approved apps and nodes on this device. If your browser does not show an install prompt, the button opens the app so you can use the browser install option there.</p>
         </div>
         <div class="portal-install-grid" aria-label="Installable approved apps and nodes">

@@ -70,7 +70,7 @@
 {% set uses_mobile_chrome = is_authenticated_app and not is_neosektor_driver_page %}
 <body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_mobile_chrome %} mobile-app-chrome has-mobile-topbar has-mobile-bottom-nav{% endif %}{% if is_rfd_hub_page %} rfd-hub-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_standalone_operator_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}">
     <div class="shell">
-        {% if not is_neosektor_driver_page and not is_neosektor_standalone_operator_page %}
+        {% if not public_landing|default(false) and not is_neosektor_driver_page and not is_neosektor_standalone_operator_page %}
         <header class="topbar">
             {% if uses_node_header %}
             <a class="motherbrain-header-logo-link" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">
@@ -90,6 +90,18 @@
                         {{ neo_brand("Gateway", "gateway") }} - {{ default_gateway.code }}
                         {% elif is_neostaffing_page %}
                         {{ neo_brand("Staffing", "staffing") }}
+                        {% elif is_portal_page %}
+                        <span class="portal-header-brandline">
+                            <img
+                                class="portal-header-logo"
+                                src="{{ url_for('static', filename='images/neoapps_logo_transparent.png') }}"
+                                alt="NeoApps"
+                                width="1874"
+                                height="312"
+                                decoding="async"
+                            >
+                            <span class="portal-header-word">Portal</span>
+                        </span>
                         {% else %}
                         {{ neo_brand("Apps", "apps") }} Portal
                         {% endif %}
