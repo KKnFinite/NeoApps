@@ -5430,23 +5430,32 @@ h2 {
 .portal-login-brand {
     display: grid;
     place-items: center;
-    gap: 10px;
-    min-height: 260px;
-    padding: 28px;
+    min-height: 250px;
+    padding: 24px;
     text-align: center;
 }
 
-.portal-login-brand .neo-node-name {
-    font-size: clamp(2.5rem, 8vw, 5.4rem);
-    font-weight: 950;
-    letter-spacing: 0.02em;
+.portal-brand-logo {
+    display: block;
+    width: min(100%, 620px);
+    height: auto;
+    object-fit: contain;
+    filter:
+        drop-shadow(0 16px 28px rgba(0, 0, 0, 0.48))
+        drop-shadow(0 0 22px rgba(var(--node-rgb), 0.16));
 }
 
-.portal-login-brand strong {
-    color: var(--steel);
-    font-size: clamp(1.7rem, 5vw, 3.1rem);
-    font-weight: 950;
-    letter-spacing: 0.18em;
+.portal-login-logo {
+    width: min(100%, 680px);
+}
+
+.portal-dashboard-brand {
+    justify-items: center;
+    margin-bottom: 2px;
+}
+
+.portal-dashboard-logo {
+    width: min(100%, 560px);
 }
 
 .portal-page {
@@ -9731,6 +9740,14 @@ select::-ms-expand {
     .portal-login-brand {
         min-height: 190px;
         padding: 18px 12px;
+    }
+
+    .portal-login-logo {
+        width: min(100%, 360px);
+    }
+
+    .portal-dashboard-logo {
+        width: min(100%, 330px);
     }
 
     .portal-app-grid {

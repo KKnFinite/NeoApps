@@ -353,8 +353,10 @@ class AuthAccountFlowsTest(unittest.TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"NeoApps", response.data)
-        self.assertIn(b"PORTAL", response.data)
+        self.assertIn(b"portal-brand-logo portal-login-logo", response.data)
+        self.assertIn(b'src="/static/images/neoapps_logo_transparent.png"', response.data)
+        self.assertNotIn(b"<strong>PORTAL</strong>", response.data)
+        self.assertNotIn(b"Sign in once", response.data)
         self.assertIn(b'<button class="command-access-panel command-enter-button" type="submit">', response.data)
         self.assertIn(b'<label for="dashboard-email">Email</label>', response.data)
         self.assertIn(b'name="email"', response.data)
@@ -441,6 +443,9 @@ class AuthAccountFlowsTest(unittest.TestCase):
         response = self.client.get("/portal")
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b"portal-brand-logo portal-dashboard-logo", response.data)
+        self.assertIn(b'src="/static/images/neoapps_logo_transparent.png"', response.data)
+        self.assertNotIn(b"Choose an approved", response.data)
         self.assertIn(b"NeoGateway", response.data)
         self.assertIn(b"neo-brand--gateway", response.data)
         self.assertIn(b"neo-brand__neo neo-word", response.data)

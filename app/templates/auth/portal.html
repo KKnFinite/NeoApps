@@ -5,9 +5,15 @@
 
 {% block content %}
 <section class="portal-page centered-command-page">
-    <div class="section-heading">
-        <h1>{{ neo_brand("Apps", "apps") }} Portal</h1>
-        <p class="muted">Choose an approved {{ neo_brand("Apps", "apps") }} system or request access.</p>
+    <div class="section-heading portal-dashboard-brand" aria-label="NeoApps Portal">
+        <img
+            class="portal-brand-logo portal-dashboard-logo"
+            src="{{ url_for('static', filename='images/neoapps_logo_transparent.png') }}"
+            alt="NeoApps Portal"
+            width="1874"
+            height="312"
+            decoding="async"
+        >
     </div>
 
     <section class="portal-app-grid" aria-label="NeoApps systems">
