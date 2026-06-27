@@ -3182,7 +3182,7 @@ a {
 }
 
 .neoermac-outbound-shell {
-    width: min(100%, 980px);
+    width: min(100%, 1180px);
 }
 
 .neoermac-outbound-summary {
@@ -3208,26 +3208,26 @@ a {
 .neoermac-outbound-location {
     display: grid;
     align-content: center;
-    gap: 4px;
-    min-height: 56px;
-    padding: 9px;
+    gap: 3px;
+    min-height: 42px;
+    padding: 6px;
 }
 
 .neoermac-outbound-summary span,
 .neoermac-outbound-card-head span,
 .neoermac-outbound-location span,
-.neoermac-outbound-pull-card dt {
+.neoermac-outbound-pull-cell span {
     color: var(--muted);
-    font-size: 0.6rem;
+    font-size: 0.54rem;
     font-weight: 950;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
 }
 
 .neoermac-outbound-summary strong,
 .neoermac-outbound-card-head strong,
 .neoermac-outbound-location strong,
-.neoermac-outbound-pull-card dd {
+.neoermac-outbound-pull-cell strong {
     overflow-wrap: anywhere;
     color: #eef6ff;
     font-weight: 950;
@@ -3236,15 +3236,15 @@ a {
 
 .neoermac-outbound-list {
     display: grid;
-    gap: 12px;
+    gap: 8px;
     width: 100%;
 }
 
 .neoermac-outbound-card {
     display: grid;
-    gap: 10px;
+    gap: 6px;
     min-width: 0;
-    padding: 12px;
+    padding: 8px;
     border: 1px solid rgba(143, 24, 38, 0.5);
     border-radius: 6px;
     background:
@@ -3259,21 +3259,24 @@ a {
 .neoermac-outbound-card-head {
     display: grid;
     grid-template-columns:
-        minmax(82px, 0.8fr)
-        minmax(98px, 1fr)
-        minmax(74px, 0.72fr)
-        minmax(104px, 1fr);
-    gap: 8px;
+        minmax(84px, 0.9fr)
+        minmax(84px, 0.9fr)
+        minmax(64px, 0.68fr)
+        minmax(60px, 0.62fr)
+        minmax(82px, 0.9fr)
+        minmax(58px, 0.62fr)
+        minmax(86px, 0.92fr);
+    gap: 5px;
 }
 
 .neoermac-outbound-destination strong {
     color: #ffffff;
-    font-size: 1.16rem;
+    font-size: 0.96rem;
     text-shadow: 0 0 14px rgba(54, 226, 123, 0.16);
 }
 
 .neoermac-outbound-location {
-    min-height: 44px;
+    min-height: 32px;
     color: var(--steel);
 }
 
@@ -3288,56 +3291,91 @@ a {
 
 .neoermac-outbound-pull-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: 5px;
 }
 
 .neoermac-outbound-pull-card {
     display: grid;
-    gap: 7px;
-    padding: 10px;
+    grid-template-columns: minmax(46px, 0.45fr) repeat(3, minmax(58px, 1fr));
+    align-items: stretch;
+    gap: 4px;
+    padding: 5px;
 }
 
 .neoermac-outbound-pull-card h2 {
+    display: grid;
+    place-items: center;
     margin: 0;
     color: var(--node-ermac-secondary);
-    font-size: 0.78rem;
+    font-size: 0.66rem;
     font-weight: 950;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-align: center;
     text-transform: uppercase;
 }
 
-.neoermac-outbound-pull-card dl {
+.neoermac-outbound-pull-cell {
     display: grid;
-    gap: 5px;
-    margin: 0;
-}
-
-.neoermac-outbound-pull-card dl div {
-    display: grid;
-    grid-template-columns: minmax(58px, 0.82fr) minmax(0, 1fr);
-    align-items: center;
-    gap: 6px;
-}
-
-.neoermac-outbound-pull-card dt,
-.neoermac-outbound-pull-card dd {
-    margin: 0;
-}
-
-.neoermac-outbound-pull-card dd {
-    font-size: 0.88rem;
-    text-align: right;
-}
-
-.neoermac-outbound-pull-card small {
-    color: var(--steel);
-    font-size: 0.54rem;
-    font-weight: 900;
-    letter-spacing: 0.04em;
+    align-content: center;
+    gap: 2px;
+    min-width: 0;
+    min-height: 34px;
+    padding: 4px 5px;
+    border: 1px solid rgba(201, 208, 214, 0.12);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.025);
     text-align: center;
-    text-transform: uppercase;
+}
+
+.neoermac-outbound-pull-cell strong {
+    font-size: 0.82rem;
+    line-height: 1.1;
+}
+
+@media (max-width: 540px) {
+    .neoermac-outbound-shell {
+        padding-inline: 10px;
+    }
+
+    .neoermac-outbound-summary {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .neoermac-outbound-card-head {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px;
+    }
+
+    .neoermac-outbound-flight,
+    .neoermac-outbound-destination,
+    .neoermac-outbound-location {
+        grid-column: 1 / -1;
+    }
+
+    .neoermac-outbound-card {
+        padding: 6px;
+    }
+
+    .neoermac-outbound-pull-card {
+        grid-template-columns: minmax(42px, 0.44fr) repeat(3, minmax(0, 1fr));
+    }
+
+    .neoermac-outbound-pull-card h2 {
+        font-size: 0.58rem;
+    }
+
+    .neoermac-outbound-pull-cell {
+        min-height: 32px;
+        padding: 3px;
+    }
+
+    .neoermac-outbound-pull-cell span {
+        font-size: 0.48rem;
+    }
+
+    .neoermac-outbound-pull-cell strong {
+        font-size: 0.72rem;
+    }
 }
 
 @media (max-width: 420px) {
@@ -3363,19 +3401,6 @@ a {
         font-size: 0.5rem;
     }
 
-    .neoermac-outbound-shell {
-        padding-inline: 10px;
-    }
-
-    .neoermac-outbound-summary,
-    .neoermac-outbound-card-head,
-    .neoermac-outbound-pull-grid {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .neoermac-outbound-pull-card dl {
-        gap: 4px;
-    }
 }
 
 @media (max-width: 520px) {

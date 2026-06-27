@@ -1,6 +1,11 @@
 from sqlalchemy import or_
 
-from app.models import NeoErmacDoorPull, SortDateMission, SortDateOperation
+from app.models import (
+    NeoErmacDoorPull,
+    SortDateMission,
+    SortDateOperation,
+    SortDateParkingAssignment,
+)
 from app.services.neoermac_building_lineup import (
     DESTINATION_FIELDS,
     get_building_lineup_rows,
@@ -32,6 +37,7 @@ def view_outbound_context(gateway):
     operation = _current_operation(gateway)
     assignments_by_destination = _lineup_assignments_by_destination(gateway)
     pulls_by_destination = _door_pulls_by_destination(gateway, operation)
+    parking_by_tail = _parking_assignments_by_tail(operation)
     missions = _departure_missions(operation)
 
     rows = []
@@ -48,6 +54,7 @@ def view_outbound_context(gateway):
                 pulls_by_destination.get(destination),
                 operation,
                 mission,
+                parking_by_tail,
             )
         )
 
@@ -59,6 +66,7 @@ def view_outbound_context(gateway):
                 pulls_by_destination.get(destination),
                 operation,
                 None,
+                parking_by_tail,
             )
         )
 
@@ -72,7 +80,14 @@ def view_outbound_context(gateway):
     }
 
 
-def _row_for_destination(destination, assignments, door_pull, operation, mission):
+def _row_for_destination(
+    destination,
+    assignments,
+    door_pull,
+    operation,
+    mission,
+    parking_by_tail,
+):
     timing_data = mission_display_timing_data(mission, operation) if mission else {}
     row_window = timing_data.get("effective_window_minutes", 0)
     planned_pulls = {}
@@ -109,6 +124,9 @@ def _row_for_destination(destination, assignments, door_pull, operation, mission
     return {
         "destination": destination,
         "flight_number": _text_value(getattr(mission, "flight_number", "")),
+        "tail": _text_value(getattr(mission, "assigned_tail_number", "")),
+        "parking": _parking_for_mission(mission, parking_by_tail),
+        "status": _status_for_mission(mission),
         "etd": _time_value(getattr(mission, "planned_datetime_local", None)),
         "assigned_doors": assigned_doors,
         "assignment_locations": assignment_locations,
@@ -158,6 +176,36 @@ def _door_pulls_by_destination(gateway, operation):
         if existing is None or (_pull_has_data(row) and not _pull_has_data(existing)):
             pulls_by_destination[destination] = row
     return pulls_by_destination
+
+
+def _parking_assignments_by_tail(operation):
+    if not operation:
+        return {}
+    return {
+        _text_value(assignment.tail_number): _text_value(assignment.position_code)
+        for assignment in SortDateParkingAssignment.query.filter_by(
+            sort_date_operation_id=operation.id,
+        ).all()
+        if _text_value(assignment.tail_number) and _text_value(assignment.position_code)
+    }
+
+
+def _parking_for_mission(mission, parking_by_tail):
+    if not mission:
+        return ""
+    tail = _text_value(getattr(mission, "assigned_tail_number", ""))
+    if not tail:
+        return ""
+    return parking_by_tail.get(tail, "")
+
+
+def _status_for_mission(mission):
+    if not mission:
+        return "NO MISSION"
+    status = _text_value(getattr(mission, "departure_status", ""))
+    if not status:
+        return "SCHEDULED"
+    return status.replace("_", " ")
 
 
 def _departure_missions(operation):

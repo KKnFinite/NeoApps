@@ -29,29 +29,41 @@
     </section>
 
     {% if rows %}
-    <div class="neoermac-outbound-list">
+    <div class="neoermac-outbound-list" data-neoermac-outbound-layout="compact">
         {% for row in rows %}
-        <article class="neoermac-outbound-card{% if not row.has_mission %} is-missing-mission{% endif %}">
-            <header class="neoermac-outbound-card-head">
-                <div class="neoermac-outbound-destination">
-                    <span>DESTINATION</span>
-                    <strong>{{ row.destination }}</strong>
-                </div>
-                <div>
-                    <span>FLIGHT</span>
+        <article class="neoermac-outbound-card{% if not row.has_mission %} is-missing-mission{% endif %}" data-neoermac-outbound-row>
+            <header class="neoermac-outbound-card-head" aria-label="{{ row.destination }} outbound mission summary">
+                <div class="neoermac-outbound-cell neoermac-outbound-flight" data-outbound-field="flight">
+                    <span>Flight</span>
                     <strong>{{ row.flight_number or "-" }}</strong>
                 </div>
-                <div>
+                <div class="neoermac-outbound-cell" data-outbound-field="tail">
+                    <span>Tail</span>
+                    <strong>{{ row.tail or "-" }}</strong>
+                </div>
+                <div class="neoermac-outbound-cell neoermac-outbound-destination" data-outbound-field="destination">
+                    <span>Dest</span>
+                    <strong>{{ row.destination }}</strong>
+                </div>
+                <div class="neoermac-outbound-cell" data-outbound-field="position">
+                    <span>Pos</span>
+                    <strong>{{ row.parking or "-" }}</strong>
+                </div>
+                <div class="neoermac-outbound-cell" data-outbound-field="doors">
+                    <span>Doors</span>
+                    <strong>{{ row.assigned_doors|join(", ") if row.assigned_doors else "-" }}</strong>
+                </div>
+                <div class="neoermac-outbound-cell" data-outbound-field="etd">
                     <span>ETD</span>
                     <strong>{{ row.etd or "-" }}</strong>
                 </div>
-                <div>
-                    <span>ASSIGNED DOOR</span>
-                    <strong>{{ row.assigned_doors|join(", ") if row.assigned_doors else "-" }}</strong>
+                <div class="neoermac-outbound-cell" data-outbound-field="status">
+                    <span>Status</span>
+                    <strong>{{ row.status or "-" }}</strong>
                 </div>
             </header>
 
-            <div class="neoermac-outbound-location">
+            <div class="neoermac-outbound-location" data-outbound-field="location">
                 <span>LOCATION</span>
                 <strong>{{ row.assignment_locations|join(" / ") if row.assignment_locations else "-" }}</strong>
             </div>
@@ -60,33 +72,29 @@
             <p class="neoermac-outbound-missing">NO CURRENT SORT MISSION FOR {{ row.destination }}.</p>
             {% endif %}
 
-            <div class="neoermac-outbound-pull-grid" aria-label="{{ row.destination }} pull summary">
+            <div class="neoermac-outbound-pull-grid" aria-label="{{ row.destination }} pull summary" data-neoermac-outbound-pull-grid>
                 {% for key, label, _planned_attr, _actual_attr, _no_attr in pull_labels %}
-                <section class="neoermac-outbound-pull-card">
-                    <h2>{{ label }}</h2>
-                    <dl>
-                        <div>
-                            <dt>PLANNED</dt>
-                            <dd>{{ row.planned_pulls[key] or "-" }}</dd>
-                        </div>
-                        <div>
-                            <dt>WINDOW</dt>
-                            <dd>{{ row.adjusted_pulls[key] or "-" }}</dd>
-                        </div>
-                        <div>
-                            <dt>ACTUAL</dt>
-                            <dd>
-                                {% if row.no_pulls[key] %}
-                                NO {{ label|upper }}
-                                {% else %}
-                                {{ row.actual_pulls[key] or "-" }}
-                                {% endif %}
-                            </dd>
-                        </div>
-                    </dl>
-                    {% if row.has_window_adjustment and row.planned_pulls[key] and row.adjusted_pulls[key] and row.planned_pulls[key] != row.adjusted_pulls[key] %}
-                    <small>BASE {{ row.planned_pulls[key] }} +{{ row.window_minutes }} MIN</small>
-                    {% endif %}
+                {% set short_label = "PURE" if key == "pure" else ("1MIX" if key == "first_mix" else "2MIX") %}
+                <section class="neoermac-outbound-pull-card" data-outbound-pull-group="{{ key }}">
+                    <h2>{{ short_label }}</h2>
+                    <div class="neoermac-outbound-pull-cell" data-outbound-pull-cell="{{ key }}-plan">
+                        <span>{{ short_label }} PLAN</span>
+                        <strong>{{ row.planned_pulls[key] or "-" }}</strong>
+                    </div>
+                    <div class="neoermac-outbound-pull-cell" data-outbound-pull-cell="{{ key }}-window">
+                        <span>{{ short_label }} WINDOW</span>
+                        <strong>{{ row.adjusted_pulls[key] or "-" }}</strong>
+                    </div>
+                    <div class="neoermac-outbound-pull-cell" data-outbound-pull-cell="{{ key }}-actual">
+                        <span>{{ short_label }} ACT</span>
+                        <strong>
+                            {% if row.no_pulls[key] %}
+                            NO {{ label|upper }}
+                            {% else %}
+                            {{ row.actual_pulls[key] or "-" }}
+                            {% endif %}
+                        </strong>
+                    </div>
                 </section>
                 {% endfor %}
             </div>
