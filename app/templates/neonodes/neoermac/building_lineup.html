@@ -9,28 +9,8 @@
 </div>
 {%- endmacro %}
 
-{% macro mobile_pull_strip(left_destination, left_pull_times, right_destination, right_pull_times, strip_key) -%}
-<div class="neoermac-mobile-pull-strip" data-mobile-pull-strip="{{ strip_key }}" aria-label="{{ left_destination or 'Left unassigned' }} and {{ right_destination or 'Right unassigned' }} planned pull times">
-    <div class="neoermac-mobile-pull-row" data-pull-kind="pure">
-        <span>PURE</span>
-        <strong data-pull-side="left">{{ left_pull_times.get("pure", "--") }}</strong>
-        <strong data-pull-side="right">{{ right_pull_times.get("pure", "--") }}</strong>
-    </div>
-    <div class="neoermac-mobile-pull-row" data-pull-kind="first">
-        <span>1ST MIX</span>
-        <strong data-pull-side="left">{{ left_pull_times.get("first_mix", "--") }}</strong>
-        <strong data-pull-side="right">{{ right_pull_times.get("first_mix", "--") }}</strong>
-    </div>
-    <div class="neoermac-mobile-pull-row" data-pull-kind="second">
-        <span>2ND MIX</span>
-        <strong data-pull-side="left">{{ left_pull_times.get("final_mix", "--") }}</strong>
-        <strong data-pull-side="right">{{ right_pull_times.get("final_mix", "--") }}</strong>
-    </div>
-</div>
-{%- endmacro %}
-
 {% macro destination_select(row, slot, selected_value, destination_choices, can_edit) -%}
-<label class="neoermac-slot neoermac-belt-cell">
+<label class="neoermac-slot neoermac-belt-cell" data-lineup-assignment-slot="{{ slot.field or 'empty' }}">
     <select class="neoermac-destination-select" name="{{ field_name(row, slot.field) if slot.field else '' }}" {% if not can_edit or not slot.field %}disabled{% endif %}>
         <option value="">{{ slot.placeholder }}</option>
         {% if slot.field %}
@@ -68,19 +48,10 @@
             <article class="neoermac-runout-card neoermac-belt-group">
                 <div class="neoermac-belt-grid-scroll">
                     <div class="neoermac-runout-slots neoermac-belt-grid" aria-label="{{ row.belt_group_label }} belt assignments">
-                        {% set left_block = row.belt_blocks[0] %}
-                        <div class="neoermac-pull-edge neoermac-pull-edge-left" aria-label="planned pull times">
-                            {% set left_top_destination = row|attr(left_block.top_field) %}
-                            {% set left_bottom_destination = row|attr(left_block.bottom_field) %}
-                            {{ pull_times_display(left_top_destination, pull_time_lookup.get(left_top_destination, {}), "neoermac-pull-edge-side") }}
-                            {{ pull_times_display(left_bottom_destination, pull_time_lookup.get(left_bottom_destination, {}), "neoermac-pull-edge-side") }}
-                        </div>
                         {% for block in row.belt_blocks %}
                         {% set top_destination = row|attr(block.top_field) %}
                         {% set bottom_destination = row|attr(block.bottom_field) %}
-                        {% set top_pull_times = pull_time_lookup.get(top_destination, {}) %}
-                        {% set bottom_pull_times = pull_time_lookup.get(bottom_destination, {}) %}
-                        <div class="neoermac-belt-block" data-mobile-destination-slot="{{ '2' if block.top_field == 'east_destination_2' else '1' }}">
+                        <div class="neoermac-belt-block" data-mobile-destination-slot="{{ block.slot_number }}">
                             <div class="neoermac-mobile-belt-topline">
                             <div class="neoermac-belt-destination-row">
                                 {% for slot in block.top_slots %}
@@ -91,7 +62,6 @@
                                 {% endfor %}
                             </div>
                             <span class="neoermac-mobile-slot-belt-name">{{ block.label }}</span>
-                            {{ mobile_pull_strip(top_destination, top_pull_times, bottom_destination, bottom_pull_times, block.top_field ~ "-" ~ block.bottom_field) }}
                             <div class="neoermac-belt-name">{{ block.label }}</div>
                             <div class="neoermac-belt-destination-row">
                                 {% for slot in block.bottom_slots %}
@@ -104,13 +74,6 @@
                             </div>
                         </div>
                         {% endfor %}
-                        {% set right_block = row.belt_blocks[1] %}
-                        <div class="neoermac-pull-edge neoermac-pull-edge-right" aria-label="planned pull times">
-                            {% set right_top_destination = row|attr(right_block.top_field) %}
-                            {% set right_bottom_destination = row|attr(right_block.bottom_field) %}
-                            {{ pull_times_display(right_top_destination, pull_time_lookup.get(right_top_destination, {}), "neoermac-pull-edge-side") }}
-                            {{ pull_times_display(right_bottom_destination, pull_time_lookup.get(right_bottom_destination, {}), "neoermac-pull-edge-side") }}
-                        </div>
                     </div>
                 </div>
             </article>

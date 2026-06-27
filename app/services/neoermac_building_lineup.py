@@ -171,18 +171,8 @@ def apply_belt_display_metadata(row, start_door, end_door, belt_names):
     row.belt_group_label = f"{start_door}-{end_door}"
     row.belt_blocks = (
         {
-            "label": display_belt_label(second_belt),
-            "top_field": "east_destination_2",
-            "bottom_field": "west_destination_2",
-            "top_slots": (
-                {"field": "east_destination_2", "placeholder": "DEST 2"},
-            ),
-            "bottom_slots": (
-                {"field": "west_destination_2", "placeholder": "DEST 2"},
-            ),
-        },
-        {
             "label": display_belt_label(first_belt),
+            "slot_number": "1",
             "top_field": "east_destination_1",
             "bottom_field": "west_destination_1",
             "top_slots": (
@@ -190,6 +180,18 @@ def apply_belt_display_metadata(row, start_door, end_door, belt_names):
             ),
             "bottom_slots": (
                 {"field": "west_destination_1", "placeholder": "DEST 1"},
+            ),
+        },
+        {
+            "label": display_belt_label(second_belt),
+            "slot_number": "2",
+            "top_field": "east_destination_2",
+            "bottom_field": "west_destination_2",
+            "top_slots": (
+                {"field": "east_destination_2", "placeholder": "DEST 2"},
+            ),
+            "bottom_slots": (
+                {"field": "west_destination_2", "placeholder": "DEST 2"},
             ),
         },
     )
