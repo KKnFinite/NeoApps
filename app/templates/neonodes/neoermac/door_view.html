@@ -46,10 +46,73 @@
     {% if not selected_door %}
     <p class="neoermac-door-empty">Select a door.</p>
     {% else %}
-    <header class="neoermac-selected-door">
-        <span>SELECTED DOOR</span>
-        <strong>{{ selected_door }}</strong>
-    </header>
+    <div class="neoermac-door-top-grid">
+        <header class="neoermac-selected-door">
+            <span>SELECTED DOOR</span>
+            <strong>{{ selected_door }}</strong>
+        </header>
+
+        <div class="neoermac-door-support-stack" aria-label="Door ULD support">
+            <section class="neoermac-door-panel neoermac-door-support-panel" aria-label="ULD request">
+                <h2>REQUEST ULDS</h2>
+                {% if can_edit %}
+                <form method="post" class="neoermac-uld-form" data-uld-request-form>
+                    <input type="hidden" name="door" value="{{ selected_door }}">
+                    <input type="hidden" name="action" value="save_uld_request">
+                    <div class="neoermac-uld-grid">
+                        <label>
+                            <span>A2</span>
+                            <input class="neoermac-ios-safe-input" type="number" name="uld_a2_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="A2">
+                        </label>
+                        <label>
+                            <span>A1</span>
+                            <input class="neoermac-ios-safe-input" type="number" name="uld_a1_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="A1">
+                        </label>
+                        <label>
+                            <span>AMP</span>
+                            <input class="neoermac-ios-safe-input" type="number" name="uld_amp_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="AMP">
+                        </label>
+                    </div>
+                    <label class="neoermac-door-toggle neoermac-setup-toggle">
+                        <input type="checkbox" name="setup_needed" data-uld-setup>
+                        <span>Needed for setup</span>
+                    </label>
+                    <div class="neoermac-door-action-row">
+                        <button class="neoermac-menu-link" type="submit">REQUEST ULDS</button>
+                        <button class="neoermac-menu-link neoermac-menu-link-secondary neoermac-clear-request" type="submit" name="clear_uld_request" value="1">CLEAR REQUEST</button>
+                    </div>
+                </form>
+                {% else %}
+                <p class="neoermac-door-empty">View-only access. ULD request controls are disabled.</p>
+                {% endif %}
+                <section class="neoermac-uld-request-list" aria-label="Active ULD request state" data-uld-request-list>
+                    <h3>ACTIVE REQUESTS</h3>
+                    {% if uld_requests %}
+                    <div class="neoermac-uld-request-rows">
+                        {% for request_record in uld_requests %}
+                        {{ uld_request_row(request_record) }}
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="neoermac-door-empty">No active ULD requests for {{ selected_door }}.</p>
+                    {% endif %}
+                </section>
+            </section>
+
+            <section class="neoermac-door-panel neoermac-door-support-panel" aria-label="ULDs on the way" data-uld-events>
+                <h2>ON THE WAY</h2>
+                {% if on_the_way_events %}
+                <ul class="neoermac-door-simple-list neoermac-uld-event-list">
+                    {% for event in on_the_way_events %}
+                    <li>{{ event.label }}</li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="neoermac-door-empty">No active on-the-way events.</p>
+                {% endif %}
+            </section>
+        </div>
+    </div>
 
     <section class="neoermac-door-panel" aria-label="Door pull operations">
         <h2>OUTBOUND PULLS</h2>
@@ -71,26 +134,22 @@
                     data-destination-index="{{ destination_index }}"
                 >
                     <input type="hidden" name="destination_{{ destination_index }}" value="{{ card.destination }}">
-                    <div class="neoermac-door-card-head">
-                        <div class="neoermac-door-flight">
-                            <span>FLIGHT</span>
-                            <strong>{{ card.flight_number or "-" }}</strong>
-                        </div>
-                        <div class="neoermac-door-destination">
+                    <div class="neoermac-door-card-head neoermac-door-flight-info-row" data-door-flight-info-row>
+                        <div class="neoermac-door-destination" data-door-flight-info-cell="destination">
                             <span>DESTINATION</span>
                             <strong>{{ card.destination }}</strong>
                         </div>
-                        <div class="neoermac-door-status">
-                            <span>STATUS</span>
-                            <strong>{{ card.status }}</strong>
+                        <div class="neoermac-door-parking" data-door-flight-info-cell="parking">
+                            <span>PARKING</span>
+                            <strong data-door-parking>{{ card.parking or "-" }}</strong>
                         </div>
-                        <div class="neoermac-door-tail">
+                        <div class="neoermac-door-tail" data-door-flight-info-cell="tail">
                             <span>TAIL</span>
                             <strong data-door-tail>{{ card.tail or "-" }}</strong>
                         </div>
-                        <div class="neoermac-door-parking">
-                            <span>PARKING</span>
-                            <strong data-door-parking>{{ card.parking or "-" }}</strong>
+                        <div class="neoermac-door-status" data-door-flight-info-cell="status">
+                            <span>STATUS</span>
+                            <strong>{{ card.status }}</strong>
                         </div>
                     </div>
 
@@ -189,65 +248,6 @@
         </ul>
         {% else %}
         <p class="neoermac-door-empty">No tugs assigned yet.</p>
-        {% endif %}
-    </section>
-
-    <section class="neoermac-door-panel" aria-label="ULD request">
-        <h2>REQUEST ULDS</h2>
-        {% if can_edit %}
-        <form method="post" class="neoermac-uld-form" data-uld-request-form>
-            <input type="hidden" name="door" value="{{ selected_door }}">
-            <input type="hidden" name="action" value="save_uld_request">
-            <div class="neoermac-uld-grid">
-                <label>
-                    <span>A2</span>
-                    <input class="neoermac-ios-safe-input" type="number" name="uld_a2_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="A2">
-                </label>
-                <label>
-                    <span>A1</span>
-                    <input class="neoermac-ios-safe-input" type="number" name="uld_a1_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="A1">
-                </label>
-                <label>
-                    <span>AMP</span>
-                    <input class="neoermac-ios-safe-input" type="number" name="uld_amp_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="AMP">
-                </label>
-            </div>
-            <label class="neoermac-door-toggle neoermac-setup-toggle">
-                <input type="checkbox" name="setup_needed" data-uld-setup>
-                <span>Needed for setup</span>
-            </label>
-            <div class="neoermac-door-action-row">
-                <button class="neoermac-menu-link" type="submit">REQUEST ULDS</button>
-                <button class="neoermac-menu-link neoermac-menu-link-secondary neoermac-clear-request" type="submit" name="clear_uld_request" value="1">CLEAR REQUEST</button>
-            </div>
-        </form>
-        {% else %}
-        <p class="neoermac-door-empty">View-only access. ULD request controls are disabled.</p>
-        {% endif %}
-        <section class="neoermac-uld-request-list" aria-label="Active ULD request state" data-uld-request-list>
-            <h3>ACTIVE REQUESTS</h3>
-            {% if uld_requests %}
-            <div class="neoermac-uld-request-rows">
-                {% for request_record in uld_requests %}
-                {{ uld_request_row(request_record) }}
-                {% endfor %}
-            </div>
-            {% else %}
-            <p class="neoermac-door-empty">No active ULD requests for {{ selected_door }}.</p>
-            {% endif %}
-        </section>
-    </section>
-
-    <section class="neoermac-door-panel" aria-label="ULDs on the way" data-uld-events>
-        <h2>ON THE WAY</h2>
-        {% if on_the_way_events %}
-        <ul class="neoermac-door-simple-list neoermac-uld-event-list">
-            {% for event in on_the_way_events %}
-            <li>{{ event.label }}</li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <p class="neoermac-door-empty">No active on-the-way events.</p>
         {% endif %}
     </section>
 

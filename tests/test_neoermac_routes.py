@@ -444,7 +444,6 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'<strong>D34</strong>', response.data)
         self.assertIn(b"SDF", response.data)
         self.assertIn(b"ONT", response.data)
-        self.assertIn(b"UPS301", response.data)
         self.assertIn(b"Scheduled", response.data)
         self.assertNotIn(b"LIVE SORT", response.data)
         self.assertIn(b"NO FLIGHT DATA", response.data)
@@ -458,7 +457,21 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"PLANNED Pure", response.data)
         self.assertIn(b"WINDOW TBD", response.data)
         self.assertIn(b"01:20", response.data)
-        self.assertLess(response.data.index(b"UPS301"), response.data.index(b"ONT"))
+        row_html = self._door_flight_info_row_html(response.data)
+        self.assertLess(row_html.index(b"DESTINATION"), row_html.index(b"PARKING"))
+        self.assertLess(row_html.index(b"PARKING"), row_html.index(b"TAIL"))
+        self.assertLess(row_html.index(b"TAIL"), row_html.index(b"STATUS"))
+        self.assertEqual(row_html.count(b"data-door-flight-info-cell"), 4)
+        self.assertIn(b"SDF", row_html)
+        self.assertIn(b"A01", row_html)
+        self.assertIn(b"N123UP", row_html)
+        self.assertIn(b"Scheduled", row_html)
+        self.assertNotIn(b"UPS301", row_html)
+        self.assertNotIn(b'class="neoermac-door-flight"', response.data)
+        self.assertLess(response.data.index(b"N123UP"), response.data.index(b"ONT"))
+        self.assertIn(b"neoermac-door-support-stack", response.data)
+        self.assertLess(response.data.index(b"neoermac-door-support-stack"), response.data.index(b"OUTBOUND PULLS"))
+        self.assertIn(b"REQUEST ULDS", response.data)
         self.assertIn(b"No tugs assigned yet.", response.data)
         self.assertIn(b"No active on-the-way events.", response.data)
 
@@ -480,9 +493,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
         response = self.client.get("/neoermac/door-view?door=D34")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"UPS948", response.data)
         self.assertIn(b"N316UP", response.data)
         self.assertIn(b"<strong data-door-parking>A01</strong>", response.data)
+        row_html = self._door_flight_info_row_html(response.data)
+        self.assertIn(b"SDF", row_html)
+        self.assertIn(b"A01", row_html)
+        self.assertIn(b"N316UP", row_html)
+        self.assertNotIn(b"UPS948", row_html)
 
     def test_door_view_state_shows_parking_plan_assignment(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
@@ -663,8 +680,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         response = self.client.get("/neoermac/door-view?door=D34")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"UPS401", response.data)
         self.assertIn(b"PLANNED Pure", response.data)
+        self.assertIn(b"neoermac-door-pull-row", response.data)
         self.assertIn(b"WINDOW 20 MIN", response.data)
         self.assertEqual(response.data.count(b"WINDOW 20 MIN"), 1)
         self.assertIn(b"01:40", response.data)
@@ -1949,6 +1966,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
         match = re.search(pattern, html, re.S)
         self.assertIsNotNone(match)
         return match.group(0)
+
+    def _door_flight_info_row_html(self, html):
+        marker = b"data-door-flight-info-row"
+        start = html.index(marker)
+        row_start = html.rfind(b"<div", 0, start)
+        row_end = html.index(b'<div class="neoermac-door-window-row"', start)
+        return html[row_start:row_end]
 
     def _upcoming_side_html(self, response, side_name):
         side_label = f'aria-label="{side_name} upcoming pulls"'.encode()
