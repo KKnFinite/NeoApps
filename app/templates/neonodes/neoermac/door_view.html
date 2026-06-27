@@ -73,7 +73,7 @@
                             <input class="neoermac-ios-safe-input" type="number" name="uld_amp_count" min="0" step="1" inputmode="numeric" value="0" data-uld-count="AMP">
                         </label>
                     </div>
-                    <label class="neoermac-door-toggle neoermac-setup-toggle">
+                    <label class="neoermac-door-toggle neoermac-setup-toggle neoermac-large-checkbox-toggle">
                         <input type="checkbox" name="setup_needed" data-uld-setup>
                         <span>Needed for setup</span>
                     </label>
@@ -136,19 +136,15 @@
                     <input type="hidden" name="destination_{{ destination_index }}" value="{{ card.destination }}">
                     <div class="neoermac-door-card-head neoermac-door-flight-info-row" data-door-flight-info-row>
                         <div class="neoermac-door-destination" data-door-flight-info-cell="destination">
-                            <span>DESTINATION</span>
                             <strong>{{ card.destination }}</strong>
                         </div>
                         <div class="neoermac-door-parking" data-door-flight-info-cell="parking">
-                            <span>PARKING</span>
                             <strong data-door-parking>{{ card.parking or "-" }}</strong>
                         </div>
                         <div class="neoermac-door-tail" data-door-flight-info-cell="tail">
-                            <span>TAIL</span>
                             <strong data-door-tail>{{ card.tail or "-" }}</strong>
                         </div>
                         <div class="neoermac-door-status" data-door-flight-info-cell="status">
-                            <span>STATUS</span>
                             <strong>{{ card.status }}</strong>
                         </div>
                     </div>
@@ -204,7 +200,7 @@
                                     {% if card.no_pull[pull.key] %}disabled{% endif %}
                                 >
                             </label>
-                            <label class="neoermac-door-toggle">
+                            <label class="neoermac-door-toggle neoermac-none-toggle neoermac-large-checkbox-toggle">
                                 <input
                                     type="checkbox"
                                     name="{{ pull.no_field }}_{{ destination_index }}"
@@ -213,14 +209,14 @@
                                     data-no-pull-toggle="{{ pull.key }}-{{ destination_index }}"
                                     {% if card.no_pull[pull.key] %}checked{% endif %}
                                 >
-                                <span class="neoermac-label-desktop">No {{ pull.label }}</span>
-                                <span class="neoermac-label-mobile">NO</span>
+                                <span class="neoermac-label-desktop">NONE {{ pull.label }}</span>
+                                <span class="neoermac-label-mobile">NONE</span>
                             </label>
                             {% else %}
                             <div class="neoermac-door-actual neoermac-door-static">
                                 <span class="neoermac-label-desktop">ACTUAL {{ pull.label }}</span>
                                 <span class="neoermac-label-mobile">ACTUAL</span>
-                                <strong>{{ "NO " ~ pull.label if card.no_pull[pull.key] else (card.actual[pull.key] or "-") }}</strong>
+                                <strong>{{ "NONE " ~ pull.label if card.no_pull[pull.key] else (card.actual[pull.key] or "-") }}</strong>
                             </div>
                             {% endif %}
                         </section>
@@ -462,7 +458,7 @@
 
     const summaryText = (cardData) => pullKeys
         .map((key) => {
-            const value = cardData.no_pull?.[key] ? "NO" : (cardData.actual?.[key] || "-");
+            const value = cardData.no_pull?.[key] ? "NONE" : (cardData.actual?.[key] || "-");
             return `${pullLabels[key]} ${value}`;
         })
         .join(" \u00B7 ");

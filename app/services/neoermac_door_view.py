@@ -578,7 +578,7 @@ def _pull_summary(actual, no_pull):
     parts = []
     for field in PULL_FIELDS:
         key = field["key"]
-        value = "NO" if no_pull[key] else (actual[key] or "-")
+        value = "NONE" if no_pull[key] else (actual[key] or "-")
         parts.append(f"{labels[key]} {value}")
     return " · ".join(parts)
 

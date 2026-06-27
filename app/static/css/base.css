@@ -2820,7 +2820,7 @@ a {
 .neoermac-uld-status strong {
     overflow-wrap: anywhere;
     color: #eef6ff;
-    font-size: 0.96rem;
+    font-size: 1.02rem;
     font-weight: 950;
     letter-spacing: 0.04em;
 }
@@ -2986,7 +2986,7 @@ a {
         #090b0f;
     color: #eef6ff;
     font: inherit;
-    font-size: 0.86rem;
+    font-size: 0.94rem;
     font-weight: 900;
     padding: 6px;
     text-align: center;
@@ -3029,9 +3029,18 @@ a {
     accent-color: var(--node-ermac-secondary);
 }
 
+.neoermac-large-checkbox-toggle input {
+    width: 22px;
+    height: 22px;
+}
+
 .neoermac-door-toggle span {
     min-width: 0;
     overflow-wrap: anywhere;
+}
+
+.neoermac-none-toggle span {
+    font-size: 0.72rem;
 }
 
 .neoermac-staffing-button {
@@ -3556,7 +3565,7 @@ a {
 
     .neoermac-door-planned strong,
     .neoermac-door-static strong {
-        font-size: 0.76rem;
+        font-size: 0.84rem;
         line-height: 1;
     }
 
@@ -3586,7 +3595,7 @@ a {
     }
 
     .neoermac-door-toggle {
-        grid-template-columns: 13px minmax(0, 1fr);
+        grid-template-columns: 18px minmax(0, 1fr);
         gap: 3px;
         min-height: 32px;
         padding: 3px;
@@ -3595,8 +3604,21 @@ a {
     }
 
     .neoermac-door-toggle input {
-        width: 13px;
-        height: 13px;
+        width: 18px;
+        height: 18px;
+    }
+
+    .neoermac-large-checkbox-toggle input {
+        width: 20px;
+        height: 20px;
+    }
+
+    .neoermac-none-toggle {
+        grid-template-columns: 20px minmax(0, 1fr);
+    }
+
+    .neoermac-none-toggle span {
+        font-size: 0.56rem;
     }
 
     .neoermac-label-mobile {

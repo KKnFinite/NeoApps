@@ -458,15 +458,19 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"WINDOW TBD", response.data)
         self.assertIn(b"01:20", response.data)
         row_html = self._door_flight_info_row_html(response.data)
-        self.assertLess(row_html.index(b"DESTINATION"), row_html.index(b"PARKING"))
-        self.assertLess(row_html.index(b"PARKING"), row_html.index(b"TAIL"))
-        self.assertLess(row_html.index(b"TAIL"), row_html.index(b"STATUS"))
         self.assertEqual(row_html.count(b"data-door-flight-info-cell"), 4)
+        self.assertNotIn(b">DESTINATION<", row_html)
+        self.assertNotIn(b">PARKING<", row_html)
+        self.assertNotIn(b">TAIL<", row_html)
+        self.assertNotIn(b">STATUS<", row_html)
         self.assertIn(b"SDF", row_html)
         self.assertIn(b"A01", row_html)
         self.assertIn(b"N123UP", row_html)
         self.assertIn(b"Scheduled", row_html)
         self.assertNotIn(b"UPS301", row_html)
+        self.assertLess(row_html.index(b"SDF"), row_html.index(b"A01"))
+        self.assertLess(row_html.index(b"A01"), row_html.index(b"N123UP"))
+        self.assertLess(row_html.index(b"N123UP"), row_html.index(b"Scheduled"))
         self.assertNotIn(b'class="neoermac-door-flight"', response.data)
         self.assertLess(response.data.index(b"N123UP"), response.data.index(b"ONT"))
         self.assertIn(b"neoermac-door-support-stack", response.data)
@@ -917,7 +921,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"SDF A01 COMPLETE", summary_html)
         self.assertNotIn(b"PULLS COMPLETE", summary_html)
         self.assertNotIn(b"Parking", summary_html)
-        self.assertIn("PURE 14:05 · 1Mix 14:07 · 2Mix NO".encode(), summary_html)
+        self.assertIn("PURE 14:05 · 1Mix 14:07 · 2Mix NONE".encode(), summary_html)
         self.assertIn(b"EDIT PULLS", response.data)
         self.assertIn(b"data-pull-edit-toggle", response.data)
 
@@ -1003,6 +1007,78 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(standard_request.a1_count, 0)
         self.assertEqual(standard_request.amp_count, 0)
 
+    def test_door_view_clear_request_only_clears_selected_door_current_context(self):
+        db.session.add_all(
+            [
+                NeoErmacUldRequest(
+                    gateway_id=self.gateway.id,
+                    door="D34",
+                    a2_count=2,
+                    setup_needed=False,
+                    created_at=datetime(2026, 6, 24, 19, 1),
+                    updated_at=datetime(2026, 6, 24, 19, 1),
+                ),
+                NeoErmacUldRequest(
+                    gateway_id=self.gateway.id,
+                    door="D34",
+                    a2_count=3,
+                    setup_needed=True,
+                    created_at=datetime(2026, 6, 24, 19, 2),
+                    updated_at=datetime(2026, 6, 24, 19, 2),
+                ),
+                NeoErmacUldRequest(
+                    gateway_id=self.gateway.id,
+                    door="D35",
+                    a2_count=4,
+                    setup_needed=False,
+                    created_at=datetime(2026, 6, 24, 19, 3),
+                    updated_at=datetime(2026, 6, 24, 19, 3),
+                ),
+            ]
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        clear_respot = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "save_uld_request",
+                "clear_uld_request": "1",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(clear_respot.status_code, 302)
+        self.assertIsNone(
+            NeoErmacUldRequest.query.filter_by(door="D34", setup_needed=False).first()
+        )
+        self.assertIsNotNone(
+            NeoErmacUldRequest.query.filter_by(door="D34", setup_needed=True).first()
+        )
+        self.assertIsNotNone(
+            NeoErmacUldRequest.query.filter_by(door="D35", setup_needed=False).first()
+        )
+
+        clear_setup = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "save_uld_request",
+                "clear_uld_request": "1",
+                "setup_needed": "on",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(clear_setup.status_code, 302)
+        self.assertIsNone(
+            NeoErmacUldRequest.query.filter_by(door="D34", setup_needed=True).first()
+        )
+        self.assertIsNotNone(
+            NeoErmacUldRequest.query.filter_by(door="D35", setup_needed=False).first()
+        )
+
     def test_door_view_request_form_renders_clean_mobile_markup(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
         db.session.commit()
@@ -1019,6 +1095,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'class="neoermac-label-mobile">PURE</span>', response.data)
         self.assertIn(b'class="neoermac-label-mobile">1ST</span>', response.data)
         self.assertIn(b'class="neoermac-label-mobile">2ND</span>', response.data)
+        self.assertIn(b"neoermac-setup-toggle neoermac-large-checkbox-toggle", response.data)
+        self.assertIn(b"neoermac-none-toggle neoermac-large-checkbox-toggle", response.data)
+        self.assertIn(b'class="neoermac-label-mobile">NONE</span>', response.data)
+        self.assertNotIn(b'class="neoermac-label-mobile">NO</span>', response.data)
         self.assertEqual(response.data.count(b"neoermac-uld-type-label"), 3)
         self.assertIn(b'<span class="neoermac-uld-type-label">A2</span>', response.data)
         self.assertIn(b'<span class="neoermac-uld-type-label">A1</span>', response.data)
@@ -1030,8 +1110,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(".neoermac-uld-grid input.neoermac-ios-safe-input", css)
         self.assertIn(".neoermac-uld-grid .neoermac-uld-type-label", css)
         self.assertIn(".neoermac-door-autosave-status", css)
+        self.assertIn(".neoermac-large-checkbox-toggle input", css)
+        self.assertIn(".neoermac-none-toggle", css)
         self.assertIn("font-size: 16px", css)
         self.assertIn("font-size: 0.74rem", css)
+        self.assertIn("font-size: 0.84rem", css)
 
     def test_door_view_request_inputs_remain_clean_after_submission(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")

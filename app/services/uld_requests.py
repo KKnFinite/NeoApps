@@ -102,15 +102,19 @@ def update_uld_request(gateway, door, counts, setup_needed=False, now=None):
     return request_record
 
 
-def clear_uld_requests_for_door(gateway, door):
+def clear_uld_requests_for_door(gateway, door, setup_needed=None):
     normalized_door = normalize_door(door)
     if not normalized_door:
         raise ValueError("Select a door.")
 
-    for request_record in NeoErmacUldRequest.query.filter_by(
+    query = NeoErmacUldRequest.query.filter_by(
         gateway_id=gateway.id,
         door=normalized_door,
-    ).all():
+    )
+    if setup_needed is not None:
+        query = query.filter_by(setup_needed=bool(setup_needed))
+
+    for request_record in query.all():
         db.session.delete(request_record)
 
     db.session.flush()
@@ -120,7 +124,11 @@ def clear_uld_requests_for_door(gateway, door):
 def update_uld_request_from_form(gateway, door, form_data):
     should_clear = form_data.get("clear_uld_request") == "1"
     if should_clear:
-        return clear_uld_requests_for_door(gateway, door)
+        return clear_uld_requests_for_door(
+            gateway,
+            door,
+            setup_needed=form_data.get("setup_needed") == "on",
+        )
 
     counts = {
         "A2": form_data.get("uld_a2_count"),
