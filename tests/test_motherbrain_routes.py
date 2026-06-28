@@ -5888,6 +5888,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"757 preferred on 04/08 positions", response.data)
         self.assertIn(b"Avoid 04/08 when valid alternatives exist", response.data)
         self.assertIn(b"Blocked-position relief for 04/08", response.data)
+        self.assertIn(b"Deice spacing: active soft rule", response.data)
+        self.assertIn(b"skipped automatically when needed", response.data)
         self.assertNotIn(b"757 preference for 04/08: planned / inactive", response.data)
         self.assertNotIn(b"Avoid 04/08: planned / inactive", response.data)
         self.assertIn(b"Hard-blocked parking positions", response.data)
@@ -7475,9 +7477,64 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(preview["solver_status"], {"OPTIMAL", "FEASIBLE"})
         self.assertEqual(preview["candidate_tail_count"], 26)
         self.assertGreater(len(preview["suggested_assignments"]), 0)
+        self.assertEqual(preview["runtime_toggles"]["deice_spacing_threshold_minutes"], 15)
+        self.assertEqual(preview["runtime_toggles"]["deice_scoring_status"], "applied")
+        self.assertIn(
+            "bounded same-ramp departure clusters",
+            preview["runtime_toggles"]["deice_scoring_detail"],
+        )
         self.assertEqual(
             len(preview["suggested_assignments"]) + len(preview["unassigned_tails"]),
             26,
+        )
+        self.assertNotIn("scoring constraints", json.dumps(preview))
+
+    def test_parking_optimizer_zero_deice_threshold_disables_scoring(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=0,
+            )
+        )
+        self._parking_pair(operation, "N401UP", departure_local=datetime(2026, 6, 19, 1, 0))
+        self._parking_pair(
+            operation,
+            "N402UP",
+            departure_local=datetime(2026, 6, 19, 1, 5),
+            destination="SDF",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        reasons = " ".join(row["reason"] for row in preview["suggested_assignments"])
+
+        self.assertIn(preview["solver_status"], {"OPTIMAL", "FEASIBLE"})
+        self.assertEqual(preview["runtime_toggles"]["deice_scoring_status"], "disabled")
+        self.assertIn("threshold is 0", preview["runtime_toggles"]["deice_scoring_detail"])
+        self.assertNotIn("Deice spacing checked", reasons)
+
+    def test_parking_optimizer_skips_deice_guard_without_blocking_suggestions(self):
+        operation = self._parking_operation()
+        for index in range(4):
+            self._parking_pair(
+                operation,
+                f"N40{index}UP",
+                departure_local=datetime(2026, 6, 19, 1, 0) + timedelta(minutes=index),
+                destination=f"D{index}",
+            )
+        db.session.commit()
+
+        with patch("app.services.parking_optimizer.DEICE_MAX_CLUSTER_COUNT", 0):
+            preview = self._parking_optimizer_preview(operation)
+
+        self.assertIn(preview["solver_status"], {"OPTIMAL", "FEASIBLE"})
+        self.assertGreater(len(preview["suggested_assignments"]), 0)
+        self.assertEqual(preview["runtime_toggles"]["deice_scoring_status"], "skipped")
+        self.assertIn(
+            "keep optimizer solve time bounded",
+            preview["runtime_toggles"]["deice_scoring_detail"],
         )
         self.assertNotIn("scoring constraints", json.dumps(preview))
 
@@ -8147,6 +8204,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"OPTIMIZE / SUGGEST PLAN", response.data)
         self.assertIn(b"PREVIEW ONLY", response.data)
         self.assertIn(b"Candidates 1", response.data)
+        self.assertIn(b"Deice 15 min / SKIPPED", response.data)
+        self.assertIn(b"Deice scoring skipped", response.data)
         self.assertIn(b"SUGGESTED ASSIGNMENTS", response.data)
         self.assertIn(b"N457UP", response.data)
         self.assertEqual(SortDateParkingAssignment.query.count(), 0)

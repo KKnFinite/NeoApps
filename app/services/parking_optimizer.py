@@ -37,6 +37,8 @@ SUCCESS_SOLVER_STATUSES = {"OPTIMAL", "FEASIBLE"}
 PREFERRED_RAMP_SCORE = 600
 AVOID_RAMP_PENALTY = 350
 DEICE_CLOSE_PAIR_PENALTY = 400
+DEICE_MAX_CLUSTER_COUNT = 240
+DEICE_MAX_CLUSTER_LITERAL_COUNT = 20000
 PARKING_WINDOW_PRIORITY_SCORE = 2000
 RAMP_BALANCE_PAIR_PENALTY = 260
 PREFERRED_MAX_PER_RAMP_PENALTY = 1200
@@ -161,6 +163,7 @@ def parking_optimizer_preview(
             "status_name": "OPTIMAL",
             "selected_by_tail": {},
             "wall_time": 0,
+            "deice_report": _deice_no_placement_report(deice_threshold),
         }
     )
 
@@ -169,6 +172,7 @@ def parking_optimizer_preview(
     candidate_diagnostics = dict(slot_1_diagnostics)
     status_name = slot_1_result["status_name"]
     wall_time = slot_1_result["wall_time"]
+    deice_reports = [slot_1_result.get("deice_report")]
 
     if status_name in SUCCESS_SOLVER_STATUSES:
         unresolved_rows = [
@@ -225,8 +229,11 @@ def parking_optimizer_preview(
                     stage_normal_ramp_counts,
                 )
                 wall_time += slot_2_result["wall_time"]
+                deice_reports.append(slot_2_result.get("deice_report"))
                 if slot_2_result["status_name"] in SUCCESS_SOLVER_STATUSES:
                     selected_by_tail.update(slot_2_result["selected_by_tail"])
+
+    deice_report = _merge_deice_reports(deice_reports, deice_threshold)
 
     unassigned = _unassigned_rows(
         candidate_rows,
@@ -255,6 +262,7 @@ def parking_optimizer_preview(
                 row,
                 deice_threshold,
                 preferred_max_per_ramp,
+                deice_report.get("status"),
                 selected_deice_reasons.get(placement.tail, ()),
             )
         )
@@ -274,6 +282,7 @@ def parking_optimizer_preview(
         include_throat,
         deice_threshold,
         preferred_max_per_ramp,
+        deice_report,
         len(candidate_rows),
         locked_assignments,
         suggestions,
@@ -408,6 +417,7 @@ def _preview_result(
     include_throat,
     deice_threshold,
     preferred_max_per_ramp,
+    deice_report,
     candidate_tail_count,
     locked_assignments,
     suggestions,
@@ -431,6 +441,8 @@ def _preview_result(
             "include_remote": bool(include_remote),
             "include_throat": bool(include_throat),
             "deice_spacing_threshold_minutes": deice_threshold,
+            "deice_scoring_status": (deice_report or {}).get("status", "disabled"),
+            "deice_scoring_detail": (deice_report or {}).get("detail", ""),
             "preferred_max_per_ramp": preferred_max_per_ramp,
         },
         "wall_time_seconds": wall_time,
@@ -703,16 +715,15 @@ def _solve_optimizer_stage(
         variable * (100000 + placement.soft_score - placement.cost)
         for placement, variable in variables.items()
     ]
-    objective_terms.extend(
-        _deice_spacing_penalty_terms(
-            model,
-            variables,
-            assignments,
-            tail_rows,
-            timezone_name,
-            deice_threshold,
-        )
+    deice_terms, deice_report = _deice_spacing_penalty_terms(
+        model,
+        variables,
+        assignments,
+        tail_rows,
+        timezone_name,
+        deice_threshold,
     )
+    objective_terms.extend(deice_terms)
     objective_terms.extend(
         _ramp_balance_penalty_terms(
             model,
@@ -738,6 +749,7 @@ def _solve_optimizer_stage(
         "status_name": status_name,
         "selected_by_tail": selected_by_tail,
         "wall_time": solver.WallTime() if status else 0,
+        "deice_report": deice_report,
     }
 
 
@@ -947,6 +959,7 @@ def _suggestion_row(
     row,
     deice_threshold=0,
     preferred_max_per_ramp=None,
+    deice_status="disabled",
     deice_reasons=(),
 ):
     reasons = ["Suggested by optimizer preview."]
@@ -963,7 +976,7 @@ def _suggestion_row(
                 f"Preferred Max Per Ramp {preferred_max_per_ramp} considered as a soft limit."
             )
     reasons.extend(placement.preference_reasons)
-    if deice_threshold and placement.departure:
+    if deice_threshold and placement.departure and deice_status == "applied":
         reasons.append(
             f"Deice spacing checked: same-ramp departures under {deice_threshold} min are penalized."
         )
@@ -1124,7 +1137,10 @@ def _deice_spacing_penalty_terms(
 ):
     threshold_minutes = _safe_int(threshold_minutes, 0)
     if threshold_minutes <= 0:
-        return []
+        return [], _deice_report(
+            "disabled",
+            "Deice scoring disabled because the threshold is 0 minutes.",
+        )
 
     terms = []
     candidate_entries = [
@@ -1133,6 +1149,11 @@ def _deice_spacing_penalty_terms(
         if _is_deice_position(placement.position) and placement.departure
     ]
     locked_entries = _locked_deice_entries(assignments, tail_rows, timezone_name)
+    cluster_terms, cluster_report = _deice_cluster_penalty_terms(
+        model,
+        candidate_entries,
+        threshold_minutes,
+    )
 
     for index, (placement, variable) in enumerate(candidate_entries):
         for locked in locked_entries:
@@ -1140,24 +1161,125 @@ def _deice_spacing_penalty_terms(
                 continue
             terms.append(variable * -_deice_penalty(placement.departure, locked["departure"], threshold_minutes))
 
-        for other_index, (other_placement, other_variable) in enumerate(candidate_entries[index + 1 :], start=index + 1):
-            if not _deice_entries_are_close(placement, other_placement, threshold_minutes):
+    terms.extend(cluster_terms)
+    if terms:
+        detail = (
+            f"Deice scoring applied as bounded same-ramp departure clusters under {threshold_minutes} min."
+        )
+        if cluster_report.get("detail"):
+            detail += f" {cluster_report['detail']}"
+        return terms, _deice_report("applied", detail)
+    if cluster_report.get("status") == "skipped":
+        return terms, cluster_report
+    return terms, _deice_report(
+        "skipped",
+        "Deice scoring skipped because no candidate normal-ramp departure times were available.",
+    )
+
+
+def _deice_cluster_penalty_terms(model, candidate_entries, threshold_minutes):
+    if not candidate_entries:
+        return [], _deice_report(
+            "skipped",
+            "Deice scoring skipped because no candidate normal-ramp departure times were available.",
+        )
+
+    by_ramp = {}
+    for index, (placement, variable) in enumerate(candidate_entries):
+        by_ramp.setdefault(placement.ramp, []).append((index, placement, variable))
+
+    clusters = []
+    seen_clusters = set()
+    for ramp, entries in by_ramp.items():
+        for _center_index, center_placement, _center_variable in entries:
+            cluster = []
+            for index, placement, _variable in entries:
+                diff = _minutes_apart(center_placement.departure, placement.departure)
+                if diff is not None and diff < threshold_minutes:
+                    cluster.append(index)
+            cluster = tuple(cluster)
+            if cluster in seen_clusters:
                 continue
-            both = model.NewBoolVar(
-                f"deice_{_var_key(placement.tail)}_{_var_key(other_placement.tail)}_{index}_{other_index}"
+            seen_clusters.add(cluster)
+            cluster_entries = [
+                entry for entry in entries if entry[0] in cluster
+            ]
+            if len({placement.tail for _index, placement, _variable in cluster_entries}) <= 1:
+                continue
+            clusters.append((ramp, cluster_entries))
+
+    literal_count = sum(len(cluster_entries) for _ramp, cluster_entries in clusters)
+    if not clusters:
+        return [], _deice_report(
+            "skipped",
+            "Deice scoring skipped because no close same-ramp candidate departure clusters were found.",
+        )
+    if len(clusters) > DEICE_MAX_CLUSTER_COUNT or literal_count > DEICE_MAX_CLUSTER_LITERAL_COUNT:
+        return [], _deice_report(
+            "skipped",
+            (
+                "Deice scoring skipped to keep optimizer solve time bounded "
+                f"({len(clusters)} clusters / {literal_count} placement references)."
+            ),
+        )
+
+    terms = []
+    for cluster_index, (ramp, cluster_entries) in enumerate(clusters):
+        variables_in_cluster = [variable for _index, _placement, variable in cluster_entries]
+        max_tail_count = len({placement.tail for _index, placement, _variable in cluster_entries})
+        excess = model.NewIntVar(
+            0,
+            max(0, max_tail_count - 1),
+            f"deice_cluster_{ramp}_{cluster_index}",
+        )
+        model.Add(excess >= sum(variables_in_cluster) - 1)
+        terms.append(excess * -DEICE_CLOSE_PAIR_PENALTY)
+
+    return terms, _deice_report(
+        "applied",
+        f"Built {len(clusters)} bounded ramp/time deice cluster penalties.",
+    )
+
+
+def _deice_report(status, detail):
+    return {"status": status, "detail": detail}
+
+
+def _deice_no_placement_report(threshold_minutes):
+    threshold_minutes = _safe_int(threshold_minutes, 0)
+    if threshold_minutes <= 0:
+        return _deice_report(
+            "disabled",
+            "Deice scoring disabled because the threshold is 0 minutes.",
+        )
+    return _deice_report(
+        "skipped",
+        "Deice scoring skipped because no candidate placements were available.",
+    )
+
+
+def _merge_deice_reports(reports, threshold_minutes):
+    reports = [report for report in reports if report]
+    if _safe_int(threshold_minutes, 0) <= 0:
+        return _deice_report(
+            "disabled",
+            "Deice scoring disabled because the threshold is 0 minutes.",
+        )
+    if not reports:
+        return _deice_no_placement_report(threshold_minutes)
+    for status in ("applied", "skipped"):
+        matching = [report for report in reports if report.get("status") == status]
+        if matching:
+            details = " ".join(
+                str(report.get("detail") or "").strip()
+                for report in matching
+                if str(report.get("detail") or "").strip()
             )
-            model.Add(both <= variable)
-            model.Add(both <= other_variable)
-            model.Add(both >= variable + other_variable - 1)
-            terms.append(
-                both
-                * -_deice_penalty(
-                    placement.departure,
-                    other_placement.departure,
-                    threshold_minutes,
-                )
-            )
-    return terms
+            return _deice_report(status, details)
+    return _deice_report(
+        "disabled",
+        "Deice scoring disabled because the threshold is 0 minutes.",
+    )
 
 
 def _selected_deice_reasons(

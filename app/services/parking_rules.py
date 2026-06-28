@@ -292,12 +292,12 @@ def _parking_rule_report(settings, grouped):
             "757 preferred on 04/08 positions: active soft rule",
             "Avoid 04/08 when valid alternatives exist: active soft rule",
             "Blocked-position relief for 04/08: active soft rule",
-            "Deice spacing setting/status",
+            "Deice spacing: active soft rule when threshold is above 0; disabled at 0 and skipped automatically when needed to keep suggestions responsive",
         ),
         "current_settings": {
             "include_remote_default": "ON" if settings.include_remote_default else "OFF",
             "include_throat_default": "ON" if settings.include_throat_default else "OFF",
-            "deice_threshold": f"{settings.deice_spacing_threshold_minutes} min",
+            "deice_threshold": _deice_status_summary(settings.deice_spacing_threshold_minutes),
             "preferred_max_per_ramp": (
                 str(settings.preferred_max_per_ramp)
                 if settings.preferred_max_per_ramp is not None
@@ -327,6 +327,16 @@ def _active_rule_summaries(rules):
         elif rule.rule_category == AIRCRAFT_TYPE_RAMP_PREFERENCE:
             summaries.append(f"{subject} prefers {ramp}")
     return tuple(sorted(summaries))
+
+
+def _deice_status_summary(threshold_minutes):
+    try:
+        threshold = max(0, int(threshold_minutes))
+    except (TypeError, ValueError):
+        threshold = DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES
+    if threshold <= 0:
+        return "0 min / DISABLED"
+    return f"{threshold} min / SOFT SCORING ENABLED"
 
 
 def _clean_note(value):
