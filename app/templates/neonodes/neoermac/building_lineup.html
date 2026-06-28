@@ -2,16 +2,17 @@
 {% from "_neo_brand.html" import neo_brand %}
 
 {% macro pull_times_display(destination, pull_times, class_name="neoermac-slot-pull-times") -%}
-<div class="{{ class_name }}" aria-label="{{ destination or 'Unassigned' }} planned pull times">
-    <span>Pure <strong>{{ pull_times.get("pure", "--") }}</strong></span>
-    <span>1st Mix <strong>{{ pull_times.get("first_mix", "--") }}</strong></span>
-    <span>2nd Mix <strong>{{ pull_times.get("final_mix", "--") }}</strong></span>
+<div class="{{ class_name }}" data-lineup-pull-times aria-label="{{ destination or 'Unassigned' }} planned pull times">
+    <span>Pure <strong data-pull-time-key="pure">{{ pull_times.get("pure", "--") }}</strong></span>
+    <span>1st Mix <strong data-pull-time-key="first_mix">{{ pull_times.get("first_mix", "--") }}</strong></span>
+    <span>2nd Mix <strong data-pull-time-key="final_mix">{{ pull_times.get("final_mix", "--") }}</strong></span>
 </div>
 {%- endmacro %}
 
 {% macro destination_select(row, slot, selected_value, destination_choices, can_edit) -%}
 <label class="neoermac-slot neoermac-belt-cell neoermac-belt-destination-card" data-lineup-assignment-slot="{{ slot.field or 'empty' }}">
-    <select class="neoermac-destination-select" name="{{ field_name(row, slot.field) if slot.field else '' }}" {% if not can_edit or not slot.field %}disabled{% endif %}>
+    {% set input_name = field_name(row, slot.field) if slot.field else "" %}
+    <select class="neoermac-destination-select" name="{{ input_name }}" data-lineup-destination-select data-lineup-field="{{ input_name }}" {% if not can_edit or not slot.field %}disabled{% endif %}>
         <option value="">{{ slot.placeholder }}</option>
         {% if slot.field %}
         {% for destination in destination_choices %}
@@ -39,7 +40,7 @@
     <p class="neoermac-readonly-note">NO MASTER DEPARTURE DESTINATIONS AVAILABLE.</p>
     {% endif %}
 
-    <form class="neoermac-lineup-form" method="post">
+    <form class="neoermac-lineup-form" method="post" data-lineup-autosave-url="{{ url_for('neoermac.building_lineup_destination_autosave') }}">
         <div class="neoermac-runout-list">
             {% for row in rows %}
             {% if loop.first %}
@@ -49,7 +50,7 @@
                 <div class="neoermac-belt-grid-scroll">
                     <div class="neoermac-runout-slots neoermac-belt-grid" aria-label="{{ row.belt_group_label }} belt assignments">
                         {% for block in row.belt_blocks %}
-                        <div class="neoermac-belt-block" data-mobile-destination-slot="{{ block.slot_number }}">
+                        <div class="neoermac-belt-block neoermac-belt-block--{{ block.color_key }}" data-mobile-destination-slot="{{ block.slot_number }}" data-belt-color="{{ block.color_key }}">
                             <div class="neoermac-belt-name">{{ block.label }}</div>
                             <div class="neoermac-belt-destination-stack" aria-label="{{ block.label }} destinations">
                             <div class="neoermac-belt-destination-row" data-belt-destination-position="upper">
@@ -81,9 +82,95 @@
         <div class="neoermac-lineup-actions">
             {% if can_edit %}
             <button class="neoermac-menu-link" type="submit">SAVE BUILDING LINEUP</button>
+            <p class="neoermac-lineup-autosave-status" data-lineup-autosave-status hidden></p>
+            <p class="neoermac-lineup-autosave-error" data-lineup-autosave-error hidden></p>
             {% endif %}
             <a class="neoermac-menu-link neoermac-menu-link-secondary" href="{{ url_for('neoermac.index') }}" aria-label="BACK TO NeoErmac">BACK TO {{ neo_brand("Ermac", "ermac", "neo-node-ermac") }}</a>
         </div>
     </form>
 </section>
+{% if can_edit %}
+<script>
+(() => {
+    const form = document.querySelector("[data-lineup-autosave-url]");
+    if (!form) {
+        return;
+    }
+
+    const saveUrl = form.dataset.lineupAutosaveUrl;
+    const pullTimesLookup = {{ pull_time_lookup|tojson }};
+    const emptyPullTimes = {{ empty_pull_times|tojson }};
+    const status = form.querySelector("[data-lineup-autosave-status]");
+    const error = form.querySelector("[data-lineup-autosave-error]");
+
+    const timesFor = (destination) => {
+        const key = (destination || "").trim().toUpperCase();
+        return pullTimesLookup[key] || emptyPullTimes;
+    };
+
+    const setMessage = (element, message, state = "") => {
+        if (!element) {
+            return;
+        }
+        element.textContent = message || "";
+        element.hidden = !message;
+        element.dataset.state = state;
+    };
+
+    const updatePullTimes = (card, pullTimes) => {
+        if (!card) {
+            return;
+        }
+        const times = pullTimes || emptyPullTimes;
+        card.querySelectorAll("[data-pull-time-key]").forEach((target) => {
+            target.textContent = times[target.dataset.pullTimeKey] || "--";
+        });
+    };
+
+    form.querySelectorAll("[data-lineup-destination-select]").forEach((select) => {
+        select.dataset.lastSavedValue = select.value || "";
+
+        select.addEventListener("change", async () => {
+            const card = select.closest("[data-lineup-assignment-slot]");
+            const previousValue = select.dataset.lastSavedValue || "";
+            const destination = (select.value || "").trim().toUpperCase();
+            updatePullTimes(card, timesFor(destination));
+            setMessage(error, "");
+            setMessage(status, "SAVING", "saving");
+
+            const body = new FormData();
+            body.set("field", select.dataset.lineupField || select.name || "");
+            body.set("destination", destination);
+
+            try {
+                const response = await fetch(saveUrl, {
+                    method: "POST",
+                    body,
+                    credentials: "same-origin",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok || !payload.ok) {
+                    throw new Error(payload.error || "Destination save failed.");
+                }
+                select.value = payload.destination || "";
+                select.dataset.lastSavedValue = select.value;
+                if (payload.destination) {
+                    pullTimesLookup[payload.destination] = payload.pull_times || emptyPullTimes;
+                }
+                updatePullTimes(card, payload.pull_times || timesFor(payload.destination));
+                setMessage(status, "SAVED", "saved");
+            } catch (saveError) {
+                select.value = previousValue;
+                updatePullTimes(card, timesFor(previousValue));
+                setMessage(status, "");
+                setMessage(error, saveError.message || "Destination save failed.", "error");
+            }
+        });
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

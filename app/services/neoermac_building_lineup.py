@@ -59,6 +59,19 @@ BELT_COLOR_LABELS = {
     "GRN": "Green",
 }
 
+BELT_COLOR_KEYS = {
+    "WHT": "white",
+    "BLU": "blue",
+    "ORG": "orange",
+    "RED": "red",
+    "YEL": "yellow",
+    "BLK": "black",
+    "BRN": "brown",
+    "GRN": "green",
+}
+
+DEFAULT_PULL_TIMES = {"pure": "--", "first_mix": "--", "final_mix": "--"}
+
 
 def get_outbound_door_options():
     return OUTBOUND_DOOR_OPTIONS
@@ -144,6 +157,13 @@ def get_departure_destination_pull_times(gateway):
     return pull_times
 
 
+def get_destination_pull_times(gateway, destination):
+    destination = normalize_destination(destination)
+    if not destination:
+        return dict(DEFAULT_PULL_TIMES)
+    return dict(get_departure_destination_pull_times(gateway).get(destination, DEFAULT_PULL_TIMES))
+
+
 def save_building_lineup(gateway, form_data):
     rows = get_building_lineup_rows(gateway)
     destination_choices = set(get_departure_destination_choices(gateway))
@@ -159,6 +179,31 @@ def save_building_lineup(gateway, form_data):
     return rows
 
 
+def save_building_lineup_destination(gateway, field_token, destination):
+    field_token = str(field_token or "").strip()
+    if not field_token:
+        raise ValueError("Building Lineup destination field is required.")
+
+    rows = get_building_lineup_rows(gateway)
+    destination_choices = set(get_departure_destination_choices(gateway))
+    value = normalize_destination(destination)
+    if value and value not in destination_choices:
+        raise ValueError(f"{value} is not an available master departure destination.")
+
+    for row in rows:
+        for field_name in DESTINATION_FIELDS:
+            if lineup_field_name(row, field_name) == field_token:
+                setattr(row, field_name, value or None)
+                db.session.flush()
+                return {
+                    "field": field_token,
+                    "destination": value,
+                    "pull_times": get_destination_pull_times(gateway, value),
+                }
+
+    raise ValueError("Unknown Building Lineup destination field.")
+
+
 def lineup_field_name(row, field_name):
     return f"lineup_{row.runout_key}_{field_name}"
 
@@ -172,6 +217,7 @@ def apply_belt_display_metadata(row, start_door, end_door, belt_names):
     row.belt_blocks = (
         {
             "label": display_belt_label(first_belt),
+            "color_key": belt_color_key(first_belt),
             "slot_number": "1",
             "top_field": "east_destination_1",
             "bottom_field": "west_destination_1",
@@ -184,6 +230,7 @@ def apply_belt_display_metadata(row, start_door, end_door, belt_names):
         },
         {
             "label": display_belt_label(second_belt),
+            "color_key": belt_color_key(second_belt),
             "slot_number": "2",
             "top_field": "east_destination_2",
             "bottom_field": "west_destination_2",
@@ -210,6 +257,11 @@ def normalize_destination(destination):
 def display_belt_label(belt_name):
     parts = str(belt_name or "").split("/")
     return "/".join(BELT_COLOR_LABELS.get(part, part.title()) for part in parts)
+
+
+def belt_color_key(belt_name):
+    first_part = str(belt_name or "").split("/", 1)[0].strip().upper()
+    return BELT_COLOR_KEYS.get(first_part, "neutral")
 
 
 def _current_sort_destination_pull_times(gateway):

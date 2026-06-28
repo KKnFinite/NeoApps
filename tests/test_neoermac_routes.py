@@ -1507,6 +1507,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"neoermac-belt-destination-stack", response.data)
         self.assertIn(b"neoermac-belt-destination-card", response.data)
         self.assertIn(b"neoermac-belt-destination-row", response.data)
+        self.assertIn(b"neoermac-belt-block--blue", response.data)
+        self.assertIn(b"neoermac-belt-block--brown", response.data)
+        self.assertIn(b"neoermac-belt-block--white", response.data)
+        self.assertIn(b'data-belt-color="blue"', response.data)
+        self.assertIn(b"data-lineup-autosave-url", response.data)
+        self.assertIn(b"data-lineup-destination-select", response.data)
+        self.assertIn(b'data-pull-time-key="pure"', response.data)
         self.assertIn(b'data-lineup-assignment-slot="east_destination_1"', response.data)
         self.assertIn(b'data-lineup-assignment-slot="east_destination_2"', response.data)
         self.assertIn(b"D1", response.data)
@@ -1714,7 +1721,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         )[0]
 
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(card.count("<strong>--</strong>"), 3)
+        self.assertGreaterEqual(card.count('data-pull-time-key="'), 3)
+        self.assertGreaterEqual(card.count(">--</strong>"), 3)
 
     def test_building_lineup_destination_options_come_from_master_departures(self):
         self._add_master_departure("UPS101", "sdf")
@@ -1775,6 +1783,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'name="lineup_green_runout_east_destination_2"', response.data)
         self.assertIn(b'name="lineup_green_runout_west_destination_2"', response.data)
+        self.assertIn(b"data-lineup-autosave-status", response.data)
+        self.assertIn(b"data-lineup-autosave-error", response.data)
         self.assertNotIn(
             b'name="lineup_green_runout_east_destination_2" disabled',
             response.data,
@@ -1849,6 +1859,99 @@ class NeoErmacRoutesTest(unittest.TestCase):
         ).one()
         self.assertEqual(save_response.status_code, 403)
         self.assertIsNone(saved.east_destination_1)
+
+    def test_building_lineup_destination_autosave_saves_one_field_and_returns_pull_times(self):
+        self._add_master_departure("UPS411", "SDF")
+        self._add_master_departure("UPS412", "ONT")
+        self._add_master_departure("UPS413", "PHX")
+        self._assign_lineup_destination("green_runout", "east_destination_1", "SDF")
+        self._assign_lineup_destination("green_runout", "west_destination_1", "PHX")
+        self._add_operation_departure(
+            "UPS412",
+            "ONT",
+            pure_pull_time_local=time(2, 5),
+            first_mix_pull_time_local=time(2, 20),
+            final_mix_pull_time_local=time(2, 35),
+        )
+        db.session.commit()
+        self._login_approved_user(role="simulator")
+
+        response = self.client.post(
+            "/neoermac/building-lineup/destination",
+            data={
+                "field": "lineup_green_runout_east_destination_1",
+                "destination": "ont",
+            },
+        )
+
+        payload = response.get_json()
+        saved = NeoErmacBuildingLineup.query.filter_by(
+            gateway_id=self.gateway.id,
+            runout_key="green_runout",
+        ).one()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["destination"], "ONT")
+        self.assertEqual(payload["pull_times"]["pure"], "02:05")
+        self.assertEqual(payload["pull_times"]["first_mix"], "02:20")
+        self.assertEqual(payload["pull_times"]["final_mix"], "02:35")
+        self.assertEqual(saved.east_destination_1, "ONT")
+        self.assertEqual(saved.west_destination_1, "PHX")
+
+    def test_building_lineup_destination_autosave_can_clear_destination(self):
+        self._add_master_departure("UPS414", "SDF")
+        self._assign_lineup_destination("green_runout", "east_destination_1", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="simulator")
+
+        response = self.client.post(
+            "/neoermac/building-lineup/destination",
+            data={
+                "field": "lineup_green_runout_east_destination_1",
+                "destination": "",
+            },
+        )
+
+        payload = response.get_json()
+        saved = NeoErmacBuildingLineup.query.filter_by(
+            gateway_id=self.gateway.id,
+            runout_key="green_runout",
+        ).one()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["destination"], "")
+        self.assertEqual(payload["pull_times"]["pure"], "--")
+        self.assertIsNone(saved.east_destination_1)
+
+    def test_view_only_user_cannot_autosave_building_lineup_destination(self):
+        self._add_master_departure("UPS415", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neoermac/building-lineup/destination",
+            data={
+                "field": "lineup_green_runout_east_destination_1",
+                "destination": "SDF",
+            },
+        )
+
+        saved = NeoErmacBuildingLineup.query.filter_by(
+            gateway_id=self.gateway.id,
+            runout_key="green_runout",
+        ).first()
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(response.get_json()["ok"])
+        self.assertIsNone(saved)
+
+    def test_building_lineup_styles_include_light_belt_and_pull_time_backgrounds(self):
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertIn(".neoermac-belt-block--blue", css)
+        self.assertIn(".neoermac-belt-block--red", css)
+        self.assertIn(".neoermac-belt-block--white", css)
+        self.assertIn("#d9dde4", css)
+        self.assertIn(".neoermac-lineup-autosave-status", css)
 
     def test_user_without_building_lineup_view_cannot_open_page(self):
         self._login_approved_user(role="watcher")

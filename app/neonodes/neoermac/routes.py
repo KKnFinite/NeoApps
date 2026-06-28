@@ -7,11 +7,13 @@ from app.services.access_control import get_current_gateway
 from app.services.neoermac_building_lineup import (
     DESTINATION_FIELDS,
     get_building_lineup_rows,
+    get_destination_pull_times,
     get_departure_destination_choices,
     get_departure_destination_pull_times,
     get_outbound_door_options,
     lineup_field_name,
     save_building_lineup,
+    save_building_lineup_destination,
 )
 from app.services.neoermac_door_view import (
     door_view_context,
@@ -106,6 +108,32 @@ def building_lineup():
     rows = get_building_lineup_rows(gateway)
     db.session.commit()
     return _building_lineup_response(gateway, access, rows=rows)
+
+
+@bp.route("/building-lineup/destination", methods=["POST"])
+@gateway_node_required("ermac")
+def building_lineup_destination_autosave():
+    gateway = get_current_gateway()
+    access = permission_access(
+        BUILDING_LINEUP_VIEW_PERMISSION,
+        BUILDING_LINEUP_EDIT_PERMISSION,
+    )
+    if not access["can_edit"]:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": "Access denied."}), 403
+
+    try:
+        result = save_building_lineup_destination(
+            gateway,
+            request.form.get("field", ""),
+            request.form.get("destination", ""),
+        )
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    db.session.commit()
+    return jsonify({"ok": True, **result})
 
 
 @bp.route("/outbound")
@@ -238,6 +266,7 @@ def _building_lineup_response(gateway, access, rows=None, status_code=200):
         rows=rows,
         destination_choices=destination_choices,
         pull_time_lookup=pull_time_lookup,
+        empty_pull_times=get_destination_pull_times(gateway, ""),
         destination_fields=DESTINATION_FIELDS,
         field_name=lineup_field_name,
         can_view=access["can_view"],

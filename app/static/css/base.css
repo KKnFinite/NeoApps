@@ -12134,6 +12134,65 @@ select::-ms-expand {
 .neoermac-belt-block {
     grid-template-rows: auto 1fr;
     min-width: 0;
+    --neoermac-belt-soft-bg: rgba(244, 247, 251, 0.18);
+    --neoermac-belt-soft-border: rgba(244, 247, 251, 0.34);
+    --neoermac-belt-soft-glow: rgba(244, 247, 251, 0.12);
+    border-color: var(--neoermac-belt-soft-border);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 38%),
+        linear-gradient(135deg, var(--neoermac-belt-soft-bg), rgba(8, 10, 14, 0.88) 64%),
+        rgba(5, 6, 9, 0.94);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.14),
+        0 0 18px var(--neoermac-belt-soft-glow);
+}
+
+.neoermac-belt-block--blue {
+    --neoermac-belt-soft-bg: rgba(202, 230, 255, 0.34);
+    --neoermac-belt-soft-border: rgba(133, 199, 255, 0.46);
+    --neoermac-belt-soft-glow: rgba(96, 177, 255, 0.18);
+}
+
+.neoermac-belt-block--red {
+    --neoermac-belt-soft-bg: rgba(255, 209, 218, 0.34);
+    --neoermac-belt-soft-border: rgba(255, 142, 160, 0.46);
+    --neoermac-belt-soft-glow: rgba(255, 98, 124, 0.18);
+}
+
+.neoermac-belt-block--white {
+    --neoermac-belt-soft-bg: rgba(248, 250, 253, 0.36);
+    --neoermac-belt-soft-border: rgba(248, 250, 253, 0.5);
+    --neoermac-belt-soft-glow: rgba(248, 250, 253, 0.14);
+}
+
+.neoermac-belt-block--orange {
+    --neoermac-belt-soft-bg: rgba(255, 224, 188, 0.32);
+    --neoermac-belt-soft-border: rgba(255, 181, 96, 0.44);
+    --neoermac-belt-soft-glow: rgba(255, 152, 64, 0.16);
+}
+
+.neoermac-belt-block--yellow {
+    --neoermac-belt-soft-bg: rgba(255, 242, 184, 0.3);
+    --neoermac-belt-soft-border: rgba(255, 224, 100, 0.42);
+    --neoermac-belt-soft-glow: rgba(255, 218, 78, 0.14);
+}
+
+.neoermac-belt-block--black {
+    --neoermac-belt-soft-bg: rgba(214, 219, 226, 0.18);
+    --neoermac-belt-soft-border: rgba(189, 197, 208, 0.32);
+    --neoermac-belt-soft-glow: rgba(189, 197, 208, 0.1);
+}
+
+.neoermac-belt-block--brown {
+    --neoermac-belt-soft-bg: rgba(226, 197, 169, 0.26);
+    --neoermac-belt-soft-border: rgba(192, 143, 100, 0.4);
+    --neoermac-belt-soft-glow: rgba(172, 111, 62, 0.14);
+}
+
+.neoermac-belt-block--green {
+    --neoermac-belt-soft-bg: rgba(203, 238, 213, 0.3);
+    --neoermac-belt-soft-border: rgba(129, 218, 153, 0.42);
+    --neoermac-belt-soft-glow: rgba(80, 212, 116, 0.14);
 }
 
 .neoermac-belt-destination-stack {
@@ -12169,6 +12228,13 @@ select::-ms-expand {
     gap: 4px;
     min-width: 0;
     padding: 6px;
+    border-color: rgba(190, 198, 209, 0.82);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.7), transparent 36%),
+        #d9dde4;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.76),
+        0 4px 10px rgba(0, 0, 0, 0.18);
 }
 
 .neoermac-belt-destination-card .neoermac-slot-pull-times span {
@@ -12182,6 +12248,28 @@ select::-ms-expand {
 
 .neoermac-belt-destination-card .neoermac-slot-pull-times strong {
     text-align: right;
+}
+
+.neoermac-lineup-autosave-status,
+.neoermac-lineup-autosave-error {
+    margin: 0;
+    color: rgba(238, 246, 255, 0.74);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.neoermac-lineup-autosave-status[data-state="saved"] {
+    color: rgba(120, 255, 164, 0.82);
+}
+
+.neoermac-lineup-autosave-status[data-state="saving"] {
+    color: rgba(244, 247, 251, 0.72);
+}
+
+.neoermac-lineup-autosave-error {
+    color: rgba(255, 150, 166, 0.9);
 }
 
 @media (max-width: 760px) {
