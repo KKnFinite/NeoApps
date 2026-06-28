@@ -65,6 +65,8 @@
 {% set mobile_shell_word = node_header_word if (uses_node_header or is_neosektor_page or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page) else ("Staffing" if is_neostaffing_page else ("Gateway" if is_rfd_hub_page else "Apps")) %}
 {% set mobile_shell_label = node_current_label if (uses_node_header or is_neosektor_page or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page) else ("DASHBOARD" if is_rfd_hub_page else ("DASHBOARD" if is_neostaffing_page else "PORTAL")) %}
 {% set mobile_home_endpoint = node_home_endpoint if (uses_node_header or is_neosektor_page or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page) else ("neostaffing.index" if is_neostaffing_page else ("neomotherbrain.rfd_hub" if is_rfd_hub_page else "auth.portal_dashboard")) %}
+{% set mobile_back_endpoint = ("neomotherbrain.rfd_hub" if is_neosektor_landing else ("neosektor.index" if is_neosektor_page else mobile_home_endpoint)) %}
+{% set mobile_back_word = ("Gateway" if is_neosektor_landing else ("NeoSektor" if is_neosektor_page else mobile_shell_word)) %}
 {% set mobile_account_icon = "images/account/account-motherbrain-128.png" if uses_motherbrain_header else ("images/account/ninja-ermac-128.png" if is_neoermac_page else ("images/account/ninja-sektor-128.png" if is_neosektor_page else none)) %}
 {% set mobile_account_initial = current_user.header_display_name[:1]|upper if is_authenticated_app and current_user.header_display_name else "?" %}
 {% set uses_mobile_chrome = is_authenticated_app and not is_neosektor_driver_page %}
@@ -174,11 +176,11 @@
         {% endif %}
         {% if uses_mobile_chrome %}
         {% set mobile_switch_targets = change_character_targets() %}
-        {% set mobile_show_back = request.endpoint != mobile_home_endpoint %}
+        {% set mobile_show_back = is_neosektor_page or request.endpoint != mobile_home_endpoint %}
         <header class="mobile-topbar node-{{ mobile_shell_key }}" data-mobile-topbar>
             <div class="mobile-topbar-left">
                 {% if mobile_show_back %}
-                <a class="mobile-topbar-back" href="{{ url_for(mobile_home_endpoint) }}" aria-label="Back to {{ mobile_shell_word }}">
+                <a class="mobile-topbar-back" href="{{ url_for(mobile_back_endpoint) }}" data-mobile-back-target="{{ url_for(mobile_back_endpoint) }}" aria-label="Back to {{ mobile_back_word }}">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.8 5.2 8 12l6.8 6.8 1.4-1.4L10.8 12l5.4-5.4-1.4-1.4Z"/></svg>
                 </a>
                 {% endif %}

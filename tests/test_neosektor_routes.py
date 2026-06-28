@@ -160,6 +160,36 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn("Inbound operations", menu_html)
         self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", css)
 
+    def test_neosektor_mobile_subpages_back_to_dashboard(self):
+        self._login_approved_user(role="simulator")
+
+        for path in (
+            "/neosektor/live-counts",
+            "/neosektor/tunnel-conductor",
+            "/neosektor/ebm",
+            "/neosektor/wbm",
+            "/neosektor/discharge",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b'class="mobile-topbar-back"', response.data)
+                self.assertIn(b'href="/neosektor"', response.data)
+                self.assertIn(b'data-mobile-back-target="/neosektor"', response.data)
+                self.assertIn(b'aria-label="Back to NeoSektor"', response.data)
+
+    def test_neosektor_dashboard_mobile_back_points_to_gateway(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neosektor")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'class="mobile-topbar-back"', response.data)
+        self.assertIn(b'href="/rfd"', response.data)
+        self.assertIn(b'data-mobile-back-target="/rfd"', response.data)
+        self.assertIn(b'aria-label="Back to Gateway"', response.data)
+
     def test_neosektor_internal_menu_filters_links_by_role(self):
         expectations = {
             "watcher": {
