@@ -481,6 +481,29 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"No tugs assigned yet.", response.data)
         self.assertIn(b"No active on-the-way events.", response.data)
 
+    def test_door_view_outbound_destination_cards_have_prominent_scan_markup(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "CID")
+        self._assign_lineup_destination("runout_11", "west_destination_2", "EWR")
+        self._add_operation_departure("UPS401", "CID", tail="N440UP", parking="D07")
+        self._add_operation_departure("UPS402", "EWR", tail="N441UP", parking="D08")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(response.data.count(b"data-door-destination-card"), 2)
+        self.assertIn(b"neoermac-door-destination-frame", response.data)
+        self.assertIn(b'class="neoermac-door-destination-title">CID</strong>', response.data)
+        self.assertIn(b'class="neoermac-door-destination-title">EWR</strong>', response.data)
+        self.assertIn(b"data-hhmm-input", response.data)
+        self.assertIn(b'class="neoermac-label-mobile">NONE</span>', response.data)
+
+        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        self.assertIn(".neoermac-door-destination-card {", css)
+        self.assertIn("border: 2px solid rgba(var(--node-rgb), 0.76)", css)
+        self.assertIn(".neoermac-door-destination .neoermac-door-destination-title", css)
+
     def test_door_view_initial_render_shows_parking_plan_assignment(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
         mission = self._add_operation_departure("UPS948", "SDF", tail="N316UP")

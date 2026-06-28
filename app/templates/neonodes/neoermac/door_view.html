@@ -128,7 +128,7 @@
                 {% for card in destinations %}
                 {% set destination_index = loop.index0 %}
                 <article
-                    class="neoermac-door-destination-card{% if card.pulls_complete %} is-pulls-complete is-pulls-collapsed{% endif %}"
+                    class="neoermac-door-destination-card neoermac-door-destination-frame{% if card.pulls_complete %} is-pulls-complete is-pulls-collapsed{% endif %}"
                     data-door-destination-card
                     data-door-destination="{{ card.destination }}"
                     data-destination-index="{{ destination_index }}"
@@ -136,7 +136,7 @@
                     <input type="hidden" name="destination_{{ destination_index }}" value="{{ card.destination }}">
                     <div class="neoermac-door-card-head neoermac-door-flight-info-row" data-door-flight-info-row>
                         <div class="neoermac-door-destination" data-door-flight-info-cell="destination">
-                            <strong>{{ card.destination }}</strong>
+                            <strong class="neoermac-door-destination-title">{{ card.destination }}</strong>
                         </div>
                         <div class="neoermac-door-parking" data-door-flight-info-cell="parking">
                             <strong data-door-parking>{{ card.parking or "-" }}</strong>
