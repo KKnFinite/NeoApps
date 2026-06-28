@@ -503,6 +503,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(".neoermac-door-destination-card {", css)
         self.assertIn("border: 2px solid rgba(var(--node-rgb), 0.76)", css)
         self.assertIn(".neoermac-door-destination .neoermac-door-destination-title", css)
+        self.assertIn("color: var(--node-ermac-secondary)", css)
+        self.assertIn(".neoermac-door-destination::before", css)
 
     def test_door_view_initial_render_shows_parking_plan_assignment(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
