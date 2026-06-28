@@ -140,7 +140,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             css,
         )
 
-    def test_neosektor_mobile_menu_is_compact_two_column_list(self):
+    def test_neosektor_mobile_menu_is_compact_single_column_list(self):
         self._login_approved_user(role="simulator")
 
         response = self.client.get("/neosektor")
@@ -158,7 +158,18 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("Discharge", menu_html)
         self.assertNotIn("OPEN", menu_html)
         self.assertNotIn("Inbound operations", menu_html)
-        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", css)
+        self.assertIn("grid-template-columns: minmax(0, 1fr);", css)
+
+    def test_neosektor_mobile_dashboard_tiles_do_not_render_subtitles(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neosektor")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"data-neosektor-mobile-dashboard", response.data)
+        self.assertNotIn(b"<small>", response.data)
+        self.assertNotIn(b"Live counts overview.", response.data)
+        self.assertNotIn(b"Tunnel conductor controls.", response.data)
 
     def test_neosektor_mobile_subpages_back_to_dashboard(self):
         self._login_approved_user(role="simulator")

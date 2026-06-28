@@ -74,7 +74,6 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(".topbar::after", css)
         self.assertIn(".rfd-node-card-icon-wrap", css)
         self.assertIn(".rfd-node-card-icon", css)
-        self.assertIn(".rfd-node-help", css)
         self.assertNotIn("../images/neobutton1_medium.png", css)
         self.assertIn(".rfd-node-prefix", css)
         self.assertIn(".rfd-node-suffix", css)
@@ -495,8 +494,10 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("@keyframes mobile-bottom-pop-close", css)
         self.assertIn(".mobile-bottom-popover.is-opening", css)
         self.assertIn(".mobile-bottom-popover.is-closing", css)
-        self.assertIn("transform-origin: var(--mobile-popover-origin-x, 88%) 100%;", css)
-        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", css)
+        self.assertIn("transform-origin: var(--mobile-popover-origin-x, calc(100% - 24px)) 100%;", css)
+        self.assertIn("--mobile-popover-origin-x: 50%;", css)
+        self.assertIn("--mobile-popover-origin-x: calc(100% - 24px);", css)
+        self.assertIn("grid-template-columns: minmax(0, 1fr);", css)
         self.assertIn(".mobile-bottom-menu-panel.is-open", css)
 
     def test_neobid_theme_stays_blue(self):

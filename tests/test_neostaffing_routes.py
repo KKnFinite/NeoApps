@@ -413,6 +413,9 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b'href="/neostaffing/app-management/management-assignments"', response.data)
         self.assertIn(b"CLASSIFICATION MANAGEMENT", response.data)
         self.assertIn(b"PERMISSIONS", response.data)
+        self.assertNotIn(b"Build Sort > Operation > Department > Work Area structure.", response.data)
+        self.assertNotIn(b"Set daily staffing plans for each Work Area.", response.data)
+        self.assertNotIn(b"Future NeoStaffing-specific permission controls.", response.data)
 
     def test_app_management_crud_pages_use_operations_card_layout(self):
         user = self._user("staffing_card_layout")

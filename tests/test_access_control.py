@@ -202,10 +202,10 @@ class AccessControlTest(unittest.TestCase):
         self.assertIn(b'src="/static/images/icons/sektor/icon_192.png"', hub.data)
         self.assertIn(b'src="/static/images/icons/ermac/icon_192.png"', hub.data)
         self.assertIn(b'src="/static/images/icons/scorpion/icon_192.png"', hub.data)
-        self.assertIn(b"Sort planning, flight schedules, parking, and API review.", hub.data)
-        self.assertIn(b"Inbound operations, ballmat counts, discharge, and routing.", hub.data)
-        self.assertIn(b"Shift execution, doors, belts, ULD requests, and outbound pulls.", hub.data)
-        self.assertIn(b"Future node.", hub.data)
+        self.assertNotIn(b"Sort planning, flight schedules, parking, and API review.", hub.data)
+        self.assertNotIn(b"Inbound operations, ballmat counts, discharge, and routing.", hub.data)
+        self.assertNotIn(b"Shift execution, doors, belts, ULD requests, and outbound pulls.", hub.data)
+        self.assertNotIn(b"Future node.", hub.data)
         for node_name in (
             b"NeoScorpion",
             b"NeoReptile",

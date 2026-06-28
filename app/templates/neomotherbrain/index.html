@@ -37,7 +37,6 @@
                 </span>
                 <span class="motherbrain-dashboard-card-copy">
                     <strong>MANAGE SORT</strong>
-                    <span>Sort setup and current operation controls.</span>
                 </span>
             </a>
             <a class="motherbrain-dashboard-card motherbrain-dashboard-card-arrival-planning" href="{{ url_for('neomotherbrain.alp_import', operation_id=selected_operation.id, mission_type='arrival') if selected_operation else url_for('neomotherbrain.manage_sort') }}" data-motherbrain-mobile-tile="arrival-planning">
@@ -46,7 +45,6 @@
                 </span>
                 <span class="motherbrain-dashboard-card-copy">
                     <strong>ARRIVAL PLANNING</strong>
-                    <span>Review ALP/API arrivals and current rows.</span>
                 </span>
             </a>
             <a class="motherbrain-dashboard-card motherbrain-dashboard-card-departure-planning" href="{{ url_for('neomotherbrain.alp_import', operation_id=selected_operation.id, mission_type='departure') if selected_operation else url_for('neomotherbrain.manage_sort') }}" data-motherbrain-mobile-tile="departure-planning">
@@ -55,7 +53,6 @@
                 </span>
                 <span class="motherbrain-dashboard-card-copy">
                     <strong>DEPARTURE PLANNING</strong>
-                    <span>Review departures, HOT rows, and actions.</span>
                 </span>
             </a>
             <a class="motherbrain-dashboard-card motherbrain-dashboard-card-parking" href="{{ url_for('neomotherbrain.parking_plan') }}" data-motherbrain-mobile-tile="parking-plan">
@@ -64,7 +61,6 @@
                 </span>
                 <span class="motherbrain-dashboard-card-copy">
                     <strong>PARKING PLAN</strong>
-                    <span>Assign tails and review parking alerts.</span>
                 </span>
             </a>
             {% if user_can("motherbrain.parking_rules.view") %}
@@ -74,7 +70,6 @@
                 </span>
                 <span class="motherbrain-dashboard-card-copy">
                     <strong>PARKING RULES</strong>
-                    <span>Ramp rules and optimizer defaults.</span>
                 </span>
             </a>
             {% endif %}
@@ -85,7 +80,6 @@
                 </span>
                 <span class="motherbrain-dashboard-card-copy">
                     <strong>SORT TIMELINE</strong>
-                    <span>Calendar and API budget planning.</span>
                 </span>
             </a>
             {% endif %}
@@ -95,7 +89,6 @@
                 </span>
                 <span class="motherbrain-dashboard-card-copy">
                     <strong>MANAGE API</strong>
-                    <span>Flight API test, polling, and diagnostics.</span>
                 </span>
             </a>
             {% if user_can("neomotherbrain.flight_api_review.view") %}
@@ -105,7 +98,6 @@
                 </span>
                 <span class="motherbrain-dashboard-card-copy">
                     <strong>UNMATCHED QUEUE</strong>
-                    <span>Review unmatched Flight API rows.</span>
                 </span>
             </a>
             {% endif %}
@@ -115,7 +107,6 @@
                 </span>
                 <span class="motherbrain-dashboard-card-copy">
                     <strong>GATEWAY MATRIX</strong>
-                    <span>Configure active sort schedule sources.</span>
                 </span>
             </a>
             <a class="motherbrain-dashboard-card motherbrain-dashboard-card-master-schedule" href="{{ url_for('neomotherbrain.master_schedule') }}" data-motherbrain-mobile-tile="master-schedule">
@@ -124,7 +115,6 @@
                 </span>
                 <span class="motherbrain-dashboard-card-copy">
                     <strong>MASTER SCHEDULE</strong>
-                    <span>Maintain baseline arrival/departure rows.</span>
                 </span>
             </a>
             {% if can_manage_system(current_user) %}
@@ -134,7 +124,6 @@
                 </span>
                 <span class="motherbrain-dashboard-card-copy">
                     <strong>PORTAL MANAGEMENT</strong>
-                    <span>User access and app approvals.</span>
                 </span>
             </a>
             <a class="motherbrain-dashboard-card motherbrain-dashboard-card-permission-rules" href="{{ url_for('auth.permission_rules') }}" data-motherbrain-mobile-tile="permission-rules">
@@ -143,7 +132,6 @@
                 </span>
                 <span class="motherbrain-dashboard-card-copy">
                     <strong>PERMISSION RULES</strong>
-                    <span>Node role and action controls.</span>
                 </span>
             </a>
             {% endif %}
