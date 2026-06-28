@@ -10,7 +10,7 @@
 {%- endmacro %}
 
 {% macro destination_select(row, slot, selected_value, destination_choices, can_edit) -%}
-<label class="neoermac-slot neoermac-belt-cell" data-lineup-assignment-slot="{{ slot.field or 'empty' }}">
+<label class="neoermac-slot neoermac-belt-cell neoermac-belt-destination-card" data-lineup-assignment-slot="{{ slot.field or 'empty' }}">
     <select class="neoermac-destination-select" name="{{ field_name(row, slot.field) if slot.field else '' }}" {% if not can_edit or not slot.field %}disabled{% endif %}>
         <option value="">{{ slot.placeholder }}</option>
         {% if slot.field %}
@@ -49,11 +49,10 @@
                 <div class="neoermac-belt-grid-scroll">
                     <div class="neoermac-runout-slots neoermac-belt-grid" aria-label="{{ row.belt_group_label }} belt assignments">
                         {% for block in row.belt_blocks %}
-                        {% set top_destination = row|attr(block.top_field) %}
-                        {% set bottom_destination = row|attr(block.bottom_field) %}
                         <div class="neoermac-belt-block" data-mobile-destination-slot="{{ block.slot_number }}">
-                            <div class="neoermac-mobile-belt-topline">
-                            <div class="neoermac-belt-destination-row">
+                            <div class="neoermac-belt-name">{{ block.label }}</div>
+                            <div class="neoermac-belt-destination-stack" aria-label="{{ block.label }} destinations">
+                            <div class="neoermac-belt-destination-row" data-belt-destination-position="upper">
                                 {% for slot in block.top_slots %}
                                 {% set selected_value = row|attr(slot.field) if slot.field else "" %}
                                 {% call destination_select(row, slot, selected_value, destination_choices, can_edit) %}
@@ -61,9 +60,7 @@
                                 {% endcall %}
                                 {% endfor %}
                             </div>
-                            <span class="neoermac-mobile-slot-belt-name">{{ block.label }}</span>
-                            <div class="neoermac-belt-name">{{ block.label }}</div>
-                            <div class="neoermac-belt-destination-row">
+                            <div class="neoermac-belt-destination-row" data-belt-destination-position="lower">
                                 {% for slot in block.bottom_slots %}
                                 {% set selected_value = row|attr(slot.field) if slot.field else "" %}
                                 {% call destination_select(row, slot, selected_value, destination_choices, can_edit) %}

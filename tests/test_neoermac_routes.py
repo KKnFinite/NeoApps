@@ -1504,6 +1504,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.data.count(b"neoermac-belt-group"), 12)
         self.assertEqual(response.data.count(b"neoermac-sequence-door"), 13)
         self.assertIn(b"neoermac-belt-block", response.data)
+        self.assertIn(b"neoermac-belt-destination-stack", response.data)
+        self.assertIn(b"neoermac-belt-destination-card", response.data)
         self.assertIn(b"neoermac-belt-destination-row", response.data)
         self.assertIn(b'data-lineup-assignment-slot="east_destination_1"', response.data)
         self.assertIn(b'data-lineup-assignment-slot="east_destination_2"', response.data)
@@ -1683,9 +1685,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("neoermac-mobile-pull-strip", html)
-        self.assertIn("neoermac-mobile-belt-topline", html)
+        self.assertNotIn("neoermac-mobile-belt-topline", html)
         self.assertIn('data-mobile-destination-slot="1"', html)
         self.assertIn('data-mobile-destination-slot="2"', html)
+        self.assertIn("neoermac-belt-destination-stack", html)
+        self.assertGreaterEqual(html.count("neoermac-belt-destination-card"), 4)
         self.assertIn("neoermac-slot-pull-times", left_pair)
         self.assertIn("00:45", left_pair)
         self.assertIn("01:00", left_pair)
@@ -1694,7 +1698,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("02:05", right_pair)
         self.assertIn("02:20", right_pair)
         self.assertIn("02:35", right_pair)
-        self.assertIn("neoermac-mobile-slot-belt-name", html)
+        self.assertNotIn("neoermac-mobile-slot-belt-name", html)
 
     def test_building_lineup_missing_pull_times_show_clean_blanks(self):
         self._add_master_departure("UPS212", "PHX")
