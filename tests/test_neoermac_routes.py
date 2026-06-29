@@ -161,6 +161,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"UPCOMING OUTBOUND PULLS", response.data)
         self.assertIn(b"No current sort operation", response.data)
         self.assertNotIn(b"neoermac-upcoming-row", response.data)
+        self.assertNotIn(b"NeoErmac pull actions", response.data)
+        self.assertNotIn(b"neoermac-dashboard-menu", response.data)
         self.assertIn(b'href="/neoermac"', response.data)
 
     def test_neoermac_upcoming_pulls_shows_west_and_east_pull_lists(self):
