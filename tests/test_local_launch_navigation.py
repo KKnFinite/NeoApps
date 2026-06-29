@@ -122,6 +122,15 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertNotIn("42px 42px", css)
         self.assertNotIn("linear-gradient(90deg, rgba(201, 208, 214, 0.035) 1px", css)
 
+    def test_base_css_prevents_accidental_mobile_zoom(self):
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertIn("-webkit-text-size-adjust: 100%;", css)
+        self.assertIn("text-size-adjust: 100%;", css)
+        self.assertIn("@media (max-width: 760px)", css)
+        self.assertIn("font-size: max(16px, 1rem);", css)
+        self.assertIn("touch-action: manipulation;", css)
+
     def test_base_template_cache_busts_stylesheet(self):
         template = Path("app/templates/base.html").read_text()
 
@@ -131,6 +140,10 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             template,
         )
         self.assertIn("url_for('service_worker', v=config.STATIC_ASSET_VERSION)", template)
+        self.assertIn(
+            '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">',
+            template,
+        )
         self.assertIn('name="theme-color" content="#d95a1f"', template)
         self.assertIn('name="apple-mobile-web-app-title" content="NeoApps"', template)
         self.assertIn("url_for('apple_touch_icon')", template)

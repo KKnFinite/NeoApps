@@ -86,6 +86,11 @@
     --mobile-node-banner-button-height: 36px;
 }
 
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
 .theme-gateway,
 .node-gateway {
     --node-primary: var(--node-gateway-primary);
@@ -16410,6 +16415,24 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 @media (max-width: 760px) {
     body.mobile-app-chrome {
         overflow-x: hidden;
+    }
+
+    input,
+    select,
+    textarea,
+    button {
+        font-size: max(16px, 1rem);
+    }
+
+    a,
+    button,
+    summary,
+    label,
+    input,
+    select,
+    textarea,
+    [role="button"] {
+        touch-action: manipulation;
     }
 
     body.mobile-app-chrome.has-mobile-topbar .shell > .topbar {
