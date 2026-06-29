@@ -12,6 +12,7 @@
     data-can-edit="{{ 'true' if can_edit else 'false' }}"
     data-state-url="{{ url_for('neosektor.ballmat_state') }}"
     data-update-url="{{ url_for('neosektor.ballmat_update', side=selected_side) }}"
+    data-refresh-active="{{ 'true' if state.refresh.auto_refresh_enabled else 'false' }}"
 >
     <header class="app-header neosektor-standalone-header mobile-shell-duplicate-title">
         <div class="header-title">
@@ -32,6 +33,12 @@
 
     <main class="counts-wrap">
         <div class="neosektor-inline-edit-error" data-neosektor-edit-error hidden aria-live="polite"></div>
+        <div class="neosektor-refresh-paused" data-neosektor-refresh-paused {% if state.refresh.auto_refresh_enabled %}hidden{% endif %} aria-live="polite">
+            {{ state.refresh.message }}
+            {% if state.refresh.operation_label and state.refresh.window_label %}
+            <span>{{ state.refresh.operation_label }} · {{ state.refresh.window_label }}</span>
+            {% endif %}
+        </div>
         <section class="wave-strip" aria-label="Wave summary">
             {% for wave_key, wave in [("first", state.waves[0]), ("second", state.waves[1])] %}
             <article class="wave-card">
@@ -151,12 +158,16 @@
     const updateUrl = root.dataset.updateUrl;
     const selectedSide = root.dataset.selectedSide;
     const canEdit = root.dataset.canEdit === "true";
+    const initialRefreshStatus = {{ state.refresh|tojson }};
     const selectedPanel = root.querySelector(`[data-ballmat-side="${selectedSide}"]`);
     const statusLabels = {{ status_labels|list|tojson }};
     const pendingEdits = new Map();
     const editError = root.querySelector("[data-neosektor-edit-error]");
+    const refreshPaused = root.querySelector("[data-neosektor-refresh-paused]");
     let pendingSequence = 0;
     let saveTimer = null;
+    let refreshTimer = null;
+    let resumeTimer = null;
 
     const editKeyFor = (input) => input?.dataset?.neosektorEditKey || "";
 
@@ -328,6 +339,46 @@
         });
     };
 
+    const setRefreshStatus = (refresh) => {
+        const status = refresh || {};
+        const isActive = status.auto_refresh_enabled !== false;
+        root.dataset.refreshActive = isActive ? "true" : "false";
+
+        if (refreshPaused) {
+            refreshPaused.hidden = isActive;
+            refreshPaused.replaceChildren(
+                document.createTextNode(status.message || "Auto-refresh paused outside the current operation window."),
+            );
+            if (status.operation_label && status.window_label) {
+                const detail = document.createElement("span");
+                detail.textContent = `${status.operation_label} · ${status.window_label}`;
+                refreshPaused.appendChild(detail);
+            }
+        }
+
+        if (isActive) {
+            window.clearTimeout(resumeTimer);
+            resumeTimer = null;
+            if (!refreshTimer) {
+                refreshTimer = window.setInterval(refreshState, 5000);
+            }
+            return;
+        }
+
+        if (refreshTimer) {
+            window.clearInterval(refreshTimer);
+            refreshTimer = null;
+        }
+        window.clearTimeout(resumeTimer);
+        const nextCheckSeconds = Number.parseInt(status.next_check_seconds, 10);
+        if (Number.isFinite(nextCheckSeconds) && nextCheckSeconds > 0) {
+            resumeTimer = window.setTimeout(
+                refreshState,
+                Math.min(Math.max(nextCheckSeconds * 1000, 5000), 2147483647),
+            );
+        }
+    };
+
     const refreshState = async () => {
         try {
             const response = await fetch(stateUrl, { cache: "no-store", credentials: "same-origin" });
@@ -336,6 +387,10 @@
             }
             const payload = await response.json();
             if (payload.ok) {
+                setRefreshStatus(payload.state?.refresh);
+                if (payload.state?.refresh?.auto_refresh_enabled === false) {
+                    return;
+                }
                 applyState(payload.state);
             }
         } catch (_error) {}
@@ -425,7 +480,7 @@
         }
     });
 
-    window.setInterval(refreshState, 5000);
+    setRefreshStatus(initialRefreshStatus);
 })();
 </script>
 {% endblock %}

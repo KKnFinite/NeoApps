@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 from app import create_app
@@ -19,10 +19,12 @@ from app.models import (
     NeoSektorUldOnTheWayEvent,
     NeoSektorWaveState,
     PermissionRule,
+    SortDateOperation,
     User,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.permission_rules import ensure_default_permission_rules
+from app.services.sort_timeline import ensure_sort_timeline_settings
 from app.services.uld_requests import (
     active_on_the_way_events,
     active_request_views,
@@ -2003,6 +2005,46 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("waves", payload["state"])
         self.assertIn("sides", payload["state"])
         self.assertEqual(payload["state"]["sides"]["east"]["bays"][0]["bay_name"], "Bay 1")
+        self.assertIn("refresh", payload["state"])
+
+    def test_neosektor_refresh_pauses_outside_operation_window(self):
+        self._login_approved_user(role="watcher")
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 29, 10, 0)
+        operation = self._add_sort_operation(date(2026, 6, 29), "night")
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+
+        response = self.client.get("/neosektor/live-counts")
+        state_response = self.client.get("/neosektor/live-counts/state")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'data-refresh-active="false"', response.data)
+        self.assertIn(b"neosektor-refresh-paused", response.data)
+        self.assertIn(b"Auto-refresh paused", response.data)
+        self.assertIn(b"RFD NIGHT 6/29/26", response.data)
+        self.assertIn(b"22:00-04:00", response.data)
+        self.assertIn(b"window.clearInterval(refreshTimer)", response.data)
+        self.assertIn(b"setRefreshStatus(initialRefreshStatus)", response.data)
+
+        payload = state_response.get_json()
+        self.assertFalse(payload["state"]["refresh"]["auto_refresh_enabled"])
+        self.assertEqual(payload["state"]["refresh"]["operation_id"], operation.id)
+        self.assertEqual(payload["state"]["refresh"]["next_check_seconds"], 43200)
+
+    def test_neosektor_refresh_active_for_midnight_crossing_operation_window(self):
+        self._login_approved_user(role="watcher")
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 30, 1, 0)
+        operation = self._add_sort_operation(date(2026, 6, 29), "night")
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+
+        response = self.client.get("/neosektor/live-counts/state")
+
+        self.assertEqual(response.status_code, 200)
+        refresh = response.get_json()["state"]["refresh"]
+        self.assertTrue(refresh["auto_refresh_enabled"])
+        self.assertEqual(refresh["operation_id"], operation.id)
+        self.assertEqual(refresh["window_start_local"], "22:00")
+        self.assertEqual(refresh["window_end_local"], "04:00")
+        self.assertEqual(refresh["reason"], "active")
 
     def test_live_counts_css_keeps_bay_status_cards_readable(self):
         css = Path("app/static/css/base.css").read_text()
@@ -2260,6 +2302,28 @@ class NeoSektorRoutesTest(unittest.TestCase):
         db.session.add(request_record)
         db.session.flush()
         return request_record
+
+    def _add_sort_operation(self, sort_date, sort_name="night"):
+        operation = SortDateOperation(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_date=sort_date,
+            sort_name=sort_name,
+        )
+        db.session.add(operation)
+        db.session.commit()
+        return operation
+
+    def _set_sort_window(self, sort_name, start_time, end_time):
+        settings = ensure_sort_timeline_settings(self.gateway)
+        sort_setting = next(
+            row
+            for row in settings.sort_settings
+            if row.sort_name == sort_name
+        )
+        sort_setting.sort_window_start_local = start_time
+        sort_setting.sort_window_end_local = end_time
+        db.session.commit()
 
     def _login_approved_user(self, role):
         user = User(

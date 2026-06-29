@@ -2725,6 +2725,35 @@ a {
     display: none;
 }
 
+.blueprint-neosektor .neosektor-refresh-paused {
+    display: grid;
+    gap: 3px;
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.42);
+    border-radius: 7px;
+    background:
+        linear-gradient(135deg, rgba(var(--node-rgb), 0.16), rgba(10, 10, 14, 0.82)),
+        rgba(14, 15, 20, 0.86);
+    color: var(--neo-silver);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-refresh-paused span {
+    color: rgba(236, 240, 246, 0.76);
+    font-size: 0.66rem;
+    letter-spacing: 0.03em;
+}
+
+.blueprint-neosektor .neosektor-refresh-paused[hidden] {
+    display: none;
+}
+
 .neosektor-ballmat-operator-page .topbar,
 .neosektor-tunnel-operator-page .topbar,
 .neosektor-live-counts-page .topbar {
