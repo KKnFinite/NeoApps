@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import or_
 
@@ -16,6 +16,11 @@ from app.services.neoermac_building_lineup import (
     get_outbound_door_options,
     normalize_destination,
 )
+from app.services.gateway_matrix import (
+    current_gateway_local_datetime,
+    operation_is_active_at,
+    sort_lookup_window_for_operation,
+)
 from app.services.sort_date_operations import mission_display_timing_data
 from app.services.uld_requests import (
     ULD_TYPES,
@@ -28,6 +33,8 @@ from app.services.uld_requests import (
     update_uld_request_from_form,
 )
 
+
+PULL_DUE_WARNING_MINUTES = 5
 
 PULL_FIELDS = (
     {
@@ -218,6 +225,7 @@ def door_view_uld_state(gateway, selected_door):
             "flight_number": card["flight_number"],
             "tail": card["tail"],
             "parking": card["parking"] or "-",
+            "pull_alerts": card["pull_alerts"],
         }
         for card in destinations
     ]
@@ -232,6 +240,7 @@ def _pull_card_payload(gateway, selected_door, destination, operation):
                 "parking": card["parking"] or "-",
                 "actual": card["actual"],
                 "no_pull": card["no_pull"],
+                "pull_alerts": card["pull_alerts"],
                 "pulls_complete": card["pulls_complete"],
                 "complete_title": card["complete_title"],
                 "pull_summary": card["pull_summary"],
@@ -268,6 +277,16 @@ def _destination_cards_for_door(gateway, selected_door, operation):
         master = masters.get(destination)
         door_pull = _door_pull_record(gateway, selected_door, destination, operation)
         timing_data = _mission_timing_data(mission, operation)
+        planned_times = {
+            "pure": _planned_pull_time(timing_data, master, "pure"),
+            "first_mix": _planned_pull_time(timing_data, master, "first_mix"),
+            "second_mix": _planned_pull_time(timing_data, master, "second_mix"),
+        }
+        base_planned_times = {
+            "pure": _base_pull_time(timing_data, master, "pure"),
+            "first_mix": _base_pull_time(timing_data, master, "first_mix"),
+            "second_mix": _base_pull_time(timing_data, master, "second_mix"),
+        }
         actual = {
             "pure": _time_value(getattr(door_pull, "actual_pure_pull_time_local", None)),
             "first_mix": _time_value(
@@ -294,23 +313,26 @@ def _destination_cards_for_door(gateway, selected_door, operation):
                 "parking": _parking_for_mission(mission, parking_by_tail),
                 "window_minutes": timing_data.get("effective_window_minutes", 0),
                 "planned": {
-                    "pure": _time_value(_planned_pull_time(timing_data, master, "pure")),
-                    "first_mix": _time_value(
-                        _planned_pull_time(timing_data, master, "first_mix")
-                    ),
-                    "second_mix": _time_value(
-                        _planned_pull_time(timing_data, master, "second_mix")
-                    ),
+                    "pure": _time_value(planned_times["pure"]),
+                    "first_mix": _time_value(planned_times["first_mix"]),
+                    "second_mix": _time_value(planned_times["second_mix"]),
                 },
                 "base_planned": {
-                    "pure": _time_value(_base_pull_time(timing_data, master, "pure")),
-                    "first_mix": _time_value(_base_pull_time(timing_data, master, "first_mix")),
-                    "second_mix": _time_value(
-                        _base_pull_time(timing_data, master, "second_mix")
-                    ),
+                    "pure": _time_value(base_planned_times["pure"]),
+                    "first_mix": _time_value(base_planned_times["first_mix"]),
+                    "second_mix": _time_value(base_planned_times["second_mix"]),
                 },
                 "actual": actual,
                 "no_pull": no_pull,
+                "pull_alerts": _pull_alerts_for_card(
+                    gateway,
+                    selected_door,
+                    destination,
+                    operation,
+                    planned_times,
+                    actual,
+                    no_pull,
+                ),
                 "pulls_complete": _pulls_complete(actual, no_pull),
                 "complete_title": _complete_title(
                     destination,
@@ -567,6 +589,97 @@ def _master_pull_time(master, pull_key):
         "second_mix": "final_mix_pull_time_local",
     }[pull_key]
     return getattr(master, attr, None)
+
+
+def _pull_alerts_for_card(
+    gateway,
+    selected_door,
+    destination,
+    operation,
+    planned_times,
+    actual,
+    no_pull,
+):
+    alerts = {field["key"]: _empty_pull_alert() for field in PULL_FIELDS}
+    if not operation:
+        return alerts
+
+    local_now = current_gateway_local_datetime(gateway)
+    if not operation_is_active_at(operation, local_now, gateway):
+        return alerts
+
+    start_local, end_local = sort_lookup_window_for_operation(operation, gateway)
+    for field in PULL_FIELDS:
+        pull_key = field["key"]
+        planned_time = planned_times.get(pull_key)
+        planned_local = _pull_planned_datetime(operation, start_local, end_local, planned_time)
+        if not planned_local:
+            continue
+
+        alerts[pull_key]["key"] = _pull_alert_key(
+            operation,
+            selected_door,
+            destination,
+            pull_key,
+            planned_local,
+        )
+        if no_pull.get(pull_key) or actual.get(pull_key):
+            continue
+
+        seconds_until = (planned_local - local_now).total_seconds()
+        if seconds_until < 0:
+            alerts[pull_key].update(
+                {
+                    "state": "late",
+                    "css_class": "is-pull-late",
+                    "label": "LATE",
+                    "minutes": int(abs(seconds_until) // 60),
+                }
+            )
+        elif seconds_until <= PULL_DUE_WARNING_MINUTES * 60:
+            alerts[pull_key].update(
+                {
+                    "state": "due_soon",
+                    "css_class": "is-pull-due-soon",
+                    "label": f"DUE {int(seconds_until // 60)} MIN",
+                    "minutes": int(seconds_until // 60),
+                }
+            )
+    return alerts
+
+
+def _empty_pull_alert():
+    return {
+        "state": "",
+        "css_class": "",
+        "label": "",
+        "key": "",
+        "minutes": None,
+    }
+
+
+def _pull_planned_datetime(operation, start_local, end_local, planned_time):
+    if not operation or not start_local or not end_local or not planned_time:
+        return None
+
+    planned_local = datetime.combine(operation.sort_date, planned_time)
+    if planned_local < start_local:
+        planned_local += timedelta(days=1)
+    if planned_local < start_local or planned_local >= end_local:
+        return None
+    return planned_local
+
+
+def _pull_alert_key(operation, selected_door, destination, pull_key, planned_local):
+    return ":".join(
+        (
+            f"op-{operation.id}",
+            normalize_door(selected_door) or "-",
+            normalize_destination(destination) or "-",
+            pull_key,
+            planned_local.strftime("%Y%m%d%H%M"),
+        )
+    )
 
 
 def _labelize(value):

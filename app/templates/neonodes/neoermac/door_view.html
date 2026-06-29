@@ -198,11 +198,20 @@
 
                     <div class="neoermac-door-pull-grid" data-pull-details>
                         {% for pull in pull_fields %}
-                        <section class="neoermac-door-pull-row">
+                        {% set pull_alert = card.pull_alerts[pull.key] %}
+                        <section
+                            class="neoermac-door-pull-row{% if pull_alert.css_class %} {{ pull_alert.css_class }}{% endif %}"
+                            data-pull-key="{{ pull.key }}"
+                            data-pull-alert-state="{{ pull_alert.state }}"
+                            data-pull-alert-key="{{ pull_alert.key }}"
+                        >
                             <div class="neoermac-door-planned">
                                 <span class="neoermac-label-desktop">PLANNED {{ pull.label }}</span>
                                 <span class="neoermac-label-mobile">{{ pull.short_label }}</span>
                                 <strong>{{ card.planned[pull.key] or "-" }}</strong>
+                                {% if pull_alert.label %}
+                                <span class="neoermac-pull-alert-badge" data-pull-alert-badge>{{ pull_alert.label }}</span>
+                                {% endif %}
                                 {% if card.window_minutes and card.base_planned[pull.key] and card.base_planned[pull.key] != card.planned[pull.key] %}
                                 <em>BASE {{ card.base_planned[pull.key] }} +{{ card.window_minutes }} MIN</em>
                                 {% endif %}
@@ -315,6 +324,38 @@
     const stateUrl = root.dataset.stateUrl;
     const canEditRequests = {{ "true" if can_edit else "false" }};
     const selectedDoor = root.querySelector('[name="door"]')?.value || "";
+    const pullAlertClasses = ["is-pull-due-soon", "is-pull-late"];
+
+    const applyPullAlerts = (card, pullAlerts) => {
+        if (!card) {
+            return;
+        }
+        card.querySelectorAll(".neoermac-door-pull-row[data-pull-key]").forEach((row) => {
+            const pullKey = row.dataset.pullKey || "";
+            const alert = pullAlerts?.[pullKey] || {};
+            row.classList.remove(...pullAlertClasses);
+            if (alert.css_class) {
+                row.classList.add(alert.css_class);
+            }
+            row.dataset.pullAlertState = alert.state || "";
+            row.dataset.pullAlertKey = alert.key || "";
+
+            let badge = row.querySelector("[data-pull-alert-badge]");
+            if (alert.label) {
+                if (!badge) {
+                    badge = document.createElement("span");
+                    badge.className = "neoermac-pull-alert-badge";
+                    badge.dataset.pullAlertBadge = "";
+                    row.querySelector(".neoermac-door-planned")?.appendChild(badge);
+                }
+                badge.textContent = alert.label;
+            } else if (badge) {
+                badge.remove();
+            }
+        });
+    };
+
+    window.neoErmacApplyPullAlerts = applyPullAlerts;
 
     const renderEvents = (events) => {
         const panel = root.querySelector("[data-uld-events]");
@@ -429,6 +470,8 @@
             if (parking) {
                 parking.textContent = row.parking || "-";
             }
+
+            applyPullAlerts(card, row.pull_alerts || {});
         });
     };
 
@@ -580,6 +623,7 @@
 
         setCardError(card, "");
         setCardStatus(card, "SAVED", "saved");
+        window.neoErmacApplyPullAlerts?.(card, cardData.pull_alerts || {});
         updatePullFormCompleteState();
     };
 

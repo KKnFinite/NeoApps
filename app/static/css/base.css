@@ -3224,6 +3224,75 @@ a {
     align-items: stretch;
 }
 
+.neoermac-door-pull-row.is-pull-due-soon .neoermac-door-planned,
+.neoermac-door-pull-row.is-pull-due-soon .neoermac-door-actual,
+.neoermac-door-pull-row.is-pull-due-soon .neoermac-door-toggle {
+    border-color: rgba(255, 203, 87, 0.72);
+    background:
+        linear-gradient(135deg, rgba(255, 203, 87, 0.16), rgba(2, 3, 5, 0.68)),
+        rgba(30, 20, 4, 0.74);
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 203, 87, 0.12),
+        0 0 12px rgba(255, 203, 87, 0.12);
+}
+
+.neoermac-door-pull-row.is-pull-late .neoermac-door-planned,
+.neoermac-door-pull-row.is-pull-late .neoermac-door-actual,
+.neoermac-door-pull-row.is-pull-late .neoermac-door-toggle {
+    border-color: rgba(255, 62, 86, 0.9);
+    background:
+        linear-gradient(135deg, rgba(255, 62, 86, 0.24), rgba(35, 0, 7, 0.84)),
+        rgba(40, 0, 8, 0.86);
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 62, 86, 0.2),
+        0 0 18px rgba(255, 62, 86, 0.28);
+    animation: neoermac-pull-critical-pulse 1.15s ease-in-out infinite;
+}
+
+.neoermac-pull-alert-badge {
+    justify-self: center;
+    width: max-content;
+    max-width: 100%;
+    padding: 2px 6px;
+    border-radius: 999px;
+    color: #161006;
+    background: #ffcb57;
+    font-size: 0.56rem;
+    font-weight: 950;
+    letter-spacing: 0.09em;
+    line-height: 1.1;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.neoermac-door-pull-row.is-pull-late .neoermac-pull-alert-badge {
+    color: #fff5f6;
+    background: #ff304f;
+    box-shadow: 0 0 12px rgba(255, 48, 79, 0.42);
+}
+
+@keyframes neoermac-pull-critical-pulse {
+    0%,
+    100% {
+        box-shadow:
+            inset 0 0 0 1px rgba(255, 62, 86, 0.18),
+            0 0 12px rgba(255, 62, 86, 0.2);
+    }
+    50% {
+        box-shadow:
+            inset 0 0 0 1px rgba(255, 62, 86, 0.4),
+            0 0 24px rgba(255, 62, 86, 0.46);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .neoermac-door-pull-row.is-pull-late .neoermac-door-planned,
+    .neoermac-door-pull-row.is-pull-late .neoermac-door-actual,
+    .neoermac-door-pull-row.is-pull-late .neoermac-door-toggle {
+        animation: none;
+    }
+}
+
 .neoermac-door-actual input,
 .neoermac-uld-grid input {
     width: 100%;
