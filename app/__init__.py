@@ -410,11 +410,11 @@ def register_pwa_assets(app):
 def _pwa_manifest_definitions():
     specs = {
         "neoportal": {
-            "name": "NeoApps Portal",
-            "short_name": "NeoPortal",
-            "description": "NeoApps Portal access dashboard.",
+            "name": "NeoApps",
+            "short_name": "NeoApps",
+            "description": "NeoApps access dashboard.",
             "start_url": "/portal",
-            "theme_color": "#4db7ff",
+            "theme_color": "#d73f7d",
             "icon_folder": "neoportal",
             "maskable": True,
         },

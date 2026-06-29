@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "_neo_brand.html" import neo_brand, neo_brand_name %}
 
-{% block title %}NeoApps Portal{% endblock %}
+{% block title %}NeoApps{% endblock %}
 
 {% block content %}
 <section class="portal-page centered-command-page">
@@ -55,13 +55,13 @@
                     decoding="async"
                 >
             </h2>
-            <p class="muted">Install approved apps and nodes on this device. If your browser does not show an install prompt, the button opens the app so you can use the browser install option there.</p>
+            <p class="muted">Install approved apps and nodes on this device. Android browsers can use the native install prompt when available. iPhone and iPad users should use the instructions below.</p>
         </div>
         <div class="portal-install-grid" aria-label="Installable approved apps and nodes">
             {% for install in install_rows %}
-            {% set install_brand_key = "gateway" if install.manifest_key == "neogateway" else ("staffing" if install.manifest_key == "neostaffing" else ("bid" if install.manifest_key == "neobid" else ("portal" if install.manifest_key == "neoportal" else install.manifest_key))) %}
+            {% set install_brand_key = "gateway" if install.manifest_key == "neogateway" else ("staffing" if install.manifest_key == "neostaffing" else ("bid" if install.manifest_key == "neobid" else ("apps" if install.manifest_key == "neoportal" else install.manifest_key))) %}
             <article class="portal-install-card portal-install-{{ install.manifest_key }}">
-                <img class="portal-install-icon" src="{{ install.icon_src }}" alt="" loading="lazy" width="64" height="64">
+                <img class="portal-install-icon" src="{{ install.icon_src }}" alt="" loading="lazy" width="48" height="48">
                 <div class="portal-install-copy">
                     <h3>{{ neo_brand_name(install.name, install_brand_key) }}</h3>
                     <p class="portal-install-status" id="install-status-{{ install.manifest_key }}" data-install-status aria-live="polite"></p>
@@ -72,11 +72,24 @@
                     data-install-button
                     data-manifest-url="{{ install.manifest_url }}"
                     data-start-url="{{ install.start_url }}"
+                    data-install-default-label="How to Install"
                     aria-describedby="install-status-{{ install.manifest_key }}"
-                >INSTALL</a>
+                >HOW TO INSTALL</a>
             </article>
             {% endfor %}
         </div>
+        <aside class="portal-install-help" id="portal-install-help" data-install-help tabindex="-1" aria-live="polite">
+            <div>
+                <h3>Install Instructions</h3>
+                <p>For iPhone or iPad: open NeoApps in Safari, tap Share, choose Add to Home Screen, then confirm.</p>
+            </div>
+            <ol>
+                <li>Open in Safari.</li>
+                <li>Tap Share.</li>
+                <li>Tap Add to Home Screen.</li>
+                <li>Confirm.</li>
+            </ol>
+        </aside>
     </section>
     {% endif %}
 
@@ -96,9 +109,21 @@
     }
 
     let deferredInstallPrompt = null;
+    const installHelp = document.querySelector("[data-install-help]");
+    const isIos = /iphone|ipad|ipod/i.test(window.navigator.userAgent || "")
+        || (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
+
+    const setNativeInstallAvailable = (isAvailable) => {
+        installButtons.forEach((button) => {
+            button.textContent = isAvailable && !isIos ? "INSTALL" : (button.dataset.installDefaultLabel || "HOW TO INSTALL").toUpperCase();
+            button.dataset.installMode = isAvailable && !isIos ? "native" : "instructions";
+        });
+    };
+
     window.addEventListener("beforeinstallprompt", (event) => {
         event.preventDefault();
         deferredInstallPrompt = event;
+        setNativeInstallAvailable(true);
     });
 
     const setStatus = (button, message) => {
@@ -109,31 +134,41 @@
         }
     };
 
+    const showInstallInstructions = (button, message) => {
+        setStatus(button, message || "Use the install instructions below.");
+        if (installHelp) {
+            installHelp.classList.add("is-highlighted");
+            installHelp.removeAttribute("hidden");
+            installHelp.focus({ preventScroll: true });
+            installHelp.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            window.setTimeout(() => installHelp.classList.remove("is-highlighted"), 1600);
+        }
+    };
+
+    setNativeInstallAvailable(false);
     installButtons.forEach((button) => {
         button.addEventListener("click", async (event) => {
             event.preventDefault();
 
             const manifestLink = document.querySelector('link[rel="manifest"]');
-            const originalManifestPath = manifestLink ? new URL(manifestLink.href, window.location.origin).pathname : "";
             const manifestUrl = button.dataset.manifestUrl || "";
-            const targetManifest = new URL(manifestUrl, window.location.origin);
-            const targetStartUrl = button.dataset.startUrl || button.getAttribute("href") || "/portal";
             if (manifestLink && manifestUrl) {
                 manifestLink.href = manifestUrl;
             }
 
-            if (deferredInstallPrompt && originalManifestPath === targetManifest.pathname) {
+            if (!isIos && deferredInstallPrompt) {
                 deferredInstallPrompt.prompt();
                 await deferredInstallPrompt.userChoice.catch(() => null);
                 deferredInstallPrompt = null;
                 setStatus(button, "Install prompt completed.");
+                setNativeInstallAvailable(false);
                 return;
             }
 
-            setStatus(button, "Opening selected app. Use your browser install option if no prompt appears.");
-            window.setTimeout(() => {
-                window.location.assign(targetStartUrl);
-            }, 700);
+            const browserMessage = isIos
+                ? "iPhone and iPad install from Safari Share, then Add to Home Screen."
+                : "This browser does not currently expose a native install prompt.";
+            showInstallInstructions(button, browserMessage);
         });
     });
 })();

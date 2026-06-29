@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#d95a1f">
-    <meta name="application-name" content="NeoApps Portal">
+    <meta name="application-name" content="NeoApps">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="NeoApps">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -61,7 +61,7 @@
 {% set node_header_name = "NeoSektor" if is_neosektor_page else ("NeoErmac" if is_neoermac_page else ("NeoScorpion" if is_neoscorpion_page else ("NeoReptile" if is_neoreptile_page else ("NeoSub-Zero" if is_neosubzero_page else ("NeoRain" if is_neorain_page else "NeoMotherBrain"))))) %}
 {% set node_current_label = neosektor_current_label if is_neosektor_page else (neoermac_current_label if is_neoermac_page else motherbrain_current_label) %}
 {% set mobile_shell_key = node_header_key if (uses_node_header or is_neosektor_page or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page) else ("staffing" if is_neostaffing_page else ("gateway" if is_rfd_hub_page else "apps")) %}
-{% set mobile_shell_name = node_header_name if (uses_node_header or is_neosektor_page or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page) else ("NeoStaffing" if is_neostaffing_page else ("NeoGateway" if is_rfd_hub_page else "NeoApps Portal")) %}
+{% set mobile_shell_name = node_header_name if (uses_node_header or is_neosektor_page or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page) else ("NeoStaffing" if is_neostaffing_page else ("NeoGateway" if is_rfd_hub_page else "NeoApps")) %}
 {% set mobile_shell_word = node_header_word if (uses_node_header or is_neosektor_page or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page) else ("Staffing" if is_neostaffing_page else ("Gateway" if is_rfd_hub_page else "Apps")) %}
 {% set mobile_shell_label = node_current_label if (uses_node_header or is_neosektor_page or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page) else ("DASHBOARD" if is_rfd_hub_page else ("DASHBOARD" if is_neostaffing_page else "PORTAL")) %}
 {% set mobile_home_endpoint = node_home_endpoint if (uses_node_header or is_neosektor_page or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page) else ("neostaffing.index" if is_neostaffing_page else ("neomotherbrain.rfd_hub" if is_rfd_hub_page else "auth.portal_dashboard")) %}
@@ -85,7 +85,7 @@
                 <strong>{{ node_current_label }}</strong>
             </div>
             {% else %}
-            <a class="brand" href="{% if is_rfd_hub_page %}{{ url_for('neomotherbrain.rfd_hub') }}{% elif is_neostaffing_page %}{{ url_for('neostaffing.index') }}{% elif current_user.is_authenticated and not public_landing|default(false) %}{{ url_for('auth.portal_dashboard') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}" aria-label="{% if is_rfd_hub_page %}NeoGateway - {{ default_gateway.code }}{% elif is_neostaffing_page %}NeoStaffing{% else %}NeoApps Portal{% endif %}">
+            <a class="brand" href="{% if is_rfd_hub_page %}{{ url_for('neomotherbrain.rfd_hub') }}{% elif is_neostaffing_page %}{{ url_for('neostaffing.index') }}{% elif current_user.is_authenticated and not public_landing|default(false) %}{{ url_for('auth.portal_dashboard') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}" aria-label="{% if is_rfd_hub_page %}NeoGateway - {{ default_gateway.code }}{% elif is_neostaffing_page %}NeoStaffing{% else %}NeoApps{% endif %}">
                 <span>
                     <strong>
                         {% if is_rfd_hub_page %}
@@ -105,7 +105,7 @@
                             <span class="portal-header-word">Portal</span>
                         </span>
                         {% else %}
-                        {{ neo_brand("Apps", "apps") }} Portal
+                        {{ neo_brand("Apps", "apps") }}
                         {% endif %}
                     </strong>
                     {% if not (current_user.is_authenticated and not public_landing|default(false)) %}
@@ -185,7 +185,7 @@
                 </a>
                 {% endif %}
                 <a class="mobile-topbar-title" href="{{ url_for(mobile_home_endpoint) }}" aria-label="{{ mobile_shell_name }} home">
-                    <span>{{ neo_brand(mobile_shell_word, mobile_shell_key, "mobile-topbar-brand", mobile_shell_name) }}{% if mobile_shell_name == "NeoApps Portal" %} Portal{% endif %}</span>
+                    <span>{{ neo_brand(mobile_shell_word, mobile_shell_key, "mobile-topbar-brand", mobile_shell_name) }}</span>
                     <strong>{{ mobile_shell_label }}</strong>
                 </a>
             </div>
@@ -204,7 +204,7 @@
                     <div class="mobile-account-panel" role="menu" aria-label="Account actions">
                         <span class="mobile-account-name">{{ current_user.header_display_name }}</span>
                         {% if not is_portal_page %}
-                        <a href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">Back to {{ neo_brand("Portal", "portal") }}</a>
+                        <a href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">Back to {{ neo_brand("Apps", "apps") }}</a>
                         {% endif %}
                         <a href="{{ url_for('auth.logout') }}" role="menuitem">Logout</a>
                     </div>
@@ -255,7 +255,7 @@
                     {% if not is_portal_page %}
                     <a class="mobile-bottom-switcher-link node-portal" href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">
                         <img class="mobile-bottom-switcher-icon" src="{{ url_for('static', filename='images/icons/neoportal/icon_192.png') }}" alt="" loading="lazy" width="26" height="26">
-                        <span class="mobile-bottom-switcher-label">{{ neo_brand("Portal", "portal") }}</span>
+                        <span class="mobile-bottom-switcher-label">{{ neo_brand("Apps", "apps") }}</span>
                     </a>
                     {% endif %}
                     {% for target in mobile_switch_targets %}
@@ -313,7 +313,7 @@
                         <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.seniority') }}" role="menuitem">Seniority</a>
                         <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.app_management') }}" role="menuitem">Manage</a>
                     {% else %}
-                        <a class="mobile-shell-menu-link" href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">{{ neo_brand("Portal", "portal") }}</a>
+                        <a class="mobile-shell-menu-link" href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">{{ neo_brand("Apps", "apps") }}</a>
                         {% if not is_rfd_hub_page %}
                         <a class="mobile-shell-menu-link" href="{{ url_for('neomotherbrain.rfd_hub') }}" role="menuitem">{{ neo_brand("Gateway", "gateway") }}</a>
                         {% endif %}

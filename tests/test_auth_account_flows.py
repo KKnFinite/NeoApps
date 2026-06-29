@@ -496,6 +496,9 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertIn("portal-install-heading-logo", install_heading)
         self.assertIn('src="/static/images/neoapps_logo_transparent.png"', install_heading)
         self.assertNotIn('neo-brand--apps', install_heading)
+        self.assertIn("portal-install-help", html)
+        self.assertIn("Open in Safari.", html)
+        self.assertIn("Add to Home Screen.", html)
         self.assertIn('data-manifest-url="/manifest/neogateway.webmanifest"', html)
         self.assertIn('data-start-url="/rfd"', html)
         self.assertIn('src="/static/images/icons/neogateway/icon_192.png"', html)
@@ -546,8 +549,12 @@ class AuthAccountFlowsTest(unittest.TestCase):
         html = response.get_data(as_text=True)
 
         self.assertIn("beforeinstallprompt", html)
-        self.assertIn("window.location.assign(targetStartUrl)", html)
+        self.assertIn("data-install-default-label=\"How to Install\"", html)
+        self.assertIn("HOW TO INSTALL", html)
+        self.assertIn("Install prompt completed.", html)
+        self.assertIn("This browser does not currently expose a native install prompt.", html)
         self.assertIn("data-install-button", html)
+        self.assertNotIn("window.location.assign(targetStartUrl)", html)
         self.assertNotIn("AERODATABOX_API_KEY", html)
         self.assertNotIn("BREVO_API_KEY", html)
 

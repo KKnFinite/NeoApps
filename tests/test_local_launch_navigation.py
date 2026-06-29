@@ -159,8 +159,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("no-cache", response.headers["Cache-Control"])
         manifest = response.get_json()
         self.assertEqual(manifest["id"], "/manifest/neoportal.webmanifest")
-        self.assertEqual(manifest["name"], "NeoApps Portal")
-        self.assertEqual(manifest["short_name"], "NeoPortal")
+        self.assertEqual(manifest["name"], "NeoApps")
+        self.assertEqual(manifest["short_name"], "NeoApps")
         self.assertEqual(manifest["start_url"], "/portal")
         self.assertEqual(manifest["scope"], "/")
         self.assertEqual(manifest["display"], "standalone")
@@ -199,7 +199,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
     def test_app_and_node_manifests_have_independent_branding_and_icons(self):
         expected_manifests = {
-            "neoportal": ("NeoApps Portal", "NeoPortal", "/portal", "#4db7ff", "neoportal"),
+            "neoportal": ("NeoApps", "NeoApps", "/portal", "#d73f7d", "neoportal"),
             "neogateway": ("NeoGateway", "NeoGateway", "/rfd", "#d95a1f", "neogateway"),
             "neostaffing": ("NeoStaffing", "NeoStaffing", "/neostaffing", "#27d0c2", "neostaffing"),
             "neobid": ("NeoBid", "NeoBid", "/neobid", "#4db7ff", "neobid"),
@@ -471,7 +471,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("data-mobile-shell-menu-button", html)
         self.assertIn("account-motherbrain-128.png", html)
         self.assertIn("Back to", html)
-        self.assertIn("neo-brand--portal", html)
+        self.assertIn("neo-brand--apps", html)
+        self.assertNotIn("neo-brand--portal", html)
         self.assertIn('href="/logout"', html)
         self.assertIn("<span>Home</span>", html)
         self.assertIn("<span>Alerts</span>", html)
@@ -502,7 +503,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("mobile-bottom-popover--menu", html)
         self.assertIn("mobile-bottom-menu-panel mobile-shell-menu-panel", html)
         self.assertIn("Back to", html)
-        self.assertIn("neo-brand--portal", html)
+        self.assertIn("neo-brand--apps", html)
+        self.assertNotIn("neo-brand--portal", html)
         self.assertIn("@keyframes mobile-bottom-pop", css)
         self.assertIn("@keyframes mobile-bottom-pop-close", css)
         self.assertIn(".mobile-bottom-popover.is-opening", css)

@@ -1,13 +1,13 @@
 {
-  "name": "NeoApps Portal",
-  "short_name": "NeoPortal",
-  "description": "NeoApps Portal access dashboard.",
+  "name": "NeoApps",
+  "short_name": "NeoApps",
+  "description": "NeoApps access dashboard.",
   "id": "/manifest/neoportal.webmanifest",
   "start_url": "/portal",
   "scope": "/",
   "display": "standalone",
   "background_color": "#050506",
-  "theme_color": "#4db7ff",
+  "theme_color": "#d73f7d",
   "icons": [
     {
       "src": "/static/images/icons/neoportal/icon_192.png",
