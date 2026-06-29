@@ -3139,14 +3139,8 @@ a {
 
 .neoermac-door-action-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 6px;
-}
-
-.neoermac-clear-request {
-    justify-self: center;
-    width: 100%;
-    padding-block: 8px;
 }
 
 .neoermac-uld-status {
@@ -3193,7 +3187,7 @@ a {
 
 .neoermac-uld-request-row {
     display: grid;
-    grid-template-columns: minmax(74px, 0.9fr) repeat(3, minmax(0, 0.82fr)) minmax(46px, 0.54fr);
+    grid-template-columns: minmax(74px, 0.9fr) repeat(3, minmax(0, 0.82fr)) minmax(46px, 0.54fr) minmax(42px, 0.46fr) 30px;
     align-items: center;
     gap: 4px;
     min-width: 0;
@@ -3228,6 +3222,103 @@ a {
 
 .neoermac-uld-request-priority {
     color: var(--node-ermac-secondary) !important;
+}
+
+.neoermac-uld-request-edit,
+.neoermac-uld-request-cancel-form {
+    min-width: 0;
+}
+
+.neoermac-uld-request-edit {
+    display: grid;
+    gap: 5px;
+}
+
+.neoermac-uld-request-edit[open] {
+    grid-column: 1 / -1;
+}
+
+.neoermac-uld-request-edit-button,
+.neoermac-uld-request-cancel,
+.neoermac-uld-request-save {
+    display: inline-grid;
+    place-items: center;
+    min-height: 28px;
+    border: 1px solid rgba(201, 208, 214, 0.22);
+    border-radius: 4px;
+    background: rgba(2, 3, 5, 0.72);
+    color: #eef6ff;
+    font-size: 0.58rem;
+    font-weight: 950;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.neoermac-uld-request-edit-button {
+    padding: 5px 7px;
+    color: var(--node-ermac-secondary);
+}
+
+.neoermac-uld-request-edit-button::-webkit-details-marker,
+.neoermac-uld-request-edit-button::marker {
+    display: none;
+    content: "";
+}
+
+.neoermac-uld-request-cancel-form {
+    display: grid;
+}
+
+.neoermac-uld-request-cancel {
+    width: 28px;
+    min-width: 28px;
+    padding: 0;
+    border-color: rgba(255, 47, 47, 0.58);
+    background: rgba(95, 12, 22, 0.82);
+    color: #ffe8e8;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.neoermac-uld-request-edit-form {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(54px, 0.52fr);
+    gap: 5px;
+    align-items: end;
+    padding-top: 5px;
+    border-top: 1px solid rgba(201, 208, 214, 0.12);
+}
+
+.neoermac-uld-request-edit-form label {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    color: var(--node-ermac-secondary);
+    font-size: 0.52rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.neoermac-uld-request-edit-form input {
+    width: 100%;
+    min-height: 30px;
+    border: 1px solid rgba(54, 226, 123, 0.26);
+    border-radius: 4px;
+    background: rgba(2, 3, 5, 0.82);
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 950;
+    text-align: center;
+}
+
+.neoermac-uld-request-save {
+    min-height: 30px;
+    border-color: rgba(54, 226, 123, 0.5);
+    background: rgba(24, 92, 58, 0.86);
+    color: #eafff5;
 }
 
 .neoermac-staffing-button:disabled {
@@ -3736,7 +3827,6 @@ a {
     }
 
     .neoermac-door-action-row {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 0.74fr);
         gap: 6px;
     }
 
@@ -3744,10 +3834,6 @@ a {
         min-height: 34px;
         padding: 7px 6px;
         font-size: 0.62rem;
-    }
-
-    .neoermac-clear-request {
-        width: 100%;
     }
 
     .neoermac-uld-request-list {
@@ -3759,7 +3845,7 @@ a {
     }
 
     .neoermac-uld-request-row {
-        grid-template-columns: minmax(54px, 0.76fr) repeat(3, minmax(0, 0.72fr)) minmax(37px, 0.46fr);
+        grid-template-columns: minmax(50px, 0.76fr) repeat(3, minmax(0, 0.62fr)) minmax(34px, 0.42fr) minmax(34px, 0.38fr) 27px;
         gap: 3px;
         padding: 5px 4px;
     }
@@ -3772,6 +3858,26 @@ a {
 
     .neoermac-uld-request-row strong {
         font-size: 0.76rem;
+    }
+
+    .neoermac-uld-request-edit-button {
+        min-height: 26px;
+        padding: 4px 5px;
+        font-size: 0.5rem;
+    }
+
+    .neoermac-uld-request-cancel {
+        width: 26px;
+        min-width: 26px;
+        min-height: 26px;
+    }
+
+    .neoermac-uld-request-edit-form {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .neoermac-uld-request-save {
+        grid-column: 1 / -1;
     }
 
     .neoermac-door-simple-list {

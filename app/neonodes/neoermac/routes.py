@@ -16,8 +16,10 @@ from app.services.neoermac_building_lineup import (
     save_building_lineup_destination,
 )
 from app.services.neoermac_door_view import (
+    delete_door_uld_request,
     door_view_context,
     door_view_uld_state,
+    edit_door_uld_request,
     save_door_pulls,
     save_single_door_pull,
     save_uld_request,
@@ -181,6 +183,12 @@ def door_view():
             elif action == "save_uld_request":
                 save_uld_request(gateway, selected_door, request.form)
                 flash("ULD REQUEST UPDATED.", "success")
+            elif action == "edit_uld_request":
+                edit_door_uld_request(gateway, selected_door, request.form)
+                flash("ULD REQUEST EDITED.", "success")
+            elif action == "delete_uld_request":
+                delete_door_uld_request(gateway, selected_door, request.form)
+                flash("ULD REQUEST CANCELLED.", "success")
             else:
                 raise ValueError("Unknown Door View action.")
         except ValueError as exc:

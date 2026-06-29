@@ -121,6 +121,34 @@ def clear_uld_requests_for_door(gateway, door, setup_needed=None):
     return None
 
 
+def delete_uld_request(gateway, door, request_id):
+    request_record = get_uld_request_by_id(gateway, request_id, door)
+    if request_record is None:
+        raise ValueError("ULD request was not found for this door.")
+
+    db.session.delete(request_record)
+    db.session.flush()
+    return None
+
+
+def edit_uld_request(gateway, door, request_id, counts, now=None):
+    now = now or datetime.utcnow()
+    request_record = get_uld_request_by_id(gateway, request_id, door)
+    if request_record is None:
+        raise ValueError("ULD request was not found for this door.")
+
+    normalized_counts = normalize_uld_counts(counts)
+    if not any(normalized_counts.values()):
+        raise ValueError("Keep at least one ULD on an active request.")
+
+    for uld_type, field_name in ULD_REQUEST_FIELDS.items():
+        setattr(request_record, field_name, normalized_counts[uld_type])
+
+    request_record.updated_at = now
+    db.session.flush()
+    return request_record
+
+
 def update_uld_request_from_form(gateway, door, form_data):
     should_clear = form_data.get("clear_uld_request") == "1"
     if should_clear:

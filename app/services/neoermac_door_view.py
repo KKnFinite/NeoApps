@@ -22,7 +22,9 @@ from app.services.uld_requests import (
     active_on_the_way_event_views,
     active_uld_requests_for_door,
     aggregate_uld_request_for_door,
+    delete_uld_request,
     door_uld_state_payload,
+    edit_uld_request,
     update_uld_request_from_form,
 )
 
@@ -168,6 +170,36 @@ def save_uld_request(gateway, selected_door, form_data):
         raise ValueError(f"{selected_door} is not available.")
 
     return update_uld_request_from_form(gateway, selected_door, form_data)
+
+
+def edit_door_uld_request(gateway, selected_door, form_data):
+    selected_door = normalize_door(selected_door)
+    if not selected_door:
+        raise ValueError("Select a door.")
+    if selected_door not in get_door_options(gateway):
+        raise ValueError(f"{selected_door} is not available.")
+
+    counts = {
+        "A2": form_data.get("uld_a2_count"),
+        "A1": form_data.get("uld_a1_count"),
+        "AMP": form_data.get("uld_amp_count"),
+    }
+    return edit_uld_request(
+        gateway,
+        selected_door,
+        form_data.get("request_id"),
+        counts,
+    )
+
+
+def delete_door_uld_request(gateway, selected_door, form_data):
+    selected_door = normalize_door(selected_door)
+    if not selected_door:
+        raise ValueError("Select a door.")
+    if selected_door not in get_door_options(gateway):
+        raise ValueError(f"{selected_door} is not available.")
+
+    return delete_uld_request(gateway, selected_door, form_data.get("request_id"))
 
 
 def door_view_uld_state(gateway, selected_door):

@@ -2,6 +2,7 @@ import re
 import unittest
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from app import create_app
 from app.extensions import db
@@ -771,9 +772,24 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(NeoErmacDoorPull.query.count(), 0)
         self.assertEqual(NeoErmacUldRequest.query.count(), 0)
 
+        db.session.add(
+            NeoErmacUldRequest(
+                gateway_id=self.gateway.id,
+                door="D34",
+                a2_count=2,
+                setup_needed=False,
+                created_at=datetime(2026, 6, 24, 19, 1),
+                updated_at=datetime(2026, 6, 24, 19, 1),
+            )
+        )
+        db.session.commit()
         page = self.client.get("/neoermac/door-view?door=D34")
+        rendered_page = page.data.split(b"<script>")[0]
         self.assertIn(b"View-only access. ULD request controls are disabled.", page.data)
-        self.assertNotIn(b"data-uld-request-form", page.data)
+        self.assertNotIn(b"data-uld-request-form", rendered_page)
+        self.assertIn(b"data-uld-request-row", rendered_page)
+        self.assertNotIn(b"data-uld-request-edit", rendered_page)
+        self.assertNotIn(b"neoermac-uld-request-cancel", rendered_page)
 
     def test_door_view_edit_user_can_save_actual_pull_and_no_pull_states(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
@@ -1039,7 +1055,121 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(standard_request.a1_count, 0)
         self.assertEqual(standard_request.amp_count, 0)
 
-    def test_door_view_clear_request_only_clears_selected_door_current_context(self):
+    def test_door_view_cancel_request_deletes_only_selected_request(self):
+        standard_request = NeoErmacUldRequest(
+            gateway_id=self.gateway.id,
+            door="D34",
+            a2_count=2,
+            setup_needed=False,
+            created_at=datetime(2026, 6, 24, 19, 1),
+            updated_at=datetime(2026, 6, 24, 19, 1),
+        )
+        setup_request = NeoErmacUldRequest(
+            gateway_id=self.gateway.id,
+            door="D34",
+            a2_count=3,
+            setup_needed=True,
+            created_at=datetime(2026, 6, 24, 19, 2),
+            updated_at=datetime(2026, 6, 24, 19, 2),
+        )
+        other_door_request = NeoErmacUldRequest(
+            gateway_id=self.gateway.id,
+            door="D35",
+            a2_count=4,
+            setup_needed=False,
+            created_at=datetime(2026, 6, 24, 19, 3),
+            updated_at=datetime(2026, 6, 24, 19, 3),
+        )
+        db.session.add_all([standard_request, setup_request, other_door_request])
+        db.session.commit()
+        standard_id = standard_request.id
+        setup_id = setup_request.id
+        other_id = other_door_request.id
+        self._login_approved_user(role="operator")
+
+        cancel_standard = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "delete_uld_request",
+                "request_id": str(standard_id),
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(cancel_standard.status_code, 302)
+        self.assertIsNone(db.session.get(NeoErmacUldRequest, standard_id))
+        self.assertIsNotNone(db.session.get(NeoErmacUldRequest, setup_id))
+        self.assertIsNotNone(db.session.get(NeoErmacUldRequest, other_id))
+
+        cancel_setup = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "delete_uld_request",
+                "request_id": str(setup_id),
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(cancel_setup.status_code, 302)
+        self.assertIsNone(db.session.get(NeoErmacUldRequest, setup_id))
+        self.assertIsNotNone(db.session.get(NeoErmacUldRequest, other_id))
+
+    def test_door_view_edit_request_sets_counts_and_updates_timestamp(self):
+        original_time = datetime(2026, 6, 24, 19, 1)
+        edit_time = datetime(2026, 6, 24, 19, 45)
+        request_record = NeoErmacUldRequest(
+            gateway_id=self.gateway.id,
+            door="D34",
+            a2_count=2,
+            a1_count=1,
+            amp_count=3,
+            setup_needed=False,
+            created_at=original_time,
+            updated_at=original_time,
+        )
+        other_request = NeoErmacUldRequest(
+            gateway_id=self.gateway.id,
+            door="D35",
+            a2_count=5,
+            setup_needed=False,
+            created_at=original_time,
+            updated_at=original_time,
+        )
+        db.session.add_all([request_record, other_request])
+        db.session.commit()
+        request_id = request_record.id
+        other_id = other_request.id
+        self._login_approved_user(role="operator")
+
+        with patch("app.services.uld_requests.datetime") as mock_datetime:
+            mock_datetime.utcnow.return_value = edit_time
+            response = self.client.post(
+                "/neoermac/door-view?door=D34",
+                data={
+                    "door": "D34",
+                    "action": "edit_uld_request",
+                    "request_id": str(request_id),
+                    "uld_a2_count": "4",
+                    "uld_a1_count": "0",
+                    "uld_amp_count": "1",
+                },
+                follow_redirects=False,
+            )
+
+        db.session.refresh(request_record)
+        db.session.refresh(other_request)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(request_record.a2_count, 4)
+        self.assertEqual(request_record.a1_count, 0)
+        self.assertEqual(request_record.amp_count, 1)
+        self.assertEqual(request_record.updated_at, edit_time)
+        self.assertEqual(other_request.id, other_id)
+        self.assertEqual(other_request.a2_count, 5)
+        self.assertEqual(other_request.updated_at, original_time)
+
+    def test_door_view_legacy_clear_request_still_scopes_selected_door_context(self):
         db.session.add_all(
             [
                 NeoErmacUldRequest(
@@ -1135,12 +1265,15 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'<span class="neoermac-uld-type-label">A2</span>', response.data)
         self.assertIn(b'<span class="neoermac-uld-type-label">A1</span>', response.data)
         self.assertIn(b'<span class="neoermac-uld-type-label">AMP</span>', response.data)
+        self.assertNotIn(b"CLEAR REQUEST", response.data)
         self.assertNotIn(b"SAVE PULLS", response.data)
         self.assertGreaterEqual(response.data.count(b"neoermac-ios-safe-input"), 6)
         css = Path("app/static/css/base.css").read_text(encoding="utf-8")
         self.assertIn(".neoermac-door-actual input.neoermac-ios-safe-input", css)
         self.assertIn(".neoermac-uld-grid input.neoermac-ios-safe-input", css)
         self.assertIn(".neoermac-uld-grid .neoermac-uld-type-label", css)
+        self.assertIn(".neoermac-uld-request-edit-button", css)
+        self.assertIn(".neoermac-uld-request-cancel", css)
         self.assertIn(".neoermac-door-autosave-status", css)
         self.assertIn(".neoermac-large-checkbox-toggle input", css)
         self.assertIn(".neoermac-none-toggle", css)
@@ -1210,6 +1343,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(rendered_html.count(b"data-uld-request-row"), 2)
+        self.assertEqual(rendered_html.count(b"data-uld-request-edit"), 2)
+        self.assertEqual(rendered_html.count(b"class=\"neoermac-uld-request-cancel\""), 2)
+        self.assertIn(b"name=\"action\" value=\"edit_uld_request\"", rendered_html)
+        self.assertIn(b"name=\"action\" value=\"delete_uld_request\"", rendered_html)
         self.assertIn(b"SETUP", response.data)
         self.assertIn(b"RESPOT", response.data)
         self.assertNotIn(b"STANDARD", response.data)

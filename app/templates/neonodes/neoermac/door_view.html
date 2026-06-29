@@ -2,13 +2,42 @@
 
 {% block title %}DOOR VIEW | NeoErmac{% endblock %}
 
-{% macro uld_request_row(request_record) -%}
+{% macro uld_request_row(request_record, can_edit=False, selected_door="") -%}
     <div class="neoermac-uld-request-row{% if request_record.setup_needed %} is-setup-needed{% endif %}" data-uld-request-row>
         <span class="neoermac-uld-request-priority">{{ "SETUP" if request_record.setup_needed else "RESPOT" }}</span>
         <span>A2 <strong>{{ request_record.a2_count }}</strong></span>
         <span>A1 <strong>{{ request_record.a1_count }}</strong></span>
         <span>AMP <strong>{{ request_record.amp_count }}</strong></span>
         <time>{{ request_record.updated_at|local_time if request_record.updated_at else "-" }}</time>
+        {% if can_edit %}
+        <details class="neoermac-uld-request-edit" data-uld-request-edit>
+            <summary class="neoermac-uld-request-edit-button">EDIT</summary>
+            <form method="post" class="neoermac-uld-request-edit-form">
+                <input type="hidden" name="door" value="{{ selected_door }}">
+                <input type="hidden" name="action" value="edit_uld_request">
+                <input type="hidden" name="request_id" value="{{ request_record.id }}">
+                <label>
+                    <span>A2</span>
+                    <input class="neoermac-ios-safe-input" type="number" name="uld_a2_count" min="0" step="1" inputmode="numeric" value="{{ request_record.a2_count }}">
+                </label>
+                <label>
+                    <span>A1</span>
+                    <input class="neoermac-ios-safe-input" type="number" name="uld_a1_count" min="0" step="1" inputmode="numeric" value="{{ request_record.a1_count }}">
+                </label>
+                <label>
+                    <span>AMP</span>
+                    <input class="neoermac-ios-safe-input" type="number" name="uld_amp_count" min="0" step="1" inputmode="numeric" value="{{ request_record.amp_count }}">
+                </label>
+                <button class="neoermac-uld-request-save" type="submit">SAVE</button>
+            </form>
+        </details>
+        <form method="post" class="neoermac-uld-request-cancel-form">
+            <input type="hidden" name="door" value="{{ selected_door }}">
+            <input type="hidden" name="action" value="delete_uld_request">
+            <input type="hidden" name="request_id" value="{{ request_record.id }}">
+            <button class="neoermac-uld-request-cancel" type="submit" aria-label="Cancel {{ 'setup' if request_record.setup_needed else 'respot' }} ULD request">&times;</button>
+        </form>
+        {% endif %}
     </div>
 {%- endmacro %}
 
@@ -79,7 +108,6 @@
                     </label>
                     <div class="neoermac-door-action-row">
                         <button class="neoermac-menu-link" type="submit">REQUEST ULDS</button>
-                        <button class="neoermac-menu-link neoermac-menu-link-secondary neoermac-clear-request" type="submit" name="clear_uld_request" value="1">CLEAR REQUEST</button>
                     </div>
                 </form>
                 {% else %}
@@ -90,7 +118,7 @@
                     {% if uld_requests %}
                     <div class="neoermac-uld-request-rows">
                         {% for request_record in uld_requests %}
-                        {{ uld_request_row(request_record) }}
+                        {{ uld_request_row(request_record, can_edit, selected_door) }}
                         {% endfor %}
                     </div>
                     {% else %}
@@ -285,6 +313,8 @@
     }
 
     const stateUrl = root.dataset.stateUrl;
+    const canEditRequests = {{ "true" if can_edit else "false" }};
+    const selectedDoor = root.querySelector('[name="door"]')?.value || "";
 
     const renderEvents = (events) => {
         const panel = root.querySelector("[data-uld-events]");
@@ -308,19 +338,57 @@
         if (!panel) {
             return;
         }
+        if (panel.querySelector("[data-uld-request-edit][open]")) {
+            return;
+        }
 
         let body = "<h3>ACTIVE REQUESTS</h3>";
         if (requests && requests.length) {
             body += `<div class="neoermac-uld-request-rows">${requests
                 .map((requestRow) => {
                     const counts = requestRow.counts || {};
+                    const a2Count = Number.parseInt(counts.A2 ?? 0, 10) || 0;
+                    const a1Count = Number.parseInt(counts.A1 ?? 0, 10) || 0;
+                    const ampCount = Number.parseInt(counts.AMP ?? 0, 10) || 0;
+                    const requestId = Number.parseInt(requestRow.id ?? 0, 10) || 0;
+                    const requestLabel = requestRow.setup_needed ? "SETUP" : "RESPOT";
+                    const actions = canEditRequests && requestId ? `
+                        <details class="neoermac-uld-request-edit" data-uld-request-edit>
+                            <summary class="neoermac-uld-request-edit-button">EDIT</summary>
+                            <form method="post" class="neoermac-uld-request-edit-form">
+                                <input type="hidden" name="door" value="${escapeHtml(selectedDoor)}">
+                                <input type="hidden" name="action" value="edit_uld_request">
+                                <input type="hidden" name="request_id" value="${requestId}">
+                                <label>
+                                    <span>A2</span>
+                                    <input class="neoermac-ios-safe-input" type="number" name="uld_a2_count" min="0" step="1" inputmode="numeric" value="${a2Count}">
+                                </label>
+                                <label>
+                                    <span>A1</span>
+                                    <input class="neoermac-ios-safe-input" type="number" name="uld_a1_count" min="0" step="1" inputmode="numeric" value="${a1Count}">
+                                </label>
+                                <label>
+                                    <span>AMP</span>
+                                    <input class="neoermac-ios-safe-input" type="number" name="uld_amp_count" min="0" step="1" inputmode="numeric" value="${ampCount}">
+                                </label>
+                                <button class="neoermac-uld-request-save" type="submit">SAVE</button>
+                            </form>
+                        </details>
+                        <form method="post" class="neoermac-uld-request-cancel-form">
+                            <input type="hidden" name="door" value="${escapeHtml(selectedDoor)}">
+                            <input type="hidden" name="action" value="delete_uld_request">
+                            <input type="hidden" name="request_id" value="${requestId}">
+                            <button class="neoermac-uld-request-cancel" type="submit" aria-label="Cancel ${requestRow.setup_needed ? "setup" : "respot"} ULD request">&times;</button>
+                        </form>
+                    ` : "";
                     return `
                         <div class="neoermac-uld-request-row${requestRow.setup_needed ? " is-setup-needed" : ""}" data-uld-request-row>
-                            <span class="neoermac-uld-request-priority">${requestRow.setup_needed ? "SETUP" : "RESPOT"}</span>
-                            <span>A2 <strong>${Number.parseInt(counts.A2 ?? 0, 10) || 0}</strong></span>
-                            <span>A1 <strong>${Number.parseInt(counts.A1 ?? 0, 10) || 0}</strong></span>
-                            <span>AMP <strong>${Number.parseInt(counts.AMP ?? 0, 10) || 0}</strong></span>
+                            <span class="neoermac-uld-request-priority">${requestLabel}</span>
+                            <span>A2 <strong>${a2Count}</strong></span>
+                            <span>A1 <strong>${a1Count}</strong></span>
+                            <span>AMP <strong>${ampCount}</strong></span>
                             <time>${escapeHtml(requestRow.updated_at_label || formatTime(requestRow.updated_at))}</time>
+                            ${actions}
                         </div>
                     `;
                 })
