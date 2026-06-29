@@ -12,7 +12,8 @@
         {% set status = access.status if access else "none" %}
         {% set app_brand_key = "gateway" if app.code == "neogateway" else ("staffing" if app.code == "neostaffing" else ("bid" if app.code == "neobid" else app.code)) %}
         <article class="portal-app-card portal-app-{{ app.code }} is-{{ status }}">
-            <div>
+            <div class="portal-app-card-heading">
+                <img class="portal-app-icon" src="{{ row.icon_src }}" alt="" loading="lazy" width="72" height="72">
                 <h2>{{ neo_brand_name(app.name, app_brand_key) }}</h2>
             </div>
             <div class="portal-app-state">

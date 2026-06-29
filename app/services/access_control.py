@@ -13,6 +13,7 @@ PORTAL_APPS = (
         "name": "NeoGateway",
         "description": "Gateway operations and NeoNode systems.",
         "endpoint": "neomotherbrain.rfd_hub",
+        "icon_folder": "neogateway",
         "coming_soon": False,
     },
     {
@@ -20,6 +21,7 @@ PORTAL_APPS = (
         "name": "NeoStaffing",
         "description": "Staffing operations and workforce planning.",
         "endpoint": "neostaffing.index",
+        "icon_folder": "neostaffing",
         "coming_soon": False,
     },
     {
@@ -27,6 +29,7 @@ PORTAL_APPS = (
         "name": "NeoBid",
         "description": "Bid tools placeholder for future buildout.",
         "endpoint": "auth.neobid_placeholder",
+        "icon_folder": "neobid",
         "coming_soon": True,
     },
 )
@@ -421,6 +424,7 @@ def portal_dashboard_rows_for_user(user):
         {
             "app": app,
             "access": get_user_app_access(user, app["code"]),
+            "icon_src": f"/static/images/icons/{app['icon_folder']}/icon_192.png",
         }
         for app in PORTAL_APPS
     ]

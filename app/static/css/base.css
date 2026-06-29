@@ -653,7 +653,7 @@ a {
 .character-switcher-link {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 10px;
     min-height: 36px;
     padding: 8px 10px;
@@ -666,6 +666,20 @@ a {
     font-size: 0.74rem;
     font-weight: 900;
     text-decoration: none;
+}
+
+.character-switcher-icon {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 10px rgba(var(--node-rgb), 0.22));
+}
+
+.character-switcher-label {
+    min-width: 0;
+    margin-right: auto;
 }
 
 .character-switcher-link:hover,
@@ -5711,6 +5725,22 @@ h2 {
         0 0 24px rgba(var(--node-rgb), 0.12);
 }
 
+.portal-app-card-heading {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+
+.portal-app-icon {
+    flex: 0 0 auto;
+    width: 72px;
+    height: 72px;
+    border-radius: 18px;
+    object-fit: contain;
+    box-shadow: 0 0 18px rgba(var(--node-rgb), 0.18);
+}
+
 .portal-app-card h2 {
     margin: 0;
     color: var(--steel);
@@ -10006,6 +10036,16 @@ select::-ms-expand {
     .portal-app-card {
         min-height: 150px;
         padding: 14px;
+    }
+
+    .portal-app-card-heading {
+        gap: 12px;
+    }
+
+    .portal-app-icon {
+        width: 58px;
+        height: 58px;
+        border-radius: 14px;
     }
 
     .portal-install-heading {
@@ -17036,10 +17076,25 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     .mobile-bottom-switcher-link {
+        justify-content: flex-start;
         text-transform: none;
     }
 
-    .mobile-bottom-switcher-link > span:last-child {
+    .mobile-bottom-switcher-icon {
+        flex: 0 0 auto;
+        width: 26px;
+        height: 26px;
+        border-radius: 7px;
+        object-fit: contain;
+        filter: drop-shadow(0 0 10px rgba(var(--node-rgb), 0.22));
+    }
+
+    .mobile-bottom-switcher-label {
+        min-width: 0;
+        margin-right: auto;
+    }
+
+    .mobile-bottom-switcher-link > span:not(.mobile-bottom-switcher-label):last-child {
         color: var(--muted);
         font-size: 0.58rem;
         font-weight: 900;

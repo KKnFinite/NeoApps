@@ -11,7 +11,17 @@
             role="menuitem"
             {% if target.is_current %}aria-current="page"{% endif %}
         >
-            {{ neo_brand(target.node_word, target.key) }}
+            <img
+                class="character-switcher-icon"
+                src="{{ url_for('static', filename='images/icons/' ~ target.key ~ '/icon_192.png') }}"
+                alt=""
+                loading="lazy"
+                width="28"
+                height="28"
+            >
+            <span class="character-switcher-label">
+                {{ neo_brand(target.node_word, target.key) }}
+            </span>
             {% if target.suffix %}
             <span class="character-switcher-suffix">{{ target.suffix }}</span>
             {% endif %}
