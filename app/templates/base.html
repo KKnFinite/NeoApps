@@ -612,6 +612,96 @@
     {% endif %}
     <script>
     (() => {
+        const pressableSelector = [
+            "button",
+            "input[type='button']",
+            "input[type='submit']",
+            "input[type='reset']",
+            ".action-button",
+            ".table-row-button",
+            ".portal-app-card",
+            ".portal-install-card",
+            ".portal-install-button",
+            ".command-card-link",
+            ".rfd-node-tile",
+            ".character-switcher-trigger",
+            ".character-switcher-link",
+            ".motherbrain-alert-button",
+            ".motherbrain-menu-button",
+            ".motherbrain-dashboard-card",
+            ".current-sort-overview-card",
+            ".neoermac-dashboard-tile",
+            ".neosektor-mobile-dashboard-tile",
+            ".neostaffing-app-card",
+            ".neostaffing-management-card",
+            ".neostaffing-board-card-actions a",
+            ".parking-tail-card",
+            ".parking-position-card",
+            ".mobile-topbar-back",
+            ".mobile-bottom-nav-link",
+            ".mobile-bottom-nav-button",
+            ".mobile-bottom-switcher > summary",
+            ".mobile-bottom-switcher-link",
+            ".mobile-shell-menu-link",
+        ].join(",");
+
+        const feedbackTimers = new WeakMap();
+        const disabledSelector = [
+            ":disabled",
+            "[aria-disabled='true']",
+            ".is-disabled",
+            ".command-card-disabled",
+            ".rfd-node-disabled",
+            ".mobile-bottom-nav-disabled",
+            ".is-placeholder",
+        ].join(",");
+
+        const isFeedbackDisabled = (element) => (
+            element.matches(disabledSelector)
+            || Boolean(element.closest("[aria-disabled='true']"))
+        );
+
+        const flashPressFeedback = (element) => {
+            if (!element || isFeedbackDisabled(element)) {
+                return;
+            }
+            const existingTimer = feedbackTimers.get(element);
+            if (existingTimer) {
+                window.clearTimeout(existingTimer);
+            }
+            element.classList.remove("is-press-feedback");
+            void element.offsetWidth;
+            element.classList.add("is-press-feedback");
+            const timer = window.setTimeout(() => {
+                element.classList.remove("is-press-feedback");
+                feedbackTimers.delete(element);
+            }, 240);
+            feedbackTimers.set(element, timer);
+        };
+
+        document.addEventListener("pointerdown", (event) => {
+            if (event.button !== undefined && event.button !== 0) {
+                return;
+            }
+            const target = event.target instanceof Element
+                ? event.target.closest(pressableSelector)
+                : null;
+            flashPressFeedback(target);
+        }, { passive: true });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter" && event.key !== " ") {
+                return;
+            }
+            const target = event.target instanceof Element
+                ? event.target.closest(pressableSelector)
+                : null;
+            flashPressFeedback(target);
+        });
+    })();
+    </script>
+    <script>
+    (() => {
         if (!("serviceWorker" in navigator)) {
             return;
         }

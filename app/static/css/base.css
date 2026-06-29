@@ -91,6 +91,168 @@ html {
     text-size-adjust: 100%;
 }
 
+@keyframes neo-press-feedback {
+    0% {
+        filter: brightness(1) saturate(1);
+    }
+    35% {
+        filter: brightness(1.15) saturate(1.08);
+        box-shadow:
+            inset 0 0 0 999px rgba(var(--node-highlight-rgb, 77, 183, 255), 0.1),
+            0 0 0 2px rgba(var(--node-highlight-rgb, 77, 183, 255), 0.36),
+            0 0 24px rgba(var(--node-rgb, 77, 183, 255), 0.28);
+    }
+    100% {
+        filter: brightness(1) saturate(1);
+    }
+}
+
+:where(
+    button,
+    input[type="button"],
+    input[type="submit"],
+    input[type="reset"],
+    .action-button,
+    .table-row-button,
+    .portal-app-card,
+    .portal-install-card,
+    .portal-install-button,
+    .command-card-link,
+    .rfd-node-tile,
+    .character-switcher-trigger,
+    .character-switcher-link,
+    .motherbrain-alert-button,
+    .motherbrain-menu-button,
+    .motherbrain-dashboard-card,
+    .current-sort-overview-card,
+    .neoermac-dashboard-tile,
+    .neosektor-mobile-dashboard-tile,
+    .neostaffing-app-card,
+    .neostaffing-management-card,
+    .neostaffing-board-card-actions a,
+    .parking-tail-card,
+    .parking-position-card,
+    .mobile-topbar-back,
+    .mobile-account-trigger,
+    .mobile-bottom-nav-link,
+    .mobile-bottom-nav-button,
+    .mobile-bottom-switcher > summary,
+    .mobile-bottom-switcher-link,
+    .mobile-shell-menu-link
+):where(:not(:disabled)):where(:not([aria-disabled="true"])) {
+    -webkit-tap-highlight-color: rgba(var(--node-highlight-rgb, 77, 183, 255), 0.22);
+}
+
+:where(
+    button,
+    input[type="button"],
+    input[type="submit"],
+    input[type="reset"],
+    .action-button,
+    .table-row-button,
+    .portal-app-card,
+    .portal-install-card,
+    .portal-install-button,
+    .command-card-link,
+    .rfd-node-tile:not(.rfd-node-disabled),
+    .character-switcher-trigger,
+    .character-switcher-link,
+    .motherbrain-alert-button,
+    .motherbrain-menu-button,
+    .motherbrain-dashboard-card,
+    .current-sort-overview-card,
+    .neoermac-dashboard-tile:not(.is-placeholder),
+    .neosektor-mobile-dashboard-tile,
+    .neostaffing-app-card,
+    .neostaffing-management-card,
+    .neostaffing-board-card-actions a,
+    .parking-tail-card,
+    .parking-position-card,
+    .mobile-topbar-back,
+    .mobile-account-trigger,
+    .mobile-bottom-nav-link,
+    .mobile-bottom-nav-button,
+    .mobile-bottom-switcher > summary,
+    .mobile-bottom-switcher-link,
+    .mobile-shell-menu-link
+):where(:not(:disabled)):where(:not([aria-disabled="true"])):active {
+    filter: brightness(1.1) saturate(1.06);
+}
+
+:where(
+    button,
+    input[type="button"],
+    input[type="submit"],
+    input[type="reset"],
+    .action-button,
+    .table-row-button,
+    .portal-app-card,
+    .portal-install-card,
+    .portal-install-button,
+    .command-card-link,
+    .rfd-node-tile:not(.rfd-node-disabled),
+    .character-switcher-trigger,
+    .character-switcher-link,
+    .motherbrain-alert-button,
+    .motherbrain-menu-button,
+    .motherbrain-dashboard-card,
+    .current-sort-overview-card,
+    .neoermac-dashboard-tile:not(.is-placeholder),
+    .neosektor-mobile-dashboard-tile,
+    .neostaffing-app-card,
+    .neostaffing-management-card,
+    .neostaffing-board-card-actions a,
+    .parking-tail-card,
+    .parking-position-card,
+    .mobile-topbar-back,
+    .mobile-account-trigger,
+    .mobile-bottom-nav-link,
+    .mobile-bottom-nav-button,
+    .mobile-bottom-switcher > summary,
+    .mobile-bottom-switcher-link,
+    .mobile-shell-menu-link
+).is-press-feedback:where(:not(:disabled)):where(:not([aria-disabled="true"])) {
+    animation: neo-press-feedback 220ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :where(
+        button,
+        input[type="button"],
+        input[type="submit"],
+        input[type="reset"],
+        .action-button,
+        .table-row-button,
+        .portal-app-card,
+        .portal-install-card,
+        .portal-install-button,
+        .command-card-link,
+        .rfd-node-tile:not(.rfd-node-disabled),
+        .character-switcher-trigger,
+        .character-switcher-link,
+        .motherbrain-alert-button,
+        .motherbrain-menu-button,
+        .motherbrain-dashboard-card,
+        .current-sort-overview-card,
+        .neoermac-dashboard-tile:not(.is-placeholder),
+        .neosektor-mobile-dashboard-tile,
+        .neostaffing-app-card,
+        .neostaffing-management-card,
+        .neostaffing-board-card-actions a,
+        .parking-tail-card,
+        .parking-position-card,
+        .mobile-topbar-back,
+        .mobile-account-trigger,
+        .mobile-bottom-nav-link,
+        .mobile-bottom-nav-button,
+        .mobile-bottom-switcher > summary,
+        .mobile-bottom-switcher-link,
+        .mobile-shell-menu-link
+    ).is-press-feedback:where(:not(:disabled)):where(:not([aria-disabled="true"])) {
+        animation-duration: 1ms;
+    }
+}
+
 .theme-gateway,
 .node-gateway {
     --node-primary: var(--node-gateway-primary);

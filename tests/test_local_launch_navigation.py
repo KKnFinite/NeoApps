@@ -513,6 +513,21 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("grid-template-columns: minmax(0, 1fr);", css)
         self.assertIn(".mobile-bottom-menu-panel.is-open", css)
 
+    def test_global_press_feedback_styles_and_hook_render(self):
+        response = self.client.get("/")
+        html = response.data.decode()
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("@keyframes neo-press-feedback", css)
+        self.assertIn(".is-press-feedback", css)
+        self.assertIn("-webkit-tap-highlight-color: rgba(var(--node-highlight-rgb, 77, 183, 255), 0.22);", css)
+        self.assertIn(".mobile-bottom-nav-button", css)
+        self.assertIn(".portal-app-card", css)
+        self.assertIn("const pressableSelector", html)
+        self.assertIn("flashPressFeedback", html)
+        self.assertIn("is-press-feedback", html)
+
     def test_neobid_theme_stays_blue(self):
         css = Path("app/static/css/base.css").read_text()
         manifest = self.client.get("/manifest/neobid.webmanifest").get_json()
