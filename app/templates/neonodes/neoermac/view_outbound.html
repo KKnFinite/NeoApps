@@ -1,13 +1,21 @@
 {% extends "base.html" %}
 {% from "_neo_brand.html" import neo_brand %}
 
-{% block title %}VIEW OUTBOUND | NeoErmac{% endblock %}
+{% block title %}Outbound Data With Pull Times | NeoErmac{% endblock %}
+
+{% macro actual_pull(row, key, label) -%}
+    {%- if row.no_pulls[key] -%}
+        NO {{ label|upper }}
+    {%- else -%}
+        {{ row.actual_pulls[key] or "-" }}
+    {%- endif -%}
+{%- endmacro %}
 
 {% block content %}
 <section class="neoermac-shell neoermac-outbound-shell" aria-labelledby="neoermac-outbound-title">
     <div class="neoermac-hero neoermac-outbound-hero mobile-shell-duplicate-title">
         <span class="neoermac-kicker">{{ neo_brand("Ermac", "ermac", "neo-node-ermac") }}</span>
-        <h1 id="neoermac-outbound-title">VIEW OUTBOUND</h1>
+        <h1 id="neoermac-outbound-title">Outbound Data With Pull Times</h1>
         <p>{{ gateway.code }} OUTBOUND DESTINATION SUMMARY</p>
     </div>
 
@@ -29,77 +37,63 @@
     </section>
 
     {% if rows %}
-    <div class="neoermac-outbound-list" data-neoermac-outbound-layout="compact">
-        {% for row in rows %}
-        <article class="neoermac-outbound-card{% if not row.has_mission %} is-missing-mission{% endif %}" data-neoermac-outbound-row>
-            <header class="neoermac-outbound-card-head" aria-label="{{ row.destination }} outbound mission summary">
-                <div class="neoermac-outbound-cell neoermac-outbound-flight" data-outbound-field="flight">
-                    <span>Flight</span>
-                    <strong>{{ row.flight_number or "-" }}</strong>
-                </div>
-                <div class="neoermac-outbound-cell" data-outbound-field="tail">
-                    <span>Tail</span>
-                    <strong>{{ row.tail or "-" }}</strong>
-                </div>
-                <div class="neoermac-outbound-cell neoermac-outbound-destination" data-outbound-field="destination">
-                    <span>Dest</span>
-                    <strong>{{ row.destination }}</strong>
-                </div>
-                <div class="neoermac-outbound-cell" data-outbound-field="position">
-                    <span>Pos</span>
-                    <strong>{{ row.parking or "-" }}</strong>
-                </div>
-                <div class="neoermac-outbound-cell" data-outbound-field="doors">
-                    <span>Doors</span>
-                    <strong>{{ row.assigned_doors|join(", ") if row.assigned_doors else "-" }}</strong>
-                </div>
-                <div class="neoermac-outbound-cell" data-outbound-field="etd">
-                    <span>ETD</span>
-                    <strong>{{ row.etd or "-" }}</strong>
-                </div>
-                <div class="neoermac-outbound-cell" data-outbound-field="status">
-                    <span>Status</span>
-                    <strong>{{ row.status or "-" }}</strong>
-                </div>
-            </header>
-
-            <div class="neoermac-outbound-location" data-outbound-field="location">
-                <span>LOCATION</span>
-                <strong>{{ row.assignment_locations|join(" / ") if row.assignment_locations else "-" }}</strong>
-            </div>
-
-            {% if not row.has_mission %}
-            <p class="neoermac-outbound-missing">NO CURRENT SORT MISSION FOR {{ row.destination }}.</p>
-            {% endif %}
-
-            <div class="neoermac-outbound-pull-grid" aria-label="{{ row.destination }} pull summary" data-neoermac-outbound-pull-grid>
-                {% for key, label, _planned_attr, _actual_attr, _no_attr in pull_labels %}
-                {% set short_label = "PURE" if key == "pure" else ("1MIX" if key == "first_mix" else "2MIX") %}
-                <section class="neoermac-outbound-pull-card" data-outbound-pull-group="{{ key }}">
-                    <h2>{{ short_label }}</h2>
-                    <div class="neoermac-outbound-pull-cell" data-outbound-pull-cell="{{ key }}-plan">
-                        <span>{{ short_label }} PLAN</span>
-                        <strong>{{ row.planned_pulls[key] or "-" }}</strong>
-                    </div>
-                    <div class="neoermac-outbound-pull-cell" data-outbound-pull-cell="{{ key }}-window">
-                        <span>{{ short_label }} WINDOW</span>
-                        <strong>{{ row.adjusted_pulls[key] or "-" }}</strong>
-                    </div>
-                    <div class="neoermac-outbound-pull-cell" data-outbound-pull-cell="{{ key }}-actual">
-                        <span>{{ short_label }} ACT</span>
-                        <strong>
-                            {% if row.no_pulls[key] %}
-                            NO {{ label|upper }}
-                            {% else %}
-                            {{ row.actual_pulls[key] or "-" }}
-                            {% endif %}
-                        </strong>
-                    </div>
-                </section>
+    <div class="neoermac-outbound-table-wrap" data-neoermac-outbound-layout="pull-table">
+        <table class="neoermac-outbound-table" data-neoermac-outbound-table>
+            <caption class="visually-hidden">Outbound flights with planned and actual pull times.</caption>
+            <thead>
+                <tr>
+                    <th scope="col" rowspan="2">Flight</th>
+                    <th scope="col" rowspan="2">Tail</th>
+                    <th scope="col" rowspan="2">Dest</th>
+                    <th scope="col" rowspan="2">Pos</th>
+                    <th scope="col" rowspan="2">Doors</th>
+                    <th scope="col" rowspan="2">ETD</th>
+                    <th scope="col" rowspan="2">Status</th>
+                    <th scope="col" rowspan="2">Location</th>
+                    <th scope="colgroup" colspan="2">PURE</th>
+                    <th scope="colgroup" colspan="2">MIX</th>
+                </tr>
+                <tr>
+                    <th scope="col">PLAN</th>
+                    <th scope="col">ACT</th>
+                    <th scope="col">PLAN</th>
+                    <th scope="col">ACT</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr class="neoermac-outbound-row{% if not row.has_mission %} is-missing-mission{% endif %}" data-neoermac-outbound-row>
+                    <td data-label="Flight" data-outbound-field="flight"><strong>{{ row.flight_number or "-" }}</strong></td>
+                    <td data-label="Tail" data-outbound-field="tail">{{ row.tail or "-" }}</td>
+                    <td data-label="Dest" class="neoermac-outbound-destination" data-outbound-field="destination"><strong>{{ row.destination }}</strong></td>
+                    <td data-label="Pos" data-outbound-field="position">{{ row.parking or "-" }}</td>
+                    <td data-label="Doors" data-outbound-field="doors">{{ row.assigned_doors|join(", ") if row.assigned_doors else "-" }}</td>
+                    <td data-label="ETD" data-outbound-field="etd">{{ row.etd or "-" }}</td>
+                    <td data-label="Status" data-outbound-field="status">
+                        <strong>{{ row.status or "-" }}</strong>
+                        {% if not row.has_mission %}
+                        <span class="neoermac-outbound-missing">NO CURRENT SORT MISSION FOR {{ row.destination }}.</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="Location" data-outbound-field="location">{{ row.assignment_locations|join(" / ") if row.assignment_locations else "-" }}</td>
+                    <td data-label="PURE PLAN" data-outbound-pull-cell="pure-plan">{{ row.planned_pulls.pure or "-" }}</td>
+                    <td data-label="PURE ACT" data-outbound-pull-cell="pure-actual"><strong>{{ actual_pull(row, "pure", "Pure") }}</strong></td>
+                    <td data-label="MIX PLAN" data-outbound-pull-cell="mix-plan">
+                        <div class="neoermac-outbound-time-stack">
+                            <span><b>1ST</b> {{ row.planned_pulls.first_mix or "-" }}</span>
+                            <span><b>2ND</b> {{ row.planned_pulls.second_mix or "-" }}</span>
+                        </div>
+                    </td>
+                    <td data-label="MIX ACT" data-outbound-pull-cell="mix-actual">
+                        <div class="neoermac-outbound-time-stack">
+                            <span><b>1ST</b> {{ actual_pull(row, "first_mix", "1st Mix") }}</span>
+                            <span><b>2ND</b> {{ actual_pull(row, "second_mix", "2nd Mix") }}</span>
+                        </div>
+                    </td>
+                </tr>
                 {% endfor %}
-            </div>
-        </article>
-        {% endfor %}
+            </tbody>
+        </table>
     </div>
     {% else %}
     <p class="neoermac-door-empty">NO OUTBOUND DESTINATIONS FOUND FOR THE CURRENT SORT.</p>

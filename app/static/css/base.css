@@ -3337,10 +3337,7 @@ a {
     width: 100%;
 }
 
-.neoermac-outbound-summary div,
-.neoermac-outbound-card-head div,
-.neoermac-outbound-location,
-.neoermac-outbound-pull-card {
+.neoermac-outbound-summary div {
     min-width: 0;
     border: 1px solid rgba(201, 208, 214, 0.16);
     border-radius: 6px;
@@ -3348,9 +3345,7 @@ a {
     text-align: center;
 }
 
-.neoermac-outbound-summary div,
-.neoermac-outbound-card-head div,
-.neoermac-outbound-location {
+.neoermac-outbound-summary div {
     display: grid;
     align-content: center;
     gap: 3px;
@@ -3358,10 +3353,7 @@ a {
     padding: 6px;
 }
 
-.neoermac-outbound-summary span,
-.neoermac-outbound-card-head span,
-.neoermac-outbound-location span,
-.neoermac-outbound-pull-cell span {
+.neoermac-outbound-summary span {
     color: var(--muted);
     font-size: 0.54rem;
     font-weight: 950;
@@ -3369,115 +3361,128 @@ a {
     text-transform: uppercase;
 }
 
-.neoermac-outbound-summary strong,
-.neoermac-outbound-card-head strong,
-.neoermac-outbound-location strong,
-.neoermac-outbound-pull-cell strong {
+.neoermac-outbound-summary strong {
     overflow-wrap: anywhere;
     color: #eef6ff;
     font-weight: 950;
     letter-spacing: 0.04em;
 }
 
-.neoermac-outbound-list {
-    display: grid;
-    gap: 8px;
+.neoermac-outbound-table-wrap {
     width: 100%;
-}
-
-.neoermac-outbound-card {
-    display: grid;
-    gap: 6px;
     min-width: 0;
-    padding: 8px;
-    border: 1px solid rgba(143, 24, 38, 0.5);
-    border-radius: 6px;
+}
+
+.neoermac-outbound-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 6px;
+    table-layout: fixed;
+    color: #eef6ff;
+}
+
+.neoermac-outbound-table th,
+.neoermac-outbound-table td {
+    overflow-wrap: anywhere;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.neoermac-outbound-table th {
+    padding: 6px 5px;
+    color: var(--muted);
+    font-size: 0.58rem;
+    font-weight: 950;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
     background:
-        radial-gradient(circle at 10% 0%, rgba(var(--node-rgb), 0.13), transparent 12rem),
-        linear-gradient(180deg, rgba(17, 19, 23, 0.94), rgba(5, 6, 9, 0.94));
+        linear-gradient(180deg, rgba(31, 36, 42, 0.92), rgba(11, 13, 17, 0.94));
+    border-top: 1px solid rgba(201, 208, 214, 0.16);
+    border-bottom: 1px solid rgba(201, 208, 214, 0.12);
 }
 
-.neoermac-outbound-card.is-missing-mission {
-    border-color: rgba(201, 208, 214, 0.22);
+.neoermac-outbound-table thead tr:first-child th:first-child {
+    border-top-left-radius: 6px;
 }
 
-.neoermac-outbound-card-head {
-    display: grid;
-    grid-template-columns:
-        minmax(84px, 0.9fr)
-        minmax(84px, 0.9fr)
-        minmax(64px, 0.68fr)
-        minmax(60px, 0.62fr)
-        minmax(82px, 0.9fr)
-        minmax(58px, 0.62fr)
-        minmax(86px, 0.92fr);
-    gap: 5px;
+.neoermac-outbound-table thead tr:first-child th:last-child {
+    border-top-right-radius: 6px;
+}
+
+.neoermac-outbound-table tbody tr {
+    background:
+        radial-gradient(circle at 8% 0%, rgba(var(--node-rgb), 0.14), transparent 13rem),
+        linear-gradient(180deg, rgba(17, 19, 23, 0.96), rgba(5, 6, 9, 0.96));
+}
+
+.neoermac-outbound-table tbody tr.is-missing-mission {
+    background:
+        linear-gradient(180deg, rgba(25, 27, 31, 0.94), rgba(7, 8, 10, 0.94));
+}
+
+.neoermac-outbound-table td {
+    padding: 7px 5px;
+    border-top: 1px solid rgba(143, 24, 38, 0.34);
+    border-bottom: 1px solid rgba(143, 24, 38, 0.34);
+    background: rgba(2, 3, 5, 0.38);
+    font-size: 0.76rem;
+    font-weight: 850;
+    letter-spacing: 0.02em;
+    line-height: 1.18;
+}
+
+.neoermac-outbound-table td:first-child {
+    border-left: 1px solid rgba(143, 24, 38, 0.34);
+    border-top-left-radius: 6px;
+    border-bottom-left-radius: 6px;
+}
+
+.neoermac-outbound-table td:last-child {
+    border-right: 1px solid rgba(143, 24, 38, 0.34);
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
+}
+
+.neoermac-outbound-table strong,
+.neoermac-outbound-time-stack b {
+    color: #ffffff;
+    font-weight: 950;
 }
 
 .neoermac-outbound-destination strong {
-    color: #ffffff;
-    font-size: 0.96rem;
+    color: var(--node-ermac-secondary);
+    font-size: 0.92rem;
     text-shadow: 0 0 14px rgba(54, 226, 123, 0.16);
 }
 
-.neoermac-outbound-location {
-    min-height: 32px;
-    color: var(--steel);
+.neoermac-outbound-time-stack {
+    display: grid;
+    gap: 2px;
+}
+
+.neoermac-outbound-time-stack span {
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+    white-space: normal;
 }
 
 .neoermac-outbound-missing {
-    margin: 0;
+    display: block;
+    margin-top: 3px;
     color: var(--steel);
-    font-size: 0.72rem;
+    font-size: 0.58rem;
     font-weight: 950;
     letter-spacing: 0.06em;
-    text-align: center;
-}
-
-.neoermac-outbound-pull-grid {
-    display: grid;
-    gap: 5px;
-}
-
-.neoermac-outbound-pull-card {
-    display: grid;
-    grid-template-columns: minmax(46px, 0.45fr) repeat(3, minmax(58px, 1fr));
-    align-items: stretch;
-    gap: 4px;
-    padding: 5px;
-}
-
-.neoermac-outbound-pull-card h2 {
-    display: grid;
-    place-items: center;
-    margin: 0;
-    color: var(--node-ermac-secondary);
-    font-size: 0.66rem;
-    font-weight: 950;
-    letter-spacing: 0.06em;
-    text-align: center;
+    line-height: 1.15;
     text-transform: uppercase;
 }
 
-.neoermac-outbound-pull-cell {
-    display: grid;
-    align-content: center;
-    gap: 2px;
-    min-width: 0;
-    min-height: 34px;
-    padding: 4px 5px;
-    border: 1px solid rgba(201, 208, 214, 0.12);
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.025);
-    text-align: center;
+.neoermac-outbound-row.is-missing-mission td {
+    border-color: rgba(201, 208, 214, 0.22);
 }
 
-.neoermac-outbound-pull-cell strong {
-    font-size: 0.82rem;
-    line-height: 1.1;
-}
-
-@media (max-width: 540px) {
+@media (max-width: 760px) {
     .neoermac-outbound-shell {
         padding-inline: 10px;
     }
@@ -3486,40 +3491,75 @@ a {
         grid-template-columns: minmax(0, 1fr);
     }
 
-    .neoermac-outbound-card-head {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 4px;
+    .neoermac-outbound-table {
+        display: block;
+        border-spacing: 0;
     }
 
-    .neoermac-outbound-flight,
-    .neoermac-outbound-destination,
-    .neoermac-outbound-location {
+    .neoermac-outbound-table thead {
+        display: none;
+    }
+
+    .neoermac-outbound-table tbody {
+        display: grid;
+        gap: 8px;
+    }
+
+    .neoermac-outbound-table tbody tr {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+        padding: 7px;
+        border: 1px solid rgba(143, 24, 38, 0.5);
+        border-radius: 8px;
+    }
+
+    .neoermac-outbound-table td {
+        display: grid;
+        align-content: center;
+        gap: 2px;
+        min-width: 0;
+        min-height: 36px;
+        padding: 5px;
+        border: 1px solid rgba(201, 208, 214, 0.12);
+        border-radius: 5px;
+        background: rgba(2, 3, 5, 0.42);
+        font-size: 0.78rem;
+    }
+
+    .neoermac-outbound-table td:first-child,
+    .neoermac-outbound-table td:last-child {
+        border: 1px solid rgba(201, 208, 214, 0.12);
+        border-radius: 5px;
+    }
+
+    .neoermac-outbound-table td::before {
+        content: attr(data-label);
+        color: var(--muted);
+        font-size: 0.5rem;
+        font-weight: 950;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+
+    .neoermac-outbound-table td[data-label="Flight"],
+    .neoermac-outbound-table td[data-label="Dest"],
+    .neoermac-outbound-table td[data-label="Location"] {
         grid-column: 1 / -1;
     }
 
-    .neoermac-outbound-card {
-        padding: 6px;
+    .neoermac-outbound-destination strong {
+        font-size: 1rem;
     }
 
-    .neoermac-outbound-pull-card {
-        grid-template-columns: minmax(42px, 0.44fr) repeat(3, minmax(0, 1fr));
+    .neoermac-outbound-time-stack span {
+        justify-content: center;
+        gap: 4px;
     }
 
-    .neoermac-outbound-pull-card h2 {
-        font-size: 0.58rem;
-    }
-
-    .neoermac-outbound-pull-cell {
-        min-height: 32px;
-        padding: 3px;
-    }
-
-    .neoermac-outbound-pull-cell span {
-        font-size: 0.48rem;
-    }
-
-    .neoermac-outbound-pull-cell strong {
-        font-size: 0.72rem;
+    .neoermac-outbound-missing {
+        font-size: 0.54rem;
     }
 }
 
