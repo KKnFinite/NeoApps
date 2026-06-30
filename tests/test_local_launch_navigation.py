@@ -550,6 +550,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("--node-apps-highlight: #8b5cf6;", css)
         self.assertIn(".portal-shell-page .topbar", css)
         self.assertIn(".portal-page .action-button", css)
+        self.assertIn("rgba(8, 7, 12, 0.99)", css)
+        self.assertIn("linear-gradient(180deg, #7b121b 0%, #3b143a 100%)", css)
         self.assertNotIn("#d73f7d", css)
         self.assertNotIn("#ff75b7", css)
         self.assertNotIn("215, 63, 125", css)
