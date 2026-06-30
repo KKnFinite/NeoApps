@@ -242,6 +242,7 @@ def motherbrain():
 @gateway_node_required("motherbrain")
 def gateway_matrix():
     gateway = get_current_gateway()
+    selected_operation = _selected_manage_sort_operation(gateway)
     if request.method == "POST":
         active_cells = []
         for day, _day_label in MATRIX_DAY_OPTIONS:
@@ -251,7 +252,10 @@ def gateway_matrix():
 
         save_gateway_matrix(gateway, active_cells)
         flash("Gateway Matrix updated.", "info")
-        return redirect(url_for("neomotherbrain.gateway_matrix"))
+        redirect_args = {}
+        if selected_operation:
+            redirect_args["operation_id"] = selected_operation.id
+        return redirect(url_for("neomotherbrain.gateway_matrix", **redirect_args))
 
     return render_template(
         "neomotherbrain/gateway_matrix.html",
@@ -259,6 +263,7 @@ def gateway_matrix():
         day_options=MATRIX_DAY_OPTIONS,
         sort_options=MATRIX_SORT_OPTIONS,
         matrix=matrix_state_for_gateway(gateway),
+        selected_operation=selected_operation,
     )
 
 
@@ -267,6 +272,7 @@ def gateway_matrix():
 def sort_timeline():
     gateway = get_current_gateway()
     month_key = request.args.get("month", "")
+    selected_operation = _selected_manage_sort_operation(gateway)
 
     if request.method == "POST":
         _settings, month_key = save_sort_timeline_from_form(gateway, request.form)
@@ -275,7 +281,10 @@ def sort_timeline():
             context = sort_timeline_context(gateway, month_key)
             return jsonify(_sort_timeline_autosave_payload(context))
         flash("Sort Timeline settings saved.", "info")
-        return redirect(url_for("neomotherbrain.sort_timeline", month=month_key))
+        redirect_args = {"month": month_key}
+        if selected_operation:
+            redirect_args["operation_id"] = selected_operation.id
+        return redirect(url_for("neomotherbrain.sort_timeline", **redirect_args))
 
     context = sort_timeline_context(gateway, month_key)
     return render_template(
@@ -284,6 +293,7 @@ def sort_timeline():
         day_options=TIMELINE_DAY_OPTIONS,
         sort_options=TIMELINE_SORT_OPTIONS,
         format_timeline_time=format_timeline_time,
+        selected_operation=selected_operation,
         **context,
     )
 
@@ -1165,6 +1175,7 @@ def operations():
 @gateway_node_required("motherbrain")
 def master_schedule():
     gateway = get_current_gateway()
+    selected_operation = _selected_manage_sort_operation(gateway)
     schedules = _master_schedules_for_gateway(gateway)
     if request.method == "POST":
         mission_type = request.form.get("board_mission_type", "").strip().lower()
@@ -1185,7 +1196,10 @@ def master_schedule():
             if _wants_json_response():
                 return {"ok": False, "message": str(error)}, 400
             flash(str(error), "error")
-            return redirect(url_for("neomotherbrain.master_schedule"))
+            redirect_args = {}
+            if selected_operation:
+                redirect_args["operation_id"] = selected_operation.id
+            return redirect(url_for("neomotherbrain.master_schedule", **redirect_args))
 
         db.session.commit()
         if _wants_json_response():
@@ -1200,7 +1214,10 @@ def master_schedule():
             f"{updated_count} updated, {created_count} created.",
             "info",
         )
-        return redirect(url_for("neomotherbrain.master_schedule"))
+        redirect_args = {}
+        if selected_operation:
+            redirect_args["operation_id"] = selected_operation.id
+        return redirect(url_for("neomotherbrain.master_schedule", **redirect_args))
 
     return render_template(
         "neomotherbrain/master_schedule.html",
@@ -1213,6 +1230,7 @@ def master_schedule():
         active_day_options=ACTIVE_DAY_OPTIONS,
         aircraft_type_options=MASTER_AIRCRAFT_TYPE_OPTIONS,
         gateway=gateway,
+        selected_operation=selected_operation,
         wave_options=MASTER_WAVE_OPTIONS,
     )
 
@@ -2074,6 +2092,20 @@ def _selected_current_operation(operations, operation_id=None):
             if selected:
                 return selected
     return operations[0] if operations else None
+
+
+def _selected_manage_sort_operation(gateway):
+    operation_id = request.values.get("operation_id")
+    if not operation_id:
+        return None
+    try:
+        operation_id = int(operation_id)
+    except (TypeError, ValueError):
+        return None
+    return SortDateOperation.query.filter_by(
+        id=operation_id,
+        gateway_code=gateway.code,
+    ).first()
 
 
 def _planning_mission_type_or_404(mission_type):

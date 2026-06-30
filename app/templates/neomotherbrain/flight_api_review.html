@@ -10,11 +10,18 @@
 {%- endmacro %}
 
 {% block content %}
-<section class="panel centered-command-page flight-api-review-page" aria-labelledby="flight-api-review-title">
-    <div class="section-heading">
-        <h1 id="flight-api-review-title" class="mobile-shell-duplicate-title">FLIGHT API REVIEW</h1>
-        <p class="muted">UNMATCHED UPS FLIGHTS FOR THE CURRENT SORT OPERATION.</p>
-    </div>
+<section class="panel centered-command-page manage-sort-sidebar-page flight-api-review-page" aria-labelledby="flight-api-review-title">
+    {% if selected_operation %}
+    {% set manage_sort_sidebar_operation = selected_operation %}
+    {% set manage_sort_sidebar_active = "unmatched-queue" %}
+    <div class="manage-sort-shell">
+        {% include "neomotherbrain/_manage_sort_sidebar.html" %}
+        <div class="manage-sort-main">
+    {% endif %}
+            <div class="section-heading">
+                <h1 id="flight-api-review-title" class="mobile-shell-duplicate-title">FLIGHT API REVIEW</h1>
+                <p class="muted">UNMATCHED UPS FLIGHTS FOR THE CURRENT SORT OPERATION.</p>
+            </div>
 
     <form class="operation-form inline-operation-form" method="get">
         <label>
@@ -134,5 +141,9 @@
             </tbody>
         </table>
     </section>
+    {% if selected_operation %}
+        </div>
+    </div>
+    {% endif %}
 </section>
 {% endblock %}

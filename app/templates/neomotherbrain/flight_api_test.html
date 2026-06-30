@@ -16,11 +16,18 @@
 {% set provider_request_url = import_result.request_url_redacted if import_result and import_result.request_url_redacted else (selected_request_details.url if selected_request_details else none) %}
 {% set provider_request_path_query = import_result.request_path_query if import_result and import_result.request_path_query else (selected_request_details.path_query if selected_request_details else none) %}
 {% set review_rows = import_result.review_items if import_result and import_result.replay_preview else pending_review_items %}
-<section class="panel centered-command-page flight-api-test-page" aria-labelledby="flight-api-test-title">
-    <div class="section-heading">
-        <h1 id="flight-api-test-title">FLIGHT API TEST</h1>
-        <p class="muted">{{ gateway.code }} API IMPORT FOUNDATION. NO SCHEDULED POLLING IS ENABLED.</p>
-    </div>
+<section class="panel centered-command-page manage-sort-sidebar-page flight-api-test-page" aria-labelledby="flight-api-test-title">
+    {% if selected_operation %}
+    {% set manage_sort_sidebar_operation = selected_operation %}
+    {% set manage_sort_sidebar_active = "manage-api" %}
+    <div class="manage-sort-shell">
+        {% include "neomotherbrain/_manage_sort_sidebar.html" %}
+        <div class="manage-sort-main">
+    {% endif %}
+            <div class="section-heading">
+                <h1 id="flight-api-test-title">FLIGHT API TEST</h1>
+                <p class="muted">{{ gateway.code }} API IMPORT FOUNDATION. NO SCHEDULED POLLING IS ENABLED.</p>
+            </div>
 
     <div class="helper-copy">
         <p class="muted"><strong>Sort Flight Lookup Window:</strong> Flight API requests pull arrivals/departures for the full sort start-to-end time. This is the flight data range.</p>
@@ -719,6 +726,10 @@
             </tbody>
         </table>
     </section>
+    {% if selected_operation %}
+        </div>
+    </div>
+    {% endif %}
 </section>
 
 <script>

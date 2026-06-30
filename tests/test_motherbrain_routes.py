@@ -302,8 +302,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"SORT TIMELINE", response.data)
         self.assertIn(b"API PLANNING SETTINGS", response.data)
-        self.assertIn(b'href="/motherbrain/flight-api-test"', response.data)
-        self.assertIn(b"FLIGHT API TEST", response.data)
+        self.assertNotIn(b'href="/motherbrain/flight-api-test"', response.data)
 
         self._login_motherbrain_role("timeline_master", "master")
         blocked = self.client.get("/motherbrain/sort-timeline", follow_redirects=False)
@@ -1561,20 +1560,23 @@ class MotherBrainRoutesTest(unittest.TestCase):
         workflow_html = main_html.split('class="motherbrain-main-menu-return"', 1)[0]
         self.assertIn("Current / Selected Sort Operation", workflow_html)
         self.assertIn(f"RFD NIGHT {sort_date.month}/{sort_date.day}/{sort_date.year % 100:02d}", workflow_html)
-        self.assertIn("Selected Sort Menu", workflow_html)
-        self.assertIn("SORT SUMMARY", workflow_html)
-        self.assertIn("ARRIVAL PLANNING", workflow_html)
-        self.assertIn("DEPARTURE PLANNING", workflow_html)
-        self.assertIn("PARKING PLAN", workflow_html)
-        self.assertIn("GATEWAY MATRIX", workflow_html)
-        self.assertIn("MASTER SCHEDULE", workflow_html)
-        self.assertIn("SORT TIMELINE", workflow_html)
-        self.assertIn("MANAGE API", workflow_html)
-        self.assertIn("UNMATCHED QUEUE", workflow_html)
+        self.assertIn("manage-sort-sidebar", workflow_html)
+        self.assertIn("Selected Sort", workflow_html)
+        self.assertIn("Sort Summary", workflow_html)
+        self.assertIn("Arrival Planning", workflow_html)
+        self.assertIn("Departure Planning", workflow_html)
+        self.assertIn("Parking Plan", workflow_html)
+        self.assertIn("Gateway Matrix", workflow_html)
+        self.assertIn("Master Schedule", workflow_html)
+        self.assertIn("Sort Timeline", workflow_html)
+        self.assertIn("Manage API", workflow_html)
+        self.assertIn("Unmatched Queue", workflow_html)
         self.assertIn("Sort Operation Settings", workflow_html)
         self.assertIn("Gateway Matrix / Schedule Source Controls", workflow_html)
         self.assertIn("API Polling Configuration", workflow_html)
         self.assertIn("Generate / Rebuild / Save Actions", workflow_html)
+        self.assertNotIn("Selected Sort Menu", workflow_html)
+        self.assertNotIn("SORT ACTIONS", workflow_html)
         self.assertNotIn("Warnings / Preview", workflow_html)
         self.assertNotIn("Selected Operation", workflow_html)
         self.assertNotIn("Current Sort Operations", workflow_html)
@@ -1582,9 +1584,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn("Flight API Test", workflow_html)
         self.assertNotIn("Flight API Review", workflow_html)
         self.assertNotIn("ADD SPECIAL FLIGHT", workflow_html)
-        self.assertIn('href="/motherbrain/gateway-matrix"', workflow_html)
-        self.assertIn('href="/motherbrain/master-schedule"', workflow_html)
-        self.assertIn('href="/motherbrain/sort-timeline"', workflow_html)
+        self.assertIn(f'href="/motherbrain/gateway-matrix?operation_id={operations[0].id}"', workflow_html)
+        self.assertIn(f'href="/motherbrain/master-schedule?operation_id={operations[0].id}"', workflow_html)
+        self.assertIn(f'href="/motherbrain/sort-timeline?operation_id={operations[0].id}"', workflow_html)
         self.assertNotIn('href="/motherbrain"', workflow_html)
         self.assertIn('class="motherbrain-main-menu-return"', main_html)
         self.assertIn('href="/motherbrain"', main_html)
@@ -4320,8 +4322,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("A03", mission_section)
-        self.assertIn("VIEW PARKING", mission_section)
-        self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"', mission_section)
+        self.assertNotIn("VIEW PARKING", mission_section)
+        self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"', html)
         self.assertNotIn("NOT PARKED", mission_section)
 
     def test_departure_planning_row_shows_not_parked_for_known_tail(self):
@@ -4336,8 +4338,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("N457UP", mission_section)
         self.assertIn("NOT PARKED", mission_section)
-        self.assertIn("VIEW PARKING", mission_section)
-        self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"', mission_section)
+        self.assertNotIn("VIEW PARKING", mission_section)
+        self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"', html)
 
     def test_planning_row_shows_oos_red_badge(self):
         operation = self._parking_operation()
@@ -4387,7 +4389,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("N457UP", mission_section)
         self.assertIn("A03", mission_section)
         self.assertIn("MISSION CANCELLED", mission_section)
-        self.assertIn("VIEW PARKING", mission_section)
+        self.assertNotIn("VIEW PARKING", mission_section)
 
     def test_cancel_arrival_marks_mission_cancelled_and_keeps_planning_row(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
@@ -4952,13 +4954,19 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.session.add(operation)
         db.session.commit()
 
-        pages = [
-            f"/motherbrain/operations/{operation.id}",
+        board_pages = [
             f"/motherbrain/operations/{operation.id}/arrivals",
             f"/motherbrain/operations/{operation.id}/departures",
         ]
 
-        for page in pages:
+        detail_response = self.client.get(f"/motherbrain/operations/{operation.id}")
+        detail_html = detail_response.data.decode()
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertIn("manage-sort-sidebar", detail_html)
+        self.assertIn(f"/motherbrain/operations/{operation.id}/alp/arrival", detail_html)
+        self.assertIn(f"/motherbrain/operations/{operation.id}/alp/departure", detail_html)
+
+        for page in board_pages:
             with self.subTest(page=page):
                 response = self.client.get(page)
                 html = response.data.decode()
@@ -5006,8 +5014,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         old_route = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
 
         self.assertEqual(old_route.status_code, 200)
-        self.assertIn("ARRIVAL PLANNING", detail)
-        self.assertIn("DEPARTURE PLANNING", detail)
+        self.assertIn("Arrival Planning", detail)
+        self.assertIn("Departure Planning", detail)
         self.assertIn("ARRIVAL PLANNING", arrivals)
         self.assertIn("DEPARTURE PLANNING", departures)
         self.assertNotIn("ALP ARRIVAL PASTE", detail)

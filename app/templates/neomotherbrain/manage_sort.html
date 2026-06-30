@@ -3,7 +3,7 @@
 {% block title %}Manage Sort | NeoApps{% endblock %}
 
 {% block content %}
-<section class="panel centered-command-page manage-sort-page">
+<section class="panel centered-command-page manage-sort-page manage-sort-sidebar-page">
     <div class="section-heading mobile-shell-duplicate-title">
         <h1>MANAGE SORT</h1>
         <p class="muted">{{ gateway.code }} LOCAL DATE {{ sort_date }}. ACTIVE SORT OPERATIONS ARE AVAILABLE BELOW.</p>
@@ -25,71 +25,55 @@
     </section>
 
     {% if selected_operation %}
-    <section class="manage-sort-selected-card" aria-labelledby="manage-sort-selected-title">
-        <div class="manage-sort-section-heading">
-            <span class="eyebrow">Selected Sort Menu</span>
-            <h2 id="manage-sort-selected-title">SORT ACTIONS</h2>
+    {% set manage_sort_sidebar_operation = selected_operation %}
+    <div class="manage-sort-shell">
+        {% include "neomotherbrain/_manage_sort_sidebar.html" %}
+        <div class="manage-sort-main">
+            <div class="manage-sort-grid">
+                <section class="manage-sort-card" aria-labelledby="manage-sort-settings-title">
+                    <span class="eyebrow">Sort Operation Settings</span>
+                    <h2 id="manage-sort-settings-title">OPERATION SETTINGS</h2>
+                    <dl class="manage-sort-detail-list">
+                        <div>
+                            <dt>Default Window</dt>
+                            <dd>{{ selected_operation.window_minutes }} MIN</dd>
+                        </div>
+                        <div>
+                            <dt>1st Wave Window</dt>
+                            <dd>{{ selected_operation.first_wave_window_minutes if selected_operation.first_wave_window_minutes is not none else selected_operation.window_minutes }} MIN</dd>
+                        </div>
+                        <div>
+                            <dt>2nd Wave Window</dt>
+                            <dd>{{ selected_operation.second_wave_window_minutes if selected_operation.second_wave_window_minutes is not none else selected_operation.window_minutes }} MIN</dd>
+                        </div>
+                    </dl>
+                    <p class="muted">Use Sort Summary to edit operation windows. Boards remain data-view screens.</p>
+                </section>
+
+                <section class="manage-sort-card" aria-labelledby="manage-sort-source-title">
+                    <span class="eyebrow">Gateway Matrix / Schedule Source Controls</span>
+                    <h2 id="manage-sort-source-title">SCHEDULE SOURCE</h2>
+                    <p class="muted">Gateway Matrix decides which sorts are planned. Master Schedule rows generate and sync current-sort missions.</p>
+                </section>
+
+                <section class="manage-sort-card" aria-labelledby="manage-sort-api-title">
+                    <span class="eyebrow">API Polling Configuration</span>
+                    <h2 id="manage-sort-api-title">FLIGHT API READINESS</h2>
+                    <p class="muted">Sort Timeline owns provider settings, API windows, polling budgets, and auto-poll readiness.</p>
+                </section>
+            </div>
+
+            <section class="manage-sort-card manage-sort-rebuild-card manage-sort-bottom-card" aria-labelledby="manage-sort-actions-title">
+                <span class="eyebrow">Generate / Rebuild / Save Actions</span>
+                <h2 id="manage-sort-actions-title">SYNC CONTROLS</h2>
+                <p class="muted">Reloading this page rechecks Gateway Matrix and syncs current operations from Master Schedule. Rebuild-style actions are separated from normal operation actions.</p>
+                <div class="action-row">
+                    <a class="action-button" href="{{ url_for('neomotherbrain.manage_sort', operation_id=selected_operation.id) }}">REFRESH / SYNC NOW</a>
+                    <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=selected_operation.id) }}">SAVE OPERATION SETTINGS</a>
+                </div>
+            </section>
         </div>
-        <div class="action-row manage-sort-primary-actions manage-sort-action-menu" aria-label="Selected sort actions">
-            <a class="action-button" href="{{ url_for('neomotherbrain.operation_detail', operation_id=selected_operation.id) }}">SORT SUMMARY</a>
-            <a class="action-button" href="{{ url_for('neomotherbrain.alp_import', operation_id=selected_operation.id, mission_type='arrival') }}">ARRIVAL PLANNING</a>
-            <a class="action-button" href="{{ url_for('neomotherbrain.alp_import', operation_id=selected_operation.id, mission_type='departure') }}">DEPARTURE PLANNING</a>
-            <a class="action-button" href="{{ url_for('neomotherbrain.parking_plan_operation', operation_id=selected_operation.id) }}">PARKING PLAN</a>
-            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.gateway_matrix') }}">GATEWAY MATRIX</a>
-            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.master_schedule') }}">MASTER SCHEDULE</a>
-            {% if can_manage_system(current_user) %}
-            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.sort_timeline') }}">SORT TIMELINE</a>
-            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.flight_api_test', operation_id=selected_operation.id) }}">MANAGE API</a>
-            {% endif %}
-            {% if user_can("neomotherbrain.flight_api_review.view") %}
-            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.flight_api_review', operation_id=selected_operation.id) }}">UNMATCHED QUEUE</a>
-            {% endif %}
-        </div>
-    </section>
-
-    <div class="manage-sort-grid">
-        <section class="manage-sort-card" aria-labelledby="manage-sort-settings-title">
-            <span class="eyebrow">Sort Operation Settings</span>
-            <h2 id="manage-sort-settings-title">OPERATION SETTINGS</h2>
-            <dl class="manage-sort-detail-list">
-                <div>
-                    <dt>Default Window</dt>
-                    <dd>{{ selected_operation.window_minutes }} MIN</dd>
-                </div>
-                <div>
-                    <dt>1st Wave Window</dt>
-                    <dd>{{ selected_operation.first_wave_window_minutes if selected_operation.first_wave_window_minutes is not none else selected_operation.window_minutes }} MIN</dd>
-                </div>
-                <div>
-                    <dt>2nd Wave Window</dt>
-                    <dd>{{ selected_operation.second_wave_window_minutes if selected_operation.second_wave_window_minutes is not none else selected_operation.window_minutes }} MIN</dd>
-                </div>
-            </dl>
-            <p class="muted">Use Sort Summary to edit operation windows. Boards remain data-view screens.</p>
-        </section>
-
-        <section class="manage-sort-card" aria-labelledby="manage-sort-source-title">
-            <span class="eyebrow">Gateway Matrix / Schedule Source Controls</span>
-            <h2 id="manage-sort-source-title">SCHEDULE SOURCE</h2>
-            <p class="muted">Gateway Matrix decides which sorts are planned. Master Schedule rows generate and sync current-sort missions.</p>
-        </section>
-
-        <section class="manage-sort-card" aria-labelledby="manage-sort-api-title">
-            <span class="eyebrow">API Polling Configuration</span>
-            <h2 id="manage-sort-api-title">FLIGHT API READINESS</h2>
-            <p class="muted">Sort Timeline owns provider settings, API windows, polling budgets, and auto-poll readiness.</p>
-        </section>
     </div>
-
-    <section class="manage-sort-card manage-sort-rebuild-card manage-sort-bottom-card" aria-labelledby="manage-sort-actions-title">
-        <span class="eyebrow">Generate / Rebuild / Save Actions</span>
-        <h2 id="manage-sort-actions-title">SYNC CONTROLS</h2>
-        <p class="muted">Reloading this page rechecks Gateway Matrix and syncs current operations from Master Schedule. Rebuild-style actions are separated from normal operation actions.</p>
-        <div class="action-row">
-            <a class="action-button" href="{{ url_for('neomotherbrain.manage_sort', operation_id=selected_operation.id) }}">REFRESH / SYNC NOW</a>
-            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=selected_operation.id) }}">SAVE OPERATION SETTINGS</a>
-        </div>
-    </section>
     {% endif %}
 {% else %}
     <section class="manage-sort-section" aria-labelledby="manage-sort-empty-title">

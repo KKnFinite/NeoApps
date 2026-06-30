@@ -60,12 +60,18 @@
 {%- endmacro %}
 
 {% block content %}
-<section class="panel centered-command-page sort-timeline-page" aria-labelledby="sort-timeline-title">
-    <div class="section-heading">
-        <h1 id="sort-timeline-title" class="mobile-shell-duplicate-title">SORT TIMELINE</h1>
-        <p class="muted">{{ gateway.code }} API PLANNING SETTINGS. NO EXTERNAL API CALLS ARE MADE FROM THIS SCREEN.</p>
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.flight_api_test') }}">FLIGHT API TEST</a>
-    </div>
+<section class="panel centered-command-page manage-sort-sidebar-page sort-timeline-page" aria-labelledby="sort-timeline-title">
+    {% if selected_operation %}
+    {% set manage_sort_sidebar_operation = selected_operation %}
+    {% set manage_sort_sidebar_active = "sort-timeline" %}
+    <div class="manage-sort-shell">
+        {% include "neomotherbrain/_manage_sort_sidebar.html" %}
+        <div class="manage-sort-main">
+    {% endif %}
+            <div class="section-heading">
+                <h1 id="sort-timeline-title" class="mobile-shell-duplicate-title">SORT TIMELINE</h1>
+                <p class="muted">{{ gateway.code }} API PLANNING SETTINGS. NO EXTERNAL API CALLS ARE MADE FROM THIS SCREEN.</p>
+            </div>
 
     <form class="operation-form sort-timeline-form" method="post" data-sort-timeline-autosave>
         <input type="hidden" name="month_key" value="{{ current_month_key }}">
@@ -256,6 +262,10 @@
 
         <p class="sort-timeline-autosave-status" data-sort-timeline-save-status aria-live="polite">AUTO-SAVE READY</p>
     </form>
+    {% if selected_operation %}
+        </div>
+    </div>
+    {% endif %}
 </section>
 
 <script>

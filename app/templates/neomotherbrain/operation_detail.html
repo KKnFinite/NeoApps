@@ -3,115 +3,117 @@
 {% block title %}Operation {{ operation.id }} | NeoApps{% endblock %}
 
 {% block content %}
-<section class="panel centered-command-page">
-    <div class="section-heading">
-        <h1>{{ operation.gateway_code }} {{ operation.sort_name|title }} {{ operation.sort_date }}</h1>
-    </div>
+<section class="panel centered-command-page manage-sort-sidebar-page">
+    {% set manage_sort_sidebar_operation = operation %}
+    {% set manage_sort_sidebar_active = "summary" %}
+    <div class="manage-sort-shell">
+        {% include "neomotherbrain/_manage_sort_sidebar.html" %}
+        <div class="manage-sort-main">
+            <div class="section-heading">
+                <h1>{{ operation.gateway_code }} {{ operation.sort_name|title }} {{ operation.sort_date }}</h1>
+            </div>
 
-    <div class="metric-grid">
-        <article class="metric-tile">
-            <span>WINDOW</span>
-            <strong>{{ operation.window_minutes }} MIN</strong>
-        </article>
-        <article class="metric-tile">
-            <span>WAVE 1 WINDOW</span>
-            <strong>{{ operation.first_wave_window_minutes if operation.first_wave_window_minutes is not none else operation.window_minutes }} MIN</strong>
-        </article>
-        <article class="metric-tile">
-            <span>WAVE 2 WINDOW</span>
-            <strong>{{ operation.second_wave_window_minutes if operation.second_wave_window_minutes is not none else operation.window_minutes }} MIN</strong>
-        </article>
-        <article class="metric-tile">
-            <span>TOTAL MISSIONS</span>
-            <strong>{{ mission_count }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>ARRIVALS</span>
-            <strong>{{ arrival_count }}</strong>
-        </article>
-        <article class="metric-tile">
-            <span>DEPARTURES</span>
-            <strong>{{ departure_count }}</strong>
-        </article>
-    </div>
+            <div class="metric-grid">
+                <article class="metric-tile">
+                    <span>WINDOW</span>
+                    <strong>{{ operation.window_minutes }} MIN</strong>
+                </article>
+                <article class="metric-tile">
+                    <span>WAVE 1 WINDOW</span>
+                    <strong>{{ operation.first_wave_window_minutes if operation.first_wave_window_minutes is not none else operation.window_minutes }} MIN</strong>
+                </article>
+                <article class="metric-tile">
+                    <span>WAVE 2 WINDOW</span>
+                    <strong>{{ operation.second_wave_window_minutes if operation.second_wave_window_minutes is not none else operation.window_minutes }} MIN</strong>
+                </article>
+                <article class="metric-tile">
+                    <span>TOTAL MISSIONS</span>
+                    <strong>{{ mission_count }}</strong>
+                </article>
+                <article class="metric-tile">
+                    <span>ARRIVALS</span>
+                    <strong>{{ arrival_count }}</strong>
+                </article>
+                <article class="metric-tile">
+                    <span>DEPARTURES</span>
+                    <strong>{{ departure_count }}</strong>
+                </article>
+            </div>
 
-    <dl class="detail-list">
-        <div>
-            <dt>GENERATED</dt>
-            <dd>{{ operation.generated_at_utc.strftime("%Y-%m-%d %H:%M") if operation.generated_at_utc else "-" }} UTC</dd>
+            <dl class="detail-list">
+                <div>
+                    <dt>GENERATED</dt>
+                    <dd>{{ operation.generated_at_utc.strftime("%Y-%m-%d %H:%M") if operation.generated_at_utc else "-" }} UTC</dd>
+                </div>
+                <div>
+                    <dt>GATEWAY</dt>
+                    <dd>{{ operation.gateway_code }}</dd>
+                </div>
+                <div>
+                    <dt>SORT</dt>
+                    <dd>{{ operation.sort_name }}</dd>
+                </div>
+            </dl>
+
+            <form class="operation-form inline-operation-form" method="post" action="{{ url_for('neomotherbrain.update_operation_window', operation_id=operation.id) }}">
+                <label>
+                    <span>WINDOW MINUTES</span>
+                    <input type="number" name="window_minutes" value="{{ operation.window_minutes }}" min="0" step="1" required>
+                </label>
+                <label>
+                    <span>WAVE 1 WINDOW</span>
+                    <input type="number" name="first_wave_window_minutes" value="{{ operation.first_wave_window_minutes if operation.first_wave_window_minutes is not none else '' }}" min="0" step="1" placeholder="Default">
+                </label>
+                <label>
+                    <span>WAVE 2 WINDOW</span>
+                    <input type="number" name="second_wave_window_minutes" value="{{ operation.second_wave_window_minutes if operation.second_wave_window_minutes is not none else '' }}" min="0" step="1" placeholder="Default">
+                </label>
+                <button class="action-button" type="submit">UPDATE WINDOW</button>
+            </form>
+
+            <div class="action-row planning-local-actions">
+                <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">ADD MISSION</a>
+            </div>
+
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>FLIGHT</th>
+                            <th>WAVE</th>
+                            <th>TAIL</th>
+                            <th>ORIGIN/DESTINATION</th>
+                            <th>PARKING</th>
+                            <th>ETA/ETD</th>
+                            <th>STATUS</th>
+                            <th>LINKS</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in rows %}
+                        {% set mission = row.mission %}
+                        <tr>
+                            <td>{{ mission.flight_number|upper }}</td>
+                            <td>{{ mission.wave|wave_label }}</td>
+                            <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
+                            <td>{{ (mission.origin if mission.mission_type == "arrival" else mission.destination)|upper }}</td>
+                            <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>
+                            <td>{{ row.display_time.strftime("%H:%M") if row.display_time else "-" }}</td>
+                            <td>{{ row.status|status_label }}</td>
+                            <td class="table-actions">
+                                <a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=mission.id) }}">VIEW</a>
+                                <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT</a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8">NO MISSIONS FOUND.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
-        <div>
-            <dt>GATEWAY</dt>
-            <dd>{{ operation.gateway_code }}</dd>
-        </div>
-        <div>
-            <dt>SORT</dt>
-            <dd>{{ operation.sort_name }}</dd>
-        </div>
-    </dl>
-
-    <form class="operation-form inline-operation-form" method="post" action="{{ url_for('neomotherbrain.update_operation_window', operation_id=operation.id) }}">
-        <label>
-            <span>WINDOW MINUTES</span>
-            <input type="number" name="window_minutes" value="{{ operation.window_minutes }}" min="0" step="1" required>
-        </label>
-        <label>
-            <span>WAVE 1 WINDOW</span>
-            <input type="number" name="first_wave_window_minutes" value="{{ operation.first_wave_window_minutes if operation.first_wave_window_minutes is not none else '' }}" min="0" step="1" placeholder="Default">
-        </label>
-        <label>
-            <span>WAVE 2 WINDOW</span>
-            <input type="number" name="second_wave_window_minutes" value="{{ operation.second_wave_window_minutes if operation.second_wave_window_minutes is not none else '' }}" min="0" step="1" placeholder="Default">
-        </label>
-        <button class="action-button" type="submit">UPDATE WINDOW</button>
-    </form>
-
-    <div class="action-row">
-        <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">ADD MISSION</a>
-        <a class="action-button alp-desktop-only" href="{{ url_for('neomotherbrain.alp_import', operation_id=operation.id, mission_type='arrival') }}">ARRIVAL PLANNING</a>
-        <a class="action-button alp-desktop-only" href="{{ url_for('neomotherbrain.alp_import', operation_id=operation.id, mission_type='departure') }}">DEPARTURE PLANNING</a>
-        <a class="action-button" href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">ARRIVAL BOARD</a>
-        <a class="action-button" href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">DEPARTURE BOARD</a>
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.manage_sort', sort=operation.sort_name) }}">BACK TO MANAGE SORT</a>
-    </div>
-
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>FLIGHT</th>
-                    <th>WAVE</th>
-                    <th>TAIL</th>
-                    <th>ORIGIN/DESTINATION</th>
-                    <th>PARKING</th>
-                    <th>ETA/ETD</th>
-                    <th>STATUS</th>
-                    <th>LINKS</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in rows %}
-                {% set mission = row.mission %}
-                <tr>
-                    <td>{{ mission.flight_number|upper }}</td>
-                    <td>{{ mission.wave|wave_label }}</td>
-                    <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
-                    <td>{{ (mission.origin if mission.mission_type == "arrival" else mission.destination)|upper }}</td>
-                    <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>
-                    <td>{{ row.display_time.strftime("%H:%M") if row.display_time else "-" }}</td>
-                    <td>{{ row.status|status_label }}</td>
-                    <td class="table-actions">
-                        <a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=mission.id) }}">VIEW</a>
-                        <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT</a>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="8">NO MISSIONS FOUND.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
     </div>
 </section>
 {% endblock %}

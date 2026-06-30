@@ -3,37 +3,48 @@
 {% block title %}Gateway Matrix | NeoApps{% endblock %}
 
 {% block content %}
-<section class="panel centered-command-page">
-    <div class="section-heading gateway-matrix-heading-block">
-        <h1 class="mobile-shell-duplicate-title">GATEWAY MATRIX</h1>
-        <p class="muted">SET ACTIVE SORTS FOR {{ gateway.code }}</p>
+<section class="panel centered-command-page manage-sort-sidebar-page">
+    {% if selected_operation %}
+    {% set manage_sort_sidebar_operation = selected_operation %}
+    {% set manage_sort_sidebar_active = "gateway-matrix" %}
+    <div class="manage-sort-shell">
+        {% include "neomotherbrain/_manage_sort_sidebar.html" %}
+        <div class="manage-sort-main">
+    {% endif %}
+            <div class="section-heading gateway-matrix-heading-block">
+                <h1 class="mobile-shell-duplicate-title">GATEWAY MATRIX</h1>
+                <p class="muted">SET ACTIVE SORTS FOR {{ gateway.code }}</p>
+            </div>
+
+            <form method="post" class="gateway-matrix-form">
+                <div class="gateway-matrix-grid" role="table" aria-label="{{ gateway.code }} Gateway Matrix">
+                    <div class="gateway-matrix-heading" role="row">
+                        <span>DAY</span>
+                        {% for sort_name, sort_label in sort_options %}
+                        <span>{{ sort_label }} Sort</span>
+                        {% endfor %}
+                    </div>
+
+                    {% for day, day_label in day_options %}
+                    <div class="gateway-matrix-row" role="row">
+                        <strong>{{ day_label }}</strong>
+                        {% for sort_name, sort_label in sort_options %}
+                        <label class="matrix-toggle">
+                            <input type="checkbox" name="{{ day }}_{{ sort_name }}" value="1" {% if matrix[day][sort_name] %}checked{% endif %}>
+                            <span>{{ sort_label }} Sort</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="action-row">
+                    <button class="action-button" type="submit">SAVE GATEWAY MATRIX</button>
+                </div>
+            </form>
+    {% if selected_operation %}
+        </div>
     </div>
-
-    <form method="post" class="gateway-matrix-form">
-        <div class="gateway-matrix-grid" role="table" aria-label="{{ gateway.code }} Gateway Matrix">
-            <div class="gateway-matrix-heading" role="row">
-                <span>DAY</span>
-                {% for sort_name, sort_label in sort_options %}
-                <span>{{ sort_label }} Sort</span>
-                {% endfor %}
-            </div>
-
-            {% for day, day_label in day_options %}
-            <div class="gateway-matrix-row" role="row">
-                <strong>{{ day_label }}</strong>
-                {% for sort_name, sort_label in sort_options %}
-                <label class="matrix-toggle">
-                    <input type="checkbox" name="{{ day }}_{{ sort_name }}" value="1" {% if matrix[day][sort_name] %}checked{% endif %}>
-                    <span>{{ sort_label }} Sort</span>
-                </label>
-                {% endfor %}
-            </div>
-            {% endfor %}
-        </div>
-
-        <div class="action-row">
-            <button class="action-button" type="submit">SAVE GATEWAY MATRIX</button>
-        </div>
-    </form>
+    {% endif %}
 </section>
 {% endblock %}

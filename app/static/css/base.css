@@ -9817,6 +9817,100 @@ select::-ms-expand {
     max-width: min(1380px, calc(100vw - 32px));
 }
 
+.manage-sort-sidebar-page {
+    max-width: min(1500px, calc(100vw - 32px));
+}
+
+.manage-sort-shell {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+    margin-top: 16px;
+    text-align: left;
+}
+
+.manage-sort-main {
+    min-width: 0;
+}
+
+.manage-sort-main > .section-heading:first-child {
+    margin-top: 0;
+}
+
+.manage-sort-sidebar {
+    position: sticky;
+    top: 92px;
+    z-index: 2;
+    border: 1px solid rgba(var(--node-rgb), 0.34);
+    border-radius: 8px;
+    padding: 12px;
+    background:
+        linear-gradient(180deg, rgba(var(--node-rgb), 0.13), transparent 36%),
+        rgba(4, 6, 10, 0.78);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 24px rgba(var(--node-rgb), 0.12);
+}
+
+.manage-sort-sidebar-heading {
+    border-bottom: 1px solid rgba(235, 241, 246, 0.11);
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+}
+
+.manage-sort-sidebar-heading strong,
+.manage-sort-sidebar-heading small {
+    display: block;
+}
+
+.manage-sort-sidebar-heading strong {
+    color: var(--text);
+    font-size: 0.9rem;
+    letter-spacing: 0.06em;
+}
+
+.manage-sort-sidebar-heading small {
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    margin-top: 3px;
+    text-transform: uppercase;
+}
+
+.manage-sort-sidebar-menu {
+    display: grid;
+    gap: 6px;
+}
+
+.manage-sort-sidebar-link {
+    border: 1px solid rgba(var(--node-rgb), 0.22);
+    border-radius: 6px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--text);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    line-height: 1.15;
+    text-decoration: none;
+    text-transform: uppercase;
+    transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.manage-sort-sidebar-link:hover,
+.manage-sort-sidebar-link:focus-visible,
+.manage-sort-sidebar-link.is-active {
+    border-color: rgba(var(--node-rgb), 0.58);
+    background: rgba(var(--node-rgb), 0.14);
+    box-shadow: 0 0 16px rgba(var(--node-rgb), 0.16);
+}
+
+.manage-sort-sidebar-link:active {
+    transform: translateY(1px);
+}
+
 .manage-sort-section,
 .manage-sort-selected-card,
 .manage-sort-card {
@@ -9934,6 +10028,17 @@ select::-ms-expand {
     margin: 0;
     color: var(--text);
     font-weight: 900;
+}
+
+@media (max-width: 900px) {
+    .manage-sort-shell {
+        display: block;
+        margin-top: 10px;
+    }
+
+    .manage-sort-sidebar {
+        display: none;
+    }
 }
 
 .planning-review-section {

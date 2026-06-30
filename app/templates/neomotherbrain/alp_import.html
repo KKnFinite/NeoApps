@@ -15,7 +15,6 @@
         {% if parking.is_cancelled %}
         <span class="planning-parking-badge is-cancelled">MISSION CANCELLED</span>
         {% endif %}
-        <a class="table-row-button planning-parking-link" href="{{ url_for('neomotherbrain.parking_plan_operation', operation_id=operation.id) }}">VIEW PARKING</a>
     </div>
     {% else %}
     <span class="muted">-</span>
@@ -23,7 +22,7 @@
 {%- endmacro %}
 
 {% block content %}
-<section class="panel centered-command-page">
+<section class="panel centered-command-page manage-sort-sidebar-page">
     {% if can_edit and mission_type == "departure" %}
     <datalist id="tail-swap-options">
         {% for tail in tail_swap_options %}
@@ -32,71 +31,73 @@
     </datalist>
     {% endif %}
 
-    <div class="section-heading">
-        <h1>{{ planning_title|upper }}</h1>
-        <p>{{ operation.gateway_code }} {{ operation.sort_name|title }} {{ operation.sort_date }}</p>
-    </div>
-
-    <div class="action-row">
-        {% if can_edit %}
-        <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id, mission_type=mission_type) }}">{{ "ADD ARRIVAL" if mission_type == "arrival" else "ADD DEPARTURE" }}</a>
-        {% endif %}
-        <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">OPERATION OVERVIEW</a>
-        <a class="action-button" href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">ARRIVAL BOARD</a>
-        <a class="action-button" href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">DEPARTURE BOARD</a>
-    </div>
-
-    <div class="alp-mobile-only alp-desktop-only-message" role="status">
-        <strong>ALP paste entry is desktop-only.</strong>
-        <span>Planning review rows remain visible below.</span>
-    </div>
-
-    <div class="alp-desktop-only">
-        <form class="operation-form" method="post">
-            <label>
-                <span>PASTE ALP {{ label|upper }} ROWS</span>
-                <textarea name="paste_text" rows="10" spellcheck="false" placeholder="Date&#9;Flight&#9;Airport&#9;Tail&#9;Parking&#9;Status&#9;Time">{{ paste_text }}</textarea>
-            </label>
-            <p class="muted">
-                Columns: Date, Flight, Airport, Tail, Parking, Status, Time. Parking and Status are ignored. ALP times are treated as Zulu and previewed in RFD local time.
-            </p>
-            <div class="action-row">
-                <button class="action-button" type="submit" name="alp_action" value="preview">PREVIEW</button>
-                {% if preview %}
-                <button class="action-button" type="submit" name="alp_action" value="apply">APPLY PREVIEW</button>
-                {% endif %}
+    {% set manage_sort_sidebar_operation = operation %}
+    {% set manage_sort_sidebar_active = "arrival-planning" if mission_type == "arrival" else "departure-planning" %}
+    <div class="manage-sort-shell">
+        {% include "neomotherbrain/_manage_sort_sidebar.html" %}
+        <div class="manage-sort-main">
+            <div class="section-heading">
+                <h1>{{ planning_title|upper }}</h1>
+                <p>{{ operation.gateway_code }} {{ operation.sort_name|title }} {{ operation.sort_date }}</p>
             </div>
-        </form>
 
-        {% if preview %}
-        <div class="metric-grid">
-            <article class="metric-tile">
-                <span>MATCHED</span>
-                <strong>{{ preview.summary.matched }}</strong>
-            </article>
-            <article class="metric-tile">
-                <span>UNMATCHED ALP</span>
-                <strong>{{ preview.summary.unmatched }}</strong>
-            </article>
-            <article class="metric-tile">
-                <span>MISSING CURRENT</span>
-                <strong>{{ preview.summary.missing }}</strong>
-            </article>
-            <article class="metric-tile">
-                <span>DUPLICATES</span>
-                <strong>{{ preview.summary.duplicates }}</strong>
-            </article>
-            <article class="metric-tile">
-                <span>INVALID</span>
-                <strong>{{ preview.summary.invalid }}</strong>
-            </article>
-            {% if preview.applied_count is defined %}
-            <article class="metric-tile">
-                <span>APPLIED</span>
-                <strong>{{ preview.applied_count }}</strong>
-            </article>
+            {% if can_edit %}
+            <div class="action-row planning-local-actions">
+                <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id, mission_type=mission_type) }}">{{ "ADD ARRIVAL" if mission_type == "arrival" else "ADD DEPARTURE" }}</a>
+            </div>
             {% endif %}
-        </div>
+
+            <div class="alp-mobile-only alp-desktop-only-message" role="status">
+                <strong>ALP paste entry is desktop-only.</strong>
+                <span>Planning review rows remain visible below.</span>
+            </div>
+
+            <div class="alp-desktop-only">
+                <form class="operation-form" method="post">
+                    <label>
+                        <span>PASTE ALP {{ label|upper }} ROWS</span>
+                        <textarea name="paste_text" rows="10" spellcheck="false" placeholder="Date&#9;Flight&#9;Airport&#9;Tail&#9;Parking&#9;Status&#9;Time">{{ paste_text }}</textarea>
+                    </label>
+                    <p class="muted">
+                        Columns: Date, Flight, Airport, Tail, Parking, Status, Time. Parking and Status are ignored. ALP times are treated as Zulu and previewed in RFD local time.
+                    </p>
+                    <div class="action-row">
+                        <button class="action-button" type="submit" name="alp_action" value="preview">PREVIEW</button>
+                        {% if preview %}
+                        <button class="action-button" type="submit" name="alp_action" value="apply">APPLY PREVIEW</button>
+                        {% endif %}
+                    </div>
+                </form>
+
+                {% if preview %}
+                <div class="metric-grid">
+                    <article class="metric-tile">
+                        <span>MATCHED</span>
+                        <strong>{{ preview.summary.matched }}</strong>
+                    </article>
+                    <article class="metric-tile">
+                        <span>UNMATCHED ALP</span>
+                        <strong>{{ preview.summary.unmatched }}</strong>
+                    </article>
+                    <article class="metric-tile">
+                        <span>MISSING CURRENT</span>
+                        <strong>{{ preview.summary.missing }}</strong>
+                    </article>
+                    <article class="metric-tile">
+                        <span>DUPLICATES</span>
+                        <strong>{{ preview.summary.duplicates }}</strong>
+                    </article>
+                    <article class="metric-tile">
+                        <span>INVALID</span>
+                        <strong>{{ preview.summary.invalid }}</strong>
+                    </article>
+                    {% if preview.applied_count is defined %}
+                    <article class="metric-tile">
+                        <span>APPLIED</span>
+                        <strong>{{ preview.applied_count }}</strong>
+                    </article>
+                    {% endif %}
+                </div>
 
         <h2>MATCHED ROWS</h2>
         <div class="table-wrap">
@@ -425,5 +426,7 @@
             </table>
         </div>
     </section>
+        </div>
+    </div>
 </section>
 {% endblock %}

@@ -149,6 +149,11 @@
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.manage_sort') }}">MANAGE SORT</a>
     </section>
     {% else %}
+    {% set manage_sort_sidebar_operation = operation %}
+    {% set manage_sort_sidebar_active = "parking-plan" %}
+    <div class="manage-sort-shell">
+        {% include "neomotherbrain/_manage_sort_sidebar.html" %}
+        <div class="manage-sort-main">
     <section class="parking-summary-grid" aria-label="Parking plan summary">
         <article><span>TOTAL TAILS</span><strong>{{ summary.total_tails }}</strong></article>
         <article><span>ASSIGNED</span><strong>{{ summary.assigned_tails }}</strong></article>
@@ -653,6 +658,8 @@
             {% endfor %}
         </section>
     </section>
+        </div>
+    </div>
     {% endif %}
 </section>
 

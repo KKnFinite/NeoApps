@@ -176,14 +176,25 @@
 
 {% block content %}
 <section class="panel master-schedule-panel centered-command-page">
-    <div class="section-heading">
-        <h1 class="mobile-shell-duplicate-title">MASTER FLIGHT SCHEDULE</h1>
-    </div>
+    {% if selected_operation %}
+    {% set manage_sort_sidebar_operation = selected_operation %}
+    {% set manage_sort_sidebar_active = "master-schedule" %}
+    <div class="manage-sort-shell">
+        {% include "neomotherbrain/_manage_sort_sidebar.html" %}
+        <div class="manage-sort-main">
+    {% endif %}
+            <div class="section-heading">
+                <h1 class="mobile-shell-duplicate-title">MASTER FLIGHT SCHEDULE</h1>
+            </div>
 
-    <div class="master-schedule-sections">
-        {{ board("MASTER ARRIVALS", arrival_schedules, "arrival") }}
-        {{ board("MASTER DEPARTURES", departure_schedules, "departure") }}
+            <div class="master-schedule-sections">
+                {{ board("MASTER ARRIVALS", arrival_schedules, "arrival") }}
+                {{ board("MASTER DEPARTURES", departure_schedules, "departure") }}
+            </div>
+    {% if selected_operation %}
+        </div>
     </div>
+    {% endif %}
 </section>
 
 {{ military_time_script()|safe }}
