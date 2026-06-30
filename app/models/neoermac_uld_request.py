@@ -8,9 +8,10 @@ class NeoErmacUldRequest(db.Model):
     __table_args__ = (
         db.UniqueConstraint(
             "gateway_id",
+            "sort_date_operation_id",
             "door",
             "setup_needed",
-            name="uq_neoermac_uld_requests_gateway_door_setup",
+            name="uq_neoermac_uld_requests_gateway_operation_door_setup",
         ),
         db.CheckConstraint("a2_count >= 0", name="ck_neoermac_uld_requests_a2_nonnegative"),
         db.CheckConstraint("a1_count >= 0", name="ck_neoermac_uld_requests_a1_nonnegative"),
@@ -19,6 +20,12 @@ class NeoErmacUldRequest(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     gateway_id = db.Column(db.Integer, db.ForeignKey("gateways.id"), nullable=False, index=True)
+    sort_date_operation_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sort_date_operations.id"),
+        nullable=True,
+        index=True,
+    )
     door = db.Column(db.String(8), nullable=False, index=True)
     a2_count = db.Column(db.Integer, nullable=False, default=0)
     a1_count = db.Column(db.Integer, nullable=False, default=0)
@@ -33,3 +40,4 @@ class NeoErmacUldRequest(db.Model):
     )
 
     gateway = db.relationship("Gateway")
+    sort_date_operation = db.relationship("SortDateOperation")

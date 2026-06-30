@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from app.extensions import db
 from app.models import NeoErmacUldRequest, NeoSektorUldOnTheWayEvent
-from app.services.gateway_matrix import gateway_timezone
+from app.services.gateway_matrix import current_operations_for_gateway, gateway_timezone
 from app.services.time_display import format_local_hhmm
 
 
@@ -16,15 +16,18 @@ ULD_REQUEST_FIELDS = {
 ON_THE_WAY_MINUTES = 5
 
 
-def get_uld_request(gateway, door, setup_needed=None):
+def current_uld_operation(gateway):
+    operations = current_operations_for_gateway(gateway)
+    return operations[0] if operations else None
+
+
+def get_uld_request(gateway, door, setup_needed=None, operation=None):
     normalized_door = normalize_door(door)
     if not normalized_door:
         return None
 
-    query = NeoErmacUldRequest.query.filter_by(
-        gateway_id=gateway.id,
-        door=normalized_door,
-    )
+    operation = _resolve_operation(gateway, operation)
+    query = _request_query(gateway, operation).filter_by(door=normalized_door)
     if setup_needed is not None:
         query = query.filter_by(setup_needed=bool(setup_needed))
 
@@ -35,17 +38,16 @@ def get_uld_request(gateway, door, setup_needed=None):
     ).first()
 
 
-def active_uld_requests_for_door(gateway, door):
+def active_uld_requests_for_door(gateway, door, operation=None):
     normalized_door = normalize_door(door)
     if not normalized_door:
         return []
 
+    operation = _resolve_operation(gateway, operation)
     return [
         request_record
-        for request_record in NeoErmacUldRequest.query.filter_by(
-            gateway_id=gateway.id,
-            door=normalized_door,
-        )
+        for request_record in _request_query(gateway, operation)
+        .filter_by(door=normalized_door)
         .order_by(
             NeoErmacUldRequest.setup_needed.desc(),
             NeoErmacUldRequest.updated_at.asc(),
@@ -56,8 +58,8 @@ def active_uld_requests_for_door(gateway, door):
     ]
 
 
-def aggregate_uld_request_for_door(gateway, door):
-    request_records = active_uld_requests_for_door(gateway, door)
+def aggregate_uld_request_for_door(gateway, door, operation=None):
+    request_records = active_uld_requests_for_door(gateway, door, operation)
     if not request_records:
         return None
 
@@ -71,7 +73,7 @@ def aggregate_uld_request_for_door(gateway, door):
     )
 
 
-def update_uld_request(gateway, door, counts, setup_needed=False, now=None):
+def update_uld_request(gateway, door, counts, setup_needed=False, now=None, operation=None):
     now = now or datetime.utcnow()
     normalized_door = normalize_door(door)
     if not normalized_door:
@@ -81,10 +83,17 @@ def update_uld_request(gateway, door, counts, setup_needed=False, now=None):
     if not any(normalized_counts.values()):
         raise ValueError("Request at least one ULD.")
 
-    request_record = get_uld_request(gateway, normalized_door, setup_needed=setup_needed)
+    operation = _resolve_operation(gateway, operation)
+    request_record = get_uld_request(
+        gateway,
+        normalized_door,
+        setup_needed=setup_needed,
+        operation=operation,
+    )
     if request_record is None:
         request_record = NeoErmacUldRequest(
             gateway_id=gateway.id,
+            sort_date_operation_id=operation.id if operation else None,
             door=normalized_door,
             setup_needed=bool(setup_needed),
             created_at=now,
@@ -102,15 +111,13 @@ def update_uld_request(gateway, door, counts, setup_needed=False, now=None):
     return request_record
 
 
-def clear_uld_requests_for_door(gateway, door, setup_needed=None):
+def clear_uld_requests_for_door(gateway, door, setup_needed=None, operation=None):
     normalized_door = normalize_door(door)
     if not normalized_door:
         raise ValueError("Select a door.")
 
-    query = NeoErmacUldRequest.query.filter_by(
-        gateway_id=gateway.id,
-        door=normalized_door,
-    )
+    operation = _resolve_operation(gateway, operation)
+    query = _request_query(gateway, operation).filter_by(door=normalized_door)
     if setup_needed is not None:
         query = query.filter_by(setup_needed=bool(setup_needed))
 
@@ -121,8 +128,9 @@ def clear_uld_requests_for_door(gateway, door, setup_needed=None):
     return None
 
 
-def delete_uld_request(gateway, door, request_id):
-    request_record = get_uld_request_by_id(gateway, request_id, door)
+def delete_uld_request(gateway, door, request_id, operation=None):
+    operation = _resolve_operation(gateway, operation)
+    request_record = get_uld_request_by_id(gateway, request_id, door, operation=operation)
     if request_record is None:
         raise ValueError("ULD request was not found for this door.")
 
@@ -131,9 +139,10 @@ def delete_uld_request(gateway, door, request_id):
     return None
 
 
-def edit_uld_request(gateway, door, request_id, counts, now=None):
+def edit_uld_request(gateway, door, request_id, counts, now=None, operation=None):
     now = now or datetime.utcnow()
-    request_record = get_uld_request_by_id(gateway, request_id, door)
+    operation = _resolve_operation(gateway, operation)
+    request_record = get_uld_request_by_id(gateway, request_id, door, operation=operation)
     if request_record is None:
         raise ValueError("ULD request was not found for this door.")
 
@@ -149,13 +158,14 @@ def edit_uld_request(gateway, door, request_id, counts, now=None):
     return request_record
 
 
-def update_uld_request_from_form(gateway, door, form_data):
+def update_uld_request_from_form(gateway, door, form_data, operation=None):
     should_clear = form_data.get("clear_uld_request") == "1"
     if should_clear:
         return clear_uld_requests_for_door(
             gateway,
             door,
             setup_needed=form_data.get("setup_needed") == "on",
+            operation=operation,
         )
 
     counts = {
@@ -168,35 +178,49 @@ def update_uld_request_from_form(gateway, door, form_data):
         door,
         counts,
         setup_needed=form_data.get("setup_needed") == "on",
+        operation=operation,
     )
 
 
-def discharge_context(gateway, now=None):
+def discharge_context(gateway, now=None, operation=None):
+    operation = _resolve_operation(gateway, operation)
     return {
-        "requests": active_discharge_request_views(gateway, now),
+        "operation": operation,
+        "requests": active_discharge_request_views(gateway, now, operation=operation),
         "uld_types": ULD_TYPES,
     }
 
 
-def discharge_state_payload(gateway, now=None):
+def discharge_state_payload(gateway, now=None, operation=None):
+    operation = _resolve_operation(gateway, operation)
     return {
-        "requests": [_request_payload(row) for row in active_discharge_request_views(gateway, now)],
+        "operation_id": operation.id if operation else None,
+        "requests": [
+            _request_payload(row)
+            for row in active_discharge_request_views(gateway, now, operation=operation)
+        ],
         "uld_types": list(ULD_TYPES),
     }
 
 
-def active_discharge_request_views(gateway, now=None):
-    return [row for row in active_request_views(gateway, now) if row.get("id")]
+def active_discharge_request_views(gateway, now=None, operation=None):
+    return [
+        row
+        for row in active_request_views(gateway, now, operation=operation)
+        if row.get("id")
+    ]
 
 
-def door_uld_state_payload(gateway, door, now=None):
+def door_uld_state_payload(gateway, door, now=None, operation=None):
     normalized_door = normalize_door(door)
     if not normalized_door:
         raise ValueError("Select a door.")
 
-    request_records = active_uld_requests_for_door(gateway, normalized_door)
+    operation = _resolve_operation(gateway, operation)
+    request_records = active_uld_requests_for_door(gateway, normalized_door, operation)
     return {
         "door": normalized_door,
+        "operation_id": operation.id if operation else None,
         "request": _aggregate_request_counts_payload(request_records),
         "requests": [
             _single_request_counts_payload(gateway, request_record)
@@ -204,20 +228,26 @@ def door_uld_state_payload(gateway, door, now=None):
         ],
         "on_the_way_events": [
             _event_payload(event)
-            for event in active_on_the_way_event_views(gateway, normalized_door, now)
+            for event in active_on_the_way_event_views(
+                gateway,
+                normalized_door,
+                now,
+                operation=operation,
+            )
         ],
     }
 
 
-def active_request_views(gateway, now=None):
+def active_request_views(gateway, now=None, operation=None):
     now = now or datetime.utcnow()
+    operation = _resolve_operation(gateway, operation)
     active_events_by_door = {}
-    for event in active_on_the_way_events(gateway, now=now):
+    for event in active_on_the_way_events(gateway, now=now, operation=operation):
         active_events_by_door.setdefault(event.door, []).append(event)
 
     requests = []
     request_doors = set()
-    for request_record in NeoErmacUldRequest.query.filter_by(gateway_id=gateway.id).all():
+    for request_record in _request_query(gateway, operation).all():
         if not request_has_counts(request_record):
             continue
 
@@ -239,7 +269,7 @@ def active_request_views(gateway, now=None):
     )
 
 
-def send_uld_on_the_way(gateway, door, uld_type, quantity, request_id=None, now=None):
+def send_uld_on_the_way(gateway, door, uld_type, quantity, request_id=None, now=None, operation=None):
     normalized_type = normalize_uld_type(uld_type)
     if not normalized_type:
         raise ValueError("Select a valid ULD type.")
@@ -250,11 +280,12 @@ def send_uld_on_the_way(gateway, door, uld_type, quantity, request_id=None, now=
         {normalized_type: quantity},
         request_id=request_id,
         now=now,
+        operation=operation,
     )
     return events[0]
 
 
-def send_uld_totals_on_the_way(gateway, door, counts, request_id=None, now=None):
+def send_uld_totals_on_the_way(gateway, door, counts, request_id=None, now=None, operation=None):
     now = now or datetime.utcnow()
     normalized_door = normalize_door(door)
     if not normalized_door:
@@ -264,9 +295,16 @@ def send_uld_totals_on_the_way(gateway, door, counts, request_id=None, now=None)
     if not any(normalized_counts.values()):
         raise ValueError("Send at least one ULD.")
 
-    request_record = get_uld_request_by_id(gateway, request_id, normalized_door)
-    if request_record is None:
-        request_record = get_uld_request(gateway, normalized_door)
+    operation = _resolve_operation(gateway, operation)
+    if request_id:
+        request_record = get_uld_request_by_id(
+            gateway,
+            request_id,
+            normalized_door,
+            operation=operation,
+        )
+    else:
+        request_record = get_uld_request(gateway, normalized_door, operation=operation)
     if request_record is None:
         raise ValueError("No active ULD request for this door.")
 
@@ -281,6 +319,7 @@ def send_uld_totals_on_the_way(gateway, door, counts, request_id=None, now=None)
 
         event = NeoSektorUldOnTheWayEvent(
             gateway_id=gateway.id,
+            sort_date_operation_id=request_record.sort_date_operation_id,
             door=normalized_door,
             uld_type=normalized_type,
             quantity=requested_quantity,
@@ -296,7 +335,7 @@ def send_uld_totals_on_the_way(gateway, door, counts, request_id=None, now=None)
     return events
 
 
-def get_uld_request_by_id(gateway, request_id, door=None):
+def get_uld_request_by_id(gateway, request_id, door=None, operation=None):
     try:
         request_id = int(request_id)
     except (TypeError, ValueError):
@@ -304,9 +343,9 @@ def get_uld_request_by_id(gateway, request_id, door=None):
     if request_id <= 0:
         return None
 
-    query = NeoErmacUldRequest.query.filter_by(
+    operation = _resolve_operation(gateway, operation)
+    query = _request_query(gateway, operation).filter_by(
         id=request_id,
-        gateway_id=gateway.id,
     )
     normalized_door = normalize_door(door)
     if normalized_door:
@@ -314,12 +353,17 @@ def get_uld_request_by_id(gateway, request_id, door=None):
     return query.first()
 
 
-def active_on_the_way_events(gateway, door=None, now=None):
+def active_on_the_way_events(gateway, door=None, now=None, operation=None):
     now = now or datetime.utcnow()
+    operation = _resolve_operation(gateway, operation)
     query = NeoSektorUldOnTheWayEvent.query.filter(
         NeoSektorUldOnTheWayEvent.gateway_id == gateway.id,
         NeoSektorUldOnTheWayEvent.expires_at_utc > now,
     )
+    if operation:
+        query = query.filter(NeoSektorUldOnTheWayEvent.sort_date_operation_id == operation.id)
+    else:
+        query = query.filter(NeoSektorUldOnTheWayEvent.sort_date_operation_id.is_(None))
     normalized_door = normalize_door(door)
     if normalized_door:
         query = query.filter(NeoSektorUldOnTheWayEvent.door == normalized_door)
@@ -330,10 +374,10 @@ def active_on_the_way_events(gateway, door=None, now=None):
     ).all()
 
 
-def active_on_the_way_event_views(gateway, door=None, now=None):
+def active_on_the_way_event_views(gateway, door=None, now=None, operation=None):
     return [
         _event_view(gateway, event)
-        for event in active_on_the_way_events(gateway, door, now)
+        for event in active_on_the_way_events(gateway, door, now, operation=operation)
     ]
 
 
@@ -370,6 +414,19 @@ def normalize_door(value):
     return f"D{int(number)}"
 
 
+def _resolve_operation(gateway, operation):
+    if operation is not None:
+        return operation
+    return current_uld_operation(gateway)
+
+
+def _request_query(gateway, operation):
+    query = NeoErmacUldRequest.query.filter_by(gateway_id=gateway.id)
+    if operation:
+        return query.filter_by(sort_date_operation_id=operation.id)
+    return query.filter(NeoErmacUldRequest.sort_date_operation_id.is_(None))
+
+
 def request_has_counts(request_record):
     return any((getattr(request_record, field_name) or 0) > 0 for field_name in ULD_REQUEST_FIELDS.values())
 
@@ -379,6 +436,7 @@ def _request_view(gateway, request_record, active_events_by_door, now):
     timezone_name = gateway_timezone(gateway)
     return {
         "id": request_record.id,
+        "sort_date_operation_id": request_record.sort_date_operation_id,
         "door": request_record.door,
         "counts": {
             uld_type: max(getattr(request_record, field_name) or 0, 0)
@@ -397,6 +455,7 @@ def _event_only_request_view(gateway, door, events):
     timezone_name = gateway_timezone(gateway)
     return {
         "id": None,
+        "sort_date_operation_id": getattr(first_event, "sort_date_operation_id", None),
         "door": door,
         "counts": {uld_type: 0 for uld_type in ULD_TYPES},
         "setup_needed": False,
@@ -413,6 +472,7 @@ def _event_only_request_view(gateway, door, events):
 def _request_payload(row):
     return {
         "id": row["id"],
+        "sort_date_operation_id": row.get("sort_date_operation_id"),
         "door": row["door"],
         "counts": row["counts"],
         "setup_needed": row["setup_needed"],
@@ -427,6 +487,7 @@ def _single_request_counts_payload(gateway, request_record):
     timezone_name = gateway_timezone(gateway)
     return {
         "id": request_record.id,
+        "sort_date_operation_id": request_record.sort_date_operation_id,
         "counts": {
             uld_type: max(getattr(request_record, field_name, 0) or 0, 0)
             for uld_type, field_name in ULD_REQUEST_FIELDS.items()
@@ -457,6 +518,7 @@ def _event_view(gateway, event):
     sent_label = format_local_hhmm(event.sent_at_utc, timezone_name)
     return {
         "id": event.id,
+        "sort_date_operation_id": event.sort_date_operation_id,
         "door": event.door,
         "uld_type": event.uld_type,
         "quantity": max(event.quantity or 0, 0),
@@ -472,6 +534,7 @@ def _event_view(gateway, event):
 def _event_payload(event):
     return {
         "id": event["id"],
+        "sort_date_operation_id": event.get("sort_date_operation_id"),
         "door": event["door"],
         "uld_type": event["uld_type"],
         "quantity": event["quantity"],

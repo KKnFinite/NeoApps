@@ -1488,6 +1488,68 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"14:05", response.data)
         self.assertIn(b"14:02", response.data)
 
+    def test_door_view_uld_requests_are_scoped_to_current_sort_operation(self):
+        old_operation = SortDateOperation(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_date=date(2026, 6, 29),
+            sort_name="night",
+        )
+        current_operation = SortDateOperation(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_date=date(2026, 6, 30),
+            sort_name="night",
+        )
+        db.session.add_all([old_operation, current_operation])
+        db.session.flush()
+        db.session.add(
+            NeoErmacUldRequest(
+                gateway_id=self.gateway.id,
+                sort_date_operation_id=old_operation.id,
+                door="D34",
+                a2_count=9,
+                setup_needed=False,
+            )
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+        self._grant_node_role("neoermac_operator_user", "sektor", "operator")
+
+        initial_response = self.client.get("/neoermac/door-view?door=D34")
+        create_response = self.client.post(
+            "/neoermac/door-view?door=D34",
+            data={
+                "door": "D34",
+                "action": "save_uld_request",
+                "uld_a2_count": "2",
+                "uld_a1_count": "0",
+                "uld_amp_count": "0",
+            },
+            follow_redirects=False,
+        )
+        door_state = self.client.get("/neoermac/door-view/state?door=D34").get_json()["state"]
+        discharge_state = self.client.get("/neosektor/discharge/state").get_json()["state"]
+
+        requests = NeoErmacUldRequest.query.filter_by(door="D34").order_by(
+            NeoErmacUldRequest.sort_date_operation_id.asc(),
+            NeoErmacUldRequest.id.asc(),
+        ).all()
+
+        self.assertEqual(initial_response.status_code, 200)
+        self.assertNotIn(b"A2 <strong>9</strong>", initial_response.data)
+        self.assertIn(b"No active ULD requests for D34.", initial_response.data)
+        self.assertEqual(create_response.status_code, 302)
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(requests[0].sort_date_operation_id, old_operation.id)
+        self.assertEqual(requests[1].sort_date_operation_id, current_operation.id)
+        self.assertEqual(requests[1].a2_count, 2)
+        self.assertEqual(door_state["operation_id"], current_operation.id)
+        self.assertEqual(len(door_state["requests"]), 1)
+        self.assertEqual(door_state["requests"][0]["sort_date_operation_id"], current_operation.id)
+        self.assertEqual(door_state["requests"][0]["counts"]["A2"], 2)
+        self.assertEqual([row["id"] for row in discharge_state["requests"]], [requests[1].id])
+
     def test_door_view_discharge_end_to_end_request_send_and_expiry_flow(self):
         self._login_approved_user(role="operator")
         self._grant_node_role("neoermac_operator_user", "sektor", "operator")

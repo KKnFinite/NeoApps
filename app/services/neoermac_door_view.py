@@ -82,8 +82,8 @@ def door_view_context(gateway, selected_door=None):
     uld_requests = []
     if selected_door:
         destinations = _destination_cards_for_door(gateway, selected_door, operation)
-        uld_request = _uld_request_for_door(gateway, selected_door)
-        uld_requests = active_uld_requests_for_door(gateway, selected_door)
+        uld_request = _uld_request_for_door(gateway, selected_door, operation)
+        uld_requests = active_uld_requests_for_door(gateway, selected_door, operation)
 
     return {
         "door_options": door_options,
@@ -97,7 +97,9 @@ def door_view_context(gateway, selected_door=None):
         "refresh_status": neoermac_refresh_status(gateway),
         "tugs": [],
         "on_the_way_events": (
-            active_on_the_way_event_views(gateway, selected_door) if selected_door else []
+            active_on_the_way_event_views(gateway, selected_door, operation=operation)
+            if selected_door
+            else []
         ),
     }
 
@@ -178,7 +180,12 @@ def save_uld_request(gateway, selected_door, form_data):
     if selected_door not in get_door_options(gateway):
         raise ValueError(f"{selected_door} is not available.")
 
-    return update_uld_request_from_form(gateway, selected_door, form_data)
+    return update_uld_request_from_form(
+        gateway,
+        selected_door,
+        form_data,
+        operation=_current_operation(gateway),
+    )
 
 
 def edit_door_uld_request(gateway, selected_door, form_data):
@@ -198,6 +205,7 @@ def edit_door_uld_request(gateway, selected_door, form_data):
         selected_door,
         form_data.get("request_id"),
         counts,
+        operation=_current_operation(gateway),
     )
 
 
@@ -208,7 +216,12 @@ def delete_door_uld_request(gateway, selected_door, form_data):
     if selected_door not in get_door_options(gateway):
         raise ValueError(f"{selected_door} is not available.")
 
-    return delete_uld_request(gateway, selected_door, form_data.get("request_id"))
+    return delete_uld_request(
+        gateway,
+        selected_door,
+        form_data.get("request_id"),
+        operation=_current_operation(gateway),
+    )
 
 
 def door_view_uld_state(gateway, selected_door):
@@ -220,7 +233,7 @@ def door_view_uld_state(gateway, selected_door):
 
     operation = _current_operation(gateway)
     destinations = _destination_cards_for_door(gateway, selected_door, operation)
-    state = door_uld_state_payload(gateway, selected_door)
+    state = door_uld_state_payload(gateway, selected_door, operation=operation)
     state["refresh"] = neoermac_refresh_status(gateway)
     state["destinations"] = [
         {
@@ -482,8 +495,8 @@ def _door_pull_record(gateway, selected_door, destination, operation, create=Fal
     return record
 
 
-def _uld_request_for_door(gateway, selected_door):
-    return aggregate_uld_request_for_door(gateway, selected_door)
+def _uld_request_for_door(gateway, selected_door, operation):
+    return aggregate_uld_request_for_door(gateway, selected_door, operation)
 
 
 def _normalize_tail(value):

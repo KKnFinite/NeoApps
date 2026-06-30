@@ -92,6 +92,12 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "motherbrain_parking_settings": {
         "preferred_max_per_ramp": "INTEGER",
     },
+    "neoermac_uld_requests": {
+        "sort_date_operation_id": "INTEGER",
+    },
+    "neosektor_uld_on_the_way_events": {
+        "sort_date_operation_id": "INTEGER",
+    },
 }
 
 POSTGRES_OPTIONAL_COLUMNS = {
@@ -155,6 +161,12 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "motherbrain_parking_settings": {
         "preferred_max_per_ramp": "INTEGER",
+    },
+    "neoermac_uld_requests": {
+        "sort_date_operation_id": "INTEGER",
+    },
+    "neosektor_uld_on_the_way_events": {
+        "sort_date_operation_id": "INTEGER",
     },
 }
 
@@ -359,7 +371,7 @@ def _sync_uld_request_unique_constraint_sqlite(inspector, table_names):
         tuple(constraint.get("column_names") or ())
         for constraint in inspector.get_unique_constraints(table_name)
     }
-    if ("gateway_id", "door", "setup_needed") in unique_sets:
+    if ("gateway_id", "sort_date_operation_id", "door", "setup_needed") in unique_sets:
         return
 
     from app.models import NeoErmacUldRequest
@@ -383,15 +395,24 @@ def _restore_uld_request_sqlite_table_from_legacy(table_name, legacy_table):
 def _drop_uld_request_sqlite_indexes():
     db.session.execute(text("DROP INDEX IF EXISTS ix_neoermac_uld_requests_door"))
     db.session.execute(text("DROP INDEX IF EXISTS ix_neoermac_uld_requests_gateway_id"))
+    db.session.execute(
+        text("DROP INDEX IF EXISTS ix_neoermac_uld_requests_sort_date_operation_id")
+    )
 
 
 def _copy_uld_request_legacy_rows():
+    _ensure_sqlite_column(
+        "neoermac_uld_requests_legacy",
+        "sort_date_operation_id",
+        "INTEGER",
+    )
     db.session.execute(
         text(
             """
             INSERT OR IGNORE INTO neoermac_uld_requests (
                 id,
                 gateway_id,
+                sort_date_operation_id,
                 door,
                 a2_count,
                 a1_count,
@@ -403,6 +424,7 @@ def _copy_uld_request_legacy_rows():
             SELECT
                 id,
                 gateway_id,
+                sort_date_operation_id,
                 door,
                 a2_count,
                 a1_count,
@@ -413,6 +435,17 @@ def _copy_uld_request_legacy_rows():
             FROM neoermac_uld_requests_legacy
             """
         )
+    )
+
+
+def _ensure_sqlite_column(table_name, column_name, column_type):
+    existing_columns = {
+        row[1] for row in db.session.execute(text(f"PRAGMA table_info({table_name})")).all()
+    }
+    if column_name in existing_columns:
+        return
+    db.session.execute(
+        text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
     )
 
 
@@ -428,17 +461,23 @@ def _sync_uld_request_unique_constraint_postgres(table_names):
     )
     db.session.execute(
         text(
+            "ALTER TABLE neoermac_uld_requests "
+            "DROP CONSTRAINT IF EXISTS uq_neoermac_uld_requests_gateway_door_setup"
+        )
+    )
+    db.session.execute(
+        text(
             """
             DO $$
             BEGIN
                 IF NOT EXISTS (
                     SELECT 1
                     FROM pg_constraint
-                    WHERE conname = 'uq_neoermac_uld_requests_gateway_door_setup'
+                    WHERE conname = 'uq_neoermac_uld_requests_gateway_operation_door_setup'
                 ) THEN
                     ALTER TABLE neoermac_uld_requests
-                    ADD CONSTRAINT uq_neoermac_uld_requests_gateway_door_setup
-                    UNIQUE (gateway_id, door, setup_needed);
+                    ADD CONSTRAINT uq_neoermac_uld_requests_gateway_operation_door_setup
+                    UNIQUE (gateway_id, sort_date_operation_id, door, setup_needed);
                 END IF;
             END
             $$;

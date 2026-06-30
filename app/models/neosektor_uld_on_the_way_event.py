@@ -14,6 +14,12 @@ class NeoSektorUldOnTheWayEvent(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     gateway_id = db.Column(db.Integer, db.ForeignKey("gateways.id"), nullable=False, index=True)
+    sort_date_operation_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sort_date_operations.id"),
+        nullable=True,
+        index=True,
+    )
     door = db.Column(db.String(8), nullable=False, index=True)
     uld_type = db.Column(db.String(8), nullable=False, index=True)
     quantity = db.Column(db.Integer, nullable=False)
@@ -22,3 +28,4 @@ class NeoSektorUldOnTheWayEvent(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     gateway = db.relationship("Gateway")
+    sort_date_operation = db.relationship("SortDateOperation")
