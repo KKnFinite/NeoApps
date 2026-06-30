@@ -531,14 +531,23 @@ def _wave_views(waves, sides, operational_settings, now=None):
     first_left_to_arrive = max(first_row.planned_count or 0, 0)
     second_left_to_arrive = max(second_row.planned_count or 0, 0)
 
+    first_east_wave_count = _side_wave_count(east, "first")
+    first_west_wave_count = _side_wave_count(west, "first")
+    second_east_wave_count = _side_wave_count(east, "second")
+    second_west_wave_count = _side_wave_count(west, "second")
+
     first_remaining = _remaining_wave_load(
         first_left_to_arrive,
-        _side_wave_count(east, "first"),
-        _side_wave_count(west, "first"),
+        first_east_wave_count,
+        first_west_wave_count,
         east_open_bays,
         west_open_bays,
     )
-    first_is_all_up = first_left_to_arrive == 0 and first_remaining == 0
+    first_is_all_up = (
+        first_left_to_arrive == 0
+        and first_remaining == 0
+        and _wave_back_rows_empty(first_east_wave_count, first_west_wave_count)
+    )
     first_timer_done = _sync_wave_all_up_timer(
         first_row,
         first_is_all_up,
@@ -558,13 +567,13 @@ def _wave_views(waves, sides, operational_settings, now=None):
     second_waiting_on_first_wave = first_is_all_up and not first_timer_done
     second_base_remaining = _wave_load_without_open_bays(
         second_left_to_arrive,
-        _side_wave_count(east, "second"),
-        _side_wave_count(west, "second"),
+        second_east_wave_count,
+        second_west_wave_count,
     )
     second_open_bay_remaining = _remaining_wave_load(
         second_left_to_arrive,
-        _side_wave_count(east, "second"),
-        _side_wave_count(west, "second"),
+        second_east_wave_count,
+        second_west_wave_count,
         east_open_bays,
         west_open_bays,
     )
@@ -577,7 +586,11 @@ def _wave_views(waves, sides, operational_settings, now=None):
         if second_can_use_open_bays
         else second_base_remaining
     )
-    second_is_all_up = second_left_to_arrive == 0 and second_remaining == 0
+    second_is_all_up = (
+        second_left_to_arrive == 0
+        and second_remaining == 0
+        and _wave_back_rows_empty(second_east_wave_count, second_west_wave_count)
+    )
     second_timer_done = _sync_wave_all_up_timer(
         second_row,
         second_is_all_up,
@@ -616,6 +629,10 @@ def _remaining_wave_load(left_to_arrive, east_wave, west_wave, east_open_bays, w
 
 def _wave_load_without_open_bays(left_to_arrive, east_wave, west_wave):
     return max(0, left_to_arrive + east_wave + west_wave)
+
+
+def _wave_back_rows_empty(east_wave, west_wave):
+    return max(east_wave or 0, 0) == 0 and max(west_wave or 0, 0) == 0
 
 
 def _sync_wave_all_up_timer(row, is_timer_active, operational_settings=None, now=None):

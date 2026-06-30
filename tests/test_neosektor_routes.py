@@ -1466,6 +1466,65 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual(late_response.get_json()["state"]["waves"][0]["left"], "DOWN")
 
+    def test_first_wave_does_not_all_up_while_ballmat_back_row_has_count(self):
+        self._login_approved_user(role="simulator")
+        self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "east",
+                "waves": {"first": {"count": 0}, "second": {"count": 0}},
+                "open_bays": 0,
+                "bay_statuses": {},
+            },
+        )
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "west",
+                "waves": {"first": {"count": 3}, "second": {"count": 0}},
+                "open_bays": 3,
+                "bay_statuses": {},
+            },
+        )
+
+        first_wave = response.get_json()["state"]["waves"][0]
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(first_wave["left_to_arrive"], "ALL IN")
+        self.assertEqual(first_wave["left"], 45)
+        self.assertNotEqual(first_wave["left"], "ALL UP")
+
+    def test_second_wave_does_not_all_up_while_ballmat_back_row_has_count(self):
+        self._login_approved_user(role="simulator")
+        self.client.get("/neosektor/live-counts/state")
+        first_wave = NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one()
+        first_wave.all_up_started_at = datetime.utcnow() - timedelta(minutes=16)
+        db.session.commit()
+        self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "east",
+                "waves": {"first": {"count": 0}, "second": {"count": 0}},
+                "open_bays": 0,
+                "bay_statuses": {},
+            },
+        )
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "west",
+                "waves": {"first": {"count": 0}, "second": {"count": 3}},
+                "open_bays": 3,
+                "bay_statuses": {},
+            },
+        )
+
+        second_wave = response.get_json()["state"]["waves"][1]
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["state"]["waves"][0]["left"], "DOWN")
+        self.assertEqual(second_wave["left_to_arrive"], "ALL IN")
+        self.assertEqual(second_wave["left"], 37)
+        self.assertNotEqual(second_wave["left"], "ALL UP")
+
     def test_tunnel_conductor_can_update_shared_ballmat_counts(self):
         self._login_approved_user(role="simulator")
 
