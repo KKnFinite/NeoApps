@@ -449,6 +449,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('class="portal-header-logo"', html)
+        self.assertIn("portal-shell-page", html)
         self.assertIn('src="/static/images/neoapps_logo_transparent.png"', html)
         self.assertIn('<span class="portal-header-word">Portal</span>', html)
         self.assertNotIn("portal-dashboard-logo", html)
@@ -471,8 +472,11 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertIn(b"PENDING", response.data)
         self.assertIn(b"NeoBid", response.data)
         self.assertIn(b"REQUEST ACCESS", response.data)
+        self.assertNotIn('class="portal-install-section"', html)
+        self.assertNotIn("data-install-button", html)
+        self.assertNotIn("beforeinstallprompt", html)
 
-    def test_portal_dashboard_shows_install_cards_only_for_accessible_apps_and_nodes(self):
+    def test_portal_dashboard_hides_install_section_and_keeps_app_cards(self):
         user, _membership = self._approved_user("installcards", "installcards@example.com")
         db.session.add(
             PortalAppAccess(
@@ -490,32 +494,31 @@ class AuthAccountFlowsTest(unittest.TestCase):
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn('class="portal-install-section"', html)
-        install_heading = html.split('id="portal-install-title"', 1)[1].split("</h2>", 1)[0]
-        self.assertIn("<span>Install</span>", install_heading)
-        self.assertIn("portal-install-heading-logo", install_heading)
-        self.assertIn('src="/static/images/neoapps_logo_transparent.png"', install_heading)
-        self.assertNotIn('neo-brand--apps', install_heading)
-        self.assertIn("portal-install-help", html)
-        self.assertIn("Open in Safari.", html)
-        self.assertIn("Add to Home Screen.", html)
-        self.assertIn('data-manifest-url="/manifest/neogateway.webmanifest"', html)
-        self.assertIn('data-start-url="/rfd"', html)
-        self.assertIn('src="/static/images/icons/neogateway/icon_192.png"', html)
+        self.assertEqual(html.count('class="portal-app-card '), 3)
+        app_card_section = html.split('<section class="portal-app-grid"', 1)[1].split("</section>", 1)[0]
+        self.assertIn('src="/static/images/icons/neogateway/icon_192.png"', app_card_section)
+        self.assertIn('src="/static/images/icons/neostaffing/icon_192.png"', app_card_section)
+        self.assertIn('src="/static/images/icons/neobid/icon_192.png"', app_card_section)
+        self.assertNotIn('class="portal-install-section"', html)
+        self.assertNotIn("portal-install-help", html)
+        self.assertNotIn("Open in Safari.", html)
+        self.assertNotIn("Add to Home Screen.", html)
+        self.assertNotIn('data-manifest-url="/manifest/neogateway.webmanifest"', html)
+        self.assertNotIn('data-start-url="/rfd"', html)
         self.assertNotIn("Gateway operations and NeoNode systems.", html)
         self.assertNotIn("Ballmat counts, routing, and discharge operations.", html)
         self.assertNotIn("Outbound door, lineup, and pull visibility.", html)
-        self.assertIn('data-manifest-url="/manifest/sektor.webmanifest"', html)
-        self.assertIn('data-manifest-url="/manifest/ermac.webmanifest"', html)
-        self.assertIn('data-manifest-url="/manifest/scorpion.webmanifest"', html)
-        self.assertIn('data-manifest-url="/manifest/reptile.webmanifest"', html)
-        self.assertIn('data-manifest-url="/manifest/subzero.webmanifest"', html)
-        self.assertIn('data-manifest-url="/manifest/rain.webmanifest"', html)
+        self.assertNotIn('data-manifest-url="/manifest/sektor.webmanifest"', html)
+        self.assertNotIn('data-manifest-url="/manifest/ermac.webmanifest"', html)
+        self.assertNotIn('data-manifest-url="/manifest/scorpion.webmanifest"', html)
+        self.assertNotIn('data-manifest-url="/manifest/reptile.webmanifest"', html)
+        self.assertNotIn('data-manifest-url="/manifest/subzero.webmanifest"', html)
+        self.assertNotIn('data-manifest-url="/manifest/rain.webmanifest"', html)
         self.assertNotIn('data-manifest-url="/manifest/motherbrain.webmanifest"', html)
         self.assertNotIn('data-manifest-url="/manifest/neostaffing.webmanifest"', html)
         self.assertNotIn('data-manifest-url="/manifest/neobid.webmanifest"', html)
 
-    def test_portal_install_cards_include_motherbrain_and_staffing_when_approved(self):
+    def test_portal_dashboard_keeps_install_ui_hidden_for_accessible_apps_and_nodes(self):
         user = self._admin("installmaster", "simulator")
         db.session.add(
             PortalAppAccess(
@@ -533,14 +536,16 @@ class AuthAccountFlowsTest(unittest.TestCase):
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn('data-manifest-url="/manifest/motherbrain.webmanifest"', html)
-        self.assertIn('data-start-url="/motherbrain"', html)
-        self.assertIn('src="/static/images/icons/motherbrain/icon_192.png"', html)
-        self.assertIn('data-manifest-url="/manifest/neostaffing.webmanifest"', html)
-        self.assertIn('data-start-url="/neostaffing"', html)
-        self.assertIn('src="/static/images/icons/neostaffing/icon_192.png"', html)
+        self.assertIn('class="portal-app-card portal-app-neogateway is-approved"', html)
+        self.assertIn('class="portal-app-card portal-app-neostaffing is-approved"', html)
+        self.assertIn('class="portal-app-card portal-app-neobid is-', html)
+        self.assertNotIn('class="portal-install-section"', html)
+        self.assertNotIn('data-manifest-url="/manifest/motherbrain.webmanifest"', html)
+        self.assertNotIn('data-start-url="/motherbrain"', html)
+        self.assertNotIn('data-manifest-url="/manifest/neostaffing.webmanifest"', html)
+        self.assertNotIn('data-start-url="/neostaffing"', html)
 
-    def test_portal_install_buttons_have_fallback_script_without_exposing_secrets(self):
+    def test_portal_dashboard_does_not_render_install_prompt_script(self):
         user, _membership = self._approved_user("installscript", "installscript@example.com")
         db.session.commit()
 
@@ -548,12 +553,11 @@ class AuthAccountFlowsTest(unittest.TestCase):
         response = self.client.get("/portal")
         html = response.get_data(as_text=True)
 
-        self.assertIn("beforeinstallprompt", html)
-        self.assertIn("data-install-default-label=\"How to Install\"", html)
-        self.assertIn("HOW TO INSTALL", html)
-        self.assertIn("Install prompt completed.", html)
-        self.assertIn("This browser does not currently expose a native install prompt.", html)
-        self.assertIn("data-install-button", html)
+        self.assertNotIn("beforeinstallprompt", html)
+        self.assertNotIn("data-install-default-label=\"How to Install\"", html)
+        self.assertNotIn("Install prompt completed.", html)
+        self.assertNotIn("This browser does not currently expose a native install prompt.", html)
+        self.assertNotIn("data-install-button", html)
         self.assertNotIn("window.location.assign(targetStartUrl)", html)
         self.assertNotIn("AERODATABOX_API_KEY", html)
         self.assertNotIn("BREVO_API_KEY", html)

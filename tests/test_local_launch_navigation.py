@@ -548,6 +548,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("--node-apps-primary: #d9362e;", css)
         self.assertIn("--node-apps-secondary: #5a2db8;", css)
         self.assertIn("--node-apps-highlight: #8b5cf6;", css)
+        self.assertIn(".portal-shell-page .topbar", css)
+        self.assertIn(".portal-page .action-button", css)
         self.assertNotIn("#d73f7d", css)
         self.assertNotIn("#ff75b7", css)
         self.assertNotIn("215, 63, 125", css)
