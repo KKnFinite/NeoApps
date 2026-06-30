@@ -7,6 +7,7 @@ from app.services.access_control import (
     get_user_gateway_membership,
     get_user_node_role,
     request_default_gateway_access_for_user,
+    seed_gateway_node_roles,
     user_can_access_node,
     user_has_gateway_access,
 )
@@ -65,6 +66,7 @@ __all__ = [
     "get_user_gateway_membership",
     "get_user_node_role",
     "request_default_gateway_access_for_user",
+    "seed_gateway_node_roles",
     "user_can_access_node",
     "user_has_gateway_access",
     "crew_sections_for_tail_swap",

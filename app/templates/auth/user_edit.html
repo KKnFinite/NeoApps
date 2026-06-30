@@ -48,18 +48,22 @@
             {% set access = row.access %}
             <div class="user-edit-role-field">
                 <span>{{ row.app.name }}</span>
+                <select name="app_status_{{ row.app.code }}">
+                    {% for status in ("none", "pending", "approved", "denied") %}
+                    <option value="{{ status }}" {% if (access.status if access else "none") == status %}selected{% endif %}>{{ status|status_label }}</option>
+                    {% endfor %}
+                </select>
+                {% if row.app.code == "neogateway" %}
+                <span class="muted compact-access-note">Access only - RFD NeoNode roles are managed below.</span>
+                {% else %}
                 <span class="role-select-wrap">
-                    <select name="app_status_{{ row.app.code }}">
-                        {% for status in ("none", "pending", "approved", "denied") %}
-                        <option value="{{ status }}" {% if (access.status if access else "none") == status %}selected{% endif %}>{{ status|status_label }}</option>
-                        {% endfor %}
-                    </select>
                     <select name="app_role_{{ row.app.code }}">
                         {% for role in ("watcher", "operator", "simulator", "master", "grandmaster") %}
                         <option value="{{ role }}" {% if access and access.role == role %}selected{% endif %}>{{ role|role_label }}</option>
                         {% endfor %}
                     </select>
                 </span>
+                {% endif %}
                 <label class="checkbox-line centered-checkbox-line">
                     <input type="checkbox" name="app_active_{{ row.app.code }}" value="1" {% if not access or access.is_active %}checked{% endif %}>
                     <span>ACTIVE</span>

@@ -4,8 +4,9 @@ from unittest.mock import patch
 
 from app import create_app
 from app.extensions import db
-from app.models import GatewayMembership, GatewayNodeRole, NeoNode, User
+from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess, User
 from app.services.access_control import (
+    DEFAULT_NEONODES,
     backfill_default_gateway_node_roles,
     ensure_default_gateway_and_nodes,
     user_can_access_node,
@@ -247,6 +248,10 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertNotIn(b'>watcher</option>', response.data)
         self.assertIn(b"Watcher fallback", detail_response.data)
         self.assertNotIn(b"watcher fallback", detail_response.data)
+        self.assertIn(b"Access only", detail_response.data)
+        self.assertNotIn(b'name="app_role_neogateway"', response.data)
+        self.assertIn(b'name="app_role_neostaffing"', response.data)
+        self.assertIn(b"Access only - RFD NeoNode roles are managed below.", response.data)
         self.assertIn(b"2026-01-15 06:00", detail_response.data)
         self.assertIn(b"RFD NeoNode ROLES", roles_response.data)
         self.assertIn(b"user-role-page", roles_response.data)
@@ -255,6 +260,31 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertIn(b'>Watcher</option>', roles_response.data)
         self.assertIn(b'>Master</option>', roles_response.data)
         self.assertNotIn(b'>watcher</option>', roles_response.data)
+
+    def test_legacy_neogateway_role_displays_as_node_seed_not_app_role(self):
+        grandmaster = self._admin("legacy_seed_grandmaster", "grandmaster")
+        target, _membership = self._approved_user("legacy_seed_user", "legacyseed@example.com")
+        db.session.add(
+            PortalAppAccess(
+                user_id=target.id,
+                app_code="neogateway",
+                status="approved",
+                role="simulator",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        edit_response = self.client.get(f"/admin/users/{target.id}/edit")
+        detail_response = self.client.get(f"/admin/users/{target.id}")
+
+        self.assertEqual(edit_response.status_code, 200)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertNotIn(b'name="app_role_neogateway"', edit_response.data)
+        self.assertIn(b'<option value="simulator" selected>Simulator</option>', edit_response.data)
+        self.assertIn(b"Seeded from NeoGateway approval", detail_response.data)
+        self.assertIn(b"Access only", detail_response.data)
 
     def test_unverified_pending_user_cannot_be_approved(self):
         grandmaster = self._admin("unverified_grandmaster", "grandmaster")
@@ -308,7 +338,10 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertIsNotNone(updated.approval_email_sent_at)
         self.assertEqual(send_approved.call_count, 1)
         self.assertTrue(user_can_access_node(user, "RFD", "motherbrain", "watcher"))
-        self.assertEqual(GatewayNodeRole.query.filter_by(gateway_membership_id=membership.id).count(), 0)
+        self.assertEqual(
+            GatewayNodeRole.query.filter_by(gateway_membership_id=membership.id).count(),
+            len(DEFAULT_NEONODES),
+        )
 
     def test_denial_sets_metadata_and_sends_no_email(self):
         grandmaster = self._admin("deny_grandmaster", "grandmaster")

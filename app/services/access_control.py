@@ -246,6 +246,10 @@ def get_user_node_role(user, gateway_code, node_code):
     if node_role:
         return node_role.role
 
+    # Legacy safety net: older approved NeoGateway access rows stored the
+    # approval role before node-role rows were materialized. Portal Management
+    # no longer exposes this as a NeoGateway role, but the hidden seed keeps
+    # existing users from losing effective node access.
     return get_user_app_role(user, "neogateway") or "watcher"
 
 
@@ -301,12 +305,33 @@ def backfill_default_gateway_node_roles(user, role="grandmaster"):
     membership.status = "approved"
     membership.is_active = True
 
+    seed_gateway_node_roles(membership, role, overwrite_existing=True)
+
+    db.session.flush()
+    app_access = ensure_user_app_access(user, "neogateway")
+    app_access.status = "approved"
+    app_access.role = role
+    app_access.is_active = True
+    app_access.approved_at = app_access.approved_at or datetime.utcnow()
+    return membership
+
+
+def seed_gateway_node_roles(membership, role="watcher", overwrite_existing=False):
+    if not membership:
+        raise ValueError("Gateway membership request was not found.")
+    if role not in ROLE_LEVELS:
+        raise ValueError("Unsupported node role.")
+
     active_nodes = NeoNode.query.filter_by(is_active=True).all()
-    for node in active_nodes:
-        node_role = GatewayNodeRole.query.filter_by(
+    existing_roles = {
+        node_role.node_id: node_role
+        for node_role in GatewayNodeRole.query.filter_by(
             gateway_membership_id=membership.id,
-            node_id=node.id,
-        ).first()
+        ).all()
+    }
+
+    for node in active_nodes:
+        node_role = existing_roles.get(node.id)
         if not node_role:
             db.session.add(
                 GatewayNodeRole(
@@ -318,16 +343,11 @@ def backfill_default_gateway_node_roles(user, role="grandmaster"):
             )
             continue
 
-        node_role.role = role
-        node_role.is_active = True
+        if overwrite_existing:
+            node_role.role = role
+            node_role.is_active = True
 
     db.session.flush()
-    app_access = ensure_user_app_access(user, "neogateway")
-    app_access.status = "approved"
-    app_access.role = role
-    app_access.is_active = True
-    app_access.approved_at = app_access.approved_at or datetime.utcnow()
-    return membership
 
 
 def portal_app_definitions():

@@ -22,6 +22,7 @@ from app.services.access_control import (
     portal_dashboard_rows_for_user,
     request_app_access_for_user,
     request_default_gateway_access_for_user,
+    seed_gateway_node_roles,
     user_has_gateway_access,
 )
 from app.services.permission_rules import ensure_default_permission_rules, grouped_permission_rules
@@ -535,6 +536,7 @@ def update_user_gateway_membership(user_id):
             _approve_membership(
                 membership,
                 request.form.get("approval_notes", "").strip() or None,
+                seed_role=request.form.get("role", "watcher").strip().lower() or "watcher",
             )
             flash("Access request approved.", "info")
         elif action == "deny":
@@ -582,6 +584,7 @@ def approve_access_request(membership_id):
         _approve_membership(
             membership,
             request.form.get("approval_notes", "").strip() or None,
+            seed_role=request.form.get("role", "watcher").strip().lower() or "watcher",
         )
     except ValueError as error:
         flash(str(error), "error")
@@ -688,10 +691,7 @@ def _apply_portal_app_access_form(target_user):
     for app in portal_app_definitions():
         app_code = app["code"]
         status = request.form.get(f"app_status_{app_code}", "none").strip().lower()
-        role = request.form.get(f"app_role_{app_code}", "watcher").strip().lower()
         is_active = request.form.get(f"app_active_{app_code}") == "1"
-        if role not in ROLE_CHOICES:
-            raise ValueError("Unsupported app role selected.")
         if status not in {"none", "pending", "approved", "denied"}:
             raise ValueError("Unsupported app access status selected.")
 
@@ -699,6 +699,13 @@ def _apply_portal_app_access_form(target_user):
             user_id=target_user.id,
             app_code=app_code,
         ).first()
+        role_value = request.form.get(f"app_role_{app_code}")
+        if role_value is None:
+            role_value = access.role if access else "watcher"
+        role = str(role_value or "watcher").strip().lower()
+        if role not in ROLE_CHOICES:
+            raise ValueError("Unsupported app role selected.")
+
         if status == "none":
             if access:
                 access.is_active = False
@@ -739,7 +746,7 @@ def _approve_portal_app_access(access, role, notes, is_active=True):
             )
             db.session.add(membership)
             db.session.flush()
-        _approve_membership(membership, notes)
+        _approve_membership(membership, notes, seed_role=role)
 
     access.status = "approved"
     access.role = role
@@ -1142,6 +1149,7 @@ def _node_role_rows(user, membership):
         NeoNode.sort_order.asc(),
         NeoNode.name.asc(),
     ).all()
+    seed_role = _neogateway_seed_role_for_membership(user, membership)
     existing_roles = {}
     if membership:
         existing_roles = {
@@ -1158,11 +1166,34 @@ def _node_role_rows(user, membership):
             "override": existing_roles.get(node.id),
             "effective_role": existing_roles.get(node.id).role
             if existing_roles.get(node.id)
-            else "watcher",
-            "role_choices": _role_choices_for_node(existing_roles.get(node.id)),
+            else seed_role,
+            "source_label": existing_roles.get(node.id).role
+            if existing_roles.get(node.id)
+            else (
+                "Seeded from NeoGateway approval"
+                if seed_role != "watcher"
+                else "Watcher fallback"
+            ),
+            "role_choices": _role_choices_for_node(
+                existing_roles.get(node.id),
+                effective_role=existing_roles.get(node.id).role
+                if existing_roles.get(node.id)
+                else seed_role,
+            ),
         }
         for node in nodes
     ]
+
+
+def _neogateway_seed_role_for_membership(user, membership):
+    if not _membership_is_approved_active(membership):
+        return "watcher"
+
+    access = ensure_user_app_access(user, "neogateway")
+    if access and access.status == "approved" and access.is_active and access.role in ROLE_CHOICES:
+        return access.role
+
+    return "watcher"
 
 
 def _apply_node_role_form(target_user, membership):
@@ -1223,13 +1254,13 @@ def _apply_permission_rule_form():
         rule.description = description
 
 
-def _role_choices_for_node(existing_role):
+def _role_choices_for_node(existing_role, effective_role=None):
     choices = [
         role
         for role in ROLE_CHOICES
         if _current_user_can_assign_role(role)
     ]
-    existing_effective_role = existing_role.role if existing_role else "watcher"
+    existing_effective_role = effective_role or (existing_role.role if existing_role else "watcher")
     if existing_effective_role not in choices:
         choices.append(existing_effective_role)
 
@@ -1337,9 +1368,11 @@ def _membership_is_approved_active(membership):
     )
 
 
-def _approve_membership(membership, notes):
+def _approve_membership(membership, notes, seed_role="watcher"):
     if not membership:
         raise ValueError("Gateway membership request was not found.")
+    if seed_role not in ROLE_CHOICES:
+        raise ValueError("Unsupported node role selected.")
     if not membership.user.email_verified_at:
         raise ValueError("Email not verified yet.")
 
@@ -1356,6 +1389,7 @@ def _approve_membership(membership, notes):
     if membership.gateway and membership.gateway.code == get_current_gateway().code:
         app_access = ensure_user_app_access(membership.user, "neogateway")
         app_access.status = "approved"
+        app_access.role = seed_role
         app_access.is_active = True
         app_access.approved_by_user_id = current_user.id
         app_access.approved_at = app_access.approved_at or datetime.utcnow()
@@ -1363,6 +1397,7 @@ def _approve_membership(membership, notes):
         app_access.denied_by_user_id = None
         app_access.denied_at = None
         app_access.denial_notes = None
+        seed_gateway_node_roles(membership, seed_role, overwrite_existing=False)
 
     send_result = email_service.send_access_approved(membership.user, membership.gateway)
     if send_result.get("sent"):

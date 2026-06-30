@@ -53,7 +53,13 @@
                     <tr>
                         <td>{{ row.app.name }}</td>
                         <td>{{ access.status if access else "none" }}</td>
-                        <td>{{ access.role|role_label if access else "-" }}</td>
+                        <td>
+                            {% if row.app.code == "neogateway" %}
+                            Access only
+                            {% else %}
+                            {{ access.role|role_label if access else "-" }}
+                            {% endif %}
+                        </td>
                         <td>{{ "Yes" if access and access.is_active else "No" }}</td>
                     </tr>
                     {% endfor %}
@@ -117,7 +123,7 @@
                     <tr>
                         <td>{{ row.node.name }}</td>
                         <td>{{ row.effective_role|role_label }}</td>
-                        <td>{{ row.override.role|role_label if row.override else "Watcher fallback" }}</td>
+                        <td>{{ row.override.role|role_label if row.override else row.source_label }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

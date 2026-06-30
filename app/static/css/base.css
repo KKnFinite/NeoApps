@@ -8791,6 +8791,18 @@ select::-ms-expand {
     width: min(100%, 300px);
 }
 
+.compact-access-note {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 240px;
+    min-height: 32px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.25;
+    text-align: center;
+}
+
 .role-select-wrap {
     position: relative;
     display: inline-grid;

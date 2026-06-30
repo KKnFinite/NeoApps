@@ -6,6 +6,7 @@ from app import create_app
 from app.extensions import db
 from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess, User, UserToken
 from app.services.access_control import (
+    DEFAULT_NEONODES,
     backfill_default_gateway_node_roles,
     ensure_default_gateway_and_nodes,
     user_can_access_node,
@@ -185,7 +186,18 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertIsNotNone(verified_membership.approval_email_sent_at)
         self.assertTrue(user_can_access_node(verified_user, "RFD", "motherbrain"))
         self.assertEqual(send_approved.call_count, 1)
-        self.assertEqual(GatewayNodeRole.query.filter_by(gateway_membership_id=verified_membership.id).count(), 0)
+        self.assertEqual(
+            GatewayNodeRole.query.filter_by(gateway_membership_id=verified_membership.id).count(),
+            len(DEFAULT_NEONODES),
+        )
+        self.assertTrue(
+            all(
+                role.role == "watcher"
+                for role in GatewayNodeRole.query.filter_by(
+                    gateway_membership_id=verified_membership.id,
+                ).all()
+            )
+        )
         self.assertIsNotNone(unverified_user)
 
     def test_denial_sends_no_email(self):
@@ -587,6 +599,46 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(response.location, "/portal/manage")
         self.assertEqual(updated.status, "approved")
         self.assertEqual(updated.role, "master")
+
+    def test_neogateway_app_approval_seeds_rfd_node_roles_from_selected_role(self):
+        grandmaster = self._admin("gateway_portal_grandmaster", "grandmaster")
+        target = self._user("gatewayrequest", email="gatewayrequest@example.com", verified=True)
+        access = PortalAppAccess(
+            user_id=target.id,
+            app_code="neogateway",
+            status="pending",
+            role="watcher",
+            is_active=True,
+        )
+        db.session.add(access)
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        with patch(
+            "app.auth.routes.email_service.send_access_approved",
+            return_value={"sent": False},
+        ):
+            response = self.client.post(
+                f"/portal/manage/app-access/{access.id}/update",
+                data={"action": "approve", "role": "simulator", "notes": "Seed simulator."},
+                follow_redirects=False,
+            )
+
+        updated = db.session.get(PortalAppAccess, access.id)
+        membership = GatewayMembership.query.filter_by(user_id=target.id).one()
+        seeded_roles = GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            is_active=True,
+        ).all()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/portal/manage")
+        self.assertEqual(updated.status, "approved")
+        self.assertEqual(updated.role, "simulator")
+        self.assertEqual(membership.status, "approved")
+        self.assertEqual(len(seeded_roles), len(DEFAULT_NEONODES))
+        self.assertEqual({role.role for role in seeded_roles}, {"simulator"})
+        self.assertTrue(user_can_access_node(target, "RFD", "motherbrain", "simulator"))
 
     def _account_form(self, **overrides):
         values = {

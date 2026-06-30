@@ -42,7 +42,10 @@
                                 {% if access.user.email_verified_at %}
                                 <form class="inline-button-form" method="post" action="{{ url_for('auth.update_portal_app_access', access_id=access.id) }}">
                                     <input type="hidden" name="action" value="approve">
-                                    <select class="compact-action-input" name="role">
+                                    {% if access.app_code == "neogateway" %}
+                                    <span class="muted compact-access-note">Seed RFD NeoNode role</span>
+                                    {% endif %}
+                                    <select class="compact-action-input" name="role" aria-label="{{ 'Seed RFD NeoNode role' if access.app_code == 'neogateway' else 'App role' }}">
                                         {% for role in role_choices %}
                                         <option value="{{ role }}" {% if role == access.role %}selected{% endif %}>{{ role|role_label }}</option>
                                         {% endfor %}
