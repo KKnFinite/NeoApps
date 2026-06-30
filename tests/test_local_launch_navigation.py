@@ -151,14 +151,14 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("url_for('favicon_32')", template)
         self.assertIn("url_for('favicon_16')", template)
 
-    def test_neoportal_manifest_uses_current_branding(self):
+    def test_neoapps_manifest_uses_current_branding(self):
         response = self.client.get("/manifest.webmanifest")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.mimetype, "application/manifest+json")
         self.assertIn("no-cache", response.headers["Cache-Control"])
         manifest = response.get_json()
-        self.assertEqual(manifest["id"], "/manifest/neoportal.webmanifest")
+        self.assertEqual(manifest["id"], "/manifest/neoapps.webmanifest")
         self.assertEqual(manifest["name"], "NeoApps")
         self.assertEqual(manifest["short_name"], "NeoApps")
         self.assertEqual(manifest["start_url"], "/portal")
@@ -169,16 +169,16 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             for icon in manifest["icons"]
         }
         self.assertIn(
-            ("/static/images/icons/neoportal/icon_192.png", "192x192", "any"),
+            ("/static/images/icons/neoapps/pwa/neoapps-icon-192.png", "192x192", "any"),
             icon_map,
         )
         self.assertIn(
-            ("/static/images/icons/neoportal/icon_512.png", "512x512", "any"),
+            ("/static/images/icons/neoapps/pwa/neoapps-icon-512.png", "512x512", "any"),
             icon_map,
         )
         self.assertIn(
             (
-                "/static/images/icons/neoportal/icon_maskable_192.png",
+                "/static/images/icons/neoapps/pwa/neoapps-maskable-192.png",
                 "192x192",
                 "maskable",
             ),
@@ -186,7 +186,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         )
         self.assertIn(
             (
-                "/static/images/icons/neoportal/icon_maskable_512.png",
+                "/static/images/icons/neoapps/pwa/neoapps-maskable-512.png",
                 "512x512",
                 "maskable",
             ),
@@ -199,20 +199,151 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
     def test_app_and_node_manifests_have_independent_branding_and_icons(self):
         expected_manifests = {
-            "neoportal": ("NeoApps", "NeoApps", "/portal", "#d9362e", "neoportal"),
-            "neogateway": ("NeoGateway", "NeoGateway", "/rfd", "#d95a1f", "neogateway"),
-            "neostaffing": ("NeoStaffing", "NeoStaffing", "/neostaffing", "#27d0c2", "neostaffing"),
-            "neobid": ("NeoBid", "NeoBid", "/neobid", "#4db7ff", "neobid"),
-            "motherbrain": ("NeoMotherBrain", "MotherBrain", "/motherbrain", "#cf6a6e", "motherbrain"),
-            "sektor": ("NeoSektor", "NeoSektor", "/neosektor", "#b5121b", "sektor"),
-            "ermac": ("NeoErmac", "NeoErmac", "/neoermac", "#8f1826", "ermac"),
-            "scorpion": ("NeoScorpion", "NeoScorpion", "/nodes/", "#f4c21f", "scorpion"),
-            "reptile": ("NeoReptile", "NeoReptile", "/nodes/", "#70e13b", "reptile"),
-            "subzero": ("NeoSub-Zero", "Sub-Zero", "/nodes/", "#4db7ff", "subzero"),
-            "rain": ("NeoRain", "NeoRain", "/nodes/", "#7f4dff", "rain"),
+            "neoapps": (
+                "NeoApps",
+                "NeoApps",
+                "/portal",
+                "#d9362e",
+                [
+                    ("/static/images/icons/neoapps/pwa/neoapps-icon-192.png", "192x192", "any"),
+                    ("/static/images/icons/neoapps/pwa/neoapps-icon-512.png", "512x512", "any"),
+                    ("/static/images/icons/neoapps/pwa/neoapps-maskable-192.png", "192x192", "maskable"),
+                    ("/static/images/icons/neoapps/pwa/neoapps-maskable-512.png", "512x512", "maskable"),
+                ],
+            ),
+            "neoportal": (
+                "NeoApps",
+                "NeoApps",
+                "/portal",
+                "#d9362e",
+                [
+                    ("/static/images/icons/neoapps/pwa/neoapps-icon-192.png", "192x192", "any"),
+                    ("/static/images/icons/neoapps/pwa/neoapps-icon-512.png", "512x512", "any"),
+                    ("/static/images/icons/neoapps/pwa/neoapps-maskable-192.png", "192x192", "maskable"),
+                    ("/static/images/icons/neoapps/pwa/neoapps-maskable-512.png", "512x512", "maskable"),
+                ],
+            ),
+            "neogateway": (
+                "NeoGateway",
+                "NeoGateway",
+                "/rfd",
+                "#d95a1f",
+                [
+                    ("/static/images/icons/neogateway/pwa/neogateway-icon-192.png", "192x192", "any"),
+                    ("/static/images/icons/neogateway/pwa/neogateway-icon-512.png", "512x512", "any"),
+                    ("/static/images/icons/neogateway/pwa/neogateway-maskable-512.png", "512x512", "any maskable"),
+                ],
+            ),
+            "neostaffing": (
+                "NeoStaffing",
+                "NeoStaffing",
+                "/neostaffing",
+                "#27d0c2",
+                [
+                    ("/static/images/icons/neostaffing/pwa/neostaffing-icon-192.png", "192x192", "any"),
+                    ("/static/images/icons/neostaffing/pwa/neostaffing-icon-512.png", "512x512", "any"),
+                    ("/static/images/icons/neostaffing/pwa/neostaffing-maskable-512.png", "512x512", "any maskable"),
+                ],
+            ),
+            "neobid": ("NeoBid", "NeoBid", "/neobid", "#4db7ff", None),
+            "neomotherbrain": (
+                "NeoMotherBrain",
+                "MotherBrain",
+                "/motherbrain",
+                "#cf6a6e",
+                [
+                    ("/static/images/icons/neomotherbrain/pwa/neomotherbrain-icon-192.png", "192x192", "any"),
+                    ("/static/images/icons/neomotherbrain/pwa/neomotherbrain-icon-512.png", "512x512", "any"),
+                    ("/static/images/icons/neomotherbrain/pwa/neomotherbrain-maskable-512.png", "512x512", "any maskable"),
+                ],
+            ),
+            "motherbrain": (
+                "NeoMotherBrain",
+                "MotherBrain",
+                "/motherbrain",
+                "#cf6a6e",
+                [
+                    ("/static/images/icons/neomotherbrain/pwa/neomotherbrain-icon-192.png", "192x192", "any"),
+                    ("/static/images/icons/neomotherbrain/pwa/neomotherbrain-icon-512.png", "512x512", "any"),
+                    ("/static/images/icons/neomotherbrain/pwa/neomotherbrain-maskable-512.png", "512x512", "any maskable"),
+                ],
+            ),
+            "neosektor": (
+                "NeoSektor",
+                "NeoSektor",
+                "/neosektor",
+                "#b5121b",
+                [
+                    ("/static/images/icons/neosektor/pwa/android-chrome-192x192.png", "192x192", "any"),
+                    ("/static/images/icons/neosektor/pwa/android-chrome-512x512.png", "512x512", "any"),
+                    ("/static/images/icons/neosektor/pwa/maskable-icon-192x192.png", "192x192", "maskable"),
+                    ("/static/images/icons/neosektor/pwa/maskable-icon-512x512.png", "512x512", "maskable"),
+                ],
+            ),
+            "sektor": (
+                "NeoSektor",
+                "NeoSektor",
+                "/neosektor",
+                "#b5121b",
+                [
+                    ("/static/images/icons/neosektor/pwa/android-chrome-192x192.png", "192x192", "any"),
+                    ("/static/images/icons/neosektor/pwa/android-chrome-512x512.png", "512x512", "any"),
+                    ("/static/images/icons/neosektor/pwa/maskable-icon-192x192.png", "192x192", "maskable"),
+                    ("/static/images/icons/neosektor/pwa/maskable-icon-512x512.png", "512x512", "maskable"),
+                ],
+            ),
+            "neoermac": (
+                "NeoErmac",
+                "NeoErmac",
+                "/neoermac",
+                "#8f1826",
+                [
+                    ("/static/images/icons/neoermac/pwa/neoermac-icon-192.png", "192x192", "any"),
+                    ("/static/images/icons/neoermac/pwa/neoermac-icon-512.png", "512x512", "any"),
+                    ("/static/images/icons/neoermac/pwa/neoermac-maskable-512.png", "512x512", "any maskable"),
+                ],
+            ),
+            "ermac": (
+                "NeoErmac",
+                "NeoErmac",
+                "/neoermac",
+                "#8f1826",
+                [
+                    ("/static/images/icons/neoermac/pwa/neoermac-icon-192.png", "192x192", "any"),
+                    ("/static/images/icons/neoermac/pwa/neoermac-icon-512.png", "512x512", "any"),
+                    ("/static/images/icons/neoermac/pwa/neoermac-maskable-512.png", "512x512", "any maskable"),
+                ],
+            ),
+            "neoscorpion": (
+                "NeoScorpion",
+                "NeoScorpion",
+                "/nodes/",
+                "#f4c21f",
+                [
+                    ("/static/images/icons/neoscorpion/pwa/icon-192x192.png", "192x192", "any"),
+                    ("/static/images/icons/neoscorpion/pwa/icon-512x512.png", "512x512", "any"),
+                    ("/static/images/icons/neoscorpion/pwa/maskable-icon-192x192.png", "192x192", "maskable"),
+                    ("/static/images/icons/neoscorpion/pwa/maskable-icon-512x512.png", "512x512", "maskable"),
+                ],
+            ),
+            "scorpion": (
+                "NeoScorpion",
+                "NeoScorpion",
+                "/nodes/",
+                "#f4c21f",
+                [
+                    ("/static/images/icons/neoscorpion/pwa/icon-192x192.png", "192x192", "any"),
+                    ("/static/images/icons/neoscorpion/pwa/icon-512x512.png", "512x512", "any"),
+                    ("/static/images/icons/neoscorpion/pwa/maskable-icon-192x192.png", "192x192", "maskable"),
+                    ("/static/images/icons/neoscorpion/pwa/maskable-icon-512x512.png", "512x512", "maskable"),
+                ],
+            ),
+            "reptile": ("NeoReptile", "NeoReptile", "/nodes/", "#70e13b", None),
+            "subzero": ("NeoSub-Zero", "Sub-Zero", "/nodes/", "#4db7ff", None),
+            "rain": ("NeoRain", "NeoRain", "/nodes/", "#7f4dff", None),
         }
 
-        for manifest_key, (name, short_name, start_url, theme_color, icon_folder) in expected_manifests.items():
+        for manifest_key, (name, short_name, start_url, theme_color, expected_icons) in expected_manifests.items():
             with self.subTest(manifest_key=manifest_key):
                 response = self.client.get(f"/manifest/{manifest_key}.webmanifest")
 
@@ -227,39 +358,32 @@ class LocalLaunchNavigationTest(unittest.TestCase):
                 self.assertEqual(manifest["scope"], "/")
                 self.assertEqual(manifest["display"], "standalone")
                 self.assertEqual(manifest["theme_color"], theme_color)
-                self.assertIn(
-                    {
-                        "src": f"/static/images/icons/{icon_folder}/icon_192.png",
-                        "sizes": "192x192",
-                        "type": "image/png",
-                        "purpose": "any",
-                    },
-                    manifest["icons"],
-                )
-                self.assertIn(
-                    {
-                        "src": f"/static/images/icons/{icon_folder}/icon_512.png",
-                        "sizes": "512x512",
-                        "type": "image/png",
-                        "purpose": "any",
-                    },
-                    manifest["icons"],
-                )
-                for icon in manifest["icons"]:
-                    icon_response = self.client.get(icon["src"])
-                    self.assertEqual(icon_response.status_code, 200)
-                    self.assertEqual(icon_response.mimetype, "image/png")
+                if expected_icons is not None:
+                    for src, sizes, purpose in expected_icons:
+                        self.assertIn(
+                            {
+                                "src": src,
+                                "sizes": sizes,
+                                "type": "image/png",
+                                "purpose": purpose,
+                            },
+                            manifest["icons"],
+                        )
+                    for icon in manifest["icons"]:
+                        icon_response = self.client.get(icon["src"])
+                        self.assertEqual(icon_response.status_code, 200)
+                        self.assertEqual(icon_response.mimetype, "image/png")
 
         missing_response = self.client.get("/manifest/not-real.webmanifest")
         self.assertEqual(missing_response.status_code, 404)
 
-    def test_pwa_root_icon_routes_serve_neoportal_images(self):
+    def test_pwa_root_icon_routes_serve_neoapps_images(self):
         icon_routes = {
-            "/apple-touch-icon.png": Path("app/static/images/icons/neoportal/apple_touch_icon_180.png"),
-            "/apple-touch-icon-precomposed.png": Path("app/static/images/icons/neoportal/apple_touch_icon_180.png"),
-            "/favicon-32x32.png": Path("app/static/images/icons/neoportal/favicon_32.png"),
-            "/favicon-16x16.png": Path("app/static/images/icons/neoportal/favicon_16.png"),
-            "/favicon.ico": Path("app/static/images/icons/neoportal/favicon_32.png"),
+            "/apple-touch-icon.png": Path("app/static/images/icons/neoapps/pwa/apple-touch-icon.png"),
+            "/apple-touch-icon-precomposed.png": Path("app/static/images/icons/neoapps/pwa/apple-touch-icon.png"),
+            "/favicon-32x32.png": Path("app/static/images/icons/neoapps/favicon/favicon-32.png"),
+            "/favicon-16x16.png": Path("app/static/images/icons/neoapps/favicon/favicon-16.png"),
+            "/favicon.ico": Path("app/static/images/icons/neoapps/favicon/favicon-32.png"),
         }
 
         for route, source_path in icon_routes.items():
@@ -271,30 +395,56 @@ class LocalLaunchNavigationTest(unittest.TestCase):
                 self.assertIn("no-cache", response.headers["Cache-Control"])
                 self.assertEqual(response.data, source_path.read_bytes())
 
-    def test_future_app_and_node_icon_structure_exists(self):
+    def test_locked_app_and_node_icon_structure_exists(self):
         icon_root = Path("app/static/images/icons")
-        expected_folders = {
-            "neoportal",
-            "neogateway",
-            "neostaffing",
-            "neobid",
-            "motherbrain",
-            "sektor",
-            "ermac",
-            "scorpion",
-            "reptile",
-            "subzero",
-            "rain",
+        expected_files = {
+            "neoapps": (
+                "pwa/neoapps-icon-192.png",
+                "pwa/neoapps-icon-512.png",
+                "pwa/neoapps-maskable-192.png",
+                "pwa/neoapps-maskable-512.png",
+                "pwa/apple-touch-icon.png",
+                "favicon/favicon-32.png",
+                "favicon/favicon-16.png",
+            ),
+            "neogateway": (
+                "pwa/neogateway-icon-192.png",
+                "pwa/neogateway-icon-512.png",
+                "pwa/neogateway-maskable-512.png",
+            ),
+            "neostaffing": (
+                "pwa/neostaffing-icon-192.png",
+                "pwa/neostaffing-icon-512.png",
+                "pwa/neostaffing-maskable-512.png",
+            ),
+            "neomotherbrain": (
+                "pwa/neomotherbrain-icon-192.png",
+                "pwa/neomotherbrain-icon-512.png",
+                "pwa/neomotherbrain-maskable-512.png",
+            ),
+            "neoermac": (
+                "pwa/neoermac-icon-192.png",
+                "pwa/neoermac-icon-512.png",
+                "pwa/neoermac-maskable-512.png",
+            ),
+            "neosektor": (
+                "pwa/android-chrome-192x192.png",
+                "pwa/android-chrome-512x512.png",
+                "pwa/maskable-icon-192x192.png",
+                "pwa/maskable-icon-512x512.png",
+            ),
+            "neoscorpion": (
+                "pwa/icon-192x192.png",
+                "pwa/icon-512x512.png",
+                "pwa/maskable-icon-192x192.png",
+                "pwa/maskable-icon-512x512.png",
+            ),
         }
 
-        for folder in expected_folders:
-            with self.subTest(folder=folder):
-                self.assertTrue((icon_root / folder / "icon_192.png").exists())
-                self.assertTrue((icon_root / folder / "icon_512.png").exists())
-
-        self.assertTrue((icon_root / "neoportal" / "favicon_32.png").exists())
-        self.assertTrue((icon_root / "neoportal" / "favicon_16.png").exists())
-        self.assertTrue((icon_root / "neoportal" / "apple_touch_icon_180.png").exists())
+        for folder, files in expected_files.items():
+            for filename in files:
+                with self.subTest(folder=folder, filename=filename):
+                    self.assertTrue((icon_root / folder / filename).exists())
 
     def test_service_worker_is_conservative_and_uses_current_logo_assets(self):
         response = self.client.get("/service-worker.js")

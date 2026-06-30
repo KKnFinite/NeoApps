@@ -51,6 +51,7 @@ PWA_INSTALL_TARGETS = (
         "code": "neogateway",
         "manifest_key": "neogateway",
         "icon_folder": "neogateway",
+        "install_icon_src": "/static/images/icons/neogateway/inapp/neogateway-inapp-128.png",
         "name": "NeoGateway",
         "description": "Gateway operations and NeoNode systems.",
         "start_url": "/rfd",
@@ -60,6 +61,7 @@ PWA_INSTALL_TARGETS = (
         "code": "neostaffing",
         "manifest_key": "neostaffing",
         "icon_folder": "neostaffing",
+        "install_icon_src": "/static/images/icons/neostaffing/inapp/neostaffing-inapp-128.png",
         "name": "NeoStaffing",
         "description": "Staffing operations and workforce planning.",
         "start_url": "/neostaffing",
@@ -76,8 +78,9 @@ PWA_INSTALL_TARGETS = (
     {
         "kind": "node",
         "code": "motherbrain",
-        "manifest_key": "motherbrain",
+        "manifest_key": "neomotherbrain",
         "icon_folder": "motherbrain",
+        "install_icon_src": "/static/images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png",
         "name": "NeoMotherBrain",
         "description": "Sort planning, schedules, and operation control.",
         "start_url": "/motherbrain",
@@ -86,8 +89,9 @@ PWA_INSTALL_TARGETS = (
     {
         "kind": "node",
         "code": "sektor",
-        "manifest_key": "sektor",
+        "manifest_key": "neosektor",
         "icon_folder": "sektor",
+        "install_icon_src": "/static/images/icons/neosektor/inapp/neosektor-icon-128x128.png",
         "name": "NeoSektor",
         "description": "Ballmat counts, routing, and discharge operations.",
         "start_url": "/neosektor",
@@ -96,8 +100,9 @@ PWA_INSTALL_TARGETS = (
     {
         "kind": "node",
         "code": "ermac",
-        "manifest_key": "ermac",
+        "manifest_key": "neoermac",
         "icon_folder": "ermac",
+        "install_icon_src": "/static/images/icons/neoermac/inapp/neoermac-inapp-128.png",
         "name": "NeoErmac",
         "description": "Outbound door, lineup, and pull visibility.",
         "start_url": "/neoermac",
@@ -106,8 +111,9 @@ PWA_INSTALL_TARGETS = (
     {
         "kind": "node",
         "code": "scorpion",
-        "manifest_key": "scorpion",
+        "manifest_key": "neoscorpion",
         "icon_folder": "scorpion",
+        "install_icon_src": "/static/images/icons/neoscorpion/inapp/neoscorpion-128x128.png",
         "name": "NeoScorpion",
         "description": "Future NeoScorpion workspace.",
         "start_url": "/nodes/",
@@ -471,7 +477,10 @@ def portal_install_rows_for_user(user):
         rows.append(
             {
                 **target,
-                "icon_src": f"/static/images/icons/{target['icon_folder']}/icon_192.png",
+                "icon_src": target.get(
+                    "install_icon_src",
+                    f"/static/images/icons/{target['icon_folder']}/icon_192.png",
+                ),
                 "manifest_url": f"/manifest/{target['manifest_key']}.webmanifest",
             }
         )

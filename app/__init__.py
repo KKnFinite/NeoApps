@@ -139,17 +139,17 @@ def register_template_helpers(app):
         if path == "/rfd" or path.startswith("/rfd/"):
             return "neogateway"
         if path == "/motherbrain" or path.startswith("/motherbrain/"):
-            return "motherbrain"
+            return "neomotherbrain"
         if path == "/neostaffing" or path.startswith("/neostaffing/"):
             return "neostaffing"
         if path == "/neobid" or path.startswith("/neobid/"):
             return "neobid"
         if path == "/neoermac" or path.startswith("/neoermac/"):
-            return "ermac"
+            return "neoermac"
         if path == "/neosektor" or path.startswith("/neosektor/"):
-            return "sektor"
+            return "neosektor"
         if path == "/neoscorpion" or path.startswith("/neoscorpion/"):
-            return "scorpion"
+            return "neoscorpion"
         if path == "/neoreptile" or path.startswith("/neoreptile/"):
             return "reptile"
         if (
@@ -163,7 +163,7 @@ def register_template_helpers(app):
             return "subzero"
         if path == "/neorain" or path.startswith("/neorain/"):
             return "rain"
-        return "neoportal"
+        return "neoapps"
 
     def change_character_targets():
         if not current_user.is_authenticated:
@@ -368,7 +368,7 @@ def register_pwa_assets(app):
 
     @app.route("/manifest.webmanifest")
     def pwa_manifest():
-        return manifest_response("neoportal")
+        return manifest_response("neoapps")
 
     @app.route("/manifest/<manifest_key>.webmanifest")
     def pwa_manifest_by_key(manifest_key):
@@ -388,35 +388,39 @@ def register_pwa_assets(app):
 
     @app.route("/apple-touch-icon.png")
     def apple_touch_icon():
-        return send_pwa_image("icons/neoportal/apple_touch_icon_180.png")
+        return send_pwa_image("icons/neoapps/pwa/apple-touch-icon.png")
 
     @app.route("/apple-touch-icon-precomposed.png")
     def apple_touch_icon_precomposed():
-        return send_pwa_image("icons/neoportal/apple_touch_icon_180.png")
+        return send_pwa_image("icons/neoapps/pwa/apple-touch-icon.png")
 
     @app.route("/favicon-32x32.png")
     def favicon_32():
-        return send_pwa_image("icons/neoportal/favicon_32.png")
+        return send_pwa_image("icons/neoapps/favicon/favicon-32.png")
 
     @app.route("/favicon-16x16.png")
     def favicon_16():
-        return send_pwa_image("icons/neoportal/favicon_16.png")
+        return send_pwa_image("icons/neoapps/favicon/favicon-16.png")
 
     @app.route("/favicon.ico")
     def favicon_ico():
-        return send_pwa_image("icons/neoportal/favicon_32.png")
+        return send_pwa_image("icons/neoapps/favicon/favicon-32.png")
 
 
 def _pwa_manifest_definitions():
     specs = {
-        "neoportal": {
+        "neoapps": {
             "name": "NeoApps",
             "short_name": "NeoApps",
             "description": "NeoApps access dashboard.",
             "start_url": "/portal",
             "theme_color": "#d9362e",
-            "icon_folder": "neoportal",
-            "maskable": True,
+            "icons": [
+                _pwa_icon_src("/static/images/icons/neoapps/pwa/neoapps-icon-192.png", "192x192", "any"),
+                _pwa_icon_src("/static/images/icons/neoapps/pwa/neoapps-icon-512.png", "512x512", "any"),
+                _pwa_icon_src("/static/images/icons/neoapps/pwa/neoapps-maskable-192.png", "192x192", "maskable"),
+                _pwa_icon_src("/static/images/icons/neoapps/pwa/neoapps-maskable-512.png", "512x512", "maskable"),
+            ],
         },
         "neogateway": {
             "name": "NeoGateway",
@@ -424,7 +428,11 @@ def _pwa_manifest_definitions():
             "description": "NeoGateway operations hub.",
             "start_url": "/rfd",
             "theme_color": "#d95a1f",
-            "icon_folder": "neogateway",
+            "icons": [
+                _pwa_icon_src("/static/images/icons/neogateway/pwa/neogateway-icon-192.png", "192x192", "any"),
+                _pwa_icon_src("/static/images/icons/neogateway/pwa/neogateway-icon-512.png", "512x512", "any"),
+                _pwa_icon_src("/static/images/icons/neogateway/pwa/neogateway-maskable-512.png", "512x512", "any maskable"),
+            ],
         },
         "neostaffing": {
             "name": "NeoStaffing",
@@ -432,7 +440,11 @@ def _pwa_manifest_definitions():
             "description": "NeoStaffing workforce planning.",
             "start_url": "/neostaffing",
             "theme_color": "#27d0c2",
-            "icon_folder": "neostaffing",
+            "icons": [
+                _pwa_icon_src("/static/images/icons/neostaffing/pwa/neostaffing-icon-192.png", "192x192", "any"),
+                _pwa_icon_src("/static/images/icons/neostaffing/pwa/neostaffing-icon-512.png", "512x512", "any"),
+                _pwa_icon_src("/static/images/icons/neostaffing/pwa/neostaffing-maskable-512.png", "512x512", "any maskable"),
+            ],
         },
         "neobid": {
             "name": "NeoBid",
@@ -442,37 +454,55 @@ def _pwa_manifest_definitions():
             "theme_color": "#4db7ff",
             "icon_folder": "neobid",
         },
-        "motherbrain": {
+        "neomotherbrain": {
             "name": "NeoMotherBrain",
             "short_name": "MotherBrain",
             "description": "NeoMotherBrain operations core.",
             "start_url": "/motherbrain",
             "theme_color": "#cf6a6e",
-            "icon_folder": "motherbrain",
+            "icons": [
+                _pwa_icon_src("/static/images/icons/neomotherbrain/pwa/neomotherbrain-icon-192.png", "192x192", "any"),
+                _pwa_icon_src("/static/images/icons/neomotherbrain/pwa/neomotherbrain-icon-512.png", "512x512", "any"),
+                _pwa_icon_src("/static/images/icons/neomotherbrain/pwa/neomotherbrain-maskable-512.png", "512x512", "any maskable"),
+            ],
         },
-        "sektor": {
+        "neosektor": {
             "name": "NeoSektor",
             "short_name": "NeoSektor",
             "description": "NeoSektor ballmat operations.",
             "start_url": "/neosektor",
             "theme_color": "#b5121b",
-            "icon_folder": "sektor",
+            "icons": [
+                _pwa_icon_src("/static/images/icons/neosektor/pwa/android-chrome-192x192.png", "192x192", "any"),
+                _pwa_icon_src("/static/images/icons/neosektor/pwa/android-chrome-512x512.png", "512x512", "any"),
+                _pwa_icon_src("/static/images/icons/neosektor/pwa/maskable-icon-192x192.png", "192x192", "maskable"),
+                _pwa_icon_src("/static/images/icons/neosektor/pwa/maskable-icon-512x512.png", "512x512", "maskable"),
+            ],
         },
-        "ermac": {
+        "neoermac": {
             "name": "NeoErmac",
             "short_name": "NeoErmac",
             "description": "NeoErmac outbound operations.",
             "start_url": "/neoermac",
             "theme_color": "#8f1826",
-            "icon_folder": "ermac",
+            "icons": [
+                _pwa_icon_src("/static/images/icons/neoermac/pwa/neoermac-icon-192.png", "192x192", "any"),
+                _pwa_icon_src("/static/images/icons/neoermac/pwa/neoermac-icon-512.png", "512x512", "any"),
+                _pwa_icon_src("/static/images/icons/neoermac/pwa/neoermac-maskable-512.png", "512x512", "any maskable"),
+            ],
         },
-        "scorpion": {
+        "neoscorpion": {
             "name": "NeoScorpion",
             "short_name": "NeoScorpion",
             "description": "NeoScorpion placeholder.",
             "start_url": "/nodes/",
             "theme_color": "#f4c21f",
-            "icon_folder": "scorpion",
+            "icons": [
+                _pwa_icon_src("/static/images/icons/neoscorpion/pwa/icon-192x192.png", "192x192", "any"),
+                _pwa_icon_src("/static/images/icons/neoscorpion/pwa/icon-512x512.png", "512x512", "any"),
+                _pwa_icon_src("/static/images/icons/neoscorpion/pwa/maskable-icon-192x192.png", "192x192", "maskable"),
+                _pwa_icon_src("/static/images/icons/neoscorpion/pwa/maskable-icon-512x512.png", "512x512", "maskable"),
+            ],
         },
         "reptile": {
             "name": "NeoReptile",
@@ -500,22 +530,35 @@ def _pwa_manifest_definitions():
         },
     }
 
-    return {key: _build_pwa_manifest(key, spec) for key, spec in specs.items()}
+    definitions = {key: _build_pwa_manifest(key, spec) for key, spec in specs.items()}
+    legacy_aliases = {
+        "neoportal": "neoapps",
+        "motherbrain": "neomotherbrain",
+        "sektor": "neosektor",
+        "ermac": "neoermac",
+        "scorpion": "neoscorpion",
+    }
+    for alias, canonical_key in legacy_aliases.items():
+        definitions[alias] = _build_pwa_manifest(alias, specs[canonical_key])
+
+    return definitions
 
 
 def _build_pwa_manifest(manifest_key, spec):
-    icon_folder = spec["icon_folder"]
-    icons = [
-        _pwa_icon(icon_folder, "icon_192.png", "192x192", "any"),
-        _pwa_icon(icon_folder, "icon_512.png", "512x512", "any"),
-    ]
-    if spec.get("maskable"):
-        icons.extend(
-            [
-                _pwa_icon(icon_folder, "icon_maskable_192.png", "192x192", "maskable"),
-                _pwa_icon(icon_folder, "icon_maskable_512.png", "512x512", "maskable"),
-            ]
-        )
+    icons = spec.get("icons")
+    if icons is None:
+        icon_folder = spec["icon_folder"]
+        icons = [
+            _pwa_icon(icon_folder, "icon_192.png", "192x192", "any"),
+            _pwa_icon(icon_folder, "icon_512.png", "512x512", "any"),
+        ]
+        if spec.get("maskable"):
+            icons.extend(
+                [
+                    _pwa_icon(icon_folder, "icon_maskable_192.png", "192x192", "maskable"),
+                    _pwa_icon(icon_folder, "icon_maskable_512.png", "512x512", "maskable"),
+                ]
+            )
 
     return {
         "id": f"/manifest/{manifest_key}.webmanifest",
@@ -532,8 +575,12 @@ def _build_pwa_manifest(manifest_key, spec):
 
 
 def _pwa_icon(icon_folder, filename, sizes, purpose):
+    return _pwa_icon_src(f"/static/images/icons/{icon_folder}/{filename}", sizes, purpose)
+
+
+def _pwa_icon_src(src, sizes, purpose):
     return {
-        "src": f"/static/images/icons/{icon_folder}/{filename}",
+        "src": src,
         "sizes": sizes,
         "type": "image/png",
         "purpose": purpose,
