@@ -2046,6 +2046,32 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(refresh["window_end_local"], "04:00")
         self.assertEqual(refresh["reason"], "active")
 
+    def test_discharge_auto_refresh_uses_operation_window(self):
+        self._login_approved_user(role="operator")
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 30, 1, 0)
+        operation = self._add_sort_operation(date(2026, 6, 29), "night")
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+
+        response = self.client.get("/neosektor/discharge")
+        state_response = self.client.get("/neosektor/discharge/state")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'data-state-url="/neosektor/discharge/state"', response.data)
+        self.assertIn(b'data-refresh-active="true"', response.data)
+        self.assertIn(b"window.setInterval(refreshState, 5000)", response.data)
+        refresh = state_response.get_json()["state"]["refresh"]
+        self.assertTrue(refresh["auto_refresh_enabled"])
+        self.assertEqual(refresh["operation_id"], operation.id)
+
+    def test_neosektor_dashboard_does_not_auto_refresh(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neosektor")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"data-state-url=", response.data)
+        self.assertNotIn(b"window.setInterval(refreshState, 5000)", response.data)
+
     def test_live_counts_css_keeps_bay_status_cards_readable(self):
         css = Path("app/static/css/base.css").read_text()
         wave_metric_block = css.split(

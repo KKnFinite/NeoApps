@@ -13,6 +13,7 @@ from app.services.neoermac_building_lineup import (
     normalize_destination,
 )
 from app.services.neoermac_door_view import PULL_FIELDS
+from app.services.node_refresh import node_auto_refresh_status
 from app.services.sort_date_operations import mission_display_timing_data
 
 
@@ -27,6 +28,7 @@ def neoermac_dashboard_context(gateway):
         return {
             "operation": None,
             "has_current_sort": False,
+            "refresh_status": node_auto_refresh_status(gateway),
             "east": [],
             "west": [],
         }
@@ -81,6 +83,7 @@ def neoermac_dashboard_context(gateway):
     return {
         "operation": operation,
         "has_current_sort": True,
+        "refresh_status": node_auto_refresh_status(gateway),
         "east": rows["east"],
         "west": rows["west"],
     }

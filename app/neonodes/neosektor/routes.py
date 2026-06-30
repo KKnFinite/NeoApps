@@ -13,6 +13,7 @@ from app.services.neosektor_live_counts import (
     driver_routing_context,
     driver_routing_state_payload,
     live_counts_context,
+    neosektor_refresh_status,
     normalize_ballmat_side,
     tunnel_conductor_context,
     update_neosektor_operational_settings,
@@ -354,6 +355,7 @@ def discharge():
 
     gateway = get_current_gateway()
     context = discharge_context(gateway)
+    context["refresh_status"] = neosektor_refresh_status(gateway)
     selected_request_id = request.args.get("request_id", type=int)
     selected_request = next(
         (
@@ -382,7 +384,9 @@ def discharge_state():
     if not access["can_view"]:
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
-    state = discharge_state_payload(get_current_gateway())
+    gateway = get_current_gateway()
+    state = discharge_state_payload(gateway)
+    state["refresh"] = neosektor_refresh_status(gateway)
     db.session.commit()
     return jsonify({"ok": True, "state": state})
 
@@ -429,6 +433,9 @@ def discharge_send():
 
     db.session.commit()
     if request.is_json:
+        gateway = get_current_gateway()
+        state = discharge_state_payload(gateway)
+        state["refresh"] = neosektor_refresh_status(gateway)
         return jsonify(
             {
                 "ok": True,
@@ -437,7 +444,7 @@ def discharge_send():
                     "uld_type": event.uld_type,
                     "quantity": event.quantity,
                 },
-                "state": discharge_state_payload(get_current_gateway()),
+                "state": state,
             }
         )
 

@@ -49,6 +49,7 @@
     data-door-view
     data-state-url="{{ url_for('neoermac.door_view_state', door=selected_door) }}"
     data-pull-save-url="{{ url_for('neoermac.door_view_pull_autosave') }}"
+    data-refresh-active="{{ 'true' if refresh_status.auto_refresh_enabled else 'false' }}"
     {% endif %}
 >
     <div class="neoermac-hero neoermac-door-hero mobile-shell-duplicate-title">
@@ -58,6 +59,19 @@
 
     {% if can_view and not can_edit %}
     <p class="neoermac-readonly-note">View Only</p>
+    {% endif %}
+
+    {% if not selected_door %}
+    {% set operation_refresh_status = refresh_status %}
+    {% set operation_refresh_class = "neoermac-refresh-paused" %}
+    {% include "neonodes/_operation_refresh_reload.html" %}
+    {% else %}
+    <div class="neoermac-refresh-paused" data-neoermac-refresh-paused {% if refresh_status.auto_refresh_enabled %}hidden{% endif %} aria-live="polite">
+        {{ refresh_status.message }}
+        {% if refresh_status.operation_label and refresh_status.window_label %}
+        <span>{{ refresh_status.operation_label }} &middot; {{ refresh_status.window_label }}</span>
+        {% endif %}
+    </div>
     {% endif %}
 
     <form class="neoermac-door-selector" method="get" action="{{ url_for('neoermac.door_view') }}">
@@ -322,9 +336,13 @@
     }
 
     const stateUrl = root.dataset.stateUrl;
+    const initialRefreshStatus = {{ refresh_status|tojson }};
+    const refreshPaused = root.querySelector("[data-neoermac-refresh-paused]");
     const canEditRequests = {{ "true" if can_edit else "false" }};
     const selectedDoor = root.querySelector('[name="door"]')?.value || "";
     const pullAlertClasses = ["is-pull-due-soon", "is-pull-late"];
+    let refreshTimer = null;
+    let resumeTimer = null;
 
     const applyPullAlerts = (card, pullAlerts) => {
         if (!card) {
@@ -446,6 +464,46 @@
         renderDestinations(state.destinations || []);
     };
 
+    const setRefreshStatus = (refresh) => {
+        const status = refresh || {};
+        const isActive = status.auto_refresh_enabled !== false;
+        root.dataset.refreshActive = isActive ? "true" : "false";
+
+        if (refreshPaused) {
+            refreshPaused.hidden = isActive;
+            refreshPaused.replaceChildren(
+                document.createTextNode(status.message || "Auto-refresh paused outside the current operation window.")
+            );
+            if (status.operation_label && status.window_label) {
+                const detail = document.createElement("span");
+                detail.textContent = `${status.operation_label} - ${status.window_label}`;
+                refreshPaused.appendChild(detail);
+            }
+        }
+
+        if (isActive) {
+            window.clearTimeout(resumeTimer);
+            resumeTimer = null;
+            if (!refreshTimer) {
+                refreshTimer = window.setInterval(refreshState, 5000);
+            }
+            return;
+        }
+
+        if (refreshTimer) {
+            window.clearInterval(refreshTimer);
+            refreshTimer = null;
+        }
+        window.clearTimeout(resumeTimer);
+        const nextCheckSeconds = Number.parseInt(status.next_check_seconds, 10);
+        if (Number.isFinite(nextCheckSeconds) && nextCheckSeconds > 0) {
+            resumeTimer = window.setTimeout(
+                refreshState,
+                Math.min(Math.max(nextCheckSeconds * 1000, 5000), 2147483647)
+            );
+        }
+    };
+
     const renderDestinations = (destinations) => {
         const rows = new Map(
             destinations.map((destination) => [
@@ -483,6 +541,10 @@
             }
             const payload = await response.json();
             if (payload.ok) {
+                setRefreshStatus(payload.state.refresh);
+                if (payload.state.refresh?.auto_refresh_enabled === false) {
+                    return;
+                }
                 applyState(payload.state);
             }
         } catch (_error) {}
@@ -504,7 +566,7 @@
         return match ? match[1] : String(value).slice(0, 5);
     };
 
-    window.setInterval(refreshState, 3000);
+    setRefreshStatus(initialRefreshStatus);
 })();
 </script>
 {% endif %}

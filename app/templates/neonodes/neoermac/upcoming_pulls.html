@@ -10,6 +10,10 @@
         <h1>UPCOMING PULLS</h1>
     </div>
 
+    {% set operation_refresh_status = dashboard_context.refresh_status %}
+    {% set operation_refresh_class = "neoermac-refresh-paused" %}
+    {% include "neonodes/_operation_refresh_reload.html" %}
+
     <section class="neoermac-dashboard-panel neoermac-upcoming-panel" aria-label="NeoErmac current sort dashboard">
         {% include "neonodes/neoermac/_upcoming_pulls_board.html" %}
     </section>

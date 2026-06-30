@@ -21,6 +21,7 @@ from app.services.gateway_matrix import (
     operation_is_active_at,
     sort_lookup_window_for_operation,
 )
+from app.services.node_refresh import node_auto_refresh_status
 from app.services.sort_date_operations import mission_display_timing_data
 from app.services.uld_requests import (
     ULD_TYPES,
@@ -93,6 +94,7 @@ def door_view_context(gateway, selected_door=None):
         "uld_request": uld_request,
         "uld_requests": uld_requests,
         "operation": operation,
+        "refresh_status": neoermac_refresh_status(gateway),
         "tugs": [],
         "on_the_way_events": (
             active_on_the_way_event_views(gateway, selected_door) if selected_door else []
@@ -219,6 +221,7 @@ def door_view_uld_state(gateway, selected_door):
     operation = _current_operation(gateway)
     destinations = _destination_cards_for_door(gateway, selected_door, operation)
     state = door_uld_state_payload(gateway, selected_door)
+    state["refresh"] = neoermac_refresh_status(gateway)
     state["destinations"] = [
         {
             "destination": card["destination"],
@@ -230,6 +233,10 @@ def door_view_uld_state(gateway, selected_door):
         for card in destinations
     ]
     return state
+
+
+def neoermac_refresh_status(gateway, now=None):
+    return node_auto_refresh_status(gateway, now=now)
 
 
 def _pull_card_payload(gateway, selected_door, destination, operation):

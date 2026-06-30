@@ -24,6 +24,10 @@
     class="neosektor-standalone-page neosektor-discharge-shell tunnel-body"
     aria-labelledby="neosektor-discharge-title"
     data-neosektor-discharge
+    data-state-url="{{ url_for('neosektor.discharge_state') }}"
+    data-refresh-active="{{ 'true' if refresh_status.auto_refresh_enabled else 'false' }}"
+    data-selected-request-id="{{ selected_request.id if selected_request else '' }}"
+    data-discharge-url="{{ url_for('neosektor.discharge') }}"
 >
     <header class="app-header neosektor-standalone-header mobile-shell-duplicate-title">
         <div class="header-title">
@@ -36,6 +40,13 @@
     </header>
 
     <main class="counts-wrap neosektor-discharge-wrap">
+        <div class="neosektor-refresh-paused" data-neosektor-refresh-paused {% if refresh_status.auto_refresh_enabled %}hidden{% endif %} aria-live="polite">
+            {{ refresh_status.message }}
+            {% if refresh_status.operation_label and refresh_status.window_label %}
+            <span>{{ refresh_status.operation_label }} &middot; {{ refresh_status.window_label }}</span>
+            {% endif %}
+        </div>
+
         {% if selected_request %}
         <section class="neosektor-discharge-detail tunnel-panel{% if selected_request.setup_needed %} is-setup-needed{% endif %}" aria-label="Selected ULD request">
             <a class="neosektor-discharge-back" href="{{ url_for('neosektor.discharge') }}">BACK TO QUEUE</a>
@@ -51,7 +62,9 @@
                 <em>{{ request_type(selected_request) }}</em>
             </header>
 
-            {{ count_strip(selected_request) }}
+            <div data-selected-request-counts>
+                {{ count_strip(selected_request) }}
+            </div>
 
             {% if can_edit %}
             <form method="post" action="{{ url_for('neosektor.discharge_send') }}" class="neosektor-discharge-send-panel">
@@ -75,7 +88,7 @@
             <p class="neosektor-discharge-view-only">View-only access. Send controls are disabled.</p>
             {% endif %}
 
-            <section class="neosektor-discharge-events" aria-label="On the way for {{ selected_request.door }}">
+            <section class="neosektor-discharge-events" aria-label="On the way for {{ selected_request.door }}" data-selected-request-events>
                 <h2>ON THE WAY</h2>
                 {% if selected_request.on_the_way_events %}
                 <ul>
@@ -94,11 +107,12 @@
             <header class="neosektor-discharge-queue-head">
                 <div>
                     <span>ACTIVE REQUESTS</span>
-                    <strong>{{ requests|length }}</strong>
+                    <strong data-discharge-request-count>{{ requests|length }}</strong>
                 </div>
                 <p>Setup-needed requests sort first. Oldest requests stay at the top.</p>
             </header>
 
+            <div data-discharge-queue-body>
             {% if requests %}
             <div class="neosektor-discharge-list">
                 {% for request_row in requests %}
@@ -119,7 +133,170 @@
                 <p>Door requests will appear here when {{ neo_brand("Ermac", "ermac") }} users request A2, A1, or AMP equipment.</p>
             </div>
             {% endif %}
+            </div>
         </section>
     </main>
 </section>
+<script>
+(() => {
+    const root = document.querySelector("[data-neosektor-discharge]");
+    if (!root) {
+        return;
+    }
+
+    const stateUrl = root.dataset.stateUrl;
+    const dischargeUrl = root.dataset.dischargeUrl;
+    const selectedRequestId = Number.parseInt(root.dataset.selectedRequestId || "", 10);
+    const initialRefreshStatus = {{ refresh_status|tojson }};
+    const refreshPaused = root.querySelector("[data-neosektor-refresh-paused]");
+    const queueBody = root.querySelector("[data-discharge-queue-body]");
+    const requestCount = root.querySelector("[data-discharge-request-count]");
+    let refreshTimer = null;
+    let resumeTimer = null;
+
+    const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+    }[character]));
+
+    const requestType = (requestRow) => requestRow.setup_needed ? "SETUP" : "RESPOT";
+
+    const countStrip = (requestRow) => {
+        const counts = requestRow.counts || {};
+        return `
+            <div class="neosektor-discharge-count-strip" aria-label="Remaining ULD counts">
+                <span><span class="neosektor-discharge-uld-label">A2</span> <strong>${Number.parseInt(counts.A2 ?? 0, 10) || 0}</strong></span>
+                <span><span class="neosektor-discharge-uld-label">A1</span> <strong>${Number.parseInt(counts.A1 ?? 0, 10) || 0}</strong></span>
+                <span><span class="neosektor-discharge-uld-label">AMP</span> <strong>${Number.parseInt(counts.AMP ?? 0, 10) || 0}</strong></span>
+            </div>
+        `;
+    };
+
+    const renderQueue = (requests) => {
+        const rows = requests || [];
+        if (requestCount) {
+            requestCount.textContent = String(rows.length);
+        }
+        if (!queueBody) {
+            return;
+        }
+
+        if (!rows.length) {
+            queueBody.innerHTML = `
+                <div class="neosektor-discharge-empty">
+                    <h2>NO ACTIVE ULD REQUESTS</h2>
+                    <p>Door requests will appear here when users request A2, A1, or AMP equipment.</p>
+                </div>
+            `;
+            return;
+        }
+
+        queueBody.innerHTML = `<div class="neosektor-discharge-list">${rows.map((requestRow) => {
+            const requestId = Number.parseInt(requestRow.id ?? 0, 10) || 0;
+            const selectedClass = selectedRequestId && selectedRequestId === requestId ? " is-selected" : "";
+            const setupClass = requestRow.setup_needed ? " is-setup-needed" : "";
+            return `
+                <a class="neosektor-discharge-row${setupClass}${selectedClass}" href="${dischargeUrl}?request_id=${requestId}">
+                    <span class="neosektor-discharge-door">${escapeHtml(requestRow.door || "")}</span>
+                    ${countStrip(requestRow)}
+                    <span class="neosektor-discharge-time">${escapeHtml(requestRow.updated_at_label || "-")}</span>
+                    <span class="neosektor-discharge-setup">${requestType(requestRow)}</span>
+                </a>
+            `;
+        }).join("")}</div>`;
+    };
+
+    const renderSelected = (requests) => {
+        if (!selectedRequestId) {
+            return;
+        }
+        const selected = (requests || []).find(
+            (requestRow) => Number.parseInt(requestRow.id ?? 0, 10) === selectedRequestId
+        );
+        if (!selected) {
+            window.location.href = dischargeUrl;
+            return;
+        }
+
+        const counts = root.querySelector("[data-selected-request-counts]");
+        if (counts) {
+            counts.innerHTML = countStrip(selected);
+        }
+
+        const events = root.querySelector("[data-selected-request-events]");
+        if (events) {
+            const eventRows = selected.on_the_way_events || [];
+            events.innerHTML = "<h2>ON THE WAY</h2>" + (
+                eventRows.length
+                    ? `<ul>${eventRows.map((event) => `<li>${escapeHtml(event.label || "")}</li>`).join("")}</ul>`
+                    : "<p>No active on-the-way events.</p>"
+            );
+        }
+    };
+
+    const setRefreshStatus = (refresh) => {
+        const status = refresh || {};
+        const isActive = status.auto_refresh_enabled !== false;
+        root.dataset.refreshActive = isActive ? "true" : "false";
+
+        if (refreshPaused) {
+            refreshPaused.hidden = isActive;
+            refreshPaused.replaceChildren(
+                document.createTextNode(status.message || "Auto-refresh paused outside the current operation window.")
+            );
+            if (status.operation_label && status.window_label) {
+                const detail = document.createElement("span");
+                detail.textContent = `${status.operation_label} - ${status.window_label}`;
+                refreshPaused.appendChild(detail);
+            }
+        }
+
+        if (isActive) {
+            window.clearTimeout(resumeTimer);
+            resumeTimer = null;
+            if (!refreshTimer) {
+                refreshTimer = window.setInterval(refreshState, 5000);
+            }
+            return;
+        }
+
+        if (refreshTimer) {
+            window.clearInterval(refreshTimer);
+            refreshTimer = null;
+        }
+        window.clearTimeout(resumeTimer);
+        const nextCheckSeconds = Number.parseInt(status.next_check_seconds, 10);
+        if (Number.isFinite(nextCheckSeconds) && nextCheckSeconds > 0) {
+            resumeTimer = window.setTimeout(
+                refreshState,
+                Math.min(Math.max(nextCheckSeconds * 1000, 5000), 2147483647)
+            );
+        }
+    };
+
+    const refreshState = async () => {
+        try {
+            const response = await fetch(stateUrl, { cache: "no-store", credentials: "same-origin" });
+            if (!response.ok) {
+                return;
+            }
+            const payload = await response.json();
+            if (!payload.ok || !payload.state) {
+                return;
+            }
+            setRefreshStatus(payload.state.refresh);
+            if (payload.state.refresh?.auto_refresh_enabled === false) {
+                return;
+            }
+            renderQueue(payload.state.requests || []);
+            renderSelected(payload.state.requests || []);
+        } catch (_error) {}
+    };
+
+    setRefreshStatus(initialRefreshStatus);
+})();
+</script>
 {% endblock %}

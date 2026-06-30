@@ -36,6 +36,10 @@
         </div>
     </section>
 
+    {% set operation_refresh_status = refresh_status %}
+    {% set operation_refresh_class = "neoermac-refresh-paused" %}
+    {% include "neonodes/_operation_refresh_reload.html" %}
+
     {% if rows %}
     <div class="neoermac-outbound-table-wrap" data-neoermac-outbound-layout="pull-table">
         <table class="neoermac-outbound-table" data-neoermac-outbound-table>
