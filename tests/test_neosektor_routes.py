@@ -2207,6 +2207,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
             ".blueprint-neosektor .tunnel-settings-panel {",
             1,
         )[1].split("}", 1)[0]
+        live_container_block = css.rsplit(
+            ".blueprint-neosektor .neosektor-live-ballmat-row .ops-column,",
+            1,
+        )[1].split("}", 1)[0]
         data_entry_block = css.split(
             ".blueprint-neosektor .counter-control,",
             1,
@@ -2241,6 +2245,18 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("border: 0;", settings_panel_block)
         self.assertIn("background: transparent;", settings_panel_block)
         self.assertIn("box-shadow: none;", settings_panel_block)
+        self.assertIn("linear-gradient(180deg, rgba(12, 15, 20, 0.96), rgba(3, 5, 8, 0.98));", live_container_block)
+        self.assertIn(
+            ".blueprint-neosektor .neosektor-live-ballmat-row .readonly-count {\n"
+            "    color: #fff;",
+            css,
+        )
+        self.assertIn(
+            ".blueprint-neosektor .tunnel-wave-panel .tunnel-arrive-control "
+            ".counter-number[data-metric=\"left_to_arrive\"],",
+            css,
+        )
+        self.assertIn("font-size: 2.35rem;", css)
 
     def test_neosektor_mobile_header_css_uses_compact_text_controls(self):
         css = Path("app/static/css/base.css").read_text()

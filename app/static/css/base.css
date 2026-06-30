@@ -17104,6 +17104,176 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     margin-bottom: 2px;
 }
 
+.blueprint-neosektor .neosektor-live-ballmat-row .ops-column,
+.blueprint-neosektor.neosektor-ballmat-operator-page .ops-column,
+.blueprint-neosektor .tunnel-counts-panel,
+.blueprint-neosektor .tunnel-bay-panel,
+.blueprint-neosektor .tunnel-offset-panel {
+    border-color: rgba(216, 220, 224, 0.16);
+    background:
+        linear-gradient(135deg, rgba(244, 247, 251, 0.035), transparent 30%),
+        linear-gradient(180deg, rgba(12, 15, 20, 0.96), rgba(3, 5, 8, 0.98));
+    box-shadow:
+        inset 0 1px 0 rgba(244, 246, 248, 0.055),
+        0 16px 34px rgba(0, 0, 0, 0.34);
+}
+
+.blueprint-neosektor .neosektor-live-ballmat-row {
+    align-items: stretch;
+    justify-items: center;
+}
+
+.blueprint-neosektor .neosektor-live-ballmat-row .ops-column {
+    width: 100%;
+    max-width: 286px;
+}
+
+.blueprint-neosektor .neosektor-live-ballmat-row .counter-card,
+.blueprint-neosektor.neosektor-ballmat-operator-page .counter-card,
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card,
+.blueprint-neosektor .tunnel-wave-panel,
+.blueprint-neosektor .tunnel-readonly-card,
+.blueprint-neosektor .tunnel-bay-card {
+    border-color: rgba(var(--node-sektor-primary-rgb), 0.5);
+    background:
+        linear-gradient(135deg, rgba(244, 247, 251, 0.06), transparent 30%),
+        linear-gradient(180deg, rgba(68, 12, 18, 0.92), rgba(14, 4, 8, 0.97));
+}
+
+.blueprint-neosektor .neosektor-live-ballmat-row .readonly-count {
+    color: #fff;
+    font-size: 3.05rem;
+    font-weight: 950;
+    line-height: 0.9;
+}
+
+.blueprint-neosektor .neosektor-live-column-bays .bay-card strong,
+.blueprint-neosektor .bay-heading strong,
+.blueprint-neosektor .tunnel-bay-card strong,
+.blueprint-neosektor .neosektor-status,
+.blueprint-neosektor .neosektor-status-empty,
+.blueprint-neosektor .neosektor-status-light,
+.blueprint-neosektor .neosektor-status-moderate,
+.blueprint-neosektor .neosektor-status-full,
+.blueprint-neosektor .neosektor-status-overflowing {
+    color: #fff;
+    text-shadow: 0 0 10px rgba(244, 247, 251, 0.18);
+}
+
+.blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong,
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_arrive"],
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_unload"],
+.blueprint-neosektor .tunnel-wave-panel [data-metric="left_to_arrive"],
+.blueprint-neosektor .tunnel-wave-panel [data-metric="left_to_unload"] {
+    color: var(--node-sektor-highlight);
+    font-weight: 950;
+    text-shadow:
+        0 0 12px rgba(var(--node-sektor-highlight-rgb), 0.42),
+        0 0 22px rgba(var(--node-sektor-primary-rgb), 0.22);
+}
+
+.blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong,
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_arrive"],
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_unload"] {
+    font-size: 2rem;
+    line-height: 0.92;
+}
+
+.blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong.is-word {
+    font-size: 1.08rem;
+}
+
+.blueprint-neosektor .tunnel-wave-panel .tunnel-arrive-control .counter-number[data-metric="left_to_arrive"],
+.blueprint-neosektor .tunnel-wave-panel [data-metric="left_to_unload"] {
+    font-size: 2.35rem;
+    line-height: 0.9;
+}
+
+.blueprint-neosektor .tunnel-wave-panel .tunnel-metric {
+    min-height: 72px;
+    justify-content: center;
+}
+
+.blueprint-neosektor .counter-control,
+.blueprint-neosektor .counter-control input,
+.blueprint-neosektor .tunnel-editable,
+.blueprint-neosektor .tunnel-setting-card,
+.blueprint-neosektor .tunnel-setting-card input,
+.blueprint-neosektor .neosektor-driver-offset-control,
+.blueprint-neosektor .neosektor-driver-offset-control input,
+.blueprint-neosektor .neosektor-discharge-send-panel label,
+.blueprint-neosektor .neosektor-discharge-send-panel input {
+    background:
+        linear-gradient(135deg, rgba(244, 247, 251, 0.04), transparent 32%),
+        linear-gradient(180deg, rgba(20, 23, 28, 0.94), rgba(5, 7, 11, 0.99));
+}
+
+.blueprint-neosektor .tunnel-settings-panel .tunnel-setting-card {
+    border-color: rgba(216, 220, 224, 0.18);
+    box-shadow: inset 0 1px 0 rgba(244, 246, 248, 0.055);
+}
+
+.blueprint-neosektor .tunnel-settings-panel .tunnel-setting-card input {
+    color: #fff;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-strip {
+    align-items: stretch;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card {
+    display: grid;
+    gap: 8px;
+    min-height: 0;
+    padding: 10px;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card .wave-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card .wave-metrics div {
+    display: grid;
+    align-content: center;
+    gap: 5px;
+    min-height: 58px;
+    padding: 8px;
+    border: 1px solid rgba(216, 220, 224, 0.16);
+    border-radius: 7px;
+    background:
+        linear-gradient(135deg, rgba(244, 247, 251, 0.04), transparent 32%),
+        linear-gradient(180deg, rgba(10, 13, 17, 0.88), rgba(4, 6, 9, 0.98));
+    text-align: center;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card .wave-metrics span {
+    color: var(--neo-silver);
+    font-size: 0.62rem;
+}
+
+@media (max-width: 760px) {
+    .blueprint-neosektor .neosektor-live-ballmat-row .ops-column {
+        max-width: none;
+    }
+
+    .blueprint-neosektor .neosektor-live-ballmat-row .readonly-count {
+        font-size: 2.55rem;
+    }
+
+    .blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong,
+    .blueprint-neosektor.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_arrive"],
+    .blueprint-neosektor.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_unload"] {
+        font-size: 1.72rem;
+    }
+
+    .blueprint-neosektor .tunnel-wave-panel .tunnel-arrive-control .counter-number[data-metric="left_to_arrive"],
+    .blueprint-neosektor .tunnel-wave-panel [data-metric="left_to_unload"] {
+        font-size: 2.05rem;
+    }
+}
+
 @media (max-width: 430px) {
     .blueprint-neosektor .neosektor-discharge-wrap,
     .neosektor-discharge-wrap {
