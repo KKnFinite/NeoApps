@@ -2087,7 +2087,36 @@ class NeoSektorRoutesTest(unittest.TestCase):
         payload = state_response.get_json()
         self.assertFalse(payload["state"]["refresh"]["auto_refresh_enabled"])
         self.assertEqual(payload["state"]["refresh"]["operation_id"], operation.id)
-        self.assertEqual(payload["state"]["refresh"]["next_check_seconds"], 43200)
+        self.assertIsNone(payload["state"]["refresh"]["next_check_seconds"])
+        self.assertNotIn(b"setTimeout(refreshState", response.data)
+        self.assertNotIn(b"resumeTimer", response.data)
+
+    def test_neosektor_auto_refresh_is_limited_to_live_operation_pages(self):
+        self._login_approved_user(role="simulator")
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 30, 1, 0)
+        self._add_sort_operation(date(2026, 6, 29), "night")
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+
+        refresh_pages = (
+            "/neosektor/live-counts",
+            "/neosektor/tunnel-conductor",
+            "/neosektor/ebm",
+            "/neosektor/wbm",
+            "/neosektor/driver-routing",
+            "/neosektor/discharge",
+        )
+        for path in refresh_pages:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b'data-refresh-active="true"', response.data)
+                self.assertIn(b"window.setInterval(refreshState, 5000)", response.data)
+                self.assertNotIn(b"setTimeout(refreshState", response.data)
+
+        dashboard_response = self.client.get("/neosektor")
+        self.assertEqual(dashboard_response.status_code, 200)
+        self.assertNotIn(b"data-state-url=", dashboard_response.data)
+        self.assertNotIn(b"window.setInterval(refreshState, 5000)", dashboard_response.data)
 
     def test_neosektor_refresh_active_for_midnight_crossing_operation_window(self):
         self._login_approved_user(role="watcher")

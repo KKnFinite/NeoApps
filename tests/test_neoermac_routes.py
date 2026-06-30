@@ -224,7 +224,15 @@ class NeoErmacRoutesTest(unittest.TestCase):
         payload = state_response.get_json()
         self.assertFalse(payload["state"]["refresh"]["auto_refresh_enabled"])
         self.assertEqual(payload["state"]["refresh"]["operation_id"], operation.id)
-        self.assertEqual(payload["state"]["refresh"]["next_check_seconds"], 43200)
+        self.assertIsNone(payload["state"]["refresh"]["next_check_seconds"])
+        self.assertNotIn(b"setTimeout(refreshState", response.data)
+        self.assertNotIn(b"resumeTimer", response.data)
+
+        reload_response = self.client.get("/neoermac/view-outbound")
+        self.assertEqual(reload_response.status_code, 200)
+        self.assertIn(b'data-refresh-active="false"', reload_response.data)
+        self.assertNotIn(b"data-next-check-seconds", reload_response.data)
+        self.assertNotIn(b"() => window.location.reload()", reload_response.data)
 
     def test_neoermac_upcoming_pulls_shows_west_and_east_pull_lists(self):
         self._assign_lineup_destination("runout_4", "east_destination_1", "BOS")

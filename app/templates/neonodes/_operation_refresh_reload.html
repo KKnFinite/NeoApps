@@ -3,7 +3,6 @@
     class="{{ operation_refresh_class|default('node-operation-refresh-paused') }}"
     data-operation-refresh-reload
     data-refresh-active="{{ 'true' if operation_refresh_status.auto_refresh_enabled else 'false' }}"
-    data-next-check-seconds="{{ operation_refresh_status.next_check_seconds or '' }}"
     {% if operation_refresh_status.auto_refresh_enabled %}hidden{% endif %}
     aria-live="polite"
 >
@@ -12,6 +11,7 @@
     <span>{{ operation_refresh_status.operation_label }} &middot; {{ operation_refresh_status.window_label }}</span>
     {% endif %}
 </div>
+{% if operation_refresh_status.auto_refresh_enabled %}
 <script>
 (() => {
     const root = document.currentScript.previousElementSibling;
@@ -24,14 +24,7 @@
         window.setInterval(() => window.location.reload(), 5000);
         return;
     }
-
-    const nextCheckSeconds = Number.parseInt(root.dataset.nextCheckSeconds || "", 10);
-    if (Number.isFinite(nextCheckSeconds) && nextCheckSeconds > 0) {
-        window.setTimeout(
-            () => window.location.reload(),
-            Math.min(Math.max(nextCheckSeconds * 1000, 5000), 2147483647)
-        );
-    }
 })();
 </script>
+{% endif %}
 {% endif %}

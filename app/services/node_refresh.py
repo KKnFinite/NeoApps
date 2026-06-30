@@ -80,10 +80,6 @@ def _refresh_status_payload(
     reason="",
     message="",
 ):
-    next_check_seconds = None
-    if not active and start_local and local_now < start_local:
-        next_check_seconds = max(int((start_local - local_now).total_seconds()), 1)
-
     return {
         "auto_refresh_enabled": bool(active),
         "is_operation_active": bool(active),
@@ -97,7 +93,7 @@ def _refresh_status_payload(
         "window_start_local": _time_label(start_local),
         "window_end_local": _time_label(end_local),
         "window_label": _window_label(start_local, end_local),
-        "next_check_seconds": next_check_seconds,
+        "next_check_seconds": None,
     }
 
 

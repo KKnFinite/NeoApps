@@ -252,7 +252,6 @@
     let settingsSaveTimer = null;
     let settingsSaveSequence = 0;
     let refreshTimer = null;
-    let resumeTimer = null;
 
     const setText = (selector, value) => {
         const element = root.querySelector(selector);
@@ -422,8 +421,6 @@
         }
 
         if (isActive) {
-            window.clearTimeout(resumeTimer);
-            resumeTimer = null;
             if (!refreshTimer) {
                 refreshTimer = window.setInterval(refreshState, 5000);
             }
@@ -433,14 +430,6 @@
         if (refreshTimer) {
             window.clearInterval(refreshTimer);
             refreshTimer = null;
-        }
-        window.clearTimeout(resumeTimer);
-        const nextCheckSeconds = Number.parseInt(status.next_check_seconds, 10);
-        if (Number.isFinite(nextCheckSeconds) && nextCheckSeconds > 0) {
-            resumeTimer = window.setTimeout(
-                refreshState,
-                Math.min(Math.max(nextCheckSeconds * 1000, 5000), 2147483647),
-            );
         }
     };
 
