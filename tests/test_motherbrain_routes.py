@@ -6530,9 +6530,16 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_parking_validator_allows_manual_normal_bank_out_of_fill_order(self):
         operation = self._parking_operation()
-        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        for tail, position in (
+            ("N457UP", "A03"),
+            ("N458UP", "D03"),
+            ("N459UP", "D06"),
+        ):
+            self._parking_pair(operation, tail, aircraft_type="757", destination=position)
         db.session.flush()
         self._parking_assignment(operation, "N457UP", "A03")
+        self._parking_assignment(operation, "N458UP", "D03")
+        self._parking_assignment(operation, "N459UP", "D06")
         db.session.commit()
         tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
 
@@ -6540,6 +6547,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         messages = [conflict.message for conflict in conflicts]
 
         self.assertNotIn("A03 cannot be used until A01, A02 are filled.", messages)
+        self.assertNotIn("D03 cannot be used until D01, D02 are filled.", messages)
+        self.assertNotIn("D06 cannot be used until D05 are filled.", messages)
         self.assertFalse(any(conflict.reason == "normal_bank_fill_order" for conflict in conflicts))
 
     def test_parking_validator_detects_parking_rules_blocked_position(self):
@@ -6609,9 +6618,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_parking_validator_echo_767_positions_do_not_use_two_slot_footprint(self):
         operation = self._parking_operation()
+        self._parking_pair(operation, "N901UP", aircraft_type="757", destination="PHL")
         self._parking_pair(operation, "N902UP", aircraft_type="757")
         self._parking_pair(operation, "N903UP", aircraft_type="757", destination="SDF")
         db.session.flush()
+        self._parking_assignment(operation, "N901UP", "E01", ramp_code="E")
         self._parking_assignment(operation, "N902UP", "E02", ramp_code="E")
         self._parking_assignment(operation, "N903UP", "E03", ramp_code="E")
         db.session.commit()
@@ -6624,7 +6635,43 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "767 at E02 is invalid because 767 aircraft cannot anchor at 02.",
             messages,
         )
+        self.assertNotIn("E02 is blocked by 767 parked at E01.", messages)
         self.assertNotIn("E03 is blocked by 767 parked at E02.", messages)
+        self.assertFalse(messages)
+
+    def test_parking_validator_allows_767_anchors_except_04_and_08(self):
+        operation = self._parking_operation()
+        for tail, position in (
+            ("N966UP", "B06"),
+            ("N977UP", "C07"),
+            ("N964UP", "D04"),
+            ("N968UP", "D08"),
+        ):
+            self._parking_pair(operation, tail, aircraft_type="757", destination=position)
+            db.session.flush()
+            self._parking_assignment(operation, tail, position, ramp_code=position[0])
+        db.session.commit()
+        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
+
+        conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
+        messages = [conflict.message for conflict in conflicts]
+
+        self.assertNotIn(
+            "767 at B06 is invalid because 767 aircraft cannot anchor at 06.",
+            messages,
+        )
+        self.assertNotIn(
+            "767 at C07 is invalid because 767 aircraft cannot anchor at 07.",
+            messages,
+        )
+        self.assertIn(
+            "767 at D04 is invalid because 767 aircraft cannot anchor at 04.",
+            messages,
+        )
+        self.assertIn(
+            "767 at D08 is invalid because 767 aircraft cannot anchor at 08.",
+            messages,
+        )
 
     def test_parking_validator_detects_slot_occupied_while_blocked_by_767(self):
         operation = self._parking_operation()

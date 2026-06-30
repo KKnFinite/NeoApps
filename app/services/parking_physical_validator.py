@@ -17,7 +17,7 @@ NORMAL_RAMP_CODES = ("A", "B", "C", "D", "E")
 NORMAL_767_FOOTPRINT_RAMP_CODES = ("A", "B", "C", "D")
 NORMAL_BANKS = ((1, 2, 3, 4), (5, 6, 7, 8))
 REMOTE_ORDER = ("R01", "R02", "R03", "R04")
-VALID_767_NORMAL_ANCHORS = {1: 2, 3: 4, 5: 6, 7: 8}
+VALID_767_NORMAL_ANCHORS = {1: 2, 2: 3, 3: 4, 5: 6, 6: 7, 7: 8}
 PARKING_ALERT_KEY_PREFIX = "parking-physical"
 
 
