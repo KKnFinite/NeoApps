@@ -7633,6 +7633,78 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertGreater(preview["model_diagnostics"][0]["placement_count"], 0)
         self.assertIn("protect memory", preview["model_diagnostic_summary"])
 
+    def test_parking_optimizer_candidate_guard_reports_without_building_large_model(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        self._parking_pair(operation, "N458UP", aircraft_type="757", destination="SDF")
+        db.session.commit()
+
+        with patch("app.services.parking_optimizer.PARKING_OPTIMIZER_MAX_CANDIDATE_TAILS", 1):
+            preview = self._parking_optimizer_preview(operation)
+
+        self.assertEqual(preview["solver_status"], "GUARDED")
+        self.assertEqual(preview["candidate_tail_count"], 2)
+        self.assertEqual(preview["suggested_assignments"], [])
+        self.assertFalse(preview["can_apply_preview"])
+        self.assertIn("candidate guard", preview["solver_diagnostic"])
+        self.assertEqual(len(preview["unassigned_tails"]), 2)
+        self.assertIn("protect memory", preview["model_diagnostic_summary"])
+
+    def test_parking_optimizer_deice_pair_scan_guard_skips_scoring_only(self):
+        operation = self._parking_operation()
+        for index in range(3):
+            self._parking_pair(
+                operation,
+                f"N45{index}UP",
+                aircraft_type="757",
+                departure_local=datetime(2026, 6, 19, 1, 0) + timedelta(minutes=index),
+                destination=f"D{index}",
+            )
+        db.session.commit()
+
+        with patch("app.services.parking_optimizer.DEICE_MAX_PAIR_SCAN_COUNT", 0):
+            preview = self._parking_optimizer_preview(operation)
+
+        self.assertIn(preview["solver_status"], {"OPTIMAL", "FEASIBLE"})
+        self.assertGreater(len(preview["suggested_assignments"]), 0)
+        self.assertEqual(preview["runtime_toggles"]["deice_scoring_status"], "skipped")
+        self.assertIn("same-ramp pair scans", preview["runtime_toggles"]["deice_scoring_detail"])
+
+    def test_parking_optimizer_solver_uses_single_worker_memory_bound(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        db.session.commit()
+
+        from ortools.sat.python import cp_model
+
+        observed = {}
+
+        class UnknownSolver:
+            def __init__(self):
+                self.parameters = SimpleNamespace(max_time_in_seconds=None)
+
+            def Solve(self, model):
+                observed["workers"] = self.parameters.num_search_workers
+                observed["memory"] = self.parameters.max_memory_in_mb
+                observed["time_limit"] = self.parameters.max_time_in_seconds
+                return cp_model.UNKNOWN
+
+            def StatusName(self, status):
+                return "UNKNOWN"
+
+            def WallTime(self):
+                return 0.001
+
+        with patch("app.services.parking_optimizer.cp_model.CpSolver", UnknownSolver):
+            preview = self._parking_optimizer_preview(operation)
+
+        self.assertEqual(preview["solver_status"], "UNKNOWN")
+        self.assertEqual(observed["workers"], 1)
+        self.assertEqual(observed["memory"], 256)
+        self.assertEqual(observed["time_limit"], 8.0)
+        self.assertEqual(preview["model_diagnostics"][0]["search_workers"], 1)
+        self.assertEqual(preview["model_diagnostics"][0]["memory_limit_mb"], 256)
+
     def test_parking_optimizer_solver_exception_reports_no_match_failure(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", aircraft_type="757")

@@ -37,12 +37,17 @@ from app.services.parking_rules import (
 logger = logging.getLogger(__name__)
 
 PARKING_OPTIMIZER_TIME_LIMIT_SECONDS = 8.0
-PARKING_OPTIMIZER_MAX_STAGE_PLACEMENTS = 3500
-PARKING_OPTIMIZER_MAX_STAGE_ETA_RELATIONS = 300000
+PARKING_OPTIMIZER_SEARCH_WORKERS = 1
+PARKING_OPTIMIZER_MAX_MEMORY_MB = 256
+PARKING_OPTIMIZER_MAX_CANDIDATE_TAILS = 64
+PARKING_OPTIMIZER_MAX_STAGE_PLACEMENTS = 1800
+PARKING_OPTIMIZER_MAX_STAGE_ETA_RELATIONS = 120000
 SUCCESS_SOLVER_STATUSES = {"OPTIMAL", "FEASIBLE"}
 PREFERRED_RAMP_SCORE = 600
 AVOID_RAMP_PENALTY = 350
 DEICE_CLOSE_PAIR_PENALTY = 400
+DEICE_MAX_CANDIDATE_ENTRIES = 1400
+DEICE_MAX_PAIR_SCAN_COUNT = 300000
 DEICE_MAX_CLUSTER_COUNT = 240
 DEICE_MAX_CLUSTER_LITERAL_COUNT = 20000
 PARKING_WINDOW_PRIORITY_SCORE = 2000
@@ -129,6 +134,68 @@ def parking_optimizer_preview(
             include_order_conflicts=True,
         )
     ]
+    candidate_guard_reason = _candidate_tail_guard_reason(candidate_rows)
+    if candidate_guard_reason:
+        candidate_positions = _candidate_positions(include_remote, include_throat)
+        candidate_diagnostics = {
+            _normalize_tail(row.get("tail")): {
+                "candidate_positions_before_filters": len(candidate_positions),
+                "candidate_positions_after_hard_filters": 0,
+                "candidate_positions_before_sample": _position_sample(
+                    [position for position, _ramp in candidate_positions]
+                ),
+                "candidate_positions_after_sample": "",
+                "top_rejection_reason": candidate_guard_reason,
+            }
+            for row in candidate_rows
+            if _normalize_tail(row.get("tail"))
+        }
+        unassigned = _unassigned_rows(
+            candidate_rows,
+            {},
+            [],
+            solver_status="GUARDED",
+            include_remote=include_remote,
+            include_throat=include_throat,
+            locked_conflicts=locked_conflicts,
+            hard_rules=rules["hard"],
+            candidate_diagnostics=candidate_diagnostics,
+        )
+        model_diagnostic = _stage_model_diagnostic(
+            "candidate_generation",
+            0,
+            0,
+            "GUARDED",
+            candidate_guard_reason,
+        )
+        result = _preview_result(
+            "GUARDED",
+            include_remote,
+            include_throat,
+            deice_threshold,
+            preferred_max_per_ramp,
+            _deice_report(
+                "skipped",
+                "Deice scoring skipped because candidate guard stopped optimizer preview.",
+            ),
+            len(candidate_rows),
+            locked_assignments,
+            [],
+            unassigned,
+            locked_conflicts,
+            candidate_guard_reason,
+            wall_time=0,
+            solver_diagnostic=candidate_guard_reason,
+            model_diagnostics=[model_diagnostic],
+        )
+        logger.warning(
+            "Parking optimizer candidate guard stopped preview: operation=%s candidates=%s limit=%s",
+            getattr(operation, "id", None),
+            len(candidate_rows),
+            PARKING_OPTIMIZER_MAX_CANDIDATE_TAILS,
+        )
+        return result
+
     locked_normal_ramp_counts = _normal_ramp_counts_for_assignments(assignments)
     candidate_positions = _candidate_positions(include_remote, include_throat)
     locked_lane_keys = {
@@ -787,6 +854,17 @@ def _build_candidate_placements(
     return placements, diagnostics
 
 
+def _candidate_tail_guard_reason(candidate_rows):
+    candidate_count = len(candidate_rows or [])
+    if candidate_count <= PARKING_OPTIMIZER_MAX_CANDIDATE_TAILS:
+        return ""
+    return (
+        "Optimizer candidate guard skipped solving to protect memory "
+        f"({candidate_count} active unparked tails exceeds "
+        f"{PARKING_OPTIMIZER_MAX_CANDIDATE_TAILS}). Existing assignments were preserved."
+    )
+
+
 def _stage_guard_reason(placements, eta_relation_count):
     placement_count = len(placements)
     if placement_count > PARKING_OPTIMIZER_MAX_STAGE_PLACEMENTS:
@@ -812,11 +890,19 @@ def _stage_model_diagnostic(
     summary,
     wall_time=None,
     deice_status="",
+    deice_candidate_count=0,
+    deice_pair_scan_count=0,
+    search_workers=None,
+    memory_limit_mb=None,
 ):
     return {
         "stage": stage,
         "placement_count": placement_count,
         "eta_relation_count": eta_relation_count,
+        "deice_candidate_count": deice_candidate_count,
+        "deice_pair_scan_count": deice_pair_scan_count,
+        "search_workers": search_workers or PARKING_OPTIMIZER_SEARCH_WORKERS,
+        "memory_limit_mb": memory_limit_mb or PARKING_OPTIMIZER_MAX_MEMORY_MB,
         "status": status,
         "summary": summary,
         "wall_time_seconds": wall_time,
@@ -846,6 +932,29 @@ def _eta_relation_count_for_placements(placements, locked_eta_by_position):
                 total += higher_candidate_count * lower_candidate_count
                 total += higher_locked_count * lower_candidate_count
     return total
+
+
+def _deice_complexity_for_placements(placements, threshold_minutes):
+    if _safe_int(threshold_minutes, 0) <= 0:
+        return 0, 0
+    by_ramp = {}
+    for placement in placements:
+        if not _is_deice_position(placement.position) or not placement.departure:
+            continue
+        by_ramp[placement.ramp] = by_ramp.get(placement.ramp, 0) + 1
+    candidate_count = sum(by_ramp.values())
+    pair_scan_count = sum(count * count for count in by_ramp.values())
+    return candidate_count, pair_scan_count
+
+
+def _configure_cp_solver(solver):
+    solver.parameters.max_time_in_seconds = PARKING_OPTIMIZER_TIME_LIMIT_SECONDS
+    solver.parameters.num_search_workers = PARKING_OPTIMIZER_SEARCH_WORKERS
+    try:
+        solver.parameters.max_memory_in_mb = PARKING_OPTIMIZER_MAX_MEMORY_MB
+    except (AttributeError, ValueError, TypeError):
+        logger.debug("CP-SAT max_memory_in_mb parameter is unavailable in this runtime.")
+    return solver
 
 
 def _solve_optimizer_stage(
@@ -879,6 +988,20 @@ def _solve_optimizer_stage(
         }
 
     eta_relation_count = _eta_relation_count_for_placements(placements, eta_by_position)
+    deice_candidate_count, deice_pair_scan_count = _deice_complexity_for_placements(
+        placements,
+        deice_threshold,
+    )
+    logger.info(
+        "Parking optimizer %s prepared: placements=%s eta_relations=%s deice_candidates=%s deice_pair_scans=%s workers=%s memory_mb=%s",
+        stage_name,
+        len(placements),
+        eta_relation_count,
+        deice_candidate_count,
+        deice_pair_scan_count,
+        PARKING_OPTIMIZER_SEARCH_WORKERS,
+        PARKING_OPTIMIZER_MAX_MEMORY_MB,
+    )
     guard_reason = _stage_guard_reason(placements, eta_relation_count)
     if guard_reason:
         logger.warning(
@@ -904,6 +1027,8 @@ def _solve_optimizer_stage(
                     eta_relation_count,
                     "GUARDED",
                     guard_reason,
+                    deice_candidate_count=deice_candidate_count,
+                    deice_pair_scan_count=deice_pair_scan_count,
                 )
             ],
         }
@@ -948,8 +1073,7 @@ def _solve_optimizer_stage(
         )
         model.Maximize(sum(objective_terms))
 
-        solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = PARKING_OPTIMIZER_TIME_LIMIT_SECONDS
+        solver = _configure_cp_solver(cp_model.CpSolver())
         status = solver.Solve(model)
         status_name = solver.StatusName(status)
     except Exception as exc:  # pragma: no cover - exercised through patched solver tests
@@ -976,6 +1100,8 @@ def _solve_optimizer_stage(
                     eta_relation_count,
                     "ERROR",
                     detail,
+                    deice_candidate_count=deice_candidate_count,
+                    deice_pair_scan_count=deice_pair_scan_count,
                 )
             ],
         }
@@ -1001,6 +1127,8 @@ def _solve_optimizer_stage(
             ),
             wall_time=solver.WallTime() if status else 0,
             deice_status=(deice_report or {}).get("status", ""),
+            deice_candidate_count=deice_candidate_count,
+            deice_pair_scan_count=deice_pair_scan_count,
         )
     ]
     selected_by_tail = {}
@@ -1455,8 +1583,29 @@ def _deice_cluster_penalty_terms(model, candidate_entries, threshold_minutes):
     for index, (placement, variable) in enumerate(candidate_entries):
         by_ramp.setdefault(placement.ramp, []).append((index, placement, variable))
 
+    pair_scan_count = sum(len(entries) * len(entries) for entries in by_ramp.values())
+    if len(candidate_entries) > DEICE_MAX_CANDIDATE_ENTRIES:
+        return [], _deice_report(
+            "skipped",
+            (
+                "Deice scoring skipped to keep optimizer memory bounded "
+                f"({len(candidate_entries)} candidate departure placements exceeds "
+                f"{DEICE_MAX_CANDIDATE_ENTRIES})."
+            ),
+        )
+    if pair_scan_count > DEICE_MAX_PAIR_SCAN_COUNT:
+        return [], _deice_report(
+            "skipped",
+            (
+                "Deice scoring skipped to keep optimizer solve time bounded "
+                f"({pair_scan_count} same-ramp pair scans exceeds "
+                f"{DEICE_MAX_PAIR_SCAN_COUNT})."
+            ),
+        )
+
     clusters = []
     seen_clusters = set()
+    literal_count = 0
     for ramp, entries in by_ramp.items():
         for _center_index, center_placement, _center_variable in entries:
             cluster = []
@@ -1474,20 +1623,20 @@ def _deice_cluster_penalty_terms(model, candidate_entries, threshold_minutes):
             if len({placement.tail for _index, placement, _variable in cluster_entries}) <= 1:
                 continue
             clusters.append((ramp, cluster_entries))
+            literal_count += len(cluster_entries)
+            if len(clusters) > DEICE_MAX_CLUSTER_COUNT or literal_count > DEICE_MAX_CLUSTER_LITERAL_COUNT:
+                return [], _deice_report(
+                    "skipped",
+                    (
+                        "Deice scoring skipped to keep optimizer solve time bounded "
+                        f"({len(clusters)} clusters / {literal_count} placement references)."
+                    ),
+                )
 
-    literal_count = sum(len(cluster_entries) for _ramp, cluster_entries in clusters)
     if not clusters:
         return [], _deice_report(
             "skipped",
             "Deice scoring skipped because no close same-ramp candidate departure clusters were found.",
-        )
-    if len(clusters) > DEICE_MAX_CLUSTER_COUNT or literal_count > DEICE_MAX_CLUSTER_LITERAL_COUNT:
-        return [], _deice_report(
-            "skipped",
-            (
-                "Deice scoring skipped to keep optimizer solve time bounded "
-                f"({len(clusters)} clusters / {literal_count} placement references)."
-            ),
         )
 
     terms = []

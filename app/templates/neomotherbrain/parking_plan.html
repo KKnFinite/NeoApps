@@ -273,6 +273,8 @@
                     <li>
                         <strong>{{ diagnostic.stage|upper }}</strong>
                         {{ diagnostic.status }} / placements {{ diagnostic.placement_count }} / ETA checks {{ diagnostic.eta_relation_count }}
+                        / deice candidates {{ diagnostic.deice_candidate_count }} / deice scans {{ diagnostic.deice_pair_scan_count }}
+                        / workers {{ diagnostic.search_workers }} / memory {{ diagnostic.memory_limit_mb }} MB
                         <span>{{ diagnostic.summary }}</span>
                     </li>
                     {% endfor %}
