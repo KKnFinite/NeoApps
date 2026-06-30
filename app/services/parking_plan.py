@@ -702,6 +702,7 @@ def _tail_state_for_operation(operation, tail_number, create=False):
             sort_name=operation.sort_name,
             tail_number=tail_number,
             aircraft_type_source="unknown",
+            is_out_of_service=False,
         )
         db.session.add(tail_state)
     return tail_state

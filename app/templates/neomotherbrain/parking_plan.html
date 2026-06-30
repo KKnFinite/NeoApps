@@ -18,6 +18,7 @@
     data-parking-tail
     data-tail-number="{{ row.tail }}"
     data-parking-tail-assigned="{{ '1' if row.assigned_position else '0' }}"
+    data-tail-oos="{{ '1' if row.is_out_of_service else '0' }}"
 >
     <div class="parking-tail-main">
         <strong>{{ row.tail }}</strong>
@@ -55,7 +56,7 @@
         <input type="hidden" name="tail_number" value="{{ row.tail }}">
         <input type="hidden" name="is_out_of_service" value="{{ 0 if row.is_out_of_service else 1 }}">
         <button class="parking-tail-status-button{% if row.is_out_of_service %} is-restore{% endif %}" type="submit">
-            {{ "RESTORE / GREEN" if row.is_out_of_service else "RED / OOS" }}
+            {{ "RESTORE / GREEN" if row.is_out_of_service else "MARK OOS" }}
         </button>
     </form>
     {% endif %}

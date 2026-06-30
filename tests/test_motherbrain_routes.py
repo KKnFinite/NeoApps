@@ -6214,6 +6214,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotEqual(arrival.arrival_status, "cancelled")
         self.assertEqual(assignment.position_code, "A01")
         self.assertEqual(assignment.lane_number, 1)
+        self.assertIn('data-tail-oos="1"', html)
         self.assertIn("parking-tail-card is-oos", html)
         self.assertIn("parking-badge parking-badge-oos", html)
         self.assertIn("OOS / RED", html)
@@ -6228,6 +6229,53 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("A01-1", status_html)
         self.assertIn("ARR57", status_html)
         self.assertIn("DEP57", status_html)
+
+    def test_newly_assigned_tail_defaults_green_not_oos(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+        card_html = self._parking_tail_card_html(html, "N457UP")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-tail-oos="0"', card_html)
+        self.assertNotIn(" is-oos", card_html)
+        self.assertNotIn("parking-badge-oos", card_html)
+        self.assertNotIn("OOS / RED", card_html)
+        self.assertNotIn("RESTORE / GREEN", card_html)
+        self.assertIn("MARK OOS", card_html)
+
+    def test_known_oos_tail_state_renders_oos_badge_and_restore_control(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        tail_state = SortDateTailState.query.filter_by(tail_number="N457UP").one()
+        tail_state.is_out_of_service = True
+        self._parking_assignment(operation, "N457UP", "A01")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+        card_html = self._parking_tail_card_html(html, "N457UP")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-tail-oos="1"', card_html)
+        self.assertIn("parking-tail-card is-oos", card_html)
+        self.assertIn("parking-badge parking-badge-oos", card_html)
+        self.assertIn("OOS / RED", card_html)
+        self.assertIn("RESTORE / GREEN", card_html)
+        self.assertNotIn("MARK OOS", card_html)
 
     def test_parking_tail_restore_green_does_not_restore_cancelled_mission(self):
         operation = self._parking_operation()
@@ -6265,7 +6313,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertFalse(tail_state.is_out_of_service)
         self.assertEqual(arrival.arrival_status, "cancelled")
         self.assertEqual(assignment.position_code, "A01")
-        self.assertIn("RED / OOS", html)
+        self.assertIn("MARK OOS", html)
+        self.assertNotIn("RESTORE / GREEN", html)
         self.assertIn('data-occupied-tail="N457UP"', html)
 
     def test_mission_cancel_and_restore_do_not_change_parking_tail_oos_status(self):
@@ -9355,6 +9404,16 @@ class MotherBrainRoutesTest(unittest.TestCase):
             sort_date_operation_id=operation.id,
             tail_number=tail_number,
         ).first()
+
+    def _parking_tail_card_html(self, html, tail_number):
+        marker = f'data-tail-number="{tail_number}"'
+        self.assertIn(marker, html)
+        marker_index = html.index(marker)
+        start_index = html.rfind("<article", 0, marker_index)
+        end_index = html.find("</article>", marker_index)
+        self.assertNotEqual(start_index, -1)
+        self.assertNotEqual(end_index, -1)
+        return html[start_index : end_index + len("</article>")]
 
     def _parking_rule(
         self,
