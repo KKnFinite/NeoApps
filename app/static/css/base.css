@@ -16998,6 +16998,83 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     text-transform: uppercase;
 }
 
+/* NeoSektor visual standardization: red readout cards, white live counts, orange unload metrics. */
+.blueprint-neosektor .wave-card,
+.blueprint-neosektor .ops-column,
+.blueprint-neosektor .mode-view .counter-card,
+.blueprint-neosektor .bay-card,
+.blueprint-neosektor .view-bay-card,
+.blueprint-neosektor .tunnel-panel:not(.tunnel-settings-panel),
+.blueprint-neosektor .tunnel-metric:not(.tunnel-editable),
+.blueprint-neosektor .tunnel-readonly-card,
+.blueprint-neosektor .tunnel-bay-card,
+.blueprint-neosektor .driver-priority-card,
+.blueprint-neosektor .neosektor-discharge-queue,
+.blueprint-neosektor .neosektor-discharge-detail,
+.blueprint-neosektor .neosektor-discharge-events,
+.blueprint-neosektor .neosektor-discharge-empty {
+    border-color: rgba(var(--node-sektor-primary-rgb), 0.44);
+    background:
+        linear-gradient(135deg, rgba(244, 246, 248, 0.055), transparent 30%),
+        linear-gradient(180deg, rgba(64, 14, 20, 0.93), rgba(18, 5, 9, 0.97));
+    box-shadow:
+        inset 0 1px 0 rgba(244, 246, 248, 0.08),
+        0 14px 34px rgba(0, 0, 0, 0.3),
+        0 0 18px rgba(var(--node-sektor-primary-rgb), 0.14);
+}
+
+.blueprint-neosektor .counter-number,
+.blueprint-neosektor .readonly-count,
+.blueprint-neosektor .neosektor-open-bay-control .readonly-count,
+.blueprint-neosektor .tunnel-ballmat-card strong,
+.blueprint-neosektor .tunnel-ballmat-card .counter-number,
+.blueprint-neosektor .neosektor-live-ballmat-row .readonly-count,
+.blueprint-neosektor .neosektor-live-column-bays .bay-card strong,
+.blueprint-neosektor .neosektor-discharge-count-strip strong {
+    color: #fff;
+    text-shadow: 0 0 12px rgba(244, 247, 251, 0.2);
+}
+
+.blueprint-neosektor [data-metric="left_to_arrive"],
+.blueprint-neosektor [data-metric="left_to_unload"] {
+    color: var(--node-sektor-highlight);
+    text-shadow: 0 0 13px rgba(var(--node-sektor-highlight-rgb), 0.38);
+}
+
+.blueprint-neosektor .bay-heading strong,
+.blueprint-neosektor .tunnel-bay-card strong,
+.blueprint-neosektor .neosektor-status,
+.blueprint-neosektor .neosektor-status-empty,
+.blueprint-neosektor .neosektor-status-light,
+.blueprint-neosektor .neosektor-status-moderate,
+.blueprint-neosektor .neosektor-status-full,
+.blueprint-neosektor .neosektor-status-overflowing {
+    color: #fff;
+}
+
+.blueprint-neosektor .counter-control,
+.blueprint-neosektor .tunnel-editable,
+.blueprint-neosektor .tunnel-setting-card,
+.blueprint-neosektor .neosektor-discharge-send-panel label,
+.blueprint-neosektor .neosektor-discharge-count-strip > span {
+    border-color: rgba(216, 220, 224, 0.18);
+    background:
+        linear-gradient(135deg, rgba(244, 247, 251, 0.045), transparent 30%),
+        linear-gradient(180deg, rgba(18, 22, 28, 0.92), rgba(4, 7, 11, 0.98));
+    box-shadow: inset 0 1px 0 rgba(244, 246, 248, 0.06);
+}
+
+.blueprint-neosektor .tunnel-settings-panel {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
+}
+
+.blueprint-neosektor .tunnel-settings-panel h2 {
+    margin-bottom: 2px;
+}
+
 @media (max-width: 430px) {
     .blueprint-neosektor .neosektor-discharge-wrap,
     .neosektor-discharge-wrap {

@@ -2113,6 +2113,50 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn("overflow-wrap: anywhere;", bay_status_block)
         self.assertIn("text-transform: none;", bay_status_block)
 
+    def test_neosektor_visual_standardization_colors_are_scoped(self):
+        self._login_approved_user(role="simulator")
+        tunnel = self.client.get("/neosektor/tunnel-conductor")
+        live_counts = self.client.get("/neosektor/live-counts")
+        css = Path("app/static/css/base.css").read_text()
+        settings_panel_block = css.rsplit(
+            ".blueprint-neosektor .tunnel-settings-panel {",
+            1,
+        )[1].split("}", 1)[0]
+        data_entry_block = css.split(
+            ".blueprint-neosektor .counter-control,",
+            1,
+        )[1].split("}", 1)[0]
+
+        self.assertEqual(tunnel.status_code, 200)
+        self.assertEqual(live_counts.status_code, 200)
+        self.assertIn(b'data-metric="left_to_arrive"', tunnel.data)
+        self.assertIn(b'data-metric="left_to_unload"', tunnel.data)
+        self.assertIn(b'class="counter-number neosektor-numeric-input"', tunnel.data)
+        self.assertIn(b'data-live-counts', live_counts.data)
+        self.assertIn(b'class="readonly-count"', live_counts.data)
+        self.assertIn(
+            ".blueprint-neosektor [data-metric=\"left_to_arrive\"],",
+            css,
+        )
+        self.assertIn(
+            ".blueprint-neosektor [data-metric=\"left_to_unload\"]",
+            css,
+        )
+        self.assertIn("color: var(--node-sektor-highlight);", css)
+        self.assertIn(
+            ".blueprint-neosektor .neosektor-live-ballmat-row .readonly-count,",
+            css,
+        )
+        self.assertIn(
+            ".blueprint-neosektor .neosektor-live-column-bays .bay-card strong,",
+            css,
+        )
+        self.assertIn("color: #fff;", css)
+        self.assertIn("linear-gradient(180deg, rgba(18, 22, 28, 0.92), rgba(4, 7, 11, 0.98));", data_entry_block)
+        self.assertIn("border: 0;", settings_panel_block)
+        self.assertIn("background: transparent;", settings_panel_block)
+        self.assertIn("box-shadow: none;", settings_panel_block)
+
     def test_neosektor_mobile_header_css_uses_compact_text_controls(self):
         css = Path("app/static/css/base.css").read_text()
         topbar_block = css.rsplit(
