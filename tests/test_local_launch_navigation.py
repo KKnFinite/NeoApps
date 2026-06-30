@@ -199,7 +199,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
     def test_app_and_node_manifests_have_independent_branding_and_icons(self):
         expected_manifests = {
-            "neoportal": ("NeoApps", "NeoApps", "/portal", "#d73f7d", "neoportal"),
+            "neoportal": ("NeoApps", "NeoApps", "/portal", "#d9362e", "neoportal"),
             "neogateway": ("NeoGateway", "NeoGateway", "/rfd", "#d95a1f", "neogateway"),
             "neostaffing": ("NeoStaffing", "NeoStaffing", "/neostaffing", "#27d0c2", "neostaffing"),
             "neobid": ("NeoBid", "NeoBid", "/neobid", "#4db7ff", "neobid"),
@@ -537,6 +537,22 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("--node-bid-primary: #4db7ff;", css)
         self.assertIn("--node-bid-highlight: #c8f4ff;", css)
         self.assertEqual(manifest["theme_color"], "#4db7ff")
+
+    def test_portal_branding_uses_red_purple_without_pink(self):
+        css = Path("app/static/css/base.css").read_text()
+        manifest = self.client.get("/manifest/neoportal.webmanifest").get_json()
+
+        self.assertIn("--node-portal-primary: #d9362e;", css)
+        self.assertIn("--node-portal-secondary: #5a2db8;", css)
+        self.assertIn("--node-portal-highlight: #8b5cf6;", css)
+        self.assertIn("--node-apps-primary: #d9362e;", css)
+        self.assertIn("--node-apps-secondary: #5a2db8;", css)
+        self.assertIn("--node-apps-highlight: #8b5cf6;", css)
+        self.assertNotIn("#d73f7d", css)
+        self.assertNotIn("#ff75b7", css)
+        self.assertNotIn("215, 63, 125", css)
+        self.assertNotIn("255, 117, 183", css)
+        self.assertEqual(manifest["theme_color"], "#d9362e")
 
     def test_mobile_duplicate_neosektor_body_title_is_hidden_by_css(self):
         css = Path("app/static/css/base.css").read_text()

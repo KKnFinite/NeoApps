@@ -414,7 +414,7 @@ def _pwa_manifest_definitions():
             "short_name": "NeoApps",
             "description": "NeoApps access dashboard.",
             "start_url": "/portal",
-            "theme_color": "#d73f7d",
+            "theme_color": "#d9362e",
             "icon_folder": "neoportal",
             "maskable": True,
         },

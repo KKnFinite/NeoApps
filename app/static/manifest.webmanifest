@@ -7,7 +7,7 @@
   "scope": "/",
   "display": "standalone",
   "background_color": "#050506",
-  "theme_color": "#d73f7d",
+  "theme_color": "#d9362e",
   "icons": [
     {
       "src": "/static/images/icons/neoportal/icon_192.png",
