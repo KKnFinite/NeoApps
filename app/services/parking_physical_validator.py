@@ -14,6 +14,7 @@ from app.services.parking_rules import (
 
 
 NORMAL_RAMP_CODES = ("A", "B", "C", "D", "E")
+NORMAL_767_FOOTPRINT_RAMP_CODES = ("A", "B", "C", "D")
 NORMAL_BANKS = ((1, 2, 3, 4), (5, 6, 7, 8))
 REMOTE_ORDER = ("R01", "R02", "R03", "R04")
 VALID_767_NORMAL_ANCHORS = {1: 2, 3: 4, 5: 6, 7: 8}
@@ -44,7 +45,7 @@ def parking_physical_validation_context(operation, tail_rows=None):
     }
 
 
-def validate_parking_physical_rules(operation, tail_rows=None):
+def validate_parking_physical_rules(operation, tail_rows=None, include_order_conflicts=False):
     if not operation:
         return []
 
@@ -55,12 +56,14 @@ def validate_parking_physical_rules(operation, tail_rows=None):
     conflicts = []
 
     conflicts.extend(_parking_rule_blocked_position_conflicts(assignments, operation))
-    conflicts.extend(_normal_fill_order_conflicts(occupancy, blocked))
-    conflicts.extend(_remote_fill_order_conflicts(occupancy, blocked))
+    if include_order_conflicts:
+        conflicts.extend(_normal_fill_order_conflicts(occupancy, blocked))
+        conflicts.extend(_remote_fill_order_conflicts(occupancy, blocked))
     conflicts.extend(_normal_767_conflicts(assignments, aircraft_type_by_tail, occupancy))
     conflicts.extend(_throat_conflicts(occupancy, blocked))
     conflicts.extend(_slot_2_overflow_conflicts(assignments, tail_rows))
-    conflicts.extend(_eta_order_conflicts(assignments, aircraft_type_by_tail, tail_rows))
+    if include_order_conflicts:
+        conflicts.extend(_eta_order_conflicts(assignments, aircraft_type_by_tail, tail_rows))
     return _dedupe_conflicts(conflicts)
 
 
@@ -200,7 +203,7 @@ def _blocked_positions(assignments, aircraft_type_by_tail):
         ramp = _normalize_ramp(getattr(assignment, "ramp_code", ""))
         number = _position_number(position)
         tail = _normalize_tail(getattr(assignment, "tail_number", ""))
-        if ramp not in NORMAL_RAMP_CODES or number is None:
+        if ramp not in NORMAL_767_FOOTPRINT_RAMP_CODES or number is None:
             continue
         if aircraft_type_by_tail.get(tail) != "767":
             continue
@@ -274,7 +277,7 @@ def _normal_767_conflicts(assignments, aircraft_type_by_tail, occupancy):
         tail = _normalize_tail(getattr(assignment, "tail_number", ""))
         if aircraft_type_by_tail.get(tail) != "767":
             continue
-        if ramp not in NORMAL_RAMP_CODES:
+        if ramp not in NORMAL_767_FOOTPRINT_RAMP_CODES:
             continue
         if number not in {1, 2, 3, 4, 5, 6, 7, 8}:
             continue
@@ -510,7 +513,7 @@ def _eta_fill_items_by_position(assignments, aircraft_type_by_tail, tail_rows):
         }
         fill_items.setdefault(position, []).append(item)
 
-        if ramp not in NORMAL_RAMP_CODES or aircraft_type_by_tail.get(tail) != "767":
+        if ramp not in NORMAL_767_FOOTPRINT_RAMP_CODES or aircraft_type_by_tail.get(tail) != "767":
             continue
         blocked_number = VALID_767_NORMAL_ANCHORS.get(number)
         if not blocked_number:

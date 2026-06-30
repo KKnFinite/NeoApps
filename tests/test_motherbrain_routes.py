@@ -6493,7 +6493,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "PARKING-POSITION-A01",
         )
 
-    def test_parking_validator_detects_normal_bank_fill_order_conflict(self):
+    def test_parking_validator_allows_manual_normal_bank_out_of_fill_order(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", aircraft_type="757")
         db.session.flush()
@@ -6504,7 +6504,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
         messages = [conflict.message for conflict in conflicts]
 
-        self.assertIn("A03 cannot be used until A01, A02 are filled.", messages)
+        self.assertNotIn("A03 cannot be used until A01, A02 are filled.", messages)
+        self.assertFalse(any(conflict.reason == "normal_bank_fill_order" for conflict in conflicts))
 
     def test_parking_validator_detects_parking_rules_blocked_position(self):
         operation = self._parking_operation()
@@ -6535,7 +6536,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             1,
         )
 
-    def test_parking_validator_detects_remote_fill_order_conflict(self):
+    def test_parking_validator_allows_manual_remote_out_of_fill_order(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", aircraft_type="757")
         db.session.flush()
@@ -6546,7 +6547,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
         messages = [conflict.message for conflict in conflicts]
 
-        self.assertIn("R03 cannot be used until R01, R02 are filled.", messages)
+        self.assertNotIn("R03 cannot be used until R01, R02 are filled.", messages)
+        self.assertFalse(any(conflict.reason == "remote_fill_order" for conflict in conflicts))
 
     def test_parking_validator_detects_767_invalid_normal_anchor(self):
         operation = self._parking_operation()
@@ -6569,6 +6571,25 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "767 at A04 is invalid because 767 aircraft cannot anchor at 04.",
             messages,
         )
+
+    def test_parking_validator_echo_767_positions_do_not_use_two_slot_footprint(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N902UP", aircraft_type="757")
+        self._parking_pair(operation, "N903UP", aircraft_type="757", destination="SDF")
+        db.session.flush()
+        self._parking_assignment(operation, "N902UP", "E02", ramp_code="E")
+        self._parking_assignment(operation, "N903UP", "E03", ramp_code="E")
+        db.session.commit()
+        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
+
+        conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
+        messages = [conflict.message for conflict in conflicts]
+
+        self.assertNotIn(
+            "767 at E02 is invalid because 767 aircraft cannot anchor at 02.",
+            messages,
+        )
+        self.assertNotIn("E03 is blocked by 767 parked at E02.", messages)
 
     def test_parking_validator_detects_slot_occupied_while_blocked_by_767(self):
         operation = self._parking_operation()
@@ -6759,7 +6780,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             messages,
         )
 
-    def test_parking_plan_page_displays_physical_validation_conflicts(self):
+    def test_parking_plan_page_does_not_display_manual_fill_order_conflicts(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", aircraft_type="757")
         db.session.flush()
@@ -6769,10 +6790,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"PHYSICAL PARKING RULES", response.data)
-        self.assertIn(b"A03 cannot be used until A01, A02 are filled.", response.data)
+        self.assertNotIn(b"A03 cannot be used until A01, A02 are filled.", response.data)
+        self.assertNotIn(b"Parking fill order conflict", response.data)
 
-    def test_parking_eta_order_validator_detects_normal_bank_01_04_conflict(self):
+    def test_parking_eta_order_validator_allows_manual_normal_bank_01_04_order(self):
         operation = self._parking_operation()
         self._parking_pair(
             operation,
@@ -6802,15 +6823,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
         messages = [conflict.message for conflict in conflicts]
 
-        self.assertTrue(
-            any(
-                "A03 cannot arrive before A01/A02 are parked." in message
-                and "N003UP at A03 ETA 00:10" in message
-                for message in messages
-            )
-        )
+        self.assertFalse(any("Parking ETA order conflict" in conflict.title for conflict in conflicts))
+        self.assertFalse(any("A03 cannot arrive before A01/A02 are parked." in message for message in messages))
 
-    def test_parking_eta_order_validator_detects_normal_bank_05_08_conflict(self):
+    def test_parking_eta_order_validator_allows_manual_normal_bank_05_08_order(self):
         operation = self._parking_operation()
         self._parking_pair(
             operation,
@@ -6833,13 +6849,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
         messages = [conflict.message for conflict in conflicts]
 
-        self.assertTrue(
-            any(
-                "A06 cannot arrive before A05 are parked." in message
-                and "N006UP at A06 ETA 23:10" in message
-                for message in messages
-            )
-        )
+        self.assertFalse(any("Parking ETA order conflict" in conflict.title for conflict in conflicts))
+        self.assertFalse(any("A06 cannot arrive before A05 are parked." in message for message in messages))
 
     def test_parking_eta_order_validator_respects_767_blocked_fill_positions(self):
         operation = self._parking_operation()
@@ -6866,15 +6877,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
         messages = [conflict.message for conflict in conflicts]
 
-        self.assertTrue(
-            any(
-                "A03 cannot arrive before A01/A02 are parked." in message
-                and "N967UP at A01 ETA 00:20" in message
-                for message in messages
-            )
-        )
+        self.assertFalse(any("Parking ETA order conflict" in conflict.title for conflict in conflicts))
+        self.assertFalse(any("A03 cannot arrive before A01/A02 are parked." in message for message in messages))
 
-    def test_parking_eta_order_validator_detects_remote_conflict(self):
+    def test_parking_eta_order_validator_allows_manual_remote_order(self):
         operation = self._parking_operation()
         self._parking_pair(
             operation,
@@ -6904,15 +6910,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
         messages = [conflict.message for conflict in conflicts]
 
-        self.assertTrue(
-            any(
-                "R03 ETA order conflict: R03 arrives before R01/R02." in message
-                and "N003UP at R03 ETA 23:10" in message
-                for message in messages
-            )
-        )
+        self.assertFalse(any("Parking ETA order conflict" in conflict.title for conflict in conflicts))
+        self.assertFalse(any("R03 ETA order conflict: R03 arrives before R01/R02." in message for message in messages))
 
-    def test_parking_eta_order_validator_detects_09_before_10_conflict(self):
+    def test_parking_eta_order_validator_allows_manual_09_before_10_order(self):
         operation = self._parking_operation()
         self._parking_pair(
             operation,
@@ -6935,13 +6936,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
         messages = [conflict.message for conflict in conflicts]
 
-        self.assertTrue(
-            any(
-                "A09 ETA order conflict: A09 cannot arrive before A10." in message
-                and "N009UP at A09 ETA 23:10" in message
-                for message in messages
-            )
-        )
+        self.assertFalse(any("Parking ETA order conflict" in conflict.title for conflict in conflicts))
+        self.assertFalse(any("A09 ETA order conflict: A09 cannot arrive before A10." in message for message in messages))
 
     def test_parking_eta_order_validator_is_midnight_aware(self):
         operation = self._parking_operation()
@@ -6966,15 +6962,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
         messages = [conflict.message for conflict in conflicts]
 
-        self.assertTrue(
-            any(
-                "N002UP at A02 ETA 23:55" in message
-                and "N001UP at A01 ETA 00:10" in message
-                for message in messages
-            )
-        )
+        self.assertFalse(any("Parking ETA order conflict" in conflict.title for conflict in conflicts))
+        self.assertFalse(any("N002UP at A02 ETA 23:55" in message for message in messages))
 
-    def test_parking_plan_page_displays_eta_order_conflicts(self):
+    def test_parking_plan_page_does_not_display_manual_eta_order_conflicts(self):
         operation = self._parking_operation()
         self._parking_pair(
             operation,
@@ -6995,11 +6986,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
 
-        self.assertIn(b"PHYSICAL PARKING RULES", response.data)
-        self.assertIn(b"Parking ETA order conflict", response.data)
-        self.assertIn(b"N002UP at A02 ETA 00:10", response.data)
+        self.assertNotIn(b"Parking ETA order conflict", response.data)
+        self.assertNotIn(b"N002UP at A02 ETA 00:10", response.data)
 
-    def test_parking_eta_order_alert_tray_syncs_and_clears(self):
+    def test_parking_eta_order_alerts_do_not_render_for_manual_assignments(self):
         operation = self._parking_operation()
         _late_arrival, _late_departure = self._parking_pair(
             operation,
@@ -7007,7 +6997,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             arrival_local=datetime(2026, 6, 19, 0, 10),
             destination="A01",
         )
-        early_arrival, _early_departure = self._parking_pair(
+        _early_arrival, _early_departure = self._parking_pair(
             operation,
             "N002UP",
             arrival_local=datetime(2026, 6, 19, 0, 0),
@@ -7021,23 +7011,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         first_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
         second_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
 
-        self.assertIn(b"MotherBrain Alerts", first_response.data)
-        self.assertIn(b"Parking ETA order conflict", first_response.data)
-        self.assertIn(b"Parking ETA order conflict", second_response.data)
-        self.assertEqual(
-            MotherBrainAlert.query.filter_by(
-                title="Parking ETA order conflict",
-                active=True,
-            ).count(),
-            1,
-        )
-
-        early_arrival.planned_datetime_local = datetime(2026, 6, 19, 0, 30)
-        early_arrival.planned_datetime_utc = datetime(2026, 6, 19, 0, 30)
-        db.session.commit()
-        resolved_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
-
-        self.assertNotIn(b"Parking ETA order conflict", resolved_response.data)
+        self.assertNotIn(b"Parking ETA order conflict", first_response.data)
+        self.assertNotIn(b"Parking ETA order conflict", second_response.data)
         self.assertEqual(
             MotherBrainAlert.query.filter_by(
                 title="Parking ETA order conflict",
@@ -7049,8 +7024,15 @@ class MotherBrainRoutesTest(unittest.TestCase):
     def test_parking_validation_alert_tray_syncs_and_does_not_duplicate(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", aircraft_type="757")
+        self._parking_rule(
+            BLOCKED_PARKING_POSITION,
+            "position",
+            "D01",
+            "D",
+            behavior="forbidden",
+        )
         db.session.flush()
-        self._parking_assignment(operation, "N457UP", "A03")
+        self._parking_assignment(operation, "N457UP", "D01")
         db.session.commit()
 
         first_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
@@ -7060,35 +7042,35 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(first_response.status_code, 200)
         self.assertEqual(second_response.status_code, 200)
         self.assertEqual(len(active_alerts), 1)
-        self.assertIn(b"Parking fill order conflict", second_response.data)
-        self.assertIn(b"A03 cannot be used until A01, A02 are filled.", second_response.data)
+        self.assertIn(b"Blocked parking position", second_response.data)
+        self.assertIn(b"D01 is blocked by Parking Rules.", second_response.data)
         self.assertEqual(active_alerts[0].permission_key, "motherbrain.parking_conflicts.view")
 
     def test_parking_validation_alert_clears_when_conflict_is_resolved(self):
         operation = self._parking_operation()
-        for tail, position in (
-            ("N451UP", "A01"),
-            ("N452UP", "A02"),
-            ("N453UP", "A03"),
-        ):
-            self._parking_pair(operation, tail, aircraft_type="757", destination=position)
-            db.session.flush()
-            if position == "A03":
-                self._parking_assignment(operation, tail, position)
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        rule = self._parking_rule(
+            BLOCKED_PARKING_POSITION,
+            "position",
+            "D01",
+            "D",
+            behavior="forbidden",
+        )
+        db.session.flush()
+        self._parking_assignment(operation, "N457UP", "D01")
         db.session.commit()
 
         self.client.get(f"/motherbrain/parking-plan/{operation.id}")
         self.assertEqual(MotherBrainAlert.query.filter_by(active=True).count(), 1)
 
-        self._parking_assignment(operation, "N451UP", "A01")
-        self._parking_assignment(operation, "N452UP", "A02")
+        rule.active = False
         db.session.commit()
         response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(MotherBrainAlert.query.filter_by(active=True).count(), 0)
         self.assertEqual(MotherBrainAlert.query.count(), 1)
-        self.assertNotIn(b"A03 cannot be used until A01, A02 are filled.", response.data)
+        self.assertNotIn(b"D01 is blocked by Parking Rules.", response.data)
 
     def test_parking_optimizer_ortools_dependency_imports(self):
         from ortools.sat.python import cp_model
@@ -7689,15 +7671,22 @@ class MotherBrainRoutesTest(unittest.TestCase):
     def test_parking_optimizer_locked_invalid_assignment_reports_conflict(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", aircraft_type="757")
+        self._parking_rule(
+            BLOCKED_PARKING_POSITION,
+            "position",
+            "D01",
+            "D",
+            behavior="forbidden",
+        )
         db.session.flush()
-        self._parking_assignment(operation, "N457UP", "A03")
+        self._parking_assignment(operation, "N457UP", "D01")
         db.session.commit()
 
         preview = self._parking_optimizer_preview(operation)
         messages = [conflict["message"] for conflict in preview["conflicts"]]
 
-        self.assertIn("A03 cannot be used until A01, A02 are filled.", messages)
-        self.assertEqual(preview["locked_assignments"][0]["label"], "A03 Slot 1")
+        self.assertIn("D01 is blocked by Parking Rules.", messages)
+        self.assertEqual(preview["locked_assignments"][0]["label"], "D01 Slot 1")
 
     def test_parking_optimizer_ignores_cancelled_missions(self):
         operation = self._parking_operation()
@@ -8475,8 +8464,15 @@ class MotherBrainRoutesTest(unittest.TestCase):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", aircraft_type="757")
         self._parking_pair(operation, "N349UP", aircraft_type="757", destination="SDF")
+        self._parking_rule(
+            BLOCKED_PARKING_POSITION,
+            "position",
+            "D01",
+            "D",
+            behavior="forbidden",
+        )
         db.session.flush()
-        self._parking_assignment(operation, "N457UP", "A03")
+        self._parking_assignment(operation, "N457UP", "D01")
         db.session.commit()
 
         response = self.client.post(
@@ -8486,8 +8482,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
 
         self.assertIn(b"PHYSICAL PARKING RULES", response.data)
-        self.assertIn(b"A03 cannot be used until", response.data)
-        self.assertIn(b"are filled.", response.data)
+        self.assertIn(b"D01 is blocked by Parking Rules.", response.data)
         self.assertGreaterEqual(MotherBrainAlert.query.filter_by(active=True).count(), 1)
 
     def test_parking_plan_ramp_layout_renders_physical_rows_and_slots(self):
@@ -8792,7 +8787,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIsNone(previous.position_code)
         self.assertEqual(current.position_code, "A01")
 
-    def test_parking_plan_physical_validator_runs_after_typed_assignment(self):
+    def test_parking_plan_physical_validator_allows_typed_out_of_order_assignment(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", destination="LAX")
         db.session.commit()
@@ -8810,8 +8805,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"PHYSICAL PARKING RULES", response.data)
-        self.assertIn(b"A03 cannot be used until A01, A02 are filled.", response.data)
+        self.assertNotIn(b"A03 cannot be used until A01, A02 are filled.", response.data)
+        self.assertNotIn(b"Parking fill order conflict", response.data)
 
     def test_parking_tail_card_compact_flags_and_order_render(self):
         operation = self._parking_operation()

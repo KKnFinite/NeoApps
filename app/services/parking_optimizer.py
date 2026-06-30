@@ -8,6 +8,7 @@ from app.extensions import db
 from app.models import MotherBrainParkingRule, MotherBrainParkingSettings, SortDateParkingAssignment
 from app.services.gateway_matrix import gateway_timezone
 from app.services.parking_physical_validator import (
+    NORMAL_767_FOOTPRINT_RAMP_CODES,
     NORMAL_BANKS,
     NORMAL_RAMP_CODES,
     REMOTE_ORDER,
@@ -117,7 +118,11 @@ def parking_optimizer_preview(
 
     locked_conflicts = [
         conflict.__dict__
-        for conflict in validate_parking_physical_rules(operation, tail_rows=tail_rows)
+        for conflict in validate_parking_physical_rules(
+            operation,
+            tail_rows=tail_rows,
+            include_order_conflicts=True,
+        )
     ]
     locked_normal_ramp_counts = _normal_ramp_counts_for_assignments(assignments)
     candidate_positions = _candidate_positions(include_remote, include_throat)
@@ -1490,7 +1495,7 @@ def _placement_allows_aircraft(aircraft_type, position, locked_filled_positions)
     ramp = _ramp_from_position(position)
     if aircraft_type != "767":
         return True
-    if ramp not in NORMAL_RAMP_CODES or number in (9, 10):
+    if ramp not in NORMAL_767_FOOTPRINT_RAMP_CODES or number in (9, 10):
         return True
     blocked_number = VALID_767_NORMAL_ANCHORS.get(number)
     if not blocked_number:
@@ -1511,7 +1516,7 @@ def _locked_blocked_positions(assignments, tail_rows):
         number = _position_number(position)
         if aircraft_type_by_tail.get(tail) != "767":
             continue
-        if ramp not in NORMAL_RAMP_CODES:
+        if ramp not in NORMAL_767_FOOTPRINT_RAMP_CODES:
             continue
         blocked_number = VALID_767_NORMAL_ANCHORS.get(number)
         if blocked_number:
@@ -1670,7 +1675,7 @@ def _blocked_position_for_values(aircraft_type, position):
         return ""
     ramp = _ramp_from_position(position)
     number = _position_number(position)
-    if ramp not in NORMAL_RAMP_CODES:
+    if ramp not in NORMAL_767_FOOTPRINT_RAMP_CODES:
         return ""
     blocked_number = VALID_767_NORMAL_ANCHORS.get(number)
     return f"{ramp}{blocked_number:02d}" if blocked_number else ""
