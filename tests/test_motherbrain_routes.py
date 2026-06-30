@@ -6257,6 +6257,41 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn("RESTORE / GREEN", card_html)
         self.assertIn("MARK OOS", card_html)
 
+    def test_parked_tail_card_renders_compact_desktop_arr_tail_dep_layout(self):
+        operation = self._parking_operation()
+        self._parking_pair(
+            operation,
+            "N125UP",
+            arrival_local=datetime(2026, 6, 18, 23, 9),
+            departure_local=datetime(2026, 6, 19, 3, 14),
+            origin="PHL",
+            destination="DFW",
+        )
+        self._parking_assignment(operation, "N125UP", "A01")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+        card_html = self._parking_tail_card_html(html, "N125UP")
+        desktop_html = card_html.split('class="parking-tail-placed-desktop"', 1)[1].split(
+            'class="parking-tail-placed-mobile"',
+            1,
+        )[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("parking-tail-route-line parking-tail-arrival-line", desktop_html)
+        self.assertIn("ARR", desktop_html)
+        self.assertIn("PHL", desktop_html)
+        self.assertIn("23:19", desktop_html)
+        self.assertIn('class="parking-tail-number">N125UP</strong>', desktop_html)
+        self.assertIn("parking-tail-route-line parking-tail-departure-line", desktop_html)
+        self.assertIn("DEP", desktop_html)
+        self.assertIn("DFW", desktop_html)
+        self.assertIn("03:14", desktop_html)
+        self.assertNotIn("ARR25", desktop_html)
+        self.assertNotIn("DEP25", desktop_html)
+        self.assertIn("MARK OOS", card_html)
+
     def test_known_oos_tail_state_renders_oos_badge_and_restore_control(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", destination="LAX")

@@ -278,7 +278,7 @@ def tail_rows_for_operation(gateway, operation):
                 "assignment": assignment,
                 "assigned_position": assigned_position,
                 "is_hot": bool(assignment and assignment.is_hot),
-                "is_out_of_service": bool(tail_state and tail_state.is_out_of_service),
+                "is_out_of_service": _tail_state_is_out_of_service(tail_state),
                 "note": assignment.note if assignment else "",
                 "status": _row_status(assignment),
                 "departure_order": None,
@@ -706,6 +706,15 @@ def _tail_state_for_operation(operation, tail_number, create=False):
         )
         db.session.add(tail_state)
     return tail_state
+
+
+def _tail_state_is_out_of_service(tail_state):
+    if not tail_state:
+        return False
+    value = getattr(tail_state, "is_out_of_service", False)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return value is True or value == 1
 
 
 def _assignment_for_tail(operation, tail_number, create=False):

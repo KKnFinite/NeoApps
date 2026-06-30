@@ -20,6 +20,26 @@
     data-parking-tail-assigned="{{ '1' if row.assigned_position else '0' }}"
     data-tail-oos="{{ '1' if row.is_out_of_service else '0' }}"
 >
+    {% if row.assigned_position %}
+    <div class="parking-tail-placed-desktop" aria-label="Parked tail summary for {{ row.tail }}">
+        <div class="parking-tail-route-line parking-tail-arrival-line">
+            <span>ARR</span>
+            <strong>{{ row.arrival_origin or "-" }}</strong>
+            <time>{{ row.arrival_time or "-" }}</time>
+        </div>
+        <div class="parking-tail-center-line">
+            <strong class="parking-tail-number">{{ row.tail }}</strong>
+            <span class="parking-tail-badges">{{ tail_badges(row) }}</span>
+            {% if row.departure_order %}<span class="parking-order">{{ row.departure_order }}</span>{% endif %}
+        </div>
+        <div class="parking-tail-route-line parking-tail-departure-line">
+            <span>DEP</span>
+            <strong>{{ row.departure_destination or "-" }}</strong>
+            <time>{{ row.departure_time or "-" }}</time>
+        </div>
+    </div>
+    <div class="parking-tail-placed-mobile">
+    {% endif %}
     <div class="parking-tail-main">
         <strong>{{ row.tail }}</strong>
         <span class="parking-tail-badges">{{ tail_badges(row) }}</span>
@@ -43,6 +63,9 @@
     {% if row.assigned_position and row.active_mission_lines and row.ground_time %}
     <div class="parking-tail-line parking-tail-gt-line">
         <small>{{ row.ground_time }}</small>
+    </div>
+    {% endif %}
+    {% if row.assigned_position %}
     </div>
     {% endif %}
     {% if row.assigned_position %}

@@ -5560,6 +5560,75 @@ h2 {
     box-shadow: 0 0 18px rgba(255, 42, 54, 0.2);
 }
 
+.parking-tail-placed-desktop {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    text-align: center;
+}
+
+.parking-tail-placed-mobile {
+    display: none;
+}
+
+.parking-tail-route-line {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 5px;
+    min-width: 0;
+    color: var(--steel);
+    font-size: 0.68rem;
+    font-weight: 900;
+    line-height: 1.05;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.parking-tail-route-line span {
+    color: var(--muted);
+    font-size: 0.58rem;
+    font-weight: 950;
+}
+
+.parking-tail-route-line strong,
+.parking-tail-route-line time {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.parking-tail-route-line strong {
+    color: var(--steel);
+}
+
+.parking-tail-route-line time {
+    color: var(--text);
+}
+
+.parking-tail-center-line {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-width: 0;
+}
+
+.parking-tail-number {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 1.08rem;
+    font-weight: 1000;
+    line-height: 1.05;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.parking-tail-center-line .parking-tail-badges {
+    justify-content: center;
+    margin-left: 0;
+}
+
 .parking-tail-line span,
 .parking-tail-mission-lines span,
 .parking-tail-line small,
@@ -10420,6 +10489,16 @@ select::-ms-expand {
 
     .parking-tail-card {
         padding: 7px;
+    }
+
+    .parking-tail-placed-desktop {
+        display: none;
+    }
+
+    .parking-tail-placed-mobile {
+        display: grid;
+        gap: 3px;
+        min-width: 0;
     }
 
     .parking-tail-main strong {
