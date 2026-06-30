@@ -8744,6 +8744,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("data-clear-selected-tail", html)
         self.assertIn("setSelectedTail", html)
         self.assertIn("assignTailToLane(lane, selectedTail)", html)
+        self.assertIn("data-direct-slot-select", html)
+        self.assertIn("openDirectSlotSelector", html)
+        self.assertIn("await assignTailToLane(lane, tail)", html)
+        self.assertIn("parking-position-label", html)
         self.assertIn("is-expanded-slot", html)
         self.assertIn('data-ramp-code="A"', html)
         self.assertIn('data-position-code="A01"', html)
@@ -8765,6 +8769,37 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertLess(mobile_html.index("HOT / NOTE"), mobile_html.index("REMOVE"))
         self.assertLess(mobile_html.index("ASSIGN TAIL"), mobile_html.index("SAVE HOT / NOTE"))
         self.assertLess(mobile_html.index("SAVE HOT / NOTE"), mobile_html.index("REMOVE / UNASSIGN"))
+
+    def test_parking_plan_empty_slot_dropdown_lists_unparked_tails(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        self._parking_pair(operation, "N349UP", destination="ONT")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+        lane_html = html.split('id="PARKING-POSITION-A01"', 1)[1].split(
+            'data-lane-number="2"',
+            1,
+        )[0]
+
+        self.assertIn('aria-label="Assign unparked tail to A01 Slot 1"', lane_html)
+        self.assertIn("parking-direct-slot-assign", lane_html)
+        self.assertIn("data-direct-slot-select", lane_html)
+        self.assertIn('<option value="N457UP">N457UP</option>', lane_html)
+        self.assertIn('<option value="N349UP">N349UP</option>', lane_html)
+
+    def test_parking_plan_desktop_visual_clarity_css_hooks_render(self):
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertIn(".parking-ramp-group", css)
+        self.assertIn("border-width: 2px", css)
+        self.assertIn("column-gap: 48px", css)
+        self.assertIn(".parking-position-card h3", css)
+        self.assertIn("font-size: 0.9rem", css)
+        self.assertIn(".parking-direct-slot-assign", css)
+        self.assertIn(".parking-lane.is-direct-selecting", css)
+        self.assertIn(".parking-direct-slot-assign {\n        display: none !important;", css)
 
     def test_parking_plan_slot_two_collapses_until_needed(self):
         operation = self._parking_operation()

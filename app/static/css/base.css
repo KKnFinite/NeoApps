@@ -5756,22 +5756,27 @@ h2 {
 .parking-ramp-layout {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 34px;
-    row-gap: 24px;
+    column-gap: 48px;
+    row-gap: 30px;
 }
 
 .parking-ramp-group {
+    border-width: 2px;
+    border-color: rgba(var(--node-rgb), 0.42);
     padding: 9px;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.09),
+        0 0 28px rgba(var(--node-rgb), 0.14);
 }
 
 .parking-position-grid {
     display: grid;
     grid-template-columns:
-        minmax(110px, 0.78fr)
+        minmax(96px, 0.7fr)
         minmax(6px, 0.04fr)
-        minmax(118px, 0.74fr)
+        minmax(104px, 0.66fr)
         minmax(6px, 0.04fr)
-        minmax(110px, 0.78fr);
+        minmax(96px, 0.7fr);
     grid-template-areas:
         "left4 . top . right4"
         "left3 . center . right3"
@@ -5782,7 +5787,7 @@ h2 {
 }
 
 .parking-position-grid-r {
-    grid-template-columns: minmax(108px, 1fr) minmax(46px, 0.24fr) minmax(108px, 1fr);
+    grid-template-columns: minmax(94px, 1fr) minmax(48px, 0.28fr) minmax(94px, 1fr);
     grid-template-areas:
         "rtop1 rlabel rtop2"
         "rbottom1 rlabel rbottom2";
@@ -5880,10 +5885,11 @@ h2 {
 .parking-position-card h3 {
     margin: 0;
     color: var(--node-highlight);
-    font-size: 0.72rem;
-    font-weight: 950;
-    letter-spacing: 0.08em;
+    font-size: 0.9rem;
+    font-weight: 1000;
+    letter-spacing: 0.1em;
     text-align: center;
+    text-shadow: 0 0 12px rgba(var(--node-highlight-rgb), 0.32);
 }
 
 .parking-lanes {
@@ -5969,6 +5975,54 @@ h2 {
     border-color: var(--node-highlight);
     background: rgba(var(--node-rgb), 0.14);
     box-shadow: inset 0 0 18px rgba(var(--node-rgb), 0.2);
+}
+
+.parking-direct-slot-assign {
+    display: none;
+    gap: 3px;
+    min-width: 0;
+}
+
+.parking-direct-slot-assign span {
+    color: var(--muted);
+    font-size: 0.52rem;
+    font-weight: 950;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.parking-direct-slot-assign select {
+    width: 100%;
+    min-width: 0;
+    min-height: 30px;
+    border: 1px solid rgba(var(--node-highlight-rgb), 0.54);
+    border-radius: 5px;
+    background: rgba(5, 6, 9, 0.94);
+    color: var(--steel);
+    font-size: 0.64rem;
+    font-weight: 900;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.parking-lane.is-direct-selecting {
+    border-color: rgba(var(--node-highlight-rgb), 0.8);
+    background:
+        linear-gradient(180deg, rgba(var(--node-highlight-rgb), 0.12), transparent 64%),
+        rgba(0, 0, 0, 0.3);
+    box-shadow:
+        inset 0 0 18px rgba(var(--node-rgb), 0.18),
+        0 0 14px rgba(var(--node-highlight-rgb), 0.16);
+}
+
+.parking-lane.is-direct-selecting .parking-empty-lane {
+    display: none;
+}
+
+.parking-lane.is-direct-selecting .parking-direct-slot-assign {
+    display: grid;
 }
 
 .parking-empty-lane {
@@ -10485,6 +10539,10 @@ select::-ms-expand {
 
     .parking-lane-slot-2.is-collapsed-slot .parking-empty-lane {
         min-height: 24px;
+    }
+
+    .parking-direct-slot-assign {
+        display: none !important;
     }
 
     .parking-tail-card {

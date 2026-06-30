@@ -606,7 +606,7 @@
                         data-position-side="{{ position.side }}"
                         data-position-slot="{{ position.slot }}"
                     >
-                        <h3>{{ position.code }}</h3>
+                        <h3 class="parking-position-label">{{ position.code }}</h3>
                         <div class="parking-lanes">
                             {% for lane in position.lanes %}
                             <div
@@ -629,6 +629,19 @@
                                     {% else %}
                                     <span class="parking-empty-lane">DROP SLOT 1</span>
                                     {% endif %}
+                                    <label class="parking-direct-slot-assign" aria-label="Assign unparked tail to {{ position.code }} Slot {{ lane.number }}">
+                                        <span>ASSIGN TAIL</span>
+                                        <select data-direct-slot-select>
+                                            <option value="">SELECT TAIL</option>
+                                            {% if unassigned_tail_rows %}
+                                                {% for row in unassigned_tail_rows %}
+                                                <option value="{{ row.tail }}">{{ row.tail }}</option>
+                                                {% endfor %}
+                                            {% else %}
+                                            <option value="" disabled>NO UNPARKED TAILS</option>
+                                            {% endif %}
+                                        </select>
+                                    </label>
                                 {% endif %}
                             </div>
                             {% endfor %}
@@ -752,6 +765,7 @@
             typedTailInput.value = selectedTail;
         }
         clearTypedError();
+        closeDirectSlotSelectors();
     };
     const assignTailToLane = async (lane, tail, options = {}) => {
         const reportError = options.errorTarget ? showTypedError : (message) => window.alert(message);
@@ -790,6 +804,28 @@
             return false;
         }
         window.location.reload();
+        return true;
+    };
+    const closeDirectSlotSelectors = (exceptLane = null) => {
+        page.querySelectorAll(".parking-lane.is-direct-selecting").forEach((lane) => {
+            if (exceptLane && lane === exceptLane) {
+                return;
+            }
+            lane.classList.remove("is-direct-selecting");
+            const select = lane.querySelector("[data-direct-slot-select]");
+            if (select) {
+                select.value = "";
+            }
+        });
+    };
+    const openDirectSlotSelector = (lane) => {
+        const select = lane.querySelector("[data-direct-slot-select]");
+        if (!select || lane.dataset.occupiedTail) {
+            return false;
+        }
+        closeDirectSlotSelectors(lane);
+        lane.classList.add("is-direct-selecting");
+        window.setTimeout(() => select.focus(), 0);
         return true;
     };
     clearSelectedTailButton?.addEventListener("click", () => {
@@ -848,22 +884,47 @@
         });
     });
 
+    page.querySelectorAll("[data-direct-slot-select]").forEach((select) => {
+        select.addEventListener("click", (event) => {
+            event.stopPropagation();
+        });
+        select.addEventListener("change", async () => {
+            const tail = select.value || "";
+            const lane = select.closest("[data-parking-lane]");
+            if (!tail || !lane) {
+                return;
+            }
+            select.disabled = true;
+            try {
+                await assignTailToLane(lane, tail);
+            } finally {
+                select.disabled = false;
+            }
+        });
+    });
+
     page.querySelectorAll("[data-parking-lane]").forEach((lane) => {
         lane.addEventListener("click", async (event) => {
+            if (event.target.closest("[data-direct-slot-select]")) {
+                return;
+            }
             if (event.target.closest("[data-parking-tail]")) {
                 return;
             }
-            if (lane.dataset.slotCollapsed === "1" && !selectedTail) {
-                lane.classList.toggle("is-expanded-slot");
+            if (lane.dataset.slotCollapsed === "1" && !selectedTail && !lane.classList.contains("is-expanded-slot")) {
+                lane.classList.add("is-expanded-slot");
                 return;
             }
             if (!selectedTail) {
+                openDirectSlotSelector(lane);
                 return;
             }
+            closeDirectSlotSelectors();
             await assignTailToLane(lane, selectedTail);
         });
         lane.addEventListener("dragover", (event) => {
             event.preventDefault();
+            closeDirectSlotSelectors();
             lane.classList.add("is-drag-over");
         });
         lane.addEventListener("dragleave", () => {
@@ -876,8 +937,19 @@
             if (!tail) {
                 return;
             }
+            closeDirectSlotSelectors();
             await assignTailToLane(lane, tail);
         });
+    });
+
+    document.addEventListener("click", (event) => {
+        if (!page.contains(event.target)) {
+            closeDirectSlotSelectors();
+            return;
+        }
+        if (!event.target.closest("[data-parking-lane]")) {
+            closeDirectSlotSelectors();
+        }
     });
 
     const unassignDropTarget = page.querySelector("[data-parking-unassign-drop]");
