@@ -362,6 +362,7 @@ def users():
         "auth/users.html",
         gateway=gateway,
         memberships=memberships,
+        role_choices=ROLE_CHOICES,
         rows=rows,
         search=search,
     )
@@ -400,10 +401,12 @@ def pending_users():
         "auth/pending_users.html",
         gateway=gateway,
         memberships=memberships,
+        role_choices=ROLE_CHOICES,
     )
 
 
 @bp.route("/admin/permissions", methods=["GET", "POST"])
+@bp.route("/motherbrain/permissions", methods=["GET", "POST"])
 @gateway_node_required("motherbrain", minimum_role="grandmaster")
 def permission_rules():
     ensure_default_permission_rules()
@@ -441,6 +444,7 @@ def user_detail(user_id):
         gateway=gateway,
         membership=membership,
         node_rows=node_rows,
+        role_choices=ROLE_CHOICES,
         target_user=target_user,
     )
 
@@ -572,6 +576,7 @@ def access_requests():
         "auth/access_requests.html",
         gateway=gateway,
         memberships=memberships,
+        role_choices=ROLE_CHOICES,
     )
 
 
@@ -1039,6 +1044,14 @@ def _gateway_memberships_by_user_id(gateway):
 
 def _node_roles_by_user_id(gateway):
     memberships = GatewayMembership.query.filter_by(gateway_id=gateway.id).all()
+    for membership in memberships:
+        if _membership_is_approved_active(membership):
+            seed_gateway_node_roles(
+                membership,
+                _neogateway_seed_role_for_membership(membership.user, membership),
+                overwrite_existing=False,
+            )
+
     membership_ids = [membership.id for membership in memberships]
     user_id_by_membership_id = {
         membership.id: membership.user_id for membership in memberships
@@ -1152,6 +1165,8 @@ def _node_role_rows(user, membership):
     seed_role = _neogateway_seed_role_for_membership(user, membership)
     existing_roles = {}
     if membership:
+        if _membership_is_approved_active(membership):
+            seed_gateway_node_roles(membership, seed_role, overwrite_existing=False)
         existing_roles = {
             role.node_id: role
             for role in GatewayNodeRole.query.filter_by(
@@ -1217,11 +1232,6 @@ def _apply_node_role_form(target_user, membership):
             raise ValueError(
                 "Cannot remove or downgrade the last active Grandmaster MotherBrain access."
             )
-
-        if selected_role == "watcher":
-            if existing_role:
-                db.session.delete(existing_role)
-            continue
 
         if not existing_role:
             db.session.add(

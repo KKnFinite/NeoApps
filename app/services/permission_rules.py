@@ -101,6 +101,11 @@ DEFAULT_PERMISSION_RULES = (
         "Edit NeoErmac Tug Assignments.",
     ),
     (
+        "neosektor.live_counts.view",
+        "watcher",
+        "View NeoSektor Live Counts screens.",
+    ),
+    (
         "neosektor.ebm.view",
         "operator",
         "View NeoSektor EBM Ballmat Operations screens.",

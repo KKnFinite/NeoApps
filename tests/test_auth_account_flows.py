@@ -248,14 +248,12 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertFalse(user_can_access_node(user, "RFD", "motherbrain", "operator"))
 
         sektor = NeoNode.query.filter_by(code="sektor").first()
-        db.session.add(
-            GatewayNodeRole(
-                gateway_membership_id=membership.id,
-                node_id=sektor.id,
-                role="operator",
-                is_active=True,
-            )
-        )
+        sektor_role = GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            node_id=sektor.id,
+        ).one()
+        sektor_role.role = "operator"
+        sektor_role.is_active = True
         db.session.commit()
 
         self.assertTrue(user_can_access_node(user, "RFD", "sektor", "operator"))
@@ -639,6 +637,42 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(len(seeded_roles), len(DEFAULT_NEONODES))
         self.assertEqual({role.role for role in seeded_roles}, {"simulator"})
         self.assertTrue(user_can_access_node(target, "RFD", "motherbrain", "simulator"))
+
+    def test_gateway_access_request_approval_seeds_selected_role_to_all_nodes(self):
+        grandmaster = self._admin("gateway_request_grandmaster", "grandmaster")
+        target, membership = self._pending_user(
+            "gatewayoldrequest",
+            "gatewayoldrequest@example.com",
+            verified=True,
+        )
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        with patch(
+            "app.auth.routes.email_service.send_access_approved",
+            return_value={"sent": False},
+        ):
+            response = self.client.post(
+                f"/admin/access-requests/{membership.id}/approve",
+                data={"role": "master", "approval_notes": "Seed master."},
+                follow_redirects=False,
+            )
+
+        seeded_roles = GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            is_active=True,
+        ).all()
+        app_access = PortalAppAccess.query.filter_by(
+            user_id=target.id,
+            app_code="neogateway",
+        ).one()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(db.session.get(GatewayMembership, membership.id).status, "approved")
+        self.assertEqual(app_access.status, "approved")
+        self.assertEqual(app_access.role, "master")
+        self.assertEqual(len(seeded_roles), len(DEFAULT_NEONODES))
+        self.assertEqual({role.role for role in seeded_roles}, {"master"})
 
     def _account_form(self, **overrides):
         values = {

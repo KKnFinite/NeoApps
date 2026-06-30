@@ -67,6 +67,7 @@ class PermissionRulesTest(unittest.TestCase):
                 "neosektor.driver_routing.view": "watcher",
                 "neosektor.ebm.edit": "operator",
                 "neosektor.ebm.view": "operator",
+                "neosektor.live_counts.view": "watcher",
                 "neosektor.tunnel_conductor.edit": "simulator",
                 "neosektor.wbm.edit": "operator",
                 "neosektor.wbm.view": "operator",
@@ -89,7 +90,7 @@ class PermissionRulesTest(unittest.TestCase):
         ).one()
 
         response = self.client.post(
-            "/admin/permissions",
+            "/motherbrain/permissions",
             data={
                 "rule_ids": [str(rule.id)],
                 f"description_{rule.id}": "Updated Building Lineup rule.",
@@ -125,7 +126,7 @@ class PermissionRulesTest(unittest.TestCase):
         rule = PermissionRule.query.filter_by(permission_key="neomotherbrain.dashboard.view").one()
 
         response = self.client.post(
-            "/admin/permissions",
+            "/motherbrain/permissions",
             data={
                 "rule_ids": [str(rule.id)],
                 f"description_{rule.id}": rule.description,

@@ -190,7 +190,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b'id="motherbrain-mobile-menu"', response.data)
         self.assertIn(b'href="/motherbrain"', response.data)
         self.assertIn(b'href="/portal/manage"', response.data)
-        self.assertIn(b'href="/admin/permissions"', response.data)
+        self.assertIn(b'href="/motherbrain/permissions"', response.data)
         self.assertIn(b'href="/motherbrain/gateway-matrix"', response.data)
         self.assertIn(b'href="/motherbrain/master-schedule"', response.data)
         self.assertIn(b'href="/motherbrain/manage-sort"', response.data)
@@ -6139,7 +6139,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
     def test_parking_optimizer_permission_keys_render_in_permission_matrix(self):
         ensure_default_permission_rules()
 
-        response = self.client.get("/admin/permissions")
+        response = self.client.get("/motherbrain/permissions")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"motherbrain.parking_rules.view", response.data)

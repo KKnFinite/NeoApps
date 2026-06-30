@@ -9,6 +9,7 @@ from app.services.access_control import (
     DEFAULT_NEONODES,
     backfill_default_gateway_node_roles,
     ensure_default_gateway_and_nodes,
+    get_user_node_role,
     user_can_access_node,
 )
 
@@ -182,8 +183,8 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertNotIn(b"Beta User", name_response.data)
         self.assertIn(b">EDIT</a>", name_response.data)
         self.assertIn(b"2026-06-05 13:30", name_response.data)
-        self.assertIn(b"Watcher fallback", name_response.data)
-        self.assertNotIn(b"watcher fallback", name_response.data)
+        self.assertIn(b"NeoMotherBrain: Watcher", name_response.data)
+        self.assertNotIn(b"Watcher fallback", name_response.data)
         self.assertNotIn(b">Actions<", name_response.data)
         self.assertNotIn(b'data-label="Actions"', name_response.data)
         self.assertIn(b"Beta User", employee_response.data)
@@ -246,8 +247,8 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertIn(b'>Watcher</option>', response.data)
         self.assertIn(b'>Master</option>', response.data)
         self.assertNotIn(b'>watcher</option>', response.data)
-        self.assertIn(b"Watcher fallback", detail_response.data)
-        self.assertNotIn(b"watcher fallback", detail_response.data)
+        self.assertIn(b"Watcher", detail_response.data)
+        self.assertNotIn(b"Watcher fallback", detail_response.data)
         self.assertIn(b"Access only", detail_response.data)
         self.assertNotIn(b'name="app_role_neogateway"', response.data)
         self.assertIn(b'name="app_role_neostaffing"', response.data)
@@ -283,7 +284,8 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertEqual(detail_response.status_code, 200)
         self.assertNotIn(b'name="app_role_neogateway"', edit_response.data)
         self.assertIn(b'<option value="simulator" selected>Simulator</option>', edit_response.data)
-        self.assertIn(b"Seeded from NeoGateway approval", detail_response.data)
+        self.assertIn(b"Simulator", detail_response.data)
+        self.assertNotIn(b"Seeded from NeoGateway approval", detail_response.data)
         self.assertIn(b"Access only", detail_response.data)
 
     def test_unverified_pending_user_cannot_be_approved(self):
@@ -367,7 +369,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertEqual(updated.denial_notes, "Needs manager follow-up.")
         self.assertEqual(send_approved.call_count, 0)
 
-    def test_node_role_updates_create_update_and_remove_watcher_override(self):
+    def test_node_role_updates_create_update_and_store_watcher_role(self):
         grandmaster = self._admin("roles_grandmaster", "grandmaster")
         user, membership = self._approved_user("role_user", "role@example.com")
         db.session.commit()
@@ -396,20 +398,59 @@ class GrandmasterUserManagementTest(unittest.TestCase):
             data=form,
             follow_redirects=False,
         )
-        updated_role = db.session.get(GatewayNodeRole, role.id)
+        self.assertEqual(update_response.status_code, 302)
+        self.assertEqual(db.session.get(GatewayNodeRole, role.id).role, "simulator")
 
         form[f"node_{sektor.id}"] = "watcher"
-        remove_response = self.client.post(
+        watcher_response = self.client.post(
             f"/admin/users/{user.id}/roles",
             data=form,
             follow_redirects=False,
         )
+        watcher_role = db.session.get(GatewayNodeRole, role.id)
 
-        self.assertEqual(update_response.status_code, 302)
-        self.assertEqual(updated_role.role, "simulator")
-        self.assertEqual(remove_response.status_code, 302)
-        self.assertIsNone(db.session.get(GatewayNodeRole, role.id))
+        self.assertEqual(watcher_response.status_code, 302)
+        self.assertEqual(watcher_role.role, "watcher")
+        self.assertTrue(watcher_role.is_active)
         self.assertTrue(user_can_access_node(user, "RFD", "sektor", "watcher"))
+        self.assertFalse(user_can_access_node(user, "RFD", "sektor", "operator"))
+
+    def test_seeded_neogateway_role_does_not_override_later_node_role_edits(self):
+        grandmaster = self._admin("seed_edit_grandmaster", "grandmaster")
+        user, membership = self._approved_user("seed_edit_user", "seededit@example.com")
+        db.session.add(
+            PortalAppAccess(
+                user_id=user.id,
+                app_code="neogateway",
+                status="approved",
+                role="simulator",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        # Opening the edit page materializes missing legacy node rows from the
+        # NeoGateway approval seed without changing later custom role edits.
+        self.client.get(f"/admin/users/{user.id}/edit")
+        sektor = NeoNode.query.filter_by(code="sektor").one()
+        form = self._role_form()
+        form[f"node_{sektor.id}"] = "watcher"
+
+        response = self.client.post(
+            f"/admin/users/{user.id}/roles",
+            data=form,
+            follow_redirects=False,
+        )
+        sektor_role = GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            node_id=sektor.id,
+            is_active=True,
+        ).one()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(sektor_role.role, "watcher")
+        self.assertEqual(get_user_node_role(user, "RFD", "sektor"), "watcher")
         self.assertFalse(user_can_access_node(user, "RFD", "sektor", "operator"))
 
     def test_combined_edit_user_updates_membership_and_node_roles(self):
@@ -457,7 +498,8 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         ).first()
         self.assertEqual(response.status_code, 400)
         self.assertIn(b"You cannot assign a role equal to or higher than your own role.", response.data)
-        self.assertIsNone(role)
+        self.assertIsNotNone(role)
+        self.assertEqual(role.role, "watcher")
 
     def test_kessler_can_assign_grandmaster_role(self):
         kessler = self._admin("Kessler", "grandmaster")

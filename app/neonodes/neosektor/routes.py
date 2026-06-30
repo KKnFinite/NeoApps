@@ -32,6 +32,7 @@ EBM_VIEW_PERMISSION = "neosektor.ebm.view"
 EBM_EDIT_PERMISSION = "neosektor.ebm.edit"
 WBM_VIEW_PERMISSION = "neosektor.wbm.view"
 WBM_EDIT_PERMISSION = "neosektor.wbm.edit"
+LIVE_COUNTS_VIEW_PERMISSION = "neosektor.live_counts.view"
 
 NEOSEKTOR_PAGES = (
     (
@@ -72,7 +73,7 @@ NEOSEKTOR_PAGES = (
 )
 
 NEOSEKTOR_INTERNAL_MENU = (
-    ("Live Counts", "neosektor.live_counts", None),
+    ("Live Counts", "neosektor.live_counts", LIVE_COUNTS_VIEW_PERMISSION),
     ("Tunnel Conductor", "neosektor.tunnel_conductor", TUNNEL_CONDUCTOR_VIEW_PERMISSION),
     ("East Ballmat", "neosektor.ebm", EBM_VIEW_PERMISSION),
     ("West Ballmat", "neosektor.wbm", WBM_VIEW_PERMISSION),
@@ -85,7 +86,7 @@ NEOSEKTOR_MOBILE_DASHBOARD = (
     (
         "Live Counts",
         "neosektor.live_counts",
-        None,
+        LIVE_COUNTS_VIEW_PERMISSION,
         "live-counts",
         "Live flow and bay status.",
     ),
@@ -447,6 +448,10 @@ def discharge_send():
 @bp.route("/live-counts")
 @gateway_node_required("sektor")
 def live_counts():
+    if not user_can(LIVE_COUNTS_VIEW_PERMISSION):
+        flash("Access denied.", "error")
+        return redirect(url_for("neosektor.index"))
+
     gateway = get_current_gateway()
     context = live_counts_context(gateway)
     db.session.commit()
@@ -468,6 +473,9 @@ def _has_multi_uld_send_payload(payload):
 @bp.route("/live-counts/state")
 @gateway_node_required("sektor")
 def live_counts_state():
+    if not user_can(LIVE_COUNTS_VIEW_PERMISSION):
+        return jsonify({"ok": False, "error": "Access denied."}), 403
+
     state = ballmat_state_payload(get_current_gateway())
     db.session.commit()
     return jsonify({"ok": True, "state": state})

@@ -2275,7 +2275,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"neosektor-count-screen-compact", live_counts.data)
         self.assertNotIn(b"data-neosektor-mobile-dashboard", live_counts.data)
 
-    def test_watcher_can_open_dashboard_and_live_counts_without_special_view_keys(self):
+    def test_watcher_can_open_dashboard_and_live_counts_with_live_counts_view_default(self):
         self._login_approved_user(role="watcher")
 
         self.assertIsNone(
@@ -2283,11 +2283,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 permission_key="neosektor.dashboard.view",
             ).first()
         )
-        self.assertIsNone(
-            PermissionRule.query.filter_by(
-                permission_key="neosektor.live_counts.view",
-            ).first()
-        )
+        live_counts_rule = PermissionRule.query.filter_by(
+            permission_key="neosektor.live_counts.view",
+        ).one()
+        self.assertEqual(live_counts_rule.minimum_role, "watcher")
 
         dashboard = self.client.get("/neosektor", follow_redirects=False)
         conductor = self.client.get("/neosektor/tunnel-conductor", follow_redirects=False)

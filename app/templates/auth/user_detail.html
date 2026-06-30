@@ -87,6 +87,14 @@
                 <form class="operation-form inline-operation-form" method="post" action="{{ url_for('auth.update_user_gateway_membership', user_id=target_user.id) }}">
                     <input type="hidden" name="action" value="approve">
                     <label>
+                        <span>SEED RFD NeoNode ROLE</span>
+                        <select name="role">
+                            {% for role in role_choices %}
+                            <option value="{{ role }}">{{ role|role_label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>
                         <span>APPROVAL NOTES</span>
                         <input name="approval_notes">
                     </label>

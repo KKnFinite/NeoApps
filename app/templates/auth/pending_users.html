@@ -45,6 +45,12 @@
                             {% if membership.user.email_verified_at %}
                             <form class="inline-button-form" method="post" action="{{ url_for('auth.update_user_gateway_membership', user_id=membership.user.id) }}">
                                 <input type="hidden" name="action" value="approve">
+                                <span class="muted compact-access-note">Seed RFD NeoNode role</span>
+                                <select class="compact-action-input" name="role" aria-label="Seed RFD NeoNode role">
+                                    {% for role in role_choices %}
+                                    <option value="{{ role }}">{{ role|role_label }}</option>
+                                    {% endfor %}
+                                </select>
                                 <input class="compact-action-input" name="approval_notes" placeholder="Approval notes">
                                 <button type="submit">APPROVE</button>
                             </form>

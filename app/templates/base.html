@@ -25,7 +25,7 @@
 {% set is_rfd_hub_page = is_authenticated_app and request.blueprint == "neomotherbrain" and request.path.rstrip("/") == "/rfd" %}
 {% set is_motherbrain_landing = is_motherbrain_page and request.path == "/motherbrain" %}
 {% set is_user_management_page = is_authenticated_app and request.blueprint == "auth" and request.path.startswith("/admin/users") %}
-{% set is_permission_management_page = is_authenticated_app and request.blueprint == "auth" and request.path.startswith("/admin/permissions") %}
+{% set is_permission_management_page = is_authenticated_app and request.blueprint == "auth" and (request.path.startswith("/admin/permissions") or request.path.startswith("/motherbrain/permissions")) %}
 {% set uses_motherbrain_header = is_motherbrain_page or is_user_management_page or is_permission_management_page %}
 {% set is_neoermac_page = is_authenticated_app and request.blueprint == "neoermac" %}
 {% set is_neosektor_page = is_authenticated_app and request.blueprint == "neosektor" %}

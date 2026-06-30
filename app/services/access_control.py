@@ -246,11 +246,14 @@ def get_user_node_role(user, gateway_code, node_code):
     if node_role:
         return node_role.role
 
-    # Legacy safety net: older approved NeoGateway access rows stored the
-    # approval role before node-role rows were materialized. Portal Management
-    # no longer exposes this as a NeoGateway role, but the hidden seed keeps
-    # existing users from losing effective node access.
-    return get_user_app_role(user, "neogateway") or "watcher"
+    seed_role = _neogateway_seed_role_for_user(user)
+    seed_gateway_node_roles(membership, seed_role, overwrite_existing=False)
+    node_role = GatewayNodeRole.query.filter_by(
+        gateway_membership_id=membership.id,
+        node_id=node.id,
+        is_active=True,
+    ).first()
+    return node_role.role if node_role else "watcher"
 
 
 def user_can_access_node(user, gateway_code, node_code, minimum_role="watcher"):
@@ -343,7 +346,7 @@ def seed_gateway_node_roles(membership, role="watcher", overwrite_existing=False
             )
             continue
 
-        if overwrite_existing:
+        if overwrite_existing or not node_role.is_active:
             node_role.role = role
             node_role.is_active = True
 
@@ -520,6 +523,16 @@ def _role_from_gateway_membership(user, membership):
     # role falls back to the user's existing global role so migration does not
     # accidentally promote every NeoGateway page because of one node override.
     return user.role if user.role in ROLE_LEVELS else "watcher"
+
+
+def _neogateway_seed_role_for_user(user):
+    access = PortalAppAccess.query.filter_by(
+        user_id=user.id,
+        app_code="neogateway",
+    ).first()
+    if access and access.status == "approved" and access.is_active and access.role in ROLE_LEVELS:
+        return access.role
+    return "watcher"
 
 
 def _default_gateway_code():
