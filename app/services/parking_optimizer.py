@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import logging
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ortools.sat.python import cp_model
@@ -33,7 +34,11 @@ from app.services.parking_rules import (
 )
 
 
+logger = logging.getLogger(__name__)
+
 PARKING_OPTIMIZER_TIME_LIMIT_SECONDS = 8.0
+PARKING_OPTIMIZER_MAX_STAGE_PLACEMENTS = 3500
+PARKING_OPTIMIZER_MAX_STAGE_ETA_RELATIONS = 300000
 SUCCESS_SOLVER_STATUSES = {"OPTIMAL", "FEASIBLE"}
 PREFERRED_RAMP_SCORE = 600
 AVOID_RAMP_PENALTY = 350
@@ -161,6 +166,7 @@ def parking_optimizer_preview(
             locked_filled_positions | locked_blocked_positions,
             locked_eta_by_position,
             locked_normal_ramp_counts,
+            stage_name="slot_1",
         )
         if slot_1_placements
         else {
@@ -169,6 +175,15 @@ def parking_optimizer_preview(
             "selected_by_tail": {},
             "wall_time": 0,
             "deice_report": _deice_no_placement_report(deice_threshold),
+            "model_diagnostics": [
+                _stage_model_diagnostic(
+                    "slot_1",
+                    0,
+                    0,
+                    "OPTIMAL",
+                    "No candidate placements were available for Slot 1.",
+                )
+            ],
         }
     )
 
@@ -178,6 +193,7 @@ def parking_optimizer_preview(
     status_name = slot_1_result["status_name"]
     wall_time = slot_1_result["wall_time"]
     deice_reports = [slot_1_result.get("deice_report")]
+    model_diagnostics = list(slot_1_result.get("model_diagnostics") or [])
 
     if status_name in SUCCESS_SOLVER_STATUSES:
         unresolved_rows = [
@@ -232,11 +248,15 @@ def parking_optimizer_preview(
                     stage_filled_positions,
                     stage_eta_by_position,
                     stage_normal_ramp_counts,
+                    stage_name="slot_2",
                 )
                 wall_time += slot_2_result["wall_time"]
                 deice_reports.append(slot_2_result.get("deice_report"))
+                model_diagnostics.extend(slot_2_result.get("model_diagnostics") or [])
                 if slot_2_result["status_name"] in SUCCESS_SOLVER_STATUSES:
                     selected_by_tail.update(slot_2_result["selected_by_tail"])
+                else:
+                    status_name = slot_2_result["status_name"]
 
     deice_report = _merge_deice_reports(deice_reports, deice_threshold)
 
@@ -281,7 +301,7 @@ def parking_optimizer_preview(
     if solver_diagnostic:
         summary = solver_diagnostic
 
-    return _preview_result(
+    result = _preview_result(
         status_name,
         include_remote,
         include_throat,
@@ -296,6 +316,83 @@ def parking_optimizer_preview(
         summary,
         wall_time=wall_time,
         solver_diagnostic=solver_diagnostic,
+        model_diagnostics=model_diagnostics,
+    )
+    logger.info(
+        "Parking optimizer preview complete: operation=%s status=%s candidates=%s suggestions=%s unresolved=%s model=%s",
+        getattr(operation, "id", None),
+        result["solver_status"],
+        result["candidate_tail_count"],
+        len(result["suggested_assignments"]),
+        len(result["unassigned_tails"]),
+        result["model_diagnostic_summary"],
+    )
+    return result
+
+
+def parking_optimizer_error_preview(
+    gateway,
+    operation,
+    include_remote=None,
+    include_throat=None,
+    tail_rows=None,
+    message=None,
+):
+    defaults = parking_optimizer_default_options(gateway)
+    include_remote = defaults["include_remote"] if include_remote is None else bool(include_remote)
+    include_throat = defaults["include_throat"] if include_throat is None else bool(include_throat)
+    deice_threshold = _safe_int(
+        defaults.get("deice_spacing_threshold_minutes"),
+        DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES,
+    )
+    preferred_max_per_ramp = _safe_optional_int(defaults.get("preferred_max_per_ramp"))
+    tail_rows = tail_rows if tail_rows is not None else tail_rows_for_operation(gateway, operation)
+    assignments = _active_assignments(operation)
+    locked_assignments = _locked_assignment_rows(assignments, tail_rows)
+    locked_tails = {row["tail"] for row in locked_assignments}
+    candidate_rows = [
+        row
+        for row in tail_rows
+        if row.get("has_active_mission")
+        and _normalize_tail(row.get("tail"))
+        and _normalize_tail(row.get("tail")) not in locked_tails
+    ]
+    diagnostic = message or (
+        "Optimizer failed before solver completed. Existing assignments were preserved."
+    )
+    unassigned = [
+        {
+            "tail": _normalize_tail(row.get("tail")),
+            "origin": row.get("arrival_origin") or "-",
+            "aircraft_type": _parking_aircraft_type_for_row(row),
+            "parking_window": _parking_window_label(row),
+            "candidate_positions_before_filters": 0,
+            "candidate_positions_after_hard_filters": 0,
+            "candidate_positions_before_sample": "",
+            "candidate_positions_after_sample": "",
+            "top_rejection_reason": "",
+            "reason": diagnostic,
+        }
+        for row in sorted(candidate_rows, key=lambda item: (_parking_window_sort_key(item), item["tail"]))
+    ]
+    return _preview_result(
+        "ERROR",
+        include_remote,
+        include_throat,
+        deice_threshold,
+        preferred_max_per_ramp,
+        _deice_report("skipped", "Deice scoring skipped because optimizer preview failed."),
+        len(candidate_rows),
+        locked_assignments,
+        [],
+        unassigned,
+        [],
+        diagnostic,
+        wall_time=0,
+        solver_diagnostic=diagnostic,
+        model_diagnostics=[
+            _stage_model_diagnostic("preview", 0, 0, "ERROR", diagnostic)
+        ],
     )
 
 
@@ -431,7 +528,9 @@ def _preview_result(
     summary,
     wall_time=None,
     solver_diagnostic=None,
+    model_diagnostics=None,
 ):
+    model_diagnostics = model_diagnostics or []
     return {
         "solver_status": solver_status,
         "summary": summary,
@@ -451,6 +550,13 @@ def _preview_result(
             "preferred_max_per_ramp": preferred_max_per_ramp,
         },
         "wall_time_seconds": wall_time,
+        "model_diagnostics": model_diagnostics,
+        "model_diagnostic_summary": " ".join(
+            str(item.get("summary") or "").strip()
+            for item in model_diagnostics
+            if str(item.get("summary") or "").strip()
+        ),
+        "can_apply_preview": solver_status in SUCCESS_SOLVER_STATUSES,
         "preview_only": True,
     }
 
@@ -681,6 +787,67 @@ def _build_candidate_placements(
     return placements, diagnostics
 
 
+def _stage_guard_reason(placements, eta_relation_count):
+    placement_count = len(placements)
+    if placement_count > PARKING_OPTIMIZER_MAX_STAGE_PLACEMENTS:
+        return (
+            "Optimizer model guard skipped solving to protect memory "
+            f"({placement_count} candidate placements exceeds "
+            f"{PARKING_OPTIMIZER_MAX_STAGE_PLACEMENTS})."
+        )
+    if eta_relation_count > PARKING_OPTIMIZER_MAX_STAGE_ETA_RELATIONS:
+        return (
+            "Optimizer model guard skipped solving to protect memory "
+            f"({eta_relation_count} ETA relation checks exceeds "
+            f"{PARKING_OPTIMIZER_MAX_STAGE_ETA_RELATIONS})."
+        )
+    return ""
+
+
+def _stage_model_diagnostic(
+    stage,
+    placement_count,
+    eta_relation_count,
+    status,
+    summary,
+    wall_time=None,
+    deice_status="",
+):
+    return {
+        "stage": stage,
+        "placement_count": placement_count,
+        "eta_relation_count": eta_relation_count,
+        "status": status,
+        "summary": summary,
+        "wall_time_seconds": wall_time,
+        "deice_status": deice_status,
+    }
+
+
+def _eta_relation_count_for_placements(placements, locked_eta_by_position):
+    contributors_by_position = {}
+    for placement in placements:
+        for position in _filled_positions_for_placement(placement):
+            contributors_by_position.setdefault(position, 0)
+            contributors_by_position[position] += 1
+
+    total = 0
+    locked_eta_by_position = locked_eta_by_position or {}
+    for sequence in _eta_order_sequences():
+        for index, higher_position in enumerate(sequence):
+            higher_candidate_count = contributors_by_position.get(higher_position, 0)
+            higher_locked_count = len(locked_eta_by_position.get(higher_position, []) or [])
+            if not higher_candidate_count and not higher_locked_count:
+                continue
+            for lower_position in sequence[:index]:
+                lower_candidate_count = contributors_by_position.get(lower_position, 0)
+                lower_locked_count = len(locked_eta_by_position.get(lower_position, []) or [])
+                total += higher_candidate_count * lower_locked_count
+                total += higher_candidate_count * lower_candidate_count
+                total += higher_locked_count * lower_candidate_count
+    return total
+
+
 def _solve_optimizer_stage(
     placements,
     assignments,
@@ -691,6 +858,7 @@ def _solve_optimizer_stage(
     filled_positions,
     eta_by_position,
     locked_normal_ramp_counts=None,
+    stage_name="stage",
 ):
     if not placements:
         return {
@@ -698,51 +866,143 @@ def _solve_optimizer_stage(
             "status_name": "NO_CANDIDATES",
             "selected_by_tail": {},
             "wall_time": 0,
+            "deice_report": _deice_no_placement_report(deice_threshold),
+            "model_diagnostics": [
+                _stage_model_diagnostic(
+                    stage_name,
+                    0,
+                    0,
+                    "NO_CANDIDATES",
+                    "No candidate placements were available for this optimizer stage.",
+                )
+            ],
+        }
+
+    eta_relation_count = _eta_relation_count_for_placements(placements, eta_by_position)
+    guard_reason = _stage_guard_reason(placements, eta_relation_count)
+    if guard_reason:
+        logger.warning(
+            "Parking optimizer guarded %s for operation model: placements=%s eta_relations=%s reason=%s",
+            stage_name,
+            len(placements),
+            eta_relation_count,
+            guard_reason,
+        )
+        return {
+            "status": None,
+            "status_name": "GUARDED",
+            "selected_by_tail": {},
+            "wall_time": 0,
+            "deice_report": _deice_report(
+                "skipped",
+                "Deice scoring skipped because the optimizer model guard stopped this stage.",
+            ),
+            "model_diagnostics": [
+                _stage_model_diagnostic(
+                    stage_name,
+                    len(placements),
+                    eta_relation_count,
+                    "GUARDED",
+                    guard_reason,
+                )
+            ],
         }
 
     model = cp_model.CpModel()
-    variables = {
-        placement: model.NewBoolVar(
-            f"assign_{_var_key(placement.tail)}_{placement.position}_{placement.lane}"
-        )
-        for placement in placements
-    }
+    try:
+        variables = {
+            placement: model.NewBoolVar(
+                f"assign_{_var_key(placement.tail)}_{placement.position}_{placement.lane}"
+            )
+            for placement in placements
+        }
 
-    _add_tail_constraints(model, variables)
-    _add_lane_constraints(model, variables)
-    fill_exprs = _add_position_fill_constraints(model, variables, filled_positions)
-    _add_fill_order_constraints(model, variables, fill_exprs)
-    _add_throat_constraints(model, variables, fill_exprs)
-    _add_767_block_constraints(model, variables, fill_exprs)
-    _add_eta_order_constraints(model, variables, eta_by_position)
+        _add_tail_constraints(model, variables)
+        _add_lane_constraints(model, variables)
+        fill_exprs = _add_position_fill_constraints(model, variables, filled_positions)
+        _add_fill_order_constraints(model, variables, fill_exprs)
+        _add_throat_constraints(model, variables, fill_exprs)
+        _add_767_block_constraints(model, variables, fill_exprs)
+        _add_eta_order_constraints(model, variables, eta_by_position)
 
-    objective_terms = [
-        variable * (100000 + placement.soft_score - placement.cost)
-        for placement, variable in variables.items()
-    ]
-    deice_terms, deice_report = _deice_spacing_penalty_terms(
-        model,
-        variables,
-        assignments,
-        tail_rows,
-        timezone_name,
-        deice_threshold,
-    )
-    objective_terms.extend(deice_terms)
-    objective_terms.extend(
-        _ramp_balance_penalty_terms(
+        objective_terms = [
+            variable * (100000 + placement.soft_score - placement.cost)
+            for placement, variable in variables.items()
+        ]
+        deice_terms, deice_report = _deice_spacing_penalty_terms(
             model,
             variables,
-            locked_normal_ramp_counts or {},
-            preferred_max_per_ramp,
+            assignments,
+            tail_rows,
+            timezone_name,
+            deice_threshold,
         )
-    )
-    model.Maximize(sum(objective_terms))
+        objective_terms.extend(deice_terms)
+        objective_terms.extend(
+            _ramp_balance_penalty_terms(
+                model,
+                variables,
+                locked_normal_ramp_counts or {},
+                preferred_max_per_ramp,
+            )
+        )
+        model.Maximize(sum(objective_terms))
 
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = PARKING_OPTIMIZER_TIME_LIMIT_SECONDS
-    status = solver.Solve(model)
-    status_name = solver.StatusName(status)
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = PARKING_OPTIMIZER_TIME_LIMIT_SECONDS
+        status = solver.Solve(model)
+        status_name = solver.StatusName(status)
+    except Exception as exc:  # pragma: no cover - exercised through patched solver tests
+        logger.exception(
+            "Parking optimizer failed in %s: placements=%s eta_relations=%s",
+            stage_name,
+            len(placements),
+            eta_relation_count,
+        )
+        detail = f"Optimizer solver failed safely: {exc}"
+        return {
+            "status": None,
+            "status_name": "ERROR",
+            "selected_by_tail": {},
+            "wall_time": 0,
+            "deice_report": _deice_report(
+                "skipped",
+                "Deice scoring skipped because optimizer solver failed.",
+            ),
+            "model_diagnostics": [
+                _stage_model_diagnostic(
+                    stage_name,
+                    len(placements),
+                    eta_relation_count,
+                    "ERROR",
+                    detail,
+                )
+            ],
+        }
+
+    logger.info(
+        "Parking optimizer %s solved: status=%s placements=%s eta_relations=%s wall_time=%.3f deice=%s",
+        stage_name,
+        status_name,
+        len(placements),
+        eta_relation_count,
+        solver.WallTime() if status else 0,
+        (deice_report or {}).get("status"),
+    )
+    model_diagnostics = [
+        _stage_model_diagnostic(
+            stage_name,
+            len(placements),
+            eta_relation_count,
+            status_name,
+            (
+                f"{stage_name}: {len(placements)} placements, "
+                f"{eta_relation_count} ETA relation checks, solver {status_name}."
+            ),
+            wall_time=solver.WallTime() if status else 0,
+            deice_status=(deice_report or {}).get("status", ""),
+        )
+    ]
     selected_by_tail = {}
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         for placement in sorted(placements, key=lambda item: (item.tail, item.cost, item.label)):
@@ -755,6 +1015,7 @@ def _solve_optimizer_stage(
         "selected_by_tail": selected_by_tail,
         "wall_time": solver.WallTime() if status else 0,
         "deice_report": deice_report,
+        "model_diagnostics": model_diagnostics,
     }
 
 
@@ -1103,30 +1364,31 @@ def _ramp_balance_penalty_terms(
 
     for ramp, entries in by_ramp.items():
         locked_count = max(0, int(locked_normal_ramp_counts.get(ramp, 0) or 0))
-        if locked_count:
-            for _placement, variable in entries:
-                terms.append(variable * -(locked_count * RAMP_BALANCE_PAIR_PENALTY))
+        candidate_variables = [variable for _placement, variable in entries]
+        if not candidate_variables:
+            continue
+        max_total_count = locked_count + len(candidate_variables)
+        ramp_count = model.NewIntVar(
+            locked_count,
+            max_total_count,
+            f"ramp_count_{ramp}",
+        )
+        model.Add(ramp_count == sum(candidate_variables) + locked_count)
 
-        for index, (_placement, variable) in enumerate(entries):
-            for other_index, (_other_placement, other_variable) in enumerate(
-                entries[index + 1 :],
-                start=index + 1,
-            ):
-                both = model.NewBoolVar(f"ramp_balance_{ramp}_{index}_{other_index}")
-                model.Add(both <= variable)
-                model.Add(both <= other_variable)
-                model.Add(both >= variable + other_variable - 1)
-                terms.append(both * -RAMP_BALANCE_PAIR_PENALTY)
+        for threshold in range(1, max_total_count):
+            over_threshold = model.NewBoolVar(f"ramp_balance_{ramp}_over_{threshold}")
+            model.Add(ramp_count >= threshold + 1).OnlyEnforceIf(over_threshold)
+            model.Add(ramp_count <= threshold).OnlyEnforceIf(over_threshold.Not())
+            terms.append(over_threshold * -(RAMP_BALANCE_PAIR_PENALTY * threshold))
 
         if preferred_max_per_ramp is None:
             continue
         preferred_max = max(0, int(preferred_max_per_ramp))
-        candidate_variables = [variable for _placement, variable in entries]
         max_possible_excess = max(0, locked_count + len(candidate_variables) - preferred_max)
         if max_possible_excess <= 0:
             continue
         excess = model.NewIntVar(0, max_possible_excess, f"preferred_max_excess_{ramp}")
-        model.Add(excess >= sum(candidate_variables) + locked_count - preferred_max)
+        model.Add(excess >= ramp_count - preferred_max)
         terms.append(excess * -PREFERRED_MAX_PER_RAMP_PENALTY)
 
     return terms
@@ -1376,6 +1638,15 @@ def _minutes_apart(first, second):
 
 
 def _solver_diagnostic(status_name, suggestions, candidate_rows):
+    if status_name == "GUARDED" and candidate_rows:
+        return (
+            "Optimizer model guard stopped the solver before it could exceed safe memory bounds. "
+            "Existing assignments were preserved; review candidate diagnostics or reduce the open candidate set."
+        )
+    if status_name == "ERROR" and candidate_rows:
+        return (
+            "Optimizer failed before proving a parking plan. Existing assignments were preserved."
+        )
     if status_name != "UNKNOWN" or suggestions or not candidate_rows:
         return ""
     return (
@@ -1776,6 +2047,16 @@ def _unresolved_reason(
 ):
     diagnostics = diagnostics or {}
     if has_candidate:
+        if solver_status == "GUARDED":
+            return (
+                "Optimizer model guard skipped solving for this tail; "
+                "candidate positions remain after hard filters."
+            )
+        if solver_status == "ERROR":
+            return (
+                "Optimizer solver failed before proving a plan for this tail; "
+                "existing assignments were preserved."
+            )
         if solver_status == "UNKNOWN":
             return (
                 "Solver returned UNKNOWN before proving a plan for this tail; "

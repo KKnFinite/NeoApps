@@ -7617,6 +7617,70 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("candidate positions remain after hard filters", preview["unassigned_tails"][0]["reason"])
         self.assertNotIn("scoring constraints", preview["unassigned_tails"][0]["reason"])
 
+    def test_parking_optimizer_model_guard_reports_without_solving(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        db.session.commit()
+
+        with patch("app.services.parking_optimizer.PARKING_OPTIMIZER_MAX_STAGE_PLACEMENTS", 0):
+            preview = self._parking_optimizer_preview(operation)
+
+        self.assertEqual(preview["solver_status"], "GUARDED")
+        self.assertEqual(preview["suggested_assignments"], [])
+        self.assertFalse(preview["can_apply_preview"])
+        self.assertIn("model guard", preview["solver_diagnostic"])
+        self.assertIn("candidate positions remain after hard filters", preview["unassigned_tails"][0]["reason"])
+        self.assertGreater(preview["model_diagnostics"][0]["placement_count"], 0)
+        self.assertIn("protect memory", preview["model_diagnostic_summary"])
+
+    def test_parking_optimizer_solver_exception_reports_no_match_failure(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        db.session.flush()
+        self._parking_assignment(operation, "N001UP", "A01")
+        db.session.commit()
+
+        class FailingSolver:
+            def __init__(self):
+                self.parameters = SimpleNamespace(max_time_in_seconds=None)
+
+            def Solve(self, model):
+                raise RuntimeError("found no matches")
+
+            def StatusName(self, status):
+                return "ERROR"
+
+            def WallTime(self):
+                return 0
+
+        with patch("app.services.parking_optimizer.cp_model.CpSolver", FailingSolver):
+            preview = self._parking_optimizer_preview(operation)
+
+        self.assertEqual(preview["solver_status"], "ERROR")
+        self.assertEqual(preview["suggested_assignments"], [])
+        self.assertFalse(preview["can_apply_preview"])
+        self.assertIn("Optimizer failed before proving", preview["solver_diagnostic"])
+        self.assertIn("found no matches", preview["model_diagnostic_summary"])
+        self.assertIn("existing assignments were preserved", preview["unassigned_tails"][0]["reason"])
+        self.assertIsNotNone(self._parking_assignment_for_tail(operation, "N001UP"))
+
+    def test_parking_optimizer_route_renders_safe_failure_report(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        db.session.commit()
+
+        with patch(
+            "app.neomotherbrain.routes.parking_optimizer_preview",
+            side_effect=RuntimeError("found no matches"),
+        ):
+            response = self.client.post(f"/motherbrain/parking-plan/{operation.id}/optimize")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Suggest Plan failed safely", response.data)
+        self.assertIn(b"Optimizer failed before solver completed", response.data)
+        self.assertIn(b"found no matches", response.data)
+        self.assertIn(b"MODEL DIAGNOSTICS", response.data)
+
     def test_parking_optimizer_remote_and_throat_off_still_allow_normal_ramps(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", aircraft_type="757")

@@ -265,6 +265,20 @@
             {% if optimizer_preview.solver_diagnostic %}
             <p class="parking-optimizer-note parking-optimizer-diagnostic">{{ optimizer_preview.solver_diagnostic }}</p>
             {% endif %}
+            {% if optimizer_preview.model_diagnostics %}
+            <div class="parking-optimizer-section parking-optimizer-diagnostics">
+                <h3>MODEL DIAGNOSTICS</h3>
+                <ul>
+                    {% for diagnostic in optimizer_preview.model_diagnostics %}
+                    <li>
+                        <strong>{{ diagnostic.stage|upper }}</strong>
+                        {{ diagnostic.status }} / placements {{ diagnostic.placement_count }} / ETA checks {{ diagnostic.eta_relation_count }}
+                        <span>{{ diagnostic.summary }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
 
             {% if optimizer_preview.locked_assignments %}
             <div class="parking-optimizer-section">
@@ -286,7 +300,7 @@
                     {% endfor %}
                 </ul>
             </div>
-            {% if can_apply_parking_optimizer %}
+            {% if can_apply_parking_optimizer and optimizer_preview.can_apply_preview %}
             <form class="parking-optimizer-apply-form" method="post" action="{{ url_for('neomotherbrain.apply_parking_plan_optimizer', operation_id=operation.id) }}">
                 <input type="hidden" name="include_remote" value="{{ 1 if optimizer_preview.runtime_toggles.include_remote else 0 }}">
                 <input type="hidden" name="include_throat" value="{{ 1 if optimizer_preview.runtime_toggles.include_throat else 0 }}">
@@ -296,6 +310,8 @@
                 </label>
                 <button class="action-button" type="submit">APPLY SUGGESTED PLAN</button>
             </form>
+            {% elif can_apply_parking_optimizer %}
+            <p class="parking-optimizer-note">Apply is unavailable until Suggest Plan completes with a feasible solver result.</p>
             {% else %}
             <p class="parking-optimizer-note">Your current permissions allow previewing suggestions, but not applying them.</p>
             {% endif %}

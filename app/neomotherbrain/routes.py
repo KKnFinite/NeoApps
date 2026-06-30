@@ -95,6 +95,7 @@ from app.services.parking_plan import (
 )
 from app.services.parking_optimizer import (
     apply_parking_optimizer_plan,
+    parking_optimizer_error_preview,
     parking_optimizer_default_options,
     parking_optimizer_preview,
 )
@@ -592,13 +593,28 @@ def optimize_parking_plan(operation_id):
     include_remote = request.form.get("include_remote") == "1"
     include_throat = request.form.get("include_throat") == "1"
     context = parking_plan_context(gateway, operation=operation)
-    optimizer_preview = parking_optimizer_preview(
-        gateway,
-        operation,
-        include_remote=include_remote,
-        include_throat=include_throat,
-        tail_rows=context["tail_rows"],
-    )
+    try:
+        optimizer_preview = parking_optimizer_preview(
+            gateway,
+            operation,
+            include_remote=include_remote,
+            include_throat=include_throat,
+            tail_rows=context["tail_rows"],
+        )
+    except Exception as exc:
+        current_app.logger.exception(
+            "Parking optimizer preview failed for operation %s",
+            operation.id,
+        )
+        optimizer_preview = parking_optimizer_error_preview(
+            gateway,
+            operation,
+            include_remote=include_remote,
+            include_throat=include_throat,
+            tail_rows=context["tail_rows"],
+            message=f"Optimizer failed before solver completed: {exc}",
+        )
+        flash("Suggest Plan failed safely. Existing assignments were preserved.", "error")
     if context.get("parking_physical_alert_sync", {}).get("changed"):
         db.session.commit()
     return render_template(
@@ -633,13 +649,22 @@ def apply_parking_plan_optimizer(operation_id):
         flash("Confirm optimizer apply before writing suggested assignments.", "error")
         return redirect(url_for("neomotherbrain.parking_plan_operation", operation_id=operation.id))
 
-    result = apply_parking_optimizer_plan(
-        gateway,
-        operation,
-        include_remote=include_remote,
-        include_throat=include_throat,
-        user=current_user,
-    )
+    try:
+        result = apply_parking_optimizer_plan(
+            gateway,
+            operation,
+            include_remote=include_remote,
+            include_throat=include_throat,
+            user=current_user,
+        )
+    except Exception:
+        current_app.logger.exception(
+            "Parking optimizer apply failed for operation %s",
+            operation.id,
+        )
+        db.session.rollback()
+        flash("Optimizer apply failed safely. Existing assignments were preserved.", "error")
+        return redirect(url_for("neomotherbrain.parking_plan_operation", operation_id=operation.id))
     context = parking_plan_context(gateway, operation=operation)
     category = "info" if result["ok"] else "error"
     flash(result["message"], category)
