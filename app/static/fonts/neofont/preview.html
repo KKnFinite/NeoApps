@@ -1,0 +1,64 @@
+﻿<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>NeoFont Preview</title>
+  <style>
+    @font-face {
+      font-family: "NeoFont";
+      src: url("./NeoFont.woff2") format("woff2"),
+           url("./NeoFont.ttf") format("truetype");
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
+
+    body {
+      margin: 0;
+      padding: 48px;
+      background: #07111f;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+
+    .neo-font {
+      font-family: "NeoFont", Arial, sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      line-height: 1.35;
+    }
+
+    .alphabet {
+      font-size: 72px;
+      word-break: break-all;
+    }
+
+    .sample {
+      margin-top: 48px;
+      font-size: 56px;
+    }
+
+    .nodes {
+      margin-top: 48px;
+      font-size: 84px;
+    }
+  </style>
+</head>
+<body>
+  <div class="neo-font alphabet">ABCDEFGHIJKLMNOPQRSTUVWXYZ</div>
+
+  <div class="neo-font sample">
+    NEOAPPS<br>
+    NEOGATEWAY<br>
+    NEOSTAFFING<br>
+    NEOMOTHERBRAIN<br>
+    NEOSEKTOR<br>
+    NEOERMAC<br>
+    NEOSCORPION
+  </div>
+
+  <div class="neo-font nodes">
+    MB SK ER SC RP SZ RN
+  </div>
+</body>
+</html>
