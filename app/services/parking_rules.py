@@ -21,6 +21,13 @@ PARKING_RULE_CATEGORIES = (
     BLOCKED_PARKING_POSITION,
 )
 
+PARKING_RULE_EDITABLE_CATEGORIES = (
+    ORIGIN_RAMP_REQUIREMENT,
+    AIRCRAFT_TYPE_RAMP_RESTRICTION,
+    AIRCRAFT_TYPE_RAMP_PREFERENCE,
+    BLOCKED_PARKING_POSITION,
+)
+
 RAMP_OPTIONS = (
     ("A", "Alpha"),
     ("B", "Bravo"),
@@ -108,18 +115,23 @@ def save_parking_rules_from_form(gateway, form):
         form.get("preferred_max_per_ramp")
     )
 
-    _update_existing_rules(gateway, form)
-    for category in PARKING_RULE_CATEGORIES:
+    _update_existing_rules(
+        gateway,
+        form,
+        editable_categories=PARKING_RULE_EDITABLE_CATEGORIES,
+    )
+    for category in PARKING_RULE_EDITABLE_CATEGORIES:
         _add_new_rule(gateway, category, form)
 
     db.session.flush()
     return settings
 
 
-def _update_existing_rules(gateway, form):
+def _update_existing_rules(gateway, form, editable_categories=None):
     rule_ids = form.getlist("rule_ids")
     if not rule_ids:
         return
+    editable_category_set = set(editable_categories or PARKING_RULE_CATEGORIES)
 
     rules = {
         str(rule.id): rule
@@ -131,6 +143,8 @@ def _update_existing_rules(gateway, form):
     for rule_id in rule_ids:
         rule = rules.get(str(rule_id))
         if not rule:
+            continue
+        if rule.rule_category not in editable_category_set:
             continue
         if form.get(f"delete_rule_{rule.id}") == "1":
             db.session.delete(rule)
