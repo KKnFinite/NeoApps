@@ -294,12 +294,19 @@ def register_template_helpers(app):
             return {"motherbrain_alert_tray": None}
 
         from app.services.access_control import get_current_gateway
-        from app.services.motherbrain_alerts import motherbrain_alert_context
+        from app.services.motherbrain_alerts import (
+            motherbrain_alert_context,
+            motherbrain_alert_operation_for_request,
+        )
+
+        gateway = get_current_gateway()
+        operation = motherbrain_alert_operation_for_request(gateway, request)
 
         return {
             "motherbrain_alert_tray": motherbrain_alert_context(
-                get_current_gateway(),
+                gateway,
                 can_view_permission=user_can,
+                operation=operation,
             )
         }
 

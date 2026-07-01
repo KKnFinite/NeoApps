@@ -8,6 +8,12 @@ class MotherBrainAlert(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     gateway_id = db.Column(db.Integer, db.ForeignKey("gateways.id"), nullable=False, index=True)
+    sort_date_operation_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sort_date_operations.id"),
+        nullable=True,
+        index=True,
+    )
     gateway_code = db.Column(db.String(8), nullable=False, index=True)
     scope = db.Column(db.String(32), nullable=False, default="motherbrain", index=True)
     alert_key = db.Column(db.String(160), nullable=False, default="", index=True)
@@ -29,3 +35,4 @@ class MotherBrainAlert(db.Model):
     )
 
     gateway = db.relationship("Gateway")
+    sort_date_operation = db.relationship("SortDateOperation")

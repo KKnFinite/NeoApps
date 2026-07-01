@@ -89,6 +89,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     },
     "motherbrain_alerts": {
         "alert_key": "VARCHAR(160) DEFAULT ''",
+        "sort_date_operation_id": "INTEGER",
     },
     "motherbrain_parking_settings": {
         "preferred_max_per_ramp": "INTEGER",
@@ -160,6 +161,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "motherbrain_alerts": {
         "alert_key": "VARCHAR(160) DEFAULT ''",
+        "sort_date_operation_id": "INTEGER",
     },
     "motherbrain_parking_settings": {
         "preferred_max_per_ramp": "INTEGER",

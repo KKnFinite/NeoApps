@@ -133,6 +133,7 @@ def sync_parking_physical_alerts(gateway, operation, validation_context):
         if not alert:
             alert = MotherBrainAlert(
                 gateway_id=gateway.id,
+                sort_date_operation_id=operation.id,
                 gateway_code=gateway.code,
                 scope=MOTHERBRAIN_ALERT_SCOPE,
                 alert_key=alert_key,
@@ -141,6 +142,7 @@ def sync_parking_physical_alerts(gateway, operation, validation_context):
             changed = True
 
         next_values = {
+            "sort_date_operation_id": operation.id,
             "gateway_code": gateway.code,
             "severity": conflict["severity"],
             "title": conflict["title"],

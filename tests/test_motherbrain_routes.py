@@ -5846,6 +5846,69 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"VIEW PARKING PLAN", response.data)
         self.assertNotIn(b"No active MotherBrain alerts", response.data)
 
+    def test_motherbrain_alert_tray_scopes_parking_alerts_to_selected_operation(self):
+        operation_a = self._parking_operation()
+        self._parking_pair(operation_a, "N457UP", aircraft_type="757")
+        self._parking_rule(
+            BLOCKED_PARKING_POSITION,
+            "position",
+            "D01",
+            "D",
+            behavior="forbidden",
+        )
+        db.session.flush()
+        self._parking_assignment(operation_a, "N457UP", "D01")
+        operation_b = self._operation(sort_date=date(2026, 6, 19), sort_name="night")
+        db.session.add(operation_b)
+        db.session.commit()
+
+        sort_a_response = self.client.get(f"/motherbrain/parking-plan/{operation_a.id}")
+        alert = MotherBrainAlert.query.filter_by(active=True).one()
+
+        self.assertEqual(sort_a_response.status_code, 200)
+        self.assertEqual(alert.sort_date_operation_id, operation_a.id)
+        self.assertIn(b"Blocked parking position", sort_a_response.data)
+        self.assertIn(f"/motherbrain/parking-plan/{operation_a.id}".encode(), sort_a_response.data)
+        self.assertIn(b'<span class="motherbrain-alert-count">1</span>', sort_a_response.data)
+
+        sort_b_response = self.client.get(f"/motherbrain/parking-plan/{operation_b.id}")
+
+        self.assertEqual(sort_b_response.status_code, 200)
+        self.assertNotIn(b"Blocked parking position", sort_b_response.data)
+        self.assertIn(b"No active MotherBrain alerts", sort_b_response.data)
+        self.assertIn(b'<span class="motherbrain-alert-count">0</span>', sort_b_response.data)
+
+    def test_motherbrain_alert_tray_scopes_legacy_parking_alert_keys(self):
+        operation_a = self._parking_operation()
+        operation_b = self._operation(sort_date=date(2026, 6, 19), sort_name="night")
+        db.session.add(operation_b)
+        db.session.flush()
+        db.session.add(
+            MotherBrainAlert(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                alert_key=f"parking-physical:{operation_a.id}:legacy-conflict",
+                severity="critical",
+                title="Legacy parking conflict",
+                message="Old alert should remain tied to its operation key.",
+                related_url=f"/motherbrain/parking-plan/{operation_a.id}",
+                related_label="VIEW PARKING PLAN",
+                permission_key="motherbrain.parking_conflicts.view",
+                active=True,
+            )
+        )
+        db.session.commit()
+
+        sort_a_response = self.client.get(f"/motherbrain/operations/{operation_a.id}")
+        sort_b_response = self.client.get(f"/motherbrain/operations/{operation_b.id}")
+
+        self.assertEqual(sort_a_response.status_code, 200)
+        self.assertEqual(sort_b_response.status_code, 200)
+        self.assertIn(b"Legacy parking conflict", sort_a_response.data)
+        self.assertIn(b"VIEW PARKING PLAN", sort_a_response.data)
+        self.assertNotIn(b"Legacy parking conflict", sort_b_response.data)
+        self.assertIn(b"No active MotherBrain alerts", sort_b_response.data)
+
     def test_motherbrain_restricted_alerts_respect_future_permission_key(self):
         from app.services.motherbrain_alerts import motherbrain_alert_context
 
@@ -7146,6 +7209,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Blocked parking position", second_response.data)
         self.assertIn(b"D01 is blocked by Parking Rules.", second_response.data)
         self.assertEqual(active_alerts[0].permission_key, "motherbrain.parking_conflicts.view")
+        self.assertEqual(active_alerts[0].sort_date_operation_id, operation.id)
 
     def test_parking_validation_alert_clears_when_conflict_is_resolved(self):
         operation = self._parking_operation()
