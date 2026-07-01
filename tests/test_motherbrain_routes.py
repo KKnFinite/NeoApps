@@ -6187,6 +6187,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Blocked-position relief for 04/08", response.data)
         self.assertIn(b"Deice spacing: active soft rule", response.data)
         self.assertIn(b"skipped automatically when needed", response.data)
+        self.assertIn(b"Inbound ETA same-ramp spacing: active soft rule", response.data)
+        self.assertIn(b"01-04 / 05-08 side balance: active soft rule", response.data)
         self.assertNotIn(b"757 preference for 04/08: planned / inactive", response.data)
         self.assertNotIn(b"Avoid 04/08: planned / inactive", response.data)
         self.assertIn(b"Hard-blocked parking positions", response.data)
@@ -6219,6 +6221,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "operation_id": str(operation.id),
                 "include_remote_default": "1",
                 "deice_spacing_threshold_minutes": "22",
+                "inbound_same_ramp_spacing_minutes": "7",
                 "preferred_max_per_ramp": "6",
                 "new_origin_ramp_preference_subject": "ont",
                 "new_origin_ramp_preference_ramp": "A",
@@ -6237,6 +6240,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertTrue(settings.include_remote_default)
         self.assertFalse(settings.include_throat_default)
         self.assertEqual(settings.deice_spacing_threshold_minutes, 22)
+        self.assertEqual(settings.inbound_same_ramp_spacing_minutes, 7)
         self.assertEqual(settings.preferred_max_per_ramp, 6)
         rules = {
             (
@@ -6272,6 +6276,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"value=\"767\"", reload_response.data)
         self.assertIn(b"value=\"D01\"", reload_response.data)
         self.assertIn(b"value=\"22\"", reload_response.data)
+        self.assertIn(b"value=\"7\"", reload_response.data)
+        self.assertIn(b"Inbound Same-Ramp Spacing", reload_response.data)
         self.assertIn(b"value=\"6\"", reload_response.data)
         self.assertIn(b"Preferred Max Per Ramp", reload_response.data)
 
@@ -7575,6 +7581,152 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(len(preview["suggested_assignments"]), 2)
         self.assertEqual(ramps.count("A"), 1)
         self.assertIn("Preferred Max Per Ramp 1 considered as a soft limit.", reasons)
+
+    def test_parking_optimizer_spreads_close_inbound_etas_across_ramps(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=0,
+                inbound_same_ramp_spacing_minutes=5,
+            )
+        )
+        self._parking_pair(
+            operation,
+            "N410UP",
+            arrival_local=datetime(2026, 6, 18, 23, 0),
+            departure_local=datetime(2026, 6, 19, 2, 0),
+        )
+        self._parking_pair(
+            operation,
+            "N411UP",
+            arrival_local=datetime(2026, 6, 18, 23, 2),
+            departure_local=datetime(2026, 6, 19, 2, 20),
+            destination="SDF",
+        )
+        self._parking_rule(
+            AIRCRAFT_TYPE_RAMP_PREFERENCE,
+            "aircraft_type",
+            "757",
+            "A",
+            behavior="preferred",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
+        reasons = " ".join(row["reason"] for row in preview["suggested_assignments"])
+
+        self.assertEqual(preview["runtime_toggles"]["inbound_same_ramp_spacing_minutes"], 5)
+        self.assertEqual(preview["runtime_toggles"]["inbound_spacing_status"], "applied")
+        self.assertNotEqual(
+            suggestions["N410UP"]["position"][:1],
+            suggestions["N411UP"]["position"][:1],
+        )
+        self.assertIn("Inbound ETA spacing checked", reasons)
+
+    def test_parking_optimizer_allows_close_inbound_same_ramp_when_unavoidable(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=0,
+                inbound_same_ramp_spacing_minutes=5,
+            )
+        )
+        for index in range(2):
+            self._parking_pair(
+                operation,
+                f"N42{index}UP",
+                arrival_local=datetime(2026, 6, 18, 23, 0) + timedelta(minutes=index * 2),
+                departure_local=datetime(2026, 6, 19, 2, 0) + timedelta(minutes=index * 20),
+                origin="ONT",
+                destination=f"D{index}",
+            )
+        self._parking_rule(ORIGIN_RAMP_PREFERENCE, "origin", "ONT", "A", behavior="required")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        ramps = {row["position"][:1] for row in preview["suggested_assignments"]}
+
+        self.assertEqual(preview["solver_status"], "OPTIMAL")
+        self.assertEqual(len(preview["suggested_assignments"]), 2)
+        self.assertEqual(ramps, {"A"})
+
+    def test_parking_optimizer_prefers_normal_ramp_side_balance(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=0,
+                inbound_same_ramp_spacing_minutes=0,
+            )
+        )
+        for index in range(4):
+            self._parking_pair(
+                operation,
+                f"N10{index}UP",
+                arrival_local=datetime(2026, 6, 18, 22, 0) + timedelta(minutes=index * 20),
+                departure_local=datetime(2026, 6, 19, 1, 0) + timedelta(minutes=index * 20),
+                origin="ONT",
+                destination=f"D{index}",
+                aircraft_type="A300",
+            )
+        self._parking_rule(ORIGIN_RAMP_PREFERENCE, "origin", "ONT", "A", behavior="required")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        positions = [row["position"] for row in preview["suggested_assignments"]]
+        lower_count = sum(1 for position in positions if int(position[1:]) <= 4)
+        upper_count = sum(1 for position in positions if 5 <= int(position[1:]) <= 8)
+        reasons = " ".join(row["reason"] for row in preview["suggested_assignments"])
+
+        self.assertEqual(preview["solver_status"], "OPTIMAL")
+        self.assertEqual(len(positions), 4)
+        self.assertEqual(lower_count, 2)
+        self.assertEqual(upper_count, 2)
+        self.assertIn("01-04 / 05-08 side balance considered", reasons)
+
+    def test_parking_optimizer_allows_side_imbalance_when_unavoidable(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=0,
+                inbound_same_ramp_spacing_minutes=0,
+            )
+        )
+        for index in range(3):
+            self._parking_pair(
+                operation,
+                f"N11{index}UP",
+                arrival_local=datetime(2026, 6, 18, 22, 0) + timedelta(minutes=index * 20),
+                departure_local=datetime(2026, 6, 19, 1, 0) + timedelta(minutes=index * 20),
+                origin="ONT",
+                destination=f"D{index}",
+                aircraft_type="A300",
+            )
+        self._parking_rule(ORIGIN_RAMP_PREFERENCE, "origin", "ONT", "A", behavior="required")
+        for position in ("A05", "A06", "A07", "A08"):
+            self._parking_rule(
+                BLOCKED_PARKING_POSITION,
+                "position",
+                position,
+                "A",
+                behavior="forbidden",
+            )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        positions = [row["position"] for row in preview["suggested_assignments"]]
+
+        self.assertEqual(preview["solver_status"], "OPTIMAL")
+        self.assertEqual(len(positions), 3)
+        self.assertTrue(all(position in {"A01", "A02", "A03"} for position in positions))
 
     def test_parking_optimizer_can_exceed_preferred_max_when_needed(self):
         operation = self._parking_operation()

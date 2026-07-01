@@ -282,6 +282,7 @@
                 <span>Remote {{ "ON" if optimizer_preview.runtime_toggles.include_remote else "OFF" }}</span>
                 <span>9/10 {{ "ON" if optimizer_preview.runtime_toggles.include_throat else "OFF" }}</span>
                 <span>Deice {{ optimizer_preview.runtime_toggles.deice_spacing_threshold_minutes }} min / {{ optimizer_preview.runtime_toggles.deice_scoring_status|upper }}</span>
+                <span>Inbound spacing {{ optimizer_preview.runtime_toggles.inbound_same_ramp_spacing_minutes }} min / {{ optimizer_preview.runtime_toggles.inbound_spacing_status|upper }}</span>
                 {% if optimizer_preview.wall_time_seconds is not none %}
                 <span>{{ "%.3f"|format(optimizer_preview.wall_time_seconds) }} sec</span>
                 {% endif %}
@@ -289,6 +290,9 @@
             <p class="parking-optimizer-note">{{ optimizer_preview.summary }}</p>
             {% if optimizer_preview.runtime_toggles.deice_scoring_detail %}
             <p class="parking-optimizer-note">Deice: {{ optimizer_preview.runtime_toggles.deice_scoring_detail }}</p>
+            {% endif %}
+            {% if optimizer_preview.runtime_toggles.inbound_spacing_detail %}
+            <p class="parking-optimizer-note">Inbound spacing: {{ optimizer_preview.runtime_toggles.inbound_spacing_detail }}</p>
             {% endif %}
             {% if optimizer_preview.solver_diagnostic %}
             <p class="parking-optimizer-note parking-optimizer-diagnostic">{{ optimizer_preview.solver_diagnostic }}</p>

@@ -215,6 +215,11 @@
                         <input type="number" min="0" name="deice_spacing_threshold_minutes" value="{{ settings.deice_spacing_threshold_minutes }}" {% if not can_edit_parking_rules %}disabled{% endif %}>
                     </label>
                     <label class="parking-rules-field">
+                        <span>INBOUND SAME-RAMP SPACING MINUTES</span>
+                        <input type="number" min="0" name="inbound_same_ramp_spacing_minutes" value="{{ settings.inbound_same_ramp_spacing_minutes }}" {% if not can_edit_parking_rules %}disabled{% endif %}>
+                        <small class="muted">Soft rule. Close inbound ETAs prefer different ramps when valid alternatives exist. Use 0 to disable.</small>
+                    </label>
+                    <label class="parking-rules-field">
                         <span>PREFERRED MAX PER RAMP</span>
                         <input type="number" min="0" name="preferred_max_per_ramp" value="{{ settings.preferred_max_per_ramp if settings.preferred_max_per_ramp is not none else '' }}" placeholder="NO LIMIT" {% if not can_edit_parking_rules %}disabled{% endif %}>
                         <small class="muted">Soft limit. The optimizer tries not to exceed it, but hard rules and valid assignment count win.</small>
@@ -270,6 +275,10 @@
                             <div>
                                 <dt>Deice Threshold</dt>
                                 <dd>{{ rule_report.current_settings.deice_threshold }}</dd>
+                            </div>
+                            <div>
+                                <dt>Inbound Same-Ramp Spacing</dt>
+                                <dd>{{ rule_report.current_settings.inbound_same_ramp_spacing }}</dd>
                             </div>
                             <div>
                                 <dt>Preferred Max Per Ramp</dt>

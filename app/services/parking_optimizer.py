@@ -29,6 +29,7 @@ from app.services.parking_rules import (
     ORIGIN_RAMP_RESTRICTION,
     ORIGIN_RAMP_PREFERENCE,
     DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES,
+    DEFAULT_INBOUND_SAME_RAMP_SPACING_MINUTES,
     active_blocked_parking_positions,
     normalize_parking_position_code,
 )
@@ -50,8 +51,14 @@ DEICE_MAX_CANDIDATE_ENTRIES = 1400
 DEICE_MAX_PAIR_SCAN_COUNT = 300000
 DEICE_MAX_CLUSTER_COUNT = 240
 DEICE_MAX_CLUSTER_LITERAL_COUNT = 20000
+INBOUND_CLOSE_ETA_RAMP_PENALTY = 900
+INBOUND_SPACING_MAX_CANDIDATE_ENTRIES = 1400
+INBOUND_SPACING_MAX_PAIR_SCAN_COUNT = 300000
+INBOUND_SPACING_MAX_CLUSTER_COUNT = 240
+INBOUND_SPACING_MAX_CLUSTER_LITERAL_COUNT = 20000
 PARKING_WINDOW_PRIORITY_SCORE = 2000
 RAMP_BALANCE_PAIR_PENALTY = 260
+RAMP_SIDE_BALANCE_PENALTY = 20
 PREFERRED_MAX_PER_RAMP_PENALTY = 1200
 FOUR_EIGHT_AVOID_PENALTY = 280
 FOUR_EIGHT_757_PREFERENCE_SCORE = 420
@@ -91,6 +98,11 @@ def parking_optimizer_default_options(gateway):
             if settings and settings.preferred_max_per_ramp is not None
             else None
         ),
+        "inbound_same_ramp_spacing_minutes": (
+            settings.inbound_same_ramp_spacing_minutes
+            if settings and settings.inbound_same_ramp_spacing_minutes is not None
+            else DEFAULT_INBOUND_SAME_RAMP_SPACING_MINUTES
+        ),
     }
 
 
@@ -107,6 +119,10 @@ def parking_optimizer_preview(
     deice_threshold = _safe_int(
         defaults.get("deice_spacing_threshold_minutes"),
         DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES,
+    )
+    inbound_spacing_threshold = _safe_int(
+        defaults.get("inbound_same_ramp_spacing_minutes"),
+        DEFAULT_INBOUND_SAME_RAMP_SPACING_MINUTES,
     )
     preferred_max_per_ramp = _safe_optional_int(defaults.get("preferred_max_per_ramp"))
     tail_rows = tail_rows if tail_rows is not None else tail_rows_for_operation(gateway, operation)
@@ -173,10 +189,15 @@ def parking_optimizer_preview(
             include_remote,
             include_throat,
             deice_threshold,
+            inbound_spacing_threshold,
             preferred_max_per_ramp,
             _deice_report(
                 "skipped",
                 "Deice scoring skipped because candidate guard stopped optimizer preview.",
+            ),
+            _inbound_spacing_report(
+                "skipped",
+                "Inbound ETA spacing skipped because candidate guard stopped optimizer preview.",
             ),
             len(candidate_rows),
             locked_assignments,
@@ -197,6 +218,7 @@ def parking_optimizer_preview(
         return result
 
     locked_normal_ramp_counts = _normal_ramp_counts_for_assignments(assignments)
+    locked_normal_side_counts = _normal_side_counts_for_assignments(assignments)
     candidate_positions = _candidate_positions(include_remote, include_throat)
     locked_lane_keys = {
         (_normalize_position(assignment.position_code), int(assignment.lane_number or 1))
@@ -229,10 +251,12 @@ def parking_optimizer_preview(
             tail_rows,
             timezone_name,
             deice_threshold,
+            inbound_spacing_threshold,
             preferred_max_per_ramp,
             locked_filled_positions | locked_blocked_positions,
             locked_eta_by_position,
             locked_normal_ramp_counts,
+            locked_normal_side_counts,
             stage_name="slot_1",
         )
         if slot_1_placements
@@ -242,6 +266,9 @@ def parking_optimizer_preview(
             "selected_by_tail": {},
             "wall_time": 0,
             "deice_report": _deice_no_placement_report(deice_threshold),
+            "inbound_spacing_report": _inbound_spacing_no_placement_report(
+                inbound_spacing_threshold
+            ),
             "model_diagnostics": [
                 _stage_model_diagnostic(
                     "slot_1",
@@ -260,6 +287,7 @@ def parking_optimizer_preview(
     status_name = slot_1_result["status_name"]
     wall_time = slot_1_result["wall_time"]
     deice_reports = [slot_1_result.get("deice_report")]
+    inbound_spacing_reports = [slot_1_result.get("inbound_spacing_report")]
     model_diagnostics = list(slot_1_result.get("model_diagnostics") or [])
 
     if status_name in SUCCESS_SOLVER_STATUSES:
@@ -282,6 +310,10 @@ def parking_optimizer_preview(
             stage_normal_ramp_counts = _merge_ramp_counts(
                 locked_normal_ramp_counts,
                 _normal_ramp_counts_for_placements(selected_by_tail.values()),
+            )
+            stage_normal_side_counts = _merge_side_counts(
+                locked_normal_side_counts,
+                _normal_side_counts_for_placements(selected_by_tail.values()),
             )
             slot_1_timing = _slot_1_timing_by_position(
                 assignments,
@@ -311,14 +343,17 @@ def parking_optimizer_preview(
                     tail_rows,
                     timezone_name,
                     deice_threshold,
+                    inbound_spacing_threshold,
                     preferred_max_per_ramp,
                     stage_filled_positions,
                     stage_eta_by_position,
                     stage_normal_ramp_counts,
+                    stage_normal_side_counts,
                     stage_name="slot_2",
                 )
                 wall_time += slot_2_result["wall_time"]
                 deice_reports.append(slot_2_result.get("deice_report"))
+                inbound_spacing_reports.append(slot_2_result.get("inbound_spacing_report"))
                 model_diagnostics.extend(slot_2_result.get("model_diagnostics") or [])
                 if slot_2_result["status_name"] in SUCCESS_SOLVER_STATUSES:
                     selected_by_tail.update(slot_2_result["selected_by_tail"])
@@ -326,6 +361,10 @@ def parking_optimizer_preview(
                     status_name = slot_2_result["status_name"]
 
     deice_report = _merge_deice_reports(deice_reports, deice_threshold)
+    inbound_spacing_report = _merge_inbound_spacing_reports(
+        inbound_spacing_reports,
+        inbound_spacing_threshold,
+    )
 
     unassigned = _unassigned_rows(
         candidate_rows,
@@ -353,8 +392,10 @@ def parking_optimizer_preview(
                 placement,
                 row,
                 deice_threshold,
+                inbound_spacing_threshold,
                 preferred_max_per_ramp,
                 deice_report.get("status"),
+                inbound_spacing_report.get("status"),
                 selected_deice_reasons.get(placement.tail, ()),
             )
         )
@@ -373,8 +414,10 @@ def parking_optimizer_preview(
         include_remote,
         include_throat,
         deice_threshold,
+        inbound_spacing_threshold,
         preferred_max_per_ramp,
         deice_report,
+        inbound_spacing_report,
         len(candidate_rows),
         locked_assignments,
         suggestions,
@@ -412,6 +455,10 @@ def parking_optimizer_error_preview(
         defaults.get("deice_spacing_threshold_minutes"),
         DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES,
     )
+    inbound_spacing_threshold = _safe_int(
+        defaults.get("inbound_same_ramp_spacing_minutes"),
+        DEFAULT_INBOUND_SAME_RAMP_SPACING_MINUTES,
+    )
     preferred_max_per_ramp = _safe_optional_int(defaults.get("preferred_max_per_ramp"))
     tail_rows = tail_rows if tail_rows is not None else tail_rows_for_operation(gateway, operation)
     assignments = _active_assignments(operation)
@@ -447,8 +494,13 @@ def parking_optimizer_error_preview(
         include_remote,
         include_throat,
         deice_threshold,
+        inbound_spacing_threshold,
         preferred_max_per_ramp,
         _deice_report("skipped", "Deice scoring skipped because optimizer preview failed."),
+        _inbound_spacing_report(
+            "skipped",
+            "Inbound ETA spacing skipped because optimizer preview failed.",
+        ),
         len(candidate_rows),
         locked_assignments,
         [],
@@ -585,8 +637,10 @@ def _preview_result(
     include_remote,
     include_throat,
     deice_threshold,
+    inbound_spacing_threshold,
     preferred_max_per_ramp,
     deice_report,
+    inbound_spacing_report,
     candidate_tail_count,
     locked_assignments,
     suggestions,
@@ -614,6 +668,9 @@ def _preview_result(
             "deice_spacing_threshold_minutes": deice_threshold,
             "deice_scoring_status": (deice_report or {}).get("status", "disabled"),
             "deice_scoring_detail": (deice_report or {}).get("detail", ""),
+            "inbound_same_ramp_spacing_minutes": inbound_spacing_threshold,
+            "inbound_spacing_status": (inbound_spacing_report or {}).get("status", "disabled"),
+            "inbound_spacing_detail": (inbound_spacing_report or {}).get("detail", ""),
             "preferred_max_per_ramp": preferred_max_per_ramp,
         },
         "wall_time_seconds": wall_time,
@@ -963,10 +1020,12 @@ def _solve_optimizer_stage(
     tail_rows,
     timezone_name,
     deice_threshold,
+    inbound_spacing_threshold,
     preferred_max_per_ramp,
     filled_positions,
     eta_by_position,
     locked_normal_ramp_counts=None,
+    locked_normal_side_counts=None,
     stage_name="stage",
 ):
     if not placements:
@@ -976,6 +1035,9 @@ def _solve_optimizer_stage(
             "selected_by_tail": {},
             "wall_time": 0,
             "deice_report": _deice_no_placement_report(deice_threshold),
+            "inbound_spacing_report": _inbound_spacing_no_placement_report(
+                inbound_spacing_threshold
+            ),
             "model_diagnostics": [
                 _stage_model_diagnostic(
                     stage_name,
@@ -1020,6 +1082,10 @@ def _solve_optimizer_stage(
                 "skipped",
                 "Deice scoring skipped because the optimizer model guard stopped this stage.",
             ),
+            "inbound_spacing_report": _inbound_spacing_report(
+                "skipped",
+                "Inbound ETA spacing skipped because the optimizer model guard stopped this stage.",
+            ),
             "model_diagnostics": [
                 _stage_model_diagnostic(
                     stage_name,
@@ -1063,12 +1129,27 @@ def _solve_optimizer_stage(
             deice_threshold,
         )
         objective_terms.extend(deice_terms)
+        inbound_spacing_terms, inbound_spacing_report = _inbound_eta_spacing_penalty_terms(
+            model,
+            variables,
+            assignments,
+            tail_rows,
+            inbound_spacing_threshold,
+        )
+        objective_terms.extend(inbound_spacing_terms)
         objective_terms.extend(
             _ramp_balance_penalty_terms(
                 model,
                 variables,
                 locked_normal_ramp_counts or {},
                 preferred_max_per_ramp,
+            )
+        )
+        objective_terms.extend(
+            _ramp_side_balance_penalty_terms(
+                model,
+                variables,
+                locked_normal_side_counts or {},
             )
         )
         model.Maximize(sum(objective_terms))
@@ -1092,6 +1173,10 @@ def _solve_optimizer_stage(
             "deice_report": _deice_report(
                 "skipped",
                 "Deice scoring skipped because optimizer solver failed.",
+            ),
+            "inbound_spacing_report": _inbound_spacing_report(
+                "skipped",
+                "Inbound ETA spacing skipped because optimizer solver failed.",
             ),
             "model_diagnostics": [
                 _stage_model_diagnostic(
@@ -1143,6 +1228,7 @@ def _solve_optimizer_stage(
         "selected_by_tail": selected_by_tail,
         "wall_time": solver.WallTime() if status else 0,
         "deice_report": deice_report,
+        "inbound_spacing_report": inbound_spacing_report,
         "model_diagnostics": model_diagnostics,
     }
 
@@ -1352,8 +1438,10 @@ def _suggestion_row(
     placement,
     row,
     deice_threshold=0,
+    inbound_spacing_threshold=0,
     preferred_max_per_ramp=None,
     deice_status="disabled",
+    inbound_spacing_status="disabled",
     deice_reasons=(),
 ):
     reasons = ["Suggested by optimizer preview."]
@@ -1365,6 +1453,13 @@ def _suggestion_row(
         reasons.append(
             "Ramp balancing considered across Alpha, Bravo, Charlie, Delta, and Echo."
         )
+        reasons.append(
+            "01-04 / 05-08 side balance considered within this ramp."
+        )
+        if inbound_spacing_threshold and inbound_spacing_status == "applied":
+            reasons.append(
+                f"Inbound ETA spacing checked: same-ramp arrivals under {inbound_spacing_threshold} min are penalized."
+            )
         if preferred_max_per_ramp is not None:
             reasons.append(
                 f"Preferred Max Per Ramp {preferred_max_per_ramp} considered as a soft limit."
@@ -1520,6 +1615,247 @@ def _ramp_balance_penalty_terms(
         terms.append(excess * -PREFERRED_MAX_PER_RAMP_PENALTY)
 
     return terms
+
+
+def _ramp_side_balance_penalty_terms(
+    model,
+    variables,
+    locked_normal_side_counts,
+):
+    terms = []
+    by_ramp = {ramp: {"lower": [], "upper": []} for ramp in sorted(NORMAL_RAMP_CODES)}
+    for placement, variable in variables.items():
+        side = _normal_ramp_side(placement.position)
+        if placement.ramp not in NORMAL_RAMP_CODES or not side:
+            continue
+        by_ramp.setdefault(placement.ramp, {"lower": [], "upper": []})[side].append(variable)
+
+    for ramp, side_variables in by_ramp.items():
+        lower_variables = side_variables.get("lower", [])
+        upper_variables = side_variables.get("upper", [])
+        if not lower_variables and not upper_variables:
+            continue
+        lower_locked = max(0, int((locked_normal_side_counts or {}).get((ramp, "lower"), 0) or 0))
+        upper_locked = max(0, int((locked_normal_side_counts or {}).get((ramp, "upper"), 0) or 0))
+        lower_count = model.NewIntVar(
+            lower_locked,
+            lower_locked + len(lower_variables),
+            f"ramp_side_{ramp}_lower_count",
+        )
+        upper_count = model.NewIntVar(
+            upper_locked,
+            upper_locked + len(upper_variables),
+            f"ramp_side_{ramp}_upper_count",
+        )
+        model.Add(lower_count == sum(lower_variables) + lower_locked)
+        model.Add(upper_count == sum(upper_variables) + upper_locked)
+        max_delta = lower_locked + upper_locked + len(lower_variables) + len(upper_variables)
+        if max_delta < 3:
+            continue
+        total_count = model.NewIntVar(
+            lower_locked + upper_locked,
+            max_delta,
+            f"ramp_side_{ramp}_total_count",
+        )
+        model.Add(total_count == lower_count + upper_count)
+        delta = model.NewIntVar(-max_delta, max_delta, f"ramp_side_{ramp}_delta")
+        imbalance = model.NewIntVar(0, max_delta, f"ramp_side_{ramp}_imbalance")
+        model.Add(delta == lower_count - upper_count)
+        model.AddAbsEquality(imbalance, delta)
+        excess_imbalance = model.NewIntVar(0, max_delta, f"ramp_side_{ramp}_excess")
+        model.Add(excess_imbalance >= imbalance - 1)
+        if lower_locked + upper_locked >= 3:
+            terms.append(excess_imbalance * -RAMP_SIDE_BALANCE_PENALTY)
+            continue
+        balance_applies = model.NewBoolVar(f"ramp_side_{ramp}_applies")
+        model.Add(total_count >= 3).OnlyEnforceIf(balance_applies)
+        model.Add(total_count <= 2).OnlyEnforceIf(balance_applies.Not())
+        active_excess = model.NewIntVar(0, max_delta, f"ramp_side_{ramp}_active_excess")
+        model.Add(active_excess <= excess_imbalance)
+        model.Add(active_excess <= max_delta * balance_applies)
+        model.Add(active_excess >= excess_imbalance - (max_delta * (1 - balance_applies)))
+        terms.append(active_excess * -RAMP_SIDE_BALANCE_PENALTY)
+
+    return terms
+
+
+def _inbound_eta_spacing_penalty_terms(
+    model,
+    variables,
+    assignments,
+    tail_rows,
+    threshold_minutes,
+):
+    threshold_minutes = _safe_int(threshold_minutes, 0)
+    if threshold_minutes <= 0:
+        return [], _inbound_spacing_report(
+            "disabled",
+            "Inbound ETA spacing disabled because the threshold is 0 minutes.",
+        )
+
+    terms = []
+    candidate_entries = [
+        (placement, variable)
+        for placement, variable in variables.items()
+        if placement.ramp in NORMAL_RAMP_CODES and placement.eta
+    ]
+    locked_entries = _locked_inbound_entries(assignments, tail_rows)
+    cluster_terms, cluster_report = _inbound_eta_cluster_penalty_terms(
+        model,
+        candidate_entries,
+        threshold_minutes,
+    )
+
+    for placement, variable in candidate_entries:
+        for locked in locked_entries:
+            if not _inbound_entries_are_close(placement, locked, threshold_minutes):
+                continue
+            terms.append(variable * -_inbound_eta_penalty(placement.eta, locked["eta"], threshold_minutes))
+
+    terms.extend(cluster_terms)
+    if terms:
+        detail = (
+            f"Inbound ETA spacing applied as bounded same-ramp arrival clusters under {threshold_minutes} min."
+        )
+        if cluster_report.get("detail"):
+            detail += f" {cluster_report['detail']}"
+        return terms, _inbound_spacing_report("applied", detail)
+    if cluster_report.get("status") == "skipped":
+        return terms, cluster_report
+    return terms, _inbound_spacing_report(
+        "skipped",
+        "Inbound ETA spacing skipped because no close same-ramp candidate arrival clusters were found.",
+    )
+
+
+def _inbound_eta_cluster_penalty_terms(model, candidate_entries, threshold_minutes):
+    if not candidate_entries:
+        return [], _inbound_spacing_report(
+            "skipped",
+            "Inbound ETA spacing skipped because no candidate normal-ramp arrival times were available.",
+        )
+
+    by_ramp = {}
+    for index, (placement, variable) in enumerate(candidate_entries):
+        by_ramp.setdefault(placement.ramp, []).append((index, placement, variable))
+
+    pair_scan_count = sum(len(entries) * len(entries) for entries in by_ramp.values())
+    if len(candidate_entries) > INBOUND_SPACING_MAX_CANDIDATE_ENTRIES:
+        return [], _inbound_spacing_report(
+            "skipped",
+            (
+                "Inbound ETA spacing skipped to keep optimizer memory bounded "
+                f"({len(candidate_entries)} candidate arrival placements exceeds "
+                f"{INBOUND_SPACING_MAX_CANDIDATE_ENTRIES})."
+            ),
+        )
+    if pair_scan_count > INBOUND_SPACING_MAX_PAIR_SCAN_COUNT:
+        return [], _inbound_spacing_report(
+            "skipped",
+            (
+                "Inbound ETA spacing skipped to keep optimizer solve time bounded "
+                f"({pair_scan_count} same-ramp pair scans exceeds "
+                f"{INBOUND_SPACING_MAX_PAIR_SCAN_COUNT})."
+            ),
+        )
+
+    clusters = []
+    seen_clusters = set()
+    literal_count = 0
+    for ramp, entries in by_ramp.items():
+        for _center_index, center_placement, _center_variable in entries:
+            cluster = []
+            for index, placement, _variable in entries:
+                diff = _minutes_apart(center_placement.eta, placement.eta)
+                if diff is not None and diff < threshold_minutes:
+                    cluster.append(index)
+            cluster = tuple(cluster)
+            if cluster in seen_clusters:
+                continue
+            seen_clusters.add(cluster)
+            cluster_entries = [
+                entry for entry in entries if entry[0] in cluster
+            ]
+            if len({placement.tail for _index, placement, _variable in cluster_entries}) <= 1:
+                continue
+            clusters.append((ramp, cluster_entries))
+            literal_count += len(cluster_entries)
+            if (
+                len(clusters) > INBOUND_SPACING_MAX_CLUSTER_COUNT
+                or literal_count > INBOUND_SPACING_MAX_CLUSTER_LITERAL_COUNT
+            ):
+                return [], _inbound_spacing_report(
+                    "skipped",
+                    (
+                        "Inbound ETA spacing skipped to keep optimizer solve time bounded "
+                        f"({len(clusters)} clusters / {literal_count} placement references)."
+                    ),
+                )
+
+    if not clusters:
+        return [], _inbound_spacing_report(
+            "skipped",
+            "Inbound ETA spacing skipped because no close same-ramp candidate arrival clusters were found.",
+        )
+
+    terms = []
+    for cluster_index, (ramp, cluster_entries) in enumerate(clusters):
+        variables_in_cluster = [variable for _index, _placement, variable in cluster_entries]
+        max_tail_count = len({placement.tail for _index, placement, _variable in cluster_entries})
+        excess = model.NewIntVar(
+            0,
+            max(0, max_tail_count - 1),
+            f"inbound_eta_cluster_{ramp}_{cluster_index}",
+        )
+        model.Add(excess >= sum(variables_in_cluster) - 1)
+        terms.append(excess * -INBOUND_CLOSE_ETA_RAMP_PENALTY)
+
+    return terms, _inbound_spacing_report(
+        "applied",
+        f"Built {len(clusters)} bounded ramp/time inbound ETA cluster penalties.",
+    )
+
+
+def _inbound_spacing_report(status, detail):
+    return {"status": status, "detail": detail}
+
+
+def _inbound_spacing_no_placement_report(threshold_minutes):
+    threshold_minutes = _safe_int(threshold_minutes, 0)
+    if threshold_minutes <= 0:
+        return _inbound_spacing_report(
+            "disabled",
+            "Inbound ETA spacing disabled because the threshold is 0 minutes.",
+        )
+    return _inbound_spacing_report(
+        "skipped",
+        "Inbound ETA spacing skipped because no candidate placements were available.",
+    )
+
+
+def _merge_inbound_spacing_reports(reports, threshold_minutes):
+    threshold_minutes = _safe_int(threshold_minutes, 0)
+    if threshold_minutes <= 0:
+        return _inbound_spacing_report(
+            "disabled",
+            "Inbound ETA spacing disabled because the threshold is 0 minutes.",
+        )
+    filtered = [report for report in reports if report]
+    if not filtered:
+        return _inbound_spacing_no_placement_report(threshold_minutes)
+    for status in ("applied", "skipped", "disabled"):
+        matching = [report for report in filtered if report.get("status") == status]
+        if matching:
+            details = " ".join(
+                str(report.get("detail") or "").strip()
+                for report in matching
+                if str(report.get("detail") or "").strip()
+            )
+            return _inbound_spacing_report(status, details)
+    return _inbound_spacing_report(
+        "skipped",
+        "Inbound ETA spacing skipped because no applicable arrival placements were available.",
+    )
 
 
 def _deice_spacing_penalty_terms(
@@ -1761,6 +2097,34 @@ def _locked_deice_entries(assignments, tail_rows, timezone_name):
     return entries
 
 
+def _locked_inbound_entries(assignments, tail_rows):
+    rows_by_tail = {
+        _normalize_tail(row.get("tail")): row
+        for row in tail_rows
+        if _normalize_tail(row.get("tail"))
+    }
+    entries = []
+    for assignment in assignments:
+        tail = _normalize_tail(assignment.tail_number)
+        position = _normalize_position(assignment.position_code)
+        ramp = _ramp_from_position(position)
+        if ramp not in NORMAL_RAMP_CODES:
+            continue
+        row = rows_by_tail.get(tail, {})
+        eta = row.get("arrival_block_in_local")
+        if not eta:
+            continue
+        entries.append(
+            {
+                "tail": tail,
+                "ramp": ramp,
+                "position": position,
+                "eta": eta,
+            }
+        )
+    return entries
+
+
 def _deice_entries_are_close(first, second, threshold_minutes):
     first_ramp = first.ramp if isinstance(first, ParkingPlacement) else first["ramp"]
     second_ramp = second.ramp if isinstance(second, ParkingPlacement) else second["ramp"]
@@ -1770,6 +2134,24 @@ def _deice_entries_are_close(first, second, threshold_minutes):
     second_departure = second.departure if isinstance(second, ParkingPlacement) else second["departure"]
     diff = _minutes_apart(first_departure, second_departure)
     return diff is not None and diff < threshold_minutes
+
+
+def _inbound_entries_are_close(first, second, threshold_minutes):
+    first_ramp = first.ramp if isinstance(first, ParkingPlacement) else first["ramp"]
+    second_ramp = second.ramp if isinstance(second, ParkingPlacement) else second["ramp"]
+    if first_ramp != second_ramp:
+        return False
+    first_eta = first.eta if isinstance(first, ParkingPlacement) else first["eta"]
+    second_eta = second.eta if isinstance(second, ParkingPlacement) else second["eta"]
+    diff = _minutes_apart(first_eta, second_eta)
+    return diff is not None and diff < threshold_minutes
+
+
+def _inbound_eta_penalty(first_eta, second_eta, threshold_minutes):
+    diff = _minutes_apart(first_eta, second_eta)
+    if diff is None:
+        return 0
+    return INBOUND_CLOSE_ETA_RAMP_PENALTY + max(0, threshold_minutes - diff)
 
 
 def _deice_penalty(first_departure, second_departure, threshold_minutes):
@@ -2014,6 +2396,19 @@ def _normal_ramp_counts_for_assignments(assignments):
     return counts
 
 
+def _normal_side_counts_for_assignments(assignments):
+    counts = {}
+    for assignment in assignments:
+        position = _normalize_position(assignment.position_code)
+        ramp = _ramp_from_position(position)
+        side = _normal_ramp_side(position)
+        if ramp not in NORMAL_RAMP_CODES or not side:
+            continue
+        key = (ramp, side)
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 def _normal_ramp_counts_for_placements(placements):
     counts = {}
     for placement in placements:
@@ -2023,12 +2418,40 @@ def _normal_ramp_counts_for_placements(placements):
     return counts
 
 
+def _normal_side_counts_for_placements(placements):
+    counts = {}
+    for placement in placements:
+        side = _normal_ramp_side(placement.position)
+        if placement.ramp not in NORMAL_RAMP_CODES or not side:
+            continue
+        key = (placement.ramp, side)
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 def _merge_ramp_counts(*sources):
     merged = {}
     for source in sources:
         for ramp, count in (source or {}).items():
             merged[ramp] = merged.get(ramp, 0) + max(0, int(count or 0))
     return merged
+
+
+def _merge_side_counts(*sources):
+    merged = {}
+    for source in sources:
+        for key, count in (source or {}).items():
+            merged[key] = merged.get(key, 0) + max(0, int(count or 0))
+    return merged
+
+
+def _normal_ramp_side(position):
+    number = _position_number(position)
+    if number in (1, 2, 3, 4):
+        return "lower"
+    if number in (5, 6, 7, 8):
+        return "upper"
+    return ""
 
 
 def _slot_1_timing_by_position(assignments, tail_rows, selected_placements, rows_by_tail, timezone_name):

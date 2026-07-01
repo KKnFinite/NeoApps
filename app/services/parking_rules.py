@@ -54,6 +54,7 @@ PHYSICAL_PARKING_RULES = (
 )
 
 DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES = 15
+DEFAULT_INBOUND_SAME_RAMP_SPACING_MINUTES = 5
 
 
 def ensure_parking_settings(gateway):
@@ -66,6 +67,7 @@ def ensure_parking_settings(gateway):
             include_throat_default=False,
             deice_spacing_threshold_minutes=DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES,
             preferred_max_per_ramp=None,
+            inbound_same_ramp_spacing_minutes=DEFAULT_INBOUND_SAME_RAMP_SPACING_MINUTES,
         )
         db.session.add(settings)
         db.session.flush()
@@ -74,6 +76,8 @@ def ensure_parking_settings(gateway):
     settings.gateway_code = gateway.code
     if settings.deice_spacing_threshold_minutes is None:
         settings.deice_spacing_threshold_minutes = DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES
+    if settings.inbound_same_ramp_spacing_minutes is None:
+        settings.inbound_same_ramp_spacing_minutes = DEFAULT_INBOUND_SAME_RAMP_SPACING_MINUTES
     return settings
 
 
@@ -113,6 +117,10 @@ def save_parking_rules_from_form(gateway, form):
     )
     settings.preferred_max_per_ramp = _optional_nonnegative_int(
         form.get("preferred_max_per_ramp")
+    )
+    settings.inbound_same_ramp_spacing_minutes = _nonnegative_int(
+        form.get("inbound_same_ramp_spacing_minutes"),
+        default=DEFAULT_INBOUND_SAME_RAMP_SPACING_MINUTES,
     )
 
     _update_existing_rules(
@@ -302,6 +310,8 @@ def _parking_rule_report(settings, grouped):
         "soft_rules": (
             "Aircraft type preferences",
             "Ramp balancing: active soft rule across Alpha, Bravo, Charlie, Delta, and Echo",
+            "Inbound ETA same-ramp spacing: active soft rule when threshold is above 0; close arrivals prefer different ramps when alternatives exist",
+            "01-04 / 05-08 side balance: active soft rule within each normal ramp",
             "Preferred Max Per Ramp: active soft limit when set; it can be exceeded if needed",
             "757 preferred on 04/08 positions: active soft rule",
             "Avoid 04/08 when valid alternatives exist: active soft rule",
@@ -312,6 +322,9 @@ def _parking_rule_report(settings, grouped):
             "include_remote_default": "ON" if settings.include_remote_default else "OFF",
             "include_throat_default": "ON" if settings.include_throat_default else "OFF",
             "deice_threshold": _deice_status_summary(settings.deice_spacing_threshold_minutes),
+            "inbound_same_ramp_spacing": _inbound_spacing_summary(
+                settings.inbound_same_ramp_spacing_minutes
+            ),
             "preferred_max_per_ramp": (
                 str(settings.preferred_max_per_ramp)
                 if settings.preferred_max_per_ramp is not None
@@ -348,6 +361,16 @@ def _deice_status_summary(threshold_minutes):
         threshold = max(0, int(threshold_minutes))
     except (TypeError, ValueError):
         threshold = DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES
+    if threshold <= 0:
+        return "0 min / DISABLED"
+    return f"{threshold} min / SOFT SCORING ENABLED"
+
+
+def _inbound_spacing_summary(threshold_minutes):
+    try:
+        threshold = max(0, int(threshold_minutes))
+    except (TypeError, ValueError):
+        threshold = DEFAULT_INBOUND_SAME_RAMP_SPACING_MINUTES
     if threshold <= 0:
         return "0 min / DISABLED"
     return f"{threshold} min / SOFT SCORING ENABLED"

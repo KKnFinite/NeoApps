@@ -93,6 +93,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     },
     "motherbrain_parking_settings": {
         "preferred_max_per_ramp": "INTEGER",
+        "inbound_same_ramp_spacing_minutes": "INTEGER DEFAULT 5",
     },
     "neoermac_uld_requests": {
         "sort_date_operation_id": "INTEGER",
@@ -165,6 +166,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "motherbrain_parking_settings": {
         "preferred_max_per_ramp": "INTEGER",
+        "inbound_same_ramp_spacing_minutes": "INTEGER DEFAULT 5",
     },
     "neoermac_uld_requests": {
         "sort_date_operation_id": "INTEGER",
