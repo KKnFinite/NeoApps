@@ -7998,7 +7998,8 @@ body.blueprint-neostaffing {
 
 .motherbrain-screen-logo img {
     display: block;
-    width: min(100%, 680px);
+    width: min(42vw, 180px);
+    max-width: 220px;
     height: auto;
     object-fit: contain;
     filter:
@@ -8023,6 +8024,30 @@ body.blueprint-neostaffing {
     letter-spacing: 0;
     text-align: center;
     text-shadow: 0 0 18px rgba(255, 47, 47, 0.24);
+}
+
+.motherbrain-header-title,
+.motherbrain-dashboard-brand {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.08em;
+}
+
+.motherbrain-header-title {
+    font-size: clamp(0.9rem, 1.25vw, 1.16rem);
+    line-height: 1;
+}
+
+.motherbrain-dashboard-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.35em;
+}
+
+.motherbrain-dashboard-title-suffix {
+    color: var(--text);
 }
 
 .motherbrain-dashboard-grid {

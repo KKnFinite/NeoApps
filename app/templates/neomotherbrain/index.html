@@ -7,10 +7,15 @@
 {% set selected_operation = current_sort_operations[0] if current_sort_operations else none %}
 <section class="motherbrain-landing" aria-label="MotherBrain home">
     <div class="motherbrain-screen-logo" aria-label="MotherBrain logo">
-        <img src="{{ url_for('static', filename='images/motherbrain_logo1.png') }}" alt="MotherBrain logo">
+        <img src="{{ url_for('static', filename='images/icons/neomotherbrain/inapp/neomotherbrain-inapp-256.png') }}" alt="NeoMotherBrain icon">
     </div>
     <section class="motherbrain-dashboard" aria-labelledby="motherbrain-dashboard-title">
-        <h1 id="motherbrain-dashboard-title" class="motherbrain-dashboard-title mobile-shell-duplicate-title">{{ neo_brand("MotherBrain", "motherbrain", "neo-node-motherbrain") }} DASHBOARD</h1>
+        <h1 id="motherbrain-dashboard-title" class="motherbrain-dashboard-title mobile-shell-duplicate-title">
+            <span class="motherbrain-dashboard-brand neo-brand-title neo-brand neo-brand--motherbrain neo-node-name neo-node-motherbrain brand-inline-name node-motherbrain" aria-label="NeoMotherBrain">
+                <span class="neo-brand__neo neo-word neo-brand-title__neo">NEO</span><span class="neo-brand__node node-word neo-brand-title__node neo-brand-title__node--motherbrain">MOTHERBRAIN</span>
+            </span>
+            <span class="motherbrain-dashboard-title-suffix">DASHBOARD</span>
+        </h1>
         <section class="motherbrain-current-sort-overview" aria-labelledby="current-sort-overview-title">
             <div class="section-heading">
                 <h2 id="current-sort-overview-title">CURRENT SORT OVERVIEW</h2>
