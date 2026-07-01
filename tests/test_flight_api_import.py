@@ -389,6 +389,7 @@ class FlightApiImportTest(unittest.TestCase):
                     origin="SDF",
                     destination="RFD",
                     revised_time="2026-06-01T02:25:00",
+                    status="En Route",
                     tail="N777UP",
                 ),
                 self._api_flight(
@@ -410,6 +411,7 @@ class FlightApiImportTest(unittest.TestCase):
                     origin="RFD",
                     destination="SDF",
                     revised_time="2026-06-01T03:05:00",
+                    status="Boarding",
                     tail="N888UP",
                 )
             ],
@@ -431,10 +433,12 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(snapshot["arrivals"][0]["origin"], "SDF")
         self.assertEqual(snapshot["arrivals"][0]["tail_number"], "N777UP")
         self.assertEqual(snapshot["arrivals"][0]["provider_time_local"], "02:25")
+        self.assertEqual(snapshot["arrivals"][0]["api_status"], "En Route")
         self.assertEqual(snapshot["departures"][0]["flight_number"], "5X888")
         self.assertEqual(snapshot["departures"][0]["destination"], "SDF")
         self.assertEqual(snapshot["departures"][0]["tail_number"], "N888UP")
         self.assertEqual(snapshot["departures"][0]["provider_time_local"], "03:05")
+        self.assertEqual(snapshot["departures"][0]["api_status"], "Boarding")
         self.assertNotIn("AAL123", self.operation.flight_api_last_poll_snapshot_json)
 
         review = flight_api_last_poll_review(self.operation, self.gateway)
@@ -3738,8 +3742,10 @@ class FlightApiTestPageTest(unittest.TestCase):
         operation, _settings = self._setup_auto_poll_operation()
         arrival = self._provider_flight("arrival", "5X777", "UPS777", operation.sort_date)
         arrival["aircraft"] = {"reg": "N777UP"}
+        arrival["status"] = "En Route"
         departure = self._provider_flight("departure", "5X888", "UPS888", operation.sort_date)
         departure["aircraft"] = {"reg": "N888UP"}
+        departure["status"] = "Boarding"
         non_ups = self._provider_flight(
             "arrival",
             "AA123",
@@ -3777,10 +3783,12 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"UPS777", response.data)
         self.assertIn(b"N777UP", response.data)
         self.assertIn(b"02:25", response.data)
+        self.assertIn(b"En Route", response.data)
         self.assertIn(b"5X888", response.data)
         self.assertIn(b"UPS888", response.data)
         self.assertIn(b"N888UP", response.data)
         self.assertIn(b"SDF", response.data)
+        self.assertIn(b"Boarding", response.data)
         self.assertNotIn(b"AAL123", response.data)
         self.assertNotIn(b"N123AA", response.data)
 
