@@ -3535,13 +3535,16 @@ def _arrival_row(
     tail_states=None,
 ):
     arrival_display = _arrival_board_display(mission, operation)
+    eta_delta_minutes = _arrival_eta_delta_minutes(mission, arrival_display)
     row = {
         "mission": mission,
         "is_cancelled": _is_cancelled_mission(mission),
         "parking_position": _parking_position_for_mission(mission, parking_assignments),
         "eta_time": arrival_display["time"],
         "eta_time_note": arrival_display["time_note"],
-        "eta_delta_display": _arrival_eta_delta_display(mission, arrival_display),
+        "eta_delta_minutes": eta_delta_minutes,
+        "eta_delta_display": _format_arrival_eta_delta(eta_delta_minutes),
+        "is_late": eta_delta_minutes is not None and eta_delta_minutes > 0,
         "status_label": arrival_display["status_label"],
         "crew_covered": is_mission_crew_covered(mission.crew_assignments),
     }
@@ -3688,6 +3691,10 @@ def _arrival_runway_status_label(mission, assumed_arrived_time_utc):
 
 def _arrival_eta_delta_display(mission, arrival_display):
     delta = _arrival_eta_delta_minutes(mission, arrival_display)
+    return _format_arrival_eta_delta(delta)
+
+
+def _format_arrival_eta_delta(delta):
     if delta is None:
         return "-"
     if delta > 0:

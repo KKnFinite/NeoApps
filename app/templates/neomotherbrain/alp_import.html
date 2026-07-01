@@ -331,6 +331,7 @@
                         <th>ORIGIN</th>
                         <th>STA</th>
                         <th>ETA</th>
+                        <th>+/-</th>
                         <th>PARKING</th>
                         <th>STATUS</th>
                         <th>ACTIONS</th>
@@ -352,13 +353,14 @@
                     {% for row in mission_rows %}
                     {% set mission = row.mission %}
                     {% if mission_type == "arrival" %}
-                    <tr>
+                    <tr{% if row.is_late %} class="is-arrival-late"{% endif %}>
                         <td>{{ mission.wave|wave_label }}</td>
                         <td>{{ mission.flight_number|upper }}</td>
                         <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
                         <td>{{ mission.origin|upper if mission.origin else "-" }}</td>
                         <td>{{ mission.planned_datetime_local.strftime("%H:%M") if mission.planned_datetime_local else "-" }}</td>
                         <td>{{ row.eta_time.strftime("%H:%M") if row.eta_time else "-" }}</td>
+                        <td class="planning-arrival-variance">{{ row.eta_delta_display }}</td>
                         <td>{{ planning_parking_cell(row, operation) }}</td>
                         <td>{{ row.status_label }}</td>
                         <td class="table-actions planning-mission-actions">
@@ -421,7 +423,7 @@
                     {% endif %}
                     {% else %}
                     <tr>
-                        <td colspan="{{ 9 if mission_type == 'arrival' else 8 }}">NO CURRENT {{ label|upper }} MISSIONS FOUND.</td>
+                        <td colspan="{{ 10 if mission_type == 'arrival' else 8 }}">NO CURRENT {{ label|upper }} MISSIONS FOUND.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

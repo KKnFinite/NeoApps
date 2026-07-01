@@ -10219,6 +10219,15 @@ select::-ms-expand {
     vertical-align: middle;
 }
 
+.planning-mission-table tr.is-arrival-late td {
+    color: #ffb6b6;
+}
+
+.planning-arrival-variance {
+    font-weight: 800;
+    white-space: nowrap;
+}
+
 .planning-mission-table .table-actions {
     justify-content: flex-start;
     gap: 6px;

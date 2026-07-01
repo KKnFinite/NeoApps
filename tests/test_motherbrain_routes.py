@@ -4208,6 +4208,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("SDF", mission_section)
         self.assertIn("02:10", mission_section)
         self.assertIn("02:34", mission_section)
+        self.assertIn("<th>+/-</th>", mission_section)
+        self.assertIn(">+24</td>", mission_section)
+        self.assertIn('class="is-arrival-late"', mission_section)
         self.assertIn("En Route", mission_section)
         self.assertIn(
             f"/motherbrain/operations/{operation.id}/missions/{mission.id}/edit",
@@ -4228,6 +4231,48 @@ class MotherBrainRoutesTest(unittest.TestCase):
             mission_section,
         )
         self.assertNotIn(">RESTORE</button>", mission_section)
+
+    def test_arrival_planning_renders_late_early_variance(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        db.session.add(operation)
+        db.session.add_all(
+            [
+                self._mission(
+                    operation=operation,
+                    mission_type="arrival",
+                    flight_number="UPSLATE",
+                    origin="EWR",
+                    planned_datetime_local=datetime(2026, 6, 24, 2, 10),
+                    planned_datetime_utc=datetime(2026, 6, 24, 7, 10),
+                    eta_datetime_utc=datetime(2026, 6, 24, 7, 24),
+                    eta_source="alp",
+                ),
+                self._mission(
+                    operation=operation,
+                    mission_type="arrival",
+                    flight_number="UPSEARLY",
+                    origin="SDF",
+                    planned_datetime_local=datetime(2026, 6, 24, 2, 10),
+                    planned_datetime_utc=datetime(2026, 6, 24, 7, 10),
+                    eta_datetime_utc=datetime(2026, 6, 24, 6, 55),
+                    eta_source="alp",
+                ),
+            ]
+        )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
+        html = response.data.decode()
+        mission_section = html.split("CURRENT ARRIVAL MISSIONS", 1)[1]
+        late_row = re.search(r"<tr[^>]*>.*?UPSLATE.*?</tr>", mission_section, re.S).group(0)
+        early_row = re.search(r"<tr[^>]*>.*?UPSEARLY.*?</tr>", mission_section, re.S).group(0)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("<th>+/-</th>", mission_section)
+        self.assertIn(">+14</td>", late_row)
+        self.assertIn("class=\"is-arrival-late\"", late_row)
+        self.assertIn(">-15</td>", early_row)
+        self.assertNotIn("is-arrival-late", early_row)
 
     def test_departure_planning_renders_current_sort_departure_mission_list(self):
         operation = self._operation(sort_date=date(2026, 6, 24), window_minutes=20)
