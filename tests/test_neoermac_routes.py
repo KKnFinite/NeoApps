@@ -23,6 +23,7 @@ from app.models import (
     User,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
+from app.services.gateway_matrix import current_gateway_local_datetime
 from app.services.permission_rules import ensure_default_permission_rules
 from app.services.sort_timeline import ensure_sort_timeline_settings
 from app.services.time_display import format_local_hhmm
@@ -1500,16 +1501,17 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"14:02", response.data)
 
     def test_door_view_uld_requests_are_scoped_to_current_sort_operation(self):
+        current_sort_date = current_gateway_local_datetime(self.gateway).date()
         old_operation = SortDateOperation(
             gateway_id=self.gateway.id,
             gateway_code=self.gateway.code,
-            sort_date=date(2026, 6, 29),
+            sort_date=current_sort_date - timedelta(days=1),
             sort_name="night",
         )
         current_operation = SortDateOperation(
             gateway_id=self.gateway.id,
             gateway_code=self.gateway.code,
-            sort_date=date(2026, 6, 30),
+            sort_date=current_sort_date,
             sort_name="night",
         )
         db.session.add_all([old_operation, current_operation])
