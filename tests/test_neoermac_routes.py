@@ -157,6 +157,16 @@ class NeoErmacRoutesTest(unittest.TestCase):
             css,
         )
 
+    def test_neoermac_dashboard_cards_use_dark_red_with_small_green_accent(self):
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertIn(".neoermac-dashboard-tile {", css)
+        self.assertIn("rgba(var(--node-sektor-primary-rgb), 0.5)", css)
+        self.assertIn("rgba(var(--node-sektor-highlight-rgb), 0.38)", css)
+        self.assertIn("linear-gradient(180deg, rgba(18, 10, 13, 0.98), rgba(6, 7, 10, 0.98))", css)
+        self.assertIn(".neoermac-dashboard-tile::before", css)
+        self.assertIn("rgba(var(--node-ermac-secondary-rgb), 0.74)", css)
+
     def test_neoermac_upcoming_pulls_shows_no_current_sort_state_without_operation(self):
         self._login_approved_user()
 
