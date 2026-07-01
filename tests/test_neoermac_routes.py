@@ -457,8 +457,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(title, response.data)
-                self.assertIn(b'aria-label="BACK TO NeoErmac"', response.data)
-                self.assertIn(b"OPERATIONAL LOGIC WILL BE ADDED IN A LATER PASS.", response.data)
+                self.assertIn(b"Coming Soon", response.data)
+                self.assertNotIn(b'aria-label="BACK TO NeoErmac"', response.data)
+                self.assertNotIn(b"OPERATIONAL LOGIC WILL BE ADDED IN A LATER PASS.", response.data)
+                self.assertNotIn(b"PLACEHOLDER SHELL", response.data)
 
     def test_door_view_route_loads_for_view_authorized_user(self):
         self._login_approved_user(role="operator")
