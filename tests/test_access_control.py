@@ -185,7 +185,7 @@ class AccessControlTest(unittest.TestCase):
 
         self.assertEqual(hub.status_code, 200)
         hub_html = hub.data.decode()
-        left_column = hub_html.split('rfd-node-column-left"', 1)[1].split('rfd-hub-logo"', 1)[0]
+        left_column = hub_html.split('rfd-node-column-left"', 1)[1].split('rfd-node-column-right"', 1)[0]
         right_column = hub_html.split('rfd-node-column-right"', 1)[1].split("</section>", 1)[0]
         self.assertIn(b"RFD Hub", hub.data)
         self.assertNotIn(b"RFD Command Hub", hub.data)
@@ -193,15 +193,23 @@ class AccessControlTest(unittest.TestCase):
         self.assertIn(b"rfd-hub-page", hub.data)
         self.assertNotIn(b"NeoRFD", hub.data)
         self.assertIn(b"watcher_hub_user", hub.data)
-        self.assertIn(b'src="/static/images/neogateway_logo3_large.png"', hub.data)
-        self.assertIn(b'class="rfd-mobile-logo"', hub.data)
+        self.assertNotIn(b'neogateway_logo3_large.png', hub.data)
+        self.assertNotIn(b'neogateway_logo3_medium.png', hub.data)
+        self.assertNotIn(b'neogateway_logo3_small.png', hub.data)
+        self.assertIn(b'class="rfd-gateway-brand-strip"', hub.data)
+        self.assertIn(b'src="/static/images/icons/neogateway/inapp/neogateway-inapp-128.png"', hub.data)
+        self.assertIn(b"rfd-gateway-brand-title neo-brand-title", hub.data)
+        self.assertIn(b"neo-brand-title__node--gateway", hub.data)
         self.assertIn(b"NeoMotherBrain", hub.data)
         self.assertIn(b"NeoSektor", hub.data)
         self.assertIn(b'href="/neoermac"', hub.data)
-        self.assertIn(b'src="/static/images/icons/motherbrain/icon_192.png"', hub.data)
-        self.assertIn(b'src="/static/images/icons/sektor/icon_192.png"', hub.data)
-        self.assertIn(b'src="/static/images/icons/ermac/icon_192.png"', hub.data)
-        self.assertIn(b'src="/static/images/icons/scorpion/icon_192.png"', hub.data)
+        self.assertIn(b'src="/static/images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png"', hub.data)
+        self.assertIn(b'src="/static/images/icons/neosektor/inapp/neosektor-icon-128x128.png"', hub.data)
+        self.assertIn(b'src="/static/images/icons/neoermac/inapp/neoermac-inapp-128.png"', hub.data)
+        self.assertIn(b'src="/static/images/icons/neoscorpion/inapp/neoscorpion-128x128.png"', hub.data)
+        self.assertIn(b'src="/static/images/icons/reptile/icon_192.png"', hub.data)
+        self.assertIn(b'src="/static/images/icons/subzero/icon_192.png"', hub.data)
+        self.assertIn(b'src="/static/images/icons/rain/icon_192.png"', hub.data)
         self.assertNotIn(b"Sort planning, flight schedules, parking, and API review.", hub.data)
         self.assertNotIn(b"Inbound operations, ballmat counts, discharge, and routing.", hub.data)
         self.assertNotIn(b"Shift execution, doors, belts, ULD requests, and outbound pulls.", hub.data)
@@ -218,8 +226,7 @@ class AccessControlTest(unittest.TestCase):
         self.assertNotIn(b"Launch", hub.data)
         self.assertNotIn(b"Gateway Command Layer", hub.data)
         self.assertLess(hub_html.index('aria-label="NeoMotherBrain"'), hub_html.index('class="rfd-node-grid"'))
-        self.assertLess(hub_html.index('rfd-node-column-left"'), hub_html.index('rfd-hub-logo"'))
-        self.assertLess(hub_html.index('rfd-hub-logo"'), hub_html.index('rfd-node-column-right"'))
+        self.assertLess(hub_html.index('rfd-node-column-left"'), hub_html.index('rfd-node-column-right"'))
         left_order = (
             "NeoSektor",
             "NeoReptile",

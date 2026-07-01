@@ -77,9 +77,10 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertNotIn("../images/neobutton1_medium.png", css)
         self.assertIn(".rfd-node-prefix", css)
         self.assertIn(".rfd-node-suffix", css)
-        self.assertIn(".rfd-mobile-logo", css)
+        self.assertIn(".rfd-gateway-brand-strip", css)
+        self.assertIn(".rfd-gateway-brand-icon", css)
+        self.assertIn(".rfd-gateway-brand-title", css)
         self.assertIn("width: min(100% - 20px, 1440px);", css)
-        self.assertIn(".rfd-hub-logo {\n        display: none;", css)
         self.assertIn(".rfd-motherbrain-launch {\n        order: 2;", css)
         self.assertIn(".rfd-node-sektor {\n        order: 3;", css)
         self.assertIn(".rfd-node-ermac {\n        order: 4;", css)
@@ -809,8 +810,15 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         hub_html = hub_response.data.decode()
         left_column = hub_html.split('rfd-node-column-left"', 1)[1].split("</div>", 1)[0]
         right_column = hub_html.split('rfd-node-column-right"', 1)[1].split("</div>", 1)[0]
-        self.assertIn(b'src="/static/images/neogateway_logo3_large.png"', hub_response.data)
-        self.assertIn(b'class="rfd-mobile-logo"', hub_response.data)
+        self.assertNotIn(b'neogateway_logo3_large.png', hub_response.data)
+        self.assertNotIn(b'neogateway_logo3_medium.png', hub_response.data)
+        self.assertNotIn(b'neogateway_logo3_small.png', hub_response.data)
+        self.assertIn(b'class="rfd-gateway-brand-strip"', hub_response.data)
+        self.assertIn(b'src="/static/images/icons/neogateway/inapp/neogateway-inapp-128.png"', hub_response.data)
+        self.assertIn(b'src="/static/images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png"', hub_response.data)
+        self.assertIn(b'src="/static/images/icons/neosektor/inapp/neosektor-icon-128x128.png"', hub_response.data)
+        self.assertIn(b'src="/static/images/icons/neoermac/inapp/neoermac-inapp-128.png"', hub_response.data)
+        self.assertIn(b'src="/static/images/icons/neoscorpion/inapp/neoscorpion-128x128.png"', hub_response.data)
         self.assertIn(b"NeoMotherBrain", hub_response.data)
         self.assertIn(b"NeoSektor", hub_response.data)
         self.assertIn(b'href="/neoermac"', hub_response.data)
@@ -826,8 +834,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertNotIn(b"Launch", hub_response.data)
         self.assertNotIn(b"Gateway Command Layer", hub_response.data)
         self.assertLess(hub_html.index('aria-label="NeoMotherBrain"'), hub_html.index('class="rfd-node-grid"'))
-        self.assertLess(hub_html.index('rfd-node-column-left"'), hub_html.index('rfd-hub-logo"'))
-        self.assertLess(hub_html.index('rfd-hub-logo"'), hub_html.index('rfd-node-column-right"'))
+        self.assertLess(hub_html.index('rfd-node-column-left"'), hub_html.index('rfd-node-column-right"'))
         left_order = (
             "NeoSektor",
             "NeoReptile",

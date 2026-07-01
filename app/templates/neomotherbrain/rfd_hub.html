@@ -5,32 +5,45 @@
 {{ neo_brand(name, slug, "rfd-node-name", "Neo" ~ name) }}
 {%- endmacro %}
 
+{% set locked_node_icons = {
+    "motherbrain": "images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png",
+    "sektor": "images/icons/neosektor/inapp/neosektor-icon-128x128.png",
+    "ermac": "images/icons/neoermac/inapp/neoermac-inapp-128.png",
+    "scorpion": "images/icons/neoscorpion/inapp/neoscorpion-128x128.png"
+} %}
+
 {% macro node_card(slug, name, icon_folder) -%}
 <span class="rfd-node-card-icon-wrap" aria-hidden="true">
-    <img class="rfd-node-card-icon" src="{{ url_for('static', filename='images/icons/' ~ icon_folder ~ '/icon_192.png') }}" alt="" loading="lazy" width="72" height="72">
+    <img class="rfd-node-card-icon" src="{{ url_for('static', filename=locked_node_icons.get(slug, 'images/icons/' ~ icon_folder ~ '/icon_192.png')) }}" alt="" loading="lazy" width="72" height="72">
 </span>
 <span class="rfd-node-card-copy">
     {{ node_label(slug, name) }}
 </span>
 {%- endmacro %}
 
-{% set neogateway_logo_small = "images/neogateway_logo3_small.png" %}
-{% set neogateway_logo_medium = "images/neogateway_logo3_medium.png" %}
-{% set neogateway_logo_large = "images/neogateway_logo3_large.png" %}
+{% macro gateway_brand() -%}
+<span class="rfd-gateway-brand">
+    <img
+        class="rfd-gateway-brand-icon"
+        src="{{ url_for('static', filename='images/icons/neogateway/inapp/neogateway-inapp-128.png') }}"
+        alt=""
+        width="128"
+        height="128"
+        decoding="async"
+    >
+    <span class="rfd-gateway-brand-title neo-brand-title neo-brand neo-brand--gateway neo-node-name brand-inline-name node-gateway" aria-label="NeoGateway">
+        <span class="neo-brand__neo neo-word neo-brand-title__neo">NEO</span><span class="neo-brand__node node-word neo-brand-title__node neo-brand-title__node--gateway">GATEWAY</span>
+    </span>
+</span>
+{%- endmacro %}
 
 {% block title %}{{ gateway.code }} Hub | NeoGateway{% endblock %}
 
 {% block content %}
 <section class="motherbrain-command rfd-command-layout" aria-label="{{ gateway.code }} gateway hub">
     <section class="rfd-node-menu" aria-label="{{ gateway.code }} NeoNode launcher">
-        <div class="rfd-mobile-logo" aria-label="{{ gateway.code }} logo">
-            <img
-                class="gateway-logo"
-                src="{{ url_for('static', filename=neogateway_logo_large) }}"
-                srcset="{{ url_for('static', filename=neogateway_logo_small) }} 420w, {{ url_for('static', filename=neogateway_logo_medium) }} 760w, {{ url_for('static', filename=neogateway_logo_large) }} 1200w"
-                sizes="(max-width: 760px) 88vw, 660px"
-                alt="NeoGateway"
-            />
+        <div class="rfd-gateway-brand-strip" aria-label="{{ gateway.code }} NeoGateway brand">
+            {{ gateway_brand() }}
         </div>
 
         {% if can_enter_motherbrain %}
@@ -60,16 +73,6 @@
                 <article class="rfd-node-tile rfd-node-placeholder rfd-node-rain" aria-disabled="true" aria-label="NeoRain">
                     {{ node_card("rain", "Rain", "rain") }}
                 </article>
-            </div>
-
-            <div class="rfd-hub-logo" aria-label="{{ gateway.code }} logo">
-                <img
-                    class="gateway-logo"
-                    src="{{ url_for('static', filename=neogateway_logo_large) }}"
-                    srcset="{{ url_for('static', filename=neogateway_logo_small) }} 420w, {{ url_for('static', filename=neogateway_logo_medium) }} 760w, {{ url_for('static', filename=neogateway_logo_large) }} 1200w"
-                    sizes="(max-width: 760px) 88vw, 660px"
-                    alt="NeoGateway"
-                />
             </div>
 
             <div class="rfd-node-column rfd-node-column-right" aria-label="{{ gateway.code }} right NeoNodes">

@@ -4243,26 +4243,64 @@ a {
 
 .rfd-node-menu {
     --rfd-node-tile-width: clamp(340px, 24vw, 520px);
-    --rfd-logo-width: clamp(500px, 34vw, 740px);
-    --rfd-hub-gap: clamp(44px, 4.8vw, 94px);
+    --rfd-hub-gap: clamp(28px, 3.8vw, 72px);
     display: grid;
     align-content: center;
     justify-items: center;
     gap: clamp(20px, 2.6vw, 38px);
-    width: min(100%, 1968px);
+    width: min(100%, 1240px);
     min-width: 0;
+}
+
+.rfd-gateway-brand-strip {
+    display: grid;
+    place-items: center;
+    width: 100%;
+}
+
+.rfd-gateway-brand {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    max-width: 100%;
+    padding: 12px 18px;
+    border: 1px solid rgba(var(--node-gateway-highlight-rgb), 0.44);
+    border-radius: 12px;
+    background:
+        linear-gradient(135deg, rgba(var(--node-gateway-primary-rgb), 0.2), transparent 46%),
+        linear-gradient(180deg, rgba(18, 22, 30, 0.92), rgba(3, 5, 9, 0.9));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        0 14px 30px rgba(0, 0, 0, 0.34),
+        0 0 24px rgba(var(--node-gateway-primary-rgb), 0.18);
+}
+
+.rfd-gateway-brand-icon {
+    display: block;
+    width: 64px;
+    height: 64px;
+    border-radius: 14px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 14px rgba(var(--node-gateway-primary-rgb), 0.28));
+}
+
+.rfd-gateway-brand-title {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.12em;
+    font-size: clamp(1.42rem, 2.6vw, 2.35rem);
+    line-height: 1;
+    white-space: nowrap;
 }
 
 .rfd-node-grid {
     display: grid;
     align-items: center;
     justify-content: center;
-    grid-template-columns:
-        var(--rfd-node-tile-width)
-        minmax(0, var(--rfd-logo-width))
-        var(--rfd-node-tile-width);
+    grid-template-columns: repeat(2, minmax(0, var(--rfd-node-tile-width)));
     gap: var(--rfd-hub-gap);
-    width: min(100%, 1968px);
+    width: min(100%, 1120px);
 }
 
 .rfd-node-column {
@@ -4272,27 +4310,6 @@ a {
     gap: clamp(22px, 2.4vw, 40px);
     min-width: 0;
     width: var(--rfd-node-tile-width);
-}
-
-.rfd-hub-logo {
-    display: grid;
-    place-items: center;
-    min-width: 0;
-}
-
-.rfd-mobile-logo {
-    display: none;
-}
-
-.rfd-hub-logo .gateway-logo {
-    display: block;
-    width: var(--rfd-logo-width);
-    max-width: 100%;
-    max-height: min(68vh, 760px);
-    object-fit: contain;
-    filter:
-        drop-shadow(0 18px 32px rgba(0, 0, 0, 0.72))
-        drop-shadow(0 0 34px rgba(255, 47, 47, 0.42));
 }
 
 .rfd-command-hub .motherbrain-core-image {
@@ -4481,20 +4498,12 @@ a {
 @media (max-width: 1180px) and (min-width: 761px) {
     .rfd-node-menu {
         --rfd-node-tile-width: clamp(240px, 26vw, 340px);
-        --rfd-logo-width: clamp(300px, 36vw, 480px);
         --rfd-hub-gap: clamp(16px, 2vw, 28px);
     }
 
     .rfd-node-grid {
-        grid-template-columns:
-            var(--rfd-node-tile-width)
-            minmax(0, var(--rfd-logo-width))
-            var(--rfd-node-tile-width);
+        grid-template-columns: repeat(2, minmax(0, var(--rfd-node-tile-width)));
         gap: var(--rfd-hub-gap);
-    }
-
-    .rfd-hub-logo .gateway-logo {
-        width: var(--rfd-logo-width);
     }
 
     .rfd-node-name {
@@ -11320,25 +11329,26 @@ select::-ms-expand {
         gap: 14px;
     }
 
-    .rfd-mobile-logo {
+    .rfd-gateway-brand-strip {
         order: 1;
         display: grid;
         place-items: center;
         width: 100%;
     }
 
-    .rfd-mobile-logo .gateway-logo {
-        display: block;
-        width: min(88vw, 430px);
-        max-height: 320px;
-        object-fit: contain;
-        filter:
-            drop-shadow(0 16px 28px rgba(0, 0, 0, 0.72))
-            drop-shadow(0 0 26px rgba(255, 47, 47, 0.34));
+    .rfd-gateway-brand {
+        width: min(100%, 420px);
+        padding: 10px 14px;
     }
 
-    .rfd-hub-logo {
-        display: none;
+    .rfd-gateway-brand-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+    }
+
+    .rfd-gateway-brand-title {
+        font-size: clamp(1.1rem, 6vw, 1.7rem);
     }
 
     .rfd-motherbrain-launch {
