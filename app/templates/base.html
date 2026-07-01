@@ -96,13 +96,16 @@
                         {% elif is_portal_page %}
                         <span class="portal-header-brandline">
                             <img
-                                class="portal-header-logo"
-                                src="{{ url_for('static', filename='images/neoapps_logo_transparent.png') }}"
+                                class="portal-header-logo portal-header-logo-icon"
+                                src="{{ url_for('static', filename='images/icons/neoapps/inapp/neoapps-inapp-128.png') }}"
                                 alt="NeoApps"
-                                width="1874"
-                                height="312"
+                                width="128"
+                                height="128"
                                 decoding="async"
                             >
+                            <span class="portal-header-title neo-brand-title neo-brand neo-brand--apps neo-node-name brand-inline-name node-apps" aria-label="NeoApps">
+                                <span class="neo-brand__neo neo-word neo-brand-title__neo">NEO</span><span class="neo-brand__node node-word neo-brand-title__node neo-brand-title__node--apps">APPS</span>
+                            </span>
                             <span class="portal-header-word">Portal</span>
                         </span>
                         {% else %}

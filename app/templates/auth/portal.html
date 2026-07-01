@@ -14,7 +14,14 @@
         <article class="portal-app-card portal-app-{{ app.code }} is-{{ status }}">
             <div class="portal-app-card-heading">
                 <img class="portal-app-icon" src="{{ row.icon_src }}" alt="" loading="lazy" width="72" height="72">
+                {% if app.code == "neogateway" or app.code == "neostaffing" %}
+                {% set app_title_word = "GATEWAY" if app.code == "neogateway" else "STAFFING" %}
+                <h2 class="portal-app-title neo-brand-title neo-brand neo-brand--{{ app_brand_key }} neo-node-name brand-inline-name node-{{ app_brand_key }}" aria-label="{{ app.name }}">
+                    <span class="neo-brand__neo neo-word neo-brand-title__neo">NEO</span><span class="neo-brand__node node-word neo-brand-title__node neo-brand-title__node--{{ app_brand_key }}">{{ app_title_word }}</span>
+                </h2>
+                {% else %}
                 <h2>{{ neo_brand_name(app.name, app_brand_key) }}</h2>
+                {% endif %}
             </div>
             <div class="portal-app-state">
                 {% if status == "approved" and access.is_active %}

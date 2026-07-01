@@ -6103,6 +6103,25 @@ h2 {
     filter: drop-shadow(0 0 12px rgba(var(--node-rgb), 0.18));
 }
 
+.portal-header-logo-icon {
+    width: 38px;
+    height: 38px;
+    max-width: none;
+    border-radius: 10px;
+}
+
+.portal-header-title,
+.portal-app-title {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.12em;
+    line-height: 1;
+}
+
+.portal-header-title {
+    font-size: 1.08rem;
+}
+
 .portal-header-word {
     color: var(--steel);
     font-size: 1.05rem;
@@ -6185,6 +6204,10 @@ h2 {
     font-weight: 950;
     letter-spacing: 0.08em;
     text-transform: uppercase;
+}
+
+.portal-app-card h2.portal-app-title {
+    color: inherit;
 }
 
 .portal-app-state {
@@ -18122,6 +18145,10 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
 .neo-brand-title__neo {
   color: #DDEBFF;
+}
+
+.neo-brand-title__node--apps {
+  color: #D9362E;
 }
 
 .neo-brand-title__node--gateway {
