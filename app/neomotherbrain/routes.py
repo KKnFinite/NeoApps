@@ -32,6 +32,7 @@ from app.services.flight_api import (
     acquire_flight_api_auto_poll_lock,
     api_polling_window_snapshot,
     flight_api_auto_poll_status,
+    flight_api_last_poll_review,
     flight_api_operational_time_utc,
     flight_api_provider_time_utc,
     flight_api_review_display_rows,
@@ -380,6 +381,16 @@ def flight_api_test():
         )
 
     pending_items = pending_review_items_for_operation(selected_operation)
+    last_poll_snapshot = (
+        import_result.get("last_poll_snapshot")
+        if import_result and not import_result.get("provider_error")
+        else None
+    )
+    last_poll_review = flight_api_last_poll_review(
+        selected_operation,
+        gateway,
+        snapshot=last_poll_snapshot,
+    )
     return render_template(
         "neomotherbrain/flight_api_test.html",
         gateway=gateway,
@@ -392,6 +403,7 @@ def flight_api_test():
         selected_request_details=selected_request_details,
         import_result=import_result,
         pending_review_items=pending_items,
+        last_poll_review=last_poll_review,
         replay_payload=replay_payload,
         auto_poll_status=auto_poll_status,
         can_trigger_auto_poll=user_can(FLIGHT_API_AUTO_POLL_TRIGGER_PERMISSION),

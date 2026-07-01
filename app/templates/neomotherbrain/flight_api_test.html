@@ -476,6 +476,133 @@
     {% endif %}
     {% endif %}
 
+    <section class="flight-api-last-poll-review" aria-labelledby="flight-api-last-poll-title">
+        <div class="section-heading compact-section-heading">
+            <h2 id="flight-api-last-poll-title">LAST POLLED UPS FLIGHT DATA</h2>
+            <p class="muted">
+                Read-only provider rows from the latest successful UPS-only poll for this selected sort.
+                {% if last_poll_review.source == "replay" %}
+                Replay preview shown from the current request and not saved.
+                {% endif %}
+            </p>
+        </div>
+        <section class="status-grid flight-api-last-poll-meta" aria-label="Last poll timing">
+            <article class="status-card">
+                <span>LAST ATTEMPTED POLL</span>
+                <strong>{{ last_poll_review.last_attempted_poll_local }}</strong>
+            </article>
+            <article class="status-card">
+                <span>LAST SUCCESSFUL POLL</span>
+                <strong>{{ last_poll_review.last_successful_poll_local }}</strong>
+            </article>
+            <article class="status-card">
+                <span>LAST FAILED POLL</span>
+                <strong>{{ last_poll_review.last_failed_poll_local }}</strong>
+            </article>
+            <article class="status-card">
+                <span>DISPLAYED POLL DATA</span>
+                <strong>
+                    {% if last_poll_review.has_snapshot %}
+                    {{ last_poll_review.poll_local_time }} {{ last_poll_review.poll_local_date }}
+                    {% else %}
+                    -
+                    {% endif %}
+                </strong>
+            </article>
+            <article class="status-card">
+                <span>UPS ARRIVALS RETURNED</span>
+                <strong>{{ last_poll_review.ups_arrivals_count }}</strong>
+            </article>
+            <article class="status-card">
+                <span>UPS DEPARTURES RETURNED</span>
+                <strong>{{ last_poll_review.ups_departures_count }}</strong>
+            </article>
+        </section>
+
+        {% if not last_poll_review.has_snapshot %}
+        <p class="muted centered-empty-message">No latest Flight API poll data has been saved for this selected sort operation yet.</p>
+        {% elif last_poll_review.no_ups_returned %}
+        <p class="muted centered-empty-message">No UPS arrivals/departures returned by last poll.</p>
+        {% endif %}
+
+        <div class="flight-api-last-poll-groups">
+            <section class="table-wrap" aria-labelledby="flight-api-last-arrivals-title">
+                <h3 id="flight-api-last-arrivals-title">ARRIVALS</h3>
+                <table class="data-table flight-api-last-poll-table">
+                    <thead>
+                        <tr>
+                            <th>FLIGHT / CALLSIGN</th>
+                            <th>ORIGIN</th>
+                            <th>TAIL</th>
+                            <th>ETA / ARRIVAL</th>
+                            <th>MATCHED CONTEXT</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in last_poll_review.arrivals %}
+                        <tr>
+                            <td>
+                                <strong>{{ row.flight_number or "-" }}</strong>
+                                <br><span class="muted">{{ row.call_sign or "-" }}</span>
+                            </td>
+                            <td>{{ row.origin or "-" }}</td>
+                            <td>{{ row.tail_number or "-" }}</td>
+                            <td>
+                                <strong>{{ row.provider_time_local or "-" }}</strong>
+                                {% if row.provider_time_source %}
+                                <br><span class="muted">{{ row.provider_time_source }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ row.match_context or "-" }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5">NO UPS ARRIVALS RETURNED BY LAST POLL.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+            <section class="table-wrap" aria-labelledby="flight-api-last-departures-title">
+                <h3 id="flight-api-last-departures-title">DEPARTURES</h3>
+                <table class="data-table flight-api-last-poll-table">
+                    <thead>
+                        <tr>
+                            <th>FLIGHT / CALLSIGN</th>
+                            <th>DESTINATION</th>
+                            <th>TAIL</th>
+                            <th>ETD / STD</th>
+                            <th>MATCHED CONTEXT</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in last_poll_review.departures %}
+                        <tr>
+                            <td>
+                                <strong>{{ row.flight_number or "-" }}</strong>
+                                <br><span class="muted">{{ row.call_sign or "-" }}</span>
+                            </td>
+                            <td>{{ row.destination or "-" }}</td>
+                            <td>{{ row.tail_number or "-" }}</td>
+                            <td>
+                                <strong>{{ row.provider_time_local or "-" }}</strong>
+                                {% if row.provider_time_source %}
+                                <br><span class="muted">{{ row.provider_time_source }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ row.match_context or "-" }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5">NO UPS DEPARTURES RETURNED BY LAST POLL.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+        </div>
+    </section>
+
     {% if import_result %}
     <section class="table-wrap" aria-labelledby="departure-match-audit-title">
         <h2 id="departure-match-audit-title">DEPARTURE MATCH AUDIT</h2>

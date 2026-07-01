@@ -48,6 +48,7 @@ class SortDateOperation(db.Model):
     flight_api_next_auto_poll_eligible_at_utc = db.Column(db.DateTime, nullable=True)
     flight_api_auto_poll_in_progress_at_utc = db.Column(db.DateTime, nullable=True)
     flight_api_auto_poll_lock_token = db.Column(db.String(64), nullable=False, default="")
+    flight_api_last_poll_snapshot_json = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

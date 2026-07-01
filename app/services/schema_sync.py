@@ -60,6 +60,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "flight_api_next_auto_poll_eligible_at_utc": "DATETIME",
         "flight_api_auto_poll_in_progress_at_utc": "DATETIME",
         "flight_api_auto_poll_lock_token": "VARCHAR(64) DEFAULT ''",
+        "flight_api_last_poll_snapshot_json": "TEXT",
     },
     "neosektor_wave_states": {
         "all_up_started_at": "DATETIME",
@@ -130,6 +131,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "flight_api_next_auto_poll_eligible_at_utc": "TIMESTAMP",
         "flight_api_auto_poll_in_progress_at_utc": "TIMESTAMP",
         "flight_api_auto_poll_lock_token": "VARCHAR(64) DEFAULT ''",
+        "flight_api_last_poll_snapshot_json": "TEXT",
     },
     "neosektor_wave_states": {
         "all_up_started_at": "TIMESTAMP",

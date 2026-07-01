@@ -4738,6 +4738,49 @@ h2 {
     text-align: right;
 }
 
+.flight-api-last-poll-review {
+    display: grid;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid rgba(var(--node-rgb), 0.24);
+    border-radius: 12px;
+    background: rgba(8, 10, 16, 0.58);
+}
+
+.flight-api-last-poll-meta {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.flight-api-last-poll-groups {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.flight-api-last-poll-groups h3 {
+    margin: 0 0 8px;
+    color: var(--node-primary);
+    font-size: 0.82rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.data-table.flight-api-last-poll-table {
+    min-width: 0;
+    table-layout: fixed;
+}
+
+.data-table.flight-api-last-poll-table th,
+.data-table.flight-api-last-poll-table td {
+    padding: 8px 7px;
+    overflow-wrap: anywhere;
+    vertical-align: top;
+}
+
+.data-table.flight-api-last-poll-table th {
+    font-size: 0.66rem;
+}
+
 .parking-plan-page {
     display: grid;
     gap: 18px;
@@ -10535,6 +10578,14 @@ select::-ms-expand {
     .flight-api-auto-poll-widget [data-flight-api-auto-poll-success] {
         justify-self: stretch;
         text-align: left;
+    }
+
+    .flight-api-last-poll-review {
+        padding: 12px;
+    }
+
+    .flight-api-last-poll-groups {
+        grid-template-columns: 1fr;
     }
 
     .alp-desktop-only {

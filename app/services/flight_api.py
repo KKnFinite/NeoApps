@@ -433,6 +433,7 @@ def process_api_flights_for_operation(
     diagnostics = _empty_import_count_diagnostics()
     replaced_review_count = replace_active_review_queue_for_operation(operation) if apply else 0
     ups_departure_candidates = []
+    ups_last_poll_rows = []
 
     for api_flight in api_flights:
         mission_type = _mission_type(api_flight)
@@ -453,11 +454,11 @@ def process_api_flights_for_operation(
             missions,
         )
         if mission:
+            normalized["matched_mission_id"] = mission.id
+            normalized["matched_mission_flight_number"] = mission.flight_number
             if match_detail:
                 normalized["match_diagnostic"] = match_detail
             if normalized_type == "departure":
-                normalized["matched_mission_id"] = mission.id
-                normalized["matched_mission_flight_number"] = mission.flight_number
                 normalized["tail_update_diagnostic"] = departure_tail_update_diagnostic(
                     mission,
                     normalized,
@@ -492,9 +493,20 @@ def process_api_flights_for_operation(
                 }
             )
             _increment_count(diagnostics, "matched", normalized_type)
+            ups_last_poll_rows.append(
+                flight_api_last_poll_snapshot_row(
+                    normalized,
+                    gateway,
+                    operation,
+                    settings,
+                    mission=mission,
+                    context_reason=match_detail or "matched",
+                )
+            )
             continue
 
         normalized["unmatched_reason"] = match_detail
+        audit_mission = None
         if normalized_type == "departure":
             audit_mission = departure_audit_candidate_mission(normalized, missions)
             normalized["candidate_mission_id"] = getattr(audit_mission, "id", None)
@@ -538,6 +550,16 @@ def process_api_flights_for_operation(
             )
             review_items.append(review_item)
             _increment_count(diagnostics, "unmatched", normalized_type)
+        ups_last_poll_rows.append(
+            flight_api_last_poll_snapshot_row(
+                normalized,
+                gateway,
+                operation,
+                settings,
+                mission=audit_mission,
+                context_reason=normalized.get("unmatched_reason"),
+            )
+        )
 
     db.session.flush()
     departure_match_audit = build_departure_match_audit(
@@ -545,6 +567,18 @@ def process_api_flights_for_operation(
         ups_departure_candidates,
         diagnostics,
     )
+    last_poll_snapshot = build_flight_api_last_poll_snapshot(
+        gateway,
+        operation,
+        ups_last_poll_rows,
+        now_utc,
+        source=source,
+    )
+    if apply and source == "live":
+        operation.flight_api_last_poll_snapshot_json = json.dumps(
+            last_poll_snapshot,
+            sort_keys=True,
+        )
     return {
         "provider_enabled": bool(settings.provider_enabled),
         "attempted": False,
@@ -562,10 +596,177 @@ def process_api_flights_for_operation(
             api_ups_departure_audit_row(normalized)
             for normalized in ups_departure_candidates
         ],
+        "last_poll_snapshot": last_poll_snapshot,
         "departure_match_audit": departure_match_audit,
         "departure_match_window_minutes": DEPARTURE_LOOKAHEAD_MATCH_WINDOW_MINUTES,
         **diagnostics,
     }
+
+
+def build_flight_api_last_poll_snapshot(gateway, operation, rows, poll_utc_time, source="live"):
+    timezone_name = gateway_timezone(gateway) if gateway else "America/Chicago"
+    arrivals = [row for row in rows if row.get("mission_type") == "arrival"]
+    departures = [row for row in rows if row.get("mission_type") == "departure"]
+    return {
+        "source": source,
+        "gateway_code": getattr(gateway, "code", None) or getattr(operation, "gateway_code", ""),
+        "sort_date_operation_id": getattr(operation, "id", None),
+        "sort_date": str(getattr(operation, "sort_date", "") or ""),
+        "sort_name": getattr(operation, "sort_name", "") or "",
+        "timezone_name": timezone_name,
+        "poll_utc_time": _iso_datetime(_utc_naive(poll_utc_time)),
+        "poll_local_date": _local_date_display(poll_utc_time, timezone_name),
+        "poll_local_time": _local_hhmm_display(poll_utc_time, timezone_name),
+        "arrivals": arrivals,
+        "departures": departures,
+        "ups_arrivals_count": len(arrivals),
+        "ups_departures_count": len(departures),
+    }
+
+
+def flight_api_last_poll_snapshot_row(
+    normalized,
+    gateway,
+    operation,
+    settings,
+    mission=None,
+    context_reason="",
+):
+    timezone_name = (
+        gateway_timezone(gateway)
+        if gateway
+        else (
+            gateway_timezone(operation.gateway)
+            if operation and getattr(operation, "gateway", None)
+            else normalized.get("timezone_name") or "America/Chicago"
+        )
+    )
+    mission_type = normalized.get("mission_type") or ""
+    provider_time = flight_api_provider_time_utc(normalized)
+    operational_time = flight_api_operational_time_utc(normalized, settings)
+    matched_time_local = _mission_display_time_local(mission) if mission else None
+    return {
+        "mission_type": mission_type,
+        "flight_number": normalized.get("provider_flight_number")
+        or normalized.get("flight_number")
+        or "",
+        "call_sign": normalized.get("call_sign") or "",
+        "origin": normalized.get("origin") or "",
+        "destination": normalized.get("destination") or "",
+        "tail_number": normalized.get("tail_number") or "",
+        "provider_time_source": flight_api_provider_time_source(normalized),
+        "provider_time_local": _local_hhmm_display(provider_time, timezone_name),
+        "provider_date_local": _local_date_display(provider_time, timezone_name),
+        "operational_time_local": _local_hhmm_display(operational_time, timezone_name),
+        "matched_mission_id": getattr(mission, "id", None),
+        "matched_mission_flight": getattr(mission, "flight_number", None) or "",
+        "matched_schedule_local": _hhmm_or_dash(matched_time_local),
+        "match_context": _last_poll_match_context(
+            mission,
+            context_reason,
+            matched_time_local,
+        ),
+        "api_status": normalized.get("api_status_raw") or "",
+    }
+
+
+def flight_api_last_poll_review(operation, gateway=None, snapshot=None):
+    timezone_name = (
+        gateway_timezone(gateway)
+        if gateway
+        else (
+            gateway_timezone(operation.gateway)
+            if operation and getattr(operation, "gateway", None)
+            else "America/Chicago"
+        )
+    )
+    snapshot = snapshot or _last_poll_snapshot_from_operation(operation)
+    arrivals = list((snapshot or {}).get("arrivals") or [])
+    departures = list((snapshot or {}).get("departures") or [])
+    return {
+        "has_snapshot": bool(snapshot),
+        "source": (snapshot or {}).get("source") or "",
+        "poll_local_time": (snapshot or {}).get("poll_local_time") or "-",
+        "poll_local_date": (snapshot or {}).get("poll_local_date") or "-",
+        "last_attempted_poll_local": _local_hhmm_display(
+            getattr(operation, "flight_api_last_attempted_poll_at_utc", None),
+            timezone_name,
+        ),
+        "last_successful_poll_local": _local_hhmm_display(
+            getattr(operation, "flight_api_last_successful_poll_at_utc", None),
+            timezone_name,
+        ),
+        "last_failed_poll_local": _local_hhmm_display(
+            getattr(operation, "flight_api_last_failed_poll_at_utc", None),
+            timezone_name,
+        ),
+        "arrivals": arrivals,
+        "departures": departures,
+        "ups_arrivals_count": len(arrivals),
+        "ups_departures_count": len(departures),
+        "no_ups_returned": bool(snapshot) and not arrivals and not departures,
+        "timezone_name": timezone_name,
+    }
+
+
+def flight_api_provider_time_source(record):
+    if _record_value(record, "runway_time_utc"):
+        return "RUNWAY"
+    if _record_value(record, "revised_time_utc"):
+        return "REVISED"
+    if _record_value(record, "scheduled_time_utc"):
+        return "SCHEDULED"
+    return ""
+
+
+def _last_poll_snapshot_from_operation(operation):
+    if not operation:
+        return {}
+    try:
+        snapshot = json.loads(operation.flight_api_last_poll_snapshot_json or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return snapshot if isinstance(snapshot, dict) else {}
+
+
+def _last_poll_match_context(mission, reason, matched_time_local):
+    if not mission:
+        return reason or "no matching mission"
+    pieces = ["MATCHED", getattr(mission, "flight_number", "") or ""]
+    scheduled = _hhmm_or_dash(matched_time_local)
+    if scheduled != "-":
+        pieces.append(scheduled)
+    if reason:
+        pieces.append(str(reason).upper())
+    return " ".join(piece for piece in pieces if piece)
+
+
+def _mission_display_time_local(mission):
+    if not mission:
+        return None
+    local_time = getattr(mission, "planned_datetime_local", None)
+    if local_time:
+        return local_time.replace(tzinfo=None) if local_time.tzinfo else local_time
+    utc_time = getattr(mission, "planned_datetime_utc", None)
+    if not utc_time:
+        return None
+    return _utc_to_local_naive(_utc_naive(utc_time), _mission_timezone_name(mission))
+
+
+def _local_hhmm_display(value, timezone_name):
+    if not value:
+        return "-"
+    return f"{_utc_to_local_naive(_utc_naive(value), timezone_name):%H:%M}"
+
+
+def _local_date_display(value, timezone_name):
+    if not value:
+        return "-"
+    return f"{_utc_to_local_naive(_utc_naive(value), timezone_name):%Y-%m-%d}"
+
+
+def _iso_datetime(value):
+    return value.isoformat(timespec="seconds") if value else ""
 
 
 def accept_review_item(review_item, settings=None, now=None):

@@ -41,6 +41,7 @@ from app.services.flight_api import (
     accept_review_item,
     current_sort_operation,
     flight_api_auto_poll_status,
+    flight_api_last_poll_review,
     flight_api_operational_time_utc,
     format_flight_api_local_time,
     ignore_review_item,
@@ -378,6 +379,91 @@ class FlightApiImportTest(unittest.TestCase):
             self.operation.flight_api_next_auto_poll_eligible_at_utc,
             datetime(2026, 6, 1, 12, 10),
         )
+
+    def test_successful_manual_poll_stores_last_polled_ups_snapshot(self):
+        payload = {
+            "arrivals": [
+                self._api_flight(
+                    number="5X777",
+                    call_sign="UPS777",
+                    origin="SDF",
+                    destination="RFD",
+                    revised_time="2026-06-01T02:25:00",
+                    tail="N777UP",
+                ),
+                self._api_flight(
+                    number="AA123",
+                    call_sign="AAL123",
+                    airline_icao="AAL",
+                    airline_iata="AA",
+                    origin="ORD",
+                    destination="RFD",
+                    revised_time="2026-06-01T02:30:00",
+                    tail="N123AA",
+                ),
+            ],
+            "departures": [
+                self._api_flight(
+                    mission_type="departure",
+                    number="5X888",
+                    call_sign="UPS888",
+                    origin="RFD",
+                    destination="SDF",
+                    revised_time="2026-06-01T03:05:00",
+                    tail="N888UP",
+                )
+            ],
+        }
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(payload),
+            now=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+        )
+        db.session.flush()
+
+        self.assertTrue(result["last_poll_snapshot"])
+        snapshot = json.loads(self.operation.flight_api_last_poll_snapshot_json)
+        self.assertEqual(snapshot["ups_arrivals_count"], 1)
+        self.assertEqual(snapshot["ups_departures_count"], 1)
+        self.assertEqual(snapshot["arrivals"][0]["flight_number"], "5X777")
+        self.assertEqual(snapshot["arrivals"][0]["origin"], "SDF")
+        self.assertEqual(snapshot["arrivals"][0]["tail_number"], "N777UP")
+        self.assertEqual(snapshot["arrivals"][0]["provider_time_local"], "02:25")
+        self.assertEqual(snapshot["departures"][0]["flight_number"], "5X888")
+        self.assertEqual(snapshot["departures"][0]["destination"], "SDF")
+        self.assertEqual(snapshot["departures"][0]["tail_number"], "N888UP")
+        self.assertEqual(snapshot["departures"][0]["provider_time_local"], "03:05")
+        self.assertNotIn("AAL123", self.operation.flight_api_last_poll_snapshot_json)
+
+        review = flight_api_last_poll_review(self.operation, self.gateway)
+        self.assertTrue(review["has_snapshot"])
+        self.assertEqual(review["ups_arrivals_count"], 1)
+        self.assertEqual(review["ups_departures_count"], 1)
+        self.assertEqual(review["last_successful_poll_local"], "07:00")
+
+    def test_failed_provider_poll_preserves_last_successful_snapshot(self):
+        payload = {"arrivals": [self._api_flight(number="5X777", call_sign="UPS777")]}
+        run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=FakeFlightClient(payload),
+            now=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+        )
+        db.session.flush()
+        saved_snapshot = self.operation.flight_api_last_poll_snapshot_json
+
+        result = run_flight_api_import(
+            self.gateway,
+            self.operation,
+            client=ErrorFlightClient("Provider returned 429 Too Many Requests."),
+            now=datetime(2026, 6, 1, 12, 5, tzinfo=timezone.utc),
+        )
+
+        self.assertTrue(result["provider_error"])
+        self.assertEqual(self.operation.flight_api_last_poll_snapshot_json, saved_snapshot)
+        self.assertEqual(self.operation.flight_api_last_poll_status, "failed")
 
     def test_replay_mode_does_not_update_poll_state(self):
         result = run_flight_api_replay(
@@ -3229,6 +3315,18 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"NEXT AUTO POLL ELIGIBLE AT", response.data)
         self.assertIn(b"CURRENT ELIGIBILITY STATUS", response.data)
 
+    def test_flight_api_test_page_shows_last_polled_empty_state(self):
+        response = self.client.get("/motherbrain/flight-api-test")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"LAST POLLED UPS FLIGHT DATA", response.data)
+        self.assertIn(
+            b"No latest Flight API poll data has been saved for this selected sort operation yet.",
+            response.data,
+        )
+        self.assertIn(b"UPS ARRIVALS RETURNED", response.data)
+        self.assertIn(b"UPS DEPARTURES RETURNED", response.data)
+
     def test_flight_api_test_page_trigger_button_respects_permission_context(self):
         original_user_can = neomotherbrain_routes.user_can
 
@@ -3635,6 +3733,93 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"999", response.data)
         self.assertIn(b"no matching mission", response.data)
         self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
+
+    def test_flight_api_test_page_manual_poll_shows_last_polled_ups_rows(self):
+        operation, _settings = self._setup_auto_poll_operation()
+        arrival = self._provider_flight("arrival", "5X777", "UPS777", operation.sort_date)
+        arrival["aircraft"] = {"reg": "N777UP"}
+        departure = self._provider_flight("departure", "5X888", "UPS888", operation.sort_date)
+        departure["aircraft"] = {"reg": "N888UP"}
+        non_ups = self._provider_flight(
+            "arrival",
+            "AA123",
+            "AAL123",
+            operation.sort_date,
+            airline_icao="AAL",
+            airline_iata="AA",
+        )
+        non_ups["aircraft"] = {"reg": "N123AA"}
+        payload = {
+            "arrivals": [arrival, non_ups],
+            "departures": [departure],
+        }
+        original_urlopen, _calls = self._install_provider_payload(payload)
+        previous = os.environ.get("AERODATABOX_API_KEY")
+        os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
+        try:
+            response = self.client.post(
+                "/motherbrain/flight-api-test",
+                data={"flight_api_action": "pull", "operation_id": str(operation.id)},
+                follow_redirects=True,
+            )
+        finally:
+            flight_api_service.urlopen = original_urlopen
+            if previous is None:
+                os.environ.pop("AERODATABOX_API_KEY", None)
+            else:
+                os.environ["AERODATABOX_API_KEY"] = previous
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"LAST POLLED UPS FLIGHT DATA", response.data)
+        self.assertIn(b"ARRIVALS", response.data)
+        self.assertIn(b"DEPARTURES", response.data)
+        self.assertIn(b"5X777", response.data)
+        self.assertIn(b"UPS777", response.data)
+        self.assertIn(b"N777UP", response.data)
+        self.assertIn(b"02:25", response.data)
+        self.assertIn(b"5X888", response.data)
+        self.assertIn(b"UPS888", response.data)
+        self.assertIn(b"N888UP", response.data)
+        self.assertIn(b"SDF", response.data)
+        self.assertNotIn(b"AAL123", response.data)
+        self.assertNotIn(b"N123AA", response.data)
+
+    def test_flight_api_test_page_shows_no_ups_last_poll_message(self):
+        operation, _settings = self._setup_auto_poll_operation()
+        payload = {
+            "arrivals": [
+                self._provider_flight(
+                    "arrival",
+                    "AA123",
+                    "AAL123",
+                    operation.sort_date,
+                    airline_icao="AAL",
+                    airline_iata="AA",
+                )
+            ],
+            "departures": [],
+        }
+        original_urlopen, _calls = self._install_provider_payload(payload)
+        previous = os.environ.get("AERODATABOX_API_KEY")
+        os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
+        try:
+            response = self.client.post(
+                "/motherbrain/flight-api-test",
+                data={"flight_api_action": "pull", "operation_id": str(operation.id)},
+                follow_redirects=True,
+            )
+        finally:
+            flight_api_service.urlopen = original_urlopen
+            if previous is None:
+                os.environ.pop("AERODATABOX_API_KEY", None)
+            else:
+                os.environ["AERODATABOX_API_KEY"] = previous
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"No UPS arrivals/departures returned by last poll.", response.data)
+        self.assertIn(b"UPS ARRIVALS RETURNED", response.data)
+        self.assertIn(b"UPS DEPARTURES RETURNED", response.data)
+        self.assertNotIn(b"AAL123", response.data)
 
     def test_flight_api_test_page_matched_table_uses_local_block_in_time(self):
         operation = SortDateOperation(
