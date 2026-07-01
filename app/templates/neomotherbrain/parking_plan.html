@@ -151,9 +151,6 @@
     {% else %}
     {% set manage_sort_sidebar_operation = operation %}
     {% set manage_sort_sidebar_active = "parking-plan" %}
-    <div class="manage-sort-shell">
-        {% include "neomotherbrain/_manage_sort_sidebar.html" %}
-        <div class="manage-sort-main">
     <section class="parking-summary-grid" aria-label="Parking plan summary">
         <article><span>TOTAL TAILS</span><strong>{{ summary.total_tails }}</strong></article>
         <article><span>ASSIGNED</span><strong>{{ summary.assigned_tails }}</strong></article>
@@ -387,8 +384,10 @@
         {% endif %}
     </section>
 
-    <section class="parking-layout">
-        <aside class="parking-tail-panel" aria-label="Unparked tails and parking assignment controls" data-parking-unassign-drop>
+    <section class="parking-layout parking-layout-with-sidebar">
+        <aside class="parking-left-rail" aria-label="Manage sort navigation and unparked tails">
+            {% include "neomotherbrain/_manage_sort_sidebar.html" %}
+            <section class="parking-tail-panel" aria-label="Unparked tails and parking assignment controls" data-parking-unassign-drop>
             <div class="parking-panel-heading">
                 <h2>UNPARKED TAILS</h2>
                 <div class="parking-panel-actions">
@@ -551,49 +550,7 @@
                 <p class="muted">All current-sort tails are assigned.</p>
                 {% endif %}
             </div>
-
-            <div class="table-wrap parking-checklist-wrap">
-                <table class="data-table parking-checklist">
-                    <thead>
-                        <tr>
-                            <th>TAIL</th>
-                            <th>ARR</th>
-                            <th>DEP</th>
-                            <th>PARK</th>
-                            <th>GT</th>
-                            <th>FLAGS</th>
-                            <th>STATUS</th>
-                            <th>ACTIONS</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in tail_rows %}
-                        <tr>
-                            <td><strong>{{ row.tail }}</strong></td>
-                            <td>{{ row.arrival_origin }} {{ row.arrival_time }}</td>
-                            <td>{{ row.departure_destination }} {{ row.departure_time }}</td>
-                            <td>{{ row.assigned_position or "-" }}</td>
-                            <td>{{ row.ground_time }}</td>
-                            <td>{{ tail_badges(row) }}</td>
-                            <td>{{ row.status|upper }}</td>
-                            <td class="table-actions parking-action-cell">
-                                <form method="post" action="{{ url_for('neomotherbrain.update_parking_plan_hot', operation_id=operation.id) }}">
-                                    <input type="hidden" name="operation_id" value="{{ operation.id }}">
-                                    <input type="hidden" name="tail_number" value="{{ row.tail }}">
-                                    <input type="hidden" name="is_hot" value="{{ 0 if row.is_hot else 1 }}">
-                                    <button class="table-row-button" type="submit">{{ "CLEAR HOT" if row.is_hot else "HOT" }}</button>
-                                </form>
-                                <form method="post" action="{{ url_for('neomotherbrain.unassign_parking_plan_tail', operation_id=operation.id) }}">
-                                    <input type="hidden" name="operation_id" value="{{ operation.id }}">
-                                    <input type="hidden" name="tail_number" value="{{ row.tail }}">
-                                    <button class="table-row-button" type="submit">UNASSIGN</button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+            </section>
         </aside>
 
         <section class="parking-ramp-layout" aria-label="Visual ramp parking layout">
@@ -677,8 +634,6 @@
             {% endfor %}
         </section>
     </section>
-        </div>
-    </div>
     {% endif %}
 </section>
 

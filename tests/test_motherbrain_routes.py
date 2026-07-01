@@ -5911,7 +5911,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"UNPARKED TAILS", response.data)
         self.assertNotIn(b"NO CURRENT SORT OPERATION", response.data)
 
-    def test_parking_plan_selected_operation_renders_board_and_checklist(self):
+    def test_parking_plan_selected_operation_renders_sidebar_left_rail_and_board(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", destination="LAX")
         db.session.commit()
@@ -5921,6 +5921,24 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"PARKING PLAN", response.data)
         self.assertIn(b"motherbrain-parking-plan-page", response.data)
+        self.assertIn(b"parking-layout-with-sidebar", response.data)
+        self.assertIn(b"parking-left-rail", response.data)
+        self.assertIn(b"manage-sort-sidebar", response.data)
+        self.assertIn(f'href="/motherbrain/operations/{operation.id}"'.encode(), response.data)
+        self.assertIn(
+            f'href="/motherbrain/operations/{operation.id}/alp/arrival"'.encode(),
+            response.data,
+        )
+        self.assertIn(
+            f'href="/motherbrain/operations/{operation.id}/alp/departure"'.encode(),
+            response.data,
+        )
+        self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"'.encode(), response.data)
+        self.assertIn(f'href="/motherbrain/gateway-matrix?operation_id={operation.id}"'.encode(), response.data)
+        self.assertIn(f'href="/motherbrain/master-schedule?operation_id={operation.id}"'.encode(), response.data)
+        self.assertIn(f'href="/motherbrain/sort-timeline?operation_id={operation.id}"'.encode(), response.data)
+        self.assertIn(f'href="/motherbrain/flight-api-test?operation_id={operation.id}"'.encode(), response.data)
+        self.assertIn(f'href="/motherbrain/flight-api-review?operation_id={operation.id}"'.encode(), response.data)
         self.assertIn(b"UNPARKED TAILS", response.data)
         self.assertIn(b"N457UP", response.data)
         self.assertIn(b"R01", response.data)
@@ -5939,7 +5957,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"data-parking-unassign-drop", response.data)
         self.assertIn(f'data-unassign-url="/motherbrain/parking-plan/{operation.id}/unassign"'.encode(), response.data)
         self.assertIn(b"parking-mobile-assignment", response.data)
-        self.assertIn(b'href="/motherbrain/parking-plan"', response.data)
+        self.assertNotIn(b"parking-checklist", response.data)
+        self.assertNotIn(b"parking-checklist-wrap", response.data)
+        self.assertNotIn(b"<th>TAIL</th>", response.data)
+        self.assertNotIn(b"<th>ARR</th>", response.data)
+        self.assertNotIn(b"<th>DEP</th>", response.data)
+        self.assertNotIn(b"<th>PARK</th>", response.data)
         self.assertIn(
             f'href="/motherbrain/parking-rules?operation_id={operation.id}"'.encode(),
             response.data,
@@ -9352,6 +9375,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(".parking-lane.is-direct-selecting.has-tail-picker-match", css)
         self.assertIn(".parking-lane.is-direct-selecting", css)
         self.assertIn(".parking-direct-slot-assign {\n        display: none !important;", css)
+        self.assertIn(".parking-layout-with-sidebar", css)
+        self.assertIn(".parking-left-rail", css)
+        self.assertIn(".parking-layout-with-sidebar .parking-ramp-layout", css)
+        self.assertIn("max-height: calc(100vh - 112px)", css)
 
     def test_parking_plan_slot_two_collapses_until_needed(self):
         operation = self._parking_operation()
