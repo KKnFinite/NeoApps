@@ -594,7 +594,12 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         css = Path("app/static/css/base.css").read_text(encoding="utf-8")
         self.assertIn(".neoermac-door-destination-card {", css)
-        self.assertIn("border: 2px solid rgba(var(--node-rgb), 0.76)", css)
+        self.assertIn("border: 1px solid rgba(var(--node-rgb), 0.58)", css)
+        self.assertIn(".neoermac-door-card-head .neoermac-door-destination", css)
+        self.assertIn("background: transparent;", css)
+        self.assertIn(".neoermac-door-planned {", css)
+        self.assertIn(".neoermac-door-toggle {", css)
+        self.assertIn(".neoermac-door-actual input", css)
         self.assertIn(".neoermac-door-destination .neoermac-door-destination-title", css)
         self.assertIn("color: var(--node-ermac-secondary)", css)
         self.assertIn(".neoermac-door-destination::before", css)
