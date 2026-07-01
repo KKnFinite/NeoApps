@@ -42,7 +42,10 @@
     <div class="neostaffing-dashboard-shell">
         <aside class="neostaffing-rail" aria-label="NeoStaffing navigation">
             <div class="neostaffing-rail-brand">
-                <span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span>
+                <img class="neostaffing-rail-icon" src="{{ url_for('static', filename='images/icons/neostaffing/inapp/neostaffing-inapp-128.png') }}" alt="NeoStaffing icon" width="128" height="128" loading="lazy">
+                {% with neostaffing_brand_class="neostaffing-rail-title" %}
+                {% include "neostaffing/_brand_title.html" %}
+                {% endwith %}
             </div>
             <a href="{{ url_for('neostaffing.index') }}">DASHBOARD</a>
             <span>STAFFING BOARD</span>
@@ -61,7 +64,9 @@
             <header class="neostaffing-dashboard-topbar">
                 <div class="mobile-shell-duplicate-title">
                     <p class="neostaffing-eyebrow">
-                        <span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span>
+                        {% with neostaffing_brand_class="neostaffing-eyebrow-brand" %}
+                        {% include "neostaffing/_brand_title.html" %}
+                        {% endwith %}
                     </p>
                     <h1 id="neostaffing-seniority-title">SENIORITY</h1>
                     <p>Operation seniority list by assigned Work Area.</p>

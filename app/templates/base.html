@@ -58,6 +58,7 @@
 {% set motherbrain_locked_icon = "images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png" %}
 {% set neoermac_locked_icon = "images/icons/neoermac/inapp/neoermac-inapp-128.png" %}
 {% set neosektor_locked_icon = "images/icons/neosektor/inapp/neosektor-icon-128x128.png" %}
+{% set neostaffing_locked_icon = "images/icons/neostaffing/inapp/neostaffing-inapp-128.png" %}
 {% set node_header_logo = neosektor_locked_icon if is_neosektor_page else (neoermac_locked_icon if is_neoermac_page else (motherbrain_locked_icon if uses_motherbrain_header else "images/motherbrain_logo1.png")) %}
 {% set node_header_alt = "NeoSektor icon" if is_neosektor_page else ("NeoErmac icon" if is_neoermac_page else ("NeoMotherBrain icon" if uses_motherbrain_header else "MotherBrain logo")) %}
 {% set node_header_key = "sektor" if is_neosektor_page else ("ermac" if is_neoermac_page else ("scorpion" if is_neoscorpion_page else ("reptile" if is_neoreptile_page else ("subzero" if is_neosubzero_page else ("rain" if is_neorain_page else "motherbrain"))))) %}
@@ -109,7 +110,19 @@
                         {% if is_rfd_hub_page %}
                         {{ neo_brand("Gateway", "gateway") }} - {{ default_gateway.code }}
                         {% elif is_neostaffing_page %}
-                        {{ neo_brand("Staffing", "staffing") }}
+                        <span class="neostaffing-header-brandline">
+                            <img
+                                class="neostaffing-header-icon"
+                                src="{{ url_for('static', filename=neostaffing_locked_icon) }}"
+                                alt="NeoStaffing icon"
+                                width="128"
+                                height="128"
+                                decoding="async"
+                            >
+                            {% with neostaffing_brand_class="neostaffing-header-title" %}
+                            {% include "neostaffing/_brand_title.html" %}
+                            {% endwith %}
+                        </span>
                         {% elif is_portal_page %}
                         <span class="portal-header-brandline">
                             <img
@@ -214,6 +227,10 @@
                         {% elif is_neoermac_page %}
                         {% with neoermac_brand_class="neoermac-header-title mobile-topbar-brand" %}
                         {% include "neonodes/neoermac/_brand_title.html" %}
+                        {% endwith %}
+                        {% elif is_neostaffing_page %}
+                        {% with neostaffing_brand_class="neostaffing-header-title mobile-topbar-brand" %}
+                        {% include "neostaffing/_brand_title.html" %}
                         {% endwith %}
                         {% else %}
                         {{ neo_brand(mobile_shell_word, mobile_shell_key, "mobile-topbar-brand", mobile_shell_name) }}

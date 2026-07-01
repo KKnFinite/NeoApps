@@ -6500,9 +6500,59 @@ body.blueprint-neostaffing {
 }
 
 .neostaffing-rail-brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
     margin-bottom: 10px;
     font-size: 1.08rem;
     font-weight: 950;
+}
+
+.neostaffing-header-brandline {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.neostaffing-header-icon {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    object-fit: contain;
+    filter: drop-shadow(0 0 12px rgba(var(--node-rgb), 0.36));
+}
+
+.neostaffing-rail-icon {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    object-fit: contain;
+    filter: drop-shadow(0 0 10px rgba(var(--node-rgb), 0.34));
+}
+
+.neostaffing-header-title,
+.neostaffing-rail-title,
+.neostaffing-eyebrow-brand {
+    letter-spacing: 0.08em;
+}
+
+.neostaffing-rail-brand .neo-brand-title,
+.neostaffing-rail-brand .neo-brand-title span {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    opacity: 1;
+    font-size: inherit;
+}
+
+.neostaffing-rail-brand .neo-brand-title__neo {
+    color: #DDEBFF;
+}
+
+.neostaffing-rail-brand .neo-brand-title__node--staffing {
+    color: #21E6C8;
 }
 
 .neostaffing-rail a,

@@ -51,7 +51,11 @@
 <section class="neostaffing-page theme-staffing" aria-labelledby="staffing-hierarchy-title">
     <div class="neostaffing-hero neostaffing-hero-compact">
         <div class="neostaffing-hero-copy mobile-shell-duplicate-title">
-            <p class="neostaffing-eyebrow"><span class="neo-node-name node-staffing"><span class="neo-word">Neo</span><span class="node-word">Staffing</span></span></p>
+            <p class="neostaffing-eyebrow">
+                {% with neostaffing_brand_class="neostaffing-eyebrow-brand" %}
+                {% include "neostaffing/_brand_title.html" %}
+                {% endwith %}
+            </p>
             <h1 id="staffing-hierarchy-title">WORK AREA HIERARCHY</h1>
             <p>Build the Sort, Operation, Department, and Work Area structure that employees will attach to.</p>
         </div>

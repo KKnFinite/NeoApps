@@ -7,7 +7,11 @@
 <section class="neostaffing-page theme-staffing" aria-labelledby="staffing-management-assignments-title">
     <div class="neostaffing-hero neostaffing-hero-compact">
         <div class="neostaffing-hero-copy mobile-shell-duplicate-title">
-            <p class="neostaffing-eyebrow">{{ neo_brand("Staffing", "staffing") }}</p>
+            <p class="neostaffing-eyebrow">
+                {% with neostaffing_brand_class="neostaffing-eyebrow-brand" %}
+                {% include "neostaffing/_brand_title.html" %}
+                {% endwith %}
+            </p>
             <h1 id="staffing-management-assignments-title">MANAGEMENT ASSIGNMENTS</h1>
             <p>Assign supervisors, specialists, managers, and division managers to their leadership scopes.</p>
         </div>

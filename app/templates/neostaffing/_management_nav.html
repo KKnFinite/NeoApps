@@ -1,7 +1,10 @@
 {% from "_neo_brand.html" import neo_brand %}
 <aside class="neostaffing-management-rail" aria-label="NeoStaffing App Management navigation">
     <div class="neostaffing-rail-brand">
-        {{ neo_brand("Staffing", "staffing") }}
+        <img class="neostaffing-rail-icon" src="{{ url_for('static', filename='images/icons/neostaffing/inapp/neostaffing-inapp-128.png') }}" alt="NeoStaffing icon" width="128" height="128" loading="lazy">
+        {% with neostaffing_brand_class="neostaffing-rail-title" %}
+        {% include "neostaffing/_brand_title.html" %}
+        {% endwith %}
     </div>
     <a href="{{ url_for('neostaffing.app_management') }}" {% if staffing_management_active == "overview" %}aria-current="page"{% endif %}>MANAGE HOME</a>
     <a href="{{ url_for('neostaffing.hierarchy') }}" {% if staffing_management_active == "hierarchy" %}aria-current="page"{% endif %}>HIERARCHY</a>
