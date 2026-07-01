@@ -195,6 +195,7 @@ def register_template_helpers(app):
                 "endpoint": "neosektor.index",
                 "minimum_role": "watcher",
                 "path_prefixes": ("/neosektor",),
+                "icon_src": "images/icons/neosektor/inapp/neosektor-icon-128x128.png",
             },
             {
                 "key": "scorpion",
@@ -251,6 +252,10 @@ def register_template_helpers(app):
                     "suffix": "",
                     "href": url_for(spec["endpoint"]),
                     "is_current": False,
+                    "icon_src": spec.get(
+                        "icon_src",
+                        f"images/icons/{spec['key']}/icon_192.png",
+                    ),
                 }
             )
 

@@ -284,9 +284,10 @@
                     {% endif %}
                     {% for target in mobile_switch_targets %}
                     <a class="mobile-bottom-switcher-link node-{{ target.key }}{% if target.is_current %} is-active{% endif %}" href="{{ target.href }}" role="menuitem" {% if target.is_current %}aria-current="page"{% endif %}>
+                        {% set target_icon_src = target.icon_src|default("images/icons/" ~ target.key ~ "/icon_192.png") %}
                         <img
                             class="mobile-bottom-switcher-icon"
-                            src="{{ url_for('static', filename='images/icons/' ~ target.key ~ '/icon_192.png') }}"
+                            src="{{ url_for('static', filename=target_icon_src) }}"
                             alt=""
                             loading="lazy"
                             width="26"

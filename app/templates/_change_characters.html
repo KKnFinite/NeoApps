@@ -11,9 +11,10 @@
             role="menuitem"
             {% if target.is_current %}aria-current="page"{% endif %}
         >
+            {% set target_icon_src = target.icon_src|default("images/icons/" ~ target.key ~ "/icon_192.png") %}
             <img
                 class="character-switcher-icon"
-                src="{{ url_for('static', filename='images/icons/' ~ target.key ~ '/icon_192.png') }}"
+                src="{{ url_for('static', filename=target_icon_src) }}"
                 alt=""
                 loading="lazy"
                 width="28"

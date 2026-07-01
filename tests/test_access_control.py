@@ -274,7 +274,10 @@ class AccessControlTest(unittest.TestCase):
         self.assertNotIn("RFD Hub", switcher)
         self.assertIn('class="character-switcher-icon"', switcher)
         self.assertIn('href="/neosektor"', switcher)
-        self.assertIn('src="/static/images/icons/sektor/icon_192.png"', switcher)
+        self.assertIn(
+            'src="/static/images/icons/neosektor/inapp/neosektor-icon-128x128.png"',
+            switcher,
+        )
         self.assertIn("Sektor", switcher)
         self.assertNotIn('href="/neoermac"', switcher)
         self.assertNotIn("Ermac", switcher)
