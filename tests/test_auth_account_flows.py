@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -441,6 +442,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
                 is_active=True,
             )
         )
+        backfill_default_gateway_node_roles(user, role="simulator")
         db.session.add(
             PortalAppAccess(
                 user_id=user.id,
@@ -463,7 +465,11 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertIn('src="/static/images/icons/neoapps/inapp/neoapps-inapp-128.png"', html)
         self.assertIn('class="portal-header-title neo-brand-title', html)
         self.assertIn("neo-brand-title__node--apps", html)
-        self.assertIn('<span class="portal-header-word">Portal</span>', html)
+        self.assertIn('<span class="portal-header-word neo-menu-text">PORTAL</span>', html)
+        self.assertIn('class="character-switcher-trigger neo-menu-text"', html)
+        self.assertIn("Change Characters", html)
+        self.assertIn("character-switcher-link node-motherbrain", html)
+        self.assertIn("character-switcher-label neo-menu-text", html)
         self.assertNotIn("portal-dashboard-logo", html)
         self.assertNotIn("Choose an approved", html)
         self.assertNotIn("Gateway operations and NeoNode systems.", app_card_section)
@@ -490,6 +496,14 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertNotIn('class="portal-install-section"', html)
         self.assertNotIn("data-install-button", html)
         self.assertNotIn("beforeinstallprompt", html)
+
+    def test_portal_desktop_branding_css_widens_cards_and_scopes_neofont_menu_text(self):
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertIn(".portal-app-grid {\n        grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));", css)
+        self.assertIn(".neo-menu-text", css)
+        self.assertIn('font-family: "NeoFont", Arial, sans-serif;', css)
+        self.assertNotIn("body {\n  font-family: \"NeoFont\"", css)
 
     def test_portal_dashboard_hides_install_section_and_keeps_app_cards(self):
         user, _membership = self._approved_user("installcards", "installcards@example.com")

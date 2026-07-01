@@ -1,12 +1,13 @@
 {% from "_neo_brand.html" import neo_brand %}
 {% set character_targets = change_character_targets() %}
+{% set character_switcher_menu_class = " neo-menu-text" if character_switcher_use_neofont|default(false) else "" %}
 {% if character_targets %}
 <details class="character-switcher {{ character_switcher_modifier|default('') }}" data-character-switcher>
-    <summary class="character-switcher-trigger">Change Characters</summary>
+    <summary class="character-switcher-trigger{{ character_switcher_menu_class }}">Change Characters</summary>
     <div class="character-switcher-panel" role="menu" aria-label="Accessible NeoNodes">
         {% for target in character_targets %}
         <a
-            class="character-switcher-link node-{{ target.key }}{% if target.is_current %} is-active{% endif %}"
+            class="character-switcher-link node-{{ target.key }}{% if target.is_current %} is-active{% endif %}{{ character_switcher_menu_class }}"
             href="{{ target.href }}"
             role="menuitem"
             {% if target.is_current %}aria-current="page"{% endif %}
@@ -20,11 +21,11 @@
                 width="28"
                 height="28"
             >
-            <span class="character-switcher-label">
+            <span class="character-switcher-label{{ character_switcher_menu_class }}">
                 {{ neo_brand(target.node_word, target.key) }}
             </span>
             {% if target.suffix %}
-            <span class="character-switcher-suffix">{{ target.suffix }}</span>
+            <span class="character-switcher-suffix{{ character_switcher_menu_class }}">{{ target.suffix }}</span>
             {% endif %}
         </a>
         {% endfor %}

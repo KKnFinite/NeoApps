@@ -136,7 +136,7 @@
                             <span class="portal-header-title neo-brand-title neo-brand neo-brand--apps neo-node-name brand-inline-name node-apps" aria-label="NeoApps">
                                 <span class="neo-brand__neo neo-word neo-brand-title__neo">NEO</span><span class="neo-brand__node node-word neo-brand-title__node neo-brand-title__node--apps">APPS</span>
                             </span>
-                            <span class="portal-header-word">Portal</span>
+                            <span class="portal-header-word neo-menu-text">PORTAL</span>
                         </span>
                         {% else %}
                         {{ neo_brand("Apps", "apps") }}
@@ -194,6 +194,7 @@
                 {% else %}
                 {% if not is_rfd_hub_page and not is_neosektor_standalone_operator_page and not is_neostaffing_page %}
                 {% set character_switcher_modifier = "character-switcher-header" %}
+                {% set character_switcher_use_neofont = is_portal_page %}
                 {% include "_change_characters.html" %}
                 {% endif %}
                 <div class="user-chip" aria-label="Logged in user">

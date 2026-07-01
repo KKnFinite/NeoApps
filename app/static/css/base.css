@@ -6241,6 +6241,11 @@ h2 {
 }
 
 @media (min-width: 769px) {
+    .portal-page {
+        width: min(1280px, 100%);
+        margin-inline: auto;
+    }
+
     .portal-shell-page .topbar {
         border-color: rgba(var(--node-secondary-rgb), 0.24);
         background:
@@ -6262,6 +6267,10 @@ h2 {
     .portal-shell-page .topbar::after {
         background: linear-gradient(90deg, transparent, rgba(var(--node-rgb), 0.64), rgba(var(--node-secondary-rgb), 0.5), transparent);
         box-shadow: 0 0 14px rgba(var(--node-rgb), 0.2);
+    }
+
+    .portal-app-grid {
+        grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
     }
 }
 
@@ -18387,6 +18396,12 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
 .neo-brand-title,
 .neo-page-title {
+  font-family: "NeoFont", Arial, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.neo-menu-text {
   font-family: "NeoFont", Arial, sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.08em;
