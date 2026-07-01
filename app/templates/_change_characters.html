@@ -1,6 +1,7 @@
 {% from "_neo_brand.html" import neo_brand %}
 {% set character_targets = change_character_targets() %}
 {% set character_switcher_menu_class = " neo-menu-text" if character_switcher_use_neofont|default(false) else "" %}
+{% set character_switcher_brand_class = " neo-menu-text" %}
 {% if character_targets %}
 <details class="character-switcher {{ character_switcher_modifier|default('') }}" data-character-switcher>
     <summary class="character-switcher-trigger{{ character_switcher_menu_class }}">Change Characters</summary>
@@ -21,7 +22,7 @@
                 width="28"
                 height="28"
             >
-            <span class="character-switcher-label{{ character_switcher_menu_class }}">
+            <span class="character-switcher-label{{ character_switcher_brand_class }}">
                 {{ neo_brand(target.node_word, target.key) }}
             </span>
             {% if target.suffix %}

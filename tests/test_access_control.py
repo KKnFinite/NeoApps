@@ -273,6 +273,9 @@ class AccessControlTest(unittest.TestCase):
         self.assertNotIn("Gateway", switcher)
         self.assertNotIn("RFD Hub", switcher)
         self.assertIn('class="character-switcher-icon"', switcher)
+        self.assertIn('class="character-switcher-label neo-menu-text"', switcher)
+        self.assertIn("neo-brand__neo neo-word", switcher)
+        self.assertIn("neo-brand__node node-word", switcher)
         self.assertIn('href="/neosektor"', switcher)
         self.assertIn(
             'src="/static/images/icons/neosektor/inapp/neosektor-icon-128x128.png"',
@@ -316,6 +319,11 @@ class AccessControlTest(unittest.TestCase):
         switcher = self._character_switcher_html(response)
 
         self.assertIn('href="/motherbrain"', switcher)
+        self.assertIn(
+            'src="/static/images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png"',
+            switcher,
+        )
+        self.assertIn('class="character-switcher-label neo-menu-text"', switcher)
         self.assertIn("MotherBrain", switcher)
 
     def test_change_characters_appears_on_authenticated_node_pages_not_rfd_hub(self):

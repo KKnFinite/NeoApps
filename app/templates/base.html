@@ -305,8 +305,8 @@
                 <div class="mobile-bottom-switcher-panel mobile-bottom-popover mobile-bottom-popover--switch" role="menu" aria-label="Accessible NeoNodes" aria-hidden="true" data-mobile-popover-anchor="switch">
                     {% if not is_portal_page %}
                     <a class="mobile-bottom-switcher-link node-portal" href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">
-                        <img class="mobile-bottom-switcher-icon" src="{{ url_for('static', filename='images/icons/neoportal/icon_192.png') }}" alt="" loading="lazy" width="26" height="26">
-                        <span class="mobile-bottom-switcher-label">{{ neo_brand("Apps", "apps") }}</span>
+                        <img class="mobile-bottom-switcher-icon" src="{{ url_for('static', filename='images/icons/neoapps/inapp/neoapps-inapp-128.png') }}" alt="" loading="lazy" width="26" height="26">
+                        <span class="mobile-bottom-switcher-label neo-menu-text">{{ neo_brand("Apps", "apps") }}</span>
                     </a>
                     {% endif %}
                     {% for target in mobile_switch_targets %}
@@ -320,7 +320,7 @@
                             width="26"
                             height="26"
                         >
-                        <span class="mobile-bottom-switcher-label">{{ neo_brand(target.node_word, target.key) }}</span>
+                        <span class="mobile-bottom-switcher-label neo-menu-text">{{ neo_brand(target.node_word, target.key) }}</span>
                         {% if target.suffix %}<span>{{ target.suffix }}</span>{% endif %}
                     </a>
                     {% endfor %}

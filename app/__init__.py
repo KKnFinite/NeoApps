@@ -179,6 +179,7 @@ def register_template_helpers(app):
                 "endpoint": "neomotherbrain.motherbrain",
                 "minimum_role": "simulator",
                 "path_prefixes": ("/motherbrain", "/admin/users", "/admin/permissions"),
+                "icon_src": "images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png",
             },
             {
                 "key": "ermac",
@@ -205,6 +206,7 @@ def register_template_helpers(app):
                 "endpoint": "neoscorpion.index",
                 "minimum_role": "watcher",
                 "path_prefixes": ("/neoscorpion",),
+                "icon_src": "images/icons/neoscorpion/inapp/neoscorpion-128x128.png",
             },
             {
                 "key": "reptile",
