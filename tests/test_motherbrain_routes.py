@@ -109,6 +109,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b'class="motherbrain-header-logo-link"', response.data)
         self.assertIn(b'class="motherbrain-header-logo"', response.data)
         self.assertIn(b"motherbrain-screen-logo", response.data)
+        self.assertIn(b'aria-label="NeoMotherBrain icon"', response.data)
         self.assertIn(b"motherbrain-header-title neo-brand-title", response.data)
         self.assertIn(b"motherbrain-dashboard-brand neo-brand-title", response.data)
         self.assertIn(b"neo-brand-title__node--motherbrain", response.data)
