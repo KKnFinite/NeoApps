@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_neo_brand.html" import neo_brand %}
 
 {% block title %}NeoSektor | NeoGateway{% endblock %}
 
@@ -7,7 +6,7 @@
 <section class="neosektor-standalone-page neosektor-dashboard-shell mode-view" aria-label="NeoSektor dashboard">
     <header class="app-header neosektor-standalone-header mobile-shell-duplicate-title">
         <div class="header-title">
-            <p>{{ neo_brand("Sektor", "sektor") }}</p>
+            <p>{% include "neonodes/neosektor/_brand_title.html" %}</p>
             <h1>Operations Menu</h1>
         </div>
         <span class="header-link header-link-static">{{ gateway.code }}</span>

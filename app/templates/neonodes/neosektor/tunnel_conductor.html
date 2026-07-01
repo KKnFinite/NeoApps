@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_neo_brand.html" import neo_brand %}
 
 {% block title %}TUNNEL CONDUCTOR | NeoSektor{% endblock %}
 
@@ -18,7 +17,7 @@
 >
     <header class="app-header tunnel-header neosektor-standalone-header mobile-shell-duplicate-title">
         <div class="header-title">
-            <p>{{ neo_brand("Sektor", "sektor") }}</p>
+            <p>{% include "neonodes/neosektor/_brand_title.html" %}</p>
             <h1 id="neosektor-tunnel-title">Tunnel Conductor</h1>
         </div>
         <div class="user-chip" aria-label="Logged in user">

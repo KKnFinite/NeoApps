@@ -13261,6 +13261,23 @@ select::-ms-expand {
         drop-shadow(0 0 18px rgba(var(--node-sektor-highlight-rgb), 0.18));
 }
 
+.neosektor-header-title,
+.neosektor-page-brand {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.08em;
+    line-height: 1;
+    text-shadow: 0 0 14px rgba(var(--node-sektor-primary-rgb), 0.28);
+}
+
+.neosektor-header-title {
+    font-size: clamp(0.88rem, 1.3vw, 1.12rem);
+}
+
+.neosektor-page-brand {
+    font-size: clamp(0.72rem, 1.6vw, 0.92rem);
+}
+
 .neosektor-shell {
     display: grid;
     justify-items: center;

@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_neo_brand.html" import neo_brand %}
 
 {% block title %}DISCHARGE | NeoSektor{% endblock %}
 
@@ -31,7 +30,7 @@
 >
     <header class="app-header neosektor-standalone-header mobile-shell-duplicate-title">
         <div class="header-title">
-            <p>{{ neo_brand("Sektor", "sektor") }}</p>
+            <p>{% include "neonodes/neosektor/_brand_title.html" %}</p>
             <h1 id="neosektor-discharge-title">Discharge</h1>
         </div>
         {% if not can_edit %}

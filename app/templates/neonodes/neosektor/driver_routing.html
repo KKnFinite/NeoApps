@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_neo_brand.html" import neo_brand %}
 
 {% block title %}DRIVER ROUTING | NeoSektor{% endblock %}
 
@@ -13,7 +12,7 @@
 >
     <header class="app-header neosektor-standalone-header">
         <div class="header-title">
-            <p>{{ neo_brand("Sektor", "sektor") }}</p>
+            <p>{% include "neonodes/neosektor/_brand_title.html" %}</p>
             <h1 id="neosektor-driver-title">Driver Routing</h1>
         </div>
         <a class="header-link neosektor-driver-back" href="{{ url_for('neosektor.index') }}">Back</a>

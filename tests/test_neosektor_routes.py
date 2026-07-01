@@ -75,6 +75,14 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"neo-brand--sektor", response.data)
         self.assertIn(b"neo-brand__neo neo-word", response.data)
         self.assertIn(b"neo-brand__node node-word", response.data)
+        self.assertIn(
+            b'src="/static/images/icons/neosektor/inapp/neosektor-icon-128x128.png"',
+            response.data,
+        )
+        self.assertIn(b"neosektor-header-title neo-brand-title", response.data)
+        self.assertIn(b"neosektor-page-brand neo-brand-title", response.data)
+        self.assertIn(b"neo-brand-title__node--sektor", response.data)
+        self.assertNotIn(b'src="/static/images/neosektor_logo1.png"', response.data)
         self.assertNotIn(b"<h1>NeoSektor</h1>", response.data)
         self.assertIn(b"Live Counts", response.data)
         self.assertNotIn(b"data-live-counts", response.data)
@@ -96,7 +104,28 @@ class NeoSektorRoutesTest(unittest.TestCase):
             b"tunnel-header neosektor-standalone-header mobile-shell-duplicate-title",
             response.data,
         )
+        self.assertIn(b"neosektor-page-brand neo-brand-title", response.data)
         self.assertIn(b'id="neosektor-tunnel-title">Tunnel Conductor</h1>', response.data)
+
+    def test_neosektor_page_headers_use_locked_title_branding(self):
+        self._login_approved_user(role="simulator")
+
+        for path in (
+            "/neosektor",
+            "/neosektor/live-counts",
+            "/neosektor/tunnel-conductor",
+            "/neosektor/ebm",
+            "/neosektor/wbm",
+            "/neosektor/discharge",
+            "/neosektor/driver-routing",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b"neosektor-page-brand neo-brand-title", response.data)
+                self.assertIn(b"neo-brand-title__neo", response.data)
+                self.assertIn(b"neo-brand-title__node--sektor", response.data)
 
     def test_live_counts_uses_balanced_count_number_sizing(self):
         self._login_approved_user(role="operator")
