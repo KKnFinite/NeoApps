@@ -2415,6 +2415,15 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"02:20", response.data)
         self.assertIn(b"20 MIN", response.data)
 
+    def test_view_outbound_mobile_rows_use_single_line_table_layout(self):
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertIn(".neoermac-outbound-table-wrap {\n        overflow-x: auto;", css)
+        self.assertIn(".neoermac-outbound-table tbody tr {\n        display: table-row;", css)
+        self.assertIn(".neoermac-outbound-table td {\n        display: table-cell;", css)
+        self.assertIn("white-space: nowrap;", css)
+        self.assertIn(".neoermac-outbound-table td::before {\n        content: none;", css)
+
     def test_view_outbound_sorts_by_planned_pull_time_and_handles_missing_data(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
         self._assign_lineup_destination("runout_10", "east_destination_2", "ONT")

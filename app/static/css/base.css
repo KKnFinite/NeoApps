@@ -3800,75 +3800,81 @@ a {
         grid-template-columns: minmax(0, 1fr);
     }
 
+    .neoermac-outbound-table-wrap {
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding-bottom: 4px;
+        scrollbar-color: rgba(var(--node-rgb), 0.72) rgba(5, 6, 9, 0.7);
+    }
+
     .neoermac-outbound-table {
-        display: block;
-        border-spacing: 0;
+        min-width: 860px;
+        border-spacing: 0 5px;
+        table-layout: fixed;
     }
 
     .neoermac-outbound-table thead {
-        display: none;
+        display: table-header-group;
     }
 
     .neoermac-outbound-table tbody {
-        display: grid;
-        gap: 8px;
+        display: table-row-group;
     }
 
     .neoermac-outbound-table tbody tr {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        display: grid;
-        gap: 5px;
-        min-width: 0;
-        padding: 7px;
-        border: 1px solid rgba(143, 24, 38, 0.5);
-        border-radius: 8px;
+        display: table-row;
     }
 
     .neoermac-outbound-table td {
-        display: grid;
-        align-content: center;
-        gap: 2px;
-        min-width: 0;
-        min-height: 36px;
-        padding: 5px;
-        border: 1px solid rgba(201, 208, 214, 0.12);
-        border-radius: 5px;
+        display: table-cell;
+        min-height: 0;
+        padding: 6px 5px;
+        border-top: 1px solid rgba(143, 24, 38, 0.34);
+        border-bottom: 1px solid rgba(143, 24, 38, 0.34);
+        border-radius: 0;
         background: rgba(2, 3, 5, 0.42);
-        font-size: 0.78rem;
+        font-size: 0.68rem;
+        line-height: 1.08;
+        overflow: hidden;
+        overflow-wrap: normal;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
-    .neoermac-outbound-table td:first-child,
+    .neoermac-outbound-table td:first-child {
+        border-left: 1px solid rgba(143, 24, 38, 0.34);
+        border-top-left-radius: 6px;
+        border-bottom-left-radius: 6px;
+    }
+
     .neoermac-outbound-table td:last-child {
-        border: 1px solid rgba(201, 208, 214, 0.12);
-        border-radius: 5px;
+        border-right: 1px solid rgba(143, 24, 38, 0.34);
+        border-top-right-radius: 6px;
+        border-bottom-right-radius: 6px;
     }
 
     .neoermac-outbound-table td::before {
-        content: attr(data-label);
-        color: var(--muted);
-        font-size: 0.5rem;
-        font-weight: 950;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-    }
-
-    .neoermac-outbound-table td[data-label="Flight"],
-    .neoermac-outbound-table td[data-label="Dest"],
-    .neoermac-outbound-table td[data-label="Location"] {
-        grid-column: 1 / -1;
+        content: none;
     }
 
     .neoermac-outbound-destination strong {
-        font-size: 1rem;
+        font-size: 0.82rem;
     }
 
     .neoermac-outbound-time-stack span {
         justify-content: center;
-        gap: 4px;
+        gap: 3px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .neoermac-outbound-missing {
+        display: inline;
+        margin-left: 4px;
+        margin-top: 0;
         font-size: 0.54rem;
+        white-space: nowrap;
     }
 }
 
