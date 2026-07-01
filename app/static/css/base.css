@@ -6049,6 +6049,7 @@ h2 {
     text-transform: uppercase;
 }
 
+.parking-direct-slot-assign input,
 .parking-direct-slot-assign select {
     width: 100%;
     min-width: 0;
@@ -6057,10 +6058,28 @@ h2 {
     border-radius: 5px;
     background: rgba(5, 6, 9, 0.94);
     color: var(--steel);
-    font-size: 0.64rem;
+    font-size: 0.82rem;
     font-weight: 900;
     text-align: center;
     text-transform: uppercase;
+}
+
+.parking-direct-slot-assign input::placeholder {
+    color: rgba(238, 246, 255, 0.62);
+}
+
+.parking-direct-slot-assign input:disabled {
+    cursor: not-allowed;
+    opacity: 0.62;
+}
+
+.parking-direct-slot-assign select[data-direct-slot-select] {
+    display: none;
+}
+
+.parking-direct-slot-assign datalist option {
+    font-size: 0.9rem;
+    font-weight: 900;
 }
 
 .parking-lane.is-direct-selecting {
@@ -6071,6 +6090,12 @@ h2 {
     box-shadow:
         inset 0 0 18px rgba(var(--node-rgb), 0.18),
         0 0 14px rgba(var(--node-highlight-rgb), 0.16);
+}
+
+.parking-lane.is-direct-selecting.has-tail-picker-match .parking-direct-slot-assign input {
+    border-color: rgba(132, 255, 182, 0.78);
+    color: #eafff0;
+    box-shadow: 0 0 12px rgba(82, 255, 154, 0.16);
 }
 
 .parking-lane.is-direct-selecting .parking-empty-lane {

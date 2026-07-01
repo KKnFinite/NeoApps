@@ -9111,7 +9111,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertLess(mobile_html.index("ASSIGN TAIL"), mobile_html.index("SAVE HOT / NOTE"))
         self.assertLess(mobile_html.index("SAVE HOT / NOTE"), mobile_html.index("REMOVE / UNASSIGN"))
 
-    def test_parking_plan_empty_slot_dropdown_lists_unparked_tails(self):
+    def test_parking_plan_empty_slot_tail_picker_lists_unparked_tails(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", destination="LAX")
         self._parking_pair(operation, "N349UP", destination="ONT")
@@ -9126,9 +9126,16 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertIn('aria-label="Assign unparked tail to A01 Slot 1"', lane_html)
         self.assertIn("parking-direct-slot-assign", lane_html)
+        self.assertIn("data-direct-slot-input", lane_html)
+        self.assertIn('list="parking-tail-picker-A01-1"', lane_html)
+        self.assertIn('data-direct-slot-options', lane_html)
         self.assertIn("data-direct-slot-select", lane_html)
         self.assertIn('<option value="N457UP">N457UP</option>', lane_html)
         self.assertIn('<option value="N349UP">N349UP</option>', lane_html)
+        self.assertIn("matchDirectPickerTail", html)
+        self.assertIn("exactDirectPickerTail", html)
+        self.assertIn("assignDirectPickerTail", html)
+        self.assertIn("has-tail-picker-match", html)
 
     def test_parking_plan_desktop_visual_clarity_css_hooks_render(self):
         css = Path("app/static/css/base.css").read_text()
@@ -9139,6 +9146,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(".parking-position-card h3", css)
         self.assertIn("font-size: 0.9rem", css)
         self.assertIn(".parking-direct-slot-assign", css)
+        self.assertIn(".parking-direct-slot-assign input", css)
+        self.assertIn("font-size: 0.82rem", css)
+        self.assertIn(".parking-direct-slot-assign datalist option", css)
+        self.assertIn(".parking-lane.is-direct-selecting.has-tail-picker-match", css)
         self.assertIn(".parking-lane.is-direct-selecting", css)
         self.assertIn(".parking-direct-slot-assign {\n        display: none !important;", css)
 

@@ -634,9 +634,24 @@
                                     {% else %}
                                     <span class="parking-empty-lane">DROP SLOT 1</span>
                                     {% endif %}
-                                    <label class="parking-direct-slot-assign" aria-label="Assign unparked tail to {{ position.code }} Slot {{ lane.number }}">
+                                    <div class="parking-direct-slot-assign" aria-label="Assign unparked tail to {{ position.code }} Slot {{ lane.number }}">
                                         <span>ASSIGN TAIL</span>
-                                        <select data-direct-slot-select>
+                                        <input
+                                            type="text"
+                                            inputmode="text"
+                                            autocomplete="off"
+                                            autocapitalize="characters"
+                                            placeholder="{{ 'SELECT TAIL' if unassigned_tail_rows else 'NO UNPARKED TAILS' }}"
+                                            list="parking-tail-picker-{{ position.code }}-{{ lane.number }}"
+                                            data-direct-slot-input
+                                            {% if not unassigned_tail_rows %}disabled{% endif %}
+                                        >
+                                        <datalist id="parking-tail-picker-{{ position.code }}-{{ lane.number }}" data-direct-slot-options>
+                                            {% for row in unassigned_tail_rows %}
+                                            <option value="{{ row.tail }}">{{ row.tail }}</option>
+                                            {% endfor %}
+                                        </datalist>
+                                        <select data-direct-slot-select aria-hidden="true" tabindex="-1">
                                             <option value="">SELECT TAIL</option>
                                             {% if unassigned_tail_rows %}
                                                 {% for row in unassigned_tail_rows %}
@@ -646,7 +661,7 @@
                                             <option value="" disabled>NO UNPARKED TAILS</option>
                                             {% endif %}
                                         </select>
-                                    </label>
+                                    </div>
                                 {% endif %}
                             </div>
                             {% endfor %}
@@ -819,6 +834,12 @@
                 return;
             }
             lane.classList.remove("is-direct-selecting");
+            lane.classList.remove("has-tail-picker-match");
+            const input = lane.querySelector("[data-direct-slot-input]");
+            if (input) {
+                input.value = "";
+                input.dataset.matchedTail = "";
+            }
             const select = lane.querySelector("[data-direct-slot-select]");
             if (select) {
                 select.value = "";
@@ -826,14 +847,75 @@
         });
     };
     const openDirectSlotSelector = (lane) => {
+        const input = lane.querySelector("[data-direct-slot-input]");
         const select = lane.querySelector("[data-direct-slot-select]");
-        if (!select || lane.dataset.occupiedTail) {
+        if ((!input && !select) || lane.dataset.occupiedTail) {
             return false;
         }
         closeDirectSlotSelectors(lane);
         lane.classList.add("is-direct-selecting");
-        window.setTimeout(() => select.focus(), 0);
+        window.setTimeout(() => (input || select).focus(), 0);
         return true;
+    };
+    const tailOptionsForDirectPicker = (lane) => {
+        const select = lane.querySelector("[data-direct-slot-select]");
+        return Array.from(select?.options || [])
+            .map((option) => (option.value || "").trim().toUpperCase())
+            .filter(Boolean);
+    };
+    const matchDirectPickerTail = (lane, rawValue) => {
+        const typed = String(rawValue || "").trim().toUpperCase().replace(/\s+/g, "");
+        const options = tailOptionsForDirectPicker(lane);
+        const exact = options.find((tail) => tail === typed);
+        if (exact) {
+            return exact;
+        }
+        const prefixMatches = options.filter((tail) => tail.startsWith(typed));
+        if (typed && prefixMatches.length === 1) {
+            return prefixMatches[0];
+        }
+        const containsMatches = options.filter((tail) => tail.includes(typed));
+        if (typed && containsMatches.length === 1) {
+            return containsMatches[0];
+        }
+        return "";
+    };
+    const exactDirectPickerTail = (lane, rawValue) => {
+        const typed = String(rawValue || "").trim().toUpperCase().replace(/\s+/g, "");
+        return tailOptionsForDirectPicker(lane).find((tail) => tail === typed) || "";
+    };
+    const updateDirectPickerMatch = (input) => {
+        const lane = input.closest("[data-parking-lane]");
+        if (!lane) {
+            return "";
+        }
+        input.value = String(input.value || "").toUpperCase().replace(/\s+/g, "");
+        const match = matchDirectPickerTail(lane, input.value);
+        input.dataset.matchedTail = match;
+        const select = lane.querySelector("[data-direct-slot-select]");
+        if (select) {
+            select.value = match;
+        }
+        lane.classList.toggle("has-tail-picker-match", Boolean(match));
+        return match;
+    };
+    const assignDirectPickerTail = async (input) => {
+        const lane = input.closest("[data-parking-lane]");
+        if (!lane) {
+            return;
+        }
+        const tail = updateDirectPickerMatch(input);
+        if (!tail) {
+            window.alert("Type or select an available unparked tail.");
+            input.focus();
+            return;
+        }
+        input.disabled = true;
+        try {
+            await assignTailToLane(lane, tail);
+        } finally {
+            input.disabled = false;
+        }
     };
     clearSelectedTailButton?.addEventListener("click", () => {
         setSelectedTail("");
@@ -891,6 +973,30 @@
         });
     });
 
+    page.querySelectorAll("[data-direct-slot-input]").forEach((input) => {
+        input.addEventListener("click", (event) => {
+            event.stopPropagation();
+        });
+        input.addEventListener("input", () => {
+            updateDirectPickerMatch(input);
+        });
+        input.addEventListener("change", async () => {
+            const lane = input.closest("[data-parking-lane]");
+            const exactTail = lane ? exactDirectPickerTail(lane, input.value) : "";
+            updateDirectPickerMatch(input);
+            if (exactTail) {
+                await assignDirectPickerTail(input);
+            }
+        });
+        input.addEventListener("keydown", async (event) => {
+            if (event.key !== "Enter") {
+                return;
+            }
+            event.preventDefault();
+            await assignDirectPickerTail(input);
+        });
+    });
+
     page.querySelectorAll("[data-direct-slot-select]").forEach((select) => {
         select.addEventListener("click", (event) => {
             event.stopPropagation();
@@ -912,7 +1018,7 @@
 
     page.querySelectorAll("[data-parking-lane]").forEach((lane) => {
         lane.addEventListener("click", async (event) => {
-            if (event.target.closest("[data-direct-slot-select]")) {
+            if (event.target.closest("[data-direct-slot-input], [data-direct-slot-select]")) {
                 return;
             }
             if (event.target.closest("[data-parking-tail]")) {
