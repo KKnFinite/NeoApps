@@ -5671,6 +5671,82 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(mission.mission_type, "departure")
         self.assertTrue(hot_state.is_hot)
 
+    def test_hot_alp_departure_creates_mission_when_arrival_has_same_flight(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        arrival = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS0999",
+            origin="EWR",
+            destination="RFD",
+            assigned_tail_number="N999UP",
+            planned_datetime_local=datetime(2026, 6, 24, 1, 20),
+            planned_datetime_utc=datetime(2026, 6, 24, 6, 20),
+            eta_datetime_utc=datetime(2026, 6, 24, 6, 20),
+            eta_source="alp",
+        )
+        db.session.add_all([operation, arrival])
+        db.session.commit()
+        form = {
+            "line_number": "1",
+            "flight_number": "UPS999",
+            "airport": "SDF",
+            "tail_number": "N999UP",
+            "utc_datetime": "2026-06-24T07:24:00",
+            "reason": "No current operation mission match.",
+        }
+
+        first = self.client.post(
+            f"/motherbrain/operations/{operation.id}/planning/departure/alp/hot",
+            data=form,
+            follow_redirects=False,
+        )
+        second = self.client.post(
+            f"/motherbrain/operations/{operation.id}/planning/departure/alp/hot",
+            data=form,
+            follow_redirects=False,
+        )
+        planning = self.client.get(f"/motherbrain/operations/{operation.id}/alp/departure")
+        parking = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+
+        departures = SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id,
+            mission_type="departure",
+            flight_number="UPS0999",
+        ).all()
+        arrival_missions = SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id,
+            mission_type="arrival",
+            flight_number="UPS0999",
+        ).all()
+        hot_state = SortDateParkingAssignment.query.filter_by(
+            sort_date_operation_id=operation.id,
+            tail_number="N999UP",
+        ).one()
+        mission_section = planning.data.decode().split(
+            "CURRENT DEPARTURE MISSIONS",
+            1,
+        )[1]
+
+        self.assertEqual(first.status_code, 302)
+        self.assertEqual(second.status_code, 302)
+        self.assertEqual(len(departures), 1)
+        self.assertEqual(len(arrival_missions), 1)
+        self.assertEqual(departures[0].destination, "SDF")
+        self.assertEqual(departures[0].assigned_tail_number, "N999UP")
+        self.assertEqual(
+            departures[0].actual_block_out_datetime_utc,
+            datetime(2026, 6, 24, 7, 24),
+        )
+        self.assertTrue(hot_state.is_hot)
+        self.assertIsNone(hot_state.position_code)
+        self.assertIn("UPS0999", mission_section)
+        self.assertIn("N999UP", mission_section)
+        self.assertIn("SDF", mission_section)
+        self.assertIn("NOT PARKED", mission_section)
+        self.assertIn(b"UNPARKED TAILS", parking.data)
+        self.assertIn(b"N999UP", parking.data)
+
     def test_ignore_alp_planning_row_hides_same_row_for_operation(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
         db.session.add(operation)

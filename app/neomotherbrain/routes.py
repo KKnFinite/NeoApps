@@ -2458,7 +2458,11 @@ def _create_mission_from_alp_planning_row(operation, row):
         mission.actual_block_out_source = "alp"
         mission.departure_status = "loading"
 
-    _raise_for_duplicate_operation_flight_number(operation, mission)
+    _raise_for_duplicate_operation_flight_number(
+        operation,
+        mission,
+        scope_to_mission_type=True,
+    )
     db.session.add(mission)
     db.session.flush()
     _sync_tail_state_and_crew_slots(mission)
@@ -2495,6 +2499,7 @@ def _create_or_update_mission_from_alp_planning_row(operation, row):
 def _existing_operation_mission_for_alp_row(operation, row):
     return SortDateMission.query.filter(
         SortDateMission.sort_date_operation_id == operation.id,
+        SortDateMission.mission_type == row["mission_type"],
         func.upper(SortDateMission.flight_number)
         == row["normalized_flight_number"].upper(),
     ).first()
@@ -3363,12 +3368,20 @@ def _apply_mission_form(mission, operation, form):
         mission.pull_time_source = None
 
 
-def _raise_for_duplicate_operation_flight_number(operation, mission):
+def _raise_for_duplicate_operation_flight_number(
+    operation,
+    mission,
+    scope_to_mission_type=False,
+):
     with db.session.no_autoflush:
         duplicate_query = SortDateMission.query.filter(
             SortDateMission.sort_date_operation_id == operation.id,
             func.upper(SortDateMission.flight_number) == mission.flight_number.upper(),
         )
+        if scope_to_mission_type:
+            duplicate_query = duplicate_query.filter(
+                SortDateMission.mission_type == mission.mission_type
+            )
 
         if mission.id:
             duplicate_query = duplicate_query.filter(SortDateMission.id != mission.id)
