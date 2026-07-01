@@ -339,6 +339,11 @@ class AccessControlTest(unittest.TestCase):
                 switcher = self._character_switcher_html(response)
                 self.assertIn("Change Characters", switcher)
                 self.assertNotIn(f'href="{path}"', switcher)
+                if path == "/neosektor":
+                    self.assertIn(
+                        'src="/static/images/icons/neoermac/inapp/neoermac-inapp-128.png"',
+                        switcher,
+                    )
 
     def test_simulator_or_higher_can_enter_motherbrain(self):
         user, membership = self._approved_user("simulator_motherbrain_user")

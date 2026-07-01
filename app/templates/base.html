@@ -56,9 +56,10 @@
 {% set neosektor_current_label = "TUNNEL CONDUCTOR" if request.path.startswith("/neosektor/tunnel-conductor") else ("EBM" if is_neosektor_ebm_page else ("WBM" if is_neosektor_wbm_page else ("DISCHARGE" if request.path.startswith("/neosektor/discharge") else ("LIVE COUNTS" if is_neosektor_live_counts_page else ("DRIVER ROUTING" if request.path.startswith("/neosektor/driver-routing") else "DASHBOARD"))))) %}
 {% set node_home_endpoint = "neosektor.index" if is_neosektor_page else ("neoermac.index" if is_neoermac_page else ("neoscorpion.index" if is_neoscorpion_page else ("neoreptile.index" if is_neoreptile_page else ("neosubzero.index" if is_neosubzero_page else ("neorain.index" if is_neorain_page else "neomotherbrain.motherbrain"))))) %}
 {% set motherbrain_locked_icon = "images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png" %}
+{% set neoermac_locked_icon = "images/icons/neoermac/inapp/neoermac-inapp-128.png" %}
 {% set neosektor_locked_icon = "images/icons/neosektor/inapp/neosektor-icon-128x128.png" %}
-{% set node_header_logo = neosektor_locked_icon if is_neosektor_page else ("images/neoermac_logo1_small.png" if is_neoermac_page else (motherbrain_locked_icon if uses_motherbrain_header else "images/motherbrain_logo1.png")) %}
-{% set node_header_alt = "NeoSektor icon" if is_neosektor_page else ("NeoErmac logo" if is_neoermac_page else ("NeoMotherBrain icon" if uses_motherbrain_header else "MotherBrain logo")) %}
+{% set node_header_logo = neosektor_locked_icon if is_neosektor_page else (neoermac_locked_icon if is_neoermac_page else (motherbrain_locked_icon if uses_motherbrain_header else "images/motherbrain_logo1.png")) %}
+{% set node_header_alt = "NeoSektor icon" if is_neosektor_page else ("NeoErmac icon" if is_neoermac_page else ("NeoMotherBrain icon" if uses_motherbrain_header else "MotherBrain logo")) %}
 {% set node_header_key = "sektor" if is_neosektor_page else ("ermac" if is_neoermac_page else ("scorpion" if is_neoscorpion_page else ("reptile" if is_neoreptile_page else ("subzero" if is_neosubzero_page else ("rain" if is_neorain_page else "motherbrain"))))) %}
 {% set node_header_word = "Sektor" if is_neosektor_page else ("Ermac" if is_neoermac_page else ("Scorpion" if is_neoscorpion_page else ("Reptile" if is_neoreptile_page else ("Sub-Zero" if is_neosubzero_page else ("Rain" if is_neorain_page else "MotherBrain"))))) %}
 {% set node_header_name = "NeoSektor" if is_neosektor_page else ("NeoErmac" if is_neoermac_page else ("NeoScorpion" if is_neoscorpion_page else ("NeoReptile" if is_neoreptile_page else ("NeoSub-Zero" if is_neosubzero_page else ("NeoRain" if is_neorain_page else "NeoMotherBrain"))))) %}
@@ -91,6 +92,10 @@
                     <span class="neosektor-header-title neo-brand-title neo-brand neo-brand--sektor neo-node-name neo-node-sektor brand-inline-name node-sektor" aria-label="NeoSektor">
                         <span class="neo-brand__neo neo-word neo-brand-title__neo">NEO</span><span class="neo-brand__node node-word neo-brand-title__node neo-brand-title__node--sektor">SEKTOR</span>
                     </span>
+                    {% elif is_neoermac_page %}
+                    {% with neoermac_brand_class="neoermac-header-title" %}
+                    {% include "neonodes/neoermac/_brand_title.html" %}
+                    {% endwith %}
                     {% else %}
                     {{ neo_brand(node_header_word, node_header_key) }}
                     {% endif %}
@@ -206,6 +211,10 @@
                         <span class="neosektor-header-title neo-brand-title neo-brand neo-brand--sektor neo-node-name neo-node-sektor mobile-topbar-brand brand-inline-name node-sektor" aria-label="NeoSektor">
                             <span class="neo-brand__neo neo-word neo-brand-title__neo">NEO</span><span class="neo-brand__node node-word neo-brand-title__node neo-brand-title__node--sektor">SEKTOR</span>
                         </span>
+                        {% elif is_neoermac_page %}
+                        {% with neoermac_brand_class="neoermac-header-title mobile-topbar-brand" %}
+                        {% include "neonodes/neoermac/_brand_title.html" %}
+                        {% endwith %}
                         {% else %}
                         {{ neo_brand(mobile_shell_word, mobile_shell_key, "mobile-topbar-brand", mobile_shell_name) }}
                         {% endif %}

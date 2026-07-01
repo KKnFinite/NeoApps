@@ -187,6 +187,7 @@ def register_template_helpers(app):
                 "endpoint": "neoermac.index",
                 "minimum_role": "watcher",
                 "path_prefixes": ("/neoermac",),
+                "icon_src": "images/icons/neoermac/inapp/neoermac-inapp-128.png",
             },
             {
                 "key": "sektor",
