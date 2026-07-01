@@ -31,6 +31,7 @@ from app.models import (
     User,
 )
 from app.services.access_control import backfill_default_gateway_node_roles
+from app.services.alp_import import preview_alp_paste
 from app.services.gateway_matrix import current_gateway_local_date
 from app.services.gateway_matrix import current_operations_for_gateway
 from app.services.night_sorting import night_sort_time_key
@@ -4828,6 +4829,86 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"UPS0612", response.data)
         self.assertIn(b"22:11 Local Jun 23", response.data)
         self.assertIn(b"- -&gt; N612UP", response.data)
+
+    def test_alp_arrival_repaste_preview_shows_eta_change(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS0910",
+            origin="EWR",
+            assigned_tail_number="N910UP",
+            tail_source="alp",
+            planned_datetime_local=datetime(2026, 6, 24, 2, 10),
+            planned_datetime_utc=datetime(2026, 6, 24, 7, 10),
+            eta_datetime_utc=datetime(2026, 6, 24, 7, 10),
+            eta_source="alp",
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            data={
+                "paste_text": "24-JUN-2026\tUPS910\tEWR\tN910UP\tA01\tScheduled\t07:24 (S)",
+                "alp_action": "preview",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"ETA CHANGE", response.data)
+        self.assertIn(b"02:10 Local Jun 24 -&gt; 02:24 Local Jun 24", response.data)
+        self.assertIn(b"UPS0910", response.data)
+        self.assertIn(b"EWR", response.data)
+
+    def test_alp_arrival_repaste_preview_keeps_unchanged_eta_no_change(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS0910",
+            assigned_tail_number="N910UP",
+            planned_datetime_utc=datetime(2026, 6, 24, 7, 24),
+            eta_datetime_utc=datetime(2026, 6, 24, 7, 24),
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+
+        preview = preview_alp_paste(
+            operation,
+            "arrival",
+            "24-JUN-2026\tUPS910\tSDF\tN910UP\tA01\tScheduled\t07:24 (S)",
+        )
+
+        self.assertEqual(preview["matched_rows"][0]["eta_change"], "No change")
+        self.assertFalse(preview["matched_rows"][0]["time_changed"])
+
+    def test_alp_arrival_repaste_apply_updates_changed_eta(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS0910",
+            assigned_tail_number="N910UP",
+            planned_datetime_utc=datetime(2026, 6, 24, 7, 10),
+            eta_datetime_utc=datetime(2026, 6, 24, 7, 10),
+            eta_source="alp",
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            data={
+                "paste_text": "24-JUN-2026\tUPS910\tSDF\tN910UP\tA01\tScheduled\t07:24 (S)",
+                "alp_action": "apply",
+            },
+        )
+        db.session.refresh(mission)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mission.eta_datetime_utc, datetime(2026, 6, 24, 7, 24))
+        self.assertEqual(mission.eta_source, "alp")
 
     def test_alp_departure_paste_apply_updates_selected_operation_only(self):
         operation = self._operation(sort_date=date(2026, 6, 24))

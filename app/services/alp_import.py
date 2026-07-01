@@ -261,6 +261,9 @@ def _matched_row(row, mission):
         else:
             warning = "ALP tail differs from current tail and will become authoritative."
 
+    current_time_utc = _current_alp_comparable_time_utc(mission)
+    time_change = _time_change_display(current_time_utc, row["utc_datetime"])
+
     return {
         **row,
         "mission_id": mission.id,
@@ -269,8 +272,47 @@ def _matched_row(row, mission):
         "tail_change": (
             "No change" if current_tail == tail_number else f"{current_tail or '-'} -> {tail_number}"
         ),
+        "time_change": time_change,
+        "eta_change": time_change,
+        "time_changed": not _same_alp_minute(current_time_utc, row["utc_datetime"]),
         "warning": warning,
     }
+
+
+def _current_alp_comparable_time_utc(mission):
+    if not mission:
+        return None
+    if mission.mission_type == "arrival":
+        return mission.eta_datetime_utc or mission.planned_datetime_utc
+    if mission.mission_type == "departure":
+        return mission.actual_block_out_datetime_utc or mission.planned_datetime_utc
+    return mission.planned_datetime_utc
+
+
+def _time_change_display(current_utc, alp_utc):
+    if _same_alp_minute(current_utc, alp_utc):
+        return "No change"
+    current_display = _alp_utc_display(current_utc)
+    alp_display = _alp_utc_display(alp_utc)
+    return f"{current_display} -> {alp_display}"
+
+
+def _same_alp_minute(left, right):
+    if not left or not right:
+        return False
+    return _minute_precision(left) == _minute_precision(right)
+
+
+def _minute_precision(value):
+    if not value:
+        return None
+    return value.replace(second=0, microsecond=0)
+
+
+def _alp_utc_display(value):
+    if not value:
+        return "-"
+    return _format_alp_local(utc_to_local_naive(value, ALP_TIMEZONE))
 
 
 def _missing_mission_row(mission):

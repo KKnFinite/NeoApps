@@ -109,6 +109,7 @@
                         <th>CURRENT FLIGHT</th>
                         <th>AIRPORT</th>
                         <th>TAIL CHANGE</th>
+                        <th>{{ "ETA CHANGE" if mission_type == "arrival" else "TIME CHANGE" }}</th>
                         <th>ALP UTC</th>
                         <th>RFD LOCAL</th>
                         <th>WARNING</th>
@@ -122,12 +123,13 @@
                         <td>{{ row.current_flight_number|upper }}</td>
                         <td>{{ row.airport }}</td>
                         <td>{{ row.tail_change }}</td>
+                        <td>{{ row.time_change }}</td>
                         <td>{{ row.utc_display }}</td>
                         <td>{{ row.local_display }}</td>
                         <td>{{ row.warning or "-" }}</td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="8">NO MATCHED ALP ROWS.</td></tr>
+                    <tr><td colspan="9">NO MATCHED ALP ROWS.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
