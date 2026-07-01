@@ -10279,6 +10279,22 @@ select::-ms-expand {
     color: #e1e6ef;
 }
 
+.planning-status-badge.is-needs-tail {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    border: 1px solid rgba(236, 190, 96, 0.58);
+    border-radius: 4px;
+    padding: 3px 6px;
+    background: rgba(88, 58, 18, 0.52);
+    color: #ffe4a7;
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    white-space: nowrap;
+}
+
 .planning-parking-context .planning-parking-link {
     min-height: 22px;
     padding: 3px 6px;

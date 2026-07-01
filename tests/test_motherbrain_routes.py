@@ -4641,7 +4641,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(mission.assigned_tail_number, "N222UP")
         self.assertNotEqual(other_mission.departure_status, "cancelled")
 
-    def test_tail_swap_requires_confirmation_before_cancelling_chained_departure(self):
+    def test_tail_swap_from_non_hot_source_flags_replacement_tail(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
         selected = self._mission(
             operation=operation,
@@ -4681,9 +4681,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(confirmed.status_code, 200)
         self.assertEqual(selected.assigned_tail_number, "N222UP")
-        self.assertEqual(chained.departure_status, "cancelled")
+        self.assertNotEqual(chained.departure_status, "cancelled")
+        self.assertIsNone(chained.assigned_tail_number)
         self.assertIsNotNone(db.session.get(SortDateMission, chained.id))
-        self.assertIn("cancelled chained departure UPS0910", confirmed.data.decode())
+        html = confirmed.data.decode()
+        self.assertIn("flagged UPS0910 as needing a replacement tail", html)
+        self.assertIn("UPS0910", html)
+        self.assertIn("NEEDS TAIL", html)
+        self.assertIn("planning-status-badge is-needs-tail", html)
 
     def test_tail_swap_hot_duplicate_conflict_cancels_hot_departure(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
@@ -4734,6 +4739,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(selected.assigned_tail_number, "N222UP")
         self.assertEqual(hot_duplicate.departure_status, "cancelled")
         self.assertEqual(active_n222_departures, [selected])
+        self.assertIn(
+            "cancelled HOT chained departure UPS0999",
+            response.data.decode(),
+        )
 
     def test_view_only_user_cannot_cancel_mission_by_post(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
