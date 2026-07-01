@@ -13039,19 +13039,21 @@ select::-ms-expand {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 4px;
     padding: 5px;
-    border: 1px solid rgba(244, 247, 251, 0.72);
+    border: 1px solid rgba(var(--node-rgb), 0.38);
     border-radius: 5px;
-    background: var(--neo-silver);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent 36%),
+        linear-gradient(180deg, rgba(20, 9, 13, 0.96), rgba(5, 6, 9, 0.96));
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.62),
-        0 4px 10px rgba(0, 0, 0, 0.2);
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 4px 10px rgba(0, 0, 0, 0.28);
 }
 
 .neoermac-slot-pull-times span,
 .neoermac-pull-edge-side span {
     display: grid;
     gap: 2px;
-    color: #2a3038;
+    color: rgba(238, 246, 255, 0.72);
     font-size: 0.5rem;
     font-weight: 950;
     letter-spacing: 0.03em;
@@ -13062,12 +13064,12 @@ select::-ms-expand {
 
 .neoermac-slot-pull-times strong,
 .neoermac-pull-edge-side strong {
-    color: #081018;
+    color: #fff8f9;
     font-size: 0.68rem;
     font-weight: 950;
     letter-spacing: 0.01em;
     line-height: 1;
-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+    text-shadow: 0 0 10px rgba(var(--node-rgb), 0.26);
 }
 
 @media (min-width: 761px) {
@@ -13095,12 +13097,12 @@ select::-ms-expand {
         grid-template-columns: 1fr;
         gap: 3px;
         padding: 5px 4px;
-        border-color: rgba(22, 28, 34, 0.16);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+        border-color: rgba(var(--node-rgb), 0.38);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
     }
 
     .neoermac-pull-edge span {
-        color: #2a3038;
+        color: rgba(238, 246, 255, 0.72);
         font-size: 0.62rem;
         font-weight: 900;
         letter-spacing: 0.06em;
@@ -13109,12 +13111,12 @@ select::-ms-expand {
     }
 
     .neoermac-pull-edge strong {
-        color: #081018;
+        color: #fff8f9;
         font-size: 0.86rem;
         font-weight: 950;
         letter-spacing: 0.02em;
         line-height: 1.1;
-        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+        text-shadow: 0 0 10px rgba(var(--node-rgb), 0.26);
     }
 
     .neoermac-belt-block .neoermac-destination-select option {
@@ -13215,13 +13217,15 @@ select::-ms-expand {
         min-width: 0;
         width: 100%;
         padding: 7px 8px;
-        border: 1px solid rgba(244, 247, 251, 0.82);
+        border: 1px solid rgba(var(--node-rgb), 0.38);
         border-radius: 5px;
-        background: var(--neo-silver);
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent 36%),
+            linear-gradient(180deg, rgba(20, 9, 13, 0.96), rgba(5, 6, 9, 0.96));
         box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.62),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
             inset 0 -1px 0 rgba(22, 28, 34, 0.12),
-            0 4px 10px rgba(0, 0, 0, 0.22);
+            0 4px 10px rgba(0, 0, 0, 0.28);
     }
 
     .neoermac-mobile-pull-row {
@@ -13235,16 +13239,16 @@ select::-ms-expand {
     .neoermac-mobile-pull-row span,
     .neoermac-mobile-pull-row strong {
         min-width: 0;
-        color: #081018;
+        color: #fff8f9;
         font-weight: 950;
         line-height: 1;
         text-align: center;
         white-space: nowrap;
-        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+        text-shadow: 0 0 10px rgba(var(--node-rgb), 0.26);
     }
 
     .neoermac-mobile-pull-row span {
-        color: #2a3038;
+        color: rgba(238, 246, 255, 0.72);
         font-size: clamp(0.58rem, 2.2vw, 0.72rem);
         letter-spacing: 0.01em;
         text-align: left;
@@ -13260,7 +13264,7 @@ select::-ms-expand {
         justify-items: center;
         gap: 1px;
         min-width: 0;
-        color: #2a3038;
+        color: rgba(238, 246, 255, 0.72);
         font-size: 0.5rem;
         font-weight: 950;
         letter-spacing: 0.025em;
@@ -13272,7 +13276,7 @@ select::-ms-expand {
 
     .neoermac-slot-pull-times strong {
         display: block;
-        color: #081018;
+        color: #fff8f9;
         font-size: 0.76rem;
         letter-spacing: 0.01em;
         line-height: 1;
@@ -13384,13 +13388,13 @@ select::-ms-expand {
     gap: 4px;
     min-width: 0;
     padding: 6px;
-    border-color: rgba(190, 198, 209, 0.82);
+    border-color: rgba(var(--node-rgb), 0.42);
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.7), transparent 36%),
-        #d9dde4;
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 36%),
+        linear-gradient(180deg, rgba(22, 9, 13, 0.98), rgba(6, 8, 12, 0.98));
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.76),
-        0 4px 10px rgba(0, 0, 0, 0.18);
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 4px 10px rgba(0, 0, 0, 0.28);
 }
 
 .neoermac-belt-destination-card .neoermac-slot-pull-times span {
@@ -13403,6 +13407,7 @@ select::-ms-expand {
 }
 
 .neoermac-belt-destination-card .neoermac-slot-pull-times strong {
+    color: #fff8f9;
     text-align: right;
 }
 

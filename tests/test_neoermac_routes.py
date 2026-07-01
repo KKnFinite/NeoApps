@@ -2305,13 +2305,16 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertFalse(response.get_json()["ok"])
         self.assertIsNone(saved)
 
-    def test_building_lineup_styles_include_light_belt_and_pull_time_backgrounds(self):
+    def test_building_lineup_styles_include_dark_pull_time_backgrounds(self):
         css = Path("app/static/css/base.css").read_text()
 
         self.assertIn(".neoermac-belt-block--blue", css)
         self.assertIn(".neoermac-belt-block--red", css)
         self.assertIn(".neoermac-belt-block--white", css)
-        self.assertIn("#d9dde4", css)
+        self.assertIn(".neoermac-belt-destination-card .neoermac-slot-pull-times", css)
+        self.assertIn("linear-gradient(180deg, rgba(22, 9, 13, 0.98), rgba(6, 8, 12, 0.98))", css)
+        self.assertIn("color: #fff8f9;", css)
+        self.assertNotIn("#d9dde4", css)
         self.assertIn(".neoermac-lineup-autosave-status", css)
 
     def test_user_without_building_lineup_view_cannot_open_page(self):
