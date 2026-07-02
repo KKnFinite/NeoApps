@@ -6,10 +6,70 @@ from flask_login import current_user
 from app.extensions import db
 from app.models import PermissionRule
 from app.models.user import ROLE_LEVELS
-from app.services.access_control import get_current_gateway, get_user_node_role
+from app.services.access_control import get_current_gateway, get_user_app_role, get_user_node_role
 
 
 DEFAULT_PERMISSION_RULES = (
+    (
+        "neoapps.portal.view",
+        "watcher",
+        "View the NeoApps Portal launch page.",
+    ),
+    (
+        "neoapps.portal.request_access.edit",
+        "watcher",
+        "Request access to NeoApps systems from the Portal.",
+    ),
+    (
+        "neoapps.portal_management.view",
+        "grandmaster",
+        "View NeoApps Portal Management screens.",
+    ),
+    (
+        "neoapps.portal_management.edit",
+        "grandmaster",
+        "Approve or update Portal app access from Portal Management.",
+    ),
+    (
+        "neoapps.user_management.view",
+        "grandmaster",
+        "View NeoApps user management screens.",
+    ),
+    (
+        "neoapps.user_management.edit",
+        "grandmaster",
+        "Edit NeoApps users, gateway access, node roles, and emergency resets.",
+    ),
+    (
+        "neoapps.access_requests.view",
+        "grandmaster",
+        "View pending NeoGateway access requests.",
+    ),
+    (
+        "neoapps.access_requests.edit",
+        "grandmaster",
+        "Approve or deny pending NeoGateway access requests.",
+    ),
+    (
+        "neomotherbrain.permission_rules.view",
+        "grandmaster",
+        "View NeoApps Permission Rules.",
+    ),
+    (
+        "neomotherbrain.permission_rules.edit",
+        "grandmaster",
+        "Edit NeoApps Permission Rules.",
+    ),
+    (
+        "neogateway.landing.view",
+        "watcher",
+        "View the NeoGateway RFD landing page.",
+    ),
+    (
+        "neobid.placeholder.view",
+        "watcher",
+        "View the NeoBid placeholder page.",
+    ),
     (
         "neomotherbrain.dashboard.view",
         "operator",
@@ -146,6 +206,16 @@ DEFAULT_PERMISSION_RULES = (
         "View NeoMotherBrain Parking Plan conflict alerts.",
     ),
     (
+        "neoermac.dashboard.view",
+        "watcher",
+        "View the NeoErmac dashboard.",
+    ),
+    (
+        "neoermac.upcoming_pulls.view",
+        "watcher",
+        "View NeoErmac Upcoming Pulls.",
+    ),
+    (
         "neoermac.building_lineup.view",
         "operator",
         "View NeoErmac Building Lineup screens.",
@@ -171,9 +241,19 @@ DEFAULT_PERMISSION_RULES = (
         "View NeoErmac outbound destination summary screens.",
     ),
     (
+        "neoermac.tug_assignments.view",
+        "watcher",
+        "View NeoErmac Tug Assignments placeholder.",
+    ),
+    (
         "neoermac.tug_assignments.edit",
         "master",
         "Edit NeoErmac Tug Assignments.",
+    ),
+    (
+        "neosektor.dashboard.view",
+        "watcher",
+        "View the NeoSektor dashboard.",
     ),
     (
         "neosektor.live_counts.view",
@@ -226,6 +306,11 @@ DEFAULT_PERMISSION_RULES = (
         "View NeoSektor Driver Routing screens.",
     ),
     (
+        "neoscorpion.dashboard.view",
+        "watcher",
+        "View the NeoScorpion dashboard.",
+    ),
+    (
         "neoscorpion.fuel_dispatch.view",
         "operator",
         "View NeoScorpion Fuel Dispatch screens.",
@@ -270,6 +355,76 @@ DEFAULT_PERMISSION_RULES = (
         "operator",
         "View NeoScorpion completed fuel history.",
     ),
+    (
+        "neostaffing.board.view",
+        "watcher",
+        "View the NeoStaffing Board dashboard.",
+    ),
+    (
+        "neostaffing.seniority.view",
+        "watcher",
+        "View NeoStaffing Seniority screens.",
+    ),
+    (
+        "neostaffing.people.view",
+        "watcher",
+        "View NeoStaffing People screens.",
+    ),
+    (
+        "neostaffing.app_management.view",
+        "master",
+        "View NeoStaffing App Management.",
+    ),
+    (
+        "neostaffing.hierarchy.view",
+        "master",
+        "View NeoStaffing hierarchy management.",
+    ),
+    (
+        "neostaffing.hierarchy.edit",
+        "master",
+        "Edit NeoStaffing hierarchy units.",
+    ),
+    (
+        "neostaffing.planned_staffing.view",
+        "master",
+        "View NeoStaffing planned staffing management.",
+    ),
+    (
+        "neostaffing.planned_staffing.edit",
+        "master",
+        "Edit NeoStaffing planned staffing requirements.",
+    ),
+    (
+        "neostaffing.people_management.view",
+        "master",
+        "View NeoStaffing People Management.",
+    ),
+    (
+        "neostaffing.people_management.edit",
+        "master",
+        "Create, update, deactivate, or delete NeoStaffing people.",
+    ),
+    (
+        "neostaffing.work_assignments.view",
+        "master",
+        "View NeoStaffing Work Assignments.",
+    ),
+    (
+        "neostaffing.work_assignments.edit",
+        "master",
+        "Assign or clear NeoStaffing work areas.",
+    ),
+    (
+        "neostaffing.management_assignments.view",
+        "master",
+        "View NeoStaffing Management Assignments.",
+    ),
+    (
+        "neostaffing.management_assignments.edit",
+        "master",
+        "Create or remove NeoStaffing management assignments.",
+    ),
 )
 
 PERMISSION_RULE_GROUPS = (
@@ -278,6 +433,8 @@ PERMISSION_RULE_GROUPS = (
     ("sektor", "NeoSektor", ("neosektor.", "sektor.")),
     ("ermac", "NeoErmac", ("neoermac.", "ermac.")),
     ("scorpion", "NeoScorpion", ("neoscorpion.", "scorpion.")),
+    ("staffing", "NeoStaffing", ("neostaffing.", "staffing.")),
+    ("bid", "NeoBid", ("neobid.", "bid.")),
     ("reptile", "NeoReptile", ("neoreptile.", "reptile.")),
     ("subzero", "NeoSub-Zero", ("neosubzero.", "subzero.", "neosub-zero.", "sub-zero.")),
     ("rain", "NeoRain", ("neorain.", "rain.")),
@@ -291,7 +448,78 @@ PERMISSION_ACTION_LABELS = {
 
 PERMISSION_ACTION_ORDER = ("view", "edit", "trigger")
 
+# Keep this registry aligned with routed NeoApps pages. New page/view permissions
+# should default to View=Watcher and Edit=Operator unless an existing surface is
+# intentionally stricter.
 PERMISSION_RULE_ITEMS = (
+    (
+        "system",
+        "neoapps.portal",
+        "NeoApps Portal",
+        "NeoApps app launch and access request landing page.",
+        {
+            "view": "neoapps.portal.view",
+            "edit": "neoapps.portal.request_access.edit",
+        },
+    ),
+    (
+        "system",
+        "neogateway.landing",
+        "NeoGateway Landing",
+        "RFD NeoGateway landing, active sort selector, and NeoNode launch links.",
+        {
+            "view": "neogateway.landing.view",
+        },
+    ),
+    (
+        "system",
+        "neoapps.portal_management",
+        "Portal Management",
+        "NeoApps Portal Management app access controls.",
+        {
+            "view": "neoapps.portal_management.view",
+            "edit": "neoapps.portal_management.edit",
+        },
+    ),
+    (
+        "system",
+        "neoapps.user_management",
+        "User Management",
+        "NeoApps user accounts, gateway access, node roles, and emergency resets.",
+        {
+            "view": "neoapps.user_management.view",
+            "edit": "neoapps.user_management.edit",
+        },
+    ),
+    (
+        "system",
+        "neoapps.access_requests",
+        "Access Requests",
+        "Pending NeoGateway access approval queue.",
+        {
+            "view": "neoapps.access_requests.view",
+            "edit": "neoapps.access_requests.edit",
+        },
+    ),
+    (
+        "bid",
+        "neobid.placeholder",
+        "NeoBid Placeholder",
+        "NeoBid Coming Soon placeholder page.",
+        {
+            "view": "neobid.placeholder.view",
+        },
+    ),
+    (
+        "motherbrain",
+        "neomotherbrain.permission_rules",
+        "Permission Rules",
+        "NeoApps permission rule editor.",
+        {
+            "view": "neomotherbrain.permission_rules.view",
+            "edit": "neomotherbrain.permission_rules.edit",
+        },
+    ),
     (
         "motherbrain",
         "neomotherbrain.manage_sort",
@@ -432,6 +660,15 @@ PERMISSION_RULE_ITEMS = (
     ),
     (
         "sektor",
+        "neosektor.dashboard",
+        "Dashboard",
+        "NeoSektor dashboard and operation tile launch page.",
+        {
+            "view": "neosektor.dashboard.view",
+        },
+    ),
+    (
+        "sektor",
         "neosektor.live_counts",
         "Live Counts",
         "NeoSektor Live Counts screen.",
@@ -490,6 +727,24 @@ PERMISSION_RULE_ITEMS = (
     ),
     (
         "ermac",
+        "neoermac.dashboard",
+        "Dashboard",
+        "NeoErmac dashboard and operation tile launch page.",
+        {
+            "view": "neoermac.dashboard.view",
+        },
+    ),
+    (
+        "ermac",
+        "neoermac.upcoming_pulls",
+        "Upcoming Pulls",
+        "NeoErmac Upcoming Pulls screen.",
+        {
+            "view": "neoermac.upcoming_pulls.view",
+        },
+    ),
+    (
+        "ermac",
         "neoermac.building_lineup",
         "Building Lineup",
         "NeoErmac Building Lineup screen.",
@@ -523,7 +778,17 @@ PERMISSION_RULE_ITEMS = (
         "Tug Assignments",
         "NeoErmac Tug Assignments placeholder and future edit access.",
         {
+            "view": "neoermac.tug_assignments.view",
             "edit": "neoermac.tug_assignments.edit",
+        },
+    ),
+    (
+        "scorpion",
+        "neoscorpion.dashboard",
+        "Dashboard",
+        "NeoScorpion dashboard and fuel operation launch page.",
+        {
+            "view": "neoscorpion.dashboard.view",
         },
     ),
     (
@@ -573,6 +838,92 @@ PERMISSION_RULE_ITEMS = (
         "NeoScorpion completed fuel history.",
         {
             "view": "neoscorpion.history.view",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.board",
+        "Board",
+        "NeoStaffing Board dashboard.",
+        {
+            "view": "neostaffing.board.view",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.seniority",
+        "Seniority",
+        "NeoStaffing Seniority list.",
+        {
+            "view": "neostaffing.seniority.view",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.people",
+        "People",
+        "NeoStaffing People directory.",
+        {
+            "view": "neostaffing.people.view",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.app_management",
+        "App Management",
+        "NeoStaffing App Management summary.",
+        {
+            "view": "neostaffing.app_management.view",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.hierarchy",
+        "Hierarchy",
+        "NeoStaffing hierarchy units.",
+        {
+            "view": "neostaffing.hierarchy.view",
+            "edit": "neostaffing.hierarchy.edit",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.planned_staffing",
+        "Planned Staffing",
+        "NeoStaffing planned staffing requirements.",
+        {
+            "view": "neostaffing.planned_staffing.view",
+            "edit": "neostaffing.planned_staffing.edit",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.people_management",
+        "People Management",
+        "NeoStaffing People Management.",
+        {
+            "view": "neostaffing.people_management.view",
+            "edit": "neostaffing.people_management.edit",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.work_assignments",
+        "Work Assignments",
+        "NeoStaffing Work Assignments.",
+        {
+            "view": "neostaffing.work_assignments.view",
+            "edit": "neostaffing.work_assignments.edit",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.management_assignments",
+        "Management Assignments",
+        "NeoStaffing Management Assignments.",
+        {
+            "view": "neostaffing.management_assignments.view",
+            "edit": "neostaffing.management_assignments.edit",
         },
     ),
 )
@@ -659,16 +1010,11 @@ def user_can(permission_key, user=None):
     if not _is_authenticated_user(user):
         return False
 
-    node_code = _node_code_from_permission_key(permission_key)
-    if not node_code:
+    role = _role_for_permission_key(permission_key, user)
+    if role is None:
         return False
 
-    gateway = get_current_gateway()
-    node_role = get_user_node_role(user, gateway.code, node_code)
-    if node_role is None:
-        return False
-
-    if node_role == "grandmaster":
+    if role == "grandmaster":
         return True
 
     rule = get_permission_rule(permission_key)
@@ -676,7 +1022,7 @@ def user_can(permission_key, user=None):
     if not minimum_role:
         return False
 
-    return ROLE_LEVELS.get(node_role, 0) >= ROLE_LEVELS.get(minimum_role, 0)
+    return ROLE_LEVELS.get(role, 0) >= ROLE_LEVELS.get(minimum_role, 0)
 
 
 def permission_access(view_permission_key, edit_permission_key=None, user=None):
@@ -769,6 +1115,32 @@ def _node_code_from_permission_key(permission_key):
     if node_code.startswith("neo") and len(node_code) > 3:
         node_code = node_code[3:]
     return node_code
+
+
+def _role_for_permission_key(permission_key, user):
+    prefix = _permission_key_prefix(permission_key)
+    if not prefix:
+        return None
+
+    if prefix in {"neoapps", "system"}:
+        return getattr(user, "role", None)
+
+    if prefix in {"neogateway", "neostaffing", "neobid"}:
+        return get_user_app_role(user, prefix)
+
+    node_code = _node_code_from_permission_key(permission_key)
+    if not node_code:
+        return None
+
+    gateway = get_current_gateway()
+    return get_user_node_role(user, gateway.code, node_code)
+
+
+def _permission_key_prefix(permission_key):
+    parts = normalize_permission_key(permission_key).split(".")
+    if len(parts) < 3 or not all(parts):
+        return None
+    return parts[0]
 
 
 def _is_authenticated_user(user):

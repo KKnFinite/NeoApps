@@ -2,9 +2,14 @@ import unittest
 
 from app import create_app
 from app.extensions import db
-from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, User
+from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, PortalAppAccess, User
 from app.services.access_control import backfill_default_gateway_node_roles, ensure_default_gateway_and_nodes
-from app.services.permission_rules import ensure_default_permission_rules, user_can
+from app.services.permission_rules import (
+    DEFAULT_PERMISSION_RULES,
+    PERMISSION_RULE_ITEMS,
+    ensure_default_permission_rules,
+    user_can,
+)
 from app.models.user import ROLE_LEVELS
 
 
@@ -40,69 +45,140 @@ class PermissionRulesTest(unittest.TestCase):
             for rule in PermissionRule.query.order_by(PermissionRule.permission_key).all()
         }
 
-        self.assertEqual(
-            rules,
-            {
-                "motherbrain.parking_conflicts.view": "operator",
-                "motherbrain.parking_optimizer.apply": "master",
-                "motherbrain.parking_optimizer.run": "master",
-                "motherbrain.parking_plan.edit": "simulator",
-                "motherbrain.parking_plan.view": "operator",
-                "motherbrain.parking_rules.edit": "simulator",
-                "motherbrain.parking_rules.view": "simulator",
-                "neomotherbrain.arrival_planning.edit": "master",
-                "neomotherbrain.arrival_planning.run": "master",
-                "neomotherbrain.arrival_planning.view": "operator",
-                "neomotherbrain.dashboard.view": "operator",
-                "neomotherbrain.departure_planning.edit": "master",
-                "neomotherbrain.departure_planning.run": "master",
-                "neomotherbrain.departure_planning.view": "operator",
-                "neomotherbrain.flight_api_auto_poll.trigger": "simulator",
-                "neomotherbrain.flight_api_review.edit": "simulator",
-                "neomotherbrain.flight_api_review.view": "simulator",
-                "neomotherbrain.gateway_matrix.edit": "simulator",
-                "neomotherbrain.gateway_matrix.view": "operator",
-                "neomotherbrain.manage_api.run": "grandmaster",
-                "neomotherbrain.manage_api.view": "grandmaster",
-                "neomotherbrain.manage_sort.edit": "simulator",
-                "neomotherbrain.manage_sort.view": "operator",
-                "neomotherbrain.master_schedule.edit": "simulator",
-                "neomotherbrain.master_schedule.view": "operator",
-                "neomotherbrain.sort_timeline.edit": "grandmaster",
-                "neomotherbrain.sort_timeline.view": "grandmaster",
-                "neoermac.building_lineup.edit": "simulator",
-                "neoermac.building_lineup.view": "operator",
-                "neoermac.door_view.edit": "operator",
-                "neoermac.door_view.view": "operator",
-                "neoermac.tug_assignments.edit": "master",
-                "neoermac.view_outbound.view": "watcher",
-                "neosektor.conductor.view": "simulator",
-                "neosektor.discharge.edit": "operator",
-                "neosektor.discharge.view": "operator",
-                "neosektor.driver_routing.view": "watcher",
-                "neosektor.ebm.edit": "operator",
-                "neosektor.ebm.view": "operator",
-                "neosektor.live_counts.view": "watcher",
-                "neosektor.tunnel_conductor.edit": "simulator",
-                "neosektor.wbm.edit": "operator",
-                "neosektor.wbm.view": "operator",
-                "neoscorpion.fuel_dispatch.edit": "simulator",
-                "neoscorpion.fuel_dispatch.view": "operator",
-                "neoscorpion.fueler.edit": "operator",
-                "neoscorpion.fueler.view": "watcher",
-                "neoscorpion.history.view": "operator",
-                "neoscorpion.settings.edit": "master",
-                "neoscorpion.settings.view": "simulator",
-                "neoscorpion.truck_manager.edit": "simulator",
-                "neoscorpion.truck_manager.view": "operator",
-            },
-        )
+        expected = {
+            permission_key: minimum_role
+            for permission_key, minimum_role, _description in DEFAULT_PERMISSION_RULES
+        }
+        self.assertEqual(rules, expected)
+        self.assertEqual(rules["neoapps.portal.view"], "watcher")
+        self.assertEqual(rules["neogateway.landing.view"], "watcher")
+        self.assertEqual(rules["neostaffing.board.view"], "watcher")
+        self.assertEqual(rules["neostaffing.hierarchy.edit"], "master")
+        self.assertEqual(rules["neobid.placeholder.view"], "watcher")
+        self.assertEqual(rules["neoermac.dashboard.view"], "watcher")
+        self.assertEqual(rules["neosektor.dashboard.view"], "watcher")
+        self.assertEqual(rules["neoscorpion.dashboard.view"], "watcher")
 
     def test_role_order_is_watcher_to_grandmaster(self):
         self.assertLess(ROLE_LEVELS["watcher"], ROLE_LEVELS["operator"])
         self.assertLess(ROLE_LEVELS["operator"], ROLE_LEVELS["simulator"])
         self.assertLess(ROLE_LEVELS["simulator"], ROLE_LEVELS["master"])
         self.assertLess(ROLE_LEVELS["master"], ROLE_LEVELS["grandmaster"])
+
+    def test_current_route_views_are_registered_by_app_node(self):
+        seeded_keys = {permission_key for permission_key, _role, _description in DEFAULT_PERMISSION_RULES}
+        view_keys_by_group = {
+            "NeoApps Portal": {
+                "neoapps.portal.view",
+                "neoapps.portal_management.view",
+                "neoapps.user_management.view",
+                "neoapps.access_requests.view",
+            },
+            "NeoGateway": {"neogateway.landing.view"},
+            "NeoMotherBrain": {
+                "neomotherbrain.dashboard.view",
+                "neomotherbrain.manage_sort.view",
+                "neomotherbrain.arrival_planning.view",
+                "neomotherbrain.departure_planning.view",
+                "neomotherbrain.master_schedule.view",
+                "neomotherbrain.gateway_matrix.view",
+                "neomotherbrain.sort_timeline.view",
+                "neomotherbrain.manage_api.view",
+                "neomotherbrain.flight_api_review.view",
+                "neomotherbrain.permission_rules.view",
+                "motherbrain.parking_rules.view",
+                "motherbrain.parking_plan.view",
+                "motherbrain.parking_conflicts.view",
+            },
+            "NeoErmac": {
+                "neoermac.dashboard.view",
+                "neoermac.upcoming_pulls.view",
+                "neoermac.building_lineup.view",
+                "neoermac.door_view.view",
+                "neoermac.view_outbound.view",
+                "neoermac.tug_assignments.view",
+            },
+            "NeoSektor": {
+                "neosektor.dashboard.view",
+                "neosektor.live_counts.view",
+                "neosektor.conductor.view",
+                "neosektor.ebm.view",
+                "neosektor.wbm.view",
+                "neosektor.discharge.view",
+                "neosektor.driver_routing.view",
+            },
+            "NeoScorpion": {
+                "neoscorpion.dashboard.view",
+                "neoscorpion.fuel_dispatch.view",
+                "neoscorpion.fueler.view",
+                "neoscorpion.truck_manager.view",
+                "neoscorpion.settings.view",
+                "neoscorpion.history.view",
+            },
+            "NeoStaffing": {
+                "neostaffing.board.view",
+                "neostaffing.seniority.view",
+                "neostaffing.people.view",
+                "neostaffing.app_management.view",
+                "neostaffing.hierarchy.view",
+                "neostaffing.planned_staffing.view",
+                "neostaffing.people_management.view",
+                "neostaffing.work_assignments.view",
+                "neostaffing.management_assignments.view",
+            },
+            "NeoBid": {"neobid.placeholder.view"},
+        }
+
+        for group, permission_keys in view_keys_by_group.items():
+            with self.subTest(group=group):
+                self.assertTrue(permission_keys <= seeded_keys)
+
+    def test_permission_rule_items_reference_seeded_rules(self):
+        seeded_keys = {permission_key for permission_key, _role, _description in DEFAULT_PERMISSION_RULES}
+
+        for _group_key, item_key, _label, _description, action_keys in PERMISSION_RULE_ITEMS:
+            for action_type, permission_key in action_keys.items():
+                with self.subTest(item=item_key, action=action_type):
+                    self.assertIn(permission_key, seeded_keys)
+
+    def test_app_level_permission_rules_use_global_and_app_roles(self):
+        portal_user = self._user("portal_watcher", role="watcher")
+        staffing_user, staffing_access = self._user_with_app_access(
+            "staffing_watcher",
+            "neostaffing",
+            "watcher",
+        )
+
+        self.assertTrue(user_can("neoapps.portal.view", portal_user))
+        self.assertFalse(user_can("neoapps.portal_management.view", portal_user))
+        portal_user.role = "grandmaster"
+        self.assertTrue(user_can("neoapps.portal_management.view", portal_user))
+        self.assertTrue(user_can("neostaffing.board.view", staffing_user))
+        self.assertFalse(user_can("neostaffing.hierarchy.view", staffing_user))
+
+        staffing_access.role = "master"
+        db.session.commit()
+
+        self.assertTrue(user_can("neostaffing.hierarchy.view", staffing_user))
+        self.assertTrue(user_can("neostaffing.hierarchy.edit", staffing_user))
+
+    def test_neostaffing_route_uses_saved_view_permission(self):
+        view_rule = PermissionRule.query.filter_by(
+            permission_key="neostaffing.app_management.view"
+        ).one()
+        view_rule.minimum_role = "grandmaster"
+        staffing_user, _access = self._user_with_app_access(
+            "staffing_master",
+            "neostaffing",
+            "master",
+        )
+        db.session.commit()
+        self._login(staffing_user.username)
+
+        response = self.client.get("/neostaffing/app-management", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/neostaffing")
 
     def test_grandmaster_can_manage_permission_rules(self):
         grandmaster = self._user_with_ermac_role("permission_grandmaster", "grandmaster")
@@ -136,6 +212,8 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertIn(b"NeoSektor", response.data)
         self.assertIn(b"NeoErmac", response.data)
         self.assertIn(b"NeoScorpion", response.data)
+        self.assertIn(b"NeoStaffing", response.data)
+        self.assertIn(b"NeoBid", response.data)
         self.assertIn(b"NeoReptile", response.data)
         self.assertIn(b"NeoSub-Zero", response.data)
         self.assertIn(b"NeoRain", response.data)
@@ -341,6 +419,26 @@ class PermissionRulesTest(unittest.TestCase):
 
         self.assertFalse(user_can("neoermac.unknown_screen.edit", master))
         self.assertTrue(user_can("neoermac.unknown_screen.edit", grandmaster))
+
+    def _user(self, username, role="watcher"):
+        user = User(username=username, role=role)
+        user.set_password("TestPassword123!")
+        db.session.add(user)
+        db.session.commit()
+        return user
+
+    def _user_with_app_access(self, username, app_code, role):
+        user = self._user(username)
+        access = PortalAppAccess(
+            user_id=user.id,
+            app_code=app_code,
+            status="approved",
+            role=role,
+            is_active=True,
+        )
+        db.session.add(access)
+        db.session.commit()
+        return user, access
 
     def _user_with_ermac_role(self, username, role):
         user = User(username=username, role="watcher")

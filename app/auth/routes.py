@@ -7,7 +7,6 @@ from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.auth import bp
-from app.auth.decorators import gateway_node_required
 from app.extensions import db
 from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, PortalAppAccess, User
 from app.models.user import ROLE_LEVELS
@@ -25,7 +24,7 @@ from app.services.access_control import (
     seed_gateway_node_roles,
     user_has_gateway_access,
 )
-from app.services.permission_rules import ensure_default_permission_rules, grouped_permission_rules
+from app.services.permission_rules import ensure_default_permission_rules, grouped_permission_rules, user_can
 from app.services.user_tokens import (
     EMAIL_VERIFICATION,
     PASSWORD_RESET,
@@ -45,19 +44,40 @@ ROLE_DISPLAY_LABELS = {
     "master": "Master",
     "grandmaster": "Grandmaster",
 }
+PORTAL_VIEW_PERMISSION = "neoapps.portal.view"
+PORTAL_REQUEST_ACCESS_PERMISSION = "neoapps.portal.request_access.edit"
+PORTAL_MANAGEMENT_VIEW_PERMISSION = "neoapps.portal_management.view"
+PORTAL_MANAGEMENT_EDIT_PERMISSION = "neoapps.portal_management.edit"
+USER_MANAGEMENT_VIEW_PERMISSION = "neoapps.user_management.view"
+USER_MANAGEMENT_EDIT_PERMISSION = "neoapps.user_management.edit"
+ACCESS_REQUESTS_VIEW_PERMISSION = "neoapps.access_requests.view"
+ACCESS_REQUESTS_EDIT_PERMISSION = "neoapps.access_requests.edit"
+PERMISSION_RULES_VIEW_PERMISSION = "neomotherbrain.permission_rules.view"
+PERMISSION_RULES_EDIT_PERMISSION = "neomotherbrain.permission_rules.edit"
+NEOBID_PLACEHOLDER_VIEW_PERMISSION = "neobid.placeholder.view"
+
+
+def portal_permission_required(permission_key, message="Access denied."):
+    def decorator(view_func):
+        @wraps(view_func)
+        @login_required
+        def wrapped_view(*args, **kwargs):
+            if user_can(permission_key):
+                return view_func(*args, **kwargs)
+
+            flash(message, "error")
+            return redirect(url_for("auth.portal_dashboard"))
+
+        return wrapped_view
+
+    return decorator
 
 
 def portal_grandmaster_required(view_func):
-    @wraps(view_func)
-    @login_required
-    def wrapped_view(*args, **kwargs):
-        if current_user.role == "grandmaster":
-            return view_func(*args, **kwargs)
-
-        flash("Portal Management requires Grandmaster access.", "error")
-        return redirect(url_for("auth.portal_dashboard"))
-
-    return wrapped_view
+    return portal_permission_required(
+        PORTAL_MANAGEMENT_VIEW_PERMISSION,
+        "Portal Management requires Grandmaster access.",
+    )(view_func)
 
 
 @bp.route("/login", methods=["GET", "POST"])
@@ -108,6 +128,10 @@ def logout():
 @bp.route("/portal")
 @login_required
 def portal_dashboard():
+    if not user_can(PORTAL_VIEW_PERMISSION):
+        flash("NeoApps Portal access denied.", "error")
+        return redirect(url_for("auth.access_pending"))
+
     return render_template(
         "auth/portal.html",
         app_rows=portal_dashboard_rows_for_user(current_user),
@@ -118,6 +142,10 @@ def portal_dashboard():
 @bp.route("/portal/request-access", methods=["POST"])
 @login_required
 def request_portal_app_access():
+    if not user_can(PORTAL_REQUEST_ACCESS_PERMISSION):
+        flash("Access request permission denied.", "error")
+        return redirect(url_for("auth.portal_dashboard"))
+
     app_code = request.form.get("app_code", "").strip().lower()
     app_definition = portal_app_definition(app_code)
     if not app_definition:
@@ -142,7 +170,9 @@ def request_portal_app_access():
 @bp.route("/neobid")
 @login_required
 def neobid_placeholder():
-    if not user_has_app_access(current_user, "neobid"):
+    if not user_has_app_access(current_user, "neobid") or not user_can(
+        NEOBID_PLACEHOLDER_VIEW_PERMISSION
+    ):
         flash("Request NeoBid access from the NeoApps Portal.", "error")
         return redirect(url_for("auth.portal_dashboard"))
     return render_template(
@@ -306,7 +336,10 @@ def change_password():
 
 
 @bp.route("/portal/manage")
-@portal_grandmaster_required
+@portal_permission_required(
+    PORTAL_MANAGEMENT_VIEW_PERMISSION,
+    "Portal Management requires Grandmaster access.",
+)
 def portal_management():
     gateway = get_current_gateway()
     memberships = _pending_memberships_for_gateway(gateway).all()
@@ -326,7 +359,10 @@ def portal_management():
 
 
 @bp.route("/portal/manage/app-access/<int:access_id>/update", methods=["POST"])
-@portal_grandmaster_required
+@portal_permission_required(
+    PORTAL_MANAGEMENT_EDIT_PERMISSION,
+    "Portal Management edit access denied.",
+)
 def update_portal_app_access(access_id):
     access = PortalAppAccess.query.get_or_404(access_id)
     action = request.form.get("action", "").strip().lower()
@@ -352,7 +388,7 @@ def update_portal_app_access(access_id):
 
 @bp.route("/admin/users")
 @bp.route("/portal/manage/users")
-@portal_grandmaster_required
+@portal_permission_required(USER_MANAGEMENT_VIEW_PERMISSION, "User Management access denied.")
 def users():
     gateway = get_current_gateway()
     memberships = _pending_memberships_for_gateway(gateway).all()
@@ -370,7 +406,7 @@ def users():
 
 @bp.route("/admin/users/edit-users")
 @bp.route("/portal/manage/users/edit-users")
-@portal_grandmaster_required
+@portal_permission_required(USER_MANAGEMENT_VIEW_PERMISSION, "User Management access denied.")
 def edit_users():
     gateway = get_current_gateway()
     search = request.args.get("q", "").strip()
@@ -386,14 +422,14 @@ def edit_users():
 
 @bp.route("/admin/users/manage-roles")
 @bp.route("/portal/manage/users/manage-roles")
-@portal_grandmaster_required
+@portal_permission_required(USER_MANAGEMENT_VIEW_PERMISSION, "User Management access denied.")
 def manage_roles():
     return redirect(url_for("auth.edit_users", q=request.args.get("q", "")))
 
 
 @bp.route("/admin/users/pending")
 @bp.route("/portal/manage/users/pending")
-@portal_grandmaster_required
+@portal_permission_required(USER_MANAGEMENT_VIEW_PERMISSION, "User Management access denied.")
 def pending_users():
     gateway = get_current_gateway()
     memberships = _pending_memberships_for_gateway(gateway).all()
@@ -407,9 +443,17 @@ def pending_users():
 
 @bp.route("/admin/permissions", methods=["GET", "POST"])
 @bp.route("/motherbrain/permissions", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="grandmaster")
+@login_required
 def permission_rules():
     ensure_default_permission_rules()
+    view_permission = (
+        PERMISSION_RULES_EDIT_PERMISSION
+        if request.method == "POST"
+        else PERMISSION_RULES_VIEW_PERMISSION
+    )
+    if not user_can(view_permission):
+        flash("Permission Rules access denied.", "error")
+        return redirect(url_for("auth.portal_dashboard"))
 
     if request.method == "POST":
         try:
@@ -432,7 +476,7 @@ def permission_rules():
 
 @bp.route("/admin/users/<int:user_id>")
 @bp.route("/portal/manage/users/<int:user_id>")
-@portal_grandmaster_required
+@portal_permission_required(USER_MANAGEMENT_VIEW_PERMISSION, "User Management access denied.")
 def user_detail(user_id):
     target_user = User.query.get_or_404(user_id)
     gateway = get_current_gateway()
@@ -451,7 +495,7 @@ def user_detail(user_id):
 
 @bp.route("/admin/users/<int:user_id>/edit", methods=["GET", "POST"])
 @bp.route("/portal/manage/users/<int:user_id>/edit", methods=["GET", "POST"])
-@portal_grandmaster_required
+@portal_permission_required(USER_MANAGEMENT_EDIT_PERMISSION, "User Management edit access denied.")
 def edit_user(user_id):
     target_user = User.query.get_or_404(user_id)
     gateway = get_current_gateway()
@@ -485,7 +529,7 @@ def edit_user(user_id):
 
 @bp.route("/admin/users/<int:user_id>/roles", methods=["GET", "POST"])
 @bp.route("/portal/manage/users/<int:user_id>/roles", methods=["GET", "POST"])
-@portal_grandmaster_required
+@portal_permission_required(USER_MANAGEMENT_EDIT_PERMISSION, "User Management edit access denied.")
 def user_roles(user_id):
     target_user = User.query.get_or_404(user_id)
     gateway = get_current_gateway()
@@ -518,7 +562,7 @@ def user_roles(user_id):
 
 @bp.route("/admin/users/<int:user_id>/gateway-membership", methods=["POST"])
 @bp.route("/portal/manage/users/<int:user_id>/gateway-membership", methods=["POST"])
-@portal_grandmaster_required
+@portal_permission_required(USER_MANAGEMENT_EDIT_PERMISSION, "User Management edit access denied.")
 def update_user_gateway_membership(user_id):
     target_user = User.query.get_or_404(user_id)
     gateway = get_current_gateway()
@@ -563,7 +607,7 @@ def update_user_gateway_membership(user_id):
 
 @bp.route("/admin/access-requests")
 @bp.route("/portal/manage/access-requests")
-@portal_grandmaster_required
+@portal_permission_required(ACCESS_REQUESTS_VIEW_PERMISSION, "Access Requests access denied.")
 def access_requests():
     gateway = get_current_gateway()
     memberships = (
@@ -582,7 +626,7 @@ def access_requests():
 
 @bp.route("/admin/access-requests/<int:membership_id>/approve", methods=["POST"])
 @bp.route("/portal/manage/access-requests/<int:membership_id>/approve", methods=["POST"])
-@portal_grandmaster_required
+@portal_permission_required(ACCESS_REQUESTS_EDIT_PERMISSION, "Access Requests edit access denied.")
 def approve_access_request(membership_id):
     membership = _membership_or_404(membership_id)
     try:
@@ -602,7 +646,7 @@ def approve_access_request(membership_id):
 
 @bp.route("/admin/access-requests/<int:membership_id>/deny", methods=["POST"])
 @bp.route("/portal/manage/access-requests/<int:membership_id>/deny", methods=["POST"])
-@portal_grandmaster_required
+@portal_permission_required(ACCESS_REQUESTS_EDIT_PERMISSION, "Access Requests edit access denied.")
 def deny_access_request(membership_id):
     membership = _membership_or_404(membership_id)
     _deny_membership(
@@ -619,7 +663,7 @@ def deny_access_request(membership_id):
 @bp.route("/admin/users/<int:user_id>/emergency-reset", methods=["GET", "POST"])
 @bp.route("/portal/manage/users/<int:user_id>/emergency-password-reset", methods=["GET", "POST"])
 @bp.route("/portal/manage/users/<int:user_id>/emergency-reset", methods=["GET", "POST"])
-@portal_grandmaster_required
+@portal_permission_required(USER_MANAGEMENT_EDIT_PERMISSION, "User Management edit access denied.")
 def emergency_reset_user_password(user_id):
     target_user = User.query.get_or_404(user_id)
 

@@ -29,11 +29,14 @@ from app.services.neoermac_view_outbound import view_outbound_context
 from app.services.permission_rules import permission_access
 
 
+NEOERMAC_DASHBOARD_VIEW_PERMISSION = "neoermac.dashboard.view"
+UPCOMING_PULLS_VIEW_PERMISSION = "neoermac.upcoming_pulls.view"
 BUILDING_LINEUP_VIEW_PERMISSION = "neoermac.building_lineup.view"
 BUILDING_LINEUP_EDIT_PERMISSION = "neoermac.building_lineup.edit"
 DOOR_VIEW_VIEW_PERMISSION = "neoermac.door_view.view"
 DOOR_VIEW_EDIT_PERMISSION = "neoermac.door_view.edit"
 VIEW_OUTBOUND_VIEW_PERMISSION = "neoermac.view_outbound.view"
+TUG_ASSIGNMENTS_VIEW_PERMISSION = "neoermac.tug_assignments.view"
 
 
 NEOERMAC_PAGES = (
@@ -48,6 +51,11 @@ NEOERMAC_PAGES = (
 @bp.route("")
 @gateway_node_required("ermac")
 def index():
+    access = permission_access(NEOERMAC_DASHBOARD_VIEW_PERMISSION)
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neomotherbrain.rfd_hub"))
+
     gateway = get_current_gateway()
     db.session.commit()
     return render_template(
@@ -66,6 +74,11 @@ def index_slash():
 @bp.route("/upcoming-pulls")
 @gateway_node_required("ermac")
 def upcoming_pulls():
+    access = permission_access(UPCOMING_PULLS_VIEW_PERMISSION)
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neoermac.index"))
+
     gateway = get_current_gateway()
     dashboard_context = neoermac_dashboard_context(gateway)
     db.session.commit()
@@ -253,6 +266,11 @@ def door_view_pull_autosave():
 @bp.route("/tug-assignments")
 @gateway_node_required("ermac")
 def tug_assignments():
+    access = permission_access(TUG_ASSIGNMENTS_VIEW_PERMISSION)
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neoermac.index"))
+
     return _placeholder_page("TUG ASSIGNMENTS")
 
 

@@ -34,6 +34,7 @@ EBM_EDIT_PERMISSION = "neosektor.ebm.edit"
 WBM_VIEW_PERMISSION = "neosektor.wbm.view"
 WBM_EDIT_PERMISSION = "neosektor.wbm.edit"
 LIVE_COUNTS_VIEW_PERMISSION = "neosektor.live_counts.view"
+NEOSEKTOR_DASHBOARD_VIEW_PERMISSION = "neosektor.dashboard.view"
 
 NEOSEKTOR_PAGES = (
     (
@@ -139,6 +140,10 @@ def inject_neosektor_navigation():
 @bp.route("")
 @gateway_node_required("sektor")
 def index():
+    if not user_can(NEOSEKTOR_DASHBOARD_VIEW_PERMISSION):
+        flash("Access denied.", "error")
+        return redirect(url_for("neomotherbrain.rfd_hub"))
+
     gateway = get_current_gateway()
     return render_template(
         "neonodes/neosektor/index.html",

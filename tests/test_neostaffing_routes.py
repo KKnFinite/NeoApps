@@ -600,7 +600,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoStaffing", response.data)
-        self.assertIn(b"APPROVED Operator", response.data)
+        self.assertIn(b"Approved Operator", response.data)
         self.assertIn(b'href="/neostaffing"', response.data)
 
     def test_seniority_view_loads_for_approved_user_and_links_from_dashboard(self):

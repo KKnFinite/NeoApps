@@ -24,6 +24,7 @@ from app.services.permission_rules import permission_access, user_can
 
 FUEL_DISPATCH_VIEW_PERMISSION = "neoscorpion.fuel_dispatch.view"
 FUEL_DISPATCH_EDIT_PERMISSION = "neoscorpion.fuel_dispatch.edit"
+NEOSCORPION_DASHBOARD_VIEW_PERMISSION = "neoscorpion.dashboard.view"
 FUELER_VIEW_PERMISSION = "neoscorpion.fueler.view"
 FUELER_EDIT_PERMISSION = "neoscorpion.fueler.edit"
 TRUCK_MANAGER_VIEW_PERMISSION = "neoscorpion.truck_manager.view"
@@ -45,6 +46,11 @@ def inject_neoscorpion_navigation():
 @gateway_node_required("scorpion")
 def index():
     gateway = get_current_gateway()
+    access = permission_access(NEOSCORPION_DASHBOARD_VIEW_PERMISSION)
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neomotherbrain.rfd_hub"))
+
     return render_template(
         "neonodes/neoscorpion/index.html",
         gateway=gateway,

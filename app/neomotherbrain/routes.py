@@ -135,6 +135,7 @@ ACTIVE_DAY_OPTIONS = (
 FLIGHT_API_REVIEW_VIEW_PERMISSION = "neomotherbrain.flight_api_review.view"
 FLIGHT_API_REVIEW_EDIT_PERMISSION = "neomotherbrain.flight_api_review.edit"
 FLIGHT_API_AUTO_POLL_TRIGGER_PERMISSION = "neomotherbrain.flight_api_auto_poll.trigger"
+NEOGATEWAY_LANDING_VIEW_PERMISSION = "neogateway.landing.view"
 MANAGE_SORT_VIEW_PERMISSION = "neomotherbrain.manage_sort.view"
 MANAGE_SORT_EDIT_PERMISSION = "neomotherbrain.manage_sort.edit"
 ARRIVAL_PLANNING_VIEW_PERMISSION = "neomotherbrain.arrival_planning.view"
@@ -226,6 +227,9 @@ def rfd_hub():
     gateway = get_current_gateway()
     if not user_has_gateway_access(current_user, gateway.code):
         return redirect(url_for("auth.access_pending"))
+    if not user_can(NEOGATEWAY_LANDING_VIEW_PERMISSION):
+        flash("NeoGateway landing access denied.", "error")
+        return redirect(url_for("auth.portal_dashboard"))
 
     generation_result = _auto_generate_today_sorts(gateway)
     current_sort_operations = current_operations_for_gateway(gateway)

@@ -9,6 +9,7 @@ from app.config import resolve_database_uri
 from app.extensions import db
 from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, User
 from app.services.access_control import DEFAULT_NEONODES, user_can_access_node
+from app.services.permission_rules import DEFAULT_PERMISSION_RULES
 from app.services.database_bootstrap import bootstrap_database
 
 
@@ -83,65 +84,16 @@ class DatabaseBootstrapTest(unittest.TestCase):
             ).count(),
             len(DEFAULT_NEONODES),
         )
+        expected_rules = {
+            permission_key: minimum_role
+            for permission_key, minimum_role, _description in DEFAULT_PERMISSION_RULES
+        }
         self.assertEqual(
             {
                 rule.permission_key: rule.minimum_role
                 for rule in PermissionRule.query.order_by(PermissionRule.permission_key).all()
             },
-            {
-                "motherbrain.parking_conflicts.view": "operator",
-                "motherbrain.parking_optimizer.apply": "master",
-                "motherbrain.parking_optimizer.run": "master",
-                "motherbrain.parking_plan.edit": "simulator",
-                "motherbrain.parking_plan.view": "operator",
-                "motherbrain.parking_rules.edit": "simulator",
-                "motherbrain.parking_rules.view": "simulator",
-                "neomotherbrain.arrival_planning.edit": "master",
-                "neomotherbrain.arrival_planning.run": "master",
-                "neomotherbrain.arrival_planning.view": "operator",
-                "neomotherbrain.dashboard.view": "operator",
-                "neomotherbrain.departure_planning.edit": "master",
-                "neomotherbrain.departure_planning.run": "master",
-                "neomotherbrain.departure_planning.view": "operator",
-                "neomotherbrain.flight_api_auto_poll.trigger": "simulator",
-                "neomotherbrain.flight_api_review.edit": "simulator",
-                "neomotherbrain.flight_api_review.view": "simulator",
-                "neomotherbrain.gateway_matrix.edit": "simulator",
-                "neomotherbrain.gateway_matrix.view": "operator",
-                "neomotherbrain.manage_api.run": "grandmaster",
-                "neomotherbrain.manage_api.view": "grandmaster",
-                "neomotherbrain.manage_sort.edit": "simulator",
-                "neomotherbrain.manage_sort.view": "operator",
-                "neomotherbrain.master_schedule.edit": "simulator",
-                "neomotherbrain.master_schedule.view": "operator",
-                "neomotherbrain.sort_timeline.edit": "grandmaster",
-                "neomotherbrain.sort_timeline.view": "grandmaster",
-                "neoermac.building_lineup.edit": "simulator",
-                "neoermac.building_lineup.view": "operator",
-                "neoermac.door_view.edit": "operator",
-                "neoermac.door_view.view": "operator",
-                "neoermac.tug_assignments.edit": "master",
-                "neoermac.view_outbound.view": "watcher",
-                "neoscorpion.fuel_dispatch.edit": "simulator",
-                "neoscorpion.fuel_dispatch.view": "operator",
-                "neoscorpion.fueler.edit": "operator",
-                "neoscorpion.fueler.view": "watcher",
-                "neoscorpion.history.view": "operator",
-                "neoscorpion.settings.edit": "master",
-                "neoscorpion.settings.view": "simulator",
-                "neoscorpion.truck_manager.edit": "simulator",
-                "neoscorpion.truck_manager.view": "operator",
-                "neosektor.conductor.view": "simulator",
-                "neosektor.discharge.edit": "operator",
-                "neosektor.discharge.view": "operator",
-                "neosektor.driver_routing.view": "watcher",
-                "neosektor.ebm.edit": "operator",
-                "neosektor.ebm.view": "operator",
-                "neosektor.live_counts.view": "watcher",
-                "neosektor.tunnel_conductor.edit": "simulator",
-                "neosektor.wbm.edit": "operator",
-                "neosektor.wbm.view": "operator",
-            },
+            expected_rules,
         )
 
     def test_bootstrap_updates_existing_kessler_user_without_overwriting_password(self):
@@ -187,7 +139,7 @@ class DatabaseBootstrapTest(unittest.TestCase):
         self.assertFalse(second_result["password_applied"])
         self.assertEqual(Gateway.query.filter_by(code="RFD").count(), 1)
         self.assertEqual(NeoNode.query.count(), len(DEFAULT_NEONODES))
-        self.assertEqual(PermissionRule.query.count(), 52)
+        self.assertEqual(PermissionRule.query.count(), len(DEFAULT_PERMISSION_RULES))
         self.assertEqual(User.query.filter_by(username="Kessler").count(), 1)
         self.assertEqual(GatewayMembership.query.filter_by(user_id=user.id).count(), 1)
         self.assertEqual(
