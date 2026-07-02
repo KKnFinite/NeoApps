@@ -199,9 +199,21 @@ def rfd_hub():
     if not user_has_gateway_access(current_user, gateway.code):
         return redirect(url_for("auth.access_pending"))
 
+    generation_result = _auto_generate_today_sorts(gateway)
+    current_sort_operations = current_operations_for_gateway(gateway)
+    active_sort_operation = _selected_current_operation(current_sort_operations)
+    if active_sort_operation:
+        active_sort_status = "Active sort ready."
+    elif generation_result["errors"]:
+        active_sort_status = "Active sort unavailable: " + "; ".join(generation_result["errors"])
+    else:
+        active_sort_status = "No active sort configured for today."
+
     return render_template(
         "neomotherbrain/rfd_hub.html",
         gateway=gateway,
+        gateway_active_sort_operation=active_sort_operation,
+        gateway_active_sort_status=active_sort_status,
         motherbrain_role=get_user_node_role(current_user, gateway.code, "motherbrain"),
         can_enter_motherbrain=user_can_access_node(
             current_user,

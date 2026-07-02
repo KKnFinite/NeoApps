@@ -120,7 +120,13 @@
                 <span>
                     <strong>
                         {% if is_rfd_hub_page %}
-                        {{ neo_brand("Gateway", "gateway") }} - {{ default_gateway.code }}
+                        <span class="rfd-header-brandline" aria-label="NeoGateway - {{ default_gateway.code }}">
+                            <span class="rfd-header-brand neo-brand-title neo-brand neo-brand--gateway neo-node-name brand-inline-name node-gateway" aria-label="NeoGateway">
+                                <span class="neo-brand__neo neo-word neo-brand-title__neo">NEO</span><span class="neo-brand__node node-word neo-brand-title__node neo-brand-title__node--gateway">GATEWAY</span>
+                            </span>
+                            <span class="rfd-header-divider" aria-hidden="true">-</span>
+                            <span class="rfd-header-code neo-menu-text">{{ default_gateway.code }}</span>
+                        </span>
                         {% elif is_neostaffing_page %}
                         <span class="neostaffing-header-brandline">
                             <img
@@ -156,6 +162,16 @@
                     </strong>
                     {% if not (current_user.is_authenticated and not public_landing|default(false)) %}
                     <small>Powered by {{ neo_brand("Apps", "apps") }}</small>
+                    {% elif is_rfd_hub_page and gateway_active_sort_operation %}
+                    <small class="rfd-active-sort-banner" aria-label="Active sort {{ gateway_active_sort_operation.gateway_code }} {{ gateway_active_sort_operation.sort_name|upper }} {{ gateway_active_sort_operation.sort_date.month }}/{{ gateway_active_sort_operation.sort_date.day }}/{{ '%02d'|format(gateway_active_sort_operation.sort_date.year % 100) }}">
+                        <span>Active Sort</span>
+                        <strong>{{ gateway_active_sort_operation.gateway_code }} {{ gateway_active_sort_operation.sort_name|upper }} {{ gateway_active_sort_operation.sort_date.month }}/{{ gateway_active_sort_operation.sort_date.day }}/{{ '%02d'|format(gateway_active_sort_operation.sort_date.year % 100) }}</strong>
+                    </small>
+                    {% elif is_rfd_hub_page and gateway_active_sort_status %}
+                    <small class="rfd-active-sort-banner rfd-active-sort-banner-warning">
+                        <span>Sort Status</span>
+                        <strong>{{ gateway_active_sort_status }}</strong>
+                    </small>
                     {% endif %}
                 </span>
             </a>

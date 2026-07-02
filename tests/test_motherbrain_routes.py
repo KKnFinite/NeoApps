@@ -1612,6 +1612,58 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(len(operation.missions), 1)
         self.assertEqual(operation.missions[0].flight_number, "AUTO01")
 
+    def test_rfd_hub_creates_and_displays_today_active_sort(self):
+        sort_date = current_gateway_local_date(self.rfd_gateway)
+        day = sort_date.strftime("%A").lower()
+        self._add_matrix_cell(day, "night")
+        db.session.commit()
+
+        response = self.client.get("/rfd")
+
+        operation = SortDateOperation.query.filter_by(
+            gateway_code="RFD",
+            sort_date=sort_date,
+            sort_name="night",
+        ).first()
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(operation)
+        self.assertIn(b"rfd-active-sort-banner", response.data)
+        self.assertIn(b"Active Sort", response.data)
+        self.assertIn(
+            f"RFD NIGHT {sort_date.month}/{sort_date.day}/{sort_date.year % 100:02d}".encode(),
+            response.data,
+        )
+
+    def test_rfd_hub_reuses_existing_active_sort_without_duplicate(self):
+        sort_date = current_gateway_local_date(self.rfd_gateway)
+        day = sort_date.strftime("%A").lower()
+        self._add_matrix_cell(day, "night")
+        existing = self._operation(sort_date=sort_date, sort_name="night")
+        db.session.add(existing)
+        db.session.commit()
+
+        response = self.client.get("/rfd")
+
+        operations = SortDateOperation.query.filter_by(
+            gateway_code="RFD",
+            sort_date=sort_date,
+            sort_name="night",
+        ).all()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(operations), 1)
+        self.assertIn(
+            f"RFD NIGHT {sort_date.month}/{sort_date.day}/{sort_date.year % 100:02d}".encode(),
+            response.data,
+        )
+
+    def test_rfd_hub_missing_active_sort_config_shows_non_blocking_status(self):
+        response = self.client.get("/rfd")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"No active sort configured for today.", response.data)
+        self.assertIn(b"rfd-hub-sort-status", response.data)
+        self.assertEqual(SortDateOperation.query.filter_by(gateway_code="RFD").count(), 0)
+
     def test_manage_sort_creates_missing_operations_without_duplicates(self):
         sort_date = current_gateway_local_date(self.rfd_gateway)
         day = sort_date.strftime("%A").lower()

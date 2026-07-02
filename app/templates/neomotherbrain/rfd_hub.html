@@ -1,8 +1,9 @@
 {% extends "base.html" %}
-{% from "_neo_brand.html" import neo_brand %}
 
 {% macro node_label(slug, name) -%}
-{{ neo_brand(name, slug, "rfd-node-name", "Neo" ~ name) }}
+<span class="rfd-node-name neo-brand-title neo-brand neo-brand--{{ slug }} neo-node-name brand-inline-name node-{{ slug }}" aria-label="Neo{{ name }}">
+    <span class="neo-brand__neo neo-word neo-brand-title__neo">NEO</span><span class="neo-brand__node node-word neo-brand-title__node neo-brand-title__node--{{ slug }}">{{ name|upper }}</span>
+</span>
 {%- endmacro %}
 
 {% set locked_node_icons = {
@@ -45,6 +46,9 @@
         <div class="rfd-gateway-brand-strip" aria-label="{{ gateway.code }} NeoGateway brand">
             {{ gateway_brand() }}
         </div>
+        {% if not gateway_active_sort_operation and gateway_active_sort_status %}
+        <p class="rfd-hub-sort-status">{{ gateway_active_sort_status }}</p>
+        {% endif %}
 
         {% if can_enter_motherbrain %}
         <a class="rfd-node-tile rfd-node-motherbrain rfd-motherbrain-launch" href="{{ url_for('neomotherbrain.motherbrain') }}" aria-label="NeoMotherBrain">
