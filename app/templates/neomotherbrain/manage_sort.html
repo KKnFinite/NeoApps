@@ -8,6 +8,11 @@
         <h1 class="motherbrain-body-duplicate-title">Manage Sort</h1>
         <p class="muted">{{ gateway.code }} LOCAL DATE {{ sort_date }}. ACTIVE SORT OPERATIONS ARE AVAILABLE BELOW.</p>
     </div>
+    {% set motherbrain_mobile_operation = selected_operation %}
+    {% set motherbrain_mobile_item_class = "motherbrain-mobile-nav-tile" %}
+    <nav class="motherbrain-mobile-nav-grid" aria-label="MotherBrain mobile navigation" data-motherbrain-mobile-nav>
+        {% include "neomotherbrain/_motherbrain_mobile_nav_items.html" %}
+    </nav>
 
     {% if operations %}
     <section class="manage-sort-section" aria-labelledby="manage-sort-select-title">

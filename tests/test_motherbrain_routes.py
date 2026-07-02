@@ -124,6 +124,22 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"motherbrain-home-page", response.data)
         self.assertIn(b"data-mobile-alert-nav", response.data)
         self.assertIn(b"data-motherbrain-alert-tray", response.data)
+        self.assertIn(b"data-motherbrain-mobile-nav", response.data)
+        for nav_label in (
+            b"Manage Sort",
+            b"Arrival Planning",
+            b"Departure Planning",
+            b"Parking Plan",
+            b"Parking Rules",
+            b"Gateway Matrix",
+            b"Master Schedule",
+            b"Sort Timeline",
+            b"Manage API",
+            b"Unmatched Queue",
+            b"Portal Management",
+            b"Permission Rules",
+        ):
+            self.assertIn(nav_label, response.data)
 
     def test_motherbrain_header_navigation_routes_work(self):
         routes = {

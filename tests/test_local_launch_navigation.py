@@ -623,6 +623,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("mobile-topbar-node-icon-link", html)
         self.assertIn("neomotherbrain-inapp-128.png", html)
         self.assertIn("mobile-topbar-page-name neo-page-title", html)
+        self.assertIn(">Sort</span>", html)
         self.assertIn('<span class="mobile-account-fallback" aria-hidden="true">K</span>', html)
         self.assertIn("Back to", html)
         self.assertIn("neo-brand--apps", html)
@@ -662,7 +663,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertLess(topbar_left.index("mobile-topbar-node-icon-link"), topbar_left.index("mobile-topbar-page-link"))
         self.assertIn("neomotherbrain-inapp-128.png", topbar_left)
         self.assertIn("mobile-topbar-page-name neo-page-title", topbar_left)
-        self.assertIn("Manage Sort", topbar_left)
+        self.assertIn(">Sort</span>", topbar_left)
+        self.assertNotIn("Manage Sort", topbar_left)
         self.assertLess(topbar_actions.index("motherbrain-alert-tray"), topbar_actions.index("mobile-account-menu"))
         self.assertIn('<span class="mobile-account-fallback" aria-hidden="true">Z</span>', topbar_actions)
         self.assertIn('href="/portal"', topbar_actions)
@@ -697,7 +699,10 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("mobile-topbar-node-icon-link", topbar)
         self.assertIn("neogateway-inapp-128.png", topbar)
-        self.assertIn("mobile-topbar-page-name neo-page-title", topbar)
+        self.assertIn("mobile-topbar-gateway-brand-link", topbar)
+        self.assertIn("mobile-topbar-brand neo-brand-title", topbar)
+        self.assertIn("neo-brand--gateway", topbar)
+        self.assertIn("mobile-topbar-page-context", topbar)
         self.assertIn(">RFD</span>", topbar)
         self.assertNotIn("<strong>DASHBOARD</strong>", topbar)
         self.assertNotIn('<nav class="mobile-bottom-nav', html)
@@ -720,7 +725,14 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         )
         self.assertIn(
             "body.rfd-hub-page.mobile-app-chrome .rfd-node-card-icon-wrap {\n"
-            "        width: 54px;",
+            "        width: 46px;",
+            css,
+        )
+        self.assertIn(
+            "body.rfd-hub-page.mobile-app-chrome,\n"
+            "    body.rfd-hub-page.mobile-app-chrome .shell,\n"
+            "    body.rfd-hub-page.mobile-app-chrome .content {\n"
+            "        height: 100dvh;",
             css,
         )
         self.assertIn(
@@ -728,6 +740,62 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             "        position: fixed;",
             css,
         )
+
+    def test_mobile_portal_header_uses_neofont_neoapps_brand(self):
+        seed_dev_grandmaster(self.app)
+        self.client.post(
+            "/login",
+            data={"username": "Kessler", "password": "1313"},
+        )
+
+        response = self.client.get("/portal")
+        html = response.data.decode()
+        topbar = html.split('class="mobile-topbar node-apps"', 1)[1].split(
+            "</header>",
+            1,
+        )[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("mobile-topbar-brand neo-brand-title", topbar)
+        self.assertIn("neo-brand--apps", topbar)
+        self.assertIn("<strong>PORTAL</strong>", topbar)
+
+    def test_motherbrain_mobile_short_titles_and_full_menu_labels(self):
+        seed_dev_grandmaster(self.app)
+        self.client.post(
+            "/login",
+            data={"username": "Kessler", "password": "1313"},
+        )
+
+        cases = (
+            ("/motherbrain/parking-plan", "Parking"),
+            ("/motherbrain/gateway-matrix", "Matrix"),
+            ("/motherbrain/parking-rules", "Rules"),
+        )
+        for path, short_title in cases:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                html = response.data.decode()
+                topbar = html.split('class="mobile-topbar node-motherbrain"', 1)[1].split(
+                    "</header>",
+                    1,
+                )[0]
+                menu = html.split('data-mobile-shell-menu-panel', 1)[1].split("</div>", 1)[0]
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(f">{short_title}</span>", topbar)
+                self.assertIn("Manage Sort", menu)
+                self.assertIn("Arrival Planning", menu)
+                self.assertIn("Departure Planning", menu)
+                self.assertIn("Parking Plan", menu)
+                self.assertIn("Parking Rules", menu)
+                self.assertIn("Gateway Matrix", menu)
+                self.assertIn("Master Schedule", menu)
+                self.assertIn("Sort Timeline", menu)
+                self.assertIn("Manage API", menu)
+                self.assertIn("Unmatched Queue", menu)
+                self.assertIn("Portal Management", menu)
+                self.assertIn("Permission Rules", menu)
 
     def test_mobile_bottom_popovers_anchor_to_switch_and_menu_buttons(self):
         seed_dev_grandmaster(self.app)
