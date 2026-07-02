@@ -12454,6 +12454,28 @@ select::-ms-expand {
         padding: 0 10px calc(94px + env(safe-area-inset-bottom, 0px));
     }
 
+    body.mobile-app-chrome.motherbrain-mobile-landing-shell,
+    body.mobile-app-chrome.motherbrain-mobile-landing-shell .shell,
+    body.mobile-app-chrome.motherbrain-mobile-landing-shell .content {
+        height: 100dvh;
+        max-height: 100dvh;
+        overflow: hidden;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-landing-shell .manage-sort-page {
+        display: grid;
+        align-content: start;
+        width: min(100%, 430px);
+        max-height: calc(100dvh - 180px - env(safe-area-inset-bottom, 0px));
+        margin-inline: auto;
+        overflow: hidden;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-landing-shell .manage-sort-page > .section-heading,
+    body.mobile-app-chrome.motherbrain-mobile-landing-shell .motherbrain-mobile-landing-extra {
+        display: none;
+    }
+
     body.mobile-app-chrome.motherbrain-home-page .motherbrain-dashboard {
         gap: 12px;
         width: min(100%, 430px);
@@ -12524,9 +12546,16 @@ select::-ms-expand {
     .motherbrain-mobile-nav-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
+        gap: 8px;
         width: min(100%, 430px);
         margin: 0 auto 14px;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-landing-shell .motherbrain-mobile-nav-grid {
+        align-content: start;
+        max-height: 100%;
+        margin-bottom: 0;
+        overflow: hidden;
     }
 
     .motherbrain-mobile-nav-tile {
@@ -19385,6 +19414,43 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         max-width: calc(100vw - 18px);
     }
 
+    body.mobile-app-chrome .mobile-topbar .motherbrain-alert-tray {
+        flex: 0 0 40px;
+        display: inline-grid;
+        width: 40px;
+        height: 40px;
+        pointer-events: auto;
+    }
+
+    body.mobile-app-chrome .mobile-topbar .motherbrain-alert-button {
+        display: inline-grid;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        min-height: 40px;
+        padding: 0;
+        border-radius: 999px;
+        gap: 0;
+    }
+
+    body.mobile-app-chrome .mobile-topbar .motherbrain-alert-button::before {
+        display: inline-grid;
+        place-items: center;
+        width: auto;
+        font-size: 1rem;
+        line-height: 1;
+    }
+
+    body.mobile-app-chrome .mobile-topbar .motherbrain-alert-count {
+        right: -4px;
+        bottom: -4px;
+        min-width: 17px;
+        height: 17px;
+        padding: 0 4px;
+        font-size: 0.56rem;
+    }
+
     .mobile-bottom-nav {
         position: fixed;
         right: 50%;
@@ -19637,6 +19703,15 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     body.rfd-hub-page.mobile-app-chrome .mobile-topbar-node-icon {
         width: 27px;
         height: 27px;
+    }
+
+    body.mobile-app-chrome .mobile-topbar .motherbrain-alert-tray,
+    body.mobile-app-chrome .mobile-topbar .motherbrain-alert-button {
+        flex-basis: 38px;
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        min-height: 38px;
     }
 
     body.rfd-hub-page.mobile-app-chrome .mobile-topbar-page-brand {

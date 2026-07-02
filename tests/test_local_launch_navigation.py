@@ -614,11 +614,13 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
         response = self.client.get("/motherbrain/manage-sort")
         html = response.data.decode()
+        css = Path("app/static/css/base.css").read_text()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('class="mobile-topbar node-motherbrain"', html)
         self.assertIn("data-mobile-bottom-nav", html)
         self.assertIn("data-mobile-alert-nav", html)
+        self.assertIn("motherbrain-alert-count", html)
         self.assertIn("data-mobile-shell-menu-button", html)
         self.assertIn("mobile-topbar-node-icon-link", html)
         self.assertIn("neomotherbrain-inapp-128.png", html)
@@ -634,6 +636,73 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("<span>Alerts</span>", html)
         self.assertIn("<span>Switch</span>", html)
         self.assertIn("<span>Menu</span>", html)
+        self.assertIn(
+            "body.mobile-app-chrome .mobile-topbar .motherbrain-alert-tray {\n"
+            "        flex: 0 0 40px;",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome .mobile-topbar .motherbrain-alert-button {\n"
+            "        display: inline-grid;\n"
+            "        place-items: center;\n"
+            "        width: 40px;",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome .mobile-topbar .motherbrain-alert-count {\n"
+            "        right: -4px;",
+            css,
+        )
+
+    def test_mobile_motherbrain_landing_is_tile_menu_only(self):
+        seed_dev_grandmaster(self.app)
+        self.client.post(
+            "/login",
+            data={"username": "Kessler", "password": "1313"},
+        )
+
+        response = self.client.get("/motherbrain", follow_redirects=True)
+        html = response.data.decode()
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("motherbrain-mobile-landing-shell", html)
+        self.assertIn("data-motherbrain-mobile-nav", html)
+        self.assertIn("motherbrain-mobile-landing-extra", html)
+        self.assertNotIn("data-motherbrain-mobile-dashboard", html)
+        for nav_label in (
+            "Manage Sort",
+            "Arrival Planning",
+            "Departure Planning",
+            "Parking Plan",
+            "Parking Rules",
+            "Gateway Matrix",
+            "Master Schedule",
+            "Sort Timeline",
+            "Manage API",
+            "Unmatched Queue",
+            "Portal Management",
+            "Permission Rules",
+        ):
+            self.assertIn(nav_label, html)
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-mobile-landing-shell,\n"
+            "    body.mobile-app-chrome.motherbrain-mobile-landing-shell .shell,\n"
+            "    body.mobile-app-chrome.motherbrain-mobile-landing-shell .content {\n"
+            "        height: 100dvh;",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-mobile-landing-shell .manage-sort-page > .section-heading,\n"
+            "    body.mobile-app-chrome.motherbrain-mobile-landing-shell .motherbrain-mobile-landing-extra {\n"
+            "        display: none;",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-mobile-landing-shell .motherbrain-mobile-nav-grid {\n"
+            "        align-content: start;",
+            css,
+        )
 
     def test_mobile_gateway_node_topbar_standard_order_and_account_menu(self):
         seed_dev_grandmaster(self.app)
