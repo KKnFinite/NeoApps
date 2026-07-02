@@ -33,6 +33,7 @@ from app.models import (
 from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.alp_import import preview_alp_paste
 from app.services.gateway_matrix import current_gateway_local_date
+from app.services.gateway_matrix import current_gateway_local_datetime
 from app.services.gateway_matrix import current_operations_for_gateway
 from app.services.night_sorting import night_sort_time_key
 from app.services.parking_plan import parking_plan_context, parking_status_for_rows
@@ -278,11 +279,34 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertIn(b"MASTER SCHEDULE", response.data)
                 self.assertIn(b"MANAGE SORT", response.data)
                 self.assertIn(b"SORT TIMELINE", response.data)
+                for nav_label in (
+                    b"Dashboard",
+                    b"Sort Summary",
+                    b"Arrival Planning",
+                    b"Departure Planning",
+                    b"Parking Plan",
+                    b"Parking Rules",
+                    b"Gateway Matrix",
+                    b"Master Schedule",
+                    b"Sort Timeline",
+                    b"Manage API",
+                    b"Unmatched Queue",
+                    b"Portal Management",
+                    b"Permission Rules",
+                ):
+                    self.assertIn(nav_label, response.data)
                 self.assertIn(b'href="/motherbrain"', response.data)
                 self.assertIn(b"neo-brand--motherbrain", response.data)
                 self.assertIn(b'data-motherbrain-desktop-side-nav', response.data)
                 self.assertIn(b"motherbrain-desktop-side-menu", response.data)
                 self.assertIn(b"motherbrain-desktop-utility", response.data)
+                self.assertIn(b"motherbrain-desktop-top-title", response.data)
+                self.assertIn(b"motherbrain-desktop-top-title-text", response.data)
+                self.assertIn(b"neo-page-title", response.data)
+                self.assertIn(b"Change Characters", response.data)
+                self.assertIn(b"data-motherbrain-alert-tray", response.data)
+                self.assertIn(b"Logged in", response.data)
+                self.assertIn(b"Logout", response.data)
                 self.assertNotIn(b"motherbrain-main-menu-return", response.data)
                 self.assertIn(b'href="/motherbrain"', response.data)
                 self.assertIn(b'href="/logout"', response.data)
@@ -308,7 +332,13 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         css = Path("app/static/css/base.css").read_text()
         self.assertIn("body.motherbrain-desktop-nav-page .motherbrain-header-nav {\n        display: none;", css)
+        self.assertIn("--motherbrain-side-nav-width: 292px;", css)
         self.assertIn(".motherbrain-desktop-side-nav", css)
+        self.assertIn("overflow-x: hidden;", css)
+        self.assertIn(".motherbrain-desktop-side-link", css)
+        self.assertIn("white-space: nowrap;", css)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", css)
+        self.assertIn(".motherbrain-desktop-top-title-text", css)
         self.assertIn(".motherbrain-desktop-utility", css)
 
         logout_response = self.client.get("/logout", follow_redirects=False)
@@ -1471,6 +1501,38 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"neo-node-name neo-node-motherbrain", home_response.data)
         self.assertIn(b"Logout", home_response.data)
         self.assertNotIn(b"BACK TO NeoMotherBrain MAIN MENU", home_response.data)
+
+    def test_motherbrain_auto_poll_widget_only_displays_on_manage_api(self):
+        local_now = current_gateway_local_datetime(self.rfd_gateway)
+        window_start = local_now - timedelta(hours=1)
+        window_end = local_now + timedelta(hours=1)
+        sort_date = window_start.date()
+        day_name = sort_date.strftime("%A").lower()
+        self._set_sort_window(
+            "night",
+            window_start.time().replace(second=0, microsecond=0),
+            window_end.time().replace(second=0, microsecond=0),
+        )
+        self._add_matrix_cell(day_name, "night")
+        settings = ensure_sort_timeline_settings(self.rfd_gateway)
+        settings.provider_enabled = True
+        operation = self._operation(sort_date=sort_date, sort_name="night")
+        db.session.add(operation)
+        db.session.commit()
+
+        parking_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        manage_api_response = self.client.get(
+            f"/motherbrain/flight-api-test?operation_id={operation.id}"
+        )
+
+        self.assertEqual(parking_response.status_code, 200)
+        self.assertEqual(manage_api_response.status_code, 200)
+        self.assertIn(b"flight-api-auto-poll-driver", parking_response.data)
+        self.assertIn(b"data-flight-api-auto-poll-timer", parking_response.data)
+        self.assertNotIn(b"flight-api-auto-poll-widget", parking_response.data)
+        self.assertIn(b"flight-api-auto-poll-widget", manage_api_response.data)
+        self.assertIn(b"data-flight-api-auto-poll-timer", manage_api_response.data)
+        self.assertIn(b"AUTO POLL", manage_api_response.data)
 
     def test_gateway_matrix_displays_dynamic_gateway_and_sort_order(self):
         response = self.client.get("/motherbrain/gateway-matrix")

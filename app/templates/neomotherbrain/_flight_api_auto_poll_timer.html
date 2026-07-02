@@ -1,11 +1,14 @@
 {% set timer_status = flight_api_auto_poll_timer.initial_status %}
+{% set auto_poll_visible = flight_api_auto_poll_visible|default(false) %}
 <section
-    class="flight-api-auto-poll-widget"
+    class="{% if auto_poll_visible %}flight-api-auto-poll-widget{% else %}flight-api-auto-poll-driver{% endif %}"
     aria-label="Flight API auto poll status"
     data-flight-api-auto-poll-timer
     data-endpoint="{{ flight_api_auto_poll_timer.endpoint }}"
     data-initial-status='{{ timer_status|tojson }}'
+    {% if not auto_poll_visible %}hidden aria-hidden="true"{% endif %}
 >
+    {% if auto_poll_visible %}
     <div>
         <span>AUTO POLL</span>
         <strong data-flight-api-auto-poll-state>{{ "READY" if timer_status.eligible else "WAITING" }}</strong>
@@ -19,6 +22,11 @@
     <p class="muted" data-flight-api-auto-poll-success>
         LAST SUCCESS {{ timer_status.last_successful_poll.local if timer_status.last_successful_poll else "-" }}
     </p>
+    {% else %}
+    <span data-flight-api-auto-poll-state hidden>{{ "READY" if timer_status.eligible else "WAITING" }}</span>
+    <span data-flight-api-auto-poll-detail hidden>{{ timer_status.reason or "Server eligibility check pending." }}</span>
+    <span data-flight-api-auto-poll-success hidden>LAST SUCCESS {{ timer_status.last_successful_poll.local if timer_status.last_successful_poll else "-" }}</span>
+    {% endif %}
 </section>
 
 <script>
@@ -39,6 +47,9 @@
     const stateField = widget.querySelector("[data-flight-api-auto-poll-state]");
     const detailField = widget.querySelector("[data-flight-api-auto-poll-detail]");
     const successField = widget.querySelector("[data-flight-api-auto-poll-success]");
+
+    // Non-Manage API MotherBrain pages render this as a hidden driver only; the
+    // passive trigger still posts here, while the visible status widget lives on Manage API.
 
     const jitterMs = () => Math.floor(Math.random() * 15000);
 

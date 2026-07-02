@@ -892,6 +892,7 @@ a {
 }
 
 .motherbrain-header-identity,
+.motherbrain-desktop-top-title,
 .motherbrain-menu-button {
     display: none;
 }
@@ -1307,7 +1308,7 @@ a {
 
 @media (min-width: 901px) {
     body.motherbrain-desktop-nav-page {
-        --motherbrain-side-nav-width: 238px;
+        --motherbrain-side-nav-width: 292px;
     }
 
     body.motherbrain-desktop-nav-page .shell {
@@ -1319,17 +1320,28 @@ a {
         position: fixed;
         top: 14px;
         right: 18px;
-        left: auto;
+        left: calc(var(--motherbrain-side-nav-width) + 34px);
         z-index: 95;
-        display: block;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 14px;
         width: auto;
-        min-height: 0;
+        min-height: 62px;
         margin: 0;
-        padding: 0;
-        border: 0;
-        background: transparent;
-        box-shadow: none;
+        padding: 9px 12px 9px 16px;
+        border: 1px solid rgba(var(--node-rgb), 0.26);
+        border-radius: 10px;
+        background:
+            linear-gradient(135deg, rgba(var(--node-rgb), 0.12), transparent 42%),
+            rgba(3, 4, 7, 0.84);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            0 14px 30px rgba(0, 0, 0, 0.3),
+            0 0 22px rgba(var(--node-rgb), 0.12);
         transform: none;
+        backdrop-filter: blur(14px);
+        overflow: hidden;
     }
 
     body.motherbrain-desktop-nav-page .motherbrain-header-logo-link,
@@ -1339,13 +1351,35 @@ a {
         display: none;
     }
 
+    body.motherbrain-desktop-nav-page .motherbrain-desktop-top-title {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+    }
+
+    body.motherbrain-desktop-nav-page .motherbrain-desktop-top-title-text {
+        display: block;
+        min-width: 0;
+        overflow: hidden;
+        color: var(--neo-bright-silver);
+        font-size: clamp(1.34rem, 2.6vw, 2.14rem);
+        line-height: 0.95;
+        text-overflow: ellipsis;
+        text-shadow:
+            0 0 18px rgba(var(--node-rgb), 0.32),
+            0 2px 0 rgba(0, 0, 0, 0.72);
+        white-space: nowrap;
+    }
+
     body.motherbrain-desktop-nav-page.motherbrain-fixed-header .topbar-actions {
         display: flex;
+        flex-wrap: wrap;
         grid-template-columns: none;
         align-items: center;
         justify-content: flex-end;
         gap: 10px;
         width: auto;
+        min-width: 0;
     }
 
     body.motherbrain-desktop-nav-page.motherbrain-fixed-header .character-switcher,
@@ -1360,23 +1394,18 @@ a {
         justify-content: flex-end;
         gap: 8px;
         width: auto;
-        padding: 7px;
-        border: 1px solid rgba(var(--node-rgb), 0.24);
-        border-radius: 8px;
-        background:
-            linear-gradient(135deg, rgba(var(--node-rgb), 0.1), transparent 42%),
-            rgba(3, 4, 7, 0.78);
-        box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.08),
-            0 14px 30px rgba(0, 0, 0, 0.3),
-            0 0 22px rgba(var(--node-rgb), 0.12);
-        backdrop-filter: blur(14px);
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
     }
 
     body.motherbrain-desktop-nav-page.motherbrain-fixed-header .content {
         width: 100%;
         max-width: none;
-        padding: 88px 24px 48px calc(var(--motherbrain-side-nav-width) + 34px);
+        padding: 92px 24px 48px calc(var(--motherbrain-side-nav-width) + 34px);
     }
 
     .motherbrain-desktop-side-nav {
@@ -1391,6 +1420,7 @@ a {
         width: var(--motherbrain-side-nav-width);
         min-width: 0;
         padding: 13px;
+        overflow-x: hidden;
         overflow-y: auto;
         border: 1px solid rgba(var(--node-rgb), 0.34);
         border-radius: 10px;
@@ -1470,17 +1500,18 @@ a {
         align-items: center;
         min-height: 34px;
         min-width: 0;
-        padding: 8px 10px;
+        padding: 8px 12px;
         border: 1px solid rgba(var(--node-rgb), 0.22);
         border-radius: 6px;
         background: rgba(255, 255, 255, 0.035);
         color: var(--text);
-        font-size: 0.68rem;
+        font-size: 0.72rem;
         font-weight: 900;
         letter-spacing: 0.06em;
         line-height: 1.1;
         text-decoration: none;
         text-transform: uppercase;
+        white-space: nowrap;
         transition:
             border-color 0.18s ease,
             background 0.18s ease,

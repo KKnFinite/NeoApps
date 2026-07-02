@@ -418,6 +418,7 @@ def flight_api_test():
         flight_api_operational_time=flight_api_operational_time_utc,
         flight_api_provider_time=flight_api_provider_time_utc,
         format_flight_api_time=format_flight_api_local_time,
+        **_flight_api_auto_poll_timer_context(gateway, operation=selected_operation),
     )
 
 

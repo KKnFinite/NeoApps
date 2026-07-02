@@ -110,6 +110,11 @@
                 </span>
                 <strong>{{ node_current_label }}</strong>
             </div>
+            {% if uses_motherbrain_header %}
+            <div class="motherbrain-desktop-top-title" aria-label="Current MotherBrain page">
+                <span class="neo-page-title motherbrain-desktop-top-title-text">{{ motherbrain_current_label }}</span>
+            </div>
+            {% endif %}
             {% else %}
             <a class="brand" href="{% if is_rfd_hub_page %}{{ url_for('neomotherbrain.rfd_hub') }}{% elif is_neostaffing_page %}{{ url_for('neostaffing.index') }}{% elif current_user.is_authenticated and not public_landing|default(false) %}{{ url_for('auth.portal_dashboard') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}" aria-label="{% if is_rfd_hub_page %}NeoGateway - {{ default_gateway.code }}{% elif is_neostaffing_page %}NeoStaffing{% else %}NeoApps{% endif %}">
                 <span>
@@ -290,6 +295,7 @@
                 {% endif %}
             {% endwith %}
             {% if flight_api_auto_poll_timer %}
+            {% set flight_api_auto_poll_visible = is_flight_api_test_page %}
             {% include "neomotherbrain/_flight_api_auto_poll_timer.html" %}
             {% endif %}
             {% block content %}{% endblock %}
