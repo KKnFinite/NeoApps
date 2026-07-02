@@ -11,6 +11,30 @@
 </select>
 {% endmacro %}
 
+{% macro parking_target_select(name, selected, disabled=False) %}
+<select name="{{ name }}" {% if disabled %}disabled{% endif %}>
+    <option value="">SELECT RAMP OR POSITION</option>
+    {% if selected and selected not in parking_target_options|map(attribute=0)|list %}
+    <option value="{{ selected }}" selected>LEGACY {{ selected }}</option>
+    {% endif %}
+    {% for code, label in parking_target_options %}
+    <option value="{{ code }}" {% if selected == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+</select>
+{% endmacro %}
+
+{% macro plan_subject_select(name, selected, options, disabled=False) %}
+<select name="{{ name }}" {% if disabled %}disabled{% endif %}>
+    <option value="">SELECT MASTER PLAN ROW</option>
+    {% if selected and selected not in options|map(attribute=0)|list %}
+    <option value="{{ selected }}" selected>LEGACY {{ selected }}</option>
+    {% endif %}
+    {% for key, label in options %}
+    <option value="{{ key }}" {% if selected == key %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+</select>
+{% endmacro %}
+
 {% macro aircraft_type_select(name, selected, disabled=False) %}
 {% set selected_value = (selected or '')|upper %}
 <select name="{{ name }}" {% if disabled %}disabled{% endif %}>
@@ -22,6 +46,74 @@
     <option value="{{ aircraft_type }}" {% if selected_value == aircraft_type %}selected{% endif %}>{{ aircraft_type }}</option>
     {% endfor %}
 </select>
+{% endmacro %}
+
+{% macro plan_rule_table(title, rules, category, options, helper_text) %}
+<section class="parking-rules-card" aria-label="{{ title }}">
+    <div class="section-heading parking-rules-card-heading">
+        <h2>{{ title|upper }}</h2>
+        <p class="muted">{{ helper_text }}</p>
+    </div>
+    <div class="table-wrap">
+        <table class="data-table wide-data-table parking-rules-table">
+            <thead>
+                <tr>
+                    <th>MASTER PLAN ROW</th>
+                    <th>RAMP / PARKING</th>
+                    <th>ACTIVE</th>
+                    <th>NOTE</th>
+                    {% if can_edit_parking_rules %}<th>REMOVE</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for rule in rules %}
+                <tr>
+                    <td data-label="Master Plan Row">
+                        <input type="hidden" name="rule_ids" value="{{ rule.id }}">
+                        {{ plan_subject_select("subject_value_" ~ rule.id, rule.subject_value, options, not can_edit_parking_rules) }}
+                    </td>
+                    <td data-label="Ramp / Parking">{{ parking_target_select("ramp_code_" ~ rule.id, rule.ramp_code, not can_edit_parking_rules) }}</td>
+                    <td data-label="Active">
+                        <label class="parking-rules-check">
+                            <input type="checkbox" name="active_{{ rule.id }}" value="1" {% if rule.active %}checked{% endif %} {% if not can_edit_parking_rules %}disabled{% endif %}>
+                            <span>{{ "ACTIVE" if rule.active else "INACTIVE" }}</span>
+                        </label>
+                    </td>
+                    <td data-label="Note">
+                        <input name="note_{{ rule.id }}" value="{{ rule.note or '' }}" autocomplete="off" {% if not can_edit_parking_rules %}disabled{% endif %}>
+                    </td>
+                    {% if can_edit_parking_rules %}
+                    <td data-label="Remove">
+                        <label class="parking-rules-check">
+                            <input type="checkbox" name="delete_rule_{{ rule.id }}" value="1">
+                            <span>DELETE</span>
+                        </label>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{{ 5 if can_edit_parking_rules else 4 }}">NO RULES CONFIGURED.</td>
+                </tr>
+                {% endfor %}
+                {% if can_edit_parking_rules %}
+                <tr class="parking-rules-new-row">
+                    <td data-label="Master Plan Row">
+                        {{ plan_subject_select("new_" ~ category ~ "_subject", "", options, not options) }}
+                        {% if not options %}<small class="muted">Add active Master Schedule rows before adding this rule.</small>{% endif %}
+                    </td>
+                    <td data-label="Ramp / Parking">{{ parking_target_select("new_" ~ category ~ "_ramp", "", not options) }}</td>
+                    <td data-label="Active">NEW</td>
+                    <td data-label="Note">
+                        <input name="new_{{ category }}_note" placeholder="OPTIONAL NOTE" autocomplete="off" {% if not options %}disabled{% endif %}>
+                    </td>
+                    <td data-label="Remove">-</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</section>
 {% endmacro %}
 
 {% macro rule_table(title, rules, subject_label, category, placeholder, helper_text='', subject_kind='text') %}
@@ -185,13 +277,10 @@
     <form class="operation-form parking-rules-form" method="post">
         {% if operation %}<input type="hidden" name="operation_id" value="{{ operation.id }}">{% endif %}
         <div class="parking-rules-grid">
-            <section class="parking-rules-card" aria-label="Origin Ramp Rules">
-                <div class="section-heading parking-rules-card-heading">
-                    <h2>ORIGIN RAMP RULES</h2>
-                    <p class="muted">Origin ramp requirements are HARD rules. Aircraft arriving from an origin listed here MUST be parked on the selected ramp when the optimizer suggests a plan.</p>
-                </div>
-                {{ rule_table("Origin Ramp Requirements", rules_by_category[categories.origin_requirements], "ORIGIN", categories.origin_requirements, "ONT", "Requirements are hard rules. Aircraft from this origin must be parked on the selected ramp. This is not a soft preference or avoid rule.") }}
-            </section>
+            {{ plan_rule_table("Arrival Preferred Parking", rules_by_category[categories.arrival_preferred], categories.arrival_preferred, arrival_rule_options, "Preferred parking is a SOFT rule. The optimizer will try to place this arrival flight/origin on the selected ramp or position when valid alternatives exist.") }}
+            {{ plan_rule_table("Arrival Required Parking", rules_by_category[categories.arrival_required], categories.arrival_required, arrival_rule_options, "Required parking is a HARD rule. This arrival flight/origin must be parked on the selected ramp or position, or it will remain unresolved with a rule conflict.") }}
+            {{ plan_rule_table("Departure Preferred Parking", rules_by_category[categories.departure_preferred], categories.departure_preferred, departure_rule_options, "Preferred parking is a SOFT rule. The optimizer will try to place this departure flight/destination on the selected ramp or position when valid alternatives exist.") }}
+            {{ plan_rule_table("Departure Required Parking", rules_by_category[categories.departure_required], categories.departure_required, departure_rule_options, "Required parking is a HARD rule. This departure flight/destination must be parked on the selected ramp or position, or it will remain unresolved with a rule conflict.") }}
 
             {{ rule_table("Aircraft Type Restrictions", rules_by_category[categories.aircraft_restrictions], "AIRCRAFT TYPE", categories.aircraft_restrictions, "767", "Aircraft Type Restrictions are HARD / NOT ALLOWED rules. The optimizer will never park the selected aircraft type on that ramp. A restriction row means not allowed on this ramp.", "aircraft_type") }}
             {{ rule_table("Aircraft Type Preferences", rules_by_category[categories.aircraft_preferences], "AIRCRAFT TYPE", categories.aircraft_preferences, "757", "Aircraft Type Preferences are SOFT optimizer guidance. The optimizer will try to place these aircraft types on these ramps when possible, but hard rules still win and preferences are not required.", "aircraft_type") }}
@@ -289,8 +378,20 @@
                                 <dd>{{ rule_report.current_settings.active_blocked_positions|join(", ") }}</dd>
                             </div>
                             <div>
-                                <dt>Active Origin Requirements</dt>
-                                <dd>{{ rule_report.current_settings.active_origin_requirements|join(", ") }}</dd>
+                                <dt>Active Arrival Required Parking</dt>
+                                <dd>{{ rule_report.current_settings.active_arrival_required|join(", ") }}</dd>
+                            </div>
+                            <div>
+                                <dt>Active Arrival Preferred Parking</dt>
+                                <dd>{{ rule_report.current_settings.active_arrival_preferred|join(", ") }}</dd>
+                            </div>
+                            <div>
+                                <dt>Active Departure Required Parking</dt>
+                                <dd>{{ rule_report.current_settings.active_departure_required|join(", ") }}</dd>
+                            </div>
+                            <div>
+                                <dt>Active Departure Preferred Parking</dt>
+                                <dd>{{ rule_report.current_settings.active_departure_preferred|join(", ") }}</dd>
                             </div>
                             <div>
                                 <dt>Active Aircraft Restrictions</dt>

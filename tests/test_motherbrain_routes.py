@@ -48,9 +48,14 @@ from app.services.parking_physical_validator import (
 from app.services.parking_rules import (
     AIRCRAFT_TYPE_RAMP_RESTRICTION,
     AIRCRAFT_TYPE_RAMP_PREFERENCE,
+    ARRIVAL_PARKING_PREFERENCE,
+    ARRIVAL_PARKING_REQUIREMENT,
     BLOCKED_PARKING_POSITION,
+    DEPARTURE_PARKING_PREFERENCE,
+    DEPARTURE_PARKING_REQUIREMENT,
     ORIGIN_RAMP_RESTRICTION,
     ORIGIN_RAMP_PREFERENCE,
+    parking_schedule_rule_key,
 )
 from app.services.permission_rules import ensure_default_permission_rules
 from app.services.sort_timeline import (
@@ -6194,22 +6199,38 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_parking_rules_page_renders_and_persists_settings(self):
         operation = self._parking_operation()
+        arrival_key = parking_schedule_rule_key("arrival", "UPS0948", "SDF")
+        departure_key = parking_schedule_rule_key("departure", "UPS1076", "EWR")
+        self._add_master(
+            mission_type="arrival",
+            flight_number="UPS0948",
+            origin="SDF",
+            destination="RFD",
+        )
+        self._add_master(
+            mission_type="departure",
+            flight_number="UPS1076",
+            origin="RFD",
+            destination="EWR",
+        )
         db.session.commit()
 
         response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"PARKING RULES", response.data)
-        self.assertIn(b"ORIGIN RAMP RULES", response.data)
-        self.assertIn(b"ORIGIN RAMP REQUIREMENTS", response.data)
-        self.assertIn(
-            b"Origin ramp requirements are HARD rules.",
-            response.data,
-        )
-        self.assertIn(
-            b"This is not a soft preference or avoid rule.",
-            response.data,
-        )
+        self.assertIn(b"ARRIVAL PREFERRED PARKING", response.data)
+        self.assertIn(b"ARRIVAL REQUIRED PARKING", response.data)
+        self.assertIn(b"DEPARTURE PREFERRED PARKING", response.data)
+        self.assertIn(b"DEPARTURE REQUIRED PARKING", response.data)
+        self.assertIn(b"UPS0948 / SDF", response.data)
+        self.assertIn(b"UPS1076 / EWR", response.data)
+        self.assertIn(b"Required parking is a HARD rule.", response.data)
+        self.assertIn(b"Preferred parking is a SOFT rule.", response.data)
+        self.assertIn(b"SELECT MASTER PLAN ROW", response.data)
+        self.assertIn(b"SELECT RAMP OR POSITION", response.data)
+        self.assertNotIn(b"ORIGIN RAMP RULES", response.data)
+        self.assertNotIn(b"ORIGIN RAMP REQUIREMENTS", response.data)
         self.assertNotIn(b"ORIGIN RAMP RESTRICTIONS", response.data)
         self.assertNotIn(b"ORIGIN RAMP PREFERENCES", response.data)
         self.assertIn(b"AIRCRAFT TYPE RESTRICTIONS", response.data)
@@ -6231,6 +6252,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"skipped automatically when needed", response.data)
         self.assertIn(b"Inbound ETA same-ramp spacing: active soft rule", response.data)
         self.assertIn(b"01-04 / 05-08 side balance: active soft rule", response.data)
+        self.assertIn(b"Arrival preferred parking", response.data)
+        self.assertIn(b"Arrival required parking", response.data)
+        self.assertIn(b"Departure preferred parking", response.data)
+        self.assertIn(b"Departure required parking", response.data)
         self.assertNotIn(b"757 preference for 04/08: planned / inactive", response.data)
         self.assertNotIn(b"Avoid 04/08: planned / inactive", response.data)
         self.assertIn(b"Hard-blocked parking positions", response.data)
@@ -6265,8 +6290,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "deice_spacing_threshold_minutes": "22",
                 "inbound_same_ramp_spacing_minutes": "7",
                 "preferred_max_per_ramp": "6",
-                "new_origin_ramp_preference_subject": "ont",
-                "new_origin_ramp_preference_ramp": "A",
+                "new_arrival_parking_preference_subject": arrival_key,
+                "new_arrival_parking_preference_ramp": "A01",
+                "new_arrival_parking_requirement_subject": arrival_key,
+                "new_arrival_parking_requirement_ramp": "A",
+                "new_departure_parking_preference_subject": departure_key,
+                "new_departure_parking_preference_ramp": "B",
+                "new_departure_parking_requirement_subject": departure_key,
+                "new_departure_parking_requirement_ramp": "B01",
                 "new_aircraft_type_ramp_restriction_subject": "767",
                 "new_aircraft_type_ramp_restriction_ramp": "R",
                 "new_aircraft_type_ramp_preference_subject": "a300",
@@ -6297,7 +6328,19 @@ class MotherBrainRoutesTest(unittest.TestCase):
             ).all()
         }
         self.assertIn(
-            ("origin_ramp_preference", "origin", "ONT", "A", "required"),
+            ("arrival_parking_preference", "arrival_plan", arrival_key, "A01", "preferred"),
+            rules,
+        )
+        self.assertIn(
+            ("arrival_parking_requirement", "arrival_plan", arrival_key, "A", "required"),
+            rules,
+        )
+        self.assertIn(
+            ("departure_parking_preference", "departure_plan", departure_key, "B", "preferred"),
+            rules,
+        )
+        self.assertIn(
+            ("departure_parking_requirement", "departure_plan", departure_key, "B01", "required"),
             rules,
         )
         self.assertIn(
@@ -6314,7 +6357,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
 
         reload_response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
-        self.assertIn(b"value=\"ONT\"", reload_response.data)
+        self.assertIn(f'value="{arrival_key}"'.encode(), reload_response.data)
+        self.assertIn(f'value="{departure_key}"'.encode(), reload_response.data)
+        self.assertIn(b"value=\"A01\"", reload_response.data)
+        self.assertIn(b"value=\"B01\"", reload_response.data)
         self.assertIn(b"value=\"767\"", reload_response.data)
         self.assertIn(b"value=\"D01\"", reload_response.data)
         self.assertIn(b"value=\"22\"", reload_response.data)
@@ -6379,8 +6425,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         response = self.client.get("/motherbrain/parking-rules")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"ORIGIN RAMP REQUIREMENTS", response.data)
-        self.assertIn(b"value=\"ONT\"", response.data)
+        self.assertIn(b"ARRIVAL PREFERRED PARKING", response.data)
+        self.assertIn(b"DEPARTURE REQUIRED PARKING", response.data)
+        self.assertNotIn(b"ORIGIN RAMP REQUIREMENTS", response.data)
+        self.assertNotIn(b"value=\"ONT\"", response.data)
         self.assertNotIn(b"ORIGIN RAMP RESTRICTIONS", response.data)
         self.assertNotIn(b"value=\"DFW\"", response.data)
 
@@ -6460,8 +6508,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "/motherbrain/parking-rules",
             data={
                 "include_remote_default": "1",
-                "new_origin_ramp_preference_subject": "ONT",
-                "new_origin_ramp_preference_ramp": "A",
+                "new_arrival_parking_requirement_subject": "UPS0948|SDF",
+                "new_arrival_parking_requirement_ramp": "A",
             },
         )
 
@@ -6483,16 +6531,16 @@ class MotherBrainRoutesTest(unittest.TestCase):
         post_response = self.client.post(
             "/motherbrain/parking-rules",
             data={
-                "new_origin_ramp_preference_subject": "ONT",
-                "new_origin_ramp_preference_ramp": "A",
+                "new_arrival_parking_requirement_subject": "UPS0948|SDF",
+                "new_arrival_parking_requirement_ramp": "A",
             },
         )
 
         self.assertEqual(post_response.status_code, 302)
         saved_rule = MotherBrainParkingRule.query.filter_by(
             gateway_id=self.rfd_gateway.id,
-            rule_category=ORIGIN_RAMP_PREFERENCE,
-            subject_value="ONT",
+            rule_category=ARRIVAL_PARKING_REQUIREMENT,
+            subject_value="UPS0948|SDF",
             ramp_code="A",
         ).one()
         self.assertEqual(saved_rule.rule_behavior, "required")
@@ -6517,8 +6565,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         post_response = self.client.post(
             "/motherbrain/parking-rules",
             data={
-                "new_origin_ramp_preference_subject": "ONT",
-                "new_origin_ramp_preference_ramp": "A",
+                "new_arrival_parking_requirement_subject": "UPS0948|SDF",
+                "new_arrival_parking_requirement_ramp": "A",
             },
         )
 
@@ -7848,6 +7896,137 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(len(preview["suggested_assignments"]), 3)
         self.assertEqual(ramps, {"A"})
+
+    def test_parking_optimizer_required_arrival_rule_forces_matching_ramp(self):
+        operation = self._parking_operation()
+        arrival, _departure = self._parking_pair(
+            operation,
+            "N410UP",
+            origin="SDF",
+            destination="EWR",
+        )
+        self._parking_rule(
+            ARRIVAL_PARKING_REQUIREMENT,
+            "arrival_plan",
+            parking_schedule_rule_key("arrival", arrival.flight_number, "SDF"),
+            "B",
+            behavior="required",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = preview["suggested_assignments"][0]
+
+        self.assertEqual(preview["solver_status"], "OPTIMAL")
+        self.assertEqual(suggestion["tail"], "N410UP")
+        self.assertTrue(suggestion["position"].startswith("B"))
+
+    def test_parking_optimizer_required_arrival_rule_reports_unassigned_when_blocked(self):
+        operation = self._parking_operation()
+        arrival, _departure = self._parking_pair(
+            operation,
+            "N411UP",
+            origin="SDF",
+            destination="EWR",
+        )
+        arrival_key = parking_schedule_rule_key("arrival", arrival.flight_number, "SDF")
+        self._parking_rule(
+            ARRIVAL_PARKING_REQUIREMENT,
+            "arrival_plan",
+            arrival_key,
+            "A01",
+            behavior="required",
+        )
+        self._parking_rule(
+            BLOCKED_PARKING_POSITION,
+            "position",
+            "A01",
+            "A",
+            behavior="forbidden",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        unresolved = {row["tail"]: row for row in preview["unassigned_tails"]}
+
+        self.assertEqual(preview["solver_status"], "OPTIMAL")
+        self.assertEqual(preview["suggested_assignments"], [])
+        self.assertIn("N411UP", unresolved)
+        self.assertIn("Arrival required parking rule", unresolved["N411UP"]["reason"])
+
+    def test_parking_optimizer_preferred_arrival_rule_influences_scoring_only(self):
+        operation = self._parking_operation()
+        arrival, _departure = self._parking_pair(
+            operation,
+            "N412UP",
+            origin="SDF",
+            destination="EWR",
+        )
+        self._parking_rule(
+            ARRIVAL_PARKING_PREFERENCE,
+            "arrival_plan",
+            parking_schedule_rule_key("arrival", arrival.flight_number, "SDF"),
+            "C",
+            behavior="preferred",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = preview["suggested_assignments"][0]
+
+        self.assertEqual(preview["solver_status"], "OPTIMAL")
+        self.assertTrue(suggestion["position"].startswith("C"))
+        self.assertIn("Arrival", suggestion["reason"])
+        self.assertIn("prefers ramp C", suggestion["reason"])
+
+    def test_parking_optimizer_required_departure_rule_forces_matching_ramp(self):
+        operation = self._parking_operation()
+        _arrival, departure = self._parking_pair(
+            operation,
+            "N413UP",
+            origin="SDF",
+            destination="EWR",
+        )
+        self._parking_rule(
+            DEPARTURE_PARKING_REQUIREMENT,
+            "departure_plan",
+            parking_schedule_rule_key("departure", departure.flight_number, "EWR"),
+            "D",
+            behavior="required",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = preview["suggested_assignments"][0]
+
+        self.assertEqual(preview["solver_status"], "OPTIMAL")
+        self.assertEqual(suggestion["tail"], "N413UP")
+        self.assertTrue(suggestion["position"].startswith("D"))
+
+    def test_parking_optimizer_preferred_departure_rule_influences_scoring_only(self):
+        operation = self._parking_operation()
+        _arrival, departure = self._parking_pair(
+            operation,
+            "N414UP",
+            origin="SDF",
+            destination="EWR",
+        )
+        self._parking_rule(
+            DEPARTURE_PARKING_PREFERENCE,
+            "departure_plan",
+            parking_schedule_rule_key("departure", departure.flight_number, "EWR"),
+            "E",
+            behavior="preferred",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = preview["suggested_assignments"][0]
+
+        self.assertEqual(preview["solver_status"], "OPTIMAL")
+        self.assertTrue(suggestion["position"].startswith("E"))
+        self.assertIn("Departure", suggestion["reason"])
+        self.assertIn("prefers ramp E", suggestion["reason"])
 
     def test_parking_optimizer_prefers_757_on_four_eight_over_other_aircraft_when_valid(self):
         operation = self._parking_operation()

@@ -106,8 +106,11 @@ from app.services.parking_optimizer import (
 from app.services.parking_rules import (
     AIRCRAFT_TYPE_RAMP_PREFERENCE,
     AIRCRAFT_TYPE_RAMP_RESTRICTION,
+    ARRIVAL_PARKING_PREFERENCE,
+    ARRIVAL_PARKING_REQUIREMENT,
     BLOCKED_PARKING_POSITION,
-    ORIGIN_RAMP_PREFERENCE,
+    DEPARTURE_PARKING_PREFERENCE,
+    DEPARTURE_PARKING_REQUIREMENT,
     parking_rules_context,
     save_parking_rules_from_form,
 )
@@ -725,14 +728,17 @@ def parking_rules():
         flash("Parking rules saved.", "info")
         return redirect(_parking_rules_redirect(operation))
 
-    context = parking_rules_context(gateway)
+    context = parking_rules_context(gateway, operation=operation)
     return render_template(
         "neomotherbrain/parking_rules.html",
         gateway=gateway,
         operation=operation,
         can_edit_parking_rules=can_edit,
         categories={
-            "origin_requirements": ORIGIN_RAMP_PREFERENCE,
+            "arrival_preferred": ARRIVAL_PARKING_PREFERENCE,
+            "arrival_required": ARRIVAL_PARKING_REQUIREMENT,
+            "departure_preferred": DEPARTURE_PARKING_PREFERENCE,
+            "departure_required": DEPARTURE_PARKING_REQUIREMENT,
             "aircraft_restrictions": AIRCRAFT_TYPE_RAMP_RESTRICTION,
             "aircraft_preferences": AIRCRAFT_TYPE_RAMP_PREFERENCE,
             "blocked_positions": BLOCKED_PARKING_POSITION,

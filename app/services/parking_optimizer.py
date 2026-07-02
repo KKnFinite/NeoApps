@@ -25,13 +25,19 @@ from app.services.parking_plan import parking_position_options, tail_rows_for_op
 from app.services.parking_rules import (
     AIRCRAFT_TYPE_RAMP_RESTRICTION,
     AIRCRAFT_TYPE_RAMP_PREFERENCE,
+    ARRIVAL_PARKING_PREFERENCE,
+    ARRIVAL_PARKING_REQUIREMENT,
     BLOCKED_PARKING_POSITION,
+    DEPARTURE_PARKING_PREFERENCE,
+    DEPARTURE_PARKING_REQUIREMENT,
     ORIGIN_RAMP_RESTRICTION,
     ORIGIN_RAMP_PREFERENCE,
     DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES,
     DEFAULT_INBOUND_SAME_RAMP_SPACING_MINUTES,
     active_blocked_parking_positions,
     normalize_parking_position_code,
+    parking_schedule_rule_key,
+    parking_schedule_rule_label,
 )
 
 
@@ -701,6 +707,10 @@ def _active_rule_sets(gateway):
                 hard_rules["required"].append(rule)
             elif behavior in soft_rules:
                 soft_rules[behavior].append(rule)
+        elif category in (ARRIVAL_PARKING_REQUIREMENT, DEPARTURE_PARKING_REQUIREMENT):
+            hard_rules["required"].append(rule)
+        elif category in (ARRIVAL_PARKING_PREFERENCE, DEPARTURE_PARKING_PREFERENCE):
+            soft_rules["preferred"].append(rule)
         elif category == AIRCRAFT_TYPE_RAMP_RESTRICTION:
             if behavior not in hard_rules:
                 continue
@@ -1495,7 +1505,7 @@ def _rule_blocks_row(row, aircraft_type, position, ramp, rules):
     ):
         return True
     required_rules = _rules_for_row(row, aircraft_type, rules.get("required", []))
-    if required_rules and not any(_rule_matches_position(rule, position, ramp) for rule in required_rules):
+    if required_rules and not _required_rules_allow(required_rules, position, ramp):
         return True
     return any(
         _rule_matches_position(rule, position, ramp)
@@ -1511,9 +1521,17 @@ def _rule_block_reason(row, aircraft_type, position, ramp, rules):
         return f"{position} is blocked by Parking Rules."
 
     required_rules = _rules_for_row(row, aircraft_type, rules.get("required", []))
-    if required_rules and not any(_rule_matches_position(rule, position, ramp) for rule in required_rules):
-        if any(str(rule.subject_type or "").strip().lower() == "aircraft_type" for rule in required_rules):
+    if required_rules and not _required_rules_allow(required_rules, position, ramp):
+        failing_rules = _failing_required_rules(required_rules, position, ramp)
+        required_subject_types = {
+            str(rule.subject_type or "").strip().lower() for rule in failing_rules
+        }
+        if "aircraft_type" in required_subject_types:
             return "Aircraft type required on another ramp."
+        if "arrival_plan" in required_subject_types:
+            return "Arrival required parking rule requires another ramp or position."
+        if "departure_plan" in required_subject_types:
+            return "Departure required parking rule requires another ramp or position."
         return "Origin required on another ramp."
 
     matching_forbidden = [
@@ -1544,11 +1562,39 @@ def _soft_rule_score(row, aircraft_type, position, ramp, soft_rules):
     return score, reasons
 
 
+def _required_rules_allow(required_rules, position, ramp):
+    return not _failing_required_rules(required_rules, position, ramp)
+
+
+def _failing_required_rules(required_rules, position, ramp):
+    failing = []
+    for group in _required_rule_groups(required_rules):
+        if not any(_rule_matches_position(rule, position, ramp) for rule in group):
+            failing.extend(group)
+    return failing
+
+
+def _required_rule_groups(required_rules):
+    groups = {}
+    for rule in required_rules:
+        key = (
+            str(rule.rule_category or "").strip().lower(),
+            str(rule.subject_type or "").strip().lower(),
+            str(rule.subject_value or "").strip().upper(),
+        )
+        groups.setdefault(key, []).append(rule)
+    return tuple(groups.values())
+
+
 def _soft_rule_reason(rule, verb):
     subject_type = str(rule.subject_type or "").strip().lower()
     subject = _normalize_subject(rule.subject_value)
     ramp = str(rule.ramp_code or "").strip().upper()
-    ramp_label = "9/10 throat" if ramp == "THROAT" else f"ramp {ramp}"
+    ramp_label = _rule_target_label(rule)
+    if subject_type == "arrival_plan":
+        return f"Arrival {parking_schedule_rule_label(rule.subject_value)} {verb} {ramp_label}."
+    if subject_type == "departure_plan":
+        return f"Departure {parking_schedule_rule_label(rule.subject_value)} {verb} {ramp_label}."
     if subject_type == "origin":
         return f"Origin {subject} {verb} {ramp_label}."
     return f"Aircraft {subject} {verb} {ramp_label}."
@@ -2259,6 +2305,8 @@ def _datetime_from_local_time(row, value):
 def _rules_for_row(row, aircraft_type, rules):
     origin = _normalize_subject(row.get("arrival_origin"))
     aircraft_type = _normalize_aircraft_type(aircraft_type)
+    arrival_key = _schedule_rule_key_for_row(row, "arrival_plan")
+    departure_key = _schedule_rule_key_for_row(row, "departure_plan")
     matching = []
     for rule in rules:
         subject_type = str(rule.subject_type or "").strip().lower()
@@ -2267,7 +2315,24 @@ def _rules_for_row(row, aircraft_type, rules):
             matching.append(rule)
         elif subject_type == "aircraft_type" and subject == aircraft_type:
             matching.append(rule)
+        elif subject_type == "arrival_plan" and str(rule.subject_value or "").strip().upper() == arrival_key:
+            matching.append(rule)
+        elif subject_type == "departure_plan" and str(rule.subject_value or "").strip().upper() == departure_key:
+            matching.append(rule)
     return matching
+
+
+def _schedule_rule_key_for_row(row, subject_type):
+    mission_type = "arrival" if subject_type == "arrival_plan" else "departure"
+    mission = row.get(mission_type)
+    if not mission:
+        return ""
+    station = getattr(mission, "origin", "") if mission_type == "arrival" else getattr(mission, "destination", "")
+    return parking_schedule_rule_key(
+        mission_type,
+        getattr(mission, "flight_number", ""),
+        station,
+    )
 
 
 def _blocked_position_counts_by_ramp(rules):
@@ -2293,6 +2358,9 @@ def _rule_matches_position(rule, position, ramp):
     if subject_type == "position":
         return normalize_parking_position_code(rule.subject_value) == _normalize_position(position)
     rule_ramp = str(rule.ramp_code or "").strip().upper()
+    rule_position = normalize_parking_position_code(rule_ramp)
+    if rule_position:
+        return rule_position == _normalize_position(position)
     if rule_ramp == "THROAT":
         return _position_number(position) in (9, 10)
     return rule_ramp == ramp
@@ -2680,11 +2748,28 @@ def _unresolved_reason(
 
 def _rule_ramp_label(rule):
     ramp = str(rule.ramp_code or "").strip().upper()
+    position = normalize_parking_position_code(ramp)
+    if position:
+        if position.startswith("R"):
+            return "Remote"
+        if _position_number(position) in (9, 10):
+            return "9/10 throat parking"
+        return position[:1]
     if ramp == "R":
         return "Remote"
     if ramp == "THROAT":
         return "9/10 throat parking"
     return ramp
+
+
+def _rule_target_label(rule):
+    target = str(rule.ramp_code or "").strip().upper()
+    position = normalize_parking_position_code(target)
+    if position:
+        return f"position {position}"
+    if target == "THROAT":
+        return "9/10 throat parking"
+    return f"ramp {target}"
 
 
 def _ramp_from_position(position):

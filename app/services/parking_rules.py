@@ -1,5 +1,5 @@
 from app.extensions import db
-from app.models import MotherBrainParkingRule, MotherBrainParkingSettings
+from app.models import MasterFlightSchedule, MotherBrainParkingRule, MotherBrainParkingSettings
 from app.services.parking_aircraft import (
     PARKING_AIRCRAFT_TYPE_OPTIONS,
     normalize_parking_aircraft_type,
@@ -9,6 +9,10 @@ from app.services.parking_aircraft import (
 ORIGIN_RAMP_RESTRICTION = "origin_ramp_restriction"
 ORIGIN_RAMP_PREFERENCE = "origin_ramp_preference"
 ORIGIN_RAMP_REQUIREMENT = ORIGIN_RAMP_PREFERENCE
+ARRIVAL_PARKING_PREFERENCE = "arrival_parking_preference"
+ARRIVAL_PARKING_REQUIREMENT = "arrival_parking_requirement"
+DEPARTURE_PARKING_PREFERENCE = "departure_parking_preference"
+DEPARTURE_PARKING_REQUIREMENT = "departure_parking_requirement"
 AIRCRAFT_TYPE_RAMP_RESTRICTION = "aircraft_type_ramp_restriction"
 AIRCRAFT_TYPE_RAMP_PREFERENCE = "aircraft_type_ramp_preference"
 BLOCKED_PARKING_POSITION = "blocked_parking_position"
@@ -16,13 +20,20 @@ BLOCKED_PARKING_POSITION = "blocked_parking_position"
 PARKING_RULE_CATEGORIES = (
     ORIGIN_RAMP_RESTRICTION,
     ORIGIN_RAMP_PREFERENCE,
+    ARRIVAL_PARKING_PREFERENCE,
+    ARRIVAL_PARKING_REQUIREMENT,
+    DEPARTURE_PARKING_PREFERENCE,
+    DEPARTURE_PARKING_REQUIREMENT,
     AIRCRAFT_TYPE_RAMP_RESTRICTION,
     AIRCRAFT_TYPE_RAMP_PREFERENCE,
     BLOCKED_PARKING_POSITION,
 )
 
 PARKING_RULE_EDITABLE_CATEGORIES = (
-    ORIGIN_RAMP_REQUIREMENT,
+    ARRIVAL_PARKING_PREFERENCE,
+    ARRIVAL_PARKING_REQUIREMENT,
+    DEPARTURE_PARKING_PREFERENCE,
+    DEPARTURE_PARKING_REQUIREMENT,
     AIRCRAFT_TYPE_RAMP_RESTRICTION,
     AIRCRAFT_TYPE_RAMP_PREFERENCE,
     BLOCKED_PARKING_POSITION,
@@ -43,6 +54,13 @@ VALID_PARKING_POSITIONS = {
     *(f"{ramp}{number:02d}" for ramp in ("A", "B", "C", "D", "E") for number in range(1, 11)),
     *(f"R{number:02d}" for number in range(1, 5)),
 }
+PARKING_TARGET_OPTIONS = RAMP_OPTIONS + tuple(
+    (position, position)
+    for position in sorted(
+        VALID_PARKING_POSITIONS,
+        key=lambda item: (0 if item[0] != "R" else 1, item[0], int(item[1:])),
+    )
+)
 
 PHYSICAL_PARKING_RULES = (
     "Normal ramp banks are 01-04 and 05-08.",
@@ -81,7 +99,7 @@ def ensure_parking_settings(gateway):
     return settings
 
 
-def parking_rules_context(gateway):
+def parking_rules_context(gateway, operation=None):
     settings = ensure_parking_settings(gateway)
     rules = (
         MotherBrainParkingRule.query.filter_by(gateway_id=gateway.id)
@@ -102,6 +120,9 @@ def parking_rules_context(gateway):
         "rules_by_category": grouped,
         "rule_report": _parking_rule_report(settings, grouped),
         "ramp_options": RAMP_OPTIONS,
+        "parking_target_options": PARKING_TARGET_OPTIONS,
+        "arrival_rule_options": _master_plan_rule_options(gateway, operation, "arrival"),
+        "departure_rule_options": _master_plan_rule_options(gateway, operation, "departure"),
         "aircraft_type_options": PARKING_AIRCRAFT_TYPE_OPTIONS,
         "physical_rules": PHYSICAL_PARKING_RULES,
     }
@@ -162,18 +183,20 @@ def _update_existing_rules(gateway, form, editable_categories=None):
             form.get(f"subject_value_{rule.id}"),
             existing_value=rule.subject_value,
         )
-        ramp_code = (
-            _ramp_for_position(subject)
-            if rule.rule_category == BLOCKED_PARKING_POSITION
-            else _normalize_ramp(form.get(f"ramp_code_{rule.id}"))
+        ramp_code = _normalize_rule_target(
+            rule.rule_category,
+            subject,
+            form.get(f"ramp_code_{rule.id}"),
         )
         if not subject or not ramp_code:
             db.session.delete(rule)
             continue
         rule.subject_value = subject
         rule.ramp_code = ramp_code
-        if rule.rule_category == ORIGIN_RAMP_REQUIREMENT:
+        if rule.rule_category in (ORIGIN_RAMP_REQUIREMENT, ARRIVAL_PARKING_REQUIREMENT, DEPARTURE_PARKING_REQUIREMENT):
             rule.rule_behavior = "required"
+        elif rule.rule_category in (ARRIVAL_PARKING_PREFERENCE, DEPARTURE_PARKING_PREFERENCE):
+            rule.rule_behavior = "preferred"
         rule.active = form.get(f"active_{rule.id}") == "1"
         rule.note = _clean_note(form.get(f"note_{rule.id}"))
 
@@ -181,11 +204,7 @@ def _update_existing_rules(gateway, form, editable_categories=None):
 def _add_new_rule(gateway, category, form):
     subject_type = _subject_type_for_category(category)
     subject = _normalize_subject(subject_type, form.get(f"new_{category}_subject"))
-    ramp_code = (
-        _ramp_for_position(subject)
-        if category == BLOCKED_PARKING_POSITION
-        else _normalize_ramp(form.get(f"new_{category}_ramp"))
-    )
+    ramp_code = _normalize_rule_target(category, subject, form.get(f"new_{category}_ramp"))
     if not subject or not ramp_code:
         return None
 
@@ -217,13 +236,17 @@ def _add_new_rule(gateway, category, form):
 def _subject_type_for_category(category):
     if category in (ORIGIN_RAMP_RESTRICTION, ORIGIN_RAMP_PREFERENCE):
         return "origin"
+    if category in (ARRIVAL_PARKING_PREFERENCE, ARRIVAL_PARKING_REQUIREMENT):
+        return "arrival_plan"
+    if category in (DEPARTURE_PARKING_PREFERENCE, DEPARTURE_PARKING_REQUIREMENT):
+        return "departure_plan"
     if category == BLOCKED_PARKING_POSITION:
         return "position"
     return "aircraft_type"
 
 
 def _behavior_for_category(category):
-    if category == ORIGIN_RAMP_REQUIREMENT:
+    if category in (ORIGIN_RAMP_REQUIREMENT, ARRIVAL_PARKING_REQUIREMENT, DEPARTURE_PARKING_REQUIREMENT):
         return "required"
     if category in (
         ORIGIN_RAMP_RESTRICTION,
@@ -242,6 +265,8 @@ def _normalize_subject(subject_type, value, existing_value=None):
         return "".join(character for character in text if character.isalnum())[:8]
     if subject_type == "position":
         return normalize_parking_position_code(text)
+    if subject_type in {"arrival_plan", "departure_plan"}:
+        return _normalize_schedule_rule_key(text)
     normalized = normalize_parking_aircraft_type(text, allow_unknown=False)
     if normalized:
         return normalized
@@ -254,6 +279,26 @@ def _normalize_subject(subject_type, value, existing_value=None):
 def _normalize_ramp(value):
     text = str(value or "").strip().upper()
     return text if text in RAMP_CODES else ""
+
+
+def _normalize_rule_target(category, subject, value):
+    if category == BLOCKED_PARKING_POSITION:
+        return _ramp_for_position(subject)
+    if category in (
+        ARRIVAL_PARKING_PREFERENCE,
+        ARRIVAL_PARKING_REQUIREMENT,
+        DEPARTURE_PARKING_PREFERENCE,
+        DEPARTURE_PARKING_REQUIREMENT,
+    ):
+        return _normalize_parking_target(value)
+    return _normalize_ramp(value)
+
+
+def _normalize_parking_target(value):
+    text = str(value or "").strip().upper()
+    if text in RAMP_CODES:
+        return text
+    return normalize_parking_position_code(text)
 
 
 def normalize_parking_position_code(value):
@@ -286,9 +331,63 @@ def active_blocked_parking_positions(gateway):
     }
 
 
+def parking_schedule_rule_key(mission_type, flight_number, station):
+    flight = _normalize_schedule_flight(flight_number)
+    station_code = _normalize_schedule_station(station)
+    if not flight or not station_code:
+        return ""
+    return f"{flight}|{station_code}"
+
+
+def parking_schedule_rule_label(subject_value):
+    key = _normalize_schedule_rule_key(subject_value)
+    if not key or "|" not in key:
+        return str(subject_value or "").strip().upper()
+    flight, station = key.split("|", 1)
+    return f"{flight} / {station}"
+
+
+def _master_plan_rule_options(gateway, operation, mission_type):
+    query = MasterFlightSchedule.query.filter_by(
+        gateway_code=gateway.code,
+        mission_type=mission_type,
+        active=True,
+    )
+    if operation is not None:
+        query = query.filter(MasterFlightSchedule.sort_name == operation.sort_name)
+    schedules = query.order_by(
+        MasterFlightSchedule.sort_name.asc(),
+        MasterFlightSchedule.planned_time_local.asc(),
+        MasterFlightSchedule.flight_number.asc(),
+        MasterFlightSchedule.id.asc(),
+    ).all()
+    options = {}
+    for schedule in schedules:
+        station = schedule.origin if mission_type == "arrival" else schedule.destination
+        key = parking_schedule_rule_key(mission_type, schedule.flight_number, station)
+        if not key or key in options:
+            continue
+        label = parking_schedule_rule_label(key)
+        if operation is None:
+            label = f"{label} ({str(schedule.sort_name or '').upper()})"
+        options[key] = label
+    return tuple(options.items())
+
+
 def _parking_rule_report(settings, grouped):
     active_blocked = _active_rule_summaries(grouped.get(BLOCKED_PARKING_POSITION, []))
-    active_origin_requirements = _active_rule_summaries(grouped.get(ORIGIN_RAMP_PREFERENCE, []))
+    active_arrival_required = _active_rule_summaries(
+        grouped.get(ARRIVAL_PARKING_REQUIREMENT, [])
+    )
+    active_arrival_preferred = _active_rule_summaries(
+        grouped.get(ARRIVAL_PARKING_PREFERENCE, [])
+    )
+    active_departure_required = _active_rule_summaries(
+        grouped.get(DEPARTURE_PARKING_REQUIREMENT, [])
+    )
+    active_departure_preferred = _active_rule_summaries(
+        grouped.get(DEPARTURE_PARKING_PREFERENCE, [])
+    )
     active_aircraft_restrictions = _active_rule_summaries(
         grouped.get(AIRCRAFT_TYPE_RAMP_RESTRICTION, [])
     )
@@ -303,11 +402,14 @@ def _parking_rule_report(settings, grouped):
             "Slot 2 overflow rules",
             "Remote toggle behavior",
             "9/10 toggle behavior",
-            "Origin ramp requirements",
+            "Arrival required parking",
+            "Departure required parking",
             "Aircraft type restrictions",
             "Hard-blocked parking positions",
         ),
         "soft_rules": (
+            "Arrival preferred parking",
+            "Departure preferred parking",
             "Aircraft type preferences",
             "Ramp balancing: active soft rule across Alpha, Bravo, Charlie, Delta, and Echo",
             "Inbound ETA same-ramp spacing: active soft rule when threshold is above 0; close arrivals prefer different ramps when alternatives exist",
@@ -331,7 +433,10 @@ def _parking_rule_report(settings, grouped):
                 else "NONE"
             ),
             "active_blocked_positions": active_blocked or ("NONE",),
-            "active_origin_requirements": active_origin_requirements or ("NONE",),
+            "active_arrival_required": active_arrival_required or ("NONE",),
+            "active_arrival_preferred": active_arrival_preferred or ("NONE",),
+            "active_departure_required": active_departure_required or ("NONE",),
+            "active_departure_preferred": active_departure_preferred or ("NONE",),
             "active_aircraft_restrictions": active_aircraft_restrictions or ("NONE",),
             "active_aircraft_preferences": active_aircraft_preferences or ("NONE",),
         },
@@ -347,13 +452,42 @@ def _active_rule_summaries(rules):
         ramp = str(rule.ramp_code or "").strip().upper()
         if rule.rule_category == BLOCKED_PARKING_POSITION:
             summaries.append(subject)
-        elif rule.rule_category == ORIGIN_RAMP_PREFERENCE:
-            summaries.append(f"{subject} -> {ramp}")
+        elif rule.rule_category in (ARRIVAL_PARKING_REQUIREMENT, DEPARTURE_PARKING_REQUIREMENT):
+            summaries.append(f"{parking_schedule_rule_label(subject)} must use {_parking_target_label(ramp)}")
+        elif rule.rule_category in (ARRIVAL_PARKING_PREFERENCE, DEPARTURE_PARKING_PREFERENCE):
+            summaries.append(f"{parking_schedule_rule_label(subject)} prefers {_parking_target_label(ramp)}")
         elif rule.rule_category == AIRCRAFT_TYPE_RAMP_RESTRICTION:
             summaries.append(f"{subject} not allowed on {ramp}")
         elif rule.rule_category == AIRCRAFT_TYPE_RAMP_PREFERENCE:
             summaries.append(f"{subject} prefers {ramp}")
     return tuple(sorted(summaries))
+
+
+def _parking_target_label(value):
+    target = str(value or "").strip().upper()
+    if target == "THROAT":
+        return "09/10"
+    return target
+
+
+def _normalize_schedule_rule_key(value):
+    text = str(value or "").strip().upper().replace("/", "|").replace(" ", "")
+    if "|" not in text:
+        return ""
+    flight, station = text.split("|", 1)
+    flight = _normalize_schedule_flight(flight)
+    station = _normalize_schedule_station(station)
+    if not flight or not station:
+        return ""
+    return f"{flight}|{station}"
+
+
+def _normalize_schedule_flight(value):
+    return "".join(character for character in str(value or "").strip().upper() if character.isalnum())[:16]
+
+
+def _normalize_schedule_station(value):
+    return "".join(character for character in str(value or "").strip().upper() if character.isalnum())[:8]
 
 
 def _deice_status_summary(threshold_minutes):
