@@ -12700,6 +12700,7 @@ select::-ms-expand {
     }
 
     body.mobile-app-chrome .planning-page > .section-heading,
+    body.mobile-app-chrome .planning-page .manage-sort-main > .section-heading,
     body.mobile-app-chrome .planning-page .planning-local-actions,
     body.mobile-app-chrome .planning-page .alp-mobile-only,
     body.mobile-app-chrome .planning-page .planning-review-section,

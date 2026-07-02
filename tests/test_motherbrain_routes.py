@@ -6030,7 +6030,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(">W2</span>", mobile_list)
         self.assertNotIn("planning-mobile-mission-card", mobile_list)
         self.assertNotIn("Arrival Planning", mobile_list)
-        self.assertIn('<h1 class="motherbrain-body-duplicate-title">Arrival Planning</h1>', html)
+        self.assertIn(
+            '<h1 class="mobile-shell-duplicate-title motherbrain-body-duplicate-title">Arrival Planning</h1>',
+            html,
+        )
         self.assertIn("CURRENT ARRIVAL MISSIONS", html)
         self.assertIn(
             "body.mobile-app-chrome .planning-page .alp-mobile-only,\n",
@@ -6038,6 +6041,15 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         self.assertIn(
             "body.mobile-app-chrome .planning-page > .section-heading,\n",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome .planning-page .manage-sort-main > .section-heading,\n",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome .mobile-shell-duplicate-title {\n"
+            "        display: none !important;",
             css,
         )
         self.assertIn(
