@@ -10,7 +10,7 @@
         {% include "neomotherbrain/_manage_sort_sidebar.html" %}
         <div class="manage-sort-main">
             <div class="section-heading">
-                <h1>{{ operation.gateway_code }} {{ operation.sort_name|title }} {{ operation.sort_date }}</h1>
+                <h1 class="manage-sort-operation-title neo-page-title">{{ operation.gateway_code }} {{ operation.sort_name|title }} {{ operation.sort_date.strftime("%m-%d-%Y") }}</h1>
             </div>
 
             <div class="metric-grid">
@@ -55,9 +55,9 @@
                 </div>
             </dl>
 
-            <form class="operation-form inline-operation-form" method="post" action="{{ url_for('neomotherbrain.update_operation_window', operation_id=operation.id) }}">
+            <form class="operation-form inline-operation-form manage-sort-window-form" method="post" action="{{ url_for('neomotherbrain.update_operation_window', operation_id=operation.id) }}">
                 <label>
-                    <span>WINDOW MINUTES</span>
+                    <span>GLOBAL / LEFT WINDOW</span>
                     <input type="number" name="window_minutes" value="{{ operation.window_minutes }}" min="0" step="1" required>
                 </label>
                 <label>
@@ -70,49 +70,6 @@
                 </label>
                 <button class="action-button" type="submit">UPDATE WINDOW</button>
             </form>
-
-            <div class="action-row planning-local-actions">
-                <a class="action-button" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id) }}">ADD MISSION</a>
-            </div>
-
-            <div class="table-wrap">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>FLIGHT</th>
-                            <th>WAVE</th>
-                            <th>TAIL</th>
-                            <th>ORIGIN/DESTINATION</th>
-                            <th>PARKING</th>
-                            <th>ETA/ETD</th>
-                            <th>STATUS</th>
-                            <th>LINKS</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in rows %}
-                        {% set mission = row.mission %}
-                        <tr>
-                            <td>{{ mission.flight_number|upper }}</td>
-                            <td>{{ mission.wave|wave_label }}</td>
-                            <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
-                            <td>{{ (mission.origin if mission.mission_type == "arrival" else mission.destination)|upper }}</td>
-                            <td>{{ row.parking_position|upper if row.parking_position else "-" }}</td>
-                            <td>{{ row.display_time.strftime("%H:%M") if row.display_time else "-" }}</td>
-                            <td>{{ row.status|status_label }}</td>
-                            <td class="table-actions">
-                                <a href="{{ url_for('neomotherbrain.mission_detail', operation_id=operation.id, mission_id=mission.id) }}">VIEW</a>
-                                <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT</a>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="8">NO MISSIONS FOUND.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
         </div>
     </div>
 </section>

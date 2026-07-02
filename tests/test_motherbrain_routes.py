@@ -102,146 +102,26 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
-    def test_logged_in_user_can_access_motherbrain_home(self):
-        response = self.client.get("/motherbrain")
-        html = response.data.decode()
+    def test_motherbrain_dashboard_redirects_to_manage_sort(self):
+        response = self.client.get("/motherbrain", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/motherbrain/manage-sort")
+
+        followed = self.client.get("/motherbrain", follow_redirects=True)
+        self.assertEqual(followed.status_code, 200)
+        self.assertIn(b"MANAGE SORT", followed.data)
+        self.assertNotIn(b"motherbrain-home-page", followed.data)
+        self.assertNotIn(b"DASHBOARD", followed.data)
+
+    def test_motherbrain_dashboard_route_no_longer_renders_mobile_dashboard(self):
+        response = self.client.get("/motherbrain", follow_redirects=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'src="/static/images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png"', response.data)
-        self.assertIn(b'src="/static/images/icons/neomotherbrain/inapp/neomotherbrain-inapp-256.png"', response.data)
-        self.assertNotIn(b"motherbrain_logo1.png", response.data)
-        self.assertIn(b"blueprint-neomotherbrain", response.data)
-        self.assertIn(b"motherbrain-fixed-header", response.data)
-        self.assertIn(b"motherbrain-home-page", response.data)
-        self.assertIn(b'class="motherbrain-header-logo-link"', response.data)
-        self.assertIn(b'class="motherbrain-header-logo"', response.data)
-        self.assertIn(b"motherbrain-screen-logo", response.data)
-        self.assertIn(b'aria-label="NeoMotherBrain icon"', response.data)
-        self.assertIn(b"motherbrain-header-title neo-brand-title", response.data)
-        self.assertIn(b"motherbrain-dashboard-brand neo-brand-title", response.data)
-        self.assertIn(b"neo-brand-title__node--motherbrain", response.data)
-        self.assertIn(b"neo-node-name neo-node-motherbrain", response.data)
-        self.assertIn(b"neo-brand--motherbrain", response.data)
-        self.assertIn(b"neo-brand__neo neo-word", response.data)
-        self.assertIn(b"neo-brand__node node-word", response.data)
-        self.assertNotIn(b"<h1>NeoMotherBrain</h1>", response.data)
-        self.assertIn(b"DASHBOARD", response.data)
-        self.assertNotIn(b"NEOMOTHERBRAIN", response.data)
-        self.assertNotIn(b">Command<", response.data)
-        self.assertNotIn(b"Command Console", response.data)
-        self.assertNotIn(b"NeoRFD Command", response.data)
-        self.assertNotIn(b"NeoRFD command", response.data)
-        self.assertNotIn(b"NEORFD COMMAND", response.data)
-        self.assertIn(b'aria-label="Primary"', response.data)
-        self.assertNotIn(b'aria-label="MotherBrain menu"', response.data)
-        self.assertNotIn(b'class="panel motherbrain-landing"', response.data)
-        self.assertNotIn(b"action-button-secondary", response.data)
-        self.assertNotIn(b"BACK TO NeoMotherBrain MAIN MENU", response.data)
-        self.assertNotIn(b"motherbrain-main-menu-return", response.data)
-        self.assertNotIn(b'class="metric-grid"', response.data)
-        self.assertNotIn(b"Master Schedule Rows", response.data)
-        self.assertNotIn(b"MotherBrain Home", response.data)
-        self.assertNotIn(b"Back to NeoMotherBrain", response.data)
-        self.assertIn(b"PORTAL MANAGEMENT", response.data)
-        self.assertIn(b"Change Characters", response.data)
-        self.assertNotIn(b"BACK TO NeoGateway", response.data)
-        self.assertIn(b"GATEWAY MATRIX", response.data)
-        self.assertIn(b"MASTER SCHEDULE", response.data)
         self.assertIn(b"MANAGE SORT", response.data)
-        self.assertIn(b"PERMISSION RULES", response.data)
-        self.assertIn(b"ARRIVAL PLANNING", response.data)
-        self.assertIn(b"DEPARTURE PLANNING", response.data)
-        self.assertIn(b"PARKING RULES", response.data)
-        self.assertIn(b"MANAGE API", response.data)
-        self.assertIn(b"UNMATCHED QUEUE", response.data)
-        self.assertNotIn(b"FLIGHT API REVIEW</strong>", response.data)
-        self.assertIn(b"neo-node-name neo-node-motherbrain", response.data)
-        self.assertIn(b"CURRENT SORT OVERVIEW", response.data)
-        self.assertIn(b"No active sort selected.", response.data)
-        self.assertIn(b"data-motherbrain-mobile-dashboard", response.data)
-        self.assertIn(b'data-motherbrain-mobile-tile="manage-sort"', response.data)
-        self.assertIn(b'data-motherbrain-mobile-tile="arrival-planning"', response.data)
-        self.assertIn(b'data-motherbrain-mobile-tile="departure-planning"', response.data)
-        self.assertIn(b'data-motherbrain-mobile-tile="parking-plan"', response.data)
-        self.assertIn(b'data-motherbrain-mobile-tile="parking-rules"', response.data)
-        self.assertIn(b'data-motherbrain-mobile-tile="manage-api"', response.data)
-        self.assertIn(b'data-motherbrain-mobile-tile="unmatched-queue"', response.data)
-        self.assertNotIn(b"Sort setup and current operation controls.", response.data)
-        self.assertNotIn(b"Review ALP/API arrivals and current rows.", response.data)
-        self.assertNotIn(b"Assign tails and review parking alerts.", response.data)
-        self.assertNotIn(b"Flight API test, polling, and diagnostics.", response.data)
-        self.assertIn(b'data-mobile-alert-nav', response.data)
-        self.assertIn(b'data-mobile-topbar', response.data)
-        self.assertNotIn(b"MANAGE CURRENT SORTS", response.data)
-        self.assertNotIn(b"MANAGE MASTER FLIGHT SCHEDULE", response.data)
-        self.assertNotIn(b"ASSIGN ACTIVE SORTS", response.data)
-        self.assertNotIn(b"USER AND ACCESS CONTROLS", response.data)
-        self.assertNotIn(b"SCREEN ACTION CONTROLS", response.data)
-        self.assertNotIn(b"Gateway Matris", response.data)
-        dashboard_html = html.split('class="motherbrain-dashboard-grid"', 1)[1]
-        self.assertLess(dashboard_html.index("MANAGE SORT"), dashboard_html.index("ARRIVAL PLANNING"))
-        self.assertLess(dashboard_html.index("ARRIVAL PLANNING"), dashboard_html.index("DEPARTURE PLANNING"))
-        self.assertLess(dashboard_html.index("DEPARTURE PLANNING"), dashboard_html.index("PARKING PLAN"))
-        self.assertLess(dashboard_html.index("PARKING PLAN"), dashboard_html.index("PARKING RULES"))
-        self.assertLess(dashboard_html.index("PARKING RULES"), dashboard_html.index("SORT TIMELINE"))
-        self.assertLess(dashboard_html.index("SORT TIMELINE"), dashboard_html.index("MANAGE API"))
-        self.assertLess(dashboard_html.index("MANAGE API"), dashboard_html.index("UNMATCHED QUEUE"))
-        self.assertLess(dashboard_html.index("UNMATCHED QUEUE"), dashboard_html.index("GATEWAY MATRIX"))
-        self.assertLess(dashboard_html.index("GATEWAY MATRIX"), dashboard_html.index("MASTER SCHEDULE"))
-        nav_html = html.split('id="motherbrain-mobile-menu"', 1)[1].split("</nav>", 1)[0]
-        self.assertLess(nav_html.index("MANAGE SORT"), nav_html.index("MASTER SCHEDULE"))
-        self.assertLess(nav_html.index("MASTER SCHEDULE"), nav_html.index("GATEWAY MATRIX"))
-        self.assertLess(nav_html.index("GATEWAY MATRIX"), nav_html.index("PORTAL MANAGEMENT"))
-        self.assertNotIn("BACK TO", nav_html)
-        self.assertNotIn("MotherBrain Home", nav_html)
-        self.assertNotIn("Back to NeoMotherBrain", nav_html)
-        self.assertNotIn("&gt;", nav_html)
-        self.assertIn(b"Logout", response.data)
-        self.assertIn(b'data-motherbrain-menu-button', response.data)
-        self.assertIn(b'aria-expanded="false"', response.data)
-        self.assertIn(b'aria-controls="motherbrain-mobile-menu"', response.data)
-        self.assertIn(b'id="motherbrain-mobile-menu"', response.data)
-        self.assertIn(b'href="/motherbrain"', response.data)
-        self.assertIn(b'href="/portal/manage"', response.data)
-        self.assertIn(b'href="/motherbrain/permissions"', response.data)
-        self.assertIn(b'href="/motherbrain/gateway-matrix"', response.data)
-        self.assertIn(b'href="/motherbrain/master-schedule"', response.data)
-        self.assertIn(b'href="/motherbrain/manage-sort"', response.data)
-        self.assertIn(b'href="/motherbrain/parking-plan"', response.data)
-        self.assertIn(b'href="/motherbrain/parking-rules"', response.data)
-        self.assertIn(b'href="/motherbrain/sort-timeline"', response.data)
-        self.assertIn(b'href="/motherbrain/flight-api-test"', response.data)
-        self.assertIn(b'href="/motherbrain/flight-api-review"', response.data)
-        self.assertIn(b'href="/logout"', response.data)
-        self.assertNotIn(b"Access Requests", response.data)
-        self.assertNotIn(b"Generate Nightly Operation", response.data)
-
-    def test_motherbrain_mobile_dashboard_cleanup_css_hooks_render(self):
-        response = self.client.get("/motherbrain")
-        css = Path("app/static/css/base.css").read_text()
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b'class="motherbrain-dashboard-title mobile-shell-duplicate-title"', response.data)
-        self.assertIn(b"data-motherbrain-mobile-dashboard", response.data)
-        self.assertIn(b'class="motherbrain-dashboard-card-icon"', response.data)
-        self.assertIn(b'class="motherbrain-dashboard-card-copy"', response.data)
-        self.assertIn("body.mobile-app-chrome .mobile-shell-duplicate-title", css)
-        self.assertIn(
-            "body.mobile-app-chrome.motherbrain-home-page .motherbrain-screen-logo,\n"
-            "    body.mobile-app-chrome.motherbrain-home-page .motherbrain-dashboard-title {\n"
-            "        display: none;",
-            css,
-        )
-        self.assertIn(
-            "body.mobile-app-chrome.motherbrain-home-page .motherbrain-dashboard-grid {\n"
-            "        display: grid;\n"
-            "        grid-template-columns: repeat(2, minmax(0, 1fr));",
-            css,
-        )
-        self.assertIn(
-            "body.mobile-app-chrome.motherbrain-home-page .motherbrain-dashboard-card",
-            css,
-        )
+        self.assertNotIn(b"class=\"motherbrain-dashboard-title mobile-shell-duplicate-title\"", response.data)
+        self.assertNotIn(b"data-motherbrain-mobile-dashboard", response.data)
+        self.assertNotIn(b"motherbrain-home-page", response.data)
         self.assertIn(b"data-mobile-alert-nav", response.data)
         self.assertIn(b"data-motherbrain-alert-tray", response.data)
 
@@ -280,8 +160,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertIn(b"MANAGE SORT", response.data)
                 self.assertIn(b"SORT TIMELINE", response.data)
                 for nav_label in (
-                    b"Dashboard",
-                    b"Sort Summary",
+                    b"Manage Sort",
                     b"Arrival Planning",
                     b"Departure Planning",
                     b"Parking Plan",
@@ -295,7 +174,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
                     b"Permission Rules",
                 ):
                     self.assertIn(nav_label, response.data)
-                self.assertIn(b'href="/motherbrain"', response.data)
+                self.assertNotIn(b"Dashboard", response.data)
+                self.assertNotIn(b"Sort Summary", response.data)
+                self.assertIn(b'href="/motherbrain/manage-sort"', response.data)
                 self.assertIn(b"neo-brand--motherbrain", response.data)
                 self.assertIn(b'data-motherbrain-desktop-side-nav', response.data)
                 self.assertIn(b"motherbrain-desktop-side-menu", response.data)
@@ -308,7 +189,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertIn(b"Logged in", response.data)
                 self.assertIn(b"Logout", response.data)
                 self.assertNotIn(b"motherbrain-main-menu-return", response.data)
-                self.assertIn(b'href="/motherbrain"', response.data)
+                self.assertIn(b'href="/motherbrain/manage-sort"', response.data)
                 self.assertIn(b'href="/logout"', response.data)
                 self.assertIn(b'data-motherbrain-menu-button', response.data)
                 self.assertIn(b'aria-controls="motherbrain-mobile-menu"', response.data)
@@ -324,7 +205,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(rfd_response.status_code, 200)
         self.assertIn(b"NeoGateway", rfd_response.data)
 
-        still_authenticated = self.client.get("/motherbrain")
+        still_authenticated = self.client.get("/motherbrain", follow_redirects=True)
         self.assertEqual(still_authenticated.status_code, 200)
         self.assertIn(b"neo-node-name neo-node-motherbrain", still_authenticated.data)
         self.assertIn(b"Logout", still_authenticated.data)
@@ -1488,8 +1369,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("data-motherbrain-desktop-side-nav", html)
         self.assertIn("neo-brand--motherbrain", html)
         sidebar_html = html.split('data-motherbrain-desktop-side-nav', 1)[1].split("</aside>", 1)[0]
-        self.assertIn('href="/motherbrain"', sidebar_html)
-        self.assertIn("Dashboard", sidebar_html)
+        self.assertIn('href="/motherbrain/manage-sort"', sidebar_html)
+        self.assertIn("Manage Sort", sidebar_html)
+        self.assertNotIn("Dashboard", sidebar_html)
+        self.assertNotIn("Sort Summary", sidebar_html)
         self.assertIn("Master Schedule", sidebar_html)
         self.assertLess(
             html.index('data-motherbrain-desktop-side-nav'),
@@ -1497,10 +1380,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
 
         home_response = self.client.get("/motherbrain", follow_redirects=False)
-        self.assertEqual(home_response.status_code, 200)
-        self.assertIn(b"neo-node-name neo-node-motherbrain", home_response.data)
-        self.assertIn(b"Logout", home_response.data)
-        self.assertNotIn(b"BACK TO NeoMotherBrain MAIN MENU", home_response.data)
+        self.assertEqual(home_response.status_code, 302)
+        self.assertEqual(home_response.location, "/motherbrain/manage-sort")
 
     def test_motherbrain_auto_poll_widget_only_displays_on_manage_api(self):
         local_now = current_gateway_local_datetime(self.rfd_gateway)
@@ -1600,7 +1481,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         db.session.commit()
 
-        response = self.client.get("/motherbrain")
+        response = self.client.get("/motherbrain", follow_redirects=True)
 
         operation = SortDateOperation.query.filter_by(
             gateway_code="RFD",
@@ -1633,6 +1514,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             f"RFD NIGHT {sort_date.month}/{sort_date.day}/{sort_date.year % 100:02d}".encode(),
             response.data,
         )
+        self.assertNotIn(b'rfd-active-sort-select', response.data)
 
     def test_rfd_hub_reuses_existing_active_sort_without_duplicate(self):
         sort_date = current_gateway_local_date(self.rfd_gateway)
@@ -1655,6 +1537,27 @@ class MotherBrainRoutesTest(unittest.TestCase):
             f"RFD NIGHT {sort_date.month}/{sort_date.day}/{sort_date.year % 100:02d}".encode(),
             response.data,
         )
+        self.assertIn(f'href="/motherbrain/operations/{existing.id}"'.encode(), response.data)
+        self.assertIn(f'href="/neosektor?operation_id={existing.id}"'.encode(), response.data)
+
+    def test_rfd_hub_multiple_active_sorts_render_selector_and_update_launch_context(self):
+        sort_date = current_gateway_local_date(self.rfd_gateway)
+        day_operation = self._operation(sort_date=sort_date, sort_name="day")
+        night_operation = self._operation(sort_date=sort_date, sort_name="night")
+        db.session.add_all([day_operation, night_operation])
+        db.session.commit()
+
+        response = self.client.get(f"/rfd?operation_id={night_operation.id}")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('class="rfd-active-sort-select"', html)
+        self.assertIn(f'value="{day_operation.id}"', html)
+        self.assertIn(f'value="{night_operation.id}" selected', html)
+        self.assertIn(f'href="/motherbrain/operations/{night_operation.id}"', html)
+        self.assertIn(f'href="/neosektor?operation_id={night_operation.id}"', html)
+        self.assertIn(f'href="/neoermac?operation_id={night_operation.id}"', html)
+        self.assertIn(f'href="/neoscorpion?operation_id={night_operation.id}"', html)
 
     def test_rfd_hub_missing_active_sort_config_shows_non_blocking_status(self):
         response = self.client.get("/rfd")
@@ -1695,7 +1598,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(f"RFD NIGHT {sort_date.month}/{sort_date.day}/{sort_date.year % 100:02d}", workflow_html)
         self.assertIn("manage-sort-sidebar", workflow_html)
         self.assertIn("Selected Sort", workflow_html)
-        self.assertIn("Sort Summary", workflow_html)
+        self.assertIn("Manage Sort", workflow_html)
+        self.assertNotIn("Sort Summary", workflow_html)
         self.assertIn("Arrival Planning", workflow_html)
         self.assertIn("Departure Planning", workflow_html)
         self.assertIn("Parking Plan", workflow_html)
@@ -1724,7 +1628,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn('class="motherbrain-main-menu-return"', main_html)
         self.assertIn('data-motherbrain-desktop-side-nav', html)
         desktop_sidebar_html = html.split('data-motherbrain-desktop-side-nav', 1)[1].split("</aside>", 1)[0]
-        self.assertIn('href="/motherbrain"', desktop_sidebar_html)
+        self.assertIn(f'href="/motherbrain/operations/{operations[0].id}"', desktop_sidebar_html)
         self.assertIn("Selected Sort", desktop_sidebar_html)
 
     def test_manage_sort_unmatched_queue_links_selected_operation(self):
@@ -1916,8 +1820,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.session.add(mission)
         db.session.commit()
 
+        motherbrain_home = self.client.get("/motherbrain", follow_redirects=False)
+        self.assertEqual(motherbrain_home.status_code, 302)
+        self.assertEqual(motherbrain_home.location, "/motherbrain/manage-sort")
+
         get_paths = (
-            "/motherbrain",
             "/motherbrain/gateway-matrix",
             "/motherbrain/manage-sort",
             "/motherbrain/operations",
@@ -1942,21 +1849,13 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertIn(b'class="motherbrain-header-logo-link"', response.data)
                 self.assertIn(b"motherbrain-header-title neo-brand-title", response.data)
                 self.assertIn(b"neo-brand-title__node--motherbrain", response.data)
-                if path == "/motherbrain":
-                    self.assertIn(b"motherbrain-home-page", response.data)
-                    self.assertIn(b"motherbrain-screen-logo", response.data)
-                    self.assertIn(b'src="/static/images/icons/neomotherbrain/inapp/neomotherbrain-inapp-256.png"', response.data)
-                    self.assertIn(b"motherbrain-dashboard-brand neo-brand-title", response.data)
-                    self.assertIn(b"neo-node-name neo-node-motherbrain", response.data)
-                    self.assertNotIn(b"BACK TO NeoMotherBrain MAIN MENU", response.data)
-                else:
-                    self.assertNotIn(b"motherbrain-home-page", response.data)
-                    self.assertNotIn(b"motherbrain-screen-logo", response.data)
-                    self.assertIn(b'data-motherbrain-desktop-side-nav', response.data)
-                    self.assertIn(b"neo-brand--motherbrain", response.data)
-                    self.assertIn(b"motherbrain-desktop-side-menu", response.data)
-                    self.assertNotIn(b"motherbrain-main-menu-return", response.data)
-                    self.assertIn(b"neo-brand--motherbrain", response.data)
+                self.assertNotIn(b"motherbrain-home-page", response.data)
+                self.assertNotIn(b"motherbrain-screen-logo", response.data)
+                self.assertIn(b'data-motherbrain-desktop-side-nav', response.data)
+                self.assertIn(b"neo-brand--motherbrain", response.data)
+                self.assertIn(b"motherbrain-desktop-side-menu", response.data)
+                self.assertNotIn(b"motherbrain-main-menu-return", response.data)
+                self.assertIn(b"neo-brand--motherbrain", response.data)
                 self.assertNotIn(b"NEOMOTHERBRAIN", response.data)
                 self.assertNotIn(b">Command<", response.data)
                 self.assertNotIn(b"Command Console", response.data)
@@ -1966,7 +1865,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertNotIn(b"<p class=\"eyebrow\">NeoMotherBrain</p>", response.data)
                 self.assertNotIn(b"MotherBrain Home", response.data)
                 self.assertNotIn(b"Back to NeoMotherBrain", response.data)
-                self.assertIn(b'href="/motherbrain"', response.data)
+                self.assertIn(b'href="/motherbrain/manage-sort"', response.data)
 
         response = self.client.post(
             f"/motherbrain/operations/{operation.id}/window",
@@ -2286,7 +2185,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertLess(html.index("DEP2334"), html.index("DEP0043"))
 
-    def test_operation_overview_night_sort_orders_late_night_before_after_midnight(self):
+    def test_arrival_board_night_sort_orders_late_night_before_after_midnight(self):
         operation = self._operation(sort_name="night")
         db.session.add(operation)
         db.session.add(
@@ -2309,7 +2208,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         db.session.commit()
 
-        response = self.client.get(f"/motherbrain/operations/{operation.id}")
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/arrivals")
         html = response.data.decode()
 
         self.assertEqual(response.status_code, 200)
@@ -5953,6 +5852,32 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Window minutes must be 0 or higher.", response.data)
         self.assertEqual(db.session.get(SortDateOperation, operation.id).window_minutes, 0)
 
+    def test_operation_detail_renders_manage_sort_header_and_compact_windows(self):
+        operation = self._operation(sort_date=date(2026, 7, 1), window_minutes=18)
+        db.session.add(operation)
+        db.session.add(
+            self._mission(
+                operation,
+                "departure",
+                "UPS1234",
+                destination="EWR",
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("RFD Night 07-01-2026", html)
+        self.assertIn("manage-sort-operation-title neo-page-title", html)
+        self.assertIn("manage-sort-window-form", html)
+        self.assertIn("GLOBAL / LEFT WINDOW", html)
+        self.assertGreaterEqual(html.count("<strong>18 MIN</strong>"), 3)
+        self.assertNotIn("ADD MISSION", html)
+        self.assertNotIn("<th>FLIGHT</th>", html)
+        self.assertNotIn("UPS1234", html)
+
     def test_window_update_accepts_zero_or_positive_values(self):
         operation = self._operation()
         db.session.add(operation)
@@ -6183,7 +6108,6 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.session.commit()
 
         pages = [
-            "/motherbrain",
             "/motherbrain/manage-sort",
             f"/motherbrain/operations/{operation.id}/alp/arrival",
             f"/motherbrain/operations/{operation.id}/alp/departure",
@@ -6223,7 +6147,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         db.session.commit()
 
-        response = self.client.get("/motherbrain")
+        response = self.client.get("/motherbrain", follow_redirects=True)
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Parking plan needs review", response.data)
@@ -10409,15 +10333,15 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn("DEP42 RFD-DFW 01:20", card_html)
         self.assertEqual(db.session.get(SortDateMission, departure.id).assigned_tail_number, "N542UP")
 
-    def test_motherbrain_dashboard_and_menu_link_to_parking_plan(self):
-        response = self.client.get("/motherbrain")
+    def test_motherbrain_manage_sort_menu_links_to_parking_plan(self):
+        response = self.client.get("/motherbrain/manage-sort")
         html = response.data.decode()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('href="/motherbrain/parking-plan"', html)
         self.assertIn("PARKING PLAN", html)
-        dashboard_html = html.split('class="motherbrain-dashboard-grid"', 1)[1]
-        self.assertLess(dashboard_html.index("MANAGE SORT"), dashboard_html.index("PARKING PLAN"))
+        sidebar_html = html.split('data-motherbrain-desktop-side-nav', 1)[1].split("</aside>", 1)[0]
+        self.assertLess(sidebar_html.index("Manage Sort"), sidebar_html.index("Parking Plan"))
 
     def test_manage_sort_parking_plan_button_links_to_selected_operation_plan(self):
         operation = self._parking_operation(now=datetime(2026, 6, 18, 10, 0))
@@ -10607,13 +10531,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         departure_response = self.client.get(
             f"/motherbrain/operations/{operation.id}/departures"
         )
-        detail_response = self.client.get(f"/motherbrain/operations/{operation.id}")
-
         self.assertEqual(arrival_response.status_code, 200)
         self.assertEqual(departure_response.status_code, 200)
         self.assertIn(b"<td>A01</td>", arrival_response.data)
         self.assertIn(b"<td>A01</td>", departure_response.data)
-        self.assertIn(b"<td>A01</td>", detail_response.data)
 
     def test_unassign_persists_and_boards_return_to_dash(self):
         operation = self._parking_operation()

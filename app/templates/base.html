@@ -162,16 +162,6 @@
                     </strong>
                     {% if not (current_user.is_authenticated and not public_landing|default(false)) %}
                     <small>Powered by {{ neo_brand("Apps", "apps") }}</small>
-                    {% elif is_rfd_hub_page and gateway_active_sort_operation %}
-                    <small class="rfd-active-sort-banner" aria-label="Active sort {{ gateway_active_sort_operation.gateway_code }} {{ gateway_active_sort_operation.sort_name|upper }} {{ gateway_active_sort_operation.sort_date.month }}/{{ gateway_active_sort_operation.sort_date.day }}/{{ '%02d'|format(gateway_active_sort_operation.sort_date.year % 100) }}">
-                        <span>Active Sort</span>
-                        <strong>{{ gateway_active_sort_operation.gateway_code }} {{ gateway_active_sort_operation.sort_name|upper }} {{ gateway_active_sort_operation.sort_date.month }}/{{ gateway_active_sort_operation.sort_date.day }}/{{ '%02d'|format(gateway_active_sort_operation.sort_date.year % 100) }}</strong>
-                    </small>
-                    {% elif is_rfd_hub_page and gateway_active_sort_status %}
-                    <small class="rfd-active-sort-banner rfd-active-sort-banner-warning">
-                        <span>Sort Status</span>
-                        <strong>{{ gateway_active_sort_status }}</strong>
-                    </small>
                     {% endif %}
                 </span>
             </a>
@@ -224,6 +214,33 @@
                     {% endif %}
                 </nav>
                 {% else %}
+                {% if is_rfd_hub_page %}
+                {% set rfd_sort_operations = gateway_active_sort_operations if gateway_active_sort_operations is defined else [] %}
+                {% if rfd_sort_operations|length > 1 %}
+                <form class="rfd-active-sort-control" method="get" action="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="Active sort selector">
+                    <label>
+                        <span>Active Sort</span>
+                        <select class="rfd-active-sort-select" name="operation_id" onchange="this.form.submit()">
+                            {% for sort_operation in rfd_sort_operations %}
+                            <option value="{{ sort_operation.id }}" {% if gateway_active_sort_operation and sort_operation.id == gateway_active_sort_operation.id %}selected{% endif %}>
+                                {{ sort_operation.gateway_code }} {{ sort_operation.sort_name|upper }} {{ sort_operation.sort_date.month }}/{{ sort_operation.sort_date.day }}/{{ '%02d'|format(sort_operation.sort_date.year % 100) }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                </form>
+                {% elif gateway_active_sort_operation %}
+                <div class="rfd-active-sort-banner rfd-active-sort-display" aria-label="Active sort {{ gateway_active_sort_operation.gateway_code }} {{ gateway_active_sort_operation.sort_name|upper }} {{ gateway_active_sort_operation.sort_date.month }}/{{ gateway_active_sort_operation.sort_date.day }}/{{ '%02d'|format(gateway_active_sort_operation.sort_date.year % 100) }}">
+                    <span>Active Sort</span>
+                    <strong>{{ gateway_active_sort_operation.gateway_code }} {{ gateway_active_sort_operation.sort_name|upper }} {{ gateway_active_sort_operation.sort_date.month }}/{{ gateway_active_sort_operation.sort_date.day }}/{{ '%02d'|format(gateway_active_sort_operation.sort_date.year % 100) }}</strong>
+                </div>
+                {% elif gateway_active_sort_status %}
+                <div class="rfd-active-sort-banner rfd-active-sort-banner-warning">
+                    <span>Sort Status</span>
+                    <strong>{{ gateway_active_sort_status }}</strong>
+                </div>
+                {% endif %}
+                {% endif %}
                 {% if not is_rfd_hub_page and not is_neosektor_standalone_operator_page and not is_neostaffing_page %}
                 {% if is_portal_page and current_user.role == "grandmaster" %}
                 <a class="portal-header-management-link neo-menu-text" href="{{ url_for('auth.portal_management') }}">Portal Management</a>

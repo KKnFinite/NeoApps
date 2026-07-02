@@ -8,7 +8,7 @@
         <small>{{ sidebar_operation.sort_date }}</small>
     </div>
     <nav class="manage-sort-sidebar-menu">
-        <a class="manage-sort-sidebar-link{% if sidebar_active == 'summary' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.operation_detail', operation_id=sidebar_operation.id) }}">Sort Summary</a>
+        <a class="manage-sort-sidebar-link{% if sidebar_active == 'summary' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.operation_detail', operation_id=sidebar_operation.id) }}">Manage Sort</a>
         <a class="manage-sort-sidebar-link{% if sidebar_active == 'arrival-planning' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.alp_import', operation_id=sidebar_operation.id, mission_type='arrival') }}">Arrival Planning</a>
         <a class="manage-sort-sidebar-link{% if sidebar_active == 'departure-planning' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.alp_import', operation_id=sidebar_operation.id, mission_type='departure') }}">Departure Planning</a>
         <a class="manage-sort-sidebar-link{% if sidebar_active == 'parking-plan' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.parking_plan_operation', operation_id=sidebar_operation.id) }}">Parking Plan</a>

@@ -212,6 +212,7 @@ def rfd_hub():
     return render_template(
         "neomotherbrain/rfd_hub.html",
         gateway=gateway,
+        gateway_active_sort_operations=current_sort_operations,
         gateway_active_sort_operation=active_sort_operation,
         gateway_active_sort_status=active_sort_status,
         motherbrain_role=get_user_node_role(current_user, gateway.code, "motherbrain"),
@@ -236,26 +237,10 @@ def sektor_launch():
 @bp.route("/motherbrain")
 @gateway_node_required("motherbrain")
 def motherbrain():
-    gateway = get_current_gateway()
-    generation_result = _auto_generate_today_sorts(gateway)
-    sort_date = generation_result["sort_date"]
-    current_sort_operations = current_operations_for_gateway(gateway)
-    operation_count = SortDateOperation.query.filter_by(gateway_code=gateway.code).count()
-    master_schedule_count = MasterFlightSchedule.query.filter_by(
-        gateway_code=gateway.code
-    ).count()
-    return render_template(
-        "neomotherbrain/index.html",
-        gateway=gateway,
-        current_sort_operations=current_sort_operations,
-        operation_count=operation_count,
-        master_schedule_count=master_schedule_count,
-        sort_date=sort_date,
-        **_flight_api_auto_poll_timer_context(
-            gateway,
-            operation=_selected_current_operation(current_sort_operations),
-        ),
-    )
+    redirect_args = {}
+    if request.args.get("operation_id"):
+        redirect_args["operation_id"] = request.args["operation_id"]
+    return redirect(url_for("neomotherbrain.manage_sort", **redirect_args))
 
 
 @bp.route("/motherbrain/gateway-matrix", methods=["GET", "POST"])
@@ -1546,18 +1531,12 @@ def operation_detail(operation_id):
         operation = _operation_or_404(operation_id)
     arrival_count = _mission_count(operation, "arrival")
     departure_count = _mission_count(operation, "departure")
-    parking_assignments = _parking_assignments_for_operation(operation)
-    rows = [
-        _mission_list_row(mission, operation, parking_assignments)
-        for mission in _all_missions_for_operation(operation)
-    ]
     return render_template(
         "neomotherbrain/operation_detail.html",
         operation=operation,
         arrival_count=arrival_count,
         departure_count=departure_count,
         mission_count=arrival_count + departure_count,
-        rows=rows,
         **_flight_api_auto_poll_timer_context(gateway, operation=operation),
     )
 

@@ -612,7 +612,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             data={"username": "Kessler", "password": "1313"},
         )
 
-        response = self.client.get("/motherbrain")
+        response = self.client.get("/motherbrain/manage-sort")
         html = response.data.decode()
 
         self.assertEqual(response.status_code, 200)
@@ -734,7 +734,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         )
 
         expected_icons = {
-            "/motherbrain": "account-motherbrain-128.png",
+            "/motherbrain/manage-sort": "account-motherbrain-128.png",
             "/neoermac": "ninja-ermac-128.png",
             "/neosektor": "ninja-sektor-128.png",
         }
@@ -795,8 +795,11 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
         self.assertEqual(login_response.status_code, 302)
 
+        motherbrain_home = self.client.get("/motherbrain", follow_redirects=False)
+        self.assertEqual(motherbrain_home.status_code, 302)
+        self.assertEqual(motherbrain_home.location, "/motherbrain/manage-sort")
+
         direct_paths = (
-            "/motherbrain",
             "/motherbrain/operations",
             "/motherbrain/master-schedule",
             f"/motherbrain/operations/{operation.id}",

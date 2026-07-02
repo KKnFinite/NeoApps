@@ -524,6 +524,42 @@ html {
     color: #ffd08a;
 }
 
+.rfd-active-sort-control {
+    display: flex;
+    align-items: center;
+    margin: 0;
+}
+
+.rfd-active-sort-control label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    color: rgba(221, 235, 255, 0.74);
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    line-height: 1.1;
+    text-transform: uppercase;
+}
+
+.rfd-active-sort-select {
+    min-width: 170px;
+    height: 34px;
+    border: 1px solid rgba(255, 90, 31, 0.45);
+    border-radius: 999px;
+    padding: 0 34px 0 12px;
+    background: rgba(6, 9, 14, 0.92);
+    color: var(--node-gateway-highlight);
+    font-size: 0.76rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 18px rgba(255, 90, 31, 0.14);
+}
+
 .motherbrain-parking-plan-page .shell {
     width: min(2040px, calc(100% - 18px));
 }
@@ -10806,6 +10842,25 @@ select::-ms-expand {
     grid-template-columns: minmax(180px, 260px) auto;
     align-items: end;
     margin: 20px 0 10px;
+}
+
+.manage-sort-operation-title {
+    color: var(--node-motherbrain-highlight);
+}
+
+.manage-sort-window-form {
+    align-items: end;
+}
+
+@media (min-width: 761px) {
+    .manage-sort-window-form {
+        grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr) auto;
+    }
+
+    .manage-sort-window-form .action-button {
+        min-height: 44px;
+        white-space: nowrap;
+    }
 }
 
 .detail-list {
