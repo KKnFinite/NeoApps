@@ -900,10 +900,11 @@ def _movement_missions_for_status(
 def _hot_status_has_rfd_origin(operational_status, arrival, departure):
     if operational_status != TAIL_STATUS_HOT:
         return False
-    for mission in (departure, arrival):
-        if mission and str(getattr(mission, "origin", "") or "").strip().upper() == "RFD":
-            return True
-    return False
+    mission = arrival or departure
+    return bool(
+        mission
+        and str(getattr(mission, "origin", "") or "").strip().upper() == "RFD"
+    )
 
 
 def _mission_is_cancelled(mission):

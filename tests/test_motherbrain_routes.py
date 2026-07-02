@@ -7986,6 +7986,145 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(preview["solver_status"], "OPTIMAL")
         self.assertEqual(positions, {"A05", "A06"})
 
+    def test_hot_origin_rfd_fixed_tail_does_not_eta_block_alpha_openings(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=0,
+                inbound_same_ramp_spacing_minutes=0,
+            )
+        )
+        self._parking_pair(
+            operation,
+            "N101UP",
+            arrival_local=datetime(2026, 6, 18, 23, 50),
+            departure_local=datetime(2026, 6, 19, 1, 50),
+            origin="RFD",
+            destination="MEM",
+            aircraft_type="A300",
+        )
+        for index in range(4):
+            self._parking_pair(
+                operation,
+                f"N14{index}UP",
+                arrival_local=datetime(2026, 6, 18, 23, 0) + timedelta(minutes=index),
+                departure_local=datetime(2026, 6, 19, 2, 0) + timedelta(minutes=index * 10),
+                origin="ONT",
+                destination=f"D{index}",
+                aircraft_type="A300",
+            )
+        self._parking_rule(ORIGIN_RAMP_PREFERENCE, "origin", "ONT", "A", behavior="required")
+        db.session.flush()
+        hot_state = SortDateTailState.query.filter_by(tail_number="N101UP").one()
+        hot_state.operational_status = "hot"
+        self._parking_assignment(operation, "N101UP", "A01")
+        db.session.commit()
+
+        page_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        card_html = self._parking_tail_card_html(page_response.data.decode(), "N101UP")
+        preview = self._parking_optimizer_preview(operation)
+        locked = {row["tail"]: row for row in preview["locked_assignments"]}
+        suggested_positions = [row["position"] for row in preview["suggested_assignments"]]
+
+        self.assertNotIn("ARR", card_html)
+        self.assertNotIn("DEP", card_html)
+        self.assertEqual(locked["N101UP"]["label"], "A01 Slot 1")
+        self.assertEqual(locked["N101UP"]["reason"], "HOT parked tail fixed.")
+        self.assertTrue(any(position in {"A02", "A03", "A04"} for position in suggested_positions))
+        self.assertFalse(all(position in {"A05", "A06", "A07", "A08"} for position in suggested_positions))
+
+    def test_blocked_d01_does_not_block_delta_two_three_four(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=0,
+                inbound_same_ramp_spacing_minutes=0,
+            )
+        )
+        expected_positions = {}
+        for index, position in enumerate(("D02", "D03", "D04")):
+            arrival, _departure = self._parking_pair(
+                operation,
+                f"N15{index}UP",
+                arrival_local=datetime(2026, 6, 18, 23, 0) + timedelta(minutes=index * 5),
+                departure_local=datetime(2026, 6, 19, 1, 0) + timedelta(minutes=index * 10),
+                origin="ONT",
+                destination=f"D{index}",
+                aircraft_type="A300",
+            )
+            expected_positions[f"N15{index}UP"] = position
+            self._parking_rule(
+                ARRIVAL_PARKING_REQUIREMENT,
+                "arrival_plan",
+                parking_schedule_rule_key("arrival", arrival.flight_number, "ONT"),
+                position,
+                behavior="required",
+            )
+        self._parking_rule(
+            BLOCKED_PARKING_POSITION,
+            "position",
+            "D01",
+            "D",
+            behavior="forbidden",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestions = {row["tail"]: row["position"] for row in preview["suggested_assignments"]}
+
+        self.assertEqual(preview["solver_status"], "OPTIMAL")
+        self.assertEqual(suggestions, expected_positions)
+        self.assertNotIn("D01", suggestions.values())
+
+    def test_blocked_d05_does_not_block_delta_six_through_ten(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=0,
+                inbound_same_ramp_spacing_minutes=0,
+            )
+        )
+        expected_positions = {}
+        for index, position in enumerate(("D06", "D07", "D08", "D10", "D09")):
+            arrival, _departure = self._parking_pair(
+                operation,
+                f"N16{index}UP",
+                arrival_local=datetime(2026, 6, 18, 23, 0) + timedelta(minutes=index * 5),
+                departure_local=datetime(2026, 6, 19, 1, 0) + timedelta(minutes=index * 10),
+                origin="ONT",
+                destination=f"D{index}",
+                aircraft_type="A300",
+            )
+            expected_positions[f"N16{index}UP"] = position
+            self._parking_rule(
+                ARRIVAL_PARKING_REQUIREMENT,
+                "arrival_plan",
+                parking_schedule_rule_key("arrival", arrival.flight_number, "ONT"),
+                position,
+                behavior="required",
+            )
+        self._parking_rule(
+            BLOCKED_PARKING_POSITION,
+            "position",
+            "D05",
+            "D",
+            behavior="forbidden",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation, include_throat=True)
+        suggestions = {row["tail"]: row["position"] for row in preview["suggested_assignments"]}
+
+        self.assertEqual(preview["solver_status"], "OPTIMAL")
+        self.assertEqual(suggestions, expected_positions)
+        self.assertNotIn("D05", suggestions.values())
+
     def test_parking_optimizer_allows_side_imbalance_when_unavoidable(self):
         operation = self._parking_operation()
         db.session.add(
@@ -10007,6 +10146,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "N457UP",
             arrival_local=datetime(2026, 6, 18, 23, 50),
             departure_local=datetime(2026, 6, 19, 0, 40),
+            origin="RFD",
             destination="LAX",
             aircraft_type="757",
         )
@@ -10057,9 +10197,20 @@ class MotherBrainRoutesTest(unittest.TestCase):
             planned_datetime_local=datetime(2026, 6, 18, 23, 40),
             planned_datetime_utc=datetime(2026, 6, 19, 4, 40),
         )
+        departure = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="DEP42",
+            origin="RFD",
+            destination="DFW",
+            assigned_tail_number="N542UP",
+            planned_datetime_local=datetime(2026, 6, 19, 1, 20),
+            planned_datetime_utc=datetime(2026, 6, 19, 6, 20),
+        )
         db.session.add_all(
             [
                 arrival,
+                departure,
                 SortDateTailState(
                     sort_date=operation.sort_date,
                     gateway_code=operation.gateway_code,
@@ -10081,6 +10232,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn('data-tail-operational-status="hot"', card_html)
         self.assertIn("parking-badge parking-badge-hot", card_html)
         self.assertIn("ARR42 SDF-RFD 23:40", card_html)
+        self.assertIn("DEP42 RFD-DFW 01:20", card_html)
 
     def test_spare_tail_suppresses_outbound_movement_display(self):
         operation = self._parking_operation()

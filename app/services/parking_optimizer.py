@@ -237,12 +237,13 @@ def parking_optimizer_preview(
         if _normalize_position(assignment.position_code)
     }
     locked_blocked_positions = _locked_blocked_positions(assignments, tail_rows)
+    rule_blocked_positions = active_blocked_parking_positions(gateway)
     locked_eta_by_position = _locked_eta_by_position(assignments, tail_rows)
     slot_1_placements, slot_1_diagnostics = _build_candidate_placements(
         candidate_rows,
         candidate_positions,
         locked_lane_keys,
-        locked_filled_positions,
+        locked_filled_positions | rule_blocked_positions,
         locked_blocked_positions,
         rules["hard"],
         rules["soft"],
@@ -260,6 +261,7 @@ def parking_optimizer_preview(
             inbound_spacing_threshold,
             preferred_max_per_ramp,
             locked_filled_positions | locked_blocked_positions,
+            rule_blocked_positions,
             locked_eta_by_position,
             locked_normal_ramp_counts,
             locked_normal_side_counts,
@@ -332,7 +334,7 @@ def parking_optimizer_preview(
                 unresolved_rows,
                 candidate_positions,
                 locked_lane_keys,
-                stage_filled_positions,
+                stage_filled_positions | rule_blocked_positions,
                 stage_blocked_positions,
                 rules["hard"],
                 rules["soft"],
@@ -352,6 +354,7 @@ def parking_optimizer_preview(
                     inbound_spacing_threshold,
                     preferred_max_per_ramp,
                     stage_filled_positions,
+                    rule_blocked_positions,
                     stage_eta_by_position,
                     stage_normal_ramp_counts,
                     stage_normal_side_counts,
@@ -1039,6 +1042,7 @@ def _solve_optimizer_stage(
     inbound_spacing_threshold,
     preferred_max_per_ramp,
     filled_positions,
+    fill_order_satisfied_positions,
     eta_by_position,
     locked_normal_ramp_counts=None,
     locked_normal_side_counts=None,
@@ -1127,7 +1131,12 @@ def _solve_optimizer_stage(
         _add_tail_constraints(model, variables)
         _add_lane_constraints(model, variables)
         fill_exprs = _add_position_fill_constraints(model, variables, filled_positions)
-        _add_fill_order_constraints(model, variables, fill_exprs)
+        _add_fill_order_constraints(
+            model,
+            variables,
+            fill_exprs,
+            fill_order_satisfied_positions=fill_order_satisfied_positions,
+        )
         _add_throat_constraints(model, variables, fill_exprs)
         _add_767_block_constraints(model, variables, fill_exprs)
         _add_eta_order_constraints(model, variables, eta_by_position)
@@ -1290,7 +1299,13 @@ def _add_position_fill_constraints(model, variables, locked_filled_positions):
     return fill_exprs
 
 
-def _add_fill_order_constraints(model, variables, fill_exprs):
+def _add_fill_order_constraints(
+    model,
+    variables,
+    fill_exprs,
+    fill_order_satisfied_positions=None,
+):
+    fill_order_satisfied_positions = set(fill_order_satisfied_positions or ())
     for placement, variable in variables.items():
         number = _position_number(placement.position)
         if placement.ramp in NORMAL_RAMP_CODES:
@@ -1300,14 +1315,28 @@ def _add_fill_order_constraints(model, variables, fill_exprs):
                 for lower in bank:
                     if lower >= number:
                         continue
-                    model.Add(variable <= _fill_expr(fill_exprs, f"{placement.ramp}{lower:02d}"))
+                    model.Add(
+                        variable
+                        <= _fill_order_expr(
+                            fill_exprs,
+                            f"{placement.ramp}{lower:02d}",
+                            fill_order_satisfied_positions,
+                        )
+                    )
         elif placement.ramp == "R":
             try:
                 index = REMOTE_ORDER.index(placement.position)
             except ValueError:
                 continue
             for lower_position in REMOTE_ORDER[:index]:
-                model.Add(variable <= _fill_expr(fill_exprs, lower_position))
+                model.Add(
+                    variable
+                    <= _fill_order_expr(
+                        fill_exprs,
+                        lower_position,
+                        fill_order_satisfied_positions,
+                    )
+                )
 
 
 def _add_throat_constraints(model, variables, fill_exprs):
@@ -2135,6 +2164,8 @@ def _locked_deice_entries(assignments, tail_rows, timezone_name):
         if not _is_deice_position(position):
             continue
         row = rows_by_tail.get(tail, {})
+        if row.get("suppress_departure_movement"):
+            continue
         departure = _departure_time_for_deice(row, timezone_name)
         if not departure:
             continue
@@ -2163,6 +2194,8 @@ def _locked_inbound_entries(assignments, tail_rows):
         if ramp not in NORMAL_RAMP_CODES:
             continue
         row = rows_by_tail.get(tail, {})
+        if row.get("suppress_arrival_movement"):
+            continue
         eta = row.get("arrival_block_in_local")
         if not eta:
             continue
@@ -2410,6 +2443,8 @@ def _locked_eta_by_position(assignments, tail_rows):
     for assignment in assignments:
         tail = _normalize_tail(assignment.tail_number)
         row = rows_by_tail.get(tail, {})
+        if row.get("suppress_arrival_movement"):
+            continue
         eta = row.get("arrival_block_in_local")
         position = _normalize_position(assignment.position_code)
         if not eta or not position:
@@ -2634,6 +2669,10 @@ def _eta_order_conflicts_from_preview(preview):
 
 def _fill_expr(fill_exprs, position):
     return fill_exprs.get(position, 0)
+
+
+def _fill_order_expr(fill_exprs, position, fill_order_satisfied_positions):
+    return 1 if position in fill_order_satisfied_positions else _fill_expr(fill_exprs, position)
 
 
 def _is_constant_one(value):
