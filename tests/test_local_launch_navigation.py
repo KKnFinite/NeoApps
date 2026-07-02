@@ -704,6 +704,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("neo-brand--gateway", topbar)
         self.assertIn("mobile-topbar-page-context", topbar)
         self.assertIn(">RFD</span>", topbar)
+        self.assertIn("mobile-account-menu", topbar)
+        self.assertIn("mobile-account-trigger", topbar)
         self.assertNotIn("<strong>DASHBOARD</strong>", topbar)
         self.assertNotIn('<nav class="mobile-bottom-nav', html)
         self.assertNotIn("has-mobile-bottom-nav", html)
@@ -726,6 +728,26 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(
             "body.rfd-hub-page.mobile-app-chrome .rfd-node-card-icon-wrap {\n"
             "        width: 46px;",
+            css,
+        )
+        self.assertIn(
+            "body.rfd-hub-page.mobile-app-chrome .mobile-topbar-left {\n"
+            "        flex: 1 1 auto;\n"
+            "        gap: 6px;",
+            css,
+        )
+        self.assertIn(
+            "body.rfd-hub-page.mobile-app-chrome .mobile-topbar-node-icon-link,\n"
+            "    body.rfd-hub-page.mobile-app-chrome .mobile-account-trigger {\n"
+            "        width: 34px;",
+            css,
+        )
+        self.assertIn(
+            "body.rfd-hub-page.mobile-app-chrome .mobile-topbar-page-brand {\n"
+            "        width: 100%;\n"
+            "        max-width: none;\n"
+            "        font-size: clamp(0.7rem, 3.6vw, 0.86rem);\n"
+            "        text-overflow: clip;",
             css,
         )
         self.assertIn(

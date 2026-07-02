@@ -19138,6 +19138,45 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         text-transform: uppercase;
     }
 
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar {
+        gap: 6px;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-left {
+        flex: 1 1 auto;
+        gap: 6px;
+        max-width: calc(100vw - 62px - env(safe-area-inset-left) - env(safe-area-inset-right));
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-node-icon-link,
+    body.rfd-hub-page.mobile-app-chrome .mobile-account-trigger {
+        width: 34px;
+        height: 34px;
+        min-width: 34px;
+        min-height: 34px;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-node-icon {
+        width: 27px;
+        height: 27px;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-gateway-brand-link {
+        flex: 1 1 auto;
+        max-width: none;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-page-brand {
+        width: 100%;
+        max-width: none;
+        font-size: clamp(0.7rem, 3.6vw, 0.86rem);
+        text-overflow: clip;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-page-brand .neo-brand {
+        max-width: 100%;
+    }
+
     .mobile-topbar-title {
         display: grid;
         gap: 1px;
@@ -19576,6 +19615,32 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     .mobile-account-fallback {
         width: 30px;
         height: 30px;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar {
+        left: max(6px, env(safe-area-inset-left));
+        right: max(6px, env(safe-area-inset-right));
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-left {
+        max-width: calc(100vw - 58px - env(safe-area-inset-left) - env(safe-area-inset-right));
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-node-icon-link,
+    body.rfd-hub-page.mobile-app-chrome .mobile-account-trigger {
+        width: 34px;
+        height: 34px;
+        min-width: 34px;
+        min-height: 34px;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-node-icon {
+        width: 27px;
+        height: 27px;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-page-brand {
+        font-size: clamp(0.66rem, 3.35vw, 0.8rem);
     }
 
     .mobile-bottom-nav {
