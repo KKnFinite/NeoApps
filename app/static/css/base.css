@@ -12737,14 +12737,11 @@ select::-ms-expand {
     body.mobile-app-chrome .planning-mobile-arrival-row {
         display: grid;
         grid-template-columns:
-            minmax(22px, 0.42fr)
-            minmax(46px, 0.95fr)
-            minmax(48px, 0.98fr)
-            minmax(32px, 0.6fr)
-            minmax(42px, 0.78fr)
-            minmax(36px, 0.7fr)
-            minmax(30px, 0.56fr)
-            minmax(44px, 0.86fr);
+            minmax(58px, 1.12fr)
+            minmax(60px, 1.04fr)
+            minmax(42px, 0.72fr)
+            minmax(46px, 0.76fr)
+            minmax(42px, 0.66fr);
         align-items: center;
         gap: 2px;
         min-width: 0;
@@ -12776,10 +12773,9 @@ select::-ms-expand {
             0 0 14px rgba(255, 48, 48, 0.16);
     }
 
-    body.mobile-app-chrome .planning-mobile-arrival-wave,
     body.mobile-app-chrome .planning-mobile-arrival-variance {
         color: rgba(255, 255, 255, 0.74);
-        font-size: 0.56rem;
+        font-size: 0.62rem;
         font-weight: 900;
         letter-spacing: 0.02em;
         text-align: center;
@@ -12795,20 +12791,12 @@ select::-ms-expand {
     }
 
     body.mobile-app-chrome .planning-mobile-arrival-origin,
-    body.mobile-app-chrome .planning-mobile-arrival-parking,
-    body.mobile-app-chrome .planning-mobile-arrival-eta,
-    body.mobile-app-chrome .planning-mobile-arrival-status {
+    body.mobile-app-chrome .planning-mobile-arrival-eta {
         font-size: 0.58rem;
         font-weight: 850;
         text-transform: uppercase;
     }
 
-    body.mobile-app-chrome .planning-mobile-arrival-status {
-        color: var(--steel);
-        text-align: right;
-    }
-
-    body.mobile-app-chrome .planning-mobile-arrival-row.is-arrival-late .planning-mobile-arrival-status,
     body.mobile-app-chrome .planning-mobile-arrival-row.is-arrival-late .planning-mobile-arrival-variance {
         color: #ff8c8c;
     }

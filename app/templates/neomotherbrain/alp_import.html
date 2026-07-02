@@ -335,17 +335,14 @@
         <article
             class="planning-mobile-arrival-row{% if row.is_late %} is-arrival-late{% endif %}"
             role="listitem"
-            aria-label="Wave {{ mission.wave or '-' }} flight {{ mission.flight_number|upper }} tail {{ mission.assigned_tail_number|upper if mission.assigned_tail_number else '-' }} origin {{ mission.origin|upper if mission.origin else '-' }} parking {{ parking.label|upper if parking and parking.has_tail else '-' }} ETA {{ row.eta_time.strftime('%H:%M') if row.eta_time else '-' }} variance {{ row.eta_delta_display }} status {{ row.status_label }}"
+            aria-label="Flight {{ mission.flight_number|upper }} tail {{ mission.assigned_tail_number|upper if mission.assigned_tail_number else '-' }} origin {{ mission.origin|upper if mission.origin else '-' }} ETA {{ row.eta_time.strftime('%H:%M') if row.eta_time else '-' }} variance {{ row.eta_delta_display }}"
             {% if row.is_late %}data-mobile-arrival-late-row{% endif %}
         >
-            <span class="planning-mobile-arrival-wave">W{{ mission.wave or "-" }}</span>
             <strong class="planning-mobile-arrival-flight">{{ mission.flight_number|upper }}</strong>
             <span class="planning-mobile-arrival-tail">{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</span>
             <span class="planning-mobile-arrival-origin">{{ mission.origin|upper if mission.origin else "-" }}</span>
-            <span class="planning-mobile-arrival-parking">{{ parking.label|upper if parking and parking.has_tail else "-" }}</span>
             <time class="planning-mobile-arrival-eta" datetime="{{ row.eta_time.isoformat() if row.eta_time else '' }}">{{ row.eta_time.strftime("%H:%M") if row.eta_time else "-" }}</time>
             <span class="planning-mobile-arrival-variance">{{ row.eta_delta_display }}</span>
-            <span class="planning-mobile-arrival-status">{{ row.status_label }}</span>
         </article>
         {% else %}
         <article class="planning-mobile-mission-card{% if mission_type == 'arrival' and row.is_late %} is-arrival-late{% endif %}">
