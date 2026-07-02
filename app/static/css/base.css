@@ -5241,6 +5241,10 @@ a {
     width: min(100%, var(--rfd-node-tile-width));
 }
 
+.rfd-motherbrain-launch-mobile {
+    display: none;
+}
+
 .rfd-node-sektor {
     --node-primary: var(--node-sektor-primary);
     --node-secondary: var(--node-sektor-secondary);
@@ -12721,6 +12725,14 @@ select::-ms-expand {
 
     body.rfd-hub-page.mobile-app-chrome .rfd-node-grid {
         gap: 2px;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .rfd-motherbrain-launch-desktop {
+        display: none;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .rfd-motherbrain-launch-mobile {
+        display: grid;
     }
 
     body.rfd-hub-page.mobile-app-chrome .rfd-node-tile {

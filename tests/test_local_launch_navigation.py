@@ -8,6 +8,7 @@ from flask import Flask
 from app import create_app
 from app.extensions import db
 from app.models import SortDateOperation, User
+from app.services.gateway_matrix import current_gateway_local_date
 from scripts.seed_dev_user import seed_dev_grandmaster
 
 
@@ -744,16 +745,31 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
     def test_mobile_gateway_landing_uses_topbar_launch_items_without_bottom_nav(self):
         seed_dev_grandmaster(self.app)
+        operation = SortDateOperation(
+            sort_date=current_gateway_local_date(),
+            gateway_code="RFD",
+            sort_name="night",
+        )
+        db.session.add(operation)
+        db.session.commit()
         self.client.post(
             "/login",
             data={"username": "Kessler", "password": "1313"},
         )
 
-        response = self.client.get("/rfd")
+        response = self.client.get(f"/rfd?operation_id={operation.id}")
         html = response.data.decode()
         css = Path("app/static/css/base.css").read_text()
         topbar = html.split('class="mobile-topbar node-gateway"', 1)[1].split(
             "</header>",
+            1,
+        )[0]
+        motherbrain_desktop_tile = html.split('class="rfd-node-tile rfd-node-motherbrain rfd-motherbrain-launch rfd-motherbrain-launch-desktop"', 1)[1].split(
+            "</a>",
+            1,
+        )[0]
+        motherbrain_mobile_tile = html.split('class="rfd-node-tile rfd-node-motherbrain rfd-motherbrain-launch rfd-motherbrain-launch-mobile"', 1)[1].split(
+            "</a>",
             1,
         )[0]
         sektor_tile = html.split('class="rfd-node-tile rfd-node-sektor"', 1)[1].split(
@@ -778,6 +794,10 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertNotIn("<strong>DASHBOARD</strong>", topbar)
         self.assertNotIn('<nav class="mobile-bottom-nav', html)
         self.assertNotIn("has-mobile-bottom-nav", html)
+        self.assertIn(f'href="/motherbrain/operations/{operation.id}"', motherbrain_desktop_tile)
+        self.assertIn(f'href="/motherbrain/manage-sort?operation_id={operation.id}"', motherbrain_mobile_tile)
+        self.assertIn("neomotherbrain-inapp-128.png", motherbrain_mobile_tile)
+        self.assertIn("rfd-node-name neo-brand-title", motherbrain_mobile_tile)
         self.assertIn('href="/neosektor', sektor_tile)
         self.assertIn("neosektor-icon-128x128.png", sektor_tile)
         self.assertIn("rfd-node-name neo-brand-title", sektor_tile)
@@ -797,6 +817,17 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(
             "body.rfd-hub-page.mobile-app-chrome .rfd-node-card-icon-wrap {\n"
             "        width: 46px;",
+            css,
+        )
+        self.assertIn(".rfd-motherbrain-launch-mobile {\n    display: none;", css)
+        self.assertIn(
+            "body.rfd-hub-page.mobile-app-chrome .rfd-motherbrain-launch-desktop {\n"
+            "        display: none;",
+            css,
+        )
+        self.assertIn(
+            "body.rfd-hub-page.mobile-app-chrome .rfd-motherbrain-launch-mobile {\n"
+            "        display: grid;",
             css,
         )
         self.assertIn(
