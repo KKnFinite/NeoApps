@@ -1251,7 +1251,10 @@ def _apply_node_role_form(target_user, membership):
 def _apply_permission_rule_form():
     rule_ids = request.form.getlist("rule_ids")
     for rule_id in rule_ids:
-        rule = db.session.get(PermissionRule, int(rule_id))
+        try:
+            rule = db.session.get(PermissionRule, int(rule_id))
+        except (TypeError, ValueError):
+            raise ValueError("Unsupported permission rule selected.")
         if not rule:
             continue
 

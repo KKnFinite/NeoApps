@@ -92,15 +92,30 @@ class DatabaseBootstrapTest(unittest.TestCase):
                 "motherbrain.parking_conflicts.view": "operator",
                 "motherbrain.parking_optimizer.apply": "master",
                 "motherbrain.parking_optimizer.run": "master",
+                "motherbrain.parking_plan.edit": "simulator",
+                "motherbrain.parking_plan.view": "operator",
                 "motherbrain.parking_rules.edit": "simulator",
                 "motherbrain.parking_rules.view": "simulator",
+                "neomotherbrain.arrival_planning.edit": "master",
+                "neomotherbrain.arrival_planning.run": "master",
+                "neomotherbrain.arrival_planning.view": "operator",
                 "neomotherbrain.dashboard.view": "operator",
+                "neomotherbrain.departure_planning.edit": "master",
+                "neomotherbrain.departure_planning.run": "master",
+                "neomotherbrain.departure_planning.view": "operator",
                 "neomotherbrain.flight_api_auto_poll.trigger": "simulator",
                 "neomotherbrain.flight_api_review.edit": "simulator",
                 "neomotherbrain.flight_api_review.view": "simulator",
+                "neomotherbrain.gateway_matrix.edit": "simulator",
                 "neomotherbrain.gateway_matrix.view": "operator",
+                "neomotherbrain.manage_api.run": "grandmaster",
+                "neomotherbrain.manage_api.view": "grandmaster",
+                "neomotherbrain.manage_sort.edit": "simulator",
                 "neomotherbrain.manage_sort.view": "operator",
+                "neomotherbrain.master_schedule.edit": "simulator",
                 "neomotherbrain.master_schedule.view": "operator",
+                "neomotherbrain.sort_timeline.edit": "grandmaster",
+                "neomotherbrain.sort_timeline.view": "grandmaster",
                 "neoermac.building_lineup.edit": "simulator",
                 "neoermac.building_lineup.view": "operator",
                 "neoermac.door_view.edit": "operator",
@@ -172,7 +187,7 @@ class DatabaseBootstrapTest(unittest.TestCase):
         self.assertFalse(second_result["password_applied"])
         self.assertEqual(Gateway.query.filter_by(code="RFD").count(), 1)
         self.assertEqual(NeoNode.query.count(), len(DEFAULT_NEONODES))
-        self.assertEqual(PermissionRule.query.count(), 37)
+        self.assertEqual(PermissionRule.query.count(), 52)
         self.assertEqual(User.query.filter_by(username="Kessler").count(), 1)
         self.assertEqual(GatewayMembership.query.filter_by(user_id=user.id).count(), 1)
         self.assertEqual(

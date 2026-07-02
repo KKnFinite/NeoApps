@@ -46,15 +46,30 @@ class PermissionRulesTest(unittest.TestCase):
                 "motherbrain.parking_conflicts.view": "operator",
                 "motherbrain.parking_optimizer.apply": "master",
                 "motherbrain.parking_optimizer.run": "master",
+                "motherbrain.parking_plan.edit": "simulator",
+                "motherbrain.parking_plan.view": "operator",
                 "motherbrain.parking_rules.edit": "simulator",
                 "motherbrain.parking_rules.view": "simulator",
+                "neomotherbrain.arrival_planning.edit": "master",
+                "neomotherbrain.arrival_planning.run": "master",
+                "neomotherbrain.arrival_planning.view": "operator",
                 "neomotherbrain.dashboard.view": "operator",
+                "neomotherbrain.departure_planning.edit": "master",
+                "neomotherbrain.departure_planning.run": "master",
+                "neomotherbrain.departure_planning.view": "operator",
                 "neomotherbrain.flight_api_auto_poll.trigger": "simulator",
                 "neomotherbrain.flight_api_review.edit": "simulator",
                 "neomotherbrain.flight_api_review.view": "simulator",
+                "neomotherbrain.gateway_matrix.edit": "simulator",
                 "neomotherbrain.gateway_matrix.view": "operator",
+                "neomotherbrain.manage_api.run": "grandmaster",
+                "neomotherbrain.manage_api.view": "grandmaster",
+                "neomotherbrain.manage_sort.edit": "simulator",
                 "neomotherbrain.manage_sort.view": "operator",
+                "neomotherbrain.master_schedule.edit": "simulator",
                 "neomotherbrain.master_schedule.view": "operator",
+                "neomotherbrain.sort_timeline.edit": "grandmaster",
+                "neomotherbrain.sort_timeline.view": "grandmaster",
                 "neoermac.building_lineup.edit": "simulator",
                 "neoermac.building_lineup.view": "operator",
                 "neoermac.door_view.edit": "operator",
@@ -111,8 +126,11 @@ class PermissionRulesTest(unittest.TestCase):
         updated = db.session.get(PermissionRule, rule.id)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"PERMISSION RULES", response.data)
-        self.assertIn(b"DESCRIPTION", response.data)
-        self.assertIn(b"MINIMUM ROLE", response.data)
+        self.assertIn(b"permission-rule-item", response.data)
+        self.assertIn(b'data-permission-action="view"', response.data)
+        self.assertIn(b'data-permission-action="edit"', response.data)
+        self.assertIn(b'data-permission-action="trigger"', response.data)
+        self.assertIn(b"data-permission-role-select", response.data)
         self.assertIn(b"NeoGateway / System", response.data)
         self.assertIn(b"NeoMotherBrain", response.data)
         self.assertIn(b"NeoSektor", response.data)
@@ -122,7 +140,10 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertIn(b"NeoSub-Zero", response.data)
         self.assertIn(b"NeoRain", response.data)
         self.assertNotIn(b"PERMISSION KEY", response.data)
+        self.assertNotIn(b"<th>DESCRIPTION</th>", response.data)
+        self.assertNotIn(b"<th>MINIMUM ROLE</th>", response.data)
         self.assertIn(b"neoermac.building_lineup.edit", response.data)
+        self.assertIn(b'<option value="master" selected>Master</option>', response.data)
         self.assertIn(b'data-motherbrain-desktop-side-nav', response.data)
         self.assertIn(b'href="/motherbrain"', response.data)
         self.assertNotIn(b"motherbrain-main-menu-return", response.data)
@@ -149,6 +170,100 @@ class PermissionRulesTest(unittest.TestCase):
         updated = db.session.get(PermissionRule, rule.id)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(updated.minimum_role, "simulator")
+
+    def test_permission_page_renders_action_dropdowns_only_where_applicable(self):
+        grandmaster = self._user_with_node_role("rule_ui_grandmaster", "motherbrain", "grandmaster")
+        backfill_default_gateway_node_roles(grandmaster, role="grandmaster")
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        response = self.client.get("/motherbrain/permissions")
+        html = response.data.decode()
+        manage_sort_block = html.split(
+            'data-permission-item="neomotherbrain.manage_sort"',
+            1,
+        )[1].split("</article>", 1)[0]
+        manage_api_block = html.split(
+            'data-permission-item="neomotherbrain.manage_api"',
+            1,
+        )[1].split("</article>", 1)[0]
+        optimizer_apply_block = html.split(
+            'data-permission-item="motherbrain.parking_optimizer_apply"',
+            1,
+        )[1].split("</article>", 1)[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-permission-action="view"', manage_sort_block)
+        self.assertIn('data-permission-action="edit"', manage_sort_block)
+        self.assertNotIn('data-permission-action="trigger"', manage_sort_block)
+        self.assertIn('data-permission-action="view"', manage_api_block)
+        self.assertIn('data-permission-action="trigger"', manage_api_block)
+        self.assertIn('data-permission-action="trigger"', optimizer_apply_block)
+        self.assertIn("neomotherbrain.manage_api.run", manage_api_block)
+        self.assertIn("motherbrain.parking_optimizer.apply", optimizer_apply_block)
+
+    def test_invalid_permission_role_is_rejected_safely(self):
+        grandmaster = self._user_with_node_role("rule_invalid_grandmaster", "motherbrain", "grandmaster")
+        backfill_default_gateway_node_roles(grandmaster, role="grandmaster")
+        db.session.commit()
+        self._login(grandmaster.username)
+        rule = PermissionRule.query.filter_by(
+            permission_key="neomotherbrain.manage_sort.edit"
+        ).one()
+
+        response = self.client.post(
+            "/motherbrain/permissions",
+            data={
+                "rule_ids": [str(rule.id)],
+                f"description_{rule.id}": rule.description,
+                f"minimum_role_{rule.id}": "captain",
+            },
+            follow_redirects=True,
+        )
+
+        db.session.refresh(rule)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Unsupported minimum role selected.", response.data)
+        self.assertEqual(rule.minimum_role, "simulator")
+
+    def test_manage_sort_view_permission_controls_route_access(self):
+        view_rule = PermissionRule.query.filter_by(
+            permission_key="neomotherbrain.manage_sort.view"
+        ).one()
+        view_rule.minimum_role = "master"
+        simulator = self._user_with_node_role("manage_sort_view_sim", "motherbrain", "simulator")
+        db.session.commit()
+        self._login(simulator.username)
+
+        response = self.client.get("/motherbrain/manage-sort", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/rfd")
+
+    def test_manage_api_run_permission_controls_manual_actions(self):
+        view_rule = PermissionRule.query.filter_by(
+            permission_key="neomotherbrain.manage_api.view"
+        ).one()
+        run_rule = PermissionRule.query.filter_by(
+            permission_key="neomotherbrain.manage_api.run"
+        ).one()
+        view_rule.minimum_role = "simulator"
+        run_rule.minimum_role = "grandmaster"
+        simulator = self._user_with_node_role("manage_api_run_sim", "motherbrain", "simulator")
+        db.session.commit()
+        self._login(simulator.username)
+
+        response = self.client.post(
+            "/motherbrain/flight-api-test",
+            data={
+                "flight_api_action": "replay",
+                "replay_payload": "{}",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/rfd")
 
     def test_simulator_can_pass_building_lineup_edit(self):
         simulator = self._user_with_ermac_role("ermac_simulator", "simulator")

@@ -17,39 +17,35 @@
                     <h2 id="permission-group-{{ group.key }}">{{ group.label }}</h2>
                 </div>
 
-                <div class="table-wrap">
-                    <table class="data-table wide-data-table permission-rule-table">
-                        <thead>
-                            <tr>
-                                <th>DESCRIPTION</th>
-                                <th>MINIMUM ROLE</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for rule in group.rules %}
-                            <tr>
-                                <td data-label="Description">
-                                    <input type="hidden" name="rule_ids" value="{{ rule.id }}">
-                                    <small class="permission-rule-key">{{ rule.permission_key }}</small>
-                                    <input name="description_{{ rule.id }}" value="{{ rule.description or '' }}" autocomplete="off">
-                                </td>
-                                <td data-label="Minimum Role">
-                                    <span class="role-select-wrap">
-                                        <select name="minimum_role_{{ rule.id }}">
-                                            {% for role in role_choices %}
-                                            <option value="{{ role }}" {% if rule.minimum_role == role %}selected{% endif %}>{{ role|role_label }}</option>
-                                            {% endfor %}
-                                        </select>
-                                    </span>
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="2">NO PERMISSION RULES CONFIGURED.</td>
-                            </tr>
+                <div class="permission-rule-items">
+                    {% for item in group["items"] %}
+                    <article class="permission-rule-item" data-permission-item="{{ item.key }}">
+                        <div class="permission-rule-copy">
+                            <strong>{{ item.label }}</strong>
+                            <p>{{ item.description }}</p>
+                        </div>
+                        <div class="permission-rule-actions">
+                            {% for action in item.actions %}
+                            {% set rule = action.rule %}
+                            <label class="permission-rule-action" data-permission-action="{{ action.type }}" data-permission-key="{{ rule.permission_key }}">
+                                <input type="hidden" name="rule_ids" value="{{ rule.id }}">
+                                <input type="hidden" name="description_{{ rule.id }}" value="{{ rule.description or '' }}">
+                                <span>{{ action.label }}</span>
+                                <small class="permission-rule-key">{{ rule.permission_key }}</small>
+                                <span class="role-select-wrap">
+                                    <select name="minimum_role_{{ rule.id }}" aria-label="{{ item.label }} {{ action.label }} minimum role" data-permission-role-select>
+                                        {% for role in role_choices %}
+                                        <option value="{{ role }}" {% if rule.minimum_role == role %}selected{% endif %}>{{ role|role_label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </span>
+                            </label>
                             {% endfor %}
-                        </tbody>
-                    </table>
+                        </div>
+                    </article>
+                    {% else %}
+                    <p class="muted">NO PERMISSION RULES CONFIGURED.</p>
+                    {% endfor %}
                 </div>
             </section>
             {% endfor %}

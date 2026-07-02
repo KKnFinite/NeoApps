@@ -2137,6 +2137,68 @@ a {
     text-transform: none;
 }
 
+.permission-rule-items {
+    display: grid;
+    gap: 10px;
+}
+
+.permission-rule-item {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(320px, 1.45fr);
+    gap: 14px;
+    align-items: stretch;
+    padding: 12px;
+    border: 1px solid rgba(235, 241, 246, 0.12);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.permission-rule-copy {
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    min-width: 0;
+}
+
+.permission-rule-copy strong {
+    color: var(--steel);
+    font-size: 0.9rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.permission-rule-copy p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.permission-rule-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    min-width: 0;
+}
+
+.permission-rule-action {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid rgba(235, 241, 246, 0.1);
+    border-radius: 6px;
+    background: rgba(8, 10, 14, 0.72);
+}
+
+.permission-rule-action > span:first-of-type {
+    color: var(--text);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
 .permission-rule-table td {
     vertical-align: middle;
 }
@@ -2148,6 +2210,19 @@ a {
     font-size: 0.62rem;
     font-weight: 900;
     letter-spacing: 0.06em;
+}
+
+.permission-rule-action .permission-rule-key {
+    overflow: hidden;
+    margin-bottom: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+    .permission-rule-item {
+        grid-template-columns: 1fr;
+    }
 }
 
 .command-card {
