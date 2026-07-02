@@ -117,8 +117,8 @@ PWA_INSTALL_TARGETS = (
         "icon_folder": "scorpion",
         "install_icon_src": "/static/images/icons/neoscorpion/inapp/neoscorpion-128x128.png",
         "name": "NeoScorpion",
-        "description": "Future NeoScorpion workspace.",
-        "start_url": "/nodes/",
+        "description": "Fueling dispatch, trucks, and fueler operations.",
+        "start_url": "/neoscorpion",
         "minimum_role": "watcher",
     },
     {

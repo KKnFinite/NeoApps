@@ -318,7 +318,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             "neoscorpion": (
                 "NeoScorpion",
                 "NeoScorpion",
-                "/nodes/",
+                "/neoscorpion",
                 "#f4c21f",
                 [
                     ("/static/images/icons/neoscorpion/pwa/icon-192x192.png", "192x192", "any"),
@@ -330,7 +330,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             "scorpion": (
                 "NeoScorpion",
                 "NeoScorpion",
-                "/nodes/",
+                "/neoscorpion",
                 "#f4c21f",
                 [
                     ("/static/images/icons/neoscorpion/pwa/icon-192x192.png", "192x192", "any"),

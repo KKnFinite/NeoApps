@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Settings | NeoScorpion{% endblock %}
+
+{% block content %}
+<section class="neoscorpion-shell neoscorpion-screen" aria-label="NeoScorpion Settings">
+    <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
+        {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}
+        {% include "neonodes/neoscorpion/_brand_title.html" %}
+        {% endwith %}
+        <h1>Settings</h1>
+    </header>
+    {% include "neonodes/neoscorpion/_menu.html" %}
+
+    <section class="neoscorpion-panel">
+        <div class="neoscorpion-panel-head">
+            <span>Fuel Settings Shell</span>
+            <strong>{{ gateway.code }}</strong>
+        </div>
+        <form class="neoscorpion-settings-form" method="post">
+            <label>Fuel Density, lb/gal
+                <input name="fuel_density_lbs_per_gallon" value="{{ settings.fuel_density_lbs_per_gallon if settings.fuel_density_lbs_per_gallon is not none else '' }}" inputmode="decimal" {% if not can_edit %}readonly{% endif %}>
+            </label>
+            <label>FOB Difference Threshold, pounds
+                <input name="fob_difference_threshold_lbs" value="{{ settings.fob_difference_threshold_lbs if settings.fob_difference_threshold_lbs is not none else '' }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}>
+            </label>
+            <label>T/F vs Estimated Fuel Threshold, pounds
+                <input name="tf_vs_estimated_threshold_lbs" value="{{ settings.tf_vs_estimated_threshold_lbs if settings.tf_vs_estimated_threshold_lbs is not none else '' }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}>
+            </label>
+            <p class="neoscorpion-helper">Detailed aircraft-specific fuel calculations are not configured yet.</p>
+            {% if can_edit %}
+            <button class="action-button neoscorpion-save-button" type="submit">Save Settings</button>
+            {% endif %}
+        </form>
+    </section>
+</section>
+{% endblock %}

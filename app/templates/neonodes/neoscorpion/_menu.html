@@ -1,0 +1,7 @@
+<nav class="neoscorpion-screen-menu" aria-label="NeoScorpion screens">
+    {% for item in neoscorpion_internal_menu_items() %}
+    <a class="neoscorpion-screen-menu-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" {% if item.active %}aria-current="page"{% endif %}>
+        {{ item.label }}
+    </a>
+    {% endfor %}
+</nav>

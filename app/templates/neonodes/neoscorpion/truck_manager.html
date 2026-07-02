@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Truck Manager | NeoScorpion{% endblock %}
+
+{% block content %}
+<section class="neoscorpion-shell neoscorpion-screen" aria-label="NeoScorpion Truck Manager">
+    <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
+        {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}
+        {% include "neonodes/neoscorpion/_brand_title.html" %}
+        {% endwith %}
+        <h1>Truck Manager</h1>
+    </header>
+    {% include "neonodes/neoscorpion/_menu.html" %}
+
+    <section class="neoscorpion-panel">
+        <div class="neoscorpion-panel-head">
+            <span>Fuel Trucks</span>
+            <strong>{{ trucks|length }}</strong>
+        </div>
+        {% if can_edit %}
+        <form class="neoscorpion-truck-form neoscorpion-new-truck-form" method="post">
+            <input type="hidden" name="action" value="save_truck">
+            <label>Truck
+                <input name="truck_number" required placeholder="TRUCK 12">
+            </label>
+            <label>Capacity (gal)
+                <input name="capacity_gallons" inputmode="numeric">
+            </label>
+            <label>Remaining (gal)
+                <input name="remaining_fuel_gallons" inputmode="numeric">
+            </label>
+            <label>Vendor Driver
+                <input name="vendor_driver_name" placeholder="Non-login vendor driver">
+            </label>
+            <label>Description
+                <input name="description">
+            </label>
+            <label class="neoscorpion-check"><input type="checkbox" name="is_active" value="1" checked> Active</label>
+            <label class="neoscorpion-check"><input type="checkbox" name="is_out_of_service" value="1"> Out of Service</label>
+            <button class="action-button neoscorpion-save-button" type="submit">Add Truck</button>
+        </form>
+        {% endif %}
+        <div class="neoscorpion-truck-list">
+            {% for truck in trucks %}
+            <form class="neoscorpion-truck-card" method="post">
+                <input type="hidden" name="truck_id" value="{{ truck.id }}">
+                <input type="hidden" name="action" value="save_truck">
+                <label>Truck
+                    <input name="truck_number" value="{{ truck.truck_number }}" {% if not can_edit %}readonly{% endif %}>
+                </label>
+                <label>Capacity (gal)
+                    <input name="capacity_gallons" value="{{ truck.capacity_gallons if truck.capacity_gallons is not none else '' }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}>
+                </label>
+                <label>Remaining (gal)
+                    <input name="remaining_fuel_gallons" value="{{ truck.remaining_fuel_gallons if truck.remaining_fuel_gallons is not none else '' }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}>
+                </label>
+                <label>Vendor Driver
+                    <input name="vendor_driver_name" value="{{ truck.vendor_driver_name }}" {% if not can_edit %}readonly{% endif %}>
+                </label>
+                <label>Description
+                    <input name="description" value="{{ truck.description }}" {% if not can_edit %}readonly{% endif %}>
+                </label>
+                <label class="neoscorpion-check"><input type="checkbox" name="is_active" value="1" {% if truck.is_active %}checked{% endif %} {% if not can_edit %}disabled{% endif %}> Active</label>
+                <label class="neoscorpion-check"><input type="checkbox" name="is_out_of_service" value="1" {% if truck.is_out_of_service %}checked{% endif %} {% if not can_edit %}disabled{% endif %}> Out of Service</label>
+                {% if can_edit %}
+                <div class="neoscorpion-truck-actions">
+                    <button class="action-button neoscorpion-save-button" type="submit">Save</button>
+                    <button class="action-button action-button-secondary" type="submit" name="action" value="deactivate_truck">Deactivate</button>
+                </div>
+                {% endif %}
+            </form>
+            {% else %}
+            <p class="neoscorpion-empty">No fuel trucks have been added yet.</p>
+            {% endfor %}
+        </div>
+    </section>
+</section>
+{% endblock %}

@@ -205,6 +205,7 @@ def rfd_hub():
         ),
         can_launch_sektor=user_can_access_node(current_user, gateway.code, "sektor"),
         can_launch_ermac=user_can_access_node(current_user, gateway.code, "ermac"),
+        can_launch_scorpion=user_can_access_node(current_user, gateway.code, "scorpion"),
     )
 
 

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Fueler | NeoScorpion{% endblock %}
+
+{% block content %}
+<section class="neoscorpion-shell neoscorpion-screen neoscorpion-fueler-screen" aria-label="NeoScorpion Fueler">
+    <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
+        {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}
+        {% include "neonodes/neoscorpion/_brand_title.html" %}
+        {% endwith %}
+        <h1>Fueler</h1>
+    </header>
+    {% include "neonodes/neoscorpion/_menu.html" %}
+
+    <section class="neoscorpion-panel">
+        <div class="neoscorpion-panel-head">
+            <span>My Fuel Assignments</span>
+            <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }}{% else %}No current sort{% endif %}</strong>
+        </div>
+        {% if not operation %}
+        <p class="neoscorpion-empty">No current SortDateOperation is available for fueler assignments.</p>
+        {% elif not rows %}
+        <p class="neoscorpion-empty">No fuel assignments are currently assigned to you.</p>
+        {% else %}
+        <div class="neoscorpion-fueler-cards">
+            {% for row in rows %}
+            <article class="neoscorpion-fueler-card">
+                <header>
+                    <span>{{ row.destination }}</span>
+                    <strong>{{ row.tail_number }}</strong>
+                    <small>{{ row.mission.flight_number }} | {{ row.parking_position }} | {{ row.departure_time or '-' }}</small>
+                </header>
+                <p class="neoscorpion-calculation-warning">{{ row.estimated_fuel_status }}</p>
+                {% if can_edit and row.assignment %}
+                <form method="post" class="neoscorpion-fueler-form">
+                    <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
+                    <label>FOB
+                        <input name="fob" value="{{ row.fob_display }}" inputmode="decimal" placeholder="50.5">
+                    </label>
+                    {% if row.aircraft_type == "A300" %}
+                    <label>Center Fuel
+                        <input name="center_fuel" value="{{ row.center_fuel_display }}" inputmode="decimal" placeholder="0.0">
+                    </label>
+                    {% endif %}
+                    <label>APU
+                        <input name="apu_lbs" value="{{ row.apu_lbs if row.apu_lbs is not none else '' }}" inputmode="numeric" placeholder="300">
+                    </label>
+                    <label>T/F
+                        <input name="transfer_fuel_gallons" value="{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '' }}" inputmode="numeric" placeholder="Gallons">
+                    </label>
+                    <label>Actual Fuel
+                        <input name="actual_fuel" value="{{ row.actual_fuel_display }}" inputmode="decimal" placeholder="50.5">
+                    </label>
+                    <label>Status
+                        <select name="tail_fuel_status">
+                            {% for status in ["pending", "in_progress", "review", "complete"] %}
+                            <option value="{{ status }}" {% if row.tail_fuel_state and row.tail_fuel_state.status == status %}selected{% endif %}>{{ status|replace("_", " ")|title }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label class="neoscorpion-fueler-notes">Notes
+                        <textarea name="notes" rows="3">{{ row.tail_fuel_state.notes if row.tail_fuel_state else '' }}</textarea>
+                    </label>
+                    <button class="action-button neoscorpion-save-button" type="submit">Save Fuel Entry</button>
+                </form>
+                {% else %}
+                <dl class="neoscorpion-fueler-readout">
+                    <div><dt>FOB</dt><dd>{{ row.fob_display or '-' }}</dd></div>
+                    {% if row.aircraft_type == "A300" %}<div><dt>Center Fuel</dt><dd>{{ row.center_fuel_display or '-' }}</dd></div>{% endif %}
+                    <div><dt>APU</dt><dd>{{ row.apu_lbs if row.apu_lbs is not none else '-' }}</dd></div>
+                    <div><dt>T/F</dt><dd>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</dd></div>
+                    <div><dt>Actual Fuel</dt><dd>{{ row.actual_fuel_display or '-' }}</dd></div>
+                </dl>
+                {% endif %}
+            </article>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </section>
+</section>
+{% endblock %}

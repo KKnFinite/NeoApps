@@ -71,6 +71,15 @@ class PermissionRulesTest(unittest.TestCase):
                 "neosektor.tunnel_conductor.edit": "simulator",
                 "neosektor.wbm.edit": "operator",
                 "neosektor.wbm.view": "operator",
+                "neoscorpion.fuel_dispatch.edit": "simulator",
+                "neoscorpion.fuel_dispatch.view": "operator",
+                "neoscorpion.fueler.edit": "operator",
+                "neoscorpion.fueler.view": "watcher",
+                "neoscorpion.history.view": "operator",
+                "neoscorpion.settings.edit": "master",
+                "neoscorpion.settings.view": "simulator",
+                "neoscorpion.truck_manager.edit": "simulator",
+                "neoscorpion.truck_manager.view": "operator",
             },
         )
 

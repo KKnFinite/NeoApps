@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Fuel Dispatch | NeoScorpion{% endblock %}
+
+{% block content %}
+<section class="neoscorpion-shell neoscorpion-screen" aria-label="NeoScorpion Fuel Dispatch">
+    <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
+        {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}
+        {% include "neonodes/neoscorpion/_brand_title.html" %}
+        {% endwith %}
+        <h1>Fuel Dispatch</h1>
+    </header>
+    {% include "neonodes/neoscorpion/_menu.html" %}
+
+    <section class="neoscorpion-panel">
+        <div class="neoscorpion-panel-head">
+            <span>Current Sort Operation</span>
+            <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }} {{ operation.sort_date.strftime('%m/%d/%y') if operation.sort_date else '' }}{% else %}No current sort{% endif %}</strong>
+        </div>
+        {% if not operation %}
+        <p class="neoscorpion-empty">No current SortDateOperation is available for Fuel Dispatch.</p>
+        {% elif not rows %}
+        <p class="neoscorpion-empty">No outbound departure missions are available for this sort.</p>
+        {% else %}
+        <div class="neoscorpion-table-wrap">
+            <table class="neoscorpion-dispatch-table">
+                <thead>
+                    <tr>
+                        <th>Flight</th>
+                        <th>Tail</th>
+                        <th>Type</th>
+                        <th>Dest</th>
+                        <th>ETD</th>
+                        <th>Parking</th>
+                        <th>Required Fuel</th>
+                        <th>Inbound Fuel</th>
+                        <th>FOB</th>
+                        <th>APU</th>
+                        <th>Estimated Fuel</th>
+                        <th>Fueler</th>
+                        <th>Truck</th>
+                        <th>Truck Fuel</th>
+                        <th>Status</th>
+                        <th>Load Planning</th>
+                        {% if can_edit %}<th>Save</th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td><strong>{{ row.mission.flight_number }}</strong></td>
+                        <td>{{ row.tail_number }}</td>
+                        <td>{{ row.aircraft_type }}</td>
+                        <td>{{ row.destination }}</td>
+                        <td>{{ row.departure_time or '-' }}</td>
+                        <td>{{ row.parking_position }}</td>
+                        {% if can_edit %}
+                        <form method="post">
+                            <input type="hidden" name="mission_id" value="{{ row.mission.id }}">
+                            <td><input class="neoscorpion-inline-input" name="required_fuel" value="{{ row.required_fuel_display }}" inputmode="decimal" aria-label="Required Fuel for {{ row.mission.flight_number }}"></td>
+                            <td><input class="neoscorpion-inline-input" name="inbound_fuel" value="{{ row.inbound_fuel_display }}" inputmode="decimal" aria-label="Inbound Fuel for {{ row.tail_number }}"></td>
+                            <td>{{ row.fob_display or '-' }}</td>
+                            <td><input class="neoscorpion-inline-input" name="apu_lbs" value="{{ row.apu_lbs if row.apu_lbs is not none else '' }}" inputmode="numeric" aria-label="APU pounds for {{ row.tail_number }}"></td>
+                            <td><span class="neoscorpion-status-pill">{{ row.estimated_fuel_status }}</span></td>
+                            <td>
+                                <select class="neoscorpion-inline-select" name="assigned_fueler_user_id" aria-label="Assigned fueler for {{ row.mission.flight_number }}">
+                                    <option value="">Unassigned</option>
+                                    {% for fueler in fuelers %}
+                                    <option value="{{ fueler.id }}" {% if row.assigned_fueler and row.assigned_fueler.id == fueler.id %}selected{% endif %}>{{ fueler.display_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <select class="neoscorpion-inline-select" name="assigned_truck_id" aria-label="Assigned fuel truck for {{ row.mission.flight_number }}">
+                                    <option value="">Unassigned</option>
+                                    {% for truck in trucks %}
+                                    <option value="{{ truck.id }}" {% if row.assigned_truck and row.assigned_truck.id == truck.id %}selected{% endif %}>{{ truck.truck_number }}{% if truck.is_out_of_service %} OOS{% endif %}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>{{ row.truck_remaining_fuel if row.truck_remaining_fuel is not none else '-' }} gal</td>
+                            <td>
+                                <select class="neoscorpion-inline-select" name="review_status" aria-label="Review status for {{ row.mission.flight_number }}">
+                                    {% for status in ["pending", "assigned", "review", "complete"] %}
+                                    <option value="{{ status }}" {% if row.review_status == status %}selected{% endif %}>{{ status|replace("_", " ")|title }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td><input class="neoscorpion-load-input" name="load_planning_note" value="{{ row.load_planning_note }}" placeholder="{{ row.load_planning_placeholder }}" aria-label="Copy-ready load planning placeholder"></td>
+                            <td><button class="action-button neoscorpion-save-button" type="submit">Save</button></td>
+                        </form>
+                        {% else %}
+                        <td>{{ row.required_fuel_display or '-' }}</td>
+                        <td>{{ row.inbound_fuel_display or '-' }}</td>
+                        <td>{{ row.fob_display or '-' }}</td>
+                        <td>{{ row.apu_lbs if row.apu_lbs is not none else '-' }}</td>
+                        <td><span class="neoscorpion-status-pill">{{ row.estimated_fuel_status }}</span></td>
+                        <td>{{ row.assigned_fueler.display_name if row.assigned_fueler else 'Unassigned' }}</td>
+                        <td>{{ row.assigned_truck.truck_number if row.assigned_truck else 'Unassigned' }}</td>
+                        <td>{{ row.truck_remaining_fuel if row.truck_remaining_fuel is not none else '-' }} gal</td>
+                        <td>{{ row.review_status|replace("_", " ")|title }}</td>
+                        <td>{{ row.load_planning_note or row.load_planning_placeholder }}</td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </section>
+</section>
+{% endblock %}

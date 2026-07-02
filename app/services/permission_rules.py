@@ -150,6 +150,51 @@ DEFAULT_PERMISSION_RULES = (
         "watcher",
         "View NeoSektor Driver Routing screens.",
     ),
+    (
+        "neoscorpion.fuel_dispatch.view",
+        "operator",
+        "View NeoScorpion Fuel Dispatch screens.",
+    ),
+    (
+        "neoscorpion.fuel_dispatch.edit",
+        "simulator",
+        "Edit NeoScorpion dispatcher fuel assignments and mission fuel requirements.",
+    ),
+    (
+        "neoscorpion.fueler.view",
+        "watcher",
+        "View assigned NeoScorpion fueler work.",
+    ),
+    (
+        "neoscorpion.fueler.edit",
+        "operator",
+        "Enter NeoScorpion fueler FOB, APU, transfer, and actual fuel data.",
+    ),
+    (
+        "neoscorpion.truck_manager.view",
+        "operator",
+        "View NeoScorpion fuel truck state.",
+    ),
+    (
+        "neoscorpion.truck_manager.edit",
+        "simulator",
+        "Edit NeoScorpion fuel trucks and vendor driver assignments.",
+    ),
+    (
+        "neoscorpion.settings.view",
+        "simulator",
+        "View NeoScorpion fuel settings.",
+    ),
+    (
+        "neoscorpion.settings.edit",
+        "master",
+        "Edit NeoScorpion fuel settings.",
+    ),
+    (
+        "neoscorpion.history.view",
+        "operator",
+        "View NeoScorpion completed fuel history.",
+    ),
 )
 
 PERMISSION_RULE_GROUPS = (

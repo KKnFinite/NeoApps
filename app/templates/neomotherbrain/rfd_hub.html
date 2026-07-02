@@ -88,9 +88,15 @@
                 <article class="rfd-node-tile rfd-node-placeholder rfd-node-subzero" aria-disabled="true" aria-label="NeoSub-Zero">
                     {{ node_card("subzero", "Sub-Zero", "subzero") }}
                 </article>
-                <article class="rfd-node-tile rfd-node-placeholder rfd-node-scorpion" aria-disabled="true" aria-label="NeoScorpion">
+                {% if can_launch_scorpion %}
+                <a class="rfd-node-tile rfd-node-scorpion" href="{{ url_for('neoscorpion.index') }}" aria-label="NeoScorpion">
+                    {{ node_card("scorpion", "Scorpion", "scorpion") }}
+                </a>
+                {% else %}
+                <article class="rfd-node-tile rfd-node-disabled rfd-node-scorpion" aria-disabled="true" aria-label="NeoScorpion">
                     {{ node_card("scorpion", "Scorpion", "scorpion") }}
                 </article>
+                {% endif %}
             </div>
         </div>
     </section>

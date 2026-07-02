@@ -44,6 +44,7 @@
 {% set motherbrain_current_label = "PERMISSION RULES" if is_permission_management_page else ("PORTAL MANAGEMENT" if is_user_management_page else ("FLIGHT API REVIEW" if is_flight_api_review_page else ("PARKING RULES" if is_parking_rules_page else ("PARKING PLAN" if is_parking_plan_page else ("SORT TIMELINE" if is_sort_timeline_page else ("GATEWAY MATRIX" if is_gateway_matrix_page else ("MASTER SCHEDULE" if is_master_schedule_page else ("MANAGE SORT" if is_manage_sort_page else "DASHBOARD")))))))) %}
 {% set is_neoermac_view_outbound_page = request.path.startswith("/neoermac/view-outbound") or request.path.startswith("/neoermac/outbound") %}
 {% set neoermac_current_label = "BUILDING LINEUP" if request.path.startswith("/neoermac/building-lineup") else ("DOOR VIEW" if request.path.startswith("/neoermac/door-view") else ("VIEW OUTBOUND" if is_neoermac_view_outbound_page else ("UPCOMING PULLS" if request.path.startswith("/neoermac/upcoming-pulls") else ("TUG ASSIGNMENTS" if request.path.startswith("/neoermac/tug-assignments") else "DASHBOARD")))) %}
+{% set neoscorpion_current_label = "FUEL DISPATCH" if request.path.startswith("/neoscorpion/fuel-dispatch") else ("FUELER" if request.path.startswith("/neoscorpion/fueler") else ("TRUCK MANAGER" if request.path.startswith("/neoscorpion/truck-manager") else ("SETTINGS" if request.path.startswith("/neoscorpion/settings") else ("FUEL HISTORY" if request.path.startswith("/neoscorpion/history") or request.path.startswith("/neoscorpion/completed-fuel") else "DASHBOARD")))) %}
 {% set neosektor_ballmat_side = request.args.get("side", "")|lower %}
 {% set is_neosektor_ebm_page = request.path.startswith("/neosektor/ebm") or (request.path.startswith("/neosektor/ballmat") and neosektor_ballmat_side == "east") %}
 {% set is_neosektor_wbm_page = request.path.startswith("/neosektor/wbm") or (request.path.startswith("/neosektor/ballmat") and neosektor_ballmat_side == "west") %}
@@ -58,13 +59,14 @@
 {% set motherbrain_locked_icon = "images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png" %}
 {% set neoermac_locked_icon = "images/icons/neoermac/inapp/neoermac-inapp-128.png" %}
 {% set neosektor_locked_icon = "images/icons/neosektor/inapp/neosektor-icon-128x128.png" %}
+{% set neoscorpion_locked_icon = "images/icons/neoscorpion/inapp/neoscorpion-128x128.png" %}
 {% set neostaffing_locked_icon = "images/icons/neostaffing/inapp/neostaffing-inapp-128.png" %}
-{% set node_header_logo = neosektor_locked_icon if is_neosektor_page else (neoermac_locked_icon if is_neoermac_page else (motherbrain_locked_icon if uses_motherbrain_header else "images/motherbrain_logo1.png")) %}
-{% set node_header_alt = "NeoSektor icon" if is_neosektor_page else ("NeoErmac icon" if is_neoermac_page else ("NeoMotherBrain icon" if uses_motherbrain_header else "MotherBrain logo")) %}
+{% set node_header_logo = neosektor_locked_icon if is_neosektor_page else (neoermac_locked_icon if is_neoermac_page else (neoscorpion_locked_icon if is_neoscorpion_page else (motherbrain_locked_icon if uses_motherbrain_header else "images/motherbrain_logo1.png"))) %}
+{% set node_header_alt = "NeoSektor icon" if is_neosektor_page else ("NeoErmac icon" if is_neoermac_page else ("NeoScorpion icon" if is_neoscorpion_page else ("NeoMotherBrain icon" if uses_motherbrain_header else "MotherBrain logo"))) %}
 {% set node_header_key = "sektor" if is_neosektor_page else ("ermac" if is_neoermac_page else ("scorpion" if is_neoscorpion_page else ("reptile" if is_neoreptile_page else ("subzero" if is_neosubzero_page else ("rain" if is_neorain_page else "motherbrain"))))) %}
 {% set node_header_word = "Sektor" if is_neosektor_page else ("Ermac" if is_neoermac_page else ("Scorpion" if is_neoscorpion_page else ("Reptile" if is_neoreptile_page else ("Sub-Zero" if is_neosubzero_page else ("Rain" if is_neorain_page else "MotherBrain"))))) %}
 {% set node_header_name = "NeoSektor" if is_neosektor_page else ("NeoErmac" if is_neoermac_page else ("NeoScorpion" if is_neoscorpion_page else ("NeoReptile" if is_neoreptile_page else ("NeoSub-Zero" if is_neosubzero_page else ("NeoRain" if is_neorain_page else "NeoMotherBrain"))))) %}
-{% set node_current_label = neosektor_current_label if is_neosektor_page else (neoermac_current_label if is_neoermac_page else motherbrain_current_label) %}
+{% set node_current_label = neosektor_current_label if is_neosektor_page else (neoermac_current_label if is_neoermac_page else (neoscorpion_current_label if is_neoscorpion_page else motherbrain_current_label)) %}
 {% set mobile_shell_key = node_header_key if (uses_node_header or is_neosektor_page or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page) else ("staffing" if is_neostaffing_page else ("gateway" if is_rfd_hub_page else "apps")) %}
 {% set mobile_shell_name = node_header_name if (uses_node_header or is_neosektor_page or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page) else ("NeoStaffing" if is_neostaffing_page else ("NeoGateway" if is_rfd_hub_page else "NeoApps")) %}
 {% set mobile_shell_word = node_header_word if (uses_node_header or is_neosektor_page or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page) else ("Staffing" if is_neostaffing_page else ("Gateway" if is_rfd_hub_page else "Apps")) %}
@@ -96,6 +98,10 @@
                     {% elif is_neoermac_page %}
                     {% with neoermac_brand_class="neoermac-header-title" %}
                     {% include "neonodes/neoermac/_brand_title.html" %}
+                    {% endwith %}
+                    {% elif is_neoscorpion_page %}
+                    {% with neoscorpion_brand_class="neoscorpion-header-title" %}
+                    {% include "neonodes/neoscorpion/_brand_title.html" %}
                     {% endwith %}
                     {% else %}
                     {{ neo_brand(node_header_word, node_header_key) }}
@@ -178,6 +184,10 @@
                     <a class="motherbrain-nav-link{% if is_neoermac_view_outbound_page %} is-active{% endif %}" href="{{ url_for('neoermac.view_outbound') }}" {% if is_neoermac_view_outbound_page %}aria-current="page"{% endif %}>VIEW OUTBOUND</a>
                     <a class="motherbrain-nav-link{% if request.path.startswith('/neoermac/upcoming-pulls') %} is-active{% endif %}" href="{{ url_for('neoermac.upcoming_pulls') }}" {% if request.path.startswith('/neoermac/upcoming-pulls') %}aria-current="page"{% endif %}>UPCOMING PULLS</a>
                     <a class="motherbrain-nav-link{% if request.path.startswith('/neoermac/tug-assignments') %} is-active{% endif %}" href="{{ url_for('neoermac.tug_assignments') }}" {% if request.path.startswith('/neoermac/tug-assignments') %}aria-current="page"{% endif %}>TUG ASSIGNMENTS</a>
+                    {% elif is_neoscorpion_page %}
+                    {% for item in neoscorpion_internal_menu_items() %}
+                    <a class="motherbrain-nav-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" {% if item.active %}aria-current="page"{% endif %}>{{ item.label|upper }}</a>
+                    {% endfor %}
                     {% else %}
                     <a class="motherbrain-nav-link{% if is_manage_sort_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.manage_sort') }}" {% if is_manage_sort_page %}aria-current="page"{% endif %}>MANAGE SORT</a>
                     <a class="motherbrain-nav-link{% if is_parking_plan_page or is_parking_rules_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.parking_plan') }}" {% if is_parking_plan_page or is_parking_rules_page %}aria-current="page"{% endif %}>PARKING PLAN</a>
@@ -348,6 +358,10 @@
                         <a class="mobile-shell-menu-link{% if is_neoermac_view_outbound_page %} is-active{% endif %}" href="{{ url_for('neoermac.view_outbound') }}" role="menuitem" {% if is_neoermac_view_outbound_page %}aria-current="page"{% endif %}>View Outbound</a>
                         <a class="mobile-shell-menu-link{% if request.path.startswith('/neoermac/upcoming-pulls') %} is-active{% endif %}" href="{{ url_for('neoermac.upcoming_pulls') }}" role="menuitem" {% if request.path.startswith('/neoermac/upcoming-pulls') %}aria-current="page"{% endif %}>Upcoming Pulls</a>
                         <a class="mobile-shell-menu-link{% if request.path.startswith('/neoermac/tug-assignments') %} is-active{% endif %}" href="{{ url_for('neoermac.tug_assignments') }}" role="menuitem" {% if request.path.startswith('/neoermac/tug-assignments') %}aria-current="page"{% endif %}>Tug Assignments</a>
+                    {% elif is_neoscorpion_page %}
+                        {% for item in neoscorpion_internal_menu_items() %}
+                        <a class="mobile-shell-menu-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" role="menuitem" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
+                        {% endfor %}
                     {% elif uses_motherbrain_header %}
                         <a class="mobile-shell-menu-link{% if is_manage_sort_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.manage_sort') }}" role="menuitem" {% if is_manage_sort_page %}aria-current="page"{% endif %}>MANAGE SORT</a>
                         <a class="mobile-shell-menu-link{% if is_parking_plan_page or is_parking_rules_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.parking_plan') }}" role="menuitem" {% if is_parking_plan_page or is_parking_rules_page %}aria-current="page"{% endif %}>PARKING PLAN</a>

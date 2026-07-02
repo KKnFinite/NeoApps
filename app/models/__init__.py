@@ -22,6 +22,12 @@ from app.models.neosektor_operational_setting import NeoSektorOperationalSetting
 from app.models.neosektor_sort_state import NeoSektorSortState
 from app.models.neosektor_uld_on_the_way_event import NeoSektorUldOnTheWayEvent
 from app.models.neosektor_wave_state import NeoSektorWaveState
+from app.models.neoscorpion_fuel import (
+    NeoScorpionFuelAssignment,
+    NeoScorpionFuelTruck,
+    NeoScorpionSettings,
+    NeoScorpionTailFuelState,
+)
 from app.models.neo_node import NeoNode
 from app.models.permission_rule import PermissionRule
 from app.models.portal_app_access import PortalAppAccess
@@ -71,6 +77,10 @@ __all__ = [
     "NeoSektorBayStatus",
     "NeoSektorDriverRouteSetting",
     "NeoSektorUldOnTheWayEvent",
+    "NeoScorpionFuelAssignment",
+    "NeoScorpionFuelTruck",
+    "NeoScorpionSettings",
+    "NeoScorpionTailFuelState",
     "MasterFlightSchedule",
     "SortDateOperation",
     "SortDateMission",

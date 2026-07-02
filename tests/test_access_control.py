@@ -282,12 +282,17 @@ class AccessControlTest(unittest.TestCase):
             switcher,
         )
         self.assertIn("Sektor", switcher)
+        self.assertIn('href="/neoscorpion"', switcher)
+        self.assertIn(
+            'src="/static/images/icons/neoscorpion/inapp/neoscorpion-128x128.png"',
+            switcher,
+        )
+        self.assertIn("Scorpion", switcher)
         self.assertNotIn('href="/neoermac"', switcher)
         self.assertNotIn("Ermac", switcher)
         self.assertNotIn('href="/motherbrain"', switcher)
         self.assertNotIn("MotherBrain", switcher)
         for unavailable_node in (
-            "Scorpion",
             "Reptile",
             "Sub-Zero",
             "Rain",

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Fuel History | NeoScorpion{% endblock %}
+
+{% block content %}
+<section class="neoscorpion-shell neoscorpion-screen" aria-label="NeoScorpion Fuel History">
+    <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
+        {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}
+        {% include "neonodes/neoscorpion/_brand_title.html" %}
+        {% endwith %}
+        <h1>Fuel History</h1>
+    </header>
+    {% include "neonodes/neoscorpion/_menu.html" %}
+
+    <section class="neoscorpion-panel">
+        <div class="neoscorpion-panel-head">
+            <span>Completed Fuel</span>
+            <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }}{% else %}No current sort{% endif %}</strong>
+        </div>
+        {% if completed_rows %}
+        <div class="neoscorpion-history-list">
+            {% for row in completed_rows %}
+            <article class="neoscorpion-history-row">
+                <strong>{{ row.mission.flight_number }} | {{ row.tail_number }}</strong>
+                <span>{{ row.destination }} | {{ row.actual_fuel_display or '-' }} | {{ row.review_status|replace("_", " ")|title }}</span>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="neoscorpion-empty">Completed fuel history is ready. Completed fuel records will appear here after completion workflows are configured.</p>
+        {% endif %}
+    </section>
+</section>
+{% endblock %}

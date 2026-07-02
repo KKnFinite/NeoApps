@@ -509,8 +509,8 @@ def _pwa_manifest_definitions():
         "neoscorpion": {
             "name": "NeoScorpion",
             "short_name": "NeoScorpion",
-            "description": "NeoScorpion placeholder.",
-            "start_url": "/nodes/",
+            "description": "NeoScorpion fueling operations.",
+            "start_url": "/neoscorpion",
             "theme_color": "#f4c21f",
             "icons": [
                 _pwa_icon_src("/static/images/icons/neoscorpion/pwa/icon-192x192.png", "192x192", "any"),
@@ -608,6 +608,7 @@ def register_blueprints(app):
     from app.neonodes import bp as neonodes_bp
     from app.neonodes.neoermac import bp as neoermac_bp
     from app.neonodes.neosektor import bp as neosektor_bp
+    from app.neonodes.neoscorpion import bp as neoscorpion_bp
     from app.neostaffing import bp as neostaffing_bp
 
     app.register_blueprint(auth_bp)
@@ -615,6 +616,7 @@ def register_blueprints(app):
     app.register_blueprint(neonodes_bp, url_prefix="/nodes")
     app.register_blueprint(neoermac_bp, url_prefix="/neoermac")
     app.register_blueprint(neosektor_bp, url_prefix="/neosektor")
+    app.register_blueprint(neoscorpion_bp, url_prefix="/neoscorpion")
     app.register_blueprint(neostaffing_bp, url_prefix="/neostaffing")
 
 
