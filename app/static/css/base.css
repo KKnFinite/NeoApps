@@ -4878,6 +4878,8 @@ h2 {
 
 .parking-rules-table input,
 .parking-rules-table select,
+.parking-rules-row input,
+.parking-rules-row select,
 .parking-rules-field input {
     width: 100%;
     min-width: 0;
@@ -4898,6 +4900,92 @@ h2 {
 
 .parking-rules-check {
     grid-template-columns: auto minmax(0, 1fr);
+}
+
+.parking-rules-row-list {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+}
+
+.parking-rules-row {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.7fr) minmax(160px, 1fr) minmax(92px, 0.52fr) minmax(160px, 1.1fr) minmax(104px, auto);
+    gap: 10px;
+    align-items: end;
+    min-width: 0;
+}
+
+.parking-rules-plan-row {
+    padding: 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.16);
+    border-radius: 6px;
+    background: rgba(3, 4, 6, 0.34);
+}
+
+.parking-rules-row-header {
+    padding: 0 10px;
+    color: var(--muted);
+    font-size: 0.66rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.parking-rules-row-field {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+
+.parking-rules-row-label {
+    color: var(--muted);
+    font-size: 0.64rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.parking-rules-row-check,
+.parking-rules-row-new-status {
+    min-height: 40px;
+    align-content: center;
+}
+
+.parking-rules-row-new-status {
+    display: grid;
+    align-items: center;
+    color: var(--node-highlight);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.parking-rules-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
+}
+
+.parking-rule-row-save {
+    min-height: 40px;
+    padding: 0 14px;
+    white-space: nowrap;
+}
+
+.parking-rules-row-empty {
+    padding: 12px;
+    border: 1px dashed rgba(var(--node-rgb), 0.24);
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
 .parking-rules-toggle-grid {
@@ -4977,6 +5065,25 @@ h2 {
     color: var(--steel);
     font-size: 0.84rem;
     font-weight: 800;
+}
+
+@media (max-width: 900px) {
+    .parking-rules-row,
+    .parking-rules-row-header {
+        grid-template-columns: 1fr;
+    }
+
+    .parking-rules-row-header {
+        display: none;
+    }
+
+    .parking-rules-row-actions {
+        justify-content: stretch;
+    }
+
+    .parking-rule-row-save {
+        width: 100%;
+    }
 }
 
 .parking-physical-rules {

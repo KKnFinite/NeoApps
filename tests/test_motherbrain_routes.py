@@ -6229,6 +6229,16 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Preferred parking is a SOFT rule.", response.data)
         self.assertIn(b"SELECT MASTER PLAN ROW", response.data)
         self.assertIn(b"SELECT RAMP OR POSITION", response.data)
+        self.assertNotIn(b"SAVE PARKING RULES", response.data)
+        self.assertIn(b"SAVE DEFAULTS / OTHER RULES", response.data)
+        self.assertIn(b'data-parking-rule-section="arrival_parking_preference"', response.data)
+        self.assertIn(b'data-parking-rule-section="arrival_parking_requirement"', response.data)
+        self.assertIn(b'data-parking-rule-section="departure_parking_preference"', response.data)
+        self.assertIn(b'data-parking-rule-section="departure_parking_requirement"', response.data)
+        self.assertIn(b'name="save_row" value="arrival_parking_preference:new"', response.data)
+        self.assertIn(b'name="save_row" value="arrival_parking_requirement:new"', response.data)
+        self.assertIn(b'name="save_row" value="departure_parking_preference:new"', response.data)
+        self.assertIn(b'name="save_row" value="departure_parking_requirement:new"', response.data)
         self.assertNotIn(b"ORIGIN RAMP RULES", response.data)
         self.assertNotIn(b"ORIGIN RAMP REQUIREMENTS", response.data)
         self.assertNotIn(b"ORIGIN RAMP RESTRICTIONS", response.data)
@@ -6355,10 +6365,21 @@ class MotherBrainRoutesTest(unittest.TestCase):
             ("blocked_parking_position", "position", "D01", "D", "forbidden"),
             rules,
         )
+        arrival_requirement_rule = MotherBrainParkingRule.query.filter_by(
+            gateway_id=self.rfd_gateway.id,
+            rule_category=ARRIVAL_PARKING_REQUIREMENT,
+            subject_value=arrival_key,
+            ramp_code="A",
+        ).one()
 
         reload_response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
         self.assertIn(f'value="{arrival_key}"'.encode(), reload_response.data)
         self.assertIn(f'value="{departure_key}"'.encode(), reload_response.data)
+        self.assertIn(
+            f'value="arrival_parking_requirement:{arrival_requirement_rule.id}"'.encode(),
+            reload_response.data,
+        )
+        self.assertIn(b'name="new_arrival_parking_requirement_subject"', reload_response.data)
         self.assertIn(b"value=\"A01\"", reload_response.data)
         self.assertIn(b"value=\"B01\"", reload_response.data)
         self.assertIn(b"value=\"767\"", reload_response.data)
@@ -6368,6 +6389,65 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Inbound Same-Ramp Spacing", reload_response.data)
         self.assertIn(b"value=\"6\"", reload_response.data)
         self.assertIn(b"Preferred Max Per Ramp", reload_response.data)
+
+    def test_parking_rules_row_save_persists_rule_without_resetting_defaults(self):
+        operation = self._parking_operation()
+        arrival_key = parking_schedule_rule_key("arrival", "UPS0948", "SDF")
+        self._add_master(
+            mission_type="arrival",
+            flight_number="UPS0948",
+            origin="SDF",
+            destination="RFD",
+        )
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                include_remote_default=True,
+                include_throat_default=True,
+                deice_spacing_threshold_minutes=22,
+                inbound_same_ramp_spacing_minutes=7,
+                preferred_max_per_ramp=6,
+            )
+        )
+        db.session.commit()
+
+        save_response = self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data={
+                "operation_id": str(operation.id),
+                "new_arrival_parking_requirement_subject": arrival_key,
+                "new_arrival_parking_requirement_ramp": "A01",
+                "new_arrival_parking_requirement_note": "Gate preference",
+                "save_row": "arrival_parking_requirement:new",
+            },
+        )
+
+        self.assertEqual(save_response.status_code, 302)
+        saved_rule = MotherBrainParkingRule.query.filter_by(
+            gateway_id=self.rfd_gateway.id,
+            rule_category=ARRIVAL_PARKING_REQUIREMENT,
+            subject_value=arrival_key,
+            ramp_code="A01",
+        ).one()
+        self.assertEqual(saved_rule.rule_behavior, "required")
+        self.assertEqual(saved_rule.note, "Gate preference")
+
+        settings = MotherBrainParkingSettings.query.filter_by(
+            gateway_id=self.rfd_gateway.id,
+        ).one()
+        self.assertTrue(settings.include_remote_default)
+        self.assertTrue(settings.include_throat_default)
+        self.assertEqual(settings.deice_spacing_threshold_minutes, 22)
+        self.assertEqual(settings.inbound_same_ramp_spacing_minutes, 7)
+        self.assertEqual(settings.preferred_max_per_ramp, 6)
+
+        reload_response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
+        self.assertIn(
+            f'value="arrival_parking_requirement:{saved_rule.id}"'.encode(),
+            reload_response.data,
+        )
+        self.assertIn(b'name="new_arrival_parking_requirement_subject"', reload_response.data)
 
     def test_parking_rules_blocked_positions_normalize_and_reload(self):
         operation = self._parking_operation()
@@ -6503,6 +6583,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(get_response.status_code, 200)
         self.assertIn(b"VIEW ONLY", get_response.data)
         self.assertNotIn(b"SAVE PARKING RULES", get_response.data)
+        self.assertNotIn(b"parking-rule-row-save", get_response.data)
 
         post_response = self.client.post(
             "/motherbrain/parking-rules",
@@ -6526,7 +6607,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self._login_motherbrain_role("ParkingRulesDefaultSimulator", "simulator")
         get_response = self.client.get("/motherbrain/parking-rules")
         self.assertEqual(get_response.status_code, 200)
-        self.assertIn(b"SAVE PARKING RULES", get_response.data)
+        self.assertNotIn(b"SAVE PARKING RULES", get_response.data)
+        self.assertIn(b"parking-rule-row-save", get_response.data)
+        self.assertIn(b"SAVE DEFAULTS / OTHER RULES", get_response.data)
 
         post_response = self.client.post(
             "/motherbrain/parking-rules",

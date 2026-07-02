@@ -130,19 +130,20 @@ def parking_rules_context(gateway, operation=None):
 
 def save_parking_rules_from_form(gateway, form):
     settings = ensure_parking_settings(gateway)
-    settings.include_remote_default = form.get("include_remote_default") == "1"
-    settings.include_throat_default = form.get("include_throat_default") == "1"
-    settings.deice_spacing_threshold_minutes = _nonnegative_int(
-        form.get("deice_spacing_threshold_minutes"),
-        default=DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES,
-    )
-    settings.preferred_max_per_ramp = _optional_nonnegative_int(
-        form.get("preferred_max_per_ramp")
-    )
-    settings.inbound_same_ramp_spacing_minutes = _nonnegative_int(
-        form.get("inbound_same_ramp_spacing_minutes"),
-        default=DEFAULT_INBOUND_SAME_RAMP_SPACING_MINUTES,
-    )
+    if _form_updates_parking_settings(form):
+        settings.include_remote_default = form.get("include_remote_default") == "1"
+        settings.include_throat_default = form.get("include_throat_default") == "1"
+        settings.deice_spacing_threshold_minutes = _nonnegative_int(
+            form.get("deice_spacing_threshold_minutes"),
+            default=DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES,
+        )
+        settings.preferred_max_per_ramp = _optional_nonnegative_int(
+            form.get("preferred_max_per_ramp")
+        )
+        settings.inbound_same_ramp_spacing_minutes = _nonnegative_int(
+            form.get("inbound_same_ramp_spacing_minutes"),
+            default=DEFAULT_INBOUND_SAME_RAMP_SPACING_MINUTES,
+        )
 
     _update_existing_rules(
         gateway,
@@ -154,6 +155,17 @@ def save_parking_rules_from_form(gateway, form):
 
     db.session.flush()
     return settings
+
+
+def _form_updates_parking_settings(form):
+    setting_keys = {
+        "include_remote_default",
+        "include_throat_default",
+        "deice_spacing_threshold_minutes",
+        "preferred_max_per_ramp",
+        "inbound_same_ramp_spacing_minutes",
+    }
+    return any(key in form for key in setting_keys)
 
 
 def _update_existing_rules(gateway, form, editable_categories=None):

@@ -54,64 +54,69 @@
         <h2>{{ title|upper }}</h2>
         <p class="muted">{{ helper_text }}</p>
     </div>
-    <div class="table-wrap">
-        <table class="data-table wide-data-table parking-rules-table">
-            <thead>
-                <tr>
-                    <th>MASTER PLAN ROW</th>
-                    <th>RAMP / PARKING</th>
-                    <th>ACTIVE</th>
-                    <th>NOTE</th>
-                    {% if can_edit_parking_rules %}<th>REMOVE</th>{% endif %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for rule in rules %}
-                <tr>
-                    <td data-label="Master Plan Row">
-                        <input type="hidden" name="rule_ids" value="{{ rule.id }}">
-                        {{ plan_subject_select("subject_value_" ~ rule.id, rule.subject_value, options, not can_edit_parking_rules) }}
-                    </td>
-                    <td data-label="Ramp / Parking">{{ parking_target_select("ramp_code_" ~ rule.id, rule.ramp_code, not can_edit_parking_rules) }}</td>
-                    <td data-label="Active">
-                        <label class="parking-rules-check">
-                            <input type="checkbox" name="active_{{ rule.id }}" value="1" {% if rule.active %}checked{% endif %} {% if not can_edit_parking_rules %}disabled{% endif %}>
-                            <span>{{ "ACTIVE" if rule.active else "INACTIVE" }}</span>
-                        </label>
-                    </td>
-                    <td data-label="Note">
-                        <input name="note_{{ rule.id }}" value="{{ rule.note or '' }}" autocomplete="off" {% if not can_edit_parking_rules %}disabled{% endif %}>
-                    </td>
-                    {% if can_edit_parking_rules %}
-                    <td data-label="Remove">
-                        <label class="parking-rules-check">
-                            <input type="checkbox" name="delete_rule_{{ rule.id }}" value="1">
-                            <span>DELETE</span>
-                        </label>
-                    </td>
-                    {% endif %}
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="{{ 5 if can_edit_parking_rules else 4 }}">NO RULES CONFIGURED.</td>
-                </tr>
-                {% endfor %}
-                {% if can_edit_parking_rules %}
-                <tr class="parking-rules-new-row">
-                    <td data-label="Master Plan Row">
-                        {{ plan_subject_select("new_" ~ category ~ "_subject", "", options, not options) }}
-                        {% if not options %}<small class="muted">Add active Master Schedule rows before adding this rule.</small>{% endif %}
-                    </td>
-                    <td data-label="Ramp / Parking">{{ parking_target_select("new_" ~ category ~ "_ramp", "", not options) }}</td>
-                    <td data-label="Active">NEW</td>
-                    <td data-label="Note">
-                        <input name="new_{{ category }}_note" placeholder="OPTIONAL NOTE" autocomplete="off" {% if not options %}disabled{% endif %}>
-                    </td>
-                    <td data-label="Remove">-</td>
-                </tr>
-                {% endif %}
-            </tbody>
-        </table>
+    <div class="parking-rules-row-list" data-parking-rule-section="{{ category }}">
+        <div class="parking-rules-row parking-rules-row-header" aria-hidden="true">
+            <span>MASTER PLAN ROW</span>
+            <span>RAMP / PARKING</span>
+            <span>ACTIVE</span>
+            <span>NOTE</span>
+            {% if can_edit_parking_rules %}<span>ACTION</span>{% endif %}
+        </div>
+        {% for rule in rules %}
+        <form class="parking-rules-row parking-rules-plan-row" method="post" data-parking-rule-row="{{ category }}">
+            {% if operation %}<input type="hidden" name="operation_id" value="{{ operation.id }}">{% endif %}
+            <input type="hidden" name="rule_ids" value="{{ rule.id }}">
+            <label class="parking-rules-row-field">
+                <span class="parking-rules-row-label">MASTER PLAN ROW</span>
+                {{ plan_subject_select("subject_value_" ~ rule.id, rule.subject_value, options, not can_edit_parking_rules) }}
+            </label>
+            <label class="parking-rules-row-field">
+                <span class="parking-rules-row-label">RAMP / PARKING</span>
+                {{ parking_target_select("ramp_code_" ~ rule.id, rule.ramp_code, not can_edit_parking_rules) }}
+            </label>
+            <label class="parking-rules-check parking-rules-row-check">
+                <input type="checkbox" name="active_{{ rule.id }}" value="1" {% if rule.active %}checked{% endif %} {% if not can_edit_parking_rules %}disabled{% endif %}>
+                <span>{{ "ACTIVE" if rule.active else "INACTIVE" }}</span>
+            </label>
+            <label class="parking-rules-row-field">
+                <span class="parking-rules-row-label">NOTE</span>
+                <input name="note_{{ rule.id }}" value="{{ rule.note or '' }}" autocomplete="off" {% if not can_edit_parking_rules %}disabled{% endif %}>
+            </label>
+            {% if can_edit_parking_rules %}
+            <div class="parking-rules-row-actions">
+                <label class="parking-rules-check">
+                    <input type="checkbox" name="delete_rule_{{ rule.id }}" value="1">
+                    <span>DELETE</span>
+                </label>
+                <button class="action-button action-button-secondary parking-rule-row-save" name="save_row" value="{{ category }}:{{ rule.id }}" type="submit">SAVE</button>
+            </div>
+            {% endif %}
+        </form>
+        {% else %}
+        <div class="parking-rules-row-empty">NO RULES CONFIGURED.</div>
+        {% endfor %}
+        {% if can_edit_parking_rules %}
+        <form class="parking-rules-row parking-rules-plan-row parking-rules-new-row" method="post" data-parking-rule-row="{{ category }}">
+            {% if operation %}<input type="hidden" name="operation_id" value="{{ operation.id }}">{% endif %}
+            <label class="parking-rules-row-field">
+                <span class="parking-rules-row-label">MASTER PLAN ROW</span>
+                {{ plan_subject_select("new_" ~ category ~ "_subject", "", options, not options) }}
+                {% if not options %}<small class="muted">Add active Master Schedule rows before adding this rule.</small>{% endif %}
+            </label>
+            <label class="parking-rules-row-field">
+                <span class="parking-rules-row-label">RAMP / PARKING</span>
+                {{ parking_target_select("new_" ~ category ~ "_ramp", "", not options) }}
+            </label>
+            <span class="parking-rules-row-new-status">NEW</span>
+            <label class="parking-rules-row-field">
+                <span class="parking-rules-row-label">NOTE</span>
+                <input name="new_{{ category }}_note" placeholder="OPTIONAL NOTE" autocomplete="off" {% if not options %}disabled{% endif %}>
+            </label>
+            <div class="parking-rules-row-actions">
+                <button class="action-button parking-rule-row-save" name="save_row" value="{{ category }}:new" type="submit" {% if not options %}disabled{% endif %}>SAVE</button>
+            </div>
+        </form>
+        {% endif %}
     </div>
 </section>
 {% endmacro %}
@@ -274,14 +279,14 @@
     </section>
     {% endif %}
 
-    <form class="operation-form parking-rules-form" method="post">
-        {% if operation %}<input type="hidden" name="operation_id" value="{{ operation.id }}">{% endif %}
-        <div class="parking-rules-grid">
-            {{ plan_rule_table("Arrival Preferred Parking", rules_by_category[categories.arrival_preferred], categories.arrival_preferred, arrival_rule_options, "Preferred parking is a SOFT rule. The optimizer will try to place this arrival flight/origin on the selected ramp or position when valid alternatives exist.") }}
-            {{ plan_rule_table("Arrival Required Parking", rules_by_category[categories.arrival_required], categories.arrival_required, arrival_rule_options, "Required parking is a HARD rule. This arrival flight/origin must be parked on the selected ramp or position, or it will remain unresolved with a rule conflict.") }}
-            {{ plan_rule_table("Departure Preferred Parking", rules_by_category[categories.departure_preferred], categories.departure_preferred, departure_rule_options, "Preferred parking is a SOFT rule. The optimizer will try to place this departure flight/destination on the selected ramp or position when valid alternatives exist.") }}
-            {{ plan_rule_table("Departure Required Parking", rules_by_category[categories.departure_required], categories.departure_required, departure_rule_options, "Required parking is a HARD rule. This departure flight/destination must be parked on the selected ramp or position, or it will remain unresolved with a rule conflict.") }}
+    <div class="parking-rules-grid">
+        {{ plan_rule_table("Arrival Preferred Parking", rules_by_category[categories.arrival_preferred], categories.arrival_preferred, arrival_rule_options, "Preferred parking is a SOFT rule. The optimizer will try to place this arrival flight/origin on the selected ramp or position when valid alternatives exist.") }}
+        {{ plan_rule_table("Arrival Required Parking", rules_by_category[categories.arrival_required], categories.arrival_required, arrival_rule_options, "Required parking is a HARD rule. This arrival flight/origin must be parked on the selected ramp or position, or it will remain unresolved with a rule conflict.") }}
+        {{ plan_rule_table("Departure Preferred Parking", rules_by_category[categories.departure_preferred], categories.departure_preferred, departure_rule_options, "Preferred parking is a SOFT rule. The optimizer will try to place this departure flight/destination on the selected ramp or position when valid alternatives exist.") }}
+        {{ plan_rule_table("Departure Required Parking", rules_by_category[categories.departure_required], categories.departure_required, departure_rule_options, "Required parking is a HARD rule. This departure flight/destination must be parked on the selected ramp or position, or it will remain unresolved with a rule conflict.") }}
 
+        <form class="operation-form parking-rules-form" method="post">
+            {% if operation %}<input type="hidden" name="operation_id" value="{{ operation.id }}">{% endif %}
             {{ rule_table("Aircraft Type Restrictions", rules_by_category[categories.aircraft_restrictions], "AIRCRAFT TYPE", categories.aircraft_restrictions, "767", "Aircraft Type Restrictions are HARD / NOT ALLOWED rules. The optimizer will never park the selected aircraft type on that ramp. A restriction row means not allowed on this ramp.", "aircraft_type") }}
             {{ rule_table("Aircraft Type Preferences", rules_by_category[categories.aircraft_preferences], "AIRCRAFT TYPE", categories.aircraft_preferences, "757", "Aircraft Type Preferences are SOFT optimizer guidance. The optimizer will try to place these aircraft types on these ramps when possible, but hard rules still win and preferences are not required.", "aircraft_type") }}
             {{ blocked_position_table(rules_by_category[categories.blocked_positions], categories.blocked_positions) }}
@@ -405,13 +410,13 @@
                     </div>
                 </div>
             </section>
-        </div>
 
-        {% if can_edit_parking_rules %}
-        <div class="action-row">
-            <button class="action-button" type="submit">SAVE PARKING RULES</button>
-        </div>
-        {% endif %}
-    </form>
+            {% if can_edit_parking_rules %}
+            <div class="action-row">
+                <button class="action-button" type="submit">SAVE DEFAULTS / OTHER RULES</button>
+            </div>
+            {% endif %}
+        </form>
+    </div>
 </section>
 {% endblock %}
