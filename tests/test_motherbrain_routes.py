@@ -5983,13 +5983,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
 
     def test_mobile_arrival_planning_renders_simple_current_sort_list(self):
-        operation = self._operation(sort_date=date(2026, 6, 1))
+        operation = self._operation(sort_date=date(2026, 7, 2))
         arrival = self._mission(
             operation,
             "arrival",
             "UPS1234",
             assigned_tail_number="N123UP",
             origin="EWR",
+            wave="2",
             eta_datetime_utc=datetime(2026, 6, 1, 7, 25),
         )
         db.session.add_all([operation, arrival])
@@ -6003,8 +6004,15 @@ class MotherBrainRoutesTest(unittest.TestCase):
         mobile_list = html.split('data-mobile-arrival-list', 1)[1].split("</section>", 1)[0]
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn(">Arrivals</span>", html)
         self.assertIn("planning-page planning-page-arrival", html)
         self.assertIn("planning-mobile-current-arrivals", html)
+        self.assertIn("planning-mobile-sort-title neo-brand-title", mobile_list)
+        self.assertIn("RFD Night 07-02-2026", mobile_list)
+        self.assertIn("planning-mobile-arrival-list", mobile_list)
+        self.assertIn("planning-mobile-arrival-row is-arrival-late", mobile_list)
+        self.assertIn("data-mobile-arrival-late-row", mobile_list)
+        self.assertIn(">W2</span>", mobile_list)
         self.assertIn("UPS1234", mobile_list)
         self.assertIn("N123UP", mobile_list)
         self.assertIn("EWR", mobile_list)
@@ -6012,13 +6020,38 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("02:25", mobile_list)
         self.assertIn("+15", mobile_list)
         self.assertIn("Expected", mobile_list)
+        self.assertIn("planning-mobile-arrival-wave", mobile_list)
+        self.assertIn("planning-mobile-arrival-flight", mobile_list)
+        self.assertIn("planning-mobile-arrival-tail", mobile_list)
+        self.assertIn("planning-mobile-arrival-origin", mobile_list)
+        self.assertIn("planning-mobile-arrival-parking", mobile_list)
+        self.assertIn("planning-mobile-arrival-eta", mobile_list)
+        self.assertIn("planning-mobile-arrival-variance", mobile_list)
+        self.assertIn("planning-mobile-arrival-status", mobile_list)
+        self.assertNotIn("planning-mobile-mission-card", mobile_list)
+        self.assertNotIn("Arrival Planning", mobile_list)
+        self.assertIn('<h1 class="motherbrain-body-duplicate-title">Arrival Planning</h1>', html)
+        self.assertIn("CURRENT ARRIVAL MISSIONS", html)
         self.assertIn(
             "body.mobile-app-chrome .planning-page .alp-mobile-only,\n",
             css,
         )
         self.assertIn(
+            "body.mobile-app-chrome .planning-page > .section-heading,\n",
+            css,
+        )
+        self.assertIn(
             "body.mobile-app-chrome .planning-mobile-current-list {\n"
             "        display: grid;",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome .planning-mobile-arrival-row {\n"
+            "        display: grid;",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome .planning-mobile-arrival-row.is-arrival-late",
             css,
         )
         self.assertIn("overflow-x: hidden;", css)

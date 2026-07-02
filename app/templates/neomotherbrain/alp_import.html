@@ -322,15 +322,35 @@
         aria-label="Mobile current {{ label|lower }} list"
         {% if mission_type == "arrival" %}data-mobile-arrival-list{% else %}data-mobile-departure-list{% endif %}
     >
+        {% if mission_type == "arrival" %}
+        <div class="planning-mobile-sort-title neo-brand-title" data-mobile-arrival-sort-header>
+            {{ operation.gateway_code|upper }} {{ operation.sort_name|title }} {{ operation.sort_date.strftime("%m-%d-%Y") }}
+        </div>
+        <div class="planning-mobile-arrival-list" role="list" aria-label="Current arrival missions">
+        {% endif %}
         {% for row in mission_rows %}
         {% set mission = row.mission %}
         {% set parking = row.parking_context %}
+        {% if mission_type == "arrival" %}
+        <article
+            class="planning-mobile-arrival-row{% if row.is_late %} is-arrival-late{% endif %}"
+            role="listitem"
+            aria-label="Wave {{ mission.wave or '-' }} flight {{ mission.flight_number|upper }} tail {{ mission.assigned_tail_number|upper if mission.assigned_tail_number else '-' }} origin {{ mission.origin|upper if mission.origin else '-' }} parking {{ parking.label|upper if parking and parking.has_tail else '-' }} ETA {{ row.eta_time.strftime('%H:%M') if row.eta_time else '-' }} variance {{ row.eta_delta_display }} status {{ row.status_label }}"
+            {% if row.is_late %}data-mobile-arrival-late-row{% endif %}
+        >
+            <span class="planning-mobile-arrival-wave">W{{ mission.wave or "-" }}</span>
+            <strong class="planning-mobile-arrival-flight">{{ mission.flight_number|upper }}</strong>
+            <span class="planning-mobile-arrival-tail">{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</span>
+            <span class="planning-mobile-arrival-origin">{{ mission.origin|upper if mission.origin else "-" }}</span>
+            <span class="planning-mobile-arrival-parking">{{ parking.label|upper if parking and parking.has_tail else "-" }}</span>
+            <time class="planning-mobile-arrival-eta" datetime="{{ row.eta_time.isoformat() if row.eta_time else '' }}">{{ row.eta_time.strftime("%H:%M") if row.eta_time else "-" }}</time>
+            <span class="planning-mobile-arrival-variance">{{ row.eta_delta_display }}</span>
+            <span class="planning-mobile-arrival-status">{{ row.status_label }}</span>
+        </article>
+        {% else %}
         <article class="planning-mobile-mission-card{% if mission_type == 'arrival' and row.is_late %} is-arrival-late{% endif %}">
             <div class="planning-mobile-mission-head">
                 <strong>{{ mission.flight_number|upper }}</strong>
-                {% if mission_type == "arrival" %}
-                <span>{{ row.status_label }}</span>
-                {% else %}
                 <span>
                     {% if mission.departure_status == "cancelled" %}
                     CANCELLED
@@ -340,35 +360,12 @@
                     {{ mission.departure_status|status_label if mission.departure_status else "-" }}
                     {% endif %}
                 </span>
-                {% endif %}
             </div>
             <dl class="planning-mobile-mission-fields">
                 <div>
                     <dt>Tail</dt>
                     <dd>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</dd>
                 </div>
-                {% if mission_type == "arrival" %}
-                <div>
-                    <dt>Origin</dt>
-                    <dd>{{ mission.origin|upper if mission.origin else "-" }}</dd>
-                </div>
-                <div>
-                    <dt>Parking</dt>
-                    <dd>{{ parking.label|upper if parking and parking.has_tail else "-" }}</dd>
-                </div>
-                <div>
-                    <dt>ETA</dt>
-                    <dd>{{ row.eta_time.strftime("%H:%M") if row.eta_time else "-" }}</dd>
-                </div>
-                <div>
-                    <dt>+/- STA</dt>
-                    <dd>{{ row.eta_delta_display }}</dd>
-                </div>
-                <div>
-                    <dt>Status</dt>
-                    <dd>{{ row.status_label }}</dd>
-                </div>
-                {% else %}
                 <div>
                     <dt>Destination</dt>
                     <dd>{{ mission.destination|upper if mission.destination else "-" }}</dd>
@@ -398,12 +395,15 @@
                         {% endif %}
                     </dd>
                 </div>
-                {% endif %}
             </dl>
         </article>
+        {% endif %}
         {% else %}
         <p class="planning-mobile-empty">No current {{ label|lower }} missions found.</p>
         {% endfor %}
+        {% if mission_type == "arrival" %}
+        </div>
+        {% endif %}
     </section>
 
     <section class="planning-mission-section" aria-labelledby="planning-mission-title">
