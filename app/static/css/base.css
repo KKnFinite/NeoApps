@@ -1301,6 +1301,301 @@ a {
     min-width: min(100%, 280px);
 }
 
+.motherbrain-desktop-side-nav {
+    display: none;
+}
+
+@media (min-width: 901px) {
+    body.motherbrain-desktop-nav-page {
+        --motherbrain-side-nav-width: 238px;
+    }
+
+    body.motherbrain-desktop-nav-page .shell {
+        width: 100%;
+        max-width: none;
+    }
+
+    body.motherbrain-desktop-nav-page.motherbrain-fixed-header .topbar {
+        position: fixed;
+        top: 14px;
+        right: 18px;
+        left: auto;
+        z-index: 95;
+        display: block;
+        width: auto;
+        min-height: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        transform: none;
+    }
+
+    body.motherbrain-desktop-nav-page .motherbrain-header-logo-link,
+    body.motherbrain-desktop-nav-page .motherbrain-header-identity,
+    body.motherbrain-desktop-nav-page .motherbrain-menu-button,
+    body.motherbrain-desktop-nav-page .motherbrain-header-nav {
+        display: none;
+    }
+
+    body.motherbrain-desktop-nav-page.motherbrain-fixed-header .topbar-actions {
+        display: flex;
+        grid-template-columns: none;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+        width: auto;
+    }
+
+    body.motherbrain-desktop-nav-page.motherbrain-fixed-header .character-switcher,
+    body.motherbrain-desktop-nav-page.motherbrain-fixed-header .topbar-user-row {
+        grid-column: auto;
+        grid-row: auto;
+    }
+
+    body.motherbrain-desktop-nav-page .motherbrain-desktop-utility {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        width: auto;
+        padding: 7px;
+        border: 1px solid rgba(var(--node-rgb), 0.24);
+        border-radius: 8px;
+        background:
+            linear-gradient(135deg, rgba(var(--node-rgb), 0.1), transparent 42%),
+            rgba(3, 4, 7, 0.78);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            0 14px 30px rgba(0, 0, 0, 0.3),
+            0 0 22px rgba(var(--node-rgb), 0.12);
+        backdrop-filter: blur(14px);
+    }
+
+    body.motherbrain-desktop-nav-page.motherbrain-fixed-header .content {
+        width: 100%;
+        max-width: none;
+        padding: 88px 24px 48px calc(var(--motherbrain-side-nav-width) + 34px);
+    }
+
+    .motherbrain-desktop-side-nav {
+        position: fixed;
+        top: 16px;
+        bottom: 16px;
+        left: 16px;
+        z-index: 94;
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        gap: 12px;
+        width: var(--motherbrain-side-nav-width);
+        min-width: 0;
+        padding: 13px;
+        overflow-y: auto;
+        border: 1px solid rgba(var(--node-rgb), 0.34);
+        border-radius: 10px;
+        background:
+            linear-gradient(180deg, rgba(var(--node-rgb), 0.15), transparent 34%),
+            linear-gradient(180deg, rgba(12, 14, 18, 0.94), rgba(3, 4, 7, 0.92));
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            0 18px 38px rgba(0, 0, 0, 0.42),
+            0 0 28px rgba(var(--node-rgb), 0.14);
+        scrollbar-gutter: stable;
+    }
+
+    .motherbrain-desktop-side-brand {
+        display: grid;
+        justify-items: center;
+        gap: 7px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid rgba(235, 241, 246, 0.12);
+        text-align: center;
+        text-decoration: none;
+    }
+
+    .motherbrain-desktop-side-brand img {
+        width: 62px;
+        height: 62px;
+        object-fit: contain;
+        filter: drop-shadow(0 0 15px rgba(var(--node-rgb), 0.3));
+    }
+
+    .motherbrain-sidebar-brand-title {
+        font-size: 0.88rem;
+        line-height: 0.95;
+    }
+
+    .motherbrain-desktop-side-context {
+        display: grid;
+        gap: 3px;
+        min-width: 0;
+        padding: 10px;
+        border: 1px solid rgba(var(--node-rgb), 0.2);
+        border-radius: 7px;
+        background: rgba(0, 0, 0, 0.22);
+    }
+
+    .motherbrain-desktop-side-context strong,
+    .motherbrain-desktop-side-context small {
+        display: block;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .motherbrain-desktop-side-context strong {
+        color: var(--text);
+        font-size: 0.78rem;
+        font-weight: 950;
+        letter-spacing: 0.06em;
+    }
+
+    .motherbrain-desktop-side-context small {
+        color: var(--muted);
+        font-size: 0.64rem;
+        font-weight: 800;
+        line-height: 1.25;
+        text-transform: uppercase;
+    }
+
+    .motherbrain-desktop-side-menu {
+        display: grid;
+        align-content: start;
+        gap: 6px;
+        min-width: 0;
+    }
+
+    .motherbrain-desktop-side-link {
+        display: flex;
+        align-items: center;
+        min-height: 34px;
+        min-width: 0;
+        padding: 8px 10px;
+        border: 1px solid rgba(var(--node-rgb), 0.22);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.035);
+        color: var(--text);
+        font-size: 0.68rem;
+        font-weight: 900;
+        letter-spacing: 0.06em;
+        line-height: 1.1;
+        text-decoration: none;
+        text-transform: uppercase;
+        transition:
+            border-color 0.18s ease,
+            background 0.18s ease,
+            box-shadow 0.18s ease,
+            transform 0.18s ease;
+    }
+
+    .motherbrain-desktop-side-link:hover,
+    .motherbrain-desktop-side-link:focus-visible,
+    .motherbrain-desktop-side-link.is-active {
+        border-color: rgba(var(--node-highlight-rgb), 0.58);
+        outline: none;
+        background:
+            linear-gradient(90deg, rgba(var(--node-highlight-rgb), 0.13), transparent 72%),
+            rgba(var(--node-rgb), 0.12);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            0 0 16px rgba(var(--node-rgb), 0.16);
+    }
+
+    .motherbrain-desktop-side-link:active {
+        transform: translateY(1px);
+    }
+
+    body.motherbrain-desktop-nav-page .manage-sort-shell {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.motherbrain-desktop-nav-page .manage-sort-shell > .manage-sort-sidebar,
+    body.motherbrain-desktop-nav-page .parking-left-rail > .manage-sort-sidebar {
+        display: none;
+    }
+
+    body.motherbrain-desktop-nav-page .manage-sort-sidebar-page {
+        max-width: min(100%, 1680px);
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-page {
+        width: min(100%, 1680px);
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-page .table-wrap {
+        overflow-x: visible;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-table,
+    body.motherbrain-desktop-nav-page .parking-rules-table.wide-data-table {
+        min-width: 0;
+        table-layout: fixed;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-table th,
+    body.motherbrain-desktop-nav-page .parking-rules-table td {
+        padding: 9px 8px;
+        overflow-wrap: anywhere;
+        vertical-align: middle;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-table select,
+    body.motherbrain-desktop-nav-page .parking-rules-row select {
+        color-scheme: dark;
+        border-color: rgba(var(--node-rgb), 0.36);
+        background-color: rgba(2, 3, 5, 0.92);
+        color: var(--text);
+    }
+
+    body.motherbrain-parking-plan-page .parking-plan-page {
+        gap: 12px;
+    }
+
+    body.motherbrain-parking-plan-page .parking-plan-page > .section-heading {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 6px 12px;
+        margin-bottom: 0;
+    }
+
+    body.motherbrain-parking-plan-page .parking-plan-page > .section-heading h1,
+    body.motherbrain-parking-plan-page .parking-plan-page > .section-heading p {
+        margin: 0;
+    }
+
+    body.motherbrain-parking-plan-page .parking-plan-page > .section-heading p {
+        grid-column: 1;
+        font-size: 0.76rem;
+    }
+
+    body.motherbrain-parking-plan-page .parking-plan-page > .section-heading .action-button {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        align-self: center;
+        min-height: 34px;
+        padding: 7px 10px;
+        font-size: 0.66rem;
+    }
+
+    body.motherbrain-parking-plan-page .parking-summary-grid {
+        gap: 7px;
+    }
+
+    body.motherbrain-parking-plan-page .parking-summary-grid article {
+        min-height: 56px;
+        padding: 8px 10px;
+    }
+
+    body.motherbrain-parking-plan-page .parking-summary-grid span {
+        font-size: 0.6rem;
+    }
+
+    body.motherbrain-parking-plan-page .parking-summary-grid strong {
+        font-size: 1.14rem;
+    }
+}
+
 .master-board-add-controls {
     display: flex;
     justify-content: flex-start;

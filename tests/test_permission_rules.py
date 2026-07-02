@@ -123,7 +123,9 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertIn(b"NeoRain", response.data)
         self.assertNotIn(b"PERMISSION KEY", response.data)
         self.assertIn(b"neoermac.building_lineup.edit", response.data)
-        self.assertEqual(response.data.count(b'aria-label="BACK TO NeoMotherBrain MAIN MENU"'), 1)
+        self.assertIn(b'data-motherbrain-desktop-side-nav', response.data)
+        self.assertIn(b'href="/motherbrain"', response.data)
+        self.assertNotIn(b"motherbrain-main-menu-return", response.data)
         self.assertEqual(updated.minimum_role, "master")
         self.assertEqual(updated.description, "Updated Building Lineup rule.")
 

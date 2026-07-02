@@ -271,7 +271,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertNotIn(b"motherbrain-screen-logo", response.data)
                 self.assertNotIn(b"MotherBrain Home", response.data)
                 self.assertNotIn(b"Back to NeoMotherBrain", response.data)
-                self.assertIn(b"BACK TO", response.data)
+                self.assertNotIn(b"BACK TO NeoMotherBrain MAIN MENU", response.data)
                 self.assertNotIn(b"BACK TO NeoGateway", response.data)
                 self.assertIn(b"PORTAL MANAGEMENT", response.data)
                 self.assertIn(b"GATEWAY MATRIX", response.data)
@@ -279,12 +279,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertIn(b"MANAGE SORT", response.data)
                 self.assertIn(b"SORT TIMELINE", response.data)
                 self.assertIn(b'href="/motherbrain"', response.data)
-                self.assertIn(b"BACK TO", response.data)
                 self.assertIn(b"neo-brand--motherbrain", response.data)
-                self.assertIn(b"MAIN MENU", response.data)
-                self.assertIn(b"motherbrain-main-menu-return", response.data)
+                self.assertIn(b'data-motherbrain-desktop-side-nav', response.data)
+                self.assertIn(b"motherbrain-desktop-side-menu", response.data)
+                self.assertIn(b"motherbrain-desktop-utility", response.data)
+                self.assertNotIn(b"motherbrain-main-menu-return", response.data)
                 self.assertIn(b'href="/motherbrain"', response.data)
-                self.assertIn(b'aria-label="BACK TO NeoMotherBrain MAIN MENU"', response.data)
                 self.assertIn(b'href="/logout"', response.data)
                 self.assertIn(b'data-motherbrain-menu-button', response.data)
                 self.assertIn(b'aria-controls="motherbrain-mobile-menu"', response.data)
@@ -306,6 +306,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Logout", still_authenticated.data)
         self.assertNotIn(b"BACK TO NeoMotherBrain MAIN MENU", still_authenticated.data)
 
+        css = Path("app/static/css/base.css").read_text()
+        self.assertIn("body.motherbrain-desktop-nav-page .motherbrain-header-nav {\n        display: none;", css)
+        self.assertIn(".motherbrain-desktop-side-nav", css)
+        self.assertIn(".motherbrain-desktop-utility", css)
+
         logout_response = self.client.get("/logout", follow_redirects=False)
         self.assertEqual(logout_response.status_code, 302)
 
@@ -314,7 +319,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"SORT TIMELINE", response.data)
         self.assertIn(b"API PLANNING SETTINGS", response.data)
-        self.assertNotIn(b'href="/motherbrain/flight-api-test"', response.data)
+        self.assertIn(b'href="/motherbrain/flight-api-test"', response.data)
+        self.assertIn(b"motherbrain-desktop-side-menu", response.data)
 
         self._login_motherbrain_role("timeline_master", "master")
         blocked = self.client.get("/motherbrain/sort-timeline", follow_redirects=False)
@@ -1444,19 +1450,20 @@ class MotherBrainRoutesTest(unittest.TestCase):
             2,
         )
 
-    def test_motherbrain_main_menu_footer_link_routes_home_without_logout(self):
+    def test_motherbrain_desktop_side_nav_routes_home_without_logout(self):
         response = self.client.get("/motherbrain/master-schedule")
         html = response.data.decode()
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("BACK TO", html)
+        self.assertIn("data-motherbrain-desktop-side-nav", html)
         self.assertIn("neo-brand--motherbrain", html)
-        self.assertIn("MAIN MENU", html)
-        footer_html = html.split('class="motherbrain-main-menu-return"', 1)[1].split("</div>", 1)[0]
-        self.assertIn('href="/motherbrain"', footer_html)
+        sidebar_html = html.split('data-motherbrain-desktop-side-nav', 1)[1].split("</aside>", 1)[0]
+        self.assertIn('href="/motherbrain"', sidebar_html)
+        self.assertIn("Dashboard", sidebar_html)
+        self.assertIn("Master Schedule", sidebar_html)
         self.assertLess(
+            html.index('data-motherbrain-desktop-side-nav'),
             html.index("MASTER ARRIVALS"),
-            html.index('class="motherbrain-main-menu-return"'),
         )
 
         home_response = self.client.get("/motherbrain", follow_redirects=False)
@@ -1569,7 +1576,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"NIGHT", first_response.data)
         html = first_response.data.decode()
         main_html = html.split('<main class="content">', 1)[1].split("</main>", 1)[0]
-        workflow_html = main_html.split('class="motherbrain-main-menu-return"', 1)[0]
+        workflow_html = main_html
         self.assertIn("Current / Selected Sort Operation", workflow_html)
         self.assertIn(f"RFD NIGHT {sort_date.month}/{sort_date.day}/{sort_date.year % 100:02d}", workflow_html)
         self.assertIn("manage-sort-sidebar", workflow_html)
@@ -1600,9 +1607,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(f'href="/motherbrain/master-schedule?operation_id={operations[0].id}"', workflow_html)
         self.assertIn(f'href="/motherbrain/sort-timeline?operation_id={operations[0].id}"', workflow_html)
         self.assertNotIn('href="/motherbrain"', workflow_html)
-        self.assertIn('class="motherbrain-main-menu-return"', main_html)
-        self.assertIn('href="/motherbrain"', main_html)
-        self.assertIn('aria-label="BACK TO NeoMotherBrain MAIN MENU"', main_html)
+        self.assertNotIn('class="motherbrain-main-menu-return"', main_html)
+        self.assertIn('data-motherbrain-desktop-side-nav', html)
+        desktop_sidebar_html = html.split('data-motherbrain-desktop-side-nav', 1)[1].split("</aside>", 1)[0]
+        self.assertIn('href="/motherbrain"', desktop_sidebar_html)
+        self.assertIn("Selected Sort", desktop_sidebar_html)
 
     def test_manage_sort_unmatched_queue_links_selected_operation(self):
         sort_date = current_gateway_local_date(self.rfd_gateway)
@@ -1829,10 +1838,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 else:
                     self.assertNotIn(b"motherbrain-home-page", response.data)
                     self.assertNotIn(b"motherbrain-screen-logo", response.data)
-                    self.assertIn(b"BACK TO", response.data)
+                    self.assertIn(b'data-motherbrain-desktop-side-nav', response.data)
                     self.assertIn(b"neo-brand--motherbrain", response.data)
-                    self.assertIn(b"MAIN MENU", response.data)
-                    self.assertIn(b"motherbrain-main-menu-return", response.data)
+                    self.assertIn(b"motherbrain-desktop-side-menu", response.data)
+                    self.assertNotIn(b"motherbrain-main-menu-return", response.data)
                     self.assertIn(b"neo-brand--motherbrain", response.data)
                 self.assertNotIn(b"NEOMOTHERBRAIN", response.data)
                 self.assertNotIn(b">Command<", response.data)
@@ -3067,15 +3076,18 @@ class MotherBrainRoutesTest(unittest.TestCase):
         detail_response = self.client.get(f"/motherbrain/master-schedule/{master.id}")
 
         self.assertEqual(list_response.status_code, 200)
-        self.assertNotIn(b"Parking", list_response.data)
-        self.assertNotIn(b"A1", list_response.data)
+        list_html = list_response.data.decode()
+        schedule_html = list_html.split('<div class="master-schedule-sections">', 1)[1].split("</section>", 1)[0]
+        self.assertNotIn("Parking", schedule_html)
+        self.assertNotIn("A1", schedule_html)
 
         for label, response in (("form", form_response), ("detail", detail_response)):
             with self.subTest(page=label):
                 self.assertEqual(response.status_code, 200)
-                self.assertNotIn(b"Preferred Parking", response.data)
-                self.assertNotIn(b"Parking", response.data)
-                self.assertNotIn(b"A1", response.data)
+                content_html = response.data.decode().split('<main class="content">', 1)[1].split("</main>", 1)[0]
+                self.assertNotIn("Preferred Parking", content_html)
+                self.assertNotIn("Parking", content_html)
+                self.assertNotIn("A1", content_html)
         self.assertNotIn(b">Edit</a>", detail_response.data)
 
     def test_delete_master_schedule_removes_row_and_preserves_generated_mission(self):
@@ -5945,6 +5957,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"PARKING PLAN", response.data)
         self.assertIn(b"motherbrain-parking-plan-page", response.data)
+        self.assertIn(b"neo-page-title motherbrain-page-title", response.data)
+        self.assertIn(b'data-motherbrain-desktop-side-nav', response.data)
         self.assertIn(b"parking-layout-with-sidebar", response.data)
         self.assertIn(b"parking-left-rail", response.data)
         self.assertIn(b"manage-sort-sidebar", response.data)
@@ -6460,6 +6474,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("background-image:", css)
         self.assertIn(".parking-rules-table select option", css)
         self.assertIn("background: #05070a;", css)
+        self.assertIn("body.motherbrain-desktop-nav-page .parking-rules-page", css)
+        self.assertIn("width: min(100%, 1680px);", css)
+        self.assertIn("body.motherbrain-desktop-nav-page .parking-rules-page .table-wrap", css)
+        self.assertIn("overflow-x: visible;", css)
+        self.assertIn("body.motherbrain-desktop-nav-page .parking-rules-table.wide-data-table", css)
+        self.assertIn("table-layout: fixed;", css)
 
     def test_parking_rules_blocked_positions_normalize_and_reload(self):
         operation = self._parking_operation()
@@ -9925,6 +9945,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(".parking-left-rail", css)
         self.assertIn(".parking-layout-with-sidebar .parking-ramp-layout", css)
         self.assertIn("max-height: calc(100vh - 112px)", css)
+        self.assertIn("body.motherbrain-parking-plan-page .parking-plan-page > .section-heading", css)
+        self.assertIn("body.motherbrain-parking-plan-page .parking-summary-grid article", css)
+        self.assertIn("min-height: 56px", css)
 
     def test_parking_plan_slot_two_collapses_until_needed(self):
         operation = self._parking_operation()

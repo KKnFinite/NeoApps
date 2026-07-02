@@ -39,9 +39,10 @@
 {% set is_manage_sort_page = is_motherbrain_page and (request.path.startswith("/motherbrain/manage-sort") or request.path.startswith("/motherbrain/operations")) %}
 {% set is_parking_plan_page = is_motherbrain_page and request.path.startswith("/motherbrain/parking-plan") %}
 {% set is_sort_timeline_page = is_motherbrain_page and request.path.startswith("/motherbrain/sort-timeline") %}
+{% set is_flight_api_test_page = is_motherbrain_page and request.path.startswith("/motherbrain/flight-api-test") %}
 {% set is_flight_api_review_page = is_motherbrain_page and request.path.startswith("/motherbrain/flight-api-review") %}
 {% set is_parking_rules_page = is_motherbrain_page and request.path.startswith("/motherbrain/parking-rules") %}
-{% set motherbrain_current_label = "PERMISSION RULES" if is_permission_management_page else ("PORTAL MANAGEMENT" if is_user_management_page else ("FLIGHT API REVIEW" if is_flight_api_review_page else ("PARKING RULES" if is_parking_rules_page else ("PARKING PLAN" if is_parking_plan_page else ("SORT TIMELINE" if is_sort_timeline_page else ("GATEWAY MATRIX" if is_gateway_matrix_page else ("MASTER SCHEDULE" if is_master_schedule_page else ("MANAGE SORT" if is_manage_sort_page else "DASHBOARD")))))))) %}
+{% set motherbrain_current_label = "PERMISSION RULES" if is_permission_management_page else ("PORTAL MANAGEMENT" if is_user_management_page else ("UNMATCHED QUEUE" if is_flight_api_review_page else ("MANAGE API" if is_flight_api_test_page else ("PARKING RULES" if is_parking_rules_page else ("PARKING PLAN" if is_parking_plan_page else ("SORT TIMELINE" if is_sort_timeline_page else ("GATEWAY MATRIX" if is_gateway_matrix_page else ("MASTER SCHEDULE" if is_master_schedule_page else ("MANAGE SORT" if is_manage_sort_page else "DASHBOARD"))))))))) %}
 {% set is_neoermac_view_outbound_page = request.path.startswith("/neoermac/view-outbound") or request.path.startswith("/neoermac/outbound") %}
 {% set neoermac_current_label = "BUILDING LINEUP" if request.path.startswith("/neoermac/building-lineup") else ("DOOR VIEW" if request.path.startswith("/neoermac/door-view") else ("VIEW OUTBOUND" if is_neoermac_view_outbound_page else ("UPCOMING PULLS" if request.path.startswith("/neoermac/upcoming-pulls") else ("TUG ASSIGNMENTS" if request.path.startswith("/neoermac/tug-assignments") else "DASHBOARD")))) %}
 {% set neoscorpion_current_label = "FUEL DISPATCH" if request.path.startswith("/neoscorpion/fuel-dispatch") else ("FUELER" if request.path.startswith("/neoscorpion/fueler") else ("TRUCK MANAGER" if request.path.startswith("/neoscorpion/truck-manager") else ("SETTINGS" if request.path.startswith("/neoscorpion/settings") else ("FUEL HISTORY" if request.path.startswith("/neoscorpion/history") or request.path.startswith("/neoscorpion/completed-fuel") else "DASHBOARD")))) %}
@@ -77,7 +78,7 @@
 {% set mobile_account_icon = "images/account/account-motherbrain-128.png" if uses_motherbrain_header else ("images/account/ninja-ermac-128.png" if is_neoermac_page else ("images/account/ninja-sektor-128.png" if is_neosektor_page else none)) %}
 {% set mobile_account_initial = current_user.header_display_name[:1]|upper if is_authenticated_app and current_user.header_display_name else "?" %}
 {% set uses_mobile_chrome = is_authenticated_app and not is_neosektor_driver_page %}
-<body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_mobile_chrome %} mobile-app-chrome has-mobile-topbar has-mobile-bottom-nav{% endif %}{% if is_portal_dashboard_page %} portal-shell-page{% endif %}{% if is_rfd_hub_page %} rfd-hub-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_standalone_operator_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}">
+<body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_mobile_chrome %} mobile-app-chrome has-mobile-topbar has-mobile-bottom-nav{% endif %}{% if is_portal_dashboard_page %} portal-shell-page{% endif %}{% if is_rfd_hub_page %} rfd-hub-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if uses_motherbrain_header %} motherbrain-desktop-nav-page{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_standalone_operator_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}">
     <div class="shell">
         {% if not public_landing|default(false) and not is_neosektor_driver_page and not is_neosektor_standalone_operator_page %}
         <header class="topbar">
@@ -159,8 +160,8 @@
                 {% if uses_node_header %}
                 {% set character_switcher_modifier = "character-switcher-header" %}
                 {% include "_change_characters.html" %}
-                <div class="topbar-user-row">
-                    {% if is_motherbrain_page %}
+                <div class="topbar-user-row motherbrain-desktop-utility">
+                    {% if motherbrain_alert_tray %}
                     {% include "neomotherbrain/_alert_tray.html" %}
                     {% endif %}
                     <div class="user-chip" aria-label="Logged in user">
@@ -274,6 +275,10 @@
         </header>
         {% endif %}
 
+        {% if uses_motherbrain_header %}
+        {% include "neomotherbrain/_motherbrain_desktop_sidebar.html" %}
+        {% endif %}
+
         <main class="content">
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
@@ -288,11 +293,6 @@
             {% include "neomotherbrain/_flight_api_auto_poll_timer.html" %}
             {% endif %}
             {% block content %}{% endblock %}
-            {% if uses_motherbrain_header and not is_motherbrain_landing %}
-            <div class="motherbrain-main-menu-return">
-                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.motherbrain') }}" aria-label="BACK TO NeoMotherBrain MAIN MENU">BACK TO {{ neo_brand("MotherBrain", "motherbrain", "neo-node-motherbrain") }} MAIN MENU</a>
-            </div>
-            {% endif %}
         </main>
         {% if uses_mobile_chrome %}
         <nav class="mobile-bottom-nav node-{{ mobile_shell_key }}" aria-label="Mobile navigation" data-mobile-bottom-nav>

@@ -290,10 +290,12 @@ def register_template_helpers(app):
     def motherbrain_alerts():
         if (
             not current_user.is_authenticated
-            or request.blueprint != "neomotherbrain"
             or not request.path.startswith("/motherbrain")
         ):
-            return {"motherbrain_alert_tray": None}
+            return {
+                "motherbrain_alert_tray": None,
+                "motherbrain_shell_operation": None,
+            }
 
         from app.services.access_control import get_current_gateway
         from app.services.motherbrain_alerts import (
@@ -309,7 +311,8 @@ def register_template_helpers(app):
                 gateway,
                 can_view_permission=user_can,
                 operation=operation,
-            )
+            ),
+            "motherbrain_shell_operation": operation,
         }
 
     @app.context_processor
