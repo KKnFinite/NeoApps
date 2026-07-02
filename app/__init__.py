@@ -290,7 +290,10 @@ def register_template_helpers(app):
     def motherbrain_alerts():
         if (
             not current_user.is_authenticated
-            or not request.path.startswith("/motherbrain")
+            or not (
+                request.path.startswith("/motherbrain")
+                or request.path.startswith("/portal/manage")
+            )
         ):
             return {
                 "motherbrain_alert_tray": None,

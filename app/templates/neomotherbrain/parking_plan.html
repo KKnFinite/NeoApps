@@ -110,7 +110,7 @@
 {% block content %}
 <section class="parking-plan-page" data-parking-plan data-assign-url="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) if operation else '' }}" data-unassign-url="{{ url_for('neomotherbrain.unassign_parking_plan_tail', operation_id=operation.id) if operation else '' }}">
     <div class="section-heading">
-        <h1 class="neo-page-title motherbrain-page-title mobile-shell-duplicate-title">PARKING PLAN</h1>
+        <h1 class="neo-page-title motherbrain-page-title mobile-shell-duplicate-title motherbrain-body-duplicate-title">Parking Plan</h1>
         {% if operation %}
         <p class="muted">{{ operation.gateway_code }} {{ operation.sort_name|upper }} SORT DATE {{ operation.sort_date }}</p>
         {% if user_can("motherbrain.parking_rules.view") %}

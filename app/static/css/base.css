@@ -1452,6 +1452,10 @@ a {
         white-space: nowrap;
     }
 
+    body.motherbrain-desktop-nav-page .motherbrain-body-duplicate-title {
+        display: none;
+    }
+
     body.motherbrain-desktop-nav-page.motherbrain-fixed-header .topbar-actions {
         display: flex;
         flex-wrap: wrap;
@@ -19775,6 +19779,10 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
   font-family: "NeoFont", Arial, sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.motherbrain-desktop-top-title-text.neo-page-title {
+  text-transform: none;
 }
 
 .neo-menu-text {

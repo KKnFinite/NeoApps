@@ -225,6 +225,66 @@ class MotherBrainRoutesTest(unittest.TestCase):
         logout_response = self.client.get("/logout", follow_redirects=False)
         self.assertEqual(logout_response.status_code, 302)
 
+    def test_motherbrain_desktop_titles_match_side_menu_labels(self):
+        operation = self._operation(sort_date=date(2026, 7, 1), sort_name="night")
+        db.session.add(operation)
+        db.session.commit()
+
+        pages = [
+            (f"/motherbrain/operations/{operation.id}", "Manage Sort", False),
+            (f"/motherbrain/operations/{operation.id}/alp/arrival", "Arrival Planning", True),
+            (f"/motherbrain/operations/{operation.id}/alp/departure", "Departure Planning", True),
+            (f"/motherbrain/parking-plan/{operation.id}", "Parking Plan", True),
+            (f"/motherbrain/parking-rules?operation_id={operation.id}", "Parking Rules", True),
+            (f"/motherbrain/gateway-matrix?operation_id={operation.id}", "Gateway Matrix", True),
+            (f"/motherbrain/master-schedule?operation_id={operation.id}", "Master Schedule", True),
+            (f"/motherbrain/sort-timeline?operation_id={operation.id}", "Sort Timeline", True),
+            (f"/motherbrain/flight-api-test?operation_id={operation.id}", "Manage API", True),
+            (f"/motherbrain/flight-api-review?operation_id={operation.id}", "Unmatched Queue", True),
+            (f"/portal/manage?operation_id={operation.id}", "Portal Management", True),
+            (f"/motherbrain/permissions?operation_id={operation.id}", "Permission Rules", True),
+        ]
+
+        for path, label, has_duplicate_title in pages:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                html = response.data.decode()
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(
+                    f'<span class="neo-page-title motherbrain-desktop-top-title-text">{label}</span>',
+                    html,
+                )
+                self.assertIn(f">{label}</a>", html)
+                if has_duplicate_title:
+                    self.assertIn("motherbrain-body-duplicate-title", html)
+
+        manage_api = self.client.get(
+            f"/motherbrain/flight-api-test?operation_id={operation.id}"
+        ).data.decode()
+        unmatched_queue = self.client.get(
+            f"/motherbrain/flight-api-review?operation_id={operation.id}"
+        ).data.decode()
+        master_schedule = self.client.get(
+            f"/motherbrain/master-schedule?operation_id={operation.id}"
+        ).data.decode()
+
+        self.assertNotIn("FLIGHT API TEST</h1>", manage_api)
+        self.assertNotIn("FLIGHT API REVIEW</h1>", unmatched_queue)
+        self.assertNotIn("MASTER FLIGHT SCHEDULE</h1>", master_schedule)
+
+        css = Path("app/static/css/base.css").read_text()
+        self.assertIn(
+            "body.motherbrain-desktop-nav-page .motherbrain-body-duplicate-title {\n"
+            "        display: none;",
+            css,
+        )
+        self.assertIn(
+            ".motherbrain-desktop-top-title-text.neo-page-title {\n"
+            "  text-transform: none;",
+            css,
+        )
+
     def test_sort_timeline_is_grandmaster_only(self):
         response = self.client.get("/motherbrain/sort-timeline?month=2026-06")
         self.assertEqual(response.status_code, 200)
@@ -1988,7 +2048,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         html = response.data.decode()
-        self.assertIn(b"MASTER FLIGHT SCHEDULE", response.data)
+        self.assertIn(b"Master Schedule", response.data)
+        self.assertNotIn(b"MASTER FLIGHT SCHEDULE</h1>", response.data)
         self.assertIn(b"centered-command-page", response.data)
         self.assertIn(b"MASTER ARRIVALS", response.data)
         self.assertIn(b"MASTER DEPARTURES", response.data)
