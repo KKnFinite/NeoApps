@@ -4707,13 +4707,21 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.session.add_all([operation, selected, hot_duplicate])
         db.session.flush()
         db.session.add(
+            SortDateTailState(
+                sort_date=operation.sort_date,
+                gateway_code=operation.gateway_code,
+                sort_name=operation.sort_name,
+                tail_number="N222UP",
+                operational_status="hot",
+            )
+        )
+        db.session.add(
             SortDateParkingAssignment(
                 sort_date_operation_id=operation.id,
                 tail_number="N222UP",
                 ramp_code="R",
                 position_code="R01",
                 lane_number=1,
-                is_hot=True,
             )
         )
         db.session.commit()
@@ -5361,14 +5369,17 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         mission = SortDateMission.query.filter_by(flight_number="UPS0999").one()
         marker = FlightApiReviewItem.query.filter_by(review_status="accepted").one()
-        hot_state = SortDateParkingAssignment.query.filter_by(
-            sort_date_operation_id=operation.id,
+        hot_state = SortDateTailState.query.filter_by(
+            sort_date=operation.sort_date,
+            gateway_code=operation.gateway_code,
+            sort_name=operation.sort_name,
             tail_number="N999UP",
         ).one()
         self.assertEqual(response.status_code, 302)
         self.assertEqual(mission.mission_type, "departure")
         self.assertEqual(marker.accepted_mission_id, mission.id)
-        self.assertTrue(hot_state.is_hot)
+        self.assertEqual(hot_state.operational_status, "hot")
+        self.assertFalse(hasattr(mission, "operational_status"))
         self.assertEqual(FlightApiReviewItem.query.filter_by(review_status="pending").count(), 0)
         self.assertIn(b"NO UNMATCHED DEPARTURE PLANNING ROWS.", persisted.data)
         self.assertNotIn(b"ADD TO CURRENT SORT</button>", persisted.data)
@@ -5672,13 +5683,16 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
 
         mission = SortDateMission.query.filter_by(flight_number="UPS0999").one()
-        hot_state = SortDateParkingAssignment.query.filter_by(
-            sort_date_operation_id=operation.id,
+        hot_state = SortDateTailState.query.filter_by(
+            sort_date=operation.sort_date,
+            gateway_code=operation.gateway_code,
+            sort_name=operation.sort_name,
             tail_number="N999UP",
         ).one()
         self.assertEqual(response.status_code, 302)
         self.assertEqual(mission.mission_type, "departure")
-        self.assertTrue(hot_state.is_hot)
+        self.assertEqual(hot_state.operational_status, "hot")
+        self.assertFalse(hasattr(mission, "operational_status"))
 
     def test_hot_alp_departure_creates_mission_when_arrival_has_same_flight(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
@@ -5728,8 +5742,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
             mission_type="arrival",
             flight_number="UPS0999",
         ).all()
-        hot_state = SortDateParkingAssignment.query.filter_by(
-            sort_date_operation_id=operation.id,
+        hot_state = SortDateTailState.query.filter_by(
+            sort_date=operation.sort_date,
+            gateway_code=operation.gateway_code,
+            sort_name=operation.sort_name,
             tail_number="N999UP",
         ).one()
         mission_section = planning.data.decode().split(
@@ -5747,8 +5763,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
             departures[0].actual_block_out_datetime_utc,
             datetime(2026, 6, 24, 7, 24),
         )
-        self.assertTrue(hot_state.is_hot)
-        self.assertIsNone(hot_state.position_code)
+        self.assertEqual(hot_state.operational_status, "hot")
+        self.assertEqual(SortDateParkingAssignment.query.filter_by(
+            sort_date_operation_id=operation.id,
+            tail_number="N999UP",
+        ).count(), 0)
         self.assertIn("UPS0999", mission_section)
         self.assertIn("N999UP", mission_section)
         self.assertIn("SDF", mission_section)
@@ -6547,7 +6566,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("N457UP", html)
         self.assertIn('data-occupied-tail="N457UP"', html)
         self.assertIn("MISSION CANCELLED", html)
-        self.assertIn("NO ACTIVE MISSION", html)
+        self.assertIn("PARKED TAILS WITHOUT ACTIVE MISSION", html)
         self.assertIn("parking-summary-grid", html)
         self.assertIn("TOTAL TAILS", html)
         self.assertIn("ASSIGNED", html)
@@ -6571,7 +6590,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/tail-status",
-            data={"tail_number": "N457UP", "is_out_of_service": "1"},
+            data={"tail_number": "N457UP", "operational_status": "oos"},
             follow_redirects=True,
         )
         db.session.refresh(arrival)
@@ -6581,14 +6600,22 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(tail_state.is_out_of_service)
+        self.assertEqual(tail_state.operational_status, "oos")
+        self.assertFalse(hasattr(arrival, "operational_status"))
         self.assertNotEqual(arrival.arrival_status, "cancelled")
         self.assertEqual(assignment.position_code, "A01")
         self.assertEqual(assignment.lane_number, 1)
         self.assertIn('data-tail-oos="1"', html)
+        self.assertIn('data-tail-operational-status="oos"', html)
         self.assertIn("parking-tail-card is-oos", html)
         self.assertIn("parking-badge parking-badge-oos", html)
-        self.assertIn("OOS / RED", html)
-        self.assertIn("RESTORE / GREEN", html)
+        self.assertIn(">OOS</span>", html)
+        self.assertIn(">EDIT</button>", html)
+        self.assertIn('name="operational_status" value="normal"', html)
+        self.assertIn('name="operational_status" value="spare"', html)
+        self.assertIn('name="operational_status" value="hot"', html)
+        self.assertNotIn("MARK OOS", html)
+        self.assertNotIn("RESTORE / GREEN", html)
         self.assertIn('data-occupied-tail="N457UP"', html)
         status_html = html.split('class="parking-status-panel', 1)[1].split(
             'class="parking-layout"',
@@ -6621,11 +6648,13 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('data-tail-oos="0"', card_html)
+        self.assertIn('data-tail-operational-status="normal"', card_html)
         self.assertNotIn(" is-oos", card_html)
         self.assertNotIn("parking-badge-oos", card_html)
         self.assertNotIn("OOS / RED", card_html)
         self.assertNotIn("RESTORE / GREEN", card_html)
-        self.assertIn("MARK OOS", card_html)
+        self.assertNotIn("MARK OOS", card_html)
+        self.assertIn(">EDIT</button>", card_html)
 
     def test_parked_tail_card_renders_compact_desktop_arr_tail_dep_layout(self):
         operation = self._parking_operation()
@@ -6660,13 +6689,15 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("03:14", desktop_html)
         self.assertNotIn("ARR25", desktop_html)
         self.assertNotIn("DEP25", desktop_html)
-        self.assertIn("MARK OOS", card_html)
+        self.assertIn(">EDIT</button>", card_html)
+        self.assertNotIn("MARK OOS", card_html)
 
     def test_known_oos_tail_state_renders_oos_badge_and_restore_control(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", destination="LAX")
         tail_state = SortDateTailState.query.filter_by(tail_number="N457UP").one()
         tail_state.is_out_of_service = True
+        tail_state.operational_status = "oos"
         self._parking_assignment(operation, "N457UP", "A01")
         db.session.commit()
 
@@ -6676,10 +6707,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('data-tail-oos="1"', card_html)
+        self.assertIn('data-tail-operational-status="oos"', card_html)
         self.assertIn("parking-tail-card is-oos", card_html)
         self.assertIn("parking-badge parking-badge-oos", card_html)
-        self.assertIn("OOS / RED", card_html)
-        self.assertIn("RESTORE / GREEN", card_html)
+        self.assertIn(">OOS</span>", card_html)
+        self.assertIn(">EDIT</button>", card_html)
+        self.assertNotIn("RESTORE / GREEN", card_html)
         self.assertNotIn("MARK OOS", card_html)
 
     def test_parking_tail_restore_green_does_not_restore_cancelled_mission(self):
@@ -6697,7 +6730,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/tail-status",
-            data={"tail_number": "N457UP", "is_out_of_service": "1"},
+            data={"tail_number": "N457UP", "operational_status": "oos"},
         )
         self.client.post(
             f"/motherbrain/operations/{operation.id}/missions/{arrival.id}/cancel",
@@ -6706,7 +6739,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/tail-status",
-            data={"tail_number": "N457UP", "is_out_of_service": "0"},
+            data={"tail_number": "N457UP", "operational_status": "normal"},
             follow_redirects=True,
         )
         db.session.refresh(arrival)
@@ -6716,9 +6749,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(tail_state.is_out_of_service)
+        self.assertEqual(tail_state.operational_status, "normal")
         self.assertEqual(arrival.arrival_status, "cancelled")
         self.assertEqual(assignment.position_code, "A01")
-        self.assertIn("MARK OOS", html)
+        self.assertIn(">EDIT</button>", html)
+        self.assertNotIn("MARK OOS", html)
         self.assertNotIn("RESTORE / GREEN", html)
         self.assertIn('data-occupied-tail="N457UP"', html)
 
@@ -6737,7 +6772,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/tail-status",
-            data={"tail_number": "N457UP", "is_out_of_service": "1"},
+            data={"tail_number": "N457UP", "operational_status": "oos"},
         )
 
         self.client.post(
@@ -6755,6 +6790,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         html = response.data.decode()
 
         self.assertTrue(after_cancel.is_out_of_service)
+        self.assertEqual(after_cancel.operational_status, "oos")
         self.assertEqual(assignment.position_code, "A01")
         self.assertEqual(assignment.lane_number, 1)
         self.assertIn("parking-tail-card is-oos", html)
@@ -8392,6 +8428,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self._parking_pair(operation, "N457UP", aircraft_type="757")
         self._parking_pair(operation, "N349UP", aircraft_type="757", destination="SDF")
         db.session.flush()
+        tail_state = SortDateTailState.query.filter_by(tail_number="N457UP").one()
+        tail_state.operational_status = "spare"
         self._parking_assignment(operation, "N457UP", "A01")
         db.session.commit()
 
@@ -8400,6 +8438,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
 
         self.assertEqual(locked["N457UP"]["label"], "A01 Slot 1")
+        self.assertEqual(locked["N457UP"]["reason"], "SPARE parked tail fixed.")
         self.assertEqual(suggestions["N349UP"]["label"], "B01 Slot 1")
         self.assertEqual(SortDateParkingAssignment.query.count(), 1)
 
@@ -9624,16 +9663,94 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "</article>", 1
         )[0]
 
-        self.assertIn("parking-tail-card is-quick-turn is-hot", slot_html)
+        tail_state = SortDateTailState.query.filter_by(tail_number="N457UP").one()
+        self.assertEqual(tail_state.operational_status, "hot")
+        self.assertIn("parking-tail-card is-hot", slot_html)
+        self.assertNotIn("is-quick-turn", slot_html)
         self.assertIn("parking-tail-badges", slot_html)
-        self.assertIn("parking-badge parking-badge-qt", slot_html)
         self.assertIn("parking-badge parking-badge-hot", slot_html)
+        self.assertNotIn("parking-badge parking-badge-qt", slot_html)
         self.assertIn('class="parking-order">1</span>', slot_html)
         self.assertIn("N457UP", slot_html)
-        self.assertIn("ARR ARR57 ONT-RFD 23:50", slot_html)
-        self.assertIn("DEP DEP57 RFD-LAX 00:40", slot_html)
-        self.assertIn("GT 0:40", slot_html)
+        self.assertNotIn("ARR ARR57 ONT-RFD 23:50", slot_html)
+        self.assertNotIn("DEP DEP57 RFD-LAX 00:40", slot_html)
+        self.assertNotIn("GT 0:40", slot_html)
         self.assertNotIn("757", slot_html)
+
+    def test_hot_tail_from_non_rfd_origin_keeps_arrival_movement_display(self):
+        operation = self._parking_operation()
+        arrival = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="ARR42",
+            origin="SDF",
+            destination="RFD",
+            assigned_tail_number="N542UP",
+            planned_datetime_local=datetime(2026, 6, 18, 23, 40),
+            planned_datetime_utc=datetime(2026, 6, 19, 4, 40),
+        )
+        db.session.add_all(
+            [
+                arrival,
+                SortDateTailState(
+                    sort_date=operation.sort_date,
+                    gateway_code=operation.gateway_code,
+                    sort_name=operation.sort_name,
+                    tail_number="N542UP",
+                    aircraft_type="757",
+                    operational_status="hot",
+                ),
+            ]
+        )
+        self._parking_assignment(operation, "N542UP", "A01")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+        card_html = self._parking_tail_card_html(html, "N542UP")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-tail-operational-status="hot"', card_html)
+        self.assertIn("parking-badge parking-badge-hot", card_html)
+        self.assertIn("ARR42 SDF-RFD 23:40", card_html)
+
+    def test_spare_tail_suppresses_outbound_movement_display(self):
+        operation = self._parking_operation()
+        departure = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="DEP42",
+            origin="RFD",
+            destination="DFW",
+            assigned_tail_number="N542UP",
+            planned_datetime_local=datetime(2026, 6, 19, 1, 20),
+            planned_datetime_utc=datetime(2026, 6, 19, 6, 20),
+        )
+        db.session.add_all(
+            [
+                departure,
+                SortDateTailState(
+                    sort_date=operation.sort_date,
+                    gateway_code=operation.gateway_code,
+                    sort_name=operation.sort_name,
+                    tail_number="N542UP",
+                    aircraft_type="757",
+                    operational_status="spare",
+                ),
+            ]
+        )
+        self._parking_assignment(operation, "N542UP", "A01")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+        card_html = self._parking_tail_card_html(html, "N542UP")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-tail-operational-status="spare"', card_html)
+        self.assertIn("parking-badge parking-badge-spare", card_html)
+        self.assertNotIn("DEP42 RFD-DFW 01:20", card_html)
+        self.assertEqual(db.session.get(SortDateMission, departure.id).assigned_tail_number, "N542UP")
 
     def test_motherbrain_dashboard_and_menu_link_to_parking_plan(self):
         response = self.client.get("/motherbrain")
@@ -9981,7 +10098,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
             data={"tail_number": "N457UP", "is_hot": "1"},
         )
         assignment = SortDateParkingAssignment.query.filter_by(tail_number="N457UP").one()
-        self.assertTrue(assignment.is_hot)
+        tail_state = SortDateTailState.query.filter_by(tail_number="N457UP").one()
+        self.assertFalse(assignment.is_hot)
+        self.assertEqual(tail_state.operational_status, "hot")
 
         self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/unassign",
@@ -9992,8 +10111,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
             data={"tail_number": "N457UP", "is_hot": "0"},
         )
         assignment = SortDateParkingAssignment.query.filter_by(tail_number="N457UP").one()
+        db.session.refresh(tail_state)
         self.assertIsNone(assignment.position_code)
         self.assertFalse(assignment.is_hot)
+        self.assertEqual(tail_state.operational_status, "normal")
 
     def test_arrival_time_uses_sta_then_api_eta_with_taxi_offset(self):
         operation = self._parking_operation()

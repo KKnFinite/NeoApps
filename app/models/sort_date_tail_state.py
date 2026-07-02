@@ -14,6 +14,10 @@ class SortDateTailState(db.Model):
             "aircraft_type_source IN ('derived', 'manual', 'api', 'unknown')",
             name="ck_sort_date_tail_states_aircraft_type_source",
         ),
+        db.CheckConstraint(
+            "operational_status IN ('normal', 'hot', 'spare', 'qt', 'oos')",
+            name="ck_sort_date_tail_states_operational_status",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -26,6 +30,7 @@ class SortDateTailState(db.Model):
     parking_position = db.Column(db.String(64), nullable=True)
     fuel_onboard = db.Column(db.Integer, nullable=True)
     mechanical_status = db.Column(db.Boolean, nullable=False, default=False)
+    operational_status = db.Column(db.String(16), nullable=False, default="normal")
     is_out_of_service = db.Column(db.Boolean, nullable=False, default=False)
     pushback_status = db.Column(db.Boolean, nullable=False, default=False)
     deice_status = db.Column(db.String(32), nullable=False, default="unknown")

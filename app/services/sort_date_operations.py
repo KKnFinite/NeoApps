@@ -210,6 +210,7 @@ def ensure_tail_state_for_mission(mission, parking_position=None):
             gateway_code=mission.gateway_code,
             sort_name=mission.sort_name,
             tail_number=mission.assigned_tail_number,
+            operational_status="normal",
         )
         db.session.add(tail_state)
 

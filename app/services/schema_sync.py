@@ -85,6 +85,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "active": "BOOLEAN DEFAULT 1",
     },
     "sort_date_tail_states": {
+        "operational_status": "VARCHAR(16) DEFAULT 'normal'",
         "is_out_of_service": "BOOLEAN DEFAULT 0",
     },
     "motherbrain_alerts": {
@@ -158,6 +159,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "active": "BOOLEAN DEFAULT TRUE",
     },
     "sort_date_tail_states": {
+        "operational_status": "VARCHAR(16) DEFAULT 'normal'",
         "is_out_of_service": "BOOLEAN DEFAULT FALSE",
     },
     "motherbrain_alerts": {

@@ -92,6 +92,9 @@ from app.services.parking_plan import (
     parking_plan_landing_context,
     set_tail_out_of_service,
     set_tail_hot,
+    set_tail_operational_status,
+    tail_status_is_hot_for_operation,
+    tail_operational_status_label,
     unassign_tail,
 )
 from app.services.parking_optimizer import (
@@ -845,7 +848,7 @@ def update_parking_plan_hot(operation_id=None):
         )
 
     try:
-        assignment = set_tail_hot(
+        tail_state = set_tail_hot(
             operation,
             request.form.get("tail_number"),
             _truthy_form_value(request.form.get("is_hot"))
@@ -859,10 +862,10 @@ def update_parking_plan_hot(operation_id=None):
         db.session.rollback()
         return _parking_plan_response(False, str(error), status=400)
 
-    state = "HOT" if assignment.is_hot else "not HOT"
+    state = tail_operational_status_label(tail_state.operational_status) or "NORMAL"
     return _parking_plan_response(
         True,
-        f"{assignment.tail_number} marked {state}.",
+        f"{tail_state.tail_number} marked {state}.",
         operation_id=operation.id,
     )
 
@@ -881,18 +884,26 @@ def update_parking_plan_tail_status(operation_id=None):
         )
 
     try:
-        tail_state = set_tail_out_of_service(
-            operation,
-            request.form.get("tail_number"),
-            _truthy_form_value(request.form.get("is_out_of_service")),
-            user=current_user,
-        )
+        if "operational_status" in request.form:
+            tail_state = set_tail_operational_status(
+                operation,
+                request.form.get("tail_number"),
+                request.form.get("operational_status"),
+                user=current_user,
+            )
+        else:
+            tail_state = set_tail_out_of_service(
+                operation,
+                request.form.get("tail_number"),
+                _truthy_form_value(request.form.get("is_out_of_service")),
+                user=current_user,
+            )
         db.session.commit()
     except ParkingPlanError as error:
         db.session.rollback()
         return _parking_plan_response(False, str(error), status=400)
 
-    state = "RED / OOS" if tail_state.is_out_of_service else "GREEN"
+    state = tail_operational_status_label(tail_state.operational_status) or "NORMAL"
     return _parking_plan_response(
         True,
         f"{tail_state.tail_number} marked {state}.",
@@ -3895,11 +3906,7 @@ def _tail_swap_conflict_is_hot(operation, mission):
     tail_number = (mission.assigned_tail_number or "").strip().upper()
     if not tail_number:
         return False
-    assignment = SortDateParkingAssignment.query.filter_by(
-        sort_date_operation_id=operation.id,
-        tail_number=tail_number,
-    ).first()
-    return bool(assignment and assignment.is_hot)
+    return tail_status_is_hot_for_operation(operation, tail_number)
 
 
 def _tail_swap_conflict_label(mission):

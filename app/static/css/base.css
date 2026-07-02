@@ -5687,6 +5687,16 @@ h2 {
     box-shadow: 0 0 18px rgba(var(--node-highlight-rgb), 0.22);
 }
 
+.parking-tail-card.is-spare {
+    border-color: rgba(255, 208, 88, 0.82);
+    box-shadow: 0 0 18px rgba(255, 208, 88, 0.18);
+}
+
+.parking-tail-card.is-qt {
+    border-color: rgba(var(--node-highlight-rgb), 0.78);
+    box-shadow: 0 0 16px rgba(var(--node-highlight-rgb), 0.2);
+}
+
 .parking-tail-card.is-oos {
     border-color: rgba(255, 90, 96, 0.9);
     background:
@@ -5811,6 +5821,25 @@ h2 {
     min-width: 0;
 }
 
+.parking-tail-mission-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    min-height: 18px;
+    padding: 2px 5px;
+    border: 1px solid rgba(255, 185, 80, 0.75);
+    border-radius: 999px;
+    color: #ffe6b8;
+    background: rgba(125, 64, 10, 0.78);
+    box-shadow: 0 0 12px rgba(255, 175, 60, 0.2);
+    font-size: 0.58rem;
+    font-weight: 950;
+    line-height: 1;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
 .parking-badge,
 .parking-order {
     display: inline-flex;
@@ -5828,6 +5857,7 @@ h2 {
 
 .parking-badge-qt,
 .parking-badge-hot,
+.parking-badge-spare,
 .parking-badge-oos {
     border: 1px solid rgba(var(--node-highlight-rgb), 0.7);
     color: var(--text);
@@ -5839,6 +5869,13 @@ h2 {
     border-color: rgba(255, 90, 96, 0.84);
     background: rgba(176, 21, 37, 0.86);
     box-shadow: 0 0 12px rgba(255, 42, 54, 0.3);
+}
+
+.parking-badge-spare {
+    border-color: rgba(255, 208, 88, 0.85);
+    color: #fff5cf;
+    background: rgba(142, 93, 16, 0.86);
+    box-shadow: 0 0 12px rgba(255, 208, 88, 0.22);
 }
 
 .parking-badge-mission-cancelled,
@@ -5862,10 +5899,18 @@ h2 {
     background: var(--steel);
 }
 
-.parking-tail-status-form {
+.parking-tail-status-edit {
     display: flex;
     justify-content: flex-end;
     margin-top: 2px;
+}
+
+.parking-tail-status-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    justify-content: flex-end;
+    margin: 0;
 }
 
 .parking-tail-status-button {
@@ -5883,9 +5928,59 @@ h2 {
     cursor: pointer;
 }
 
-.parking-tail-status-button.is-restore {
+.parking-tail-status-modal {
+    width: min(320px, calc(100vw - 32px));
+    border: 1px solid rgba(var(--node-highlight-rgb), 0.62);
+    border-radius: 8px;
+    padding: 14px;
+    color: var(--text);
+    background:
+        linear-gradient(180deg, rgba(var(--node-rgb), 0.18), transparent 45%),
+        rgba(4, 5, 8, 0.98);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+.parking-tail-status-modal::backdrop {
+    background: rgba(0, 0, 0, 0.58);
+    backdrop-filter: blur(2px);
+}
+
+.parking-tail-status-modal h3,
+.parking-tail-status-modal p {
+    margin: 0;
+}
+
+.parking-tail-status-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.parking-tail-status-options button,
+.parking-tail-status-close {
+    min-height: 34px;
+    border: 1px solid rgba(var(--node-rgb), 0.58);
+    border-radius: 6px;
+    background: linear-gradient(180deg, rgba(31, 35, 42, 0.98), rgba(8, 9, 12, 0.96));
+    color: var(--text);
+    font-size: 0.72rem;
+    font-weight: 950;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.parking-tail-status-options button:hover,
+.parking-tail-status-options button:focus-visible,
+.parking-tail-status-close:hover,
+.parking-tail-status-close:focus-visible {
     border-color: rgba(var(--node-highlight-rgb), 0.78);
-    background: linear-gradient(180deg, rgba(var(--node-rgb), 0.72), rgba(7, 18, 18, 0.94));
+    box-shadow: 0 0 14px rgba(var(--node-rgb), 0.22);
+}
+
+.parking-tail-status-close {
+    width: 100%;
+    margin-top: 10px;
 }
 
 .parking-ramp-layout {

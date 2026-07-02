@@ -38,6 +38,24 @@ QUICK_TURN_THRESHOLDS = {
     "A300": 75,
     "767": 75,
 }
+TAIL_STATUS_NORMAL = "normal"
+TAIL_STATUS_HOT = "hot"
+TAIL_STATUS_SPARE = "spare"
+TAIL_STATUS_QT = "qt"
+TAIL_STATUS_OOS = "oos"
+TAIL_OPERATIONAL_STATUSES = {
+    TAIL_STATUS_NORMAL,
+    TAIL_STATUS_HOT,
+    TAIL_STATUS_SPARE,
+    TAIL_STATUS_QT,
+    TAIL_STATUS_OOS,
+}
+TAIL_STATUS_LABELS = {
+    TAIL_STATUS_HOT: "HOT",
+    TAIL_STATUS_SPARE: "SPARE",
+    TAIL_STATUS_QT: "QT",
+    TAIL_STATUS_OOS: "OOS",
+}
 
 
 class ParkingPlanError(ValueError):
@@ -238,6 +256,23 @@ def tail_rows_for_operation(gateway, operation):
         ground_minutes = _ground_minutes(block_in_local, departure_local)
         aircraft_type = _aircraft_type_for_tail(tail, arrival, departure, tail_state)
         quick_turn = _is_quick_turn(aircraft_type, ground_minutes)
+        operational_status = tail_operational_status(
+            tail_state,
+            assignment=assignment,
+            quick_turn=quick_turn,
+        )
+        hot_origin_rfd = _hot_status_has_rfd_origin(
+            operational_status,
+            arrival,
+            departure,
+        )
+        suppress_arrival_movement = hot_origin_rfd
+        suppress_departure_movement = hot_origin_rfd or operational_status == TAIL_STATUS_SPARE
+        display_active_missions = _movement_missions_for_status(
+            active_missions,
+            suppress_arrival_movement=suppress_arrival_movement,
+            suppress_departure_movement=suppress_departure_movement,
+        )
         assigned_position = _assignment_position_label(assignment)
 
         rows.append(
@@ -245,19 +280,25 @@ def tail_rows_for_operation(gateway, operation):
                 "tail": tail,
                 "arrival": arrival,
                 "departure": departure,
-                "arrival_origin": _mission_origin(arrival),
-                "arrival_time": _format_local_time(block_in_local),
+                "arrival_origin": "" if suppress_arrival_movement else _mission_origin(arrival),
+                "arrival_time": "" if suppress_arrival_movement else _format_local_time(block_in_local),
                 "arrival_source": arrival_source,
                 "arrival_block_in_local": block_in_local,
-                "departure_destination": _mission_destination(departure),
-                "departure_time": _format_local_time(departure_local),
+                "departure_destination": "" if suppress_departure_movement else _mission_destination(departure),
+                "departure_time": "" if suppress_departure_movement else _format_local_time(departure_local),
                 "departure_datetime_local": departure_local,
                 "ground_minutes": ground_minutes,
-                "ground_time": _format_ground_time(ground_minutes),
+                "ground_time": "" if suppress_arrival_movement or suppress_departure_movement else _format_ground_time(ground_minutes),
                 "aircraft_type": aircraft_type,
-                "quick_turn": quick_turn,
+                "quick_turn": operational_status == TAIL_STATUS_QT,
+                "calculated_quick_turn": quick_turn,
+                "operational_status": operational_status,
+                "operational_status_label": tail_operational_status_label(operational_status),
+                "show_qt_status_option": quick_turn or operational_status == TAIL_STATUS_QT,
+                "suppress_arrival_movement": suppress_arrival_movement,
+                "suppress_departure_movement": suppress_departure_movement,
                 "active_mission_lines": [
-                    _mission_display_line(mission) for mission in active_missions
+                    _mission_display_line(mission) for mission in display_active_missions
                 ],
                 "all_mission_lines": [
                     _mission_display_line(mission) for mission in tail_missions
@@ -272,13 +313,14 @@ def tail_rows_for_operation(gateway, operation):
                     _mission_is_cancelled(mission) for mission in tail_missions
                 ),
                 "mission_attachment_label": _mission_attachment_label(
-                    len(tail_missions),
+                    tail_missions,
                     active_missions,
                 ),
                 "assignment": assignment,
                 "assigned_position": assigned_position,
-                "is_hot": bool(assignment and assignment.is_hot),
-                "is_out_of_service": _tail_state_is_out_of_service(tail_state),
+                "is_hot": operational_status == TAIL_STATUS_HOT,
+                "is_spare": operational_status == TAIL_STATUS_SPARE,
+                "is_out_of_service": operational_status == TAIL_STATUS_OOS,
                 "note": assignment.note if assignment else "",
                 "status": _row_status(assignment),
                 "departure_order": None,
@@ -325,7 +367,13 @@ def assign_tail_to_lane(
     assignment.position_code = position_code
     assignment.lane_number = lane_number
     if is_hot is not None:
-        assignment.is_hot = bool(is_hot)
+        set_tail_operational_status(
+            operation,
+            tail_number,
+            TAIL_STATUS_HOT if is_hot else TAIL_STATUS_NORMAL,
+            user=user,
+        )
+        assignment.is_hot = False
     if note is not None:
         assignment.note = str(note or "").strip()
     assignment.assigned_by_user_id = getattr(user, "id", None)
@@ -372,26 +420,91 @@ def set_tail_hot(operation, tail_number, is_hot, user=None, note=None):
     tail_number = _normalize_tail(tail_number)
     if tail_number not in _current_operation_tail_assets(operation):
         raise ParkingPlanError(f"{tail_number or 'Tail'} is not in the current sort.")
-    assignment = _assignment_for_tail(operation, tail_number, create=True)
+    assignment = _assignment_for_tail(operation, tail_number, create=note is not None)
     if is_hot is not None:
-        assignment.is_hot = bool(is_hot)
+        set_tail_operational_status(
+            operation,
+            tail_number,
+            TAIL_STATUS_HOT if is_hot else TAIL_STATUS_NORMAL,
+            user=user,
+        )
+        if assignment:
+            assignment.is_hot = False
     if note is not None:
+        assignment = assignment or _assignment_for_tail(operation, tail_number, create=True)
         assignment.note = str(note or "").strip()
-    assignment.assigned_by_user_id = getattr(user, "id", None)
-    assignment.assigned_at = _utc_now()
+    if assignment:
+        assignment.assigned_by_user_id = getattr(user, "id", None)
+        assignment.assigned_at = _utc_now()
     db.session.flush()
-    return assignment
+    return _tail_state_for_operation(operation, tail_number, create=True)
 
 
 def set_tail_out_of_service(operation, tail_number, is_out_of_service, user=None):
+    return set_tail_operational_status(
+        operation,
+        tail_number,
+        TAIL_STATUS_OOS if is_out_of_service else TAIL_STATUS_NORMAL,
+        user=user,
+    )
+
+
+def set_tail_operational_status(operation, tail_number, operational_status, user=None):
     tail_number = _normalize_tail(tail_number)
     if tail_number not in _current_operation_tail_assets(operation):
         raise ParkingPlanError(f"{tail_number or 'Tail'} is not in the current sort.")
 
     tail_state = _tail_state_for_operation(operation, tail_number, create=True)
-    tail_state.is_out_of_service = bool(is_out_of_service)
+    tail_state.operational_status = normalize_tail_operational_status(operational_status)
+    tail_state.is_out_of_service = tail_state.operational_status == TAIL_STATUS_OOS
+    assignment = _assignment_for_tail(operation, tail_number)
+    if assignment:
+        assignment.is_hot = False
+        assignment.assigned_by_user_id = getattr(user, "id", None)
+        assignment.assigned_at = _utc_now()
     db.session.flush()
     return tail_state
+
+
+def normalize_tail_operational_status(value):
+    text = str(value or "").strip().lower().replace("/", " ").replace("-", " ")
+    text = " ".join(text.split())
+    if text in {"", "normal", "clear", "green", "clear normal"}:
+        return TAIL_STATUS_NORMAL
+    if text in {"hot"}:
+        return TAIL_STATUS_HOT
+    if text in {"spare"}:
+        return TAIL_STATUS_SPARE
+    if text in {"qt", "quick turn", "quickturn"}:
+        return TAIL_STATUS_QT
+    if text in {"oos", "red", "red oos", "out of service"}:
+        return TAIL_STATUS_OOS
+    if text in TAIL_OPERATIONAL_STATUSES:
+        return text
+    return TAIL_STATUS_NORMAL
+
+
+def tail_operational_status(tail_state, assignment=None, quick_turn=False):
+    status = normalize_tail_operational_status(
+        getattr(tail_state, "operational_status", None)
+    )
+    if status == TAIL_STATUS_NORMAL and _tail_state_is_out_of_service(tail_state):
+        status = TAIL_STATUS_OOS
+    if status == TAIL_STATUS_NORMAL and bool(getattr(assignment, "is_hot", False)):
+        status = TAIL_STATUS_HOT
+    if status == TAIL_STATUS_NORMAL and quick_turn:
+        status = TAIL_STATUS_QT
+    return status
+
+
+def tail_operational_status_label(status):
+    return TAIL_STATUS_LABELS.get(normalize_tail_operational_status(status), "")
+
+
+def tail_status_is_hot_for_operation(operation, tail_number):
+    tail_state = _tail_state_for_operation(operation, tail_number, create=False)
+    assignment = _assignment_for_tail(operation, tail_number)
+    return tail_operational_status(tail_state, assignment=assignment) == TAIL_STATUS_HOT
 
 
 def parking_position_options():
@@ -501,7 +614,7 @@ def _apply_departure_order(tail_rows):
 def _summary_for_rows(rows):
     assigned = [row for row in rows if row["assigned_position"]]
     hot = [row for row in rows if row["is_hot"]]
-    quick_turn = [row for row in rows if row["quick_turn"]]
+    quick_turn = [row for row in rows if row["operational_status"] == TAIL_STATUS_QT]
     conflicts = [row for row in rows if row["status"] == "conflict"]
     return {
         "total_tails": len(rows),
@@ -702,6 +815,7 @@ def _tail_state_for_operation(operation, tail_number, create=False):
             sort_name=operation.sort_name,
             tail_number=tail_number,
             aircraft_type_source="unknown",
+            operational_status=TAIL_STATUS_NORMAL,
             is_out_of_service=False,
         )
         db.session.add(tail_state)
@@ -711,6 +825,10 @@ def _tail_state_for_operation(operation, tail_number, create=False):
 def _tail_state_is_out_of_service(tail_state):
     if not tail_state:
         return False
+    if normalize_tail_operational_status(
+        getattr(tail_state, "operational_status", None)
+    ) == TAIL_STATUS_OOS:
+        return True
     value = getattr(tail_state, "is_out_of_service", False)
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "y", "on"}
@@ -762,6 +880,32 @@ def _active_missions_for_tail(arrivals, departures):
     )
 
 
+def _movement_missions_for_status(
+    active_missions,
+    suppress_arrival_movement=False,
+    suppress_departure_movement=False,
+):
+    if suppress_arrival_movement and suppress_departure_movement:
+        return []
+    return [
+        mission
+        for mission in active_missions
+        if not (
+            (suppress_arrival_movement and mission.mission_type == "arrival")
+            or (suppress_departure_movement and mission.mission_type == "departure")
+        )
+    ]
+
+
+def _hot_status_has_rfd_origin(operational_status, arrival, departure):
+    if operational_status != TAIL_STATUS_HOT:
+        return False
+    for mission in (departure, arrival):
+        if mission and str(getattr(mission, "origin", "") or "").strip().upper() == "RFD":
+            return True
+    return False
+
+
 def _mission_is_cancelled(mission):
     if not mission:
         return False
@@ -794,10 +938,12 @@ def _mission_display_line(mission):
     )
 
 
-def _mission_attachment_label(mission_count, active_missions):
+def _mission_attachment_label(tail_missions, active_missions):
     if active_missions:
         return ""
-    if mission_count:
+    if any(_mission_is_cancelled(mission) for mission in tail_missions):
+        return "MISSION CANCELLED"
+    if tail_missions:
         return "NO ACTIVE MISSION"
     return "UNATTACHED TAIL"
 

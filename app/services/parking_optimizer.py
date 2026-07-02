@@ -772,6 +772,12 @@ def _locked_assignment_rows(assignments, tail_rows):
     ):
         tail = _normalize_tail(assignment.tail_number)
         row = row_by_tail.get(tail, {})
+        status_label = str(row.get("operational_status_label") or "").strip().upper()
+        reason = (
+            f"{status_label} parked tail fixed."
+            if status_label in {"HOT", "SPARE", "QT", "OOS"}
+            else "Existing manual assignment preserved."
+        )
         locked.append(
             {
                 "tail": tail,
@@ -781,7 +787,7 @@ def _locked_assignment_rows(assignments, tail_rows):
                 "origin": row.get("arrival_origin") or "-",
                 "aircraft_type": _parking_aircraft_type_for_row(row),
                 "parking_window": _parking_window_label(row),
-                "reason": "Existing manual assignment preserved.",
+                "reason": reason,
             }
         )
     return locked
