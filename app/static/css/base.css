@@ -6910,6 +6910,31 @@ h2 {
     text-transform: uppercase;
 }
 
+.portal-header-management-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid rgba(var(--node-rgb), 0.4);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 32%),
+        rgba(9, 8, 13, 0.78);
+    color: var(--text);
+    font-size: 0.72rem;
+    line-height: 1;
+    text-decoration: none;
+    text-transform: uppercase;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 14px rgba(var(--node-rgb), 0.1);
+}
+
+.portal-header-management-link:hover {
+    border-color: rgba(var(--node-highlight-rgb), 0.62);
+    color: var(--white);
+}
+
 @media (min-width: 769px) {
     .portal-page {
         width: min(1280px, 100%);
@@ -6957,33 +6982,46 @@ h2 {
 
 .portal-app-card {
     display: grid;
-    gap: 16px;
-    min-height: 178px;
-    padding: 20px;
-    border: 1px solid rgba(var(--node-rgb), 0.32);
-    border-radius: 8px;
-    background:
-        linear-gradient(145deg, rgba(var(--node-rgb), 0.12), transparent 44%),
-        linear-gradient(180deg, rgba(11, 10, 16, 0.92), rgba(4, 4, 7, 0.92));
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        0 0 20px rgba(var(--node-secondary-rgb), 0.1);
+    justify-items: center;
+    gap: 14px;
+    min-height: 0;
+    padding: 16px 12px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    text-align: center;
 }
 
 .portal-app-card-heading {
-    display: flex;
+    display: grid;
     align-items: center;
-    gap: 14px;
+    justify-items: center;
+    gap: 10px;
     min-width: 0;
 }
 
 .portal-app-icon {
     flex: 0 0 auto;
-    width: 72px;
-    height: 72px;
-    border-radius: 18px;
+    width: 76px;
+    height: 76px;
+    border-radius: 20px;
     object-fit: contain;
     box-shadow: 0 0 18px rgba(var(--node-rgb), 0.18);
+}
+
+.portal-app-icon-fallback {
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(var(--node-rgb), 0.34);
+    background:
+        linear-gradient(145deg, rgba(var(--node-rgb), 0.18), transparent 54%),
+        rgba(5, 7, 10, 0.86);
+    color: var(--node-primary);
+    font-size: 1.15rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-shadow: 0 0 12px rgba(var(--node-rgb), 0.32);
 }
 
 .portal-app-card h2 {
@@ -7001,11 +7039,19 @@ h2 {
 
 .portal-app-state {
     display: grid;
+    justify-items: center;
     gap: 10px;
     align-self: end;
 }
 
-.portal-app-state span,
+.portal-app-state > span {
+    color: var(--steel);
+    font-size: 0.84rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
 .portal-app-request-fieldset legend {
     color: var(--muted);
     font-size: 0.72rem;

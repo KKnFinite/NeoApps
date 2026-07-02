@@ -209,6 +209,9 @@
                 </nav>
                 {% else %}
                 {% if not is_rfd_hub_page and not is_neosektor_standalone_operator_page and not is_neostaffing_page %}
+                {% if is_portal_page and current_user.role == "grandmaster" %}
+                <a class="portal-header-management-link neo-menu-text" href="{{ url_for('auth.portal_management') }}">Portal Management</a>
+                {% endif %}
                 {% set character_switcher_modifier = "character-switcher-header" %}
                 {% set character_switcher_use_neofont = is_portal_page %}
                 {% include "_change_characters.html" %}
