@@ -11276,6 +11276,11 @@ select::-ms-expand {
     margin-top: 22px;
 }
 
+.planning-mobile-current-list,
+.parking-mobile-slot-change {
+    display: none;
+}
+
 .planning-review-table .table-actions {
     justify-content: flex-start;
     gap: 6px;
@@ -12589,6 +12594,378 @@ select::-ms-expand {
         box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.12),
             0 0 24px rgba(var(--node-rgb), 0.24);
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell,
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .shell,
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .content {
+        height: 100dvh;
+        max-height: 100dvh;
+        overflow: hidden;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .content {
+        width: min(100% - 16px, 430px);
+        padding: 72px 0 calc(84px + env(safe-area-inset-bottom, 0px));
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .manage-sort-operation-page {
+        display: grid;
+        align-content: start;
+        gap: 8px;
+        max-height: calc(100dvh - 156px - env(safe-area-inset-bottom, 0px));
+        padding: 8px;
+        overflow: hidden;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .manage-sort-shell {
+        display: block;
+        margin-top: 0;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .manage-sort-main {
+        display: grid;
+        gap: 8px;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .manage-sort-main > .section-heading:first-child {
+        margin: 0;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .manage-sort-operation-title {
+        font-size: 0.92rem;
+        line-height: 1;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .metric-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .metric-tile {
+        min-height: 48px;
+        padding: 7px 6px;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .metric-tile span,
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .detail-list dt,
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .manage-sort-window-form span {
+        font-size: 0.56rem;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .metric-tile strong {
+        font-size: 0.92rem;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .detail-list {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        margin: 0;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .detail-list div {
+        min-height: 42px;
+        padding: 6px;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .detail-list dd {
+        font-size: 0.72rem;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .manage-sort-window-form {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        margin-top: 0;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .manage-sort-window-form label {
+        gap: 3px;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .manage-sort-window-form input {
+        min-height: 34px;
+        padding: 6px 7px;
+        font-size: 16px;
+    }
+
+    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .manage-sort-window-form .action-button {
+        grid-column: 1 / -1;
+        min-height: 36px;
+        padding: 8px 10px;
+        font-size: 0.68rem;
+    }
+
+    body.mobile-app-chrome .planning-page {
+        overflow-x: hidden;
+    }
+
+    body.mobile-app-chrome .planning-page > .section-heading,
+    body.mobile-app-chrome .planning-page .planning-local-actions,
+    body.mobile-app-chrome .planning-page .alp-mobile-only,
+    body.mobile-app-chrome .planning-page .planning-review-section,
+    body.mobile-app-chrome .planning-page .planning-mission-section > h2,
+    body.mobile-app-chrome .planning-page .planning-mission-section > p,
+    body.mobile-app-chrome .planning-page .planning-mission-section > .table-wrap {
+        display: none !important;
+    }
+
+    body.mobile-app-chrome .planning-mobile-current-list {
+        display: grid;
+        gap: 8px;
+        width: min(100%, 430px);
+        margin-inline: auto;
+        overflow-x: hidden;
+    }
+
+    body.mobile-app-chrome .planning-mobile-mission-card {
+        display: grid;
+        gap: 8px;
+        min-width: 0;
+        padding: 10px;
+        border: 1px solid rgba(var(--node-highlight-rgb), 0.36);
+        border-radius: 7px;
+        background:
+            linear-gradient(135deg, rgba(var(--node-highlight-rgb), 0.12), transparent 42%),
+            rgba(6, 7, 10, 0.9);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    body.mobile-app-chrome .planning-mobile-mission-card.is-arrival-late {
+        color: #ffb6b6;
+    }
+
+    body.mobile-app-chrome .planning-mobile-mission-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    body.mobile-app-chrome .planning-mobile-mission-head strong {
+        color: var(--neo-bright-silver);
+        font-size: 0.88rem;
+        letter-spacing: 0.04em;
+    }
+
+    body.mobile-app-chrome .planning-mobile-mission-head span {
+        color: var(--steel);
+        font-size: 0.66rem;
+        font-weight: 800;
+        text-align: right;
+        text-transform: uppercase;
+    }
+
+    body.mobile-app-chrome .planning-mobile-mission-fields {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+        margin: 0;
+    }
+
+    body.mobile-app-chrome .planning-mobile-mission-fields div {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+        padding: 6px 7px;
+        border: 1px solid rgba(var(--node-rgb), 0.22);
+        border-radius: 5px;
+        background: rgba(0, 0, 0, 0.24);
+    }
+
+    body.mobile-app-chrome .planning-mobile-mission-fields dt {
+        color: var(--muted);
+        font-size: 0.56rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+
+    body.mobile-app-chrome .planning-mobile-mission-fields dd {
+        min-width: 0;
+        margin: 0;
+        color: var(--neo-bright-silver);
+        font-size: 0.76rem;
+        font-weight: 850;
+        overflow-wrap: anywhere;
+        text-transform: uppercase;
+    }
+
+    body.mobile-app-chrome .planning-mobile-tail-swap {
+        grid-column: 1 / -1;
+    }
+
+    body.mobile-app-chrome .planning-mobile-tail-swap-form {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        align-items: center;
+        gap: 6px;
+    }
+
+    body.mobile-app-chrome .planning-mobile-tail-swap-form input[type="text"] {
+        min-width: 0;
+        width: 100%;
+        min-height: 36px;
+        border: 1px solid rgba(var(--node-rgb), 0.38);
+        border-radius: 5px;
+        background: rgba(2, 3, 5, 0.86);
+        color: var(--steel);
+        font-size: 16px;
+        font-weight: 850;
+        text-align: center;
+        text-transform: uppercase;
+    }
+
+    body.mobile-app-chrome .planning-mobile-tail-swap-form label {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--muted);
+        font-size: 0.6rem;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page {
+        overflow-x: hidden;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-plan-page > .section-heading,
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-summary-grid,
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-status-panel,
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-optimizer-panel,
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-left-rail {
+        display: none !important;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-plan-page {
+        width: min(100%, 430px);
+        margin-inline: auto;
+        overflow-x: hidden;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-layout {
+        display: block;
+        overflow-x: hidden;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-ramp-layout {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+        width: 100%;
+        max-height: none;
+        overflow: visible;
+        padding-right: 0;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-ramp-group {
+        padding: 9px;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-ramp-center {
+        display: none;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-position-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-areas:
+            "left4 right4"
+            "left3 right3"
+            "left2 right2"
+            "left1 right1"
+            "top bottom";
+        gap: 6px;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-position-grid-r {
+        grid-template-areas:
+            "rtop1 rtop2"
+            "rbottom1 rbottom2";
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-position-grid-r .parking-position-slot-remote-bottom-right {
+        grid-area: rtop1;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-position-grid-r .parking-position-slot-remote-bottom-left {
+        grid-area: rtop2;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-position-grid-r .parking-position-slot-remote-top-right {
+        grid-area: rbottom1;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-position-grid-r .parking-position-slot-remote-top-left {
+        grid-area: rbottom2;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-position-card {
+        min-width: 0;
+        padding: 7px;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-position-label {
+        font-size: 0.84rem;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-lane {
+        min-height: 74px;
+        padding: 5px;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-tail-card {
+        padding: 6px;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-mobile-slot-change {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end;
+        gap: 5px;
+        margin-top: 5px;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-mobile-slot-change label {
+        display: grid;
+        gap: 3px;
+        min-width: 0;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-mobile-slot-change span {
+        color: var(--muted);
+        font-size: 0.52rem;
+        font-weight: 850;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-mobile-slot-change select {
+        min-width: 0;
+        width: 100%;
+        min-height: 34px;
+        border: 1px solid rgba(var(--node-rgb), 0.42);
+        border-radius: 5px;
+        background: rgba(2, 3, 5, 0.9);
+        color: var(--steel);
+        font-size: 16px;
+        font-weight: 850;
+        text-transform: uppercase;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-mobile-slot-change button {
+        min-height: 34px;
+        padding: 6px 8px;
+        border: 1px solid rgba(var(--node-rgb), 0.5);
+        border-radius: 5px;
+        background:
+            linear-gradient(180deg, rgba(var(--node-rgb), 0.34), rgba(0, 0, 0, 0.22)),
+            rgba(6, 7, 10, 0.9);
+        color: var(--steel);
+        font-size: 0.58rem;
+        font-weight: 900;
+        text-transform: uppercase;
     }
 
     .node-strip {

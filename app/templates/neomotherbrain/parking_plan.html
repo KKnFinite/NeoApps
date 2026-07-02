@@ -574,7 +574,7 @@
             </section>
         </aside>
 
-        <section class="parking-ramp-layout" aria-label="Visual ramp parking layout">
+        <section class="parking-ramp-layout" aria-label="Visual ramp parking layout" data-mobile-parking-ramp-cards>
             {% for ramp in ramp_groups %}
             <article
                 class="parking-ramp-group parking-ramp-{{ ramp.code|lower }}"
@@ -645,6 +645,29 @@
                                         </select>
                                     </div>
                                 {% endif %}
+                                <form
+                                    class="parking-mobile-slot-change"
+                                    method="post"
+                                    action="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) }}"
+                                    data-mobile-slot-tail-picker
+                                    aria-label="Change tail for {{ position.code }} Slot {{ lane.number }}"
+                                >
+                                    <input type="hidden" name="operation_id" value="{{ operation.id }}">
+                                    <input type="hidden" name="ramp_code" value="{{ ramp.code }}">
+                                    <input type="hidden" name="position_code" value="{{ position.code }}">
+                                    <input type="hidden" name="lane_number" value="{{ lane.number }}">
+                                    <input type="hidden" name="replace_occupied" value="{{ 1 if lane.row else 0 }}">
+                                    <label>
+                                        <span>{{ "Change Tail" if lane.row else "Assign Tail" }}</span>
+                                        <select name="tail_number" required>
+                                            <option value="">SELECT TAIL</option>
+                                            {% for row in tail_rows %}
+                                            <option value="{{ row.tail }}" {% if lane.tail == row.tail %}selected{% endif %}>{{ row.tail }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </label>
+                                    <button type="submit">Save</button>
+                                </form>
                             </div>
                             {% endfor %}
                         </div>

@@ -112,7 +112,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(followed.status_code, 200)
         self.assertIn(b"MANAGE SORT", followed.data)
         self.assertNotIn(b"motherbrain-home-page", followed.data)
-        self.assertNotIn(b"DASHBOARD", followed.data)
+        self.assertNotIn(b"data-motherbrain-mobile-dashboard", followed.data)
 
     def test_motherbrain_dashboard_route_no_longer_renders_mobile_dashboard(self):
         response = self.client.get("/motherbrain", follow_redirects=True)
@@ -190,7 +190,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
                     b"Permission Rules",
                 ):
                     self.assertIn(nav_label, response.data)
-                self.assertNotIn(b"Dashboard", response.data)
+                desktop_sidebar = response.data.split(b"data-motherbrain-desktop-side-nav", 1)[1].split(b"</aside>", 1)[0]
+                self.assertNotIn(b"Dashboard", desktop_sidebar)
                 self.assertNotIn(b"Sort Summary", response.data)
                 self.assertIn(b'href="/motherbrain/manage-sort"', response.data)
                 self.assertIn(b"neo-brand--motherbrain", response.data)
@@ -5955,6 +5956,102 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn("<th>FLIGHT</th>", html)
         self.assertNotIn("UPS1234", html)
 
+    def test_mobile_manage_sort_detail_has_compact_locked_layout_hooks(self):
+        operation = self._operation(sort_date=date(2026, 7, 1), window_minutes=18)
+        db.session.add(operation)
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}")
+        html = response.data.decode()
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("motherbrain-mobile-manage-sort-shell", html)
+        self.assertIn("data-mobile-manage-sort-compact", html)
+        self.assertIn(">Sort</span>", html)
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell,\n"
+            "    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .shell,\n"
+            "    body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .content {\n"
+            "        height: 100dvh;",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-mobile-manage-sort-shell .metric-grid {\n"
+            "        grid-template-columns: repeat(3, minmax(0, 1fr));",
+            css,
+        )
+
+    def test_mobile_arrival_planning_renders_simple_current_sort_list(self):
+        operation = self._operation(sort_date=date(2026, 6, 1))
+        arrival = self._mission(
+            operation,
+            "arrival",
+            "UPS1234",
+            assigned_tail_number="N123UP",
+            origin="EWR",
+            eta_datetime_utc=datetime(2026, 6, 1, 7, 25),
+        )
+        db.session.add_all([operation, arrival])
+        db.session.flush()
+        self._parking_assignment(operation, "N123UP", "A01")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
+        html = response.data.decode()
+        css = Path("app/static/css/base.css").read_text()
+        mobile_list = html.split('data-mobile-arrival-list', 1)[1].split("</section>", 1)[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("planning-page planning-page-arrival", html)
+        self.assertIn("planning-mobile-current-arrivals", html)
+        self.assertIn("UPS1234", mobile_list)
+        self.assertIn("N123UP", mobile_list)
+        self.assertIn("EWR", mobile_list)
+        self.assertIn("A01", mobile_list)
+        self.assertIn("02:25", mobile_list)
+        self.assertIn("+15", mobile_list)
+        self.assertIn("Expected", mobile_list)
+        self.assertIn(
+            "body.mobile-app-chrome .planning-page .alp-mobile-only,\n",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome .planning-mobile-current-list {\n"
+            "        display: grid;",
+            css,
+        )
+        self.assertIn("overflow-x: hidden;", css)
+
+    def test_mobile_departure_planning_renders_simple_current_sort_list(self):
+        operation = self._operation(sort_date=date(2026, 6, 1))
+        departure = self._mission(
+            operation,
+            "departure",
+            "UPS5678",
+            assigned_tail_number="N567UP",
+            destination="OMA",
+        )
+        db.session.add_all([operation, departure])
+        db.session.flush()
+        self._parking_assignment(operation, "N567UP", "B02")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/departure")
+        html = response.data.decode()
+        mobile_list = html.split('data-mobile-departure-list', 1)[1].split("</section>", 1)[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("planning-page planning-page-departure", html)
+        self.assertIn("planning-mobile-current-departures", html)
+        self.assertIn("UPS5678", mobile_list)
+        self.assertIn("N567UP", mobile_list)
+        self.assertIn("OMA", mobile_list)
+        self.assertIn("B02", mobile_list)
+        self.assertIn("data-mobile-tail-swap-options", mobile_list)
+        self.assertIn("planning-mobile-tail-swap-form", mobile_list)
+        self.assertNotIn("PASTE ALP", mobile_list)
+
     def test_window_update_accepts_zero_or_positive_values(self):
         operation = self._operation()
         db.session.add(operation)
@@ -10014,6 +10111,57 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertLess(mobile_html.index("HOT / NOTE"), mobile_html.index("REMOVE"))
         self.assertLess(mobile_html.index("ASSIGN TAIL"), mobile_html.index("SAVE HOT / NOTE"))
         self.assertLess(mobile_html.index("SAVE HOT / NOTE"), mobile_html.index("REMOVE / UNASSIGN"))
+
+    def test_mobile_parking_plan_renders_simple_ramp_cards_and_slot_picker(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        self._parking_pair(operation, "N349UP", destination="ONT")
+        db.session.flush()
+        self._parking_assignment(operation, "N457UP", "A01")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+        css = Path("app/static/css/base.css").read_text()
+        ramp_html = html.split('data-mobile-parking-ramp-cards', 1)[1]
+        a01_html = html.split('id="PARKING-POSITION-A01"', 1)[1].split("</section>", 1)[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("data-mobile-parking-ramp-cards", html)
+        for ramp_name in ("ALPHA", "BRAVO", "CHARLIE", "DELTA", "ECHO", "REMOTE"):
+            self.assertIn(ramp_name, ramp_html)
+        self.assertIn("parking-mobile-slot-change", a01_html)
+        self.assertIn("data-mobile-slot-tail-picker", a01_html)
+        self.assertIn('<option value="N457UP" selected', a01_html)
+        self.assertIn('<option value="N349UP"', a01_html)
+        self.assertIn("Change Tail", a01_html)
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-parking-plan-page .parking-optimizer-panel,\n"
+            "    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-left-rail {\n"
+            "        display: none !important;",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-parking-plan-page .parking-ramp-layout {\n"
+            "        display: grid;\n"
+            "        grid-template-columns: 1fr;",
+            css,
+        )
+        self.assertIn(
+            'grid-template-areas:\n'
+            '            "left4 right4"\n'
+            '            "left3 right3"\n'
+            '            "left2 right2"\n'
+            '            "left1 right1"\n'
+            '            "top bottom";',
+            css,
+        )
+        self.assertIn(
+            'grid-template-areas:\n'
+            '            "rtop1 rtop2"\n'
+            '            "rbottom1 rbottom2";',
+            css,
+        )
 
     def test_parking_plan_empty_slot_tail_picker_lists_unparked_tails(self):
         operation = self._parking_operation()
