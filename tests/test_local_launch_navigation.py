@@ -630,6 +630,63 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("<span>Switch</span>", html)
         self.assertIn("<span>Menu</span>", html)
 
+    def test_mobile_gateway_landing_uses_topbar_launch_items_without_bottom_nav(self):
+        seed_dev_grandmaster(self.app)
+        self.client.post(
+            "/login",
+            data={"username": "Kessler", "password": "1313"},
+        )
+
+        response = self.client.get("/rfd")
+        html = response.data.decode()
+        css = Path("app/static/css/base.css").read_text()
+        topbar = html.split('class="mobile-topbar node-gateway"', 1)[1].split(
+            "</header>",
+            1,
+        )[0]
+        sektor_tile = html.split('class="rfd-node-tile rfd-node-sektor"', 1)[1].split(
+            "</a>",
+            1,
+        )[0]
+        ermac_tile = html.split('class="rfd-node-tile rfd-node-ermac"', 1)[1].split(
+            "</a>",
+            1,
+        )[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("mobile-topbar-brand", topbar)
+        self.assertIn("neo-brand--gateway", topbar)
+        self.assertIn("<strong>RFD</strong>", topbar)
+        self.assertNotIn("<strong>DASHBOARD</strong>", topbar)
+        self.assertNotIn('<nav class="mobile-bottom-nav', html)
+        self.assertNotIn("has-mobile-bottom-nav", html)
+        self.assertIn('href="/neosektor', sektor_tile)
+        self.assertIn("neosektor-icon-128x128.png", sektor_tile)
+        self.assertIn("rfd-node-name neo-brand-title", sektor_tile)
+        self.assertIn('href="/neoermac', ermac_tile)
+        self.assertIn("neoermac-inapp-128.png", ermac_tile)
+        self.assertIn("rfd-node-name neo-brand-title", ermac_tile)
+        self.assertIn(
+            "body.rfd-hub-page.mobile-app-chrome .rfd-gateway-brand-strip {\n"
+            "        display: none;",
+            css,
+        )
+        self.assertIn(
+            "body.rfd-hub-page.mobile-app-chrome .rfd-node-tile {\n"
+            "        width: 100%;",
+            css,
+        )
+        self.assertIn(
+            "body.rfd-hub-page.mobile-app-chrome .rfd-node-card-icon-wrap {\n"
+            "        width: 54px;",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome.has-mobile-bottom-nav .mobile-bottom-nav {\n"
+            "        position: fixed;",
+            css,
+        )
+
     def test_mobile_bottom_popovers_anchor_to_switch_and_menu_buttons(self):
         seed_dev_grandmaster(self.app)
         self.client.post(

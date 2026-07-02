@@ -12551,6 +12551,74 @@ select::-ms-expand {
         height: 46px;
     }
 
+    body.rfd-hub-page.mobile-app-chrome .rfd-command-layout {
+        align-items: start;
+        min-height: 0;
+        padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .rfd-node-menu {
+        align-content: start;
+        gap: 8px;
+        width: min(100%, 430px);
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .rfd-gateway-brand-strip {
+        display: none;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .rfd-hub-sort-status {
+        margin-bottom: 4px;
+        font-size: 0.68rem;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .rfd-node-grid {
+        gap: 4px;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .rfd-node-tile {
+        width: 100%;
+        max-width: 430px;
+        min-height: 66px;
+        margin-inline: 0;
+        padding: 6px 8px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        overflow: visible;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .rfd-node-tile::before,
+    body.rfd-hub-page.mobile-app-chrome .rfd-node-tile::after {
+        display: none;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .rfd-node-card-icon-wrap {
+        width: 54px;
+        height: 54px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .rfd-node-card-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        filter: drop-shadow(0 0 14px rgba(var(--node-rgb), 0.28));
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .rfd-node-card-copy {
+        display: flex;
+        align-items: center;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .rfd-node-name {
+        font-size: clamp(1.02rem, 5.3vw, 1.42rem);
+    }
+
     .rfd-node-sektor {
         order: 3;
     }
@@ -18815,6 +18883,10 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     body.mobile-app-chrome.has-mobile-bottom-nav {
         padding-bottom: calc(18px + env(safe-area-inset-bottom));
+    }
+
+    body.mobile-app-chrome.has-mobile-bottom-nav .mobile-bottom-nav {
+        position: fixed;
     }
 
     .mobile-topbar {
