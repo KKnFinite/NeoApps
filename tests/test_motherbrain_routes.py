@@ -6246,6 +6246,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"AIRCRAFT TYPE RESTRICTIONS", response.data)
         self.assertIn(b"AIRCRAFT TYPE PREFERENCES", response.data)
         self.assertIn(b"BLOCKED PARKING POSITIONS", response.data)
+        self.assertIn(b'<select name="new_blocked_parking_position_subject"', response.data)
+        self.assertIn(b'<option value="A01"', response.data)
+        self.assertIn(b'<option value="R01"', response.data)
+        self.assertNotIn(b'placeholder="D1, D01, R1, A9, A10"', response.data)
         self.assertIn(b"OPTIMIZER DEFAULTS", response.data)
         self.assertIn(b"PHYSICAL PARKING RULES", response.data)
         self.assertIn(b"OPTIMIZER RULE REPORT", response.data)
@@ -6449,6 +6453,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         self.assertIn(b'name="new_arrival_parking_requirement_subject"', reload_response.data)
 
+    def test_parking_rules_dropdowns_use_dark_theme_styles(self):
+        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+
+        self.assertIn(".parking-rules-row select", css)
+        self.assertIn("background-image:", css)
+        self.assertIn(".parking-rules-table select option", css)
+        self.assertIn("background: #05070a;", css)
+
     def test_parking_rules_blocked_positions_normalize_and_reload(self):
         operation = self._parking_operation()
         db.session.commit()
@@ -6475,6 +6487,27 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"R01", response.data)
         self.assertIn(b"A09", response.data)
         self.assertIn(b"A10", response.data)
+
+    def test_parking_rules_blocked_position_select_rejects_comma_entry(self):
+        operation = self._parking_operation()
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
+        self.assertIn(b'<select name="new_blocked_parking_position_subject"', response.data)
+        self.assertNotIn(b'placeholder="D1, D01, R1, A9, A10"', response.data)
+
+        self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data={"new_blocked_parking_position_subject": "D01,D02"},
+        )
+
+        self.assertEqual(
+            MotherBrainParkingRule.query.filter_by(
+                gateway_id=self.rfd_gateway.id,
+                rule_category=BLOCKED_PARKING_POSITION,
+            ).count(),
+            0,
+        )
 
     def test_parking_rules_legacy_origin_restrictions_do_not_render_editor(self):
         legacy_restriction = MotherBrainParkingRule(
@@ -7879,6 +7912,79 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(lower_count, 2)
         self.assertEqual(upper_count, 2)
         self.assertIn("01-04 / 05-08 side balance considered", reasons)
+
+    def test_parking_optimizer_prefers_three_two_side_split_for_five_aircraft(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=0,
+                inbound_same_ramp_spacing_minutes=0,
+            )
+        )
+        for index in range(5):
+            self._parking_pair(
+                operation,
+                f"N12{index}UP",
+                arrival_local=datetime(2026, 6, 18, 22, 0) + timedelta(minutes=index * 20),
+                departure_local=datetime(2026, 6, 19, 1, 0) + timedelta(minutes=index * 20),
+                origin="ONT",
+                destination=f"D{index}",
+                aircraft_type="A300",
+            )
+        self._parking_rule(ORIGIN_RAMP_PREFERENCE, "origin", "ONT", "A", behavior="required")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        positions = [row["position"] for row in preview["suggested_assignments"]]
+        lower_count = sum(1 for position in positions if int(position[1:]) <= 4)
+        upper_count = sum(1 for position in positions if 5 <= int(position[1:]) <= 8)
+
+        self.assertEqual(preview["solver_status"], "OPTIMAL")
+        self.assertEqual(len(positions), 5)
+        self.assertEqual({lower_count, upper_count}, {2, 3})
+
+    def test_parking_optimizer_counts_fixed_tails_toward_side_balance(self):
+        operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                deice_spacing_threshold_minutes=0,
+                inbound_same_ramp_spacing_minutes=0,
+            )
+        )
+        for index, position in enumerate(("A01", "A02")):
+            tail = f"N13{index}UP"
+            self._parking_pair(
+                operation,
+                tail,
+                arrival_local=datetime(2026, 6, 18, 22, 0) + timedelta(minutes=index * 20),
+                departure_local=datetime(2026, 6, 19, 1, 0) + timedelta(minutes=index * 20),
+                origin="ONT",
+                destination=f"F{index}",
+                aircraft_type="A300",
+            )
+            self._parking_assignment(operation, tail, position)
+        for index in range(2, 4):
+            self._parking_pair(
+                operation,
+                f"N13{index}UP",
+                arrival_local=datetime(2026, 6, 18, 23, 0) + timedelta(minutes=index * 20),
+                departure_local=datetime(2026, 6, 19, 2, 0) + timedelta(minutes=index * 20),
+                origin="ONT",
+                destination=f"D{index}",
+                aircraft_type="A300",
+            )
+        self._parking_rule(ORIGIN_RAMP_PREFERENCE, "origin", "ONT", "A", behavior="required")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        positions = {row["position"] for row in preview["suggested_assignments"]}
+
+        self.assertEqual(preview["solver_status"], "OPTIMAL")
+        self.assertEqual(positions, {"A05", "A06"})
 
     def test_parking_optimizer_allows_side_imbalance_when_unavoidable(self):
         operation = self._parking_operation()

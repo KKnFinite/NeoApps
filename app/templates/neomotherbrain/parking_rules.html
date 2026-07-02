@@ -23,6 +23,18 @@
 </select>
 {% endmacro %}
 
+{% macro parking_position_select(name, selected, disabled=False) %}
+<select name="{{ name }}" {% if disabled %}disabled{% endif %}>
+    <option value="">SELECT POSITION</option>
+    {% if selected and selected not in parking_position_options|map(attribute=0)|list %}
+    <option value="{{ selected }}" selected>LEGACY {{ selected }}</option>
+    {% endif %}
+    {% for code, label in parking_position_options %}
+    <option value="{{ code }}" {% if selected == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+</select>
+{% endmacro %}
+
 {% macro plan_subject_select(name, selected, options, disabled=False) %}
 <select name="{{ name }}" {% if disabled %}disabled{% endif %}>
     <option value="">SELECT MASTER PLAN ROW</option>
@@ -217,7 +229,7 @@
                 <tr>
                     <td data-label="Position">
                         <input type="hidden" name="rule_ids" value="{{ rule.id }}">
-                        <input name="subject_value_{{ rule.id }}" value="{{ rule.subject_value }}" placeholder="D01" autocomplete="off" {% if not can_edit_parking_rules %}disabled{% endif %}>
+                        {{ parking_position_select("subject_value_" ~ rule.id, rule.subject_value, not can_edit_parking_rules) }}
                     </td>
                     <td data-label="Active">
                         <label class="parking-rules-check">
@@ -245,7 +257,7 @@
                 {% if can_edit_parking_rules %}
                 <tr class="parking-rules-new-row">
                     <td data-label="Position">
-                        <input name="new_{{ category }}_subject" placeholder="D1, D01, R1, A9, A10" autocomplete="off">
+                        {{ parking_position_select("new_" ~ category ~ "_subject", "") }}
                     </td>
                     <td data-label="Active">NEW</td>
                     <td data-label="Note">

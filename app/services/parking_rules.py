@@ -61,6 +61,13 @@ PARKING_TARGET_OPTIONS = RAMP_OPTIONS + tuple(
         key=lambda item: (0 if item[0] != "R" else 1, item[0], int(item[1:])),
     )
 )
+PARKING_POSITION_OPTIONS = tuple(
+    (position, position)
+    for position in sorted(
+        VALID_PARKING_POSITIONS,
+        key=lambda item: (0 if item[0] != "R" else 1, item[0], int(item[1:])),
+    )
+)
 
 PHYSICAL_PARKING_RULES = (
     "Normal ramp banks are 01-04 and 05-08.",
@@ -121,6 +128,7 @@ def parking_rules_context(gateway, operation=None):
         "rule_report": _parking_rule_report(settings, grouped),
         "ramp_options": RAMP_OPTIONS,
         "parking_target_options": PARKING_TARGET_OPTIONS,
+        "parking_position_options": PARKING_POSITION_OPTIONS,
         "arrival_rule_options": _master_plan_rule_options(gateway, operation, "arrival"),
         "departure_rule_options": _master_plan_rule_options(gateway, operation, "departure"),
         "aircraft_type_options": PARKING_AIRCRAFT_TYPE_OPTIONS,
@@ -203,6 +211,17 @@ def _update_existing_rules(gateway, form, editable_categories=None):
         if not subject or not ramp_code:
             db.session.delete(rule)
             continue
+        duplicate = _duplicate_existing_rule(
+            gateway,
+            rule,
+            subject,
+            ramp_code,
+        )
+        if duplicate is not None:
+            duplicate.active = form.get(f"active_{rule.id}") == "1"
+            duplicate.note = _clean_note(form.get(f"note_{rule.id}"))
+            db.session.delete(rule)
+            continue
         rule.subject_value = subject
         rule.ramp_code = ramp_code
         if rule.rule_category in (ORIGIN_RAMP_REQUIREMENT, ARRIVAL_PARKING_REQUIREMENT, DEPARTURE_PARKING_REQUIREMENT):
@@ -243,6 +262,18 @@ def _add_new_rule(gateway, category, form):
         rule.active = True
     rule.note = _clean_note(form.get(f"new_{category}_note"))
     return rule
+
+
+def _duplicate_existing_rule(gateway, rule, subject, ramp_code):
+    return MotherBrainParkingRule.query.filter(
+        MotherBrainParkingRule.gateway_id == gateway.id,
+        MotherBrainParkingRule.id != rule.id,
+        MotherBrainParkingRule.rule_category == rule.rule_category,
+        MotherBrainParkingRule.subject_type == rule.subject_type,
+        MotherBrainParkingRule.subject_value == subject,
+        MotherBrainParkingRule.ramp_code == ramp_code,
+        MotherBrainParkingRule.rule_behavior == rule.rule_behavior,
+    ).first()
 
 
 def _subject_type_for_category(category):

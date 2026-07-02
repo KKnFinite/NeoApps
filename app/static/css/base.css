@@ -4885,6 +4885,52 @@ h2 {
     min-width: 0;
 }
 
+.parking-rules-table input,
+.parking-rules-table select,
+.parking-rules-row input,
+.parking-rules-row select,
+.parking-rules-field input {
+    min-height: 40px;
+    padding: 9px 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.28);
+    border-radius: 6px;
+    background: rgba(2, 3, 5, 0.84);
+    color: var(--steel);
+    font-size: 0.86rem;
+    font-weight: 800;
+}
+
+.parking-rules-table select,
+.parking-rules-row select {
+    appearance: none;
+    background-image:
+        linear-gradient(45deg, transparent 50%, rgba(var(--node-rgb), 0.92) 50%),
+        linear-gradient(135deg, rgba(var(--node-rgb), 0.92) 50%, transparent 50%),
+        linear-gradient(145deg, rgba(var(--node-rgb), 0.08), rgba(2, 3, 5, 0.84));
+    background-position:
+        calc(100% - 16px) 17px,
+        calc(100% - 10px) 17px,
+        0 0;
+    background-repeat: no-repeat;
+    background-size: 6px 6px, 6px 6px, 100% 100%;
+    padding-right: 30px;
+}
+
+.parking-rules-table select option,
+.parking-rules-row select option {
+    background: #05070a;
+    color: var(--steel);
+}
+
+.parking-rules-table input:disabled,
+.parking-rules-table select:disabled,
+.parking-rules-row input:disabled,
+.parking-rules-row select:disabled,
+.parking-rules-field input:disabled {
+    opacity: 0.66;
+    cursor: not-allowed;
+}
+
 .parking-rules-check,
 .parking-rules-toggle,
 .parking-rules-field {
