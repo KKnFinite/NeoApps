@@ -18921,6 +18921,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     .mobile-topbar-back,
+    .mobile-topbar-node-icon-link,
     .mobile-account-trigger,
     .mobile-topbar .motherbrain-alert-button {
         display: inline-grid;
@@ -18950,6 +18951,35 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         width: 19px;
         height: 19px;
         fill: currentColor;
+    }
+
+    .mobile-topbar-node-icon {
+        display: block;
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        object-fit: contain;
+        filter: drop-shadow(0 0 10px rgba(var(--node-rgb), 0.26));
+    }
+
+    .mobile-topbar-page-link {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        padding: 3px 0;
+        color: var(--neo-bright-silver);
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.72);
+    }
+
+    .mobile-topbar-page-name {
+        display: block;
+        overflow: hidden;
+        max-width: min(43vw, 230px);
+        color: var(--neo-bright-silver);
+        font-size: 0.98rem;
+        line-height: 1;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .mobile-topbar-title {
@@ -19377,6 +19407,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     .mobile-topbar-back,
+    .mobile-topbar-node-icon-link,
     .mobile-account-trigger,
     .mobile-topbar .motherbrain-alert-button {
         width: 38px;

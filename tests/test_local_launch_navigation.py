@@ -620,15 +620,56 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("data-mobile-bottom-nav", html)
         self.assertIn("data-mobile-alert-nav", html)
         self.assertIn("data-mobile-shell-menu-button", html)
-        self.assertIn("account-motherbrain-128.png", html)
+        self.assertIn("mobile-topbar-node-icon-link", html)
+        self.assertIn("neomotherbrain-inapp-128.png", html)
+        self.assertIn("mobile-topbar-page-name neo-page-title", html)
+        self.assertIn('<span class="mobile-account-fallback" aria-hidden="true">K</span>', html)
         self.assertIn("Back to", html)
         self.assertIn("neo-brand--apps", html)
+        self.assertIn("Portal", html)
         self.assertNotIn("neo-brand--portal", html)
         self.assertIn('href="/logout"', html)
         self.assertIn("<span>Home</span>", html)
         self.assertIn("<span>Alerts</span>", html)
         self.assertIn("<span>Switch</span>", html)
         self.assertIn("<span>Menu</span>", html)
+
+    def test_mobile_gateway_node_topbar_standard_order_and_account_menu(self):
+        seed_dev_grandmaster(self.app)
+        user = User.query.filter_by(username="Kessler").first()
+        user.first_name = "Alpha"
+        user.last_name = "Zulu"
+        db.session.commit()
+        self.client.post(
+            "/login",
+            data={"username": "Kessler", "password": "1313"},
+        )
+
+        response = self.client.get("/motherbrain/manage-sort")
+        html = response.data.decode()
+        topbar = html.split('class="mobile-topbar node-motherbrain"', 1)[1].split(
+            '<aside class="motherbrain-desktop-side-nav"',
+            1,
+        )[0]
+        topbar_left = topbar.split('class="mobile-topbar-left"', 1)[1].split(
+            'class="mobile-topbar-actions"',
+            1,
+        )[0]
+        topbar_actions = topbar.split('class="mobile-topbar-actions"', 1)[1]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLess(topbar_left.index("mobile-topbar-back"), topbar_left.index("mobile-topbar-node-icon-link"))
+        self.assertLess(topbar_left.index("mobile-topbar-node-icon-link"), topbar_left.index("mobile-topbar-page-link"))
+        self.assertIn("neomotherbrain-inapp-128.png", topbar_left)
+        self.assertIn("mobile-topbar-page-name neo-page-title", topbar_left)
+        self.assertIn("Manage Sort", topbar_left)
+        self.assertLess(topbar_actions.index("motherbrain-alert-tray"), topbar_actions.index("mobile-account-menu"))
+        self.assertIn('<span class="mobile-account-fallback" aria-hidden="true">Z</span>', topbar_actions)
+        self.assertIn('href="/portal"', topbar_actions)
+        self.assertIn("Portal", topbar_actions)
+        self.assertIn('href="/logout"', topbar_actions)
+        self.assertIn('<nav class="mobile-bottom-nav', html)
+        self.assertIn("data-mobile-bottom-nav", html)
 
     def test_mobile_gateway_landing_uses_topbar_launch_items_without_bottom_nav(self):
         seed_dev_grandmaster(self.app)
@@ -654,9 +695,10 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         )[0]
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("mobile-topbar-brand", topbar)
-        self.assertIn("neo-brand--gateway", topbar)
-        self.assertIn("<strong>RFD</strong>", topbar)
+        self.assertIn("mobile-topbar-node-icon-link", topbar)
+        self.assertIn("neogateway-inapp-128.png", topbar)
+        self.assertIn("mobile-topbar-page-name neo-page-title", topbar)
+        self.assertIn(">RFD</span>", topbar)
         self.assertNotIn("<strong>DASHBOARD</strong>", topbar)
         self.assertNotIn('<nav class="mobile-bottom-nav', html)
         self.assertNotIn("has-mobile-bottom-nav", html)
@@ -740,6 +782,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("const pressableSelector", html)
         self.assertIn("flashPressFeedback", html)
         self.assertIn("is-press-feedback", html)
+        self.assertIn(".mobile-topbar-node-icon-link", html)
+        self.assertIn(".mobile-topbar-page-link", html)
 
     def test_neobid_theme_stays_blue(self):
         css = Path("app/static/css/base.css").read_text()
@@ -783,20 +827,24 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             css,
         )
 
-    def test_mobile_account_icon_mapping_uses_node_specific_128px_assets(self):
+    def test_mobile_account_uses_last_name_initial_and_node_icons(self):
         seed_dev_grandmaster(self.app)
+        user = User.query.filter_by(username="Kessler").first()
+        user.first_name = "Alpha"
+        user.last_name = "Zulu"
+        db.session.commit()
         self.client.post(
             "/login",
             data={"username": "Kessler", "password": "1313"},
         )
 
         expected_icons = {
-            "/motherbrain/manage-sort": "account-motherbrain-128.png",
-            "/neoermac": "ninja-ermac-128.png",
-            "/neosektor": "ninja-sektor-128.png",
+            "/motherbrain/manage-sort": "neomotherbrain-inapp-128.png",
+            "/neoermac": "neoermac-inapp-128.png",
+            "/neosektor": "neosektor-icon-128x128.png",
         }
 
-        for path, icon_name in expected_icons.items():
+        for path, node_icon_name in expected_icons.items():
             with self.subTest(path=path):
                 response = self.client.get(path)
                 html = response.data.decode()
@@ -804,11 +852,14 @@ class LocalLaunchNavigationTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertIn("data-mobile-topbar", html)
                 self.assertIn("data-mobile-bottom-nav", html)
-                self.assertIn(icon_name, html)
+                self.assertIn("mobile-topbar-node-icon-link", html)
+                self.assertIn(node_icon_name, html)
+                self.assertIn('<span class="mobile-account-fallback" aria-hidden="true">Z</span>', html)
+                self.assertNotIn("mobile-account-icon", html)
+                self.assertNotIn("account-motherbrain-128.png", html)
+                self.assertNotIn("ninja-ermac-128.png", html)
+                self.assertNotIn("ninja-sektor-128.png", html)
                 self.assertNotIn("-1024.png", html)
-                icon_response = self.client.get(f"/static/images/account/{icon_name}")
-                self.assertEqual(icon_response.status_code, 200)
-                self.assertEqual(icon_response.mimetype, "image/png")
 
     def test_mobile_shell_uses_safe_fallback_account_avatar_on_portal(self):
         seed_dev_grandmaster(self.app)
