@@ -3400,13 +3400,8 @@ a {
 }
 
 .neoermac-door-destination::before {
-    content: "";
-    position: absolute;
-    inset: 6px auto 6px 5px;
-    width: 3px;
-    border-radius: 999px;
-    background: var(--node-ermac-secondary);
-    box-shadow: 0 0 12px rgba(var(--node-secondary-rgb), 0.44);
+    content: none;
+    display: none;
 }
 
 .neoermac-door-destination strong {
@@ -3722,6 +3717,27 @@ a {
 
 .neoermac-none-toggle span {
     font-size: 0.72rem;
+}
+
+@media (min-width: 761px) {
+    .neoermac-door-pull-row .neoermac-door-actual {
+        align-content: start;
+        gap: 4px;
+        min-height: 34px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
+    .neoermac-door-pull-row .neoermac-door-actual span {
+        justify-self: center;
+        line-height: 1;
+    }
+
+    .neoermac-door-pull-row .neoermac-door-actual input {
+        min-height: 34px;
+    }
 }
 
 .neoermac-staffing-button {
@@ -4116,6 +4132,36 @@ a {
 
 .neoermac-outbound-row.is-missing-mission td {
     border-color: rgba(201, 208, 214, 0.22);
+}
+
+@media (min-width: 761px) {
+    .neoermac-outbound-table {
+        border-spacing: 0 4px;
+    }
+
+    .neoermac-outbound-table th {
+        padding: 4px;
+    }
+
+    .neoermac-outbound-table td {
+        padding: 4px;
+        overflow-wrap: normal;
+        line-height: 1.05;
+        white-space: nowrap;
+    }
+
+    .neoermac-outbound-time-stack {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        white-space: nowrap;
+    }
+
+    .neoermac-outbound-time-stack span {
+        gap: 3px;
+        white-space: nowrap;
+    }
 }
 
 @media (max-width: 760px) {
@@ -13994,6 +14040,8 @@ select::-ms-expand {
     align-items: center;
     gap: 6px;
     min-width: 0;
+    color: rgba(255, 248, 249, 0.9);
+    font-size: 0.56rem;
     text-align: left;
 }
 
@@ -14022,6 +14070,25 @@ select::-ms-expand {
 
 .neoermac-lineup-autosave-error {
     color: rgba(255, 150, 166, 0.9);
+}
+
+@media (min-width: 761px) {
+    .neoermac-belt-destination-stack {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: stretch;
+    }
+
+    .neoermac-belt-destination-row {
+        display: grid;
+        min-width: 0;
+    }
+}
+
+.neoermac-operation-title {
+    color: #eef6ff;
+    text-shadow:
+        0 0 18px rgba(var(--node-rgb), 0.34),
+        0 2px 0 rgba(0, 0, 0, 0.72);
 }
 
 @media (max-width: 760px) {

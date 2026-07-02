@@ -189,7 +189,6 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         reload_pages = (
             "/neoermac/door-view",
-            "/neoermac/view-outbound",
             "/neoermac/upcoming-pulls",
         )
         for path in reload_pages:
@@ -199,6 +198,14 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 self.assertIn(b"data-operation-refresh-reload", response.data)
                 self.assertIn(b'data-refresh-active="true"', response.data)
                 self.assertIn(b"window.setInterval(() => window.location.reload(), 5000)", response.data)
+
+        outbound_response = self.client.get("/neoermac/view-outbound")
+        self.assertEqual(outbound_response.status_code, 200)
+        self.assertIn(b"data-neoermac-outbound-refresh", outbound_response.data)
+        self.assertIn(b'data-refresh-active="true"', outbound_response.data)
+        self.assertIn(b"window.setInterval(refreshOutboundView, 5000)", outbound_response.data)
+        self.assertNotIn(b"data-operation-refresh-reload", outbound_response.data)
+        self.assertNotIn(b"window.location.reload()", outbound_response.data)
 
         door_response = self.client.get("/neoermac/door-view?door=D34")
         self.assertEqual(door_response.status_code, 200)
@@ -590,7 +597,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'class="neoermac-door-destination-title">CID</strong>', response.data)
         self.assertIn(b'class="neoermac-door-destination-title">EWR</strong>', response.data)
         self.assertIn(b"data-hhmm-input", response.data)
-        self.assertIn(b'class="neoermac-label-mobile">NONE</span>', response.data)
+        self.assertIn(b"neo-page-title neoermac-operation-title", response.data)
+        self.assertIn(b'class="neoermac-label-desktop">NO Pure</span>', response.data)
+        self.assertIn(b'class="neoermac-label-mobile">NO</span>', response.data)
 
         css = Path("app/static/css/base.css").read_text(encoding="utf-8")
         self.assertIn(".neoermac-door-destination-card {", css)
@@ -600,9 +609,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(".neoermac-door-planned {", css)
         self.assertIn(".neoermac-door-toggle {", css)
         self.assertIn(".neoermac-door-actual input", css)
+        self.assertIn(".neoermac-door-pull-row .neoermac-door-actual {", css)
         self.assertIn(".neoermac-door-destination .neoermac-door-destination-title", css)
         self.assertIn("color: var(--node-ermac-secondary)", css)
-        self.assertIn(".neoermac-door-destination::before", css)
+        self.assertIn("content: none;", css)
+        self.assertNotIn('.neoermac-door-destination::before {\n    content: "";', css)
         self.assertIn(".neoermac-door-pull-row.is-pull-due-soon", css)
         self.assertIn(".neoermac-door-pull-row.is-pull-late", css)
         self.assertIn("@keyframes neoermac-pull-critical-pulse", css)
@@ -1422,8 +1433,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'class="neoermac-label-mobile">2ND</span>', response.data)
         self.assertIn(b"neoermac-setup-toggle neoermac-large-checkbox-toggle", response.data)
         self.assertIn(b"neoermac-none-toggle neoermac-large-checkbox-toggle", response.data)
-        self.assertIn(b'class="neoermac-label-mobile">NONE</span>', response.data)
-        self.assertNotIn(b'class="neoermac-label-mobile">NO</span>', response.data)
+        self.assertIn(b'class="neoermac-label-mobile">NO</span>', response.data)
+        self.assertNotIn(b'class="neoermac-label-mobile">NONE</span>', response.data)
         self.assertEqual(response.data.count(b"neoermac-uld-type-label"), 3)
         self.assertIn(b'<span class="neoermac-uld-type-label">A2</span>', response.data)
         self.assertIn(b'<span class="neoermac-uld-type-label">A1</span>', response.data)
@@ -1861,14 +1872,15 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"BUILDING LINEUP", response.data)
+        self.assertIn(b"neo-page-title neoermac-operation-title", response.data)
         self.assertIn(b"neoermac-sequence-door", response.data)
         self.assertIn(b"Orange", response.data)
         self.assertIn(b"White/Blue", response.data)
         self.assertIn(b"Blue/Black", response.data)
         self.assertNotIn(b"neoermac-pull-edge", response.data)
-        self.assertIn(b"Pure", response.data)
-        self.assertIn(b"1st Mix", response.data)
-        self.assertIn(b"2nd Mix", response.data)
+        self.assertIn(b"PURE", response.data)
+        self.assertIn(b"1ST MIX", response.data)
+        self.assertIn(b"2ND MIX", response.data)
         self.assertEqual(response.data.count(b"neoermac-belt-group"), 12)
         self.assertEqual(response.data.count(b"neoermac-sequence-door"), 13)
         self.assertIn(b"neoermac-belt-block", response.data)
@@ -2319,6 +2331,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(".neoermac-belt-block--red", css)
         self.assertIn(".neoermac-belt-block--white", css)
         self.assertIn(".neoermac-belt-destination-card .neoermac-slot-pull-times", css)
+        self.assertIn(".neoermac-belt-destination-stack {\n        grid-template-columns: repeat(2, minmax(0, 1fr));", css)
         self.assertIn("linear-gradient(180deg, rgba(22, 9, 13, 0.98), rgba(6, 8, 12, 0.98))", css)
         self.assertIn("color: #fff8f9;", css)
         self.assertNotIn("#d9dde4", css)
@@ -2355,7 +2368,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         response = self.client.get("/neoermac/view-outbound")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Outbound Data With Pull Times", response.data)
+        self.assertIn(b"Outbound View", response.data)
+        self.assertIn(b"neo-page-title neoermac-operation-title", response.data)
         self.assertIn(b"WINDOW", response.data)
         self.assertNotIn(b"DISCHARGE", response.data)
         self.assertNotIn(b"SAVE", response.data)
@@ -2406,7 +2420,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"A14", response.data)
         self.assertIn(b"02:15", response.data)
         self.assertIn(b"D32-D34", response.data)
-        self.assertIn(b"EAST BLU/BLU BELT", response.data)
+        self.assertNotIn(b"EAST BLU/BLU BELT", response.data)
         self.assertIn(b"PURE PLAN", response.data)
         self.assertIn(b"PURE ACT", response.data)
         self.assertIn(b"MIX PLAN", response.data)
@@ -2425,6 +2439,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
     def test_view_outbound_mobile_rows_use_single_line_table_layout(self):
         css = Path("app/static/css/base.css").read_text()
 
+        self.assertIn(".neoermac-outbound-table td {\n        padding: 4px;", css)
+        self.assertIn(".neoermac-outbound-time-stack {\n        display: inline-flex;", css)
         self.assertIn(".neoermac-outbound-table-wrap {\n        overflow-x: auto;", css)
         self.assertIn(".neoermac-outbound-table tbody tr {\n        display: table-row;", css)
         self.assertIn(".neoermac-outbound-table td {\n        display: table-cell;", css)

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "_neo_brand.html" import neo_brand %}
 
-{% block title %}Outbound Data With Pull Times | NeoErmac{% endblock %}
+{% block title %}Outbound View | NeoErmac{% endblock %}
 
 {% macro actual_pull(row, key, label) -%}
     {%- if row.no_pulls[key] -%}
@@ -12,9 +12,15 @@
 {%- endmacro %}
 
 {% block content %}
-<section class="neoermac-shell neoermac-outbound-shell" aria-labelledby="neoermac-outbound-title">
+<section
+    class="neoermac-shell neoermac-outbound-shell"
+    aria-labelledby="neoermac-outbound-title"
+    data-neoermac-outbound-refresh
+    data-refresh-active="{{ 'true' if refresh_status.auto_refresh_enabled else 'false' }}"
+    data-refresh-url="{{ url_for('neoermac.view_outbound') }}"
+>
     <div class="neoermac-hero neoermac-outbound-hero mobile-shell-duplicate-title">
-        <h1 id="neoermac-outbound-title">Outbound Data With Pull Times</h1>
+        <h1 id="neoermac-outbound-title" class="neo-page-title neoermac-operation-title">Outbound View</h1>
         <p>{{ gateway.code }} OUTBOUND DESTINATION SUMMARY</p>
     </div>
 
@@ -35,71 +41,120 @@
         </div>
     </section>
 
-    {% set operation_refresh_status = refresh_status %}
-    {% set operation_refresh_class = "neoermac-refresh-paused" %}
-    {% include "neonodes/_operation_refresh_reload.html" %}
-
-    {% if rows %}
-    <div class="neoermac-outbound-table-wrap" data-neoermac-outbound-layout="pull-table">
-        <table class="neoermac-outbound-table" data-neoermac-outbound-table>
-            <caption class="visually-hidden">Outbound flights with planned and actual pull times.</caption>
-            <thead>
-                <tr>
-                    <th scope="col" rowspan="2">Flight</th>
-                    <th scope="col" rowspan="2">Tail</th>
-                    <th scope="col" rowspan="2">Dest</th>
-                    <th scope="col" rowspan="2">Pos</th>
-                    <th scope="col" rowspan="2">Doors</th>
-                    <th scope="col" rowspan="2">ETD</th>
-                    <th scope="col" rowspan="2">Status</th>
-                    <th scope="col" rowspan="2">Location</th>
-                    <th scope="colgroup" colspan="2">PURE</th>
-                    <th scope="colgroup" colspan="2">MIX</th>
-                </tr>
-                <tr>
-                    <th scope="col">PLAN</th>
-                    <th scope="col">ACT</th>
-                    <th scope="col">PLAN</th>
-                    <th scope="col">ACT</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in rows %}
-                <tr class="neoermac-outbound-row{% if not row.has_mission %} is-missing-mission{% endif %}" data-neoermac-outbound-row>
-                    <td data-label="Flight" data-outbound-field="flight"><strong>{{ row.flight_number or "-" }}</strong></td>
-                    <td data-label="Tail" data-outbound-field="tail">{{ row.tail or "-" }}</td>
-                    <td data-label="Dest" class="neoermac-outbound-destination" data-outbound-field="destination"><strong>{{ row.destination }}</strong></td>
-                    <td data-label="Pos" data-outbound-field="position">{{ row.parking or "-" }}</td>
-                    <td data-label="Doors" data-outbound-field="doors">{{ row.assigned_doors|join(", ") if row.assigned_doors else "-" }}</td>
-                    <td data-label="ETD" data-outbound-field="etd">{{ row.etd or "-" }}</td>
-                    <td data-label="Status" data-outbound-field="status">
-                        <strong>{{ row.status or "-" }}</strong>
-                        {% if not row.has_mission %}
-                        <span class="neoermac-outbound-missing">NO CURRENT SORT MISSION FOR {{ row.destination }}.</span>
-                        {% endif %}
-                    </td>
-                    <td data-label="Location" data-outbound-field="location">{{ row.assignment_locations|join(" / ") if row.assignment_locations else "-" }}</td>
-                    <td data-label="PURE PLAN" data-outbound-pull-cell="pure-plan">{{ row.planned_pulls.pure or "-" }}</td>
-                    <td data-label="PURE ACT" data-outbound-pull-cell="pure-actual"><strong>{{ actual_pull(row, "pure", "Pure") }}</strong></td>
-                    <td data-label="MIX PLAN" data-outbound-pull-cell="mix-plan">
-                        <div class="neoermac-outbound-time-stack">
-                            <span><b>1ST</b> {{ row.planned_pulls.first_mix or "-" }}</span>
-                            <span><b>2ND</b> {{ row.planned_pulls.second_mix or "-" }}</span>
-                        </div>
-                    </td>
-                    <td data-label="MIX ACT" data-outbound-pull-cell="mix-actual">
-                        <div class="neoermac-outbound-time-stack">
-                            <span><b>1ST</b> {{ actual_pull(row, "first_mix", "1st Mix") }}</span>
-                            <span><b>2ND</b> {{ actual_pull(row, "second_mix", "2nd Mix") }}</span>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div
+        class="neoermac-refresh-paused"
+        data-neoermac-outbound-refresh-paused
+        {% if refresh_status.auto_refresh_enabled %}hidden{% endif %}
+        aria-live="polite"
+    >
+        {{ refresh_status.message }}
+        {% if refresh_status.operation_label and refresh_status.window_label %}
+        <span>{{ refresh_status.operation_label }} &middot; {{ refresh_status.window_label }}</span>
+        {% endif %}
     </div>
-    {% else %}
-    <p class="neoermac-door-empty">NO OUTBOUND DESTINATIONS FOUND FOR THE CURRENT SORT.</p>
-    {% endif %}
+
+    <div data-neoermac-outbound-content>
+        {% if rows %}
+        <div class="neoermac-outbound-table-wrap" data-neoermac-outbound-layout="pull-table">
+            <table class="neoermac-outbound-table" data-neoermac-outbound-table>
+                <caption class="visually-hidden">Outbound flights with planned and actual pull times.</caption>
+                <thead>
+                    <tr>
+                        <th scope="col" rowspan="2">Flight</th>
+                        <th scope="col" rowspan="2">Tail</th>
+                        <th scope="col" rowspan="2">Dest</th>
+                        <th scope="col" rowspan="2">Pos</th>
+                        <th scope="col" rowspan="2">Doors</th>
+                        <th scope="col" rowspan="2">ETD</th>
+                        <th scope="col" rowspan="2">Status</th>
+                        <th scope="col" rowspan="2">Location</th>
+                        <th scope="colgroup" colspan="2">PURE</th>
+                        <th scope="colgroup" colspan="2">MIX</th>
+                    </tr>
+                    <tr>
+                        <th scope="col">PLAN</th>
+                        <th scope="col">ACT</th>
+                        <th scope="col">PLAN</th>
+                        <th scope="col">ACT</th>
+                    </tr>
+                </thead>
+                <tbody data-neoermac-outbound-table-body>
+                    {% for row in rows %}
+                    <tr class="neoermac-outbound-row{% if not row.has_mission %} is-missing-mission{% endif %}" data-neoermac-outbound-row>
+                        <td data-label="Flight" data-outbound-field="flight"><strong>{{ row.flight_number or "-" }}</strong></td>
+                        <td data-label="Tail" data-outbound-field="tail">{{ row.tail or "-" }}</td>
+                        <td data-label="Dest" class="neoermac-outbound-destination" data-outbound-field="destination"><strong>{{ row.destination }}</strong></td>
+                        <td data-label="Pos" data-outbound-field="position">{{ row.parking or "-" }}</td>
+                        <td data-label="Doors" data-outbound-field="doors">{{ row.assigned_doors|join(", ") if row.assigned_doors else "-" }}</td>
+                        <td data-label="ETD" data-outbound-field="etd">{{ row.etd or "-" }}</td>
+                        <td data-label="Status" data-outbound-field="status">
+                            <strong>{{ row.status or "-" }}</strong>
+                            {% if not row.has_mission %}
+                            <span class="neoermac-outbound-missing">NO CURRENT SORT MISSION FOR {{ row.destination }}.</span>
+                            {% endif %}
+                        </td>
+                        <td data-label="Location" data-outbound-field="location">{{ row.assigned_doors|join(" / ") if row.assigned_doors else "-" }}</td>
+                        <td data-label="PURE PLAN" data-outbound-pull-cell="pure-plan">{{ row.planned_pulls.pure or "-" }}</td>
+                        <td data-label="PURE ACT" data-outbound-pull-cell="pure-actual"><strong>{{ actual_pull(row, "pure", "Pure") }}</strong></td>
+                        <td data-label="MIX PLAN" data-outbound-pull-cell="mix-plan">
+                            <div class="neoermac-outbound-time-stack">
+                                <span><b>1ST</b> {{ row.planned_pulls.first_mix or "-" }}</span>
+                                <span><b>2ND</b> {{ row.planned_pulls.second_mix or "-" }}</span>
+                            </div>
+                        </td>
+                        <td data-label="MIX ACT" data-outbound-pull-cell="mix-actual">
+                            <div class="neoermac-outbound-time-stack">
+                                <span><b>1ST</b> {{ actual_pull(row, "first_mix", "1st Mix") }}</span>
+                                <span><b>2ND</b> {{ actual_pull(row, "second_mix", "2nd Mix") }}</span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="neoermac-door-empty">NO OUTBOUND DESTINATIONS FOUND FOR THE CURRENT SORT.</p>
+        {% endif %}
+    </div>
 </section>
+{% if refresh_status.auto_refresh_enabled %}
+<script>
+(() => {
+    const root = document.querySelector("[data-neoermac-outbound-refresh]");
+    if (!root || root.dataset.refreshActive !== "true") {
+        return;
+    }
+
+    const content = root.querySelector("[data-neoermac-outbound-content]");
+    if (!content) {
+        return;
+    }
+
+    const refreshOutboundView = async () => {
+        try {
+            const response = await fetch(root.dataset.refreshUrl || window.location.href, {
+                cache: "no-store",
+                credentials: "same-origin",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+            });
+            if (!response.ok) {
+                return;
+            }
+            const html = await response.text();
+            const doc = new DOMParser().parseFromString(html, "text/html");
+            const newContent = doc.querySelector("[data-neoermac-outbound-content]");
+            if (!newContent) {
+                return;
+            }
+            content.replaceChildren(...Array.from(newContent.children).map((node) => node.cloneNode(true)));
+        } catch (_error) {}
+    };
+
+    window.setInterval(refreshOutboundView, 5000);
+})();
+</script>
+{% endif %}
 {% endblock %}

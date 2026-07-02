@@ -53,7 +53,7 @@
     {% endif %}
 >
     <div class="neoermac-hero neoermac-door-hero mobile-shell-duplicate-title">
-        <h1 id="neoermac-door-title">DOOR VIEW</h1>
+        <h1 id="neoermac-door-title" class="neo-page-title neoermac-operation-title">DOOR VIEW</h1>
         <p>SHIFT OUTBOUND</p>
     </div>
 
@@ -260,14 +260,14 @@
                                     data-no-pull-toggle="{{ pull.key }}-{{ destination_index }}"
                                     {% if card.no_pull[pull.key] %}checked{% endif %}
                                 >
-                                <span class="neoermac-label-desktop">NONE {{ pull.label }}</span>
-                                <span class="neoermac-label-mobile">NONE</span>
+                                <span class="neoermac-label-desktop">NO {{ pull.label }}</span>
+                                <span class="neoermac-label-mobile">NO</span>
                             </label>
                             {% else %}
                             <div class="neoermac-door-actual neoermac-door-static">
                                 <span class="neoermac-label-desktop">ACTUAL {{ pull.label }}</span>
                                 <span class="neoermac-label-mobile">ACTUAL</span>
-                                <strong>{{ "NONE " ~ pull.label if card.no_pull[pull.key] else (card.actual[pull.key] or "-") }}</strong>
+                                <strong>{{ "NO " ~ pull.label if card.no_pull[pull.key] else (card.actual[pull.key] or "-") }}</strong>
                             </div>
                             {% endif %}
                         </section>

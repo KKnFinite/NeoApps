@@ -3,9 +3,9 @@
 
 {% macro pull_times_display(destination, pull_times, class_name="neoermac-slot-pull-times") -%}
 <div class="{{ class_name }}" data-lineup-pull-times aria-label="{{ destination or 'Unassigned' }} planned pull times">
-    <span>Pure <strong data-pull-time-key="pure">{{ pull_times.get("pure", "--") }}</strong></span>
-    <span>1st Mix <strong data-pull-time-key="first_mix">{{ pull_times.get("first_mix", "--") }}</strong></span>
-    <span>2nd Mix <strong data-pull-time-key="final_mix">{{ pull_times.get("final_mix", "--") }}</strong></span>
+    <span>PURE <strong data-pull-time-key="pure">{{ pull_times.get("pure", "--") }}</strong></span>
+    <span>1ST MIX <strong data-pull-time-key="first_mix">{{ pull_times.get("first_mix", "--") }}</strong></span>
+    <span>2ND MIX <strong data-pull-time-key="final_mix">{{ pull_times.get("final_mix", "--") }}</strong></span>
 </div>
 {%- endmacro %}
 
@@ -29,7 +29,7 @@
 {% block content %}
 <section class="neoermac-shell neoermac-lineup-shell" aria-labelledby="neoermac-lineup-title">
     <div class="neoermac-hero mobile-shell-duplicate-title">
-        <h1 id="neoermac-lineup-title">BUILDING LINEUP</h1>
+        <h1 id="neoermac-lineup-title" class="neo-page-title neoermac-operation-title">BUILDING LINEUP</h1>
     </div>
 
     {% if can_view and not can_edit %}
