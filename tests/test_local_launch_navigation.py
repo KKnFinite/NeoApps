@@ -662,7 +662,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             data={"username": "Kessler", "password": "1313"},
         )
 
-        response = self.client.get("/motherbrain", follow_redirects=True)
+        response = self.client.get("/motherbrain/manage-sort", follow_redirects=True)
         html = response.data.decode()
         css = Path("app/static/css/base.css").read_text()
 
@@ -795,7 +795,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertNotIn("<strong>DASHBOARD</strong>", topbar)
         self.assertNotIn('<nav class="mobile-bottom-nav', html)
         self.assertNotIn("has-mobile-bottom-nav", html)
-        self.assertIn(f'href="/motherbrain/operations/{operation.id}"', motherbrain_desktop_tile)
+        self.assertIn(f'href="/motherbrain?operation_id={operation.id}"', motherbrain_desktop_tile)
         self.assertIn(f'href="/motherbrain/manage-sort?operation_id={operation.id}"', motherbrain_mobile_tile)
         self.assertIn("neomotherbrain-inapp-128.png", motherbrain_mobile_tile)
         self.assertIn("rfd-node-name neo-brand-title", motherbrain_mobile_tile)
@@ -1095,8 +1095,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertEqual(login_response.status_code, 302)
 
         motherbrain_home = self.client.get("/motherbrain", follow_redirects=False)
-        self.assertEqual(motherbrain_home.status_code, 302)
-        self.assertEqual(motherbrain_home.location, "/motherbrain/manage-sort")
+        self.assertEqual(motherbrain_home.status_code, 200)
+        self.assertIn(b"data-motherbrain-dashboard", motherbrain_home.data)
 
         direct_paths = (
             "/motherbrain/operations",

@@ -140,6 +140,7 @@ FLIGHT_API_REVIEW_VIEW_PERMISSION = "neomotherbrain.flight_api_review.view"
 FLIGHT_API_REVIEW_EDIT_PERMISSION = "neomotherbrain.flight_api_review.edit"
 FLIGHT_API_AUTO_POLL_TRIGGER_PERMISSION = "neomotherbrain.flight_api_auto_poll.trigger"
 NEOGATEWAY_LANDING_VIEW_PERMISSION = "neogateway.landing.view"
+DASHBOARD_VIEW_PERMISSION = "neomotherbrain.dashboard.view"
 MANAGE_SORT_VIEW_PERMISSION = "neomotherbrain.manage_sort.view"
 MANAGE_SORT_EDIT_PERMISSION = "neomotherbrain.manage_sort.edit"
 ARRIVAL_PLANNING_VIEW_PERMISSION = "neomotherbrain.arrival_planning.view"
@@ -237,7 +238,10 @@ def rfd_hub():
 
     generation_result = _auto_generate_today_sorts(gateway)
     current_sort_operations = current_operations_for_gateway(gateway)
-    active_sort_operation = _selected_current_operation(current_sort_operations)
+    active_sort_operation = _selected_current_operation(
+        current_sort_operations,
+        operation_id=request.args.get("operation_id"),
+    )
     if active_sort_operation:
         active_sort_status = "Active sort ready."
     elif generation_result["errors"]:
@@ -273,10 +277,33 @@ def sektor_launch():
 @bp.route("/motherbrain")
 @gateway_node_required("motherbrain", minimum_role="operator")
 def motherbrain():
-    redirect_args = {}
-    if request.args.get("operation_id"):
-        redirect_args["operation_id"] = request.args["operation_id"]
-    return redirect(url_for("neomotherbrain.manage_sort", **redirect_args))
+    gateway = get_current_gateway()
+    denied = _permission_guard(DASHBOARD_VIEW_PERMISSION)
+    if denied:
+        return denied
+
+    generation_result = _auto_generate_today_sorts(gateway)
+    sort_date = generation_result["sort_date"]
+    operations = current_operations_for_gateway(gateway)
+    sync_results = [_sync_operation_with_master(operation) for operation in operations]
+    if any(
+        result["added"] or result["updated"]
+        for result in sync_results
+    ):
+        db.session.commit()
+        operations = current_operations_for_gateway(gateway)
+    selected_operation = _selected_current_operation(
+        operations,
+        operation_id=request.args.get("operation_id"),
+    )
+
+    return render_template(
+        "neomotherbrain/index.html",
+        gateway=gateway,
+        sort_date=sort_date,
+        current_sort_operations=operations,
+        selected_operation=selected_operation,
+    )
 
 
 @bp.route("/motherbrain/gateway-matrix", methods=["GET", "POST"])

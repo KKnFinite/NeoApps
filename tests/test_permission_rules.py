@@ -136,11 +136,16 @@ class PermissionRulesTest(unittest.TestCase):
 
     def test_permission_rule_items_reference_seeded_rules(self):
         seeded_keys = {permission_key for permission_key, _role, _description in DEFAULT_PERMISSION_RULES}
+        item_keys = {
+            item_key
+            for _group_key, item_key, _label, _description, _action_keys in PERMISSION_RULE_ITEMS
+        }
 
         for _group_key, item_key, _label, _description, action_keys in PERMISSION_RULE_ITEMS:
             for action_type, permission_key in action_keys.items():
                 with self.subTest(item=item_key, action=action_type):
                     self.assertIn(permission_key, seeded_keys)
+        self.assertIn("neomotherbrain.dashboard", item_keys)
 
     def test_permission_edit_descriptions_are_specific(self):
         descriptions = {

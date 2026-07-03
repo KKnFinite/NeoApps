@@ -103,29 +103,67 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
-    def test_motherbrain_dashboard_redirects_to_manage_sort(self):
-        response = self.client.get("/motherbrain", follow_redirects=False)
+    def test_motherbrain_dashboard_renders_tile_menu(self):
+        operation = self._operation(sort_date=current_gateway_local_date(self.rfd_gateway))
+        db.session.add(operation)
+        db.session.commit()
 
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.location, "/motherbrain/manage-sort")
-
-        followed = self.client.get("/motherbrain", follow_redirects=True)
-        self.assertEqual(followed.status_code, 200)
-        self.assertIn(b"MANAGE SORT", followed.data)
-        self.assertNotIn(b"motherbrain-home-page", followed.data)
-        self.assertNotIn(b"data-motherbrain-mobile-dashboard", followed.data)
-
-    def test_motherbrain_dashboard_route_no_longer_renders_mobile_dashboard(self):
-        response = self.client.get("/motherbrain", follow_redirects=True)
+        response = self.client.get(f"/motherbrain?operation_id={operation.id}", follow_redirects=False)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"MANAGE SORT", response.data)
-        self.assertNotIn(b"class=\"motherbrain-dashboard-title mobile-shell-duplicate-title\"", response.data)
+        self.assertIn(b"motherbrain-home-page", response.data)
+        self.assertIn(b"data-motherbrain-dashboard", response.data)
         self.assertNotIn(b"data-motherbrain-mobile-dashboard", response.data)
-        self.assertNotIn(b"motherbrain-home-page", response.data)
+        self.assertIn(b"motherbrain-dashboard-card-manage-sort", response.data)
+        self.assertIn(f'href="/motherbrain/operations/{operation.id}"'.encode(), response.data)
+        self.assertIn(
+            f'href="/motherbrain/operations/{operation.id}/alp/arrival"'.encode(),
+            response.data,
+        )
+        self.assertIn(
+            f'href="/motherbrain/operations/{operation.id}/alp/departure"'.encode(),
+            response.data,
+        )
+        self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"'.encode(), response.data)
+        self.assertIn(
+            f'href="/motherbrain/parking-rules?operation_id={operation.id}"'.encode(),
+            response.data,
+        )
+        self.assertIn(
+            f'href="/motherbrain/gateway-matrix?operation_id={operation.id}"'.encode(),
+            response.data,
+        )
+        self.assertIn(
+            f'href="/motherbrain/master-schedule?operation_id={operation.id}"'.encode(),
+            response.data,
+        )
+        self.assertIn(
+            f'href="/motherbrain/sort-timeline?operation_id={operation.id}"'.encode(),
+            response.data,
+        )
+        self.assertIn(
+            f'href="/motherbrain/flight-api-test?operation_id={operation.id}"'.encode(),
+            response.data,
+        )
+        self.assertIn(
+            f'href="/motherbrain/flight-api-review?operation_id={operation.id}"'.encode(),
+            response.data,
+        )
+        self.assertIn(
+            f'href="/portal/manage?operation_id={operation.id}"'.encode(),
+            response.data,
+        )
+        self.assertIn(
+            f'href="/motherbrain/permissions?operation_id={operation.id}"'.encode(),
+            response.data,
+        )
+
+    def test_motherbrain_dashboard_tiles_include_expected_pages(self):
+        response = self.client.get("/motherbrain", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 200)
         self.assertIn(b"data-mobile-alert-nav", response.data)
         self.assertIn(b"data-motherbrain-alert-tray", response.data)
-        self.assertIn(b"data-motherbrain-mobile-nav", response.data)
         for nav_label in (
             b"Manage Sort",
             b"Arrival Planning",
@@ -1458,8 +1496,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
 
         home_response = self.client.get("/motherbrain", follow_redirects=False)
-        self.assertEqual(home_response.status_code, 302)
-        self.assertEqual(home_response.location, "/motherbrain/manage-sort")
+        self.assertEqual(home_response.status_code, 200)
+        self.assertIn(b"data-motherbrain-dashboard", home_response.data)
 
     def test_motherbrain_auto_poll_widget_only_displays_on_manage_api(self):
         local_now = current_gateway_local_datetime(self.rfd_gateway)
@@ -1625,7 +1663,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             f"RFD NIGHT {sort_date.month}/{sort_date.day}/{sort_date.year % 100:02d}".encode(),
             response.data,
         )
-        self.assertIn(f'href="/motherbrain/operations/{existing.id}"'.encode(), response.data)
+        self.assertIn(f'href="/motherbrain?operation_id={existing.id}"'.encode(), response.data)
         self.assertIn(f'href="/neosektor?operation_id={existing.id}"'.encode(), response.data)
 
     def test_rfd_hub_multiple_active_sorts_render_selector_and_update_launch_context(self):
@@ -1642,7 +1680,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn('class="rfd-active-sort-select"', html)
         self.assertIn(f'value="{day_operation.id}"', html)
         self.assertIn(f'value="{night_operation.id}" selected', html)
-        self.assertIn(f'href="/motherbrain/operations/{night_operation.id}"', html)
+        self.assertIn(f'href="/motherbrain?operation_id={night_operation.id}"', html)
         self.assertIn(f'href="/neosektor?operation_id={night_operation.id}"', html)
         self.assertIn(f'href="/neoermac?operation_id={night_operation.id}"', html)
         self.assertIn(f'href="/neoscorpion?operation_id={night_operation.id}"', html)
@@ -1909,8 +1947,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.session.commit()
 
         motherbrain_home = self.client.get("/motherbrain", follow_redirects=False)
-        self.assertEqual(motherbrain_home.status_code, 302)
-        self.assertEqual(motherbrain_home.location, "/motherbrain/manage-sort")
+        self.assertEqual(motherbrain_home.status_code, 200)
+        self.assertIn(b"motherbrain-home-page", motherbrain_home.data)
+        self.assertIn(b"data-motherbrain-dashboard", motherbrain_home.data)
 
         get_paths = (
             "/motherbrain/gateway-matrix",

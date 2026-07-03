@@ -566,6 +566,15 @@ PERMISSION_RULE_ITEMS = (
     ),
     (
         "motherbrain",
+        "neomotherbrain.dashboard",
+        "Dashboard",
+        "NeoMotherBrain dashboard tile landing page.",
+        {
+            "view": "neomotherbrain.dashboard.view",
+        },
+    ),
+    (
+        "motherbrain",
         "neomotherbrain.permission_rules",
         "Permission Rules",
         "NeoApps permission rule editor.",

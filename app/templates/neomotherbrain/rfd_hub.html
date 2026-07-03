@@ -52,7 +52,7 @@
         {% endif %}
 
         {% if can_enter_motherbrain %}
-        <a class="rfd-node-tile rfd-node-motherbrain rfd-motherbrain-launch rfd-motherbrain-launch-desktop" href="{{ url_for('neomotherbrain.operation_detail', operation_id=selected_operation_id) if selected_operation_id else url_for('neomotherbrain.manage_sort') }}" aria-label="NeoMotherBrain">
+        <a class="rfd-node-tile rfd-node-motherbrain rfd-motherbrain-launch rfd-motherbrain-launch-desktop" href="{{ url_for('neomotherbrain.motherbrain', operation_id=selected_operation_id) if selected_operation_id else url_for('neomotherbrain.motherbrain') }}" aria-label="NeoMotherBrain">
             {{ node_card("motherbrain", "MotherBrain", "motherbrain") }}
         </a>
         <a class="rfd-node-tile rfd-node-motherbrain rfd-motherbrain-launch rfd-motherbrain-launch-mobile" href="{{ url_for('neomotherbrain.manage_sort', operation_id=selected_operation_id) if selected_operation_id else url_for('neomotherbrain.manage_sort') }}" aria-label="NeoMotherBrain mobile menu">

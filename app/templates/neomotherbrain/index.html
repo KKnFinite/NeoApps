@@ -4,7 +4,10 @@
 {% block title %}MotherBrain | NeoApps{% endblock %}
 
 {% block content %}
-{% set selected_operation = current_sort_operations[0] if current_sort_operations else none %}
+{% set selected_operation = selected_operation|default(none) %}
+{% if not selected_operation and current_sort_operations %}
+{% set selected_operation = current_sort_operations[0] %}
+{% endif %}
 <section class="motherbrain-landing" aria-label="MotherBrain home">
     <div class="motherbrain-screen-logo" aria-label="NeoMotherBrain icon">
         <img src="{{ url_for('static', filename='images/icons/neomotherbrain/inapp/neomotherbrain-inapp-256.png') }}" alt="NeoMotherBrain icon">
@@ -35,8 +38,8 @@
             <p class="muted centered-empty-message">No active sort selected.</p>
             {% endif %}
         </section>
-        <div class="motherbrain-dashboard-grid" data-motherbrain-mobile-dashboard aria-label="MotherBrain dashboard actions">
-            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-manage-sort" href="{{ url_for('neomotherbrain.manage_sort') }}" data-motherbrain-mobile-tile="manage-sort">
+        <div class="motherbrain-dashboard-grid" data-motherbrain-dashboard aria-label="MotherBrain dashboard actions">
+            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-manage-sort" href="{{ url_for('neomotherbrain.operation_detail', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.manage_sort') }}" data-motherbrain-dashboard-tile="manage-sort">
                 <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M4 5h16v3H4V5Zm0 5h10v3H4v-3Zm0 5h16v3H4v-3Zm13-5h3v3h-3v-3Z"/></svg>
                 </span>
@@ -44,7 +47,7 @@
                     <strong>MANAGE SORT</strong>
                 </span>
             </a>
-            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-arrival-planning" href="{{ url_for('neomotherbrain.alp_import', operation_id=selected_operation.id, mission_type='arrival') if selected_operation else url_for('neomotherbrain.manage_sort') }}" data-motherbrain-mobile-tile="arrival-planning">
+            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-arrival-planning" href="{{ url_for('neomotherbrain.alp_import', operation_id=selected_operation.id, mission_type='arrival') if selected_operation else url_for('neomotherbrain.manage_sort') }}" data-motherbrain-dashboard-tile="arrival-planning">
                 <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M3 11.5 21 4l-5.2 16-4-6.4-6.8 2.2 3-4.3H3Z"/></svg>
                 </span>
@@ -52,7 +55,7 @@
                     <strong>ARRIVAL PLANNING</strong>
                 </span>
             </a>
-            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-departure-planning" href="{{ url_for('neomotherbrain.alp_import', operation_id=selected_operation.id, mission_type='departure') if selected_operation else url_for('neomotherbrain.manage_sort') }}" data-motherbrain-mobile-tile="departure-planning">
+            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-departure-planning" href="{{ url_for('neomotherbrain.alp_import', operation_id=selected_operation.id, mission_type='departure') if selected_operation else url_for('neomotherbrain.manage_sort') }}" data-motherbrain-dashboard-tile="departure-planning">
                 <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M21 12.5 3 20l5.2-16 4 6.4 6.8-2.2-3 4.3h5Z"/></svg>
                 </span>
@@ -60,7 +63,7 @@
                     <strong>DEPARTURE PLANNING</strong>
                 </span>
             </a>
-            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-parking" href="{{ url_for('neomotherbrain.parking_plan') }}" data-motherbrain-mobile-tile="parking-plan">
+            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-parking" href="{{ url_for('neomotherbrain.parking_plan_operation', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.parking_plan') }}" data-motherbrain-dashboard-tile="parking-plan">
                 <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M5 4h14v16H5V4Zm2 2v12h10V6H7Zm2 2h4a3 3 0 0 1 0 6h-2v3H9V8Zm2 2v2h2a1 1 0 0 0 0-2h-2Z"/></svg>
                 </span>
@@ -69,7 +72,7 @@
                 </span>
             </a>
             {% if user_can("motherbrain.parking_rules.view") %}
-            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-parking-rules" href="{{ url_for('neomotherbrain.parking_rules', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.parking_rules') }}" data-motherbrain-mobile-tile="parking-rules">
+            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-parking-rules" href="{{ url_for('neomotherbrain.parking_rules', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.parking_rules') }}" data-motherbrain-dashboard-tile="parking-rules">
                 <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5V4Zm9 1.8V9h3.2L14 5.8ZM8 11h8v2H8v-2Zm0 4h8v2H8v-2Zm0-8h4v2H8V7Z"/></svg>
                 </span>
@@ -79,7 +82,7 @@
             </a>
             {% endif %}
             {% if can_manage_system(current_user) %}
-            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-sort-timeline" href="{{ url_for('neomotherbrain.sort_timeline') }}" data-motherbrain-mobile-tile="sort-timeline">
+            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-sort-timeline" href="{{ url_for('neomotherbrain.sort_timeline', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.sort_timeline') }}" data-motherbrain-dashboard-tile="sort-timeline">
                 <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M7 3h2v2h6V3h2v2h3v16H4V5h3V3Zm11 8H6v8h12v-8ZM6 7v2h12V7H6Zm2 6h3v3H8v-3Z"/></svg>
                 </span>
@@ -88,7 +91,7 @@
                 </span>
             </a>
             {% endif %}
-            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-manage-api" href="{{ url_for('neomotherbrain.flight_api_test', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.flight_api_test') }}" data-motherbrain-mobile-tile="manage-api">
+            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-manage-api" href="{{ url_for('neomotherbrain.flight_api_test', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.flight_api_test') }}" data-motherbrain-dashboard-tile="manage-api">
                 <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M5 5h14v14H5V5Zm2 2v10h10V7H7Zm2 2h2v2H9V9Zm4 0h2v2h-2V9Zm-4 4h6v2H9v-2Z"/></svg>
                 </span>
@@ -97,7 +100,7 @@
                 </span>
             </a>
             {% if user_can("neomotherbrain.flight_api_review.view") %}
-            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-unmatched" href="{{ url_for('neomotherbrain.flight_api_review', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.flight_api_review') }}" data-motherbrain-mobile-tile="unmatched-queue">
+            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-unmatched" href="{{ url_for('neomotherbrain.flight_api_review', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.flight_api_review') }}" data-motherbrain-dashboard-tile="unmatched-queue">
                 <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M12 2 22 20H2L12 2Zm0 4.2L5.4 18h13.2L12 6.2ZM11 10h2v4h-2v-4Zm0 5h2v2h-2v-2Z"/></svg>
                 </span>
@@ -106,7 +109,7 @@
                 </span>
             </a>
             {% endif %}
-            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-gateway-matrix" href="{{ url_for('neomotherbrain.gateway_matrix') }}" data-motherbrain-mobile-tile="gateway-matrix">
+            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-gateway-matrix" href="{{ url_for('neomotherbrain.gateway_matrix', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.gateway_matrix') }}" data-motherbrain-dashboard-tile="gateway-matrix">
                 <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7ZM6 6v3h3V6H6Zm9 0v3h3V6h-3ZM6 15v3h3v-3H6Zm9 0v3h3v-3h-3Z"/></svg>
                 </span>
@@ -114,7 +117,7 @@
                     <strong>GATEWAY MATRIX</strong>
                 </span>
             </a>
-            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-master-schedule" href="{{ url_for('neomotherbrain.master_schedule') }}" data-motherbrain-mobile-tile="master-schedule">
+            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-master-schedule" href="{{ url_for('neomotherbrain.master_schedule', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.master_schedule') }}" data-motherbrain-dashboard-tile="master-schedule">
                 <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M5 4h14v16H5V4Zm2 3v2h10V7H7Zm0 4v2h10v-2H7Zm0 4v2h6v-2H7Z"/></svg>
                 </span>
@@ -123,7 +126,7 @@
                 </span>
             </a>
             {% if can_manage_system(current_user) %}
-            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-portal-management" href="{{ url_for('auth.portal_management') }}" data-motherbrain-mobile-tile="portal-management">
+            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-portal-management" href="{{ url_for('auth.portal_management', operation_id=selected_operation.id) if selected_operation else url_for('auth.portal_management') }}" data-motherbrain-dashboard-tile="portal-management">
                 <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm-7 8a7 7 0 0 1 14 0H5Z"/></svg>
                 </span>
@@ -131,7 +134,7 @@
                     <strong>PORTAL MANAGEMENT</strong>
                 </span>
             </a>
-            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-permission-rules" href="{{ url_for('auth.permission_rules') }}" data-motherbrain-mobile-tile="permission-rules">
+            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-permission-rules" href="{{ url_for('auth.permission_rules', operation_id=selected_operation.id) if selected_operation else url_for('auth.permission_rules') }}" data-motherbrain-dashboard-tile="permission-rules">
                 <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M12 2 20 5v6c0 5-3.4 9-8 11-4.6-2-8-6-8-11V5l8-3Zm0 2.2L6 6.4V11c0 3.7 2.3 6.8 6 8.6 3.7-1.8 6-4.9 6-8.6V6.4l-6-2.2Z"/></svg>
                 </span>
