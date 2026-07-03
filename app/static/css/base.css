@@ -9252,11 +9252,12 @@ body.blueprint-neostaffing {
 }
 
 .motherbrain-dashboard-grid {
-    display: none;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
     gap: 14px;
     justify-content: center;
-    width: 100%;
+    width: min(100%, 940px);
+    margin: 0 auto;
 }
 
 .motherbrain-current-sort-overview {
@@ -9417,6 +9418,24 @@ body.blueprint-neostaffing {
 .motherbrain-menu {
     justify-content: center;
     margin: 0;
+}
+
+@media (min-width: 769px) {
+    body.motherbrain-home-page:not(.mobile-app-chrome) .motherbrain-landing {
+        width: 100%;
+        justify-items: stretch;
+    }
+
+    body.motherbrain-home-page:not(.mobile-app-chrome) .motherbrain-dashboard-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        align-items: stretch;
+    }
+
+    body.motherbrain-home-page:not(.mobile-app-chrome) .motherbrain-dashboard-card {
+        aspect-ratio: 1 / 1;
+        min-height: 0;
+        padding: 16px 12px;
+    }
 }
 
 .node-strip p {

@@ -114,6 +114,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         dashboard_body = response.data.split(b'<main class="content">', 1)[1].split(b"</main>", 1)[0]
         self.assertIn(b"motherbrain-home-page", response.data)
         self.assertIn(b"data-motherbrain-dashboard", dashboard_body)
+        self.assertIn(b"data-motherbrain-dashboard-body", dashboard_body)
         self.assertNotIn(b"data-motherbrain-mobile-dashboard", dashboard_body)
         self.assertNotIn(b"motherbrain-screen-logo", dashboard_body)
         self.assertNotIn(b"motherbrain-dashboard-title", dashboard_body)
@@ -122,6 +123,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"current-sort-overview-card", dashboard_body)
         self.assertNotIn(b"CURRENT SORT OVERVIEW", dashboard_body)
         self.assertNotIn(b"MIN WINDOW", dashboard_body)
+        self.assertGreaterEqual(dashboard_body.count(b"motherbrain-dashboard-card"), 12)
         self.assertIn(b"motherbrain-dashboard-card-manage-sort", dashboard_body)
         self.assertIn(f'href="/motherbrain/operations/{operation.id}"'.encode(), dashboard_body)
         self.assertIn(
@@ -170,22 +172,28 @@ class MotherBrainRoutesTest(unittest.TestCase):
         response = self.client.get("/motherbrain", follow_redirects=False)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"data-motherbrain-dashboard", response.data)
-        for tile_key in (
-            b"manage-sort",
-            b"arrival-planning",
-            b"departure-planning",
-            b"parking-plan",
-            b"parking-rules",
-            b"gateway-matrix",
-            b"master-schedule",
-            b"sort-timeline",
-            b"manage-api",
-            b"unmatched-queue",
-            b"portal-management",
-            b"permission-rules",
-        ):
+        dashboard_body = response.data.split(b'<main class="content">', 1)[1].split(b"</main>", 1)[0]
+        self.assertIn(b"data-motherbrain-dashboard", dashboard_body)
+        self.assertIn(b"data-motherbrain-dashboard-body", dashboard_body)
+        self.assertGreater(len(dashboard_body.strip()), 1000)
+        expected_tiles = (
+            (b"manage-sort", b"MANAGE SORT"),
+            (b"arrival-planning", b"ARRIVAL PLANNING"),
+            (b"departure-planning", b"DEPARTURE PLANNING"),
+            (b"parking-plan", b"PARKING PLAN"),
+            (b"parking-rules", b"PARKING RULES"),
+            (b"gateway-matrix", b"GATEWAY MATRIX"),
+            (b"master-schedule", b"MASTER SCHEDULE"),
+            (b"sort-timeline", b"SORT TIMELINE"),
+            (b"manage-api", b"MANAGE API"),
+            (b"unmatched-queue", b"UNMATCHED QUEUE"),
+            (b"portal-management", b"PORTAL MANAGEMENT"),
+            (b"permission-rules", b"PERMISSION RULES"),
+        )
+        for tile_key, label in expected_tiles:
             self.assertIn(b'data-motherbrain-dashboard-tile="' + tile_key + b'"', response.data)
+            self.assertIn(b'data-motherbrain-dashboard-tile="' + tile_key + b'"', dashboard_body)
+            self.assertIn(label, dashboard_body)
         self.assertIn(b"data-mobile-alert-nav", response.data)
         self.assertIn(b"data-motherbrain-alert-tray", response.data)
         for nav_label in (
@@ -203,6 +211,15 @@ class MotherBrainRoutesTest(unittest.TestCase):
             b"Permission Rules",
         ):
             self.assertIn(nav_label, response.data)
+
+        css = Path("app/static/css/base.css").read_text()
+        self.assertIn(".motherbrain-dashboard-grid {\n    display: grid;", css)
+        self.assertNotIn(".motherbrain-dashboard-grid {\n    display: none;", css)
+        self.assertIn(
+            "body.motherbrain-home-page:not(.mobile-app-chrome) .motherbrain-dashboard-card",
+            css,
+        )
+        self.assertIn("aspect-ratio: 1 / 1;", css)
 
     def test_motherbrain_header_navigation_routes_work(self):
         routes = {

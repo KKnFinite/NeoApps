@@ -8,7 +8,7 @@
 {% set selected_operation = current_sort_operations[0] %}
 {% endif %}
 <section class="motherbrain-landing" aria-label="MotherBrain home">
-    <nav class="motherbrain-dashboard-grid" data-motherbrain-dashboard aria-label="MotherBrain dashboard actions">
+    <nav class="motherbrain-dashboard-grid" data-motherbrain-dashboard data-motherbrain-dashboard-body aria-label="MotherBrain dashboard actions">
             <a class="motherbrain-dashboard-card motherbrain-dashboard-card-manage-sort" href="{{ url_for('neomotherbrain.operation_detail', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.manage_sort') }}" data-motherbrain-dashboard-tile="manage-sort">
                 <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M4 5h16v3H4V5Zm0 5h10v3H4v-3Zm0 5h16v3H4v-3Zm13-5h3v3h-3v-3Z"/></svg>
@@ -51,6 +51,22 @@
                 </span>
             </a>
             {% endif %}
+            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-gateway-matrix" href="{{ url_for('neomotherbrain.gateway_matrix', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.gateway_matrix') }}" data-motherbrain-dashboard-tile="gateway-matrix">
+                <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7ZM6 6v3h3V6H6Zm9 0v3h3V6h-3ZM6 15v3h3v-3H6Zm9 0v3h3v-3h-3Z"/></svg>
+                </span>
+                <span class="motherbrain-dashboard-card-copy">
+                    <strong>GATEWAY MATRIX</strong>
+                </span>
+            </a>
+            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-master-schedule" href="{{ url_for('neomotherbrain.master_schedule', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.master_schedule') }}" data-motherbrain-dashboard-tile="master-schedule">
+                <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M5 4h14v16H5V4Zm2 3v2h10V7H7Zm0 4v2h10v-2H7Zm0 4v2h6v-2H7Z"/></svg>
+                </span>
+                <span class="motherbrain-dashboard-card-copy">
+                    <strong>MASTER SCHEDULE</strong>
+                </span>
+            </a>
             {% if can_manage_system(current_user) %}
             <a class="motherbrain-dashboard-card motherbrain-dashboard-card-sort-timeline" href="{{ url_for('neomotherbrain.sort_timeline', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.sort_timeline') }}" data-motherbrain-dashboard-tile="sort-timeline">
                 <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
@@ -79,22 +95,6 @@
                 </span>
             </a>
             {% endif %}
-            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-gateway-matrix" href="{{ url_for('neomotherbrain.gateway_matrix', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.gateway_matrix') }}" data-motherbrain-dashboard-tile="gateway-matrix">
-                <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7ZM6 6v3h3V6H6Zm9 0v3h3V6h-3ZM6 15v3h3v-3H6Zm9 0v3h3v-3h-3Z"/></svg>
-                </span>
-                <span class="motherbrain-dashboard-card-copy">
-                    <strong>GATEWAY MATRIX</strong>
-                </span>
-            </a>
-            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-master-schedule" href="{{ url_for('neomotherbrain.master_schedule', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.master_schedule') }}" data-motherbrain-dashboard-tile="master-schedule">
-                <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24"><path d="M5 4h14v16H5V4Zm2 3v2h10V7H7Zm0 4v2h10v-2H7Zm0 4v2h6v-2H7Z"/></svg>
-                </span>
-                <span class="motherbrain-dashboard-card-copy">
-                    <strong>MASTER SCHEDULE</strong>
-                </span>
-            </a>
             {% if can_manage_system(current_user) %}
             <a class="motherbrain-dashboard-card motherbrain-dashboard-card-portal-management" href="{{ url_for('auth.portal_management', operation_id=selected_operation.id) if selected_operation else url_for('auth.portal_management') }}" data-motherbrain-dashboard-tile="portal-management">
                 <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
