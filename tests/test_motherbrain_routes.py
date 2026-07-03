@@ -111,57 +111,81 @@ class MotherBrainRoutesTest(unittest.TestCase):
         response = self.client.get(f"/motherbrain?operation_id={operation.id}", follow_redirects=False)
 
         self.assertEqual(response.status_code, 200)
+        dashboard_body = response.data.split(b'<main class="content">', 1)[1].split(b"</main>", 1)[0]
         self.assertIn(b"motherbrain-home-page", response.data)
-        self.assertIn(b"data-motherbrain-dashboard", response.data)
-        self.assertNotIn(b"data-motherbrain-mobile-dashboard", response.data)
-        self.assertIn(b"motherbrain-dashboard-card-manage-sort", response.data)
-        self.assertIn(f'href="/motherbrain/operations/{operation.id}"'.encode(), response.data)
+        self.assertIn(b"data-motherbrain-dashboard", dashboard_body)
+        self.assertNotIn(b"data-motherbrain-mobile-dashboard", dashboard_body)
+        self.assertNotIn(b"motherbrain-screen-logo", dashboard_body)
+        self.assertNotIn(b"motherbrain-dashboard-title", dashboard_body)
+        self.assertNotIn(b"motherbrain-dashboard-brand", dashboard_body)
+        self.assertNotIn(b"motherbrain-current-sort-overview", dashboard_body)
+        self.assertNotIn(b"current-sort-overview-card", dashboard_body)
+        self.assertNotIn(b"CURRENT SORT OVERVIEW", dashboard_body)
+        self.assertNotIn(b"MIN WINDOW", dashboard_body)
+        self.assertIn(b"motherbrain-dashboard-card-manage-sort", dashboard_body)
+        self.assertIn(f'href="/motherbrain/operations/{operation.id}"'.encode(), dashboard_body)
         self.assertIn(
             f'href="/motherbrain/operations/{operation.id}/alp/arrival"'.encode(),
-            response.data,
+            dashboard_body,
         )
         self.assertIn(
             f'href="/motherbrain/operations/{operation.id}/alp/departure"'.encode(),
-            response.data,
+            dashboard_body,
         )
-        self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"'.encode(), response.data)
+        self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"'.encode(), dashboard_body)
         self.assertIn(
             f'href="/motherbrain/parking-rules?operation_id={operation.id}"'.encode(),
-            response.data,
+            dashboard_body,
         )
         self.assertIn(
             f'href="/motherbrain/gateway-matrix?operation_id={operation.id}"'.encode(),
-            response.data,
+            dashboard_body,
         )
         self.assertIn(
             f'href="/motherbrain/master-schedule?operation_id={operation.id}"'.encode(),
-            response.data,
+            dashboard_body,
         )
         self.assertIn(
             f'href="/motherbrain/sort-timeline?operation_id={operation.id}"'.encode(),
-            response.data,
+            dashboard_body,
         )
         self.assertIn(
             f'href="/motherbrain/flight-api-test?operation_id={operation.id}"'.encode(),
-            response.data,
+            dashboard_body,
         )
         self.assertIn(
             f'href="/motherbrain/flight-api-review?operation_id={operation.id}"'.encode(),
-            response.data,
+            dashboard_body,
         )
         self.assertIn(
             f'href="/portal/manage?operation_id={operation.id}"'.encode(),
-            response.data,
+            dashboard_body,
         )
         self.assertIn(
             f'href="/motherbrain/permissions?operation_id={operation.id}"'.encode(),
-            response.data,
+            dashboard_body,
         )
 
     def test_motherbrain_dashboard_tiles_include_expected_pages(self):
         response = self.client.get("/motherbrain", follow_redirects=False)
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b"data-motherbrain-dashboard", response.data)
+        for tile_key in (
+            b"manage-sort",
+            b"arrival-planning",
+            b"departure-planning",
+            b"parking-plan",
+            b"parking-rules",
+            b"gateway-matrix",
+            b"master-schedule",
+            b"sort-timeline",
+            b"manage-api",
+            b"unmatched-queue",
+            b"portal-management",
+            b"permission-rules",
+        ):
+            self.assertIn(b'data-motherbrain-dashboard-tile="' + tile_key + b'"', response.data)
         self.assertIn(b"data-mobile-alert-nav", response.data)
         self.assertIn(b"data-motherbrain-alert-tray", response.data)
         for nav_label in (

@@ -385,7 +385,8 @@ class AccessControlTest(unittest.TestCase):
         self.assertIn(b"MANAGE SORT", response.data)
         self.assertIn(b"data-motherbrain-dashboard", response.data)
         self.assertIn(b'src="/static/images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png"', response.data)
-        self.assertIn(b"motherbrain-dashboard-brand neo-brand-title", response.data)
+        self.assertNotIn(b"motherbrain-dashboard-brand neo-brand-title", response.data)
+        self.assertNotIn(b"motherbrain-current-sort-overview", response.data)
         self.assertNotIn(b"motherbrain_logo1.png", response.data)
 
     def test_approved_rfd_user_can_launch_neosektor(self):

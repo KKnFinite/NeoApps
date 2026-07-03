@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_neo_brand.html" import neo_brand %}
 
 {% block title %}MotherBrain | NeoApps{% endblock %}
 
@@ -9,36 +8,7 @@
 {% set selected_operation = current_sort_operations[0] %}
 {% endif %}
 <section class="motherbrain-landing" aria-label="MotherBrain home">
-    <div class="motherbrain-screen-logo" aria-label="NeoMotherBrain icon">
-        <img src="{{ url_for('static', filename='images/icons/neomotherbrain/inapp/neomotherbrain-inapp-256.png') }}" alt="NeoMotherBrain icon">
-    </div>
-    <section class="motherbrain-dashboard" aria-labelledby="motherbrain-dashboard-title">
-        <h1 id="motherbrain-dashboard-title" class="motherbrain-dashboard-title mobile-shell-duplicate-title">
-            <span class="motherbrain-dashboard-brand neo-brand-title neo-brand neo-brand--motherbrain neo-node-name neo-node-motherbrain brand-inline-name node-motherbrain" aria-label="NeoMotherBrain">
-                <span class="neo-brand__neo neo-word neo-brand-title__neo">NEO</span><span class="neo-brand__node node-word neo-brand-title__node neo-brand-title__node--motherbrain">MOTHERBRAIN</span>
-            </span>
-            <span class="motherbrain-dashboard-title-suffix">DASHBOARD</span>
-        </h1>
-        <section class="motherbrain-current-sort-overview" aria-labelledby="current-sort-overview-title">
-            <div class="section-heading">
-                <h2 id="current-sort-overview-title">CURRENT SORT OVERVIEW</h2>
-                <p class="muted">{{ gateway.code }} {{ sort_date }}</p>
-            </div>
-            {% if current_sort_operations %}
-            <div class="current-sort-overview-grid">
-                {% for operation in current_sort_operations %}
-                <a class="current-sort-overview-card" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">
-                    <span>{{ operation.sort_name|upper }}</span>
-                    <strong>{{ operation.missions|length }} MISSION{{ "" if operation.missions|length == 1 else "S" }}</strong>
-                    <small>{{ operation.window_minutes }} MIN WINDOW</small>
-                </a>
-                {% endfor %}
-            </div>
-            {% else %}
-            <p class="muted centered-empty-message">No active sort selected.</p>
-            {% endif %}
-        </section>
-        <div class="motherbrain-dashboard-grid" data-motherbrain-dashboard aria-label="MotherBrain dashboard actions">
+    <nav class="motherbrain-dashboard-grid" data-motherbrain-dashboard aria-label="MotherBrain dashboard actions">
             <a class="motherbrain-dashboard-card motherbrain-dashboard-card-manage-sort" href="{{ url_for('neomotherbrain.operation_detail', operation_id=selected_operation.id) if selected_operation else url_for('neomotherbrain.manage_sort') }}" data-motherbrain-dashboard-tile="manage-sort">
                 <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M4 5h16v3H4V5Zm0 5h10v3H4v-3Zm0 5h16v3H4v-3Zm13-5h3v3h-3v-3Z"/></svg>
@@ -143,7 +113,6 @@
                 </span>
             </a>
             {% endif %}
-        </div>
-    </section>
+    </nav>
 </section>
 {% endblock %}
