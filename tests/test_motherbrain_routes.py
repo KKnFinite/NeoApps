@@ -64,6 +64,7 @@ from app.services.sort_timeline import (
     record_sort_timeline_api_attempt,
     sort_timeline_context,
 )
+from app.services.sort_date_operations import generate_sort_date_operation_from_master
 
 
 class MotherBrainRoutesTest(unittest.TestCase):
@@ -1884,7 +1885,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         updated_mission = db.session.get(SortDateMission, mission.id)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(updated_mission.destination, "ONT")
-        self.assertEqual(updated_mission.planned_datetime_local, datetime(2026, 6, 1, 3, 20))
+        self.assertEqual(updated_mission.planned_datetime_local, datetime(2026, 6, 2, 3, 20))
 
     def test_manage_sort_empty_state_is_simple_centered_message(self):
         response = self.client.get("/motherbrain/manage-sort")
@@ -2217,6 +2218,52 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertLess(
             night_sort_time_key(time(0, 43), "day"),
             night_sort_time_key(time(23, 34), "day"),
+        )
+
+    def test_night_sort_generation_rolls_post_midnight_missions_to_next_local_date(self):
+        self._add_master(
+            flight_number="ARR0005",
+            mission_type="arrival",
+            origin="SDF",
+            planned_time_local=time(0, 5),
+            active_days="thursday",
+        )
+        self._add_master(
+            flight_number="DEP0054",
+            mission_type="departure",
+            destination="MEM",
+            planned_time_local=time(0, 54),
+            active_days="thursday",
+        )
+        db.session.commit()
+
+        operation = generate_sort_date_operation_from_master(
+            date(2026, 7, 2),
+            "RFD",
+            "night",
+        )
+        missions = {
+            mission.flight_number: mission
+            for mission in SortDateMission.query.filter_by(
+                sort_date_operation_id=operation.id,
+            ).all()
+        }
+
+        self.assertEqual(
+            missions["ARR0005"].planned_datetime_local,
+            datetime(2026, 7, 3, 0, 5),
+        )
+        self.assertEqual(
+            missions["ARR0005"].planned_datetime_utc,
+            datetime(2026, 7, 3, 5, 5),
+        )
+        self.assertEqual(
+            missions["DEP0054"].planned_datetime_local,
+            datetime(2026, 7, 3, 0, 54),
+        )
+        self.assertEqual(
+            missions["DEP0054"].planned_datetime_utc,
+            datetime(2026, 7, 3, 5, 54),
         )
 
     def test_master_schedule_night_sort_orders_late_night_before_after_midnight(self):
@@ -5010,6 +5057,43 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"22:11 Local Jun 23", response.data)
         self.assertIn(b"- -&gt; N612UP", response.data)
 
+    def test_alp_preview_and_apply_show_post_midnight_night_sort_local_date(self):
+        operation = self._operation(sort_date=date(2026, 7, 2), sort_name="night")
+        mission = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS0910",
+            origin="EWR",
+            assigned_tail_number="N910UP",
+            planned_datetime_local=datetime(2026, 7, 3, 0, 5),
+            planned_datetime_utc=datetime(2026, 7, 3, 5, 5),
+            eta_datetime_utc=datetime(2026, 7, 3, 5, 5),
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+
+        preview = self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            data={
+                "paste_text": "03-JUL-2026\tUPS910\tEWR\tN910UP\tA01\tScheduled\t05:05 (S)",
+                "alp_action": "preview",
+            },
+        )
+        apply = self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            data={
+                "paste_text": "03-JUL-2026\tUPS910\tEWR\tN910UP\tA01\tScheduled\t05:54 (S)",
+                "alp_action": "apply",
+            },
+        )
+        db.session.refresh(mission)
+
+        self.assertEqual(preview.status_code, 200)
+        self.assertIn(b"00:05 Local Jul 3", preview.data)
+        self.assertEqual(apply.status_code, 200)
+        self.assertIn(b"00:54 Local Jul 3", apply.data)
+        self.assertEqual(mission.eta_datetime_utc, datetime(2026, 7, 3, 5, 54))
+
     def test_alp_arrival_repaste_preview_shows_eta_change(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
         mission = self._mission(
@@ -5626,6 +5710,33 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"ADD TO CURRENT SORT", response.data)
         self.assertIn(b">HOT</button>", response.data)
         self.assertIn(b"IGNORE", response.data)
+
+    def test_alp_9xxx_same_tail_normal_outbound_does_not_create_unmatched_row(self):
+        operation = self._operation(sort_date=date(2026, 7, 2), sort_name="night")
+        normal_outbound = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="UPS1382",
+            destination="MEM",
+            assigned_tail_number="N409UP",
+            planned_datetime_local=datetime(2026, 7, 3, 1, 51),
+            planned_datetime_utc=datetime(2026, 7, 3, 6, 51),
+        )
+        db.session.add_all([operation, normal_outbound])
+        db.session.commit()
+
+        paste = "03-JUL-2026\tUPS9329\tRFD\tN409UP\tA01\tScheduled\t05:05 (S)"
+        preview = preview_alp_paste(operation, "departure", paste)
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/departure",
+            data={"paste_text": paste, "alp_action": "preview"},
+        )
+
+        self.assertEqual(preview["unmatched_rows"], [])
+        self.assertEqual(preview["summary"]["unmatched"], 0)
+        self.assertEqual(preview["summary"]["suppressed_hot"], 1)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(FlightApiReviewItem.query.filter_by(review_status="pending").count(), 0)
 
     def test_api_planning_time_mismatch_detail_shows_current_and_api_times(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
@@ -8379,6 +8490,55 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(locked["N101UP"]["reason"], "HOT parked tail fixed.")
         self.assertTrue(any(position in {"A02", "A03", "A04"} for position in suggested_positions))
         self.assertFalse(all(position in {"A05", "A06", "A07", "A08"} for position in suggested_positions))
+
+    def test_parking_plan_hot_9xxx_tail_shows_real_outbound_departure(self):
+        operation = self._parking_operation()
+        hot_positioning = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="UPS9329",
+            origin="RFD",
+            destination="RFD",
+            assigned_tail_number="N409UP",
+            planned_datetime_local=datetime(2026, 6, 19, 0, 5),
+            planned_datetime_utc=datetime(2026, 6, 19, 5, 5),
+        )
+        normal_outbound = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="UPS1382",
+            origin="RFD",
+            destination="MEM",
+            assigned_tail_number="N409UP",
+            planned_datetime_local=datetime(2026, 6, 19, 1, 51),
+            planned_datetime_utc=datetime(2026, 6, 19, 6, 51),
+        )
+        db.session.add_all(
+            [
+                hot_positioning,
+                normal_outbound,
+                SortDateTailState(
+                    sort_date=operation.sort_date,
+                    gateway_code=operation.gateway_code,
+                    sort_name=operation.sort_name,
+                    tail_number="N409UP",
+                    aircraft_type="767",
+                    operational_status="hot",
+                ),
+            ]
+        )
+        self._parking_assignment(operation, "N409UP", "A01")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        card_html = self._parking_tail_card_html(response.data.decode(), "N409UP")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("ARR", card_html)
+        self.assertIn("DEP", card_html)
+        self.assertIn("MEM", card_html)
+        self.assertIn("UPS1382", card_html)
+        self.assertNotIn("UPS9329", card_html)
 
     def test_blocked_d01_does_not_block_delta_two_three_four(self):
         operation = self._parking_operation()

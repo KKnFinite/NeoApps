@@ -17,6 +17,7 @@ from app.services.flight_rules import (
     default_required_crew_sections,
     derive_aircraft_type_from_tail_number,
 )
+from app.services.night_sorting import sort_datetime_for_local_time
 
 WAVE_OPTIONS = ("1", "2")
 
@@ -355,6 +356,7 @@ def mission_display_timing_data(mission, operation=None):
 def _build_mission_from_master(operation, master_row, sort_date):
     planned_datetime_local = _planned_datetime_local(
         sort_date,
+        master_row.sort_name,
         master_row.planned_time_local,
     )
     planned_datetime_utc = _planned_datetime_utc(
@@ -405,6 +407,7 @@ def _apply_master_template_to_mission(mission, master_row, operation):
     before = _master_template_snapshot(mission)
     planned_datetime_local = _planned_datetime_local(
         operation.sort_date,
+        master_row.sort_name,
         master_row.planned_time_local,
     )
     planned_datetime_utc = _planned_datetime_utc(
@@ -485,8 +488,8 @@ def _master_updated_after_operation_generation(master_row, operation):
     return master_row.updated_at > operation.generated_at_utc
 
 
-def _planned_datetime_local(sort_date, planned_time_local):
-    return datetime.combine(sort_date, planned_time_local)
+def _planned_datetime_local(sort_date, sort_name, planned_time_local):
+    return sort_datetime_for_local_time(sort_date, sort_name, planned_time_local)
 
 
 def _planned_datetime_utc(planned_datetime_local, timezone):

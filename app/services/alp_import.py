@@ -2,6 +2,8 @@ from collections import Counter, defaultdict
 from datetime import datetime
 import re
 
+from sqlalchemy import func
+
 from app.extensions import db
 from app.models import SortDateMission
 from app.services.flight_api import _utc_to_local_naive as utc_to_local_naive
@@ -47,6 +49,7 @@ def preview_alp_paste(operation, mission_type, paste_text, timezone_name=ALP_TIM
     matched_rows = []
     unmatched_rows = []
     duplicate_rows = []
+    suppressed_hot_rows = []
     invalid_rows = [row for row in parsed_rows if row.get("error")]
     present_keys = {row["flight_key"] for row in valid_rows if row.get("flight_key")}
 
@@ -64,6 +67,14 @@ def preview_alp_paste(operation, mission_type, paste_text, timezone_name=ALP_TIM
                 {**row, "reason": "Multiple current operation missions share this flight."}
             )
         else:
+            if _should_suppress_hot_positioning_row(operation, row):
+                suppressed_hot_rows.append(
+                    {
+                        **row,
+                        "reason": "9xxx HOT positioning row linked to normal outbound mission.",
+                    }
+                )
+                continue
             unmatched_rows.append({**row, "reason": "No current operation mission match."})
 
     missing_missions = [
@@ -81,12 +92,14 @@ def preview_alp_paste(operation, mission_type, paste_text, timezone_name=ALP_TIM
         "missing_missions": missing_missions,
         "duplicate_rows": duplicate_rows,
         "invalid_rows": invalid_rows,
+        "suppressed_hot_rows": suppressed_hot_rows,
         "summary": {
             "matched": len(matched_rows),
             "unmatched": len(unmatched_rows),
             "missing": len(missing_missions),
             "duplicates": len(duplicate_rows),
             "invalid": len(invalid_rows),
+            "suppressed_hot": len(suppressed_hot_rows),
         },
     }
 
@@ -249,6 +262,38 @@ def _missions_by_key(missions):
         if key:
             grouped[key].append(mission)
     return grouped
+
+
+def _should_suppress_hot_positioning_row(operation, row):
+    if not _is_9xxx_flight(row.get("flight_number")):
+        return False
+    tail = str(row.get("tail_number") or "").strip().upper()
+    if not tail:
+        return False
+    row_key = row.get("flight_key") or alp_flight_key(row.get("flight_number"))
+    return bool(_normal_outbound_for_tail(operation, tail, excluded_flight_key=row_key))
+
+
+def _normal_outbound_for_tail(operation, tail_number, excluded_flight_key=None):
+    missions = (
+        SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id,
+            mission_type="departure",
+        )
+        .filter(func.upper(SortDateMission.assigned_tail_number) == tail_number)
+        .order_by(SortDateMission.planned_datetime_utc.asc(), SortDateMission.id.asc())
+        .all()
+    )
+    for mission in missions:
+        mission_key = alp_flight_key(mission.flight_number)
+        if mission_key and mission_key != excluded_flight_key and not mission_key.startswith("9"):
+            return mission
+    return None
+
+
+def _is_9xxx_flight(value):
+    key = alp_flight_key(value)
+    return bool(key and key.startswith("9"))
 
 
 def _matched_row(row, mission):

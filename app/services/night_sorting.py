@@ -1,4 +1,4 @@
-from datetime import time
+from datetime import datetime, timedelta, time
 
 
 NIGHT_SORT_MORNING_CUTOFF = time(12, 0)
@@ -13,6 +13,13 @@ def night_sort_time_key(time_value, sort_name):
         minutes += 24 * 60
 
     return (0, minutes)
+
+
+def sort_datetime_for_local_time(sort_date, sort_name, time_value):
+    local_datetime = datetime.combine(sort_date, time_value)
+    if str(sort_name or "").strip().lower() == "night" and time_value < NIGHT_SORT_MORNING_CUTOFF:
+        return local_datetime + timedelta(days=1)
+    return local_datetime
 
 
 def mission_board_sort_key(mission):

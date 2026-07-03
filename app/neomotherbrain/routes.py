@@ -79,7 +79,11 @@ from app.services.gateway_matrix import (
     operations_for_gateway_date,
     save_gateway_matrix,
 )
-from app.services.night_sorting import master_schedule_sort_key, mission_board_sort_key
+from app.services.night_sorting import (
+    master_schedule_sort_key,
+    mission_board_sort_key,
+    sort_datetime_for_local_time,
+)
 from app.services.permission_rules import permission_access, user_can
 from app.services.parking_plan import (
     ParkingLaneOccupied,
@@ -2376,6 +2380,8 @@ def _planning_review_rows(operation, mission_type, preview=None, settings=None):
         if item.mission_type == mission_type
     ]
     for item in pending_items:
+        if _planning_item_is_suppressed_hot_duplicate(operation, item):
+            continue
         rows.append(_review_item_planning_row(operation, item, settings))
         persisted_keys.add(item.review_key)
 
@@ -2479,6 +2485,34 @@ def _planning_review_payload(item):
     except (TypeError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _planning_item_is_suppressed_hot_duplicate(operation, item):
+    payload = _planning_review_payload(item)
+    source = str(payload.get("source") or getattr(item, "api_status", "") or "").strip().upper()
+    if source != "ALP":
+        return False
+    flight_key = alp_flight_key(getattr(item, "flight_number", None))
+    if not flight_key or not flight_key.startswith("9"):
+        return False
+    tail = str(getattr(item, "tail_number", "") or "").strip().upper()
+    if not tail:
+        return False
+    normal_outbound = (
+        SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id,
+            mission_type="departure",
+        )
+        .filter(func.upper(SortDateMission.assigned_tail_number) == tail)
+        .order_by(SortDateMission.planned_datetime_utc.asc(), SortDateMission.id.asc())
+        .all()
+    )
+    return any(
+        mission_key
+        and mission_key != flight_key
+        and not mission_key.startswith("9")
+        for mission_key in (alp_flight_key(mission.flight_number) for mission in normal_outbound)
+    )
 
 
 def _planning_row_sort_key(row):
@@ -3499,7 +3533,11 @@ def _apply_mission_form(mission, operation, form):
         raise ValueError("Flight number, origin, and destination are required.")
 
     planned_time_local = _parse_time(form["planned_time_local"], "Planned time")
-    planned_datetime_local = datetime.combine(operation.sort_date, planned_time_local)
+    planned_datetime_local = sort_datetime_for_local_time(
+        operation.sort_date,
+        operation.sort_name,
+        planned_time_local,
+    )
 
     mission.sort_date_operation = operation
     mission.sort_date = operation.sort_date

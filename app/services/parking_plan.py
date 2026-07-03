@@ -239,8 +239,9 @@ def tail_rows_for_operation(gateway, operation):
     timezone_name = gateway_timezone(gateway)
     for tail, mission_group in sorted(grouped.items()):
         arrival = _first_mission(mission_group["arrivals"])
-        departure = _first_mission(mission_group["departures"])
         tail_missions = mission_group["arrivals"] + mission_group["departures"]
+        departure = _normal_departure_mission(mission_group["departures"])
+        has_9xxx_positioning = _has_9xxx_mission(tail_missions)
         active_missions = _active_missions_for_tail(
             mission_group["arrivals"],
             mission_group["departures"],
@@ -266,13 +267,26 @@ def tail_rows_for_operation(gateway, operation):
             arrival,
             departure,
         )
-        suppress_arrival_movement = hot_origin_rfd
-        suppress_departure_movement = hot_origin_rfd or operational_status == TAIL_STATUS_SPARE
+        hot_positioning_with_normal_outbound = (
+            operational_status == TAIL_STATUS_HOT
+            and has_9xxx_positioning
+            and departure is not None
+            and not _mission_is_9xxx(departure)
+        )
+        suppress_arrival_movement = hot_origin_rfd or hot_positioning_with_normal_outbound
+        suppress_departure_movement = (
+            operational_status == TAIL_STATUS_SPARE
+            or (hot_origin_rfd and not hot_positioning_with_normal_outbound)
+        )
         display_active_missions = _movement_missions_for_status(
             active_missions,
             suppress_arrival_movement=suppress_arrival_movement,
             suppress_departure_movement=suppress_departure_movement,
         )
+        if hot_positioning_with_normal_outbound:
+            display_active_missions = [
+                mission for mission in display_active_missions if not _mission_is_9xxx(mission)
+            ]
         assigned_position = _assignment_position_label(assignment)
 
         rows.append(
@@ -861,6 +875,25 @@ def _assignment_for_lane(operation, ramp_code, position_code, lane_number):
 
 def _first_mission(missions):
     return missions[0] if missions else None
+
+
+def _normal_departure_mission(missions):
+    return next((mission for mission in missions if not _mission_is_9xxx(mission)), None) or _first_mission(missions)
+
+
+def _has_9xxx_mission(missions):
+    return any(_mission_is_9xxx(mission) for mission in missions)
+
+
+def _mission_is_9xxx(mission):
+    if not mission:
+        return False
+    digits = "".join(
+        character for character in str(getattr(mission, "flight_number", "") or "") if character.isdigit()
+    )
+    if not digits:
+        return False
+    return f"{int(digits):04d}".startswith("9")
 
 
 def _active_missions_for_tail(arrivals, departures):
