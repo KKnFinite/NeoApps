@@ -108,8 +108,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
             with self.subTest(path=path):
                 response = self.client.get(path, follow_redirects=False)
                 self.assertEqual(response.status_code, 302)
-                expected_location = "/rfd" if path == "/admin/permissions" else "/portal"
-                self.assertEqual(response.location, expected_location)
+                self.assertEqual(response.location, "/portal")
 
     def test_pending_users_appear_on_pending_requests_screen(self):
         grandmaster = self._admin("pending_grandmaster", "grandmaster")

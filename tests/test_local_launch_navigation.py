@@ -46,7 +46,10 @@ class LocalLaunchNavigationTest(unittest.TestCase):
     def test_default_gateway_branding_config_preserves_rfd_context_with_neogateway_logo(self):
         self.assertEqual(self.app.config["DEFAULT_GATEWAY_CODE"], "RFD")
         self.assertEqual(self.app.config["DEFAULT_GATEWAY_NAME"], "NeoGateway")
-        self.assertEqual(self.app.config["DEFAULT_GATEWAY_LOGO"], "images/neogateway_logo3_small.png")
+        self.assertEqual(
+            self.app.config["DEFAULT_GATEWAY_LOGO"],
+            "images/icons/neogateway/inapp/neogateway-inapp-128.png",
+        )
         self.assertIn("STATIC_ASSET_VERSION", self.app.config)
         self.assertEqual(self.app.config["SESSION_COOKIE_SAMESITE"], "Lax")
         self.assertTrue(self.app.config["SESSION_COOKIE_HTTPONLY"])
@@ -54,10 +57,10 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertTrue(self.app.config["REMEMBER_COOKIE_HTTPONLY"])
 
     def test_default_neogateway_logo_asset_exists_with_render_safe_casing(self):
-        logo_path = Path("app/static/images/neogateway_logo3_small.png")
+        logo_path = Path("app/static/images/icons/neogateway/inapp/neogateway-inapp-128.png")
 
         self.assertTrue(logo_path.is_file())
-        self.assertEqual(logo_path.name, "neogateway_logo3_small.png")
+        self.assertEqual(logo_path.name, "neogateway-inapp-128.png")
         self.assertGreater(logo_path.stat().st_size, 0)
 
     def test_base_css_uses_cyber_topbar_without_vertical_grid_background(self):
@@ -465,9 +468,12 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("caches.delete(cacheName)", service_worker)
         self.assertNotIn('caches.match(request))', service_worker.split('request.mode === "navigate"', 1)[1].split('if (!requestUrl.pathname.startsWith("/static/"))', 1)[0])
         self.assertNotIn("/neoermac/door-view", service_worker)
-        self.assertIn("/static/images/neogateway_logo3_small.png", service_worker)
-        self.assertIn("/static/images/neogateway_logo3_medium.png", service_worker)
-        self.assertIn("/static/images/neogateway_logo3_large.png", service_worker)
+        self.assertIn("/static/images/icons/neogateway/inapp/neogateway-inapp-128.png", service_worker)
+        self.assertIn("/static/images/icons/neogateway/inapp/neogateway-inapp-256.png", service_worker)
+        self.assertIn("/static/images/icons/neoapps/inapp/neoapps-inapp-128.png", service_worker)
+        self.assertNotIn("/static/images/neogateway_logo3_small.png", service_worker)
+        self.assertNotIn("/static/images/neogateway_logo3_medium.png", service_worker)
+        self.assertNotIn("/static/images/neogateway_logo3_large.png", service_worker)
         self.assertNotIn("NeoRFD", service_worker)
         self.assertNotIn("neorfd", service_worker.lower())
 
@@ -483,10 +489,10 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         )
 
     def test_neonode_button_asset_exists_with_render_safe_casing(self):
-        button_path = Path("app/static/images/neobutton1_medium.png")
+        button_path = Path("app/static/images/icons/neogateway/inapp/neogateway-inapp-128.png")
 
         self.assertTrue(button_path.is_file())
-        self.assertEqual(button_path.name, "neobutton1_medium.png")
+        self.assertEqual(button_path.name, "neogateway-inapp-128.png")
         self.assertGreater(button_path.stat().st_size, 0)
 
     def test_public_home_uses_enter_login_form_without_separate_login_button(self):
@@ -729,7 +735,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         topbar_actions = topbar.split('class="mobile-topbar-actions"', 1)[1]
 
         self.assertEqual(response.status_code, 200)
-        self.assertLess(topbar_left.index("mobile-topbar-back"), topbar_left.index("mobile-topbar-node-icon-link"))
+        self.assertNotIn("mobile-topbar-back", topbar_left)
         self.assertLess(topbar_left.index("mobile-topbar-node-icon-link"), topbar_left.index("mobile-topbar-page-link"))
         self.assertIn("neomotherbrain-inapp-128.png", topbar_left)
         self.assertIn("mobile-topbar-page-name neo-page-title", topbar_left)

@@ -2,9 +2,9 @@ const CACHE_PREFIX = "neogateway-";
 const CACHE_NAME = "neogateway-static-v20260623-3";
 const STATIC_ASSETS = [
   "/static/css/base.css?v=20260623-3",
-  "/static/images/neogateway_logo3_small.png",
-  "/static/images/neogateway_logo3_medium.png",
-  "/static/images/neogateway_logo3_large.png",
+  "/static/images/icons/neogateway/inapp/neogateway-inapp-128.png",
+  "/static/images/icons/neogateway/inapp/neogateway-inapp-256.png",
+  "/static/images/icons/neoapps/inapp/neoapps-inapp-128.png",
 ];
 
 self.addEventListener("install", (event) => {

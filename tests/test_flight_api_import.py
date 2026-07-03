@@ -3297,7 +3297,8 @@ class FlightApiTestPageTest(unittest.TestCase):
         response = self.client.get("/motherbrain/flight-api-test")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"FLIGHT API TEST", response.data)
+        self.assertIn(b"Manage API", response.data)
+        self.assertNotIn(b"FLIGHT API TEST</h1>", response.data)
         self.assertIn(b"NO SCHEDULED POLLING IS ENABLED", response.data)
         self.assertIn(b"Sort Flight Lookup Window", response.data)
         self.assertIn(b"Flight API requests pull arrivals/departures for the full sort start-to-end time.", response.data)
@@ -3360,10 +3361,13 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertNotIn("setInterval", template)
         self.assertNotIn("setTimeout", template)
 
-    def test_auto_poll_page_timer_renders_on_active_motherbrain_pages(self):
+    def test_auto_poll_page_timer_renders_visible_widget_only_on_manage_api(self):
         operation, _settings = self._setup_auto_poll_operation()
 
-        responses = [
+        manage_api_response = self.client.get(
+            f"/motherbrain/flight-api-test?operation_id={operation.id}"
+        )
+        passive_or_plain_responses = [
             self.client.get("/motherbrain"),
             self.client.get("/motherbrain/manage-sort"),
             self.client.get("/motherbrain/flight-api-review"),
@@ -3372,11 +3376,18 @@ class FlightApiTestPageTest(unittest.TestCase):
             self.client.get(f"/motherbrain/operations/{operation.id}/departures"),
         ]
 
-        for response in responses:
+        self.assertEqual(manage_api_response.status_code, 200)
+        self.assertIn(b"flight-api-auto-poll-widget", manage_api_response.data)
+        self.assertIn(b"data-flight-api-auto-poll-timer", manage_api_response.data)
+        self.assertIn(b"/motherbrain/flight-api-auto-poll/check", manage_api_response.data)
+        self.assertIn(b"AUTO POLL", manage_api_response.data)
+
+        for response in passive_or_plain_responses:
             self.assertEqual(response.status_code, 200)
-            self.assertIn(b"data-flight-api-auto-poll-timer", response.data)
-            self.assertIn(b"/motherbrain/flight-api-auto-poll/check", response.data)
-            self.assertIn(b"AUTO POLL", response.data)
+            self.assertNotIn(b"flight-api-auto-poll-widget", response.data)
+            if b"data-flight-api-auto-poll-timer" in response.data:
+                self.assertIn(b"flight-api-auto-poll-driver", response.data)
+                self.assertIn(b"/motherbrain/flight-api-auto-poll/check", response.data)
 
     def test_auto_poll_page_timer_does_not_render_without_trigger_permission(self):
         self._setup_auto_poll_operation()
@@ -3405,14 +3416,15 @@ class FlightApiTestPageTest(unittest.TestCase):
         api_test_response = self.client.get("/motherbrain/flight-api-test")
         permission_response = self.client.get("/admin/permissions")
 
-        for response in (
-            login_response,
-            sort_timeline_response,
-            api_test_response,
-            permission_response,
-        ):
+        for response in (login_response, permission_response):
             self.assertNotIn(b"data-flight-api-auto-poll-timer", response.data)
 
+        self.assertNotIn(b"flight-api-auto-poll-widget", sort_timeline_response.data)
+        if b"data-flight-api-auto-poll-timer" in sort_timeline_response.data:
+            self.assertIn(b"flight-api-auto-poll-driver", sort_timeline_response.data)
+
+        self.assertIn(b"flight-api-auto-poll-widget", api_test_response.data)
+        self.assertIn(b"data-flight-api-auto-poll-timer", api_test_response.data)
         self.assertIn(b"data-auto-poll-trigger", api_test_response.data)
 
     def test_auto_poll_timer_script_uses_only_passive_endpoint_and_no_secrets(self):
@@ -4380,7 +4392,8 @@ class FlightApiTestPageTest(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"FLIGHT API REVIEW", response.data)
+        self.assertIn(b"Unmatched Queue", response.data)
+        self.assertNotIn(b"FLIGHT API REVIEW</h1>", response.data)
         self.assertIn(b"5X555", response.data)
         self.assertIn(b"UPS555", response.data)
         self.assertIn(b"SDF / RFD", response.data)

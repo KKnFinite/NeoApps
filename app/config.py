@@ -33,7 +33,7 @@ class Config:
     DEFAULT_GATEWAY_TIMEZONE = os.getenv("DEFAULT_GATEWAY_TIMEZONE", "America/Chicago")
     DEFAULT_GATEWAY_LOGO = os.getenv(
         "DEFAULT_GATEWAY_LOGO",
-        "images/neogateway_logo3_small.png",
+        "images/icons/neogateway/inapp/neogateway-inapp-128.png",
     )
     BREVO_API_KEY = os.getenv("BREVO_API_KEY")
     MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "NeoApps Portal")

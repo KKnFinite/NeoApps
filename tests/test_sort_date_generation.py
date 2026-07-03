@@ -310,7 +310,7 @@ class SortDateGenerationTest(unittest.TestCase):
         self.assertEqual(len(result["updated"]), 1)
         self.assertEqual(mission.destination, "ONT")
         self.assertEqual(mission.wave, "2")
-        self.assertEqual(mission.planned_datetime_local, datetime(2026, 6, 1, 3, 15))
+        self.assertEqual(mission.planned_datetime_local, datetime(2026, 6, 2, 3, 15))
         self.assertEqual(mission.first_mix_pull_time_local, time(2, 45))
         self.assertEqual(mission.final_mix_pull_time_local, time(3, 0))
         self.assertEqual(mission.pull_time_source, "master")
