@@ -31,7 +31,7 @@ def motherbrain_alert_context(gateway, can_view_permission=None, limit=20, opera
         "alerts": alerts,
         "count": len(alerts),
         "has_alerts": bool(alerts),
-        "empty_message": "No active MotherBrain alerts",
+        "empty_message": "No alerts.",
     }
 
 

@@ -38,7 +38,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "neoapps.user_management.edit",
         "grandmaster",
-        "Edit NeoApps users, gateway access, node roles, and emergency resets.",
+        "Create users, update gateway access, set node roles, and reset emergency credentials.",
     ),
     (
         "neoapps.access_requests.view",
@@ -58,7 +58,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "neomotherbrain.permission_rules.edit",
         "grandmaster",
-        "Edit NeoApps Permission Rules.",
+        "Save minimum-role dropdown settings for NeoApps Permission Rules.",
     ),
     (
         "neogateway.landing.view",
@@ -83,7 +83,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "neomotherbrain.manage_sort.edit",
         "simulator",
-        "Edit NeoMotherBrain sort operation windows, missions, and generated sort data.",
+        "Save sort operation windows, mission rows, and generated sort data updates.",
     ),
     (
         "neomotherbrain.arrival_planning.view",
@@ -93,7 +93,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "neomotherbrain.arrival_planning.edit",
         "master",
-        "Edit NeoMotherBrain Arrival Planning mission rows.",
+        "Save Arrival Planning mission row time, tail, route, status, and parking updates.",
     ),
     (
         "neomotherbrain.arrival_planning.run",
@@ -108,7 +108,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "neomotherbrain.departure_planning.edit",
         "master",
-        "Edit NeoMotherBrain Departure Planning mission rows.",
+        "Save Departure Planning mission row time, tail, route, status, and tail-swap updates.",
     ),
     (
         "neomotherbrain.departure_planning.run",
@@ -123,7 +123,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "neomotherbrain.master_schedule.edit",
         "simulator",
-        "Edit NeoMotherBrain Master Schedule rows and active status.",
+        "Create, update, deactivate, and delete NeoMotherBrain Master Schedule rows.",
     ),
     (
         "neomotherbrain.gateway_matrix.view",
@@ -133,7 +133,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "neomotherbrain.gateway_matrix.edit",
         "simulator",
-        "Edit NeoMotherBrain Gateway Matrix active sort days.",
+        "Save Gateway Matrix active sort day and sort window settings.",
     ),
     (
         "neomotherbrain.sort_timeline.view",
@@ -143,7 +143,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "neomotherbrain.sort_timeline.edit",
         "grandmaster",
-        "Edit NeoMotherBrain Sort Timeline API planning settings.",
+        "Save Sort Timeline API planning windows and monthly usage settings.",
     ),
     (
         "neomotherbrain.manage_api.view",
@@ -178,7 +178,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "motherbrain.parking_rules.edit",
         "simulator",
-        "Edit NeoMotherBrain Parking Rules settings.",
+        "Save Parking Rules rows, blocked positions, aircraft rules, and optimizer settings.",
     ),
     (
         "motherbrain.parking_plan.view",
@@ -188,7 +188,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "motherbrain.parking_plan.edit",
         "simulator",
-        "Edit NeoMotherBrain Parking Plan assignments and tail state controls.",
+        "Assign, clear, swap, annotate, and update tail-state controls on Parking Plan.",
     ),
     (
         "motherbrain.parking_optimizer.run",
@@ -223,7 +223,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "neoermac.building_lineup.edit",
         "simulator",
-        "Edit NeoErmac Building Lineup screens.",
+        "Assign destinations and save NeoErmac Building Lineup pull-time entries.",
     ),
     (
         "neoermac.door_view.view",
@@ -248,7 +248,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "neoermac.tug_assignments.edit",
         "master",
-        "Edit NeoErmac Tug Assignments.",
+        "Save future NeoErmac Tug Assignments updates when the screen is activated.",
     ),
     (
         "neosektor.dashboard.view",
@@ -288,7 +288,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "neosektor.tunnel_conductor.edit",
         "simulator",
-        "Edit NeoSektor Tunnel Conductor screens.",
+        "Save NeoSektor Tunnel Conductor unload settings and routing updates.",
     ),
     (
         "neosektor.discharge.view",
@@ -298,7 +298,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "neosektor.discharge.edit",
         "operator",
-        "Edit NeoSektor Discharge screens.",
+        "Save NeoSektor Discharge counts, unload progress, and bay status updates.",
     ),
     (
         "neosektor.driver_routing.view",
@@ -348,7 +348,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "neoscorpion.settings.edit",
         "master",
-        "Edit NeoScorpion fuel settings.",
+        "Save NeoScorpion fuel density and fuel threshold settings.",
     ),
     (
         "neoscorpion.history.view",
@@ -383,7 +383,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "neostaffing.hierarchy.edit",
         "master",
-        "Edit NeoStaffing hierarchy units.",
+        "Create, update, deactivate, or remove NeoStaffing hierarchy units.",
     ),
     (
         "neostaffing.planned_staffing.view",
@@ -393,7 +393,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "neostaffing.planned_staffing.edit",
         "master",
-        "Edit NeoStaffing planned staffing requirements.",
+        "Save NeoStaffing planned staffing requirement rows.",
     ),
     (
         "neostaffing.people_management.view",
@@ -426,6 +426,60 @@ DEFAULT_PERMISSION_RULES = (
         "Create or remove NeoStaffing management assignments.",
     ),
 )
+
+LEGACY_PERMISSION_DESCRIPTIONS = {
+    "neoapps.user_management.edit": {
+        "Edit NeoApps users, gateway access, node roles, and emergency resets.",
+    },
+    "neomotherbrain.permission_rules.edit": {
+        "Edit NeoApps Permission Rules.",
+    },
+    "neomotherbrain.manage_sort.edit": {
+        "Edit NeoMotherBrain sort operation windows, missions, and generated sort data.",
+    },
+    "neomotherbrain.arrival_planning.edit": {
+        "Edit NeoMotherBrain Arrival Planning mission rows.",
+    },
+    "neomotherbrain.departure_planning.edit": {
+        "Edit NeoMotherBrain Departure Planning mission rows.",
+    },
+    "neomotherbrain.master_schedule.edit": {
+        "Edit NeoMotherBrain Master Schedule rows and active status.",
+    },
+    "neomotherbrain.gateway_matrix.edit": {
+        "Edit NeoMotherBrain Gateway Matrix active sort days.",
+    },
+    "neomotherbrain.sort_timeline.edit": {
+        "Edit NeoMotherBrain Sort Timeline API planning settings.",
+    },
+    "motherbrain.parking_rules.edit": {
+        "Edit NeoMotherBrain Parking Rules settings.",
+    },
+    "motherbrain.parking_plan.edit": {
+        "Edit NeoMotherBrain Parking Plan assignments and tail state controls.",
+    },
+    "neoermac.building_lineup.edit": {
+        "Edit NeoErmac Building Lineup screens.",
+    },
+    "neoermac.tug_assignments.edit": {
+        "Edit NeoErmac Tug Assignments.",
+    },
+    "neosektor.tunnel_conductor.edit": {
+        "Edit NeoSektor Tunnel Conductor screens.",
+    },
+    "neosektor.discharge.edit": {
+        "Edit NeoSektor Discharge screens.",
+    },
+    "neoscorpion.settings.edit": {
+        "Edit NeoScorpion fuel settings.",
+    },
+    "neostaffing.hierarchy.edit": {
+        "Edit NeoStaffing hierarchy units.",
+    },
+    "neostaffing.planned_staffing.edit": {
+        "Edit NeoStaffing planned staffing requirements.",
+    },
+}
 
 PERMISSION_RULE_GROUPS = (
     ("system", "NeoGateway / System", ("neogateway.", "neoapps.", "system.")),
@@ -776,7 +830,7 @@ PERMISSION_RULE_ITEMS = (
         "ermac",
         "neoermac.tug_assignments",
         "Tug Assignments",
-        "NeoErmac Tug Assignments placeholder and future edit access.",
+        "NeoErmac Tug Assignments placeholder and future tug update controls.",
         {
             "view": "neoermac.tug_assignments.view",
             "edit": "neoermac.tug_assignments.edit",
@@ -944,7 +998,8 @@ def ensure_default_permission_rules():
 
         if not rule.minimum_role:
             rule.minimum_role = minimum_role
-        if not rule.description:
+        legacy_descriptions = LEGACY_PERMISSION_DESCRIPTIONS.get(permission_key, set())
+        if not rule.description or rule.description in legacy_descriptions:
             rule.description = description
 
     db.session.flush()

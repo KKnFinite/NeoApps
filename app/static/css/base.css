@@ -1092,11 +1092,11 @@ a {
 
 .motherbrain-alert-tray {
     position: relative;
-    z-index: 60;
+    z-index: 1200;
 }
 
 .motherbrain-alert-tray[open] {
-    z-index: 80;
+    z-index: 4000;
 }
 
 .motherbrain-alert-button {
@@ -1158,6 +1158,7 @@ a {
     position: absolute;
     top: calc(100% + 8px);
     right: 0;
+    z-index: 4001;
     width: min(340px, calc(100vw - 32px));
     padding: 12px;
     border: 1px solid rgba(var(--node-highlight-rgb), 0.42);
@@ -1422,7 +1423,7 @@ a {
             0 0 22px rgba(var(--node-rgb), 0.12);
         transform: none;
         backdrop-filter: blur(14px);
-        overflow: hidden;
+        overflow: visible;
     }
 
     body.motherbrain-desktop-nav-page .motherbrain-header-logo-link,
@@ -1485,6 +1486,11 @@ a {
         background: transparent;
         box-shadow: none;
         backdrop-filter: none;
+    }
+
+    body.motherbrain-desktop-nav-page.motherbrain-fixed-header .topbar-actions,
+    body.motherbrain-desktop-nav-page .motherbrain-desktop-utility {
+        overflow: visible;
     }
 
     body.motherbrain-desktop-nav-page.motherbrain-fixed-header .content {
@@ -1695,12 +1701,14 @@ a {
     }
 
     body.motherbrain-parking-plan-page .parking-summary-grid {
-        gap: 7px;
+        grid-template-columns: repeat(6, minmax(72px, 1fr));
+        gap: 6px;
+        margin-bottom: 0;
     }
 
     body.motherbrain-parking-plan-page .parking-summary-grid article {
-        min-height: 56px;
-        padding: 8px 10px;
+        min-height: 48px;
+        padding: 6px 8px;
     }
 
     body.motherbrain-parking-plan-page .parking-summary-grid span {
@@ -1708,7 +1716,53 @@ a {
     }
 
     body.motherbrain-parking-plan-page .parking-summary-grid strong {
-        font-size: 1.14rem;
+        font-size: 1.04rem;
+    }
+
+    body.motherbrain-parking-plan-page .parking-optimizer-panel {
+        grid-template-columns: minmax(190px, 0.74fr) minmax(280px, 1fr);
+        align-items: center;
+        gap: 7px 10px;
+        margin: 0;
+        padding: 8px 10px;
+    }
+
+    body.motherbrain-parking-plan-page .parking-optimizer-heading {
+        align-items: center;
+        gap: 8px;
+    }
+
+    body.motherbrain-parking-plan-page .parking-optimizer-heading h2 {
+        margin-top: 1px;
+        font-size: 0.88rem;
+    }
+
+    body.motherbrain-parking-plan-page .parking-optimizer-heading p {
+        max-width: 460px;
+        font-size: 0.68rem;
+        line-height: 1.22;
+    }
+
+    body.motherbrain-parking-plan-page .parking-optimizer-form {
+        justify-content: flex-end;
+        gap: 6px;
+    }
+
+    body.motherbrain-parking-plan-page .parking-optimizer-form .parking-checkbox {
+        min-height: 30px;
+        padding: 5px 8px;
+        font-size: 0.64rem;
+    }
+
+    body.motherbrain-parking-plan-page .parking-optimizer-form .action-button {
+        min-height: 32px;
+        padding: 6px 10px;
+        font-size: 0.64rem;
+    }
+
+    body.motherbrain-parking-plan-page .parking-optimizer-results {
+        grid-column: 1 / -1;
+        margin-top: 2px;
     }
 }
 

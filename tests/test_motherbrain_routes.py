@@ -6492,8 +6492,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(b'data-motherbrain-alert-tray', response.data)
+                self.assertIn(b'data-alert-count="0"', response.data)
+                self.assertIn(b"data-motherbrain-alert-toggle", response.data)
                 self.assertIn(b"MotherBrain Alerts", response.data)
-                self.assertIn(b"No active MotherBrain alerts", response.data)
+                self.assertIn(b"No alerts.", response.data)
 
     def test_motherbrain_alert_tray_does_not_render_outside_motherbrain_pages(self):
         response = self.client.get("/rfd")
@@ -6523,7 +6525,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"One tail needs conflict review.", response.data)
         self.assertIn(b"WARNING", response.data)
         self.assertIn(b"VIEW PARKING PLAN", response.data)
-        self.assertNotIn(b"No active MotherBrain alerts", response.data)
+        self.assertNotIn(b"No alerts.", response.data)
 
     def test_motherbrain_alert_tray_scopes_parking_alerts_to_selected_operation(self):
         operation_a = self._parking_operation()
@@ -6554,7 +6556,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(sort_b_response.status_code, 200)
         self.assertNotIn(b"Blocked parking position", sort_b_response.data)
-        self.assertIn(b"No active MotherBrain alerts", sort_b_response.data)
+        self.assertIn(b"No alerts.", sort_b_response.data)
         self.assertIn(b'<span class="motherbrain-alert-count">0</span>', sort_b_response.data)
 
     def test_motherbrain_alert_tray_scopes_legacy_parking_alert_keys(self):
@@ -6586,7 +6588,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"Legacy parking conflict", sort_a_response.data)
         self.assertIn(b"VIEW PARKING PLAN", sort_a_response.data)
         self.assertNotIn(b"Legacy parking conflict", sort_b_response.data)
-        self.assertIn(b"No active MotherBrain alerts", sort_b_response.data)
+        self.assertIn(b"No alerts.", sort_b_response.data)
 
     def test_motherbrain_restricted_alerts_respect_future_permission_key(self):
         from app.services.motherbrain_alerts import motherbrain_alert_context
@@ -10516,7 +10518,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("max-height: calc(100vh - 112px)", css)
         self.assertIn("body.motherbrain-parking-plan-page .parking-plan-page > .section-heading", css)
         self.assertIn("body.motherbrain-parking-plan-page .parking-summary-grid article", css)
-        self.assertIn("min-height: 56px", css)
+        self.assertIn("min-height: 48px", css)
+        self.assertIn("body.motherbrain-parking-plan-page .parking-optimizer-panel", css)
+        self.assertIn("grid-template-columns: minmax(190px, 0.74fr) minmax(280px, 1fr)", css)
+        self.assertIn("body.motherbrain-parking-plan-page .parking-optimizer-form", css)
+        self.assertIn("body.motherbrain-parking-plan-page .parking-optimizer-results", css)
 
     def test_parking_plan_slot_two_collapses_until_needed(self):
         operation = self._parking_operation()

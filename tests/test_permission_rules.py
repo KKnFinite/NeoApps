@@ -142,6 +142,52 @@ class PermissionRulesTest(unittest.TestCase):
                 with self.subTest(item=item_key, action=action_type):
                     self.assertIn(permission_key, seeded_keys)
 
+    def test_permission_edit_descriptions_are_specific(self):
+        descriptions = {
+            permission_key: description
+            for permission_key, _minimum_role, description in DEFAULT_PERMISSION_RULES
+        }
+
+        for permission_key, description in descriptions.items():
+            if permission_key.endswith(".edit"):
+                with self.subTest(permission_key=permission_key):
+                    self.assertNotIn("edit access", description.lower())
+
+        self.assertIn(
+            "Save Arrival Planning mission row time, tail, route, status, and parking updates.",
+            descriptions["neomotherbrain.arrival_planning.edit"],
+        )
+        self.assertIn(
+            "Assign, clear, swap, annotate, and update tail-state controls on Parking Plan.",
+            descriptions["motherbrain.parking_plan.edit"],
+        )
+        self.assertIn(
+            "Save Parking Rules rows, blocked positions, aircraft rules, and optimizer settings.",
+            descriptions["motherbrain.parking_rules.edit"],
+        )
+
+    def test_legacy_permission_descriptions_are_refreshed_without_overwriting_custom_copy(self):
+        legacy_rule = PermissionRule.query.filter_by(
+            permission_key="neomotherbrain.permission_rules.edit"
+        ).one()
+        custom_rule = PermissionRule.query.filter_by(
+            permission_key="neomotherbrain.manage_sort.edit"
+        ).one()
+        legacy_rule.description = "Edit NeoApps Permission Rules."
+        custom_rule.description = "Custom Manage Sort copy."
+        db.session.commit()
+
+        ensure_default_permission_rules()
+        db.session.commit()
+
+        db.session.refresh(legacy_rule)
+        db.session.refresh(custom_rule)
+        self.assertEqual(
+            legacy_rule.description,
+            "Save minimum-role dropdown settings for NeoApps Permission Rules.",
+        )
+        self.assertEqual(custom_rule.description, "Custom Manage Sort copy.")
+
     def test_app_level_permission_rules_use_global_and_app_roles(self):
         portal_user = self._user("portal_watcher", role="watcher")
         staffing_user, staffing_access = self._user_with_app_access(

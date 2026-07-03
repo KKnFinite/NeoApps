@@ -1,7 +1,7 @@
 {% set tray = motherbrain_alert_tray %}
 {% if tray %}
-<details class="motherbrain-alert-tray" data-motherbrain-alert-tray>
-    <summary class="motherbrain-alert-button" aria-label="MotherBrain alerts">
+<details class="motherbrain-alert-tray" data-motherbrain-alert-tray data-alert-count="{{ tray.count }}">
+    <summary class="motherbrain-alert-button" aria-label="MotherBrain alerts" data-motherbrain-alert-toggle>
         <span class="motherbrain-alert-button-label">Alerts</span>
         <span class="motherbrain-alert-count">{{ tray.count }}</span>
     </summary>
