@@ -12812,11 +12812,11 @@ select::-ms-expand {
     body.mobile-app-chrome .planning-mobile-departure-row {
         display: grid;
         grid-template-columns:
-            minmax(58px, 1.08fr)
-            minmax(58px, 1fr)
-            minmax(42px, 0.72fr)
-            minmax(42px, 0.72fr)
-            minmax(108px, 1.55fr);
+            minmax(54px, 1.08fr)
+            minmax(48px, 0.9fr)
+            minmax(38px, 0.72fr)
+            minmax(38px, 0.72fr)
+            54px;
         align-items: center;
         gap: 3px;
         min-width: 0;
@@ -12940,17 +12940,66 @@ select::-ms-expand {
 
     body.mobile-app-chrome .planning-mobile-tail-swap {
         grid-column: 1 / -1;
+        position: relative;
+        min-width: 0;
+        overflow: visible;
     }
 
     body.mobile-app-chrome .planning-mobile-tail-swap-form {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto auto;
+        grid-template-columns: minmax(0, 1fr) auto;
         align-items: center;
         gap: 4px;
     }
 
     body.mobile-app-chrome .planning-mobile-departure-row .planning-mobile-tail-swap {
         grid-column: auto;
+        justify-self: stretch;
+        overflow: visible;
+    }
+
+    body.mobile-app-chrome .planning-mobile-tail-swap-details {
+        position: relative;
+        min-width: 0;
+    }
+
+    body.mobile-app-chrome .planning-mobile-tail-swap-details > summary {
+        list-style: none;
+    }
+
+    body.mobile-app-chrome .planning-mobile-tail-swap-details > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    body.mobile-app-chrome .planning-mobile-tail-swap-button {
+        display: grid;
+        min-height: 30px;
+        place-items: center;
+        border: 1px solid rgba(var(--node-rgb), 0.5);
+        border-radius: 5px;
+        background:
+            linear-gradient(180deg, rgba(var(--node-rgb), 0.34), rgba(0, 0, 0, 0.2)),
+            rgba(6, 7, 10, 0.92);
+        color: var(--steel);
+        font-size: 0.52rem;
+        font-weight: 950;
+        text-transform: uppercase;
+        cursor: pointer;
+    }
+
+    body.mobile-app-chrome .planning-mobile-tail-swap-details[open] .planning-mobile-tail-swap-form {
+        position: absolute;
+        z-index: 8;
+        right: 0;
+        top: calc(100% + 5px);
+        width: min(210px, calc(100vw - 24px));
+        padding: 7px;
+        border: 1px solid rgba(var(--node-rgb), 0.46);
+        border-radius: 6px;
+        background:
+            linear-gradient(145deg, rgba(var(--node-rgb), 0.16), transparent 42%),
+            rgba(3, 4, 7, 0.96);
+        box-shadow: 0 14px 28px rgba(0, 0, 0, 0.38);
     }
 
     body.mobile-app-chrome .planning-mobile-tail-swap-form input[type="text"],
@@ -12965,16 +13014,6 @@ select::-ms-expand {
         font-size: 16px;
         font-weight: 850;
         text-align: center;
-        text-transform: uppercase;
-    }
-
-    body.mobile-app-chrome .planning-mobile-tail-swap-form label {
-        display: inline-flex;
-        align-items: center;
-        gap: 3px;
-        color: var(--muted);
-        font-size: 0.54rem;
-        font-weight: 800;
         text-transform: uppercase;
     }
 
@@ -13017,10 +13056,14 @@ select::-ms-expand {
         overflow-x: hidden;
     }
 
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-mobile-assignment {
+        display: none !important;
+    }
+
     body.mobile-app-chrome.motherbrain-parking-plan-page .parking-ramp-layout {
         display: grid;
         grid-template-columns: 1fr;
-        gap: 30px;
+        gap: 90px;
         width: 100%;
         max-height: none;
         overflow: visible;
@@ -13096,6 +13139,11 @@ select::-ms-expand {
         padding: 5px;
     }
 
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-empty-lane,
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-direct-slot-assign {
+        display: none !important;
+    }
+
     body.mobile-app-chrome.motherbrain-parking-plan-page .parking-tail-card {
         padding: 6px;
     }
@@ -13125,19 +13173,19 @@ select::-ms-expand {
     body.mobile-app-chrome.motherbrain-parking-plan-page .parking-mobile-slot-change select {
         min-width: 0;
         width: 100%;
-        min-height: 34px;
+        min-height: 30px;
         border: 1px solid rgba(var(--node-rgb), 0.42);
         border-radius: 5px;
         background: rgba(2, 3, 5, 0.9);
         color: var(--steel);
-        font-size: 16px;
+        font-size: 0.72rem;
         font-weight: 850;
         text-transform: uppercase;
     }
 
     body.mobile-app-chrome.motherbrain-parking-plan-page .parking-mobile-slot-change button {
-        min-height: 34px;
-        padding: 6px 8px;
+        min-height: 30px;
+        padding: 5px 7px;
         border: 1px solid rgba(var(--node-rgb), 0.5);
         border-radius: 5px;
         background:
@@ -13147,6 +13195,183 @@ select::-ms-expand {
         font-size: 0.58rem;
         font-weight: 900;
         text-transform: uppercase;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-page {
+        width: min(100%, 430px);
+        margin-inline: auto;
+        overflow-x: hidden;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-grid,
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-form,
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-card {
+        gap: 10px;
+        min-width: 0;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-card {
+        padding: 10px;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-card .table-wrap {
+        width: 100%;
+        overflow-x: hidden;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table,
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table tbody,
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table tr,
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table td {
+        display: block;
+        width: 100%;
+        min-width: 0;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table {
+        table-layout: auto;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table thead {
+        display: none;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table tr {
+        display: grid;
+        gap: 7px;
+        padding: 8px;
+        border: 1px solid rgba(var(--node-rgb), 0.18);
+        border-radius: 6px;
+        background: rgba(3, 4, 6, 0.32);
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table td {
+        display: grid;
+        grid-template-columns: minmax(76px, 0.42fr) minmax(0, 1fr);
+        gap: 7px;
+        align-items: center;
+        padding: 0;
+        border: 0;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table td::before {
+        content: attr(data-label);
+        color: var(--muted);
+        font-size: 0.56rem;
+        font-weight: 900;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table td[colspan] {
+        display: block;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table td[colspan]::before {
+        content: none;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-row,
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-row-header {
+        grid-template-columns: 1fr;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-row-header {
+        display: none;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table input,
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table select,
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-row input,
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-row select,
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-field input {
+        min-height: 32px;
+        padding: 6px 8px;
+        font-size: 0.72rem;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-check {
+        min-width: 0;
+    }
+
+    body.mobile-app-chrome.motherbrain-permission-rules-page .users-panel.centered-command-page {
+        width: min(100%, 430px);
+        margin-inline: auto;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        overflow-x: hidden;
+    }
+
+    body.mobile-app-chrome.motherbrain-permission-rules-page .permission-rule-groups {
+        gap: 10px;
+    }
+
+    body.mobile-app-chrome.motherbrain-permission-rules-page .permission-rule-group {
+        gap: 8px;
+        padding: 9px;
+        border-color: rgba(var(--node-rgb), 0.2);
+        background: rgba(4, 5, 8, 0.54);
+        box-shadow: none;
+    }
+
+    body.mobile-app-chrome.motherbrain-permission-rules-page .permission-rule-group-heading h2 {
+        font-size: 0.82rem;
+    }
+
+    body.mobile-app-chrome.motherbrain-permission-rules-page .permission-rule-items {
+        gap: 7px;
+    }
+
+    body.mobile-app-chrome.motherbrain-permission-rules-page .permission-rule-item {
+        grid-template-columns: 1fr;
+        gap: 7px;
+        padding: 8px;
+        border: 0;
+        background: rgba(0, 0, 0, 0.18);
+    }
+
+    body.mobile-app-chrome.motherbrain-permission-rules-page .permission-rule-copy {
+        gap: 2px;
+    }
+
+    body.mobile-app-chrome.motherbrain-permission-rules-page .permission-rule-copy strong {
+        font-size: 0.76rem;
+    }
+
+    body.mobile-app-chrome.motherbrain-permission-rules-page .permission-rule-copy p {
+        font-size: 0.66rem;
+        line-height: 1.25;
+    }
+
+    body.mobile-app-chrome.motherbrain-permission-rules-page .permission-rule-actions {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+
+    body.mobile-app-chrome.motherbrain-permission-rules-page .permission-rule-action {
+        grid-template-columns: minmax(58px, 0.34fr) minmax(0, 1fr);
+        gap: 5px 8px;
+        align-items: center;
+        padding: 7px;
+        border: 0;
+        background: rgba(8, 10, 14, 0.64);
+    }
+
+    body.mobile-app-chrome.motherbrain-permission-rules-page .permission-rule-action > span:first-of-type {
+        font-size: 0.62rem;
+    }
+
+    body.mobile-app-chrome.motherbrain-permission-rules-page .permission-rule-action .permission-rule-key {
+        grid-column: 1 / -1;
+        font-size: 0.5rem;
+        white-space: normal;
+    }
+
+    body.mobile-app-chrome.motherbrain-permission-rules-page .permission-rule-action .role-select-wrap select {
+        min-height: 32px;
+        font-size: 0.72rem;
     }
 
     body.mobile-app-chrome.motherbrain-gateway-matrix-page .centered-command-page.manage-sort-sidebar-page {

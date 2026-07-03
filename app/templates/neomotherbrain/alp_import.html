@@ -364,19 +364,19 @@
                     {% if row.is_cancelled %}
                     <span class="planning-mobile-tail-swap-note">Restore</span>
                     {% else %}
-                    <form class="planning-mobile-tail-swap-form" method="post" action="{{ url_for('neomotherbrain.tail_swap_mission', operation_id=operation.id, mission_id=mission.id) }}">
-                        <select name="replacement_tail" aria-label="Replacement tail for {{ mission.flight_number|upper }}" required {% if not tail_swap_options %}disabled{% endif %}>
-                            <option value="">TAIL</option>
-                            {% for tail in tail_swap_options %}
-                            <option value="{{ tail }}">{{ tail }}</option>
-                            {% endfor %}
-                        </select>
-                        <label class="planning-mobile-tail-swap-confirm">
-                            <input type="checkbox" name="confirm_tail_swap" value="1">
-                            OK
-                        </label>
-                        <button class="table-row-button" type="submit" {% if not tail_swap_options %}disabled{% endif %}>Swap</button>
-                    </form>
+                    <details class="planning-mobile-tail-swap-details">
+                        <summary class="planning-mobile-tail-swap-button" role="button" aria-label="Swap tail for {{ mission.flight_number|upper }}">Swap</summary>
+                        <form class="planning-mobile-tail-swap-form" method="post" action="{{ url_for('neomotherbrain.tail_swap_mission', operation_id=operation.id, mission_id=mission.id) }}">
+                            <select name="replacement_tail" aria-label="Replacement tail for {{ mission.flight_number|upper }}" required {% if not tail_swap_options %}disabled{% endif %}>
+                                <option value="">TAIL</option>
+                                {% for tail in tail_swap_options %}
+                                <option value="{{ tail }}">{{ tail }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="hidden" name="confirm_tail_swap" value="1">
+                            <button class="table-row-button" type="submit" {% if not tail_swap_options %}disabled{% endif %}>Apply</button>
+                        </form>
+                    </details>
                     {% endif %}
                 {% else %}
                 <span class="planning-mobile-tail-swap-note">View</span>

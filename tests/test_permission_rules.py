@@ -1,3 +1,4 @@
+from pathlib import Path
 import unittest
 
 from app import create_app
@@ -279,6 +280,35 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertIn('data-permission-action="trigger"', optimizer_apply_block)
         self.assertIn("neomotherbrain.manage_api.run", manage_api_block)
         self.assertIn("motherbrain.parking_optimizer.apply", optimizer_apply_block)
+
+    def test_permission_rules_mobile_layout_uses_simplified_card_hooks(self):
+        grandmaster = self._user_with_node_role("rule_mobile_grandmaster", "motherbrain", "grandmaster")
+        backfill_default_gateway_node_roles(grandmaster, role="grandmaster")
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        response = self.client.get("/motherbrain/permissions")
+        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"motherbrain-permission-rules-page", response.data)
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-permission-rules-page .users-panel.centered-command-page",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-permission-rules-page .permission-rule-item {\n"
+            "        grid-template-columns: 1fr;\n"
+            "        gap: 7px;\n"
+            "        padding: 8px;\n"
+            "        border: 0;",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-permission-rules-page .permission-rule-action {\n"
+            "        grid-template-columns: minmax(58px, 0.34fr) minmax(0, 1fr);",
+            css,
+        )
 
     def test_invalid_permission_role_is_rejected_safely(self):
         grandmaster = self._user_with_node_role("rule_invalid_grandmaster", "motherbrain", "grandmaster")

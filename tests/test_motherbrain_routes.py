@@ -6099,6 +6099,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("planning-page planning-page-departure", html)
+        self.assertIn('<span class="mobile-topbar-page-name neo-page-title">Depart</span>', html)
         self.assertIn("planning-mobile-current-departures", html)
         self.assertIn("planning-mobile-sort-title neo-brand-title", mobile_list)
         self.assertIn("RFD Night 06-01-2026", mobile_list)
@@ -6113,8 +6114,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("OMA", mobile_list)
         self.assertIn("B02", mobile_list)
         self.assertIn("data-mobile-tail-swap-options", mobile_list)
+        self.assertIn("planning-mobile-tail-swap-details", mobile_list)
+        self.assertIn("planning-mobile-tail-swap-button", mobile_list)
+        self.assertIn(">Swap</summary>", mobile_list)
         self.assertIn("planning-mobile-tail-swap-form", mobile_list)
         self.assertIn('<select name="replacement_tail"', mobile_list)
+        self.assertNotIn("planning-mobile-tail-swap-confirm", mobile_list)
+        self.assertNotIn('type="checkbox" name="confirm_tail_swap"', mobile_list)
+        self.assertNotIn(">OK<", mobile_list)
         self.assertNotIn("planning-mobile-mission-card", mobile_list)
         self.assertNotIn("planning-mobile-mission-fields", mobile_list)
         self.assertNotIn("PASTE ALP", mobile_list)
@@ -6124,11 +6131,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
             css,
         )
         self.assertIn(
-            "body.mobile-app-chrome .planning-mobile-departure-row > * {\n"
-            "        min-width: 0;\n"
-            "        overflow: hidden;",
+            "body.mobile-app-chrome .planning-mobile-tail-swap-details[open] .planning-mobile-tail-swap-form",
             css,
         )
+        self.assertIn("body.mobile-app-chrome .planning-mobile-departure-row .planning-mobile-tail-swap", css)
 
     def test_window_update_accepts_zero_or_positive_values(self):
         operation = self._operation()
@@ -6770,6 +6776,35 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("overflow-x: visible;", css)
         self.assertIn("body.motherbrain-desktop-nav-page .parking-rules-table.wide-data-table", css)
         self.assertIn("table-layout: fixed;", css)
+        self.assertIn("body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-page", css)
+        self.assertIn("body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table td", css)
+        self.assertIn("grid-template-columns: minmax(76px, 0.42fr) minmax(0, 1fr);", css)
+
+    def test_mobile_parking_rules_page_has_no_horizontal_table_layout_hooks(self):
+        operation = self._parking_operation()
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
+        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"motherbrain-parking-rules-page", response.data)
+        self.assertIn(b"Aircraft Type Restrictions", response.data)
+        self.assertIn(b"Blocked Parking Positions", response.data)
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-card .table-wrap {\n"
+            "        width: 100%;\n"
+            "        overflow-x: hidden;",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table,\n"
+            "    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table tbody,\n"
+            "    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table tr,\n"
+            "    body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table td {\n"
+            "        display: block;",
+            css,
+        )
 
     def test_parking_rules_blocked_positions_normalize_and_reload(self):
         operation = self._parking_operation()
@@ -10152,9 +10187,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
         html = response.data.decode()
-        mobile_html = html.split('class="parking-mobile-assignment"', 1)[1].split(
-            'class="parking-unassigned"', 1
-        )[0]
+        css = Path("app/static/css/base.css").read_text()
 
         self.assertIn("data-parking-lane", html)
         self.assertIn("data-parking-unassign-drop", html)
@@ -10177,18 +10210,21 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("parking-lane-slot-2 is-collapsed-slot", html)
         self.assertIn("parking-slot-expand", html)
         self.assertIn('data-occupied-tail=""', html)
-        self.assertIn("parking-mobile-assign-controls", mobile_html)
-        self.assertIn("parking-mobile-hot-note-controls", mobile_html)
-        self.assertIn("parking-mobile-remove-controls", mobile_html)
-        self.assertIn("SLOT 1", mobile_html)
-        self.assertIn("SLOT 2", mobile_html)
-        self.assertNotIn("LANE 1", mobile_html)
+        self.assertIn("parking-mobile-assignment", html)
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-parking-plan-page .parking-mobile-assignment {\n"
+            "        display: none !important;",
+            css,
+        )
+        self.assertIn("parking-mobile-slot-change", html)
+        self.assertIn("data-mobile-slot-tail-picker", html)
+        self.assertIn("SLOT 1", html)
+        self.assertIn("SLOT 2", html)
+        self.assertNotIn("LANE 1", html)
         self.assertIn("REPLACE SLOT 1", html)
         self.assertIn("USE SLOT 2", html)
-        self.assertLess(mobile_html.index("ASSIGN / MOVE"), mobile_html.index("HOT / NOTE"))
-        self.assertLess(mobile_html.index("HOT / NOTE"), mobile_html.index("REMOVE"))
-        self.assertLess(mobile_html.index("ASSIGN TAIL"), mobile_html.index("SAVE HOT / NOTE"))
-        self.assertLess(mobile_html.index("SAVE HOT / NOTE"), mobile_html.index("REMOVE / UNASSIGN"))
+        self.assertIn("Change Tail", html)
+        self.assertIn(">Change</button>", html)
 
     def test_mobile_parking_plan_renders_simple_ramp_cards_and_slot_picker(self):
         operation = self._parking_operation()
@@ -10213,7 +10249,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("data-mobile-slot-tail-picker", a01_html)
         self.assertIn('<option value="N457UP" selected', a01_html)
         self.assertIn('<option value="N349UP"', a01_html)
-        self.assertIn("Change Tail", a01_html)
+        self.assertIn("Swap Tail", a01_html)
+        self.assertIn(">Swap</button>", a01_html)
         self.assertIn(
             "body.mobile-app-chrome.motherbrain-parking-plan-page .parking-optimizer-panel,\n"
             "    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-left-rail {\n"
@@ -10235,7 +10272,21 @@ class MotherBrainRoutesTest(unittest.TestCase):
             '            "bottom top";',
             css,
         )
-        self.assertIn("gap: 30px;", css)
+        self.assertIn("gap: 90px;", css)
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-parking-plan-page .parking-empty-lane,\n"
+            "    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-direct-slot-assign {\n"
+            "        display: none !important;",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-parking-plan-page .parking-mobile-slot-change select {\n"
+            "        min-width: 0;\n"
+            "        width: 100%;\n"
+            "        min-height: 30px;",
+            css,
+        )
+        self.assertIn("font-size: 0.72rem;", css)
         self.assertIn(
             "body.mobile-app-chrome.motherbrain-parking-plan-page.motherbrain-parking-throat-disabled .parking-position-grid:not(.parking-position-grid-r) {\n"
             "        grid-template-areas:\n"

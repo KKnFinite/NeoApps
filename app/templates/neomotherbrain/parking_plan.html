@@ -658,7 +658,7 @@
                                     <input type="hidden" name="lane_number" value="{{ lane.number }}">
                                     <input type="hidden" name="replace_occupied" value="{{ 1 if lane.row else 0 }}">
                                     <label>
-                                        <span>{{ "Change Tail" if lane.row else "Assign Tail" }}</span>
+                                        <span>{{ "Swap Tail" if lane.row else "Change Tail" }}</span>
                                         <select name="tail_number" required>
                                             <option value="">SELECT TAIL</option>
                                             {% for row in tail_rows %}
@@ -666,7 +666,7 @@
                                             {% endfor %}
                                         </select>
                                     </label>
-                                    <button type="submit">Save</button>
+                                    <button type="submit">{{ "Swap" if lane.row else "Change" }}</button>
                                 </form>
                             </div>
                             {% endfor %}
