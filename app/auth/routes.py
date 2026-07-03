@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.auth import bp
 from app.extensions import db
 from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, PortalAppAccess, User
-from app.models.user import ROLE_LEVELS
+from app.models.user import MANAGEMENT_LEVELS, ROLE_LEVELS
 from app.services import email_service
 from app.services.access_control import (
     ensure_user_app_access,
@@ -923,6 +923,8 @@ def _user_edit_form_from_request(user):
             "last_name": request.form.get("last_name", ""),
             "employee_id": request.form.get("employee_id", ""),
             "email": request.form.get("email", ""),
+            "is_management": request.form.get("is_management", ""),
+            "management_level": request.form.get("management_level", ""),
             "supervisor_name": request.form.get("supervisor_name", ""),
             "work_area": request.form.get("work_area", ""),
             "access_reason": request.form.get("access_reason", ""),
@@ -940,6 +942,8 @@ def _user_edit_form_from_request(user):
         "last_name": last_name,
         "employee_id": user.employee_id or "",
         "email": user.email or "",
+        "is_management": "1" if getattr(user, "is_management", False) else "",
+        "management_level": user.management_level or "",
         "supervisor_name": user.supervisor_name or "",
         "work_area": user.work_area or "",
         "access_reason": user.access_reason or "",
@@ -969,6 +973,16 @@ def _apply_user_edit_form(user, form):
     user.full_name = _combined_name(first_name, last_name)
     user.email = email
     user.employee_id = employee_id
+    user.is_management = str(form.get("is_management") or "").strip().lower() in {
+        "1",
+        "true",
+        "on",
+        "yes",
+    }
+    management_level = str(form.get("management_level") or "").strip() or None
+    if management_level and management_level not in MANAGEMENT_LEVELS:
+        raise ValueError("Unsupported management level.")
+    user.management_level = management_level if user.is_management else None
     user.supervisor_name = form["supervisor_name"].strip()
     user.work_area = form["work_area"].strip()
     user.access_reason = form["access_reason"].strip()
@@ -983,6 +997,7 @@ def _render_user_edit_form(target_user, gateway, membership, form):
         membership=membership,
         node_rows=_node_role_rows(target_user, membership),
         target_user=target_user,
+        management_level_choices=MANAGEMENT_LEVELS,
     )
 
 

@@ -434,10 +434,9 @@
                         {% set motherbrain_mobile_item_class = "mobile-shell-menu-link" %}
                         {% include "neomotherbrain/_motherbrain_mobile_nav_items.html" %}
                     {% elif is_neostaffing_page %}
-                        <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.index') }}" role="menuitem">Board</a>
                         <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.people') }}" role="menuitem">People</a>
-                        <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.seniority') }}" role="menuitem">Seniority</a>
-                        <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.app_management') }}" role="menuitem">Manage</a>
+                        <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.org_chart') }}" role="menuitem">Org Chart</a>
+                        <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.reports') }}" role="menuitem">Reports</a>
                     {% else %}
                         <a class="mobile-shell-menu-link" href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">{{ neo_brand("Apps", "apps") }}</a>
                         {% if not is_rfd_hub_page %}

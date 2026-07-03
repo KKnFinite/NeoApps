@@ -28,6 +28,19 @@
                 <span>EMAIL</span>
                 <input name="email" type="email" value="{{ form.email }}" autocomplete="email" required>
             </label>
+            <label class="checkbox-line centered-checkbox-line">
+                <input type="checkbox" name="is_management" value="1" {% if form.is_management %}checked{% endif %}>
+                <span>STAFFING MANAGEMENT IDENTITY</span>
+            </label>
+            <label>
+                <span>MANAGEMENT LEVEL</span>
+                <select name="management_level">
+                    <option value="">None</option>
+                    {% for level in management_level_choices %}
+                    <option value="{{ level }}" {% if form.management_level == level %}selected{% endif %}>{{ level|status_label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
             <label>
                 <span>SUPERVISOR / MANAGER</span>
                 <input name="supervisor_name" value="{{ form.supervisor_name }}">

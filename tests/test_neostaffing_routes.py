@@ -38,7 +38,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
-    def test_approved_neostaffing_user_can_open_dashboard(self):
+    def test_approved_neostaffing_user_can_open_landing_menu(self):
         user = self._user("staffing_operator")
         self._grant_app_access(user, "neostaffing", "operator")
         db.session.commit()
@@ -47,31 +47,23 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         response = self.client.get("/neostaffing")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"DASHBOARD", response.data)
-        self.assertIn(b"ORGANIZATION HIERARCHY", response.data)
-        self.assertIn(b"STAFFING BOARD", response.data)
-        self.assertIn(b"TOTAL PLANNED STAFFING", response.data)
-        self.assertIn(b"TOTAL ASSIGNED STAFFING", response.data)
-        self.assertIn(b"TOTAL OPEN POSITIONS", response.data)
-        self.assertIn(b"TOTAL EXTRA STAFFING", response.data)
-        self.assertIn(b"MISSING LEADERSHIP", response.data)
-        self.assertIn(b"Search work areas", response.data)
+        self.assertIn(b"neostaffing-primary-menu", response.data)
         self.assertIn(b"PEOPLE", response.data)
-        self.assertIn(b"SENIORITY", response.data)
-        self.assertIn(b"MANAGE", response.data)
-        self.assertIn(b"APP MANAGEMENT", response.data)
+        self.assertIn(b"ORG CHART", response.data)
+        self.assertIn(b"REPORTS", response.data)
+        self.assertIn(b'href="/neostaffing/people"', response.data)
+        self.assertIn(b'href="/neostaffing/org-chart"', response.data)
+        self.assertIn(b'href="/neostaffing/reports"', response.data)
         self.assertIn(b"neo-brand--apps", response.data)
         self.assertIn(b"/static/images/icons/neostaffing/inapp/neostaffing-inapp-128.png", response.data)
         self.assertIn(b"neostaffing-header-title", response.data)
-        self.assertIn(b"neostaffing-rail-title", response.data)
-        self.assertIn(b"neostaffing-eyebrow-brand", response.data)
         self.assertIn(b"neo-brand-title__node--staffing", response.data)
-        self.assertIn(b'class="mobile-shell-duplicate-title"', response.data)
-        self.assertIn(b'id="neostaffing-title">BOARD</h1>', response.data)
+        self.assertNotIn(b"TOTAL PLANNED STAFFING", response.data)
+        self.assertNotIn(b"STAFFING BOARD", response.data)
         self.assertNotIn(b"NeoMotherBrain", response.data)
         self.assertNotIn(b"Change Characters", response.data)
 
-    def test_dashboard_uses_hierarchy_driven_operations_layout(self):
+    def test_org_chart_uses_hierarchy_driven_visual_layout(self):
         user = self._user("staffing_dashboard_master")
         self._grant_app_access(user, "neostaffing", "master")
         sort = StaffingUnit(unit_type="sort", name="Night Sort", display_order=1)
@@ -108,197 +100,52 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login(user.username)
 
-        response = self.client.get("/neostaffing")
+        response = self.client.get(f"/neostaffing/org-chart?unit_id={operation.id}")
+        work_area_response = self.client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Night Sort", response.data)
         self.assertIn(b"Shift Operation", response.data)
         self.assertIn(b"East Shift Department", response.data)
         self.assertIn(b"EBM", response.data)
-        self.assertIn(b"1 / 2", response.data)
-        self.assertIn(b"1 OPEN", response.data)
-        self.assertIn(b"Planned", response.data)
-        self.assertIn(b"Assigned", response.data)
-        self.assertIn(b"Open", response.data)
-        self.assertIn(b"Extra", response.data)
-        self.assertIn(b"Understaffed", response.data)
-        self.assertIn(b"SORT ROLLUPS", response.data)
-        self.assertIn(b"OPERATION ROLLUPS", response.data)
-        self.assertIn(b"DEPARTMENT ROLLUPS", response.data)
-        self.assertIn(b"PT Sup", response.data)
-        self.assertIn(b"FT Sup", response.data)
-        self.assertIn(b"VIEW PEOPLE", response.data)
-        self.assertIn(b"VIEW SENIORITY", response.data)
-        self.assertIn(b"MANAGE WORK AREA", response.data)
+        self.assertIn(b"ORG TREE", response.data)
+        self.assertIn(b"neostaffing-unit-card", response.data)
+        self.assertEqual(work_area_response.status_code, 200)
+        self.assertIn(b"Required Headcount", work_area_response.data)
+        self.assertIn(b"Assigned People", work_area_response.data)
+        self.assertIn(b"1", work_area_response.data)
 
-    def test_board_filters_understaffed_missing_leadership_and_search(self):
-        user = self._user("staffing_board_filters")
+    def test_reports_render_staffing_seniority_and_attendance_shells(self):
+        user = self._user("staffing_reports")
         self._grant_app_access(user, "neostaffing", "master")
-        sort, operation, department, work_area = self._staffing_hierarchy()
-        staffing_service.update_unit(
-            work_area,
+        _sort, operation, department, work_area = self._staffing_hierarchy()
+        person = staffing_service.create_person(
             {
-                "unit_type": "work_area",
-                "name": work_area.name,
-                "parent_id": department.id,
-                "required_headcount": "1",
-            },
-        )
-        second_work_area = staffing_service.create_unit(
-            {
-                "unit_type": "work_area",
-                "name": "WBM",
-                "parent_id": department.id,
-                "required_headcount": "3",
+                "employee_id": "25001",
+                "first_name": "Avery",
+                "last_name": "Report",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+                "phone_number": "555-0100",
             }
         )
-        staffing_service.assign_work_area(
-            staffing_service.create_person(
-                {
-                    "employee_id": "21001",
-                    "first_name": "Avery",
-                    "last_name": "East",
-                    "seniority_date": "2020-01-01",
-                    "classification": "part_time",
-                }
-            ),
-            work_area,
-        )
-        staffing_service.assign_work_area(
-            staffing_service.create_person(
-                {
-                    "employee_id": "21002",
-                    "first_name": "Morgan",
-                    "last_name": "West",
-                    "seniority_date": "2020-01-02",
-                    "classification": "part_time",
-                }
-            ),
-            second_work_area,
-        )
-        staffing_service.create_leadership_assignment(
-            staffing_service.create_person(
-                {
-                    "employee_id": "21003",
-                    "first_name": "Pat",
-                    "last_name": "Lead",
-                    "seniority_date": "2019-01-01",
-                    "classification": "part_time_supervisor",
-                }
-            ),
-            work_area,
-        )
-        staffing_service.create_leadership_assignment(
-            staffing_service.create_person(
-                {
-                    "employee_id": "21004",
-                    "first_name": "Fran",
-                    "last_name": "Supervisor",
-                    "seniority_date": "2018-01-01",
-                    "classification": "full_time_supervisor",
-                }
-            ),
-            department,
-        )
-        staffing_service.create_leadership_assignment(
-            staffing_service.create_person(
-                {
-                    "employee_id": "21005",
-                    "first_name": "Manny",
-                    "last_name": "Manager",
-                    "seniority_date": "2017-01-01",
-                    "classification": "manager",
-                }
-            ),
-            operation,
-        )
-        staffing_service.create_leadership_assignment(
-            staffing_service.create_person(
-                {
-                    "employee_id": "21006",
-                    "first_name": "Dana",
-                    "last_name": "Division",
-                    "seniority_date": "2016-01-01",
-                    "classification": "division_manager",
-                }
-            ),
-            sort,
-        )
+        staffing_service.assign_work_area(person, work_area)
         db.session.commit()
         self._login(user.username)
 
-        response = self.client.get("/neostaffing?understaffed_only=1&missing_leadership_only=1")
-        searched = self.client.get("/neostaffing?search=EBM")
+        staffing = self.client.get("/neostaffing/reports?report_type=staffing")
+        seniority = self.client.get(f"/neostaffing/reports?report_type=seniority&operation_id={operation.id}")
+        attendance = self.client.get("/neostaffing/reports?report_type=attendance")
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"WBM", response.data)
-        self.assertIn(b"1 / 3", response.data)
-        self.assertIn(b"Missing PT Supervisor", response.data)
-        self.assertEqual(searched.status_code, 200)
-        self.assertIn(b"EBM", searched.data)
-        self.assertIn(b"1 / 1", searched.data)
-        self.assertNotIn(b"1 / 3", searched.data)
-
-    def test_board_planned_staffing_gap_analysis_and_rollups(self):
-        user = self._user("staffing_gap_board")
-        self._grant_app_access(user, "neostaffing", "master")
-        sort, operation, department, work_area = self._staffing_hierarchy()
-        understaffed = staffing_service.update_unit(
-            work_area,
-            {
-                "unit_type": "work_area",
-                "name": "EBM",
-                "parent_id": department.id,
-                "required_headcount": "4",
-            },
-        )
-        overstaffed = staffing_service.create_unit(
-            {
-                "unit_type": "work_area",
-                "name": "East Primary",
-                "parent_id": department.id,
-                "required_headcount": "1",
-            }
-        )
-        defaulted = staffing_service.create_unit(
-            {"unit_type": "work_area", "name": "East Irregs", "parent_id": department.id}
-        )
-        for index, area in enumerate([understaffed, overstaffed, overstaffed, defaulted], start=1):
-            person = staffing_service.create_person(
-                {
-                    "employee_id": f"2500{index}",
-                    "first_name": f"Worker{index}",
-                    "last_name": "Gap",
-                    "seniority_date": "2020-01-01",
-                    "classification": "part_time",
-                }
-            )
-            staffing_service.assign_work_area(person, area)
-        db.session.commit()
-        self._login(user.username)
-
-        response = self.client.get("/neostaffing")
-        context = staffing_service.dashboard_context({})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"TOTAL PLANNED STAFFING", response.data)
-        self.assertIn(b"TOTAL ASSIGNED STAFFING", response.data)
-        self.assertIn(b"TOTAL OPEN POSITIONS", response.data)
-        self.assertIn(b"TOTAL EXTRA STAFFING", response.data)
-        self.assertIn(b"MOST UNDERSTAFFED", response.data)
-        self.assertIn(b"MOST OVERSTAFFED", response.data)
-        self.assertIn(b"Planned 4 / Assigned 1 / Gap 3", response.data)
-        self.assertIn(b"Planned 1 / Assigned 2 / Extra 1", response.data)
-        self.assertIn(b"Planned staffing defaults to assigned staffing.", response.data)
-        self.assertEqual(context["summary"]["total_planned"], 6)
-        self.assertEqual(context["summary"]["total_assigned"], 4)
-        self.assertEqual(context["summary"]["total_open"], 3)
-        self.assertEqual(context["summary"]["total_extra"], 1)
-        self.assertEqual(context["summary"]["most_understaffed"][0]["unit"].name, "EBM")
-        self.assertEqual(context["summary"]["most_overstaffed"][0]["unit"].name, "East Primary")
-        overstaffed_card = next(card for card in context["work_area_cards"] if card["unit"].name == "East Primary")
-        self.assertEqual(overstaffed_card["coverage"], 200)
-        self.assertEqual(overstaffed_card["coverage_bar"], 100)
+        self.assertEqual(staffing.status_code, 200)
+        self.assertIn(b"STAFFING REPORT", staffing.data)
+        self.assertIn(b"25001", staffing.data)
+        self.assertIn(b"Active", staffing.data)
+        self.assertEqual(seniority.status_code, 200)
+        self.assertIn(b"SENIORITY REPORT", seniority.data)
+        self.assertIn(b"Night Sort / Shift Operation / East Shift Department / EBM", seniority.data)
+        self.assertEqual(attendance.status_code, 200)
+        self.assertIn(b"ATTENDANCE REPORT", attendance.data)
 
     def test_user_without_neostaffing_access_cannot_open_dashboard(self):
         user = self._user("no_staffing")
@@ -534,7 +381,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertIsNotNone(second_work_area)
 
-    def test_board_drilldown_links_detail_panel_and_required_status(self):
+    def test_org_chart_drilldown_shows_work_area_detail(self):
         user = self._user("staffing_board_drilldown")
         self._grant_app_access(user, "neostaffing", "master")
         sort, operation, department, work_area = self._staffing_hierarchy()
@@ -563,32 +410,18 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login(user.username)
 
-        response = self.client.get(f"/neostaffing?work_area_id={work_area.id}")
-        defaulted = self.client.get(f"/neostaffing?work_area_id={default_area.id}")
+        response = self.client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
+        defaulted = self.client.get(f"/neostaffing/org-chart?unit_id={default_area.id}")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Planned Source", response.data)
-        self.assertIn(b"Configured", response.data)
-        self.assertIn(b"Department", response.data)
+        self.assertIn(b"Required Headcount", response.data)
+        self.assertIn(b"Assigned People", response.data)
         self.assertIn(b"East Shift Department", response.data)
-        self.assertIn(b"Operation", response.data)
         self.assertIn(b"Shift Operation", response.data)
-        self.assertIn(
-            f'href="/neostaffing/people?sort_id={sort.id}&amp;operation_id={operation.id}&amp;department_id={department.id}&amp;work_area_id={work_area.id}"'.encode(),
-            response.data,
-        )
-        self.assertIn(
-            f'href="/neostaffing/seniority?sort_id={sort.id}&amp;operation_id={operation.id}&amp;department_id={department.id}&amp;work_area_id={work_area.id}"'.encode(),
-            response.data,
-        )
-        self.assertIn(
-            f'href="/neostaffing/app-management/planned-staffing?sort_id={sort.id}&amp;operation_id={operation.id}&amp;department_id={department.id}&amp;work_area_id={work_area.id}"'.encode(),
-            response.data,
-        )
-        self.assertIn(b"DEFAULT PLANNED STAFFING", response.data)
+        self.assertIn(b"Headcount 2", response.data)
         self.assertEqual(defaulted.status_code, 200)
-        self.assertIn(b"Defaulted", defaulted.data)
-        self.assertIn(b"Planned staffing defaults to assigned staffing.", defaulted.data)
+        self.assertIn(b"Default Area", defaulted.data)
+        self.assertIn(b"Required Headcount", defaulted.data)
 
     def test_portal_tile_opens_neostaffing_for_approved_user(self):
         user = self._user("staffing_portal")
@@ -603,7 +436,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Approved Operator", response.data)
         self.assertIn(b'href="/neostaffing"', response.data)
 
-    def test_seniority_view_loads_for_approved_user_and_links_from_dashboard(self):
+    def test_seniority_view_loads_for_approved_user_but_is_not_primary_landing_tile(self):
         user = self._user("staffing_seniority_operator")
         self._grant_app_access(user, "neostaffing", "operator")
         db.session.commit()
@@ -617,7 +450,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"FILTERS", response.data)
         self.assertIn(b"TOTAL EMPLOYEES", response.data)
         self.assertIn(b"Include Management", response.data)
-        self.assertIn(b'href="/neostaffing/seniority"', dashboard.data)
+        self.assertIn(b'href="/neostaffing/people"', dashboard.data)
+        self.assertIn(b'href="/neostaffing/org-chart"', dashboard.data)
+        self.assertIn(b'href="/neostaffing/reports"', dashboard.data)
+        self.assertNotIn(b'href="/neostaffing/seniority"', dashboard.data)
 
     def test_seniority_view_blocks_user_without_neostaffing_access(self):
         user = self._user("staffing_seniority_blocked")

@@ -22,6 +22,8 @@
         <div><dt>LAST NAME</dt><dd>{{ target_user.last_name or "" }}</dd></div>
         <div><dt>EMAIL</dt><dd>{{ target_user.email or "" }}</dd></div>
         <div><dt>EMPLOYEE ID</dt><dd>{{ target_user.employee_id or "" }}</dd></div>
+        <div><dt>STAFFING MANAGEMENT</dt><dd>{{ "Yes" if target_user.is_management else "No" }}</dd></div>
+        <div><dt>MANAGEMENT LEVEL</dt><dd>{{ target_user.management_level|status_label if target_user.management_level else "" }}</dd></div>
         <div><dt>SUPERVISOR / MANAGER</dt><dd>{{ target_user.supervisor_name or "" }}</dd></div>
         <div><dt>WORK AREA</dt><dd>{{ target_user.work_area or "" }}</dd></div>
         <div><dt>EMAIL VERIFIED</dt><dd>{{ "Yes" if target_user.email_verified_at else "No" }}</dd></div>

@@ -14,6 +14,14 @@ ROLE_LEVELS = {
     "grandmaster": 50,
 }
 
+MANAGEMENT_LEVELS = (
+    "part_time_supervisor",
+    "full_time_supervisor",
+    "full_time_specialist",
+    "manager",
+    "division_manager",
+)
+
 
 class User(UserMixin, db.Model):
     __tablename__ = "users"
@@ -21,6 +29,12 @@ class User(UserMixin, db.Model):
         db.CheckConstraint(
             "role IN ('grandmaster', 'master', 'simulator', 'operator', 'watcher')",
             name="ck_users_role_supported",
+        ),
+        db.CheckConstraint(
+            "management_level IS NULL OR management_level IN ("
+            "'part_time_supervisor', 'full_time_supervisor', "
+            "'full_time_specialist', 'manager', 'division_manager')",
+            name="ck_users_management_level_supported",
         ),
     )
 
@@ -33,6 +47,8 @@ class User(UserMixin, db.Model):
     employee_id = db.Column(db.String(80), unique=True, nullable=True, index=True)
     supervisor_name = db.Column(db.String(160), nullable=True)
     work_area = db.Column(db.String(160), nullable=True)
+    is_management = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    management_level = db.Column(db.String(40), nullable=True, index=True)
     access_reason = db.Column(db.Text, nullable=True)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(32), nullable=False, default="watcher")

@@ -37,6 +37,7 @@ from app.models.sort_date_operation import SortDateOperation
 from app.models.sort_date_parking_assignment import SortDateParkingAssignment
 from app.models.sort_date_tail_state import SortDateTailState
 from app.models.staffing_leadership_assignment import StaffingLeadershipAssignment
+from app.models.staffing_daily_attendance import StaffingDailyAttendance
 from app.models.staffing_person import StaffingPerson
 from app.models.staffing_unit import StaffingUnit
 from app.models.staffing_work_assignment import StaffingWorkAssignment
@@ -90,6 +91,7 @@ __all__ = [
     "StaffingUnit",
     "StaffingWorkAssignment",
     "StaffingLeadershipAssignment",
+    "StaffingDailyAttendance",
     "SortTimelineSettings",
     "SortTimelineApiParticipation",
     "SortTimelineMonthVariance",

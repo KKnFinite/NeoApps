@@ -18,6 +18,8 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "employee_id": "VARCHAR(80)",
         "supervisor_name": "VARCHAR(160)",
         "work_area": "VARCHAR(160)",
+        "is_management": "BOOLEAN DEFAULT 0",
+        "management_level": "VARCHAR(40)",
         "access_reason": "TEXT",
         "email_verified_at": "DATETIME",
         "password_reset_required": "BOOLEAN DEFAULT 0",
@@ -81,6 +83,9 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "active": "BOOLEAN DEFAULT 1",
         "effective_date": "DATE",
     },
+    "staffing_people": {
+        "roster_status": "VARCHAR(24) DEFAULT 'active'",
+    },
     "staffing_leadership_assignments": {
         "active": "BOOLEAN DEFAULT 1",
     },
@@ -108,6 +113,8 @@ POSTGRES_OPTIONAL_COLUMNS = {
     "users": {
         "first_name": "VARCHAR(80)",
         "last_name": "VARCHAR(80)",
+        "is_management": "BOOLEAN DEFAULT FALSE",
+        "management_level": "VARCHAR(40)",
     },
     "sort_date_missions": {
         "arrival_status": "VARCHAR(32)",
@@ -154,6 +161,9 @@ POSTGRES_OPTIONAL_COLUMNS = {
     "staffing_work_assignments": {
         "active": "BOOLEAN DEFAULT TRUE",
         "effective_date": "DATE",
+    },
+    "staffing_people": {
+        "roster_status": "VARCHAR(24) DEFAULT 'active'",
     },
     "staffing_leadership_assignments": {
         "active": "BOOLEAN DEFAULT TRUE",
@@ -507,6 +517,7 @@ def _create_missing_application_tables(existing_table_names):
         PortalAppAccess,
         SortDateParkingAssignment,
         StaffingLeadershipAssignment,
+        StaffingDailyAttendance,
         StaffingPerson,
         StaffingUnit,
         StaffingWorkAssignment,
@@ -533,6 +544,7 @@ def _create_missing_application_tables(existing_table_names):
         StaffingUnit,
         StaffingWorkAssignment,
         StaffingLeadershipAssignment,
+        StaffingDailyAttendance,
         SortTimelineSettings,
         SortTimelineApiParticipation,
         SortTimelineMonthVariance,

@@ -4,13 +4,16 @@ from sqlalchemy import func
 
 from app.extensions import db
 from app.models import (
+    StaffingDailyAttendance,
     StaffingLeadershipAssignment,
     StaffingPerson,
     StaffingUnit,
     StaffingWorkAssignment,
+    User,
 )
 from app.models.staffing_leadership_assignment import STAFFING_LEADERSHIP_LEVELS
-from app.models.staffing_person import STAFFING_CLASSIFICATIONS
+from app.models.staffing_daily_attendance import STAFFING_DAILY_ATTENDANCE_STATUSES
+from app.models.staffing_person import STAFFING_CLASSIFICATIONS, STAFFING_ROSTER_STATUSES
 from app.models.staffing_unit import STAFFING_UNIT_TYPES
 
 
@@ -38,6 +41,30 @@ LEADERSHIP_LEVEL_LABELS = {
     "sort": "Sort",
 }
 
+ROSTER_STATUS_LABELS = {
+    "active": "Active",
+    "disability": "Disability",
+    "comp": "Comp",
+    "military": "Military",
+    "fmla": "FMLA",
+}
+
+ATTENDANCE_STATUS_LABELS = {
+    "here": "Here",
+    "call_in": "Call In",
+    "no_call": "No Call",
+    "vacation": "Vacation",
+    "optional_day": "Optional Day",
+    "anniversary_day": "Anniversary Day",
+    "funeral": "Funeral",
+    "jury": "Jury",
+    "int_fmla": "Int FMLA",
+    "disability": "Disability",
+    "comp": "Comp",
+    "military": "Military",
+    "cleared": "Cleared",
+}
+
 NON_MANAGEMENT_CLASSIFICATIONS = {"part_time", "full_time_combo"}
 MANAGEMENT_CLASSIFICATIONS = set(STAFFING_CLASSIFICATIONS) - NON_MANAGEMENT_CLASSIFICATIONS
 SUPERVISOR_CLASSIFICATIONS = {
@@ -50,13 +77,24 @@ PARENT_TYPE_BY_UNIT_TYPE = {
     "sort": None,
     "operation": "sort",
     "department": "operation",
-    "work_area": "department",
+    "work_area": ("department", "operation"),
 }
 STAFFING_NEAR_TARGET_THRESHOLD = 0.8
 
 
 def classification_choices():
     return [(value, CLASSIFICATION_LABELS[value]) for value in STAFFING_CLASSIFICATIONS]
+
+
+def roster_status_choices():
+    return [(value, ROSTER_STATUS_LABELS[value]) for value in STAFFING_ROSTER_STATUSES]
+
+
+def attendance_status_choices():
+    return [
+        (value, ATTENDANCE_STATUS_LABELS[value])
+        for value in STAFFING_DAILY_ATTENDANCE_STATUSES
+    ]
 
 
 def unit_type_choices():
@@ -85,6 +123,11 @@ def update_person(person, values, is_new=False):
         STAFFING_CLASSIFICATIONS,
         "classification",
     )
+    roster_status = _normalize_choice(
+        values.get("roster_status") or "active",
+        STAFFING_ROSTER_STATUSES,
+        "roster status",
+    )
     phone_number = _optional_text(values.get("phone_number"))
     active = _parse_bool(values.get("active"), default=True)
 
@@ -100,6 +143,7 @@ def update_person(person, values, is_new=False):
     person.seniority_date = seniority_date
     person.phone_number = phone_number
     person.classification = classification
+    person.roster_status = roster_status
     person.active = active
 
     if old_classification and old_classification != classification:
@@ -291,8 +335,11 @@ def dashboard_context(filters=None):
     selected_operation = _resolve_optional_unit(filters.get("operation_id"), "operation")
     selected_department = _resolve_optional_unit(filters.get("department_id"), "department")
     selected_work_area = _resolve_optional_unit(filters.get("work_area_id"), "work_area")
-    if selected_work_area and selected_department is None:
-        selected_department = selected_work_area.parent
+    if selected_work_area:
+        area_department, area_operation, area_sort = parent_chain_for_work_area(selected_work_area)
+        selected_department = selected_department or area_department
+        selected_operation = selected_operation or area_operation
+        selected_sort = selected_sort or area_sort
     if selected_department and selected_operation is None:
         selected_operation = selected_department.parent
     if selected_operation and selected_sort is None:
@@ -456,8 +503,11 @@ def required_headcount_context(filters=None):
     selected_operation = _resolve_optional_unit(filters.get("operation_id"), "operation")
     selected_department = _resolve_optional_unit(filters.get("department_id"), "department")
     selected_work_area = _resolve_optional_unit(filters.get("work_area_id"), "work_area")
-    if selected_work_area and selected_department is None:
-        selected_department = selected_work_area.parent
+    if selected_work_area:
+        area_department, area_operation, area_sort = parent_chain_for_work_area(selected_work_area)
+        selected_department = selected_department or area_department
+        selected_operation = selected_operation or area_operation
+        selected_sort = selected_sort or area_sort
     if selected_department and selected_operation is None:
         selected_operation = selected_department.parent
     if selected_operation and selected_sort is None:
@@ -622,9 +672,23 @@ def _board_leadership_index():
 
 
 def _board_parent_chain(work_area):
-    department = work_area.parent if work_area else None
-    operation = department.parent if department and department.parent else None
-    sort = operation.parent if operation and operation.parent else None
+    return parent_chain_for_work_area(work_area)
+
+
+def parent_chain_for_work_area(work_area):
+    department = None
+    operation = None
+    sort = None
+    if not work_area:
+        return department, operation, sort
+    parent = work_area.parent
+    if parent and parent.unit_type == "department":
+        department = parent
+        operation = parent.parent if parent.parent and parent.parent.unit_type == "operation" else None
+    elif parent and parent.unit_type == "operation":
+        operation = parent
+    if operation and operation.parent and operation.parent.unit_type == "sort":
+        sort = operation.parent
     return department, operation, sort
 
 
@@ -770,6 +834,7 @@ def seniority_context(filters=None):
             "sort_id": str(selected_sort.id) if selected_sort else "",
             "operation_id": str(selected_operation.id) if selected_operation else "",
             "classification": filters.get("classification", ""),
+            "roster_status": filters.get("roster_status", ""),
             "department_id": filters.get("department_id", ""),
             "work_area_id": filters.get("work_area_id", ""),
             "search": filters.get("search", ""),
@@ -795,8 +860,11 @@ def people_context(filters=None):
         selected_sort = selected_operation.parent
     selected_department = _resolve_optional_unit(filters.get("department_id"), "department")
     selected_work_area = _resolve_optional_unit(filters.get("work_area_id"), "work_area")
-    if selected_work_area and selected_department is None:
-        selected_department = selected_work_area.parent
+    if selected_work_area:
+        area_department, area_operation, area_sort = parent_chain_for_work_area(selected_work_area)
+        selected_department = selected_department or area_department
+        selected_operation = selected_operation or area_operation
+        selected_sort = selected_sort or area_sort
     if selected_department and selected_operation is None:
         selected_operation = selected_department.parent
     if selected_operation and selected_sort is None:
@@ -872,6 +940,12 @@ def selectable_parent_units(unit_type):
     expected_parent_type = PARENT_TYPE_BY_UNIT_TYPE.get(unit_type)
     if expected_parent_type is None:
         return []
+    if isinstance(expected_parent_type, tuple):
+        return (
+            StaffingUnit.query.filter(StaffingUnit.unit_type.in_(expected_parent_type))
+            .order_by(StaffingUnit.unit_type, StaffingUnit.display_order, StaffingUnit.name)
+            .all()
+        )
     return (
         StaffingUnit.query.filter_by(unit_type=expected_parent_type)
         .order_by(StaffingUnit.display_order, StaffingUnit.name)
@@ -911,7 +985,351 @@ def work_area_ids_under(unit):
     return ids
 
 
-def people_query(search=None, classification=None, active=None):
+def org_chart_context(selected_unit_id=None):
+    selected_unit = None
+    if selected_unit_id:
+        try:
+            selected_unit = db.session.get(StaffingUnit, int(selected_unit_id))
+        except (TypeError, ValueError):
+            selected_unit = None
+    root_units = units_by_type("sort")
+    current_children = []
+    if selected_unit:
+        current_children = sorted(
+            selected_unit.children,
+            key=lambda row: (row.display_order, row.unit_type, row.name.lower(), row.id),
+        )
+    else:
+        current_children = root_units
+    work_area_detail = None
+    if selected_unit and selected_unit.unit_type == "work_area":
+        assigned_count = StaffingWorkAssignment.query.filter_by(
+            work_area_unit_id=selected_unit.id,
+            active=True,
+        ).count()
+        pt_supervisors = [
+            assignment
+            for assignment in selected_unit.leadership_assignments
+            if assignment.active
+            and assignment.person.classification == "part_time_supervisor"
+        ]
+        work_area_detail = {
+            "unit": selected_unit,
+            "path": unit_path(selected_unit),
+            "assigned_count": assigned_count,
+            "pt_supervisors": pt_supervisors,
+            "required_headcount": selected_unit.required_headcount,
+        }
+    return {
+        "tree": staffing_hierarchy_tree(),
+        "selected_unit": selected_unit,
+        "breadcrumb": unit_breadcrumb(selected_unit),
+        "current_children": current_children,
+        "work_area_detail": work_area_detail,
+        "units": StaffingUnit.query.order_by(
+            StaffingUnit.unit_type,
+            StaffingUnit.display_order,
+            StaffingUnit.name,
+        ).all(),
+        "sorts": units_by_type("sort"),
+        "operations": units_by_type("operation"),
+        "departments": units_by_type("department"),
+        "parent_units": selectable_parent_units("work_area"),
+    }
+
+
+def unit_breadcrumb(unit):
+    if not unit:
+        return []
+    breadcrumb = []
+    current = unit
+    while current:
+        breadcrumb.append(current)
+        current = current.parent
+    return list(reversed(breadcrumb))
+
+
+def management_attendance_context_for_user(user):
+    is_management = bool(getattr(user, "is_management", False))
+    employee_id = str(getattr(user, "employee_id", "") or "").strip()
+    if not is_management:
+        return {"is_management": False, "person": None, "assignments": [], "message": ""}
+    if not employee_id:
+        return {
+            "is_management": True,
+            "person": None,
+            "assignments": [],
+            "message": "Add an Employee ID to your NeoApps account before assigned staffing scope can resolve.",
+        }
+    person = StaffingPerson.query.filter(
+        func.lower(StaffingPerson.employee_id) == employee_id.lower()
+    ).first()
+    if not person:
+        return {
+            "is_management": True,
+            "person": None,
+            "assignments": [],
+            "message": "Create a matching PEOPLE record before assigned staffing scope can resolve.",
+        }
+    assignments = [
+        assignment
+        for assignment in person.leadership_assignments
+        if assignment.active and assignment.unit and assignment.unit.active
+    ]
+    cards = [
+        {
+            "assignment": assignment,
+            "unit": assignment.unit,
+            "path": unit_path(assignment.unit),
+            "label": _attendance_scope_label(assignment),
+            "scope_key": _attendance_scope_key(assignment.unit),
+        }
+        for assignment in assignments
+    ]
+    return {
+        "is_management": True,
+        "person": person,
+        "assignments": cards,
+        "message": "" if cards else "No leadership assignment is linked to your PEOPLE record yet.",
+    }
+
+
+def _attendance_scope_label(assignment):
+    if assignment.leadership_level == "work_area":
+        return "Work Area Attendance"
+    if assignment.leadership_level == "department":
+        return "Department Attendance"
+    if assignment.leadership_level == "operation":
+        return "Operation Attendance"
+    if assignment.leadership_level == "sort":
+        return "Sort Attendance"
+    return "Attendance"
+
+
+def _attendance_scope_key(unit):
+    return f"{unit.unit_type}_id"
+
+
+def attendance_context(filters=None, user=None):
+    filters = filters or {}
+    attendance_date = _parse_optional_date(filters.get("attendance_date")) or date.today()
+    selected_scope = _resolve_attendance_scope(filters)
+    selected_sort = _resolve_attendance_sort(filters, selected_scope)
+    work_area_ids = set()
+    if selected_scope:
+        work_area_ids = work_area_ids_under(selected_scope)
+    elif selected_sort:
+        work_area_ids = work_area_ids_under(selected_sort)
+    rows = []
+    assignments = (
+        StaffingWorkAssignment.query.join(StaffingPerson)
+        .join(StaffingUnit)
+        .filter(
+            StaffingWorkAssignment.active.is_(True),
+            StaffingPerson.active.is_(True),
+            StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS),
+        )
+    )
+    if work_area_ids:
+        assignments = assignments.filter(
+            StaffingWorkAssignment.work_area_unit_id.in_(work_area_ids)
+        )
+    existing = {}
+    if selected_sort:
+        existing = {
+            record.person_id: record
+            for record in StaffingDailyAttendance.query.filter_by(
+                attendance_date=attendance_date,
+                sort_unit_id=selected_sort.id,
+            ).all()
+        }
+    for assignment in assignments.order_by(StaffingPerson.last_name, StaffingPerson.first_name).all():
+        record = existing.get(assignment.person_id)
+        rows.append(
+            {
+                "person": assignment.person,
+                "work_area": assignment.work_area,
+                "sort": parent_chain_for_work_area(assignment.work_area)[2],
+                "attendance": record,
+                "status": record.status if record else "here",
+                "note": record.note if record else "",
+            }
+        )
+    counts = {}
+    for row in rows:
+        counts[row["status"]] = counts.get(row["status"], 0) + 1
+    return {
+        "attendance_date": attendance_date,
+        "selected_sort": selected_sort,
+        "selected_scope": selected_scope,
+        "rows": rows,
+        "counts": counts,
+        "sorts": units_by_type("sort"),
+        "operations": units_by_type("operation"),
+        "departments": units_by_type("department"),
+        "work_areas": work_area_units(),
+        "status_choices": attendance_status_choices(),
+        "filters": {
+            "attendance_date": attendance_date.isoformat(),
+            "sort_id": str(selected_sort.id) if selected_sort else "",
+            "operation_id": filters.get("operation_id", ""),
+            "department_id": filters.get("department_id", ""),
+            "work_area_id": filters.get("work_area_id", ""),
+        },
+    }
+
+
+def save_attendance(values, user):
+    attendance_date = _parse_date(values.get("attendance_date"), "Attendance date")
+    selected_scope = _resolve_attendance_scope(values)
+    sort = _resolve_attendance_sort(values, selected_scope)
+    if not sort:
+        raise ValueError("Select a Sort before saving attendance.")
+    saved = 0
+    person_ids = set()
+    for key in values.keys():
+        if str(key).startswith("status_"):
+            try:
+                person_ids.add(int(str(key).split("_", 1)[1]))
+            except (TypeError, ValueError):
+                continue
+    for person_id in sorted(person_ids):
+        person = db.session.get(StaffingPerson, person_id)
+        if not person:
+            continue
+        status = _normalize_choice(
+            values.get(f"status_{person_id}") or "here",
+            STAFFING_DAILY_ATTENDANCE_STATUSES,
+            "attendance status",
+        )
+        note = _optional_text(values.get(f"note_{person_id}"))
+        work_area = _attendance_work_area_for_person(person)
+        record = StaffingDailyAttendance.query.filter_by(
+            person_id=person.id,
+            attendance_date=attendance_date,
+            sort_unit_id=sort.id,
+        ).first()
+        if not record:
+            record = StaffingDailyAttendance(
+                person=person,
+                attendance_date=attendance_date,
+                sort_unit_id=sort.id,
+                recorded_by_user_id=getattr(user, "id", None),
+            )
+            db.session.add(record)
+        record.work_area_unit_id = work_area.id if work_area else None
+        record.status = status
+        record.note = note
+        record.updated_by_user_id = getattr(user, "id", None)
+        saved += 1
+    db.session.flush()
+    return saved
+
+
+def _attendance_work_area_for_person(person):
+    assignment = person.work_assignment if person.work_assignment and person.work_assignment.active else None
+    return assignment.work_area if assignment else None
+
+
+def _resolve_attendance_scope(filters):
+    for key, unit_type in (
+        ("work_area_id", "work_area"),
+        ("department_id", "department"),
+        ("operation_id", "operation"),
+        ("sort_id", "sort"),
+    ):
+        unit = _resolve_optional_unit(filters.get(key), unit_type)
+        if unit:
+            return unit
+    return None
+
+
+def _resolve_attendance_sort(filters, selected_scope):
+    explicit_sort = _resolve_optional_unit(filters.get("sort_id"), "sort")
+    if explicit_sort:
+        return explicit_sort
+    current = selected_scope
+    while current:
+        if current.unit_type == "sort":
+            return current
+        current = current.parent
+    sorts = units_by_type("sort")
+    return sorts[0] if len(sorts) == 1 else None
+
+
+def reports_context(filters=None):
+    filters = filters or {}
+    report_type = str(filters.get("report_type") or "staffing").strip().lower()
+    if report_type not in {"staffing", "seniority", "attendance"}:
+        report_type = "staffing"
+    staffing = people_context(
+        {
+            "sort_id": filters.get("sort_id", ""),
+            "operation_id": filters.get("operation_id", ""),
+            "department_id": filters.get("department_id", ""),
+            "work_area_id": filters.get("work_area_id", ""),
+            "classification": filters.get("classification", ""),
+            "roster_status": filters.get("roster_status", ""),
+            "active": filters.get("active", "active"),
+            "search": filters.get("search", ""),
+        }
+    )
+    seniority = seniority_context(
+        {
+            "sort_id": filters.get("sort_id", ""),
+            "operation_id": filters.get("operation_id", ""),
+            "department_id": filters.get("department_id", ""),
+            "work_area_id": filters.get("work_area_id", ""),
+            "classification": filters.get("classification", ""),
+            "active": filters.get("active", "active"),
+        }
+    )
+    attendance_date = _parse_optional_date(filters.get("attendance_date"))
+    attendance_query = StaffingDailyAttendance.query.join(StaffingPerson)
+    if attendance_date:
+        attendance_query = attendance_query.filter(
+            StaffingDailyAttendance.attendance_date == attendance_date
+        )
+    attendance_status = str(filters.get("attendance_status") or "").strip()
+    if attendance_status in STAFFING_DAILY_ATTENDANCE_STATUSES:
+        attendance_query = attendance_query.filter(
+            StaffingDailyAttendance.status == attendance_status
+        )
+    return {
+        "report_type": report_type,
+        "staffing": staffing,
+        "seniority": seniority,
+        "attendance_rows": attendance_query.order_by(
+            StaffingDailyAttendance.attendance_date.desc(),
+            StaffingPerson.last_name,
+            StaffingPerson.first_name,
+        ).all(),
+        "attendance_status_choices": attendance_status_choices(),
+        "classification_choices": classification_choices(),
+        "roster_status_choices": roster_status_choices(),
+        "filters": {
+            "report_type": report_type,
+            "sort_id": filters.get("sort_id", ""),
+            "operation_id": filters.get("operation_id", ""),
+            "department_id": filters.get("department_id", ""),
+            "work_area_id": filters.get("work_area_id", ""),
+            "classification": filters.get("classification", ""),
+            "roster_status": filters.get("roster_status", ""),
+            "attendance_date": filters.get("attendance_date", ""),
+            "attendance_status": filters.get("attendance_status", ""),
+        },
+    }
+
+
+def linked_user_for_person(person):
+    if not person or not person.employee_id:
+        return None
+    return User.query.filter(
+        func.lower(User.employee_id) == person.employee_id.lower()
+    ).first()
+
+
+def people_query(search=None, classification=None, active=None, roster_status=None):
     query = StaffingPerson.query
     if search:
         pattern = f"%{search.strip()}%"
@@ -924,6 +1342,8 @@ def people_query(search=None, classification=None, active=None):
         )
     if classification:
         query = query.filter_by(classification=classification)
+    if roster_status:
+        query = query.filter_by(roster_status=roster_status)
     if active in {"active", "inactive"}:
         query = query.filter_by(active=(active == "active"))
     return query.order_by(StaffingPerson.seniority_date, StaffingPerson.last_name, StaffingPerson.first_name)
@@ -950,9 +1370,7 @@ def _people_rows():
     for person in StaffingPerson.query.order_by(StaffingPerson.last_name, StaffingPerson.first_name).all():
         work_assignment = active_work_assignments.get(person.id)
         work_area = work_assignment.work_area if work_assignment else None
-        department = work_area.parent if work_area and work_area.parent else None
-        operation = department.parent if department and department.parent else None
-        sort = operation.parent if operation and operation.parent else None
+        department, operation, sort = parent_chain_for_work_area(work_area)
         leadership_assignments = sorted(
             active_leadership.get(person.id, []),
             key=lambda row: (row.unit.unit_type, unit_path(row.unit), row.id),
@@ -976,6 +1394,7 @@ def _people_rows():
 def _filter_people_rows(rows, filters):
     active = filters.get("active", "active")
     classification = str(filters.get("classification") or "").strip()
+    roster_status = str(filters.get("roster_status") or "").strip()
     search = str(filters.get("search") or "").strip().lower()
     leadership_only = _parse_bool(filters.get("leadership_only"), default=False)
     selected_scope = (
@@ -992,6 +1411,8 @@ def _filter_people_rows(rows, filters):
         if active in {"active", "inactive"} and person.active != (active == "active"):
             continue
         if classification in STAFFING_CLASSIFICATIONS and person.classification != classification:
+            continue
+        if roster_status in STAFFING_ROSTER_STATUSES and person.roster_status != roster_status:
             continue
         if leadership_only and not row["leadership_assignments"]:
             continue
@@ -1047,16 +1468,19 @@ def _leadership_labels(person, assignments):
 
 
 def _people_seniority_operation(work_area, leadership_assignments):
-    if work_area and work_area.parent and work_area.parent.parent:
-        return work_area.parent.parent
+    _department, operation, _sort = parent_chain_for_work_area(work_area)
+    if operation:
+        return operation
     for assignment in leadership_assignments:
         unit = assignment.unit
         if unit.unit_type == "operation":
             return unit
         if unit.unit_type == "department" and unit.parent:
             return unit.parent
-        if unit.unit_type == "work_area" and unit.parent and unit.parent.parent:
-            return unit.parent.parent
+        if unit.unit_type == "work_area":
+            _department, operation, _sort = parent_chain_for_work_area(unit)
+            if operation:
+                return operation
     return None
 
 
@@ -1251,6 +1675,11 @@ def _resolve_parent(parent_id, unit_type):
     parent = db.session.get(StaffingUnit, int(parent_id))
     if not parent:
         raise ValueError("Selected parent unit was not found.")
+    if isinstance(expected_parent_type, tuple):
+        if parent.unit_type not in expected_parent_type:
+            allowed = " or ".join(UNIT_TYPE_LABELS[value] for value in expected_parent_type)
+            raise ValueError(f"{UNIT_TYPE_LABELS[unit_type]} parent must be a {allowed}.")
+        return parent
     if parent.unit_type != expected_parent_type:
         raise ValueError(
             f"{UNIT_TYPE_LABELS[unit_type]} parent must be a {UNIT_TYPE_LABELS[expected_parent_type]}."

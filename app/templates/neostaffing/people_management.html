@@ -37,6 +37,13 @@
                     {% endfor %}
                 </select>
             </label>
+            <label><span>Roster Status</span>
+                <select name="roster_status" required>
+                    {% for value, label in roster_status_choices %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
             <button type="submit">ADD PERSON</button>
         </form>
     </section>
@@ -60,6 +67,14 @@
                     <option value="inactive" {% if filters.active == "inactive" %}selected{% endif %}>Inactive</option>
                 </select>
             </label>
+            <label><span>Roster Status</span>
+                <select name="roster_status">
+                    <option value="">All</option>
+                    {% for value, label in roster_status_choices %}
+                    <option value="{{ value }}" {% if filters.roster_status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
             <button type="submit">FILTER</button>
         </form>
     </section>
@@ -74,7 +89,7 @@
                         <span>{{ person.employee_id }}</span>
                         <strong>{{ person.full_name }}</strong>
                     </div>
-                    <em>{{ "ACTIVE" if person.active else "INACTIVE" }}</em>
+                    <em>{{ roster_status_labels[person.roster_status] }}</em>
                 </header>
                 <div class="neostaffing-record-meta">
                     <span>{{ classification_labels[person.classification] }}</span>
@@ -91,6 +106,13 @@
                         <select name="classification" required>
                             {% for value, label in classification_choices %}
                             <option value="{{ value }}" {% if person.classification == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label><span>Roster Status</span>
+                        <select name="roster_status" required>
+                            {% for value, label in roster_status_choices %}
+                            <option value="{{ value }}" {% if person.roster_status == value %}selected{% endif %}>{{ label }}</option>
                             {% endfor %}
                         </select>
                     </label>

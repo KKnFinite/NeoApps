@@ -13,6 +13,14 @@ STAFFING_CLASSIFICATIONS = (
     "division_manager",
 )
 
+STAFFING_ROSTER_STATUSES = (
+    "active",
+    "disability",
+    "comp",
+    "military",
+    "fmla",
+)
+
 
 class StaffingPerson(db.Model):
     __tablename__ = "staffing_people"
@@ -21,6 +29,10 @@ class StaffingPerson(db.Model):
             "classification IN ('part_time', 'full_time_combo', 'part_time_supervisor', "
             "'full_time_supervisor', 'full_time_specialist', 'manager', 'division_manager')",
             name="ck_staffing_people_classification",
+        ),
+        db.CheckConstraint(
+            "roster_status IN ('active', 'disability', 'comp', 'military', 'fmla')",
+            name="ck_staffing_people_roster_status",
         ),
     )
 
@@ -31,6 +43,12 @@ class StaffingPerson(db.Model):
     seniority_date = db.Column(db.Date, nullable=False, index=True)
     phone_number = db.Column(db.String(40), nullable=True)
     classification = db.Column(db.String(40), nullable=False, index=True)
+    roster_status = db.Column(
+        db.String(24),
+        nullable=False,
+        default="active",
+        index=True,
+    )
     active = db.Column(db.Boolean, nullable=False, default=True, index=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
@@ -48,6 +66,11 @@ class StaffingPerson(db.Model):
     )
     leadership_assignments = db.relationship(
         "StaffingLeadershipAssignment",
+        back_populates="person",
+        cascade="all, delete-orphan",
+    )
+    daily_attendance_records = db.relationship(
+        "StaffingDailyAttendance",
         back_populates="person",
         cascade="all, delete-orphan",
     )

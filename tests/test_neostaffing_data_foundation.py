@@ -4,10 +4,12 @@ import unittest
 from app import create_app
 from app.extensions import db
 from app.models import (
+    StaffingDailyAttendance,
     StaffingLeadershipAssignment,
     StaffingPerson,
     StaffingUnit,
     StaffingWorkAssignment,
+    User,
 )
 from app.services import neostaffing as staffing_service
 
@@ -48,6 +50,7 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
 
         self.assertEqual(person.employee_id, "E100")
         self.assertEqual(person.seniority_date, date(2020, 1, 2))
+        self.assertEqual(person.roster_status, "active")
 
         with self.assertRaisesRegex(ValueError, "First name is required"):
             staffing_service.create_person(
@@ -82,6 +85,18 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
                 }
             )
 
+        with self.assertRaisesRegex(ValueError, "Unsupported roster status"):
+            staffing_service.create_person(
+                {
+                    "employee_id": "E103",
+                    "first_name": "Bad",
+                    "last_name": "Status",
+                    "seniority_date": "2020-01-02",
+                    "classification": "part_time",
+                    "roster_status": "daily_call_in",
+                }
+            )
+
     def test_staffing_unit_hierarchy_validation(self):
         sort = staffing_service.create_unit({"unit_type": "sort", "name": "Night Sort"})
         operation = staffing_service.create_unit(
@@ -101,6 +116,14 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
 
         self.assertEqual(work_area.parent, department)
         self.assertEqual(work_area.required_headcount, 3)
+        direct_work_area = staffing_service.create_unit(
+            {
+                "unit_type": "work_area",
+                "name": "Load Planning",
+                "parent_id": operation.id,
+            }
+        )
+        self.assertEqual(direct_work_area.parent, operation)
 
         with self.assertRaisesRegex(ValueError, "Operation parent must be a Sort"):
             staffing_service.create_unit(
@@ -112,9 +135,9 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
                 {"unit_type": "department", "name": "Bad Department", "parent_id": sort.id}
             )
 
-        with self.assertRaisesRegex(ValueError, "Work Area parent must be a Department"):
+        with self.assertRaisesRegex(ValueError, "Work Area parent must be a Department or Operation"):
             staffing_service.create_unit(
-                {"unit_type": "work_area", "name": "Bad Work Area", "parent_id": operation.id}
+                {"unit_type": "work_area", "name": "Bad Work Area", "parent_id": sort.id}
             )
 
         with self.assertRaisesRegex(ValueError, "Sort units cannot have a parent"):
@@ -575,6 +598,110 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         self.assertEqual(context["selected_person"]["leadership_labels"][0]["label"], "Work Area Supervisor")
         self.assertEqual(context["selected_person"]["leadership_labels"][0]["unit"], work_area)
         self.assertEqual(context["selected_person"]["seniority_operation"], operation)
+
+    def test_daily_attendance_is_separate_from_roster_status_and_unique(self):
+        sort, _operation, _department, work_area = self._hierarchy()
+        employee = self._person_with_name("E730", "part_time", "Attend", "Worker", "2020-01-01")
+        employee.roster_status = "fmla"
+        staffing_service.assign_work_area(employee, work_area)
+        user = User(username="recorder", employee_id="REC1", role="watcher", password_hash="x")
+        db.session.add(user)
+        db.session.flush()
+
+        saved = staffing_service.save_attendance(
+            {
+                "attendance_date": "2026-07-03",
+                "sort_id": str(sort.id),
+                f"status_{employee.id}": "call_in",
+                f"note_{employee.id}": "Called supervisor",
+            },
+            user,
+        )
+        second_saved = staffing_service.save_attendance(
+            {
+                "attendance_date": "2026-07-03",
+                "sort_id": str(sort.id),
+                f"status_{employee.id}": "here",
+            },
+            user,
+        )
+        db.session.commit()
+
+        self.assertEqual(saved, 1)
+        self.assertEqual(second_saved, 1)
+        self.assertEqual(employee.roster_status, "fmla")
+        self.assertEqual(
+            StaffingDailyAttendance.query.filter_by(person_id=employee.id).count(),
+            1,
+        )
+        record = StaffingDailyAttendance.query.filter_by(person_id=employee.id).first()
+        self.assertEqual(record.status, "here")
+        self.assertEqual(record.attendance_date, date(2026, 7, 3))
+        self.assertEqual(record.sort_unit_id, sort.id)
+        self.assertEqual(record.work_area_unit_id, work_area.id)
+
+    def test_management_attendance_shortcut_resolves_user_person_assignment(self):
+        _sort, _operation, _department, work_area = self._hierarchy()
+        supervisor = self._person_with_name(
+            "M100",
+            "part_time_supervisor",
+            "Pat",
+            "Supervisor",
+            "2018-01-01",
+        )
+        staffing_service.create_leadership_assignment(supervisor, work_area)
+        user = User(
+            username="ptsup",
+            employee_id="M100",
+            role="watcher",
+            password_hash="x",
+            is_management=True,
+            management_level="part_time_supervisor",
+        )
+        db.session.add(user)
+        db.session.flush()
+
+        context = staffing_service.management_attendance_context_for_user(user)
+        missing = staffing_service.management_attendance_context_for_user(
+            User(
+                username="missing-person",
+                employee_id="M404",
+                role="watcher",
+                password_hash="x",
+                is_management=True,
+                management_level="manager",
+            )
+        )
+
+        self.assertTrue(context["is_management"])
+        self.assertEqual(context["person"], supervisor)
+        self.assertEqual(context["assignments"][0]["unit"], work_area)
+        self.assertEqual(context["assignments"][0]["scope_key"], "work_area_id")
+        self.assertIn("Create a matching PEOPLE record", missing["message"])
+
+    def test_seniority_report_operation_includes_direct_and_department_work_areas(self):
+        sort = staffing_service.create_unit({"unit_type": "sort", "name": "Night Sort"})
+        operation = staffing_service.create_unit(
+            {"unit_type": "operation", "name": "Shift Operation", "parent_id": sort.id}
+        )
+        department = staffing_service.create_unit(
+            {"unit_type": "department", "name": "East Department", "parent_id": operation.id}
+        )
+        nested_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "EBM", "parent_id": department.id}
+        )
+        direct_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "Load Planning", "parent_id": operation.id}
+        )
+        senior = self._person_with_name("E740", "part_time", "Senior", "Direct", "2019-01-01")
+        junior = self._person_with_name("E741", "part_time", "Junior", "Nested", "2020-01-01")
+        staffing_service.assign_work_area(junior, nested_area)
+        staffing_service.assign_work_area(senior, direct_area)
+
+        context = staffing_service.seniority_context({"operation_id": str(operation.id)})
+
+        self.assertEqual([row["person"].employee_id for row in context["rows"]], ["E740", "E741"])
+        self.assertEqual({row["work_area"].name for row in context["rows"]}, {"Load Planning", "EBM"})
 
     def _hierarchy(self):
         sort = staffing_service.create_unit({"unit_type": "sort", "name": "Night Sort"})

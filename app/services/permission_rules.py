@@ -371,6 +371,26 @@ DEFAULT_PERMISSION_RULES = (
         "View NeoStaffing People screens.",
     ),
     (
+        "neostaffing.attendance.edit",
+        "master",
+        "Record or update NeoStaffing daily attendance.",
+    ),
+    (
+        "neostaffing.org_chart.view",
+        "watcher",
+        "View the NeoStaffing Org Chart.",
+    ),
+    (
+        "neostaffing.org_chart.edit",
+        "master",
+        "Create, update, move, deactivate, or remove NeoStaffing org units.",
+    ),
+    (
+        "neostaffing.reports.view",
+        "watcher",
+        "View NeoStaffing Reports.",
+    ),
+    (
         "neostaffing.app_management.view",
         "master",
         "View NeoStaffing App Management.",
@@ -928,6 +948,36 @@ PERMISSION_RULE_ITEMS = (
         "NeoStaffing People directory.",
         {
             "view": "neostaffing.people.view",
+            "edit": "neostaffing.people_management.edit",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.people_attendance",
+        "People Attendance",
+        "NeoStaffing daily attendance entry.",
+        {
+            "view": "neostaffing.people.view",
+            "edit": "neostaffing.attendance.edit",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.org_chart",
+        "Org Chart",
+        "NeoStaffing hierarchy explorer and management.",
+        {
+            "view": "neostaffing.org_chart.view",
+            "edit": "neostaffing.org_chart.edit",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.reports",
+        "Reports",
+        "NeoStaffing staffing, seniority, and attendance reports.",
+        {
+            "view": "neostaffing.reports.view",
         },
     ),
     (

@@ -15,6 +15,11 @@ from app.services.permission_rules import user_can
 BOARD_VIEW_PERMISSION = "neostaffing.board.view"
 SENIORITY_VIEW_PERMISSION = "neostaffing.seniority.view"
 PEOPLE_VIEW_PERMISSION = "neostaffing.people.view"
+PEOPLE_EDIT_PERMISSION = "neostaffing.people_management.edit"
+ATTENDANCE_EDIT_PERMISSION = "neostaffing.attendance.edit"
+ORG_CHART_VIEW_PERMISSION = "neostaffing.org_chart.view"
+ORG_CHART_EDIT_PERMISSION = "neostaffing.org_chart.edit"
+REPORTS_VIEW_PERMISSION = "neostaffing.reports.view"
 APP_MANAGEMENT_VIEW_PERMISSION = "neostaffing.app_management.view"
 HIERARCHY_VIEW_PERMISSION = "neostaffing.hierarchy.view"
 HIERARCHY_EDIT_PERMISSION = "neostaffing.hierarchy.edit"
@@ -65,22 +70,11 @@ def neostaffing_app_required(minimum_role="watcher", permission_key=None):
 @neostaffing_app_required(permission_key=BOARD_VIEW_PERMISSION)
 def index():
     role = get_user_app_role(current_user, "neostaffing")
-    dashboard = staffing_service.dashboard_context(
-        {
-            "sort_id": request.args.get("sort_id", "").strip(),
-            "operation_id": request.args.get("operation_id", "").strip(),
-            "department_id": request.args.get("department_id", "").strip(),
-            "work_area_id": request.args.get("work_area_id", "").strip(),
-            "search": request.args.get("search", "").strip(),
-            "understaffed_only": request.args.get("understaffed_only", "").strip(),
-            "missing_leadership_only": request.args.get("missing_leadership_only", "").strip(),
-        }
-    )
     return render_template(
         "neostaffing/index.html",
         app_role=role,
         can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
-        dashboard=dashboard,
+        attendance_shortcut=staffing_service.management_attendance_context_for_user(current_user),
     )
 
 
@@ -131,6 +125,9 @@ def people():
     active = request.args.get("active", "active").strip() or "active"
     if active not in {"active", "inactive", "all"}:
         active = "active"
+    roster_status = request.args.get("roster_status", "").strip()
+    if roster_status not in {choice[0] for choice in staffing_service.roster_status_choices()}:
+        roster_status = ""
     context = staffing_service.people_context(
         {
             "sort_id": request.args.get("sort_id", "").strip(),
@@ -138,6 +135,7 @@ def people():
             "department_id": request.args.get("department_id", "").strip(),
             "work_area_id": request.args.get("work_area_id", "").strip(),
             "classification": classification,
+            "roster_status": roster_status,
             "active": active,
             "leadership_only": request.args.get("leadership_only", "").strip(),
             "search": request.args.get("search", "").strip(),
@@ -150,8 +148,57 @@ def people():
         can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
         classification_choices=staffing_service.classification_choices(),
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
+        roster_status_choices=staffing_service.roster_status_choices(),
+        roster_status_labels=staffing_service.ROSTER_STATUS_LABELS,
         unit_path=staffing_service.unit_path,
         people=context,
+    )
+
+
+@bp.route("/people/attendance", methods=["GET", "POST"])
+@neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
+def people_attendance():
+    management_context = staffing_service.management_attendance_context_for_user(current_user)
+    can_edit = user_can(ATTENDANCE_EDIT_PERMISSION) or bool(management_context.get("assignments"))
+    if request.method == "POST":
+        if not can_edit:
+            flash("NeoStaffing attendance edits require an assigned management scope.", "error")
+            return redirect(url_for("neostaffing.people_attendance", **request.args))
+        try:
+            saved = staffing_service.save_attendance(request.form, current_user)
+            db.session.commit()
+        except (ValueError, IntegrityError) as error:
+            db.session.rollback()
+            flash(str(getattr(error, "orig", None) or error), "error")
+        else:
+            flash(f"Attendance saved for {saved} people.", "success")
+        return redirect(
+            url_for(
+                "neostaffing.people_attendance",
+                attendance_date=request.form.get("attendance_date", ""),
+                sort_id=request.form.get("sort_id", ""),
+                operation_id=request.form.get("operation_id", ""),
+                department_id=request.form.get("department_id", ""),
+                work_area_id=request.form.get("work_area_id", ""),
+            )
+        )
+    context = staffing_service.attendance_context(
+        {
+            "attendance_date": request.args.get("attendance_date", "").strip(),
+            "sort_id": request.args.get("sort_id", "").strip(),
+            "operation_id": request.args.get("operation_id", "").strip(),
+            "department_id": request.args.get("department_id", "").strip(),
+            "work_area_id": request.args.get("work_area_id", "").strip(),
+        },
+        current_user,
+    )
+    return render_template(
+        "neostaffing/attendance.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
+        can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
+        can_edit_attendance=can_edit,
+        attendance=context,
+        unit_path=staffing_service.unit_path,
     )
 
 
@@ -171,65 +218,107 @@ def app_management():
     )
 
 
+@bp.route("/org-chart")
+@neostaffing_app_required(permission_key=ORG_CHART_VIEW_PERMISSION)
+def org_chart():
+    return _render_org_chart()
+
+
+@bp.route("/reports")
+@neostaffing_app_required(permission_key=REPORTS_VIEW_PERMISSION)
+def reports():
+    context = staffing_service.reports_context(
+        {
+            "report_type": request.args.get("report_type", "").strip(),
+            "sort_id": request.args.get("sort_id", "").strip(),
+            "operation_id": request.args.get("operation_id", "").strip(),
+            "department_id": request.args.get("department_id", "").strip(),
+            "work_area_id": request.args.get("work_area_id", "").strip(),
+            "classification": request.args.get("classification", "").strip(),
+            "roster_status": request.args.get("roster_status", "").strip(),
+            "attendance_date": request.args.get("attendance_date", "").strip(),
+            "attendance_status": request.args.get("attendance_status", "").strip(),
+        }
+    )
+    return render_template(
+        "neostaffing/reports.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
+        can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
+        reports=context,
+        unit_path=staffing_service.unit_path,
+        classification_labels=staffing_service.CLASSIFICATION_LABELS,
+        roster_status_labels=staffing_service.ROSTER_STATUS_LABELS,
+        attendance_status_labels=staffing_service.ATTENDANCE_STATUS_LABELS,
+    )
+
+
 @bp.route("/app-management/hierarchy")
 @neostaffing_app_required(permission_key=HIERARCHY_VIEW_PERMISSION)
 def hierarchy():
+    return _render_org_chart()
+
+
+def _render_org_chart():
+    context = staffing_service.org_chart_context(request.args.get("unit_id", "").strip())
     return render_template(
-        "neostaffing/hierarchy.html",
+        "neostaffing/org_chart.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
-        hierarchy=staffing_service.staffing_hierarchy_tree(),
-        units=StaffingUnit.query.order_by(
-            StaffingUnit.unit_type,
-            StaffingUnit.display_order,
-            StaffingUnit.name,
-        ).all(),
+        can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
+        org_chart=context,
+        hierarchy=context["tree"],
+        units=context["units"],
+        people=staffing_service.people_query(active="active").all(),
         sorts=staffing_service.selectable_parent_units("operation"),
         operations=staffing_service.selectable_parent_units("department"),
-        departments=staffing_service.selectable_parent_units("work_area"),
+        departments=staffing_service.units_by_type("department"),
+        work_area_parents=staffing_service.selectable_parent_units("work_area"),
         unit_type_labels=staffing_service.UNIT_TYPE_LABELS,
+        classification_labels=staffing_service.CLASSIFICATION_LABELS,
+        unit_path=staffing_service.unit_path,
+        linked_user_for_person=staffing_service.linked_user_for_person,
     )
 
 
 @bp.route("/app-management/hierarchy/units", methods=["POST"])
-@neostaffing_app_required(permission_key=HIERARCHY_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=ORG_CHART_EDIT_PERMISSION)
 def create_unit():
     return _mutate(
         lambda: staffing_service.create_unit(request.form),
         "Staffing unit added.",
-        "neostaffing.hierarchy",
+        "neostaffing.org_chart",
     )
 
 
 @bp.route("/app-management/hierarchy/units/<int:unit_id>/update", methods=["POST"])
-@neostaffing_app_required(permission_key=HIERARCHY_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=ORG_CHART_EDIT_PERMISSION)
 def update_unit(unit_id):
     unit = _get_unit(unit_id)
     return _mutate(
         lambda: staffing_service.update_unit(unit, request.form),
         "Staffing unit updated.",
-        "neostaffing.hierarchy",
+        "neostaffing.org_chart",
     )
 
 
 @bp.route("/app-management/hierarchy/units/<int:unit_id>/toggle-active", methods=["POST"])
-@neostaffing_app_required(permission_key=HIERARCHY_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=ORG_CHART_EDIT_PERMISSION)
 def toggle_unit_active(unit_id):
     unit = _get_unit(unit_id)
 
     def toggle():
         unit.active = not unit.active
 
-    return _mutate(toggle, "Staffing unit status updated.", "neostaffing.hierarchy")
+    return _mutate(toggle, "Staffing unit status updated.", "neostaffing.org_chart")
 
 
 @bp.route("/app-management/hierarchy/units/<int:unit_id>/delete", methods=["POST"])
-@neostaffing_app_required(permission_key=HIERARCHY_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=ORG_CHART_EDIT_PERMISSION)
 def delete_unit(unit_id):
     unit = _get_unit(unit_id)
     return _mutate(
         lambda: staffing_service.delete_unit(unit),
         "Staffing unit deleted.",
-        "neostaffing.hierarchy",
+        "neostaffing.org_chart",
     )
 
 
@@ -287,12 +376,16 @@ def people_management():
     search = request.args.get("search", "").strip()
     classification = request.args.get("classification", "").strip()
     active = request.args.get("active", "").strip()
+    roster_status = request.args.get("roster_status", "").strip()
     if classification not in {choice[0] for choice in staffing_service.classification_choices()}:
         classification = ""
+    if roster_status not in {choice[0] for choice in staffing_service.roster_status_choices()}:
+        roster_status = ""
     people_rows = staffing_service.people_query(
         search=search,
         classification=classification or None,
         active=active or None,
+        roster_status=roster_status or None,
     ).all()
     return render_template(
         "neostaffing/people_management.html",
@@ -300,7 +393,14 @@ def people_management():
         people=people_rows,
         classification_choices=staffing_service.classification_choices(),
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
-        filters={"search": search, "classification": classification, "active": active},
+        roster_status_choices=staffing_service.roster_status_choices(),
+        roster_status_labels=staffing_service.ROSTER_STATUS_LABELS,
+        filters={
+            "search": search,
+            "classification": classification,
+            "active": active,
+            "roster_status": roster_status,
+        },
     )
 
 

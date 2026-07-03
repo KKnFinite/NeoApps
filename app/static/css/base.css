@@ -8421,6 +8421,154 @@ body.blueprint-neostaffing {
     gap: 14px;
 }
 
+.neostaffing-home-page {
+    min-height: calc(100vh - 140px);
+    display: grid;
+    align-items: center;
+}
+
+.neostaffing-home-shell {
+    display: grid;
+    gap: 22px;
+    width: min(980px, 100%);
+    margin: 0 auto;
+}
+
+.neostaffing-home-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 18px 0;
+}
+
+.neostaffing-primary-menu,
+.neostaffing-my-area-grid,
+.neostaffing-unit-card-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.neostaffing-menu-tile,
+.neostaffing-attendance-card,
+.neostaffing-unit-card {
+    display: grid;
+    align-content: center;
+    gap: 8px;
+    min-height: 156px;
+    padding: 18px;
+    border: 1px solid rgba(var(--node-rgb), 0.42);
+    border-radius: 8px;
+    background:
+        linear-gradient(145deg, rgba(var(--node-rgb), 0.16), transparent 48%),
+        linear-gradient(180deg, rgba(18, 27, 33, 0.94), rgba(2, 6, 10, 0.96));
+    color: var(--neo-bright-silver);
+    text-decoration: none;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 0 24px rgba(var(--node-rgb), 0.1);
+}
+
+.neostaffing-menu-tile span {
+    color: var(--node-primary);
+    font-family: var(--neo-font-family);
+    font-size: clamp(1.6rem, 4vw, 2.5rem);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.neostaffing-attendance-shortcut {
+    display: grid;
+    gap: 12px;
+}
+
+.neostaffing-attendance-shortcut h2,
+.neostaffing-attendance-card span,
+.neostaffing-unit-card span,
+.neostaffing-breadcrumb a {
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 950;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.neostaffing-attendance-card strong,
+.neostaffing-unit-card strong {
+    color: var(--neo-bright-silver);
+    font-size: 1.22rem;
+    font-weight: 950;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.neostaffing-attendance-card em,
+.neostaffing-unit-card em {
+    color: var(--neo-silver);
+    font-style: normal;
+    font-weight: 700;
+}
+
+.neostaffing-breadcrumb {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.neostaffing-breadcrumb a {
+    padding: 8px 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.28);
+    border-radius: 999px;
+    background: rgba(3, 9, 13, 0.78);
+    text-decoration: none;
+}
+
+.neostaffing-org-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr);
+    gap: 14px;
+}
+
+.neostaffing-attendance-list,
+.neostaffing-report-list {
+    display: grid;
+    gap: 8px;
+}
+
+.neostaffing-attendance-row,
+.neostaffing-report-row {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.1fr) repeat(5, minmax(100px, 1fr));
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.22);
+    border-radius: 7px;
+    background: rgba(2, 7, 11, 0.72);
+    color: var(--neo-silver);
+}
+
+.neostaffing-attendance-row {
+    grid-template-columns: minmax(220px, 1fr) minmax(150px, 0.35fr) minmax(180px, 0.65fr);
+}
+
+.neostaffing-attendance-row strong,
+.neostaffing-report-row strong {
+    color: var(--neo-bright-silver);
+    font-weight: 950;
+}
+
+.neostaffing-attendance-row span,
+.neostaffing-attendance-row em,
+.neostaffing-report-row span {
+    min-width: 0;
+    color: var(--neo-silver);
+    font-style: normal;
+    font-weight: 700;
+}
+
 .neostaffing-management-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -9042,6 +9190,19 @@ body.blueprint-neostaffing {
 
     .neostaffing-people-card {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neostaffing-primary-menu,
+    .neostaffing-my-area-grid,
+    .neostaffing-unit-card-grid,
+    .neostaffing-org-grid,
+    .neostaffing-attendance-row,
+    .neostaffing-report-row {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-home-header {
+        display: grid;
     }
 
     .neostaffing-rollup-grid,
