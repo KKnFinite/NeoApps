@@ -115,6 +115,19 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             destination="ONT",
             planned_fuel_load=50500,
         )
+        self._add_current_departure(
+            flight_number="UPS902",
+            tail_number="N456UP",
+            destination="EWR",
+        )
+        self._add_current_arrival(
+            operation,
+            flight_number="UPS801",
+            tail_number="N123UP",
+            origin="PHL",
+            eta_datetime_utc=datetime(2026, 6, 26, 3, 10),
+            arrival_status="en_route",
+        )
         truck = NeoScorpionFuelTruck(
             gateway_id=self.gateway.id,
             truck_number="TRUCK 7",
@@ -156,16 +169,34 @@ class NeoScorpionRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"UPS901", response.data)
+        self.assertIn(b"UPS902", response.data)
         self.assertIn(b"N123UP", response.data)
+        self.assertIn(b"N456UP", response.data)
         self.assertIn(b"A300", response.data)
         self.assertIn(b"ONT", response.data)
+        self.assertIn(b"EWR", response.data)
+        self.assertIn(b"22:10", response.data)
+        self.assertIn(b"En Route", response.data)
+        self.assertIn(b"neoscorpion-dispatch-divider-cell", response.data)
         self.assertIn(b"D07", response.data)
         self.assertIn(b'value="50.5"', response.data)
         self.assertIn(b'value="13.6"', response.data)
         self.assertIn(b"14.1", response.data)
         self.assertIn(b"TRUCK 7", response.data)
         self.assertIn(b"3400 gal", response.data)
-        self.assertIn(CALCULATION_NOT_CONFIGURED_MESSAGE.encode(), response.data)
+        self.assertIn(b"INOP", response.data)
+        self.assertNotIn(CALCULATION_NOT_CONFIGURED_MESSAGE.encode(), response.data)
+
+        header = response.data.split(b"<thead>", 1)[1].split(b"</thead>", 1)[0]
+        for earlier, later in (
+            (b"Tail", b"Arrival ETA"),
+            (b"Arrival ETA", b"Arrival Status"),
+            (b"Arrival Status", b"Departure Flight"),
+            (b"Departure Flight", b"Dest"),
+            (b"Dest", b"Parking"),
+            (b"Parking", b"ETD"),
+        ):
+            self.assertLess(header.index(earlier), header.index(later))
 
     def test_fueler_sees_only_assigned_missions_and_a300_center_fuel(self):
         user = self._login_approved_user(role="operator")
@@ -343,6 +374,40 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         )
         db.session.commit()
         return operation, mission
+
+    def _add_current_arrival(
+        self,
+        operation,
+        flight_number="UPS800",
+        tail_number="N123UP",
+        origin="PHL",
+        eta_datetime_utc=None,
+        arrival_status="scheduled",
+    ):
+        mission = SortDateMission(
+            sort_date=operation.sort_date,
+            gateway_code=operation.gateway_code,
+            sort_name=operation.sort_name,
+            sort_date_operation_id=operation.id,
+            mission_type="arrival",
+            mission_source="manual",
+            flight_number=flight_number,
+            origin=origin,
+            destination=operation.gateway_code,
+            timezone="America/Chicago",
+            planned_datetime_local=datetime(2026, 6, 25, 21, 30),
+            planned_datetime_utc=datetime(2026, 6, 26, 2, 30),
+            planned_source="manual",
+            eta_datetime_utc=eta_datetime_utc,
+            eta_source="manual" if eta_datetime_utc else "unknown",
+            assigned_tail_number=tail_number,
+            tail_source="manual",
+            fuel_status="waiting",
+            arrival_status=arrival_status,
+        )
+        db.session.add(mission)
+        db.session.commit()
+        return mission
 
 
 if __name__ == "__main__":

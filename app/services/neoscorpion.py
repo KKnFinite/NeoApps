@@ -159,7 +159,11 @@ def fueler_context(gateway, user):
     missions = [assignment.sort_date_mission for assignment in assignments if assignment.sort_date_mission]
     return {
         "operation": operation,
-        "rows": _fuel_rows(operation, missions),
+        "rows": _fuel_rows(
+            operation,
+            missions,
+            estimated_fuel_status=CALCULATION_NOT_CONFIGURED_MESSAGE,
+        ),
         "settings": ensure_neoscorpion_settings(gateway),
         "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
     }
@@ -365,11 +369,12 @@ def ensure_fuel_assignment(operation, mission):
     return assignment
 
 
-def _fuel_rows(operation, missions):
+def _fuel_rows(operation, missions, estimated_fuel_status="INOP"):
     tail_states = _tail_states_by_tail(operation)
     tail_fuel_states = _tail_fuel_states_by_tail(operation)
     parking = _parking_by_tail(operation)
     assignments = _assignments_by_mission(operation)
+    arrivals = _arrivals_by_tail(operation)
     trucks = {truck.id: truck for truck in _fuel_trucks(operation.gateway or _gateway_stub(operation))}
 
     rows = []
@@ -378,6 +383,7 @@ def _fuel_rows(operation, missions):
         tail_state = tail_states.get(tail_number)
         tail_fuel_state = tail_fuel_states.get(tail_number)
         assignment = assignments.get(mission.id)
+        arrival = arrivals.get(tail_number)
         truck = assignment.assigned_truck if assignment and assignment.assigned_truck else (
             trucks.get(assignment.assigned_truck_id) if assignment else None
         )
@@ -386,9 +392,12 @@ def _fuel_rows(operation, missions):
             {
                 "mission": mission,
                 "assignment": assignment,
+                "arrival_mission": arrival,
                 "tail_number": tail_number or "-",
                 "aircraft_type": aircraft_type,
                 "destination": mission.destination or "-",
+                "arrival_eta": _arrival_eta_display(arrival),
+                "arrival_status": _arrival_status_display(arrival),
                 "departure_time": format_local_hhmm(
                     mission.eta_datetime_utc or mission.planned_datetime_utc,
                     mission.timezone,
@@ -411,8 +420,8 @@ def _fuel_rows(operation, missions):
                 "transfer_fuel_gallons": (
                     assignment.transfer_fuel_gallons if assignment else None
                 ),
-                "estimated_fuel_display": "-",
-                "estimated_fuel_status": CALCULATION_NOT_CONFIGURED_MESSAGE,
+                "estimated_fuel_display": estimated_fuel_status,
+                "estimated_fuel_status": estimated_fuel_status,
                 "assigned_fueler": assignment.assigned_fueler if assignment else None,
                 "assigned_truck": truck,
                 "truck_remaining_fuel": (
@@ -440,14 +449,62 @@ def format_display_thousands(value):
 
 def _departure_missions(operation):
     return (
-        SortDateMission.query.filter_by(
-            sort_date_operation_id=operation.id,
-            mission_type="departure",
+        SortDateMission.query.filter(
+            SortDateMission.sort_date_operation_id == operation.id,
+            SortDateMission.mission_type == "departure",
+            db.or_(
+                SortDateMission.departure_status.is_(None),
+                SortDateMission.departure_status != "cancelled",
+            ),
         )
-        .filter(SortDateMission.departure_status != "cancelled")
         .order_by(SortDateMission.planned_datetime_utc, SortDateMission.flight_number)
         .all()
     )
+
+
+def _arrivals_by_tail(operation):
+    arrivals = {}
+    missions = (
+        SortDateMission.query.filter(
+            SortDateMission.sort_date_operation_id == operation.id,
+            SortDateMission.mission_type == "arrival",
+            SortDateMission.assigned_tail_number.isnot(None),
+            db.or_(
+                SortDateMission.arrival_status.is_(None),
+                SortDateMission.arrival_status != "cancelled",
+            ),
+        )
+        .order_by(
+            SortDateMission.eta_datetime_utc.is_(None),
+            SortDateMission.eta_datetime_utc,
+            SortDateMission.planned_datetime_utc,
+            SortDateMission.flight_number,
+        )
+        .all()
+    )
+    for mission in missions:
+        tail_number = _normalize_tail(mission.assigned_tail_number)
+        if tail_number and tail_number not in arrivals:
+            arrivals[tail_number] = mission
+    return arrivals
+
+
+def _arrival_eta_display(mission):
+    if not mission:
+        return "-"
+    return format_local_hhmm(
+        mission.actual_block_in_datetime_utc
+        or mission.eta_datetime_utc
+        or mission.planned_datetime_utc,
+        mission.timezone,
+    )
+
+
+def _arrival_status_display(mission):
+    if not mission:
+        return "-"
+    status = mission.arrival_status or mission.api_status or mission.api_status_raw or ""
+    return status.replace("_", " ").title() if status else "-"
 
 
 def _departure_mission_for_operation(operation, mission_id):

@@ -26,12 +26,15 @@
             <table class="neoscorpion-dispatch-table">
                 <thead>
                     <tr>
-                        <th>Flight</th>
                         <th>Tail</th>
-                        <th>Type</th>
+                        <th>Arrival ETA</th>
+                        <th>Arrival Status</th>
+                        <th class="neoscorpion-dispatch-divider-head" aria-label="Arrival departure divider"></th>
+                        <th>Departure Flight</th>
                         <th>Dest</th>
-                        <th>ETD</th>
                         <th>Parking</th>
+                        <th>ETD</th>
+                        <th>Type</th>
                         <th>Required Fuel</th>
                         <th>Inbound Fuel</th>
                         <th>FOB</th>
@@ -48,12 +51,15 @@
                 <tbody>
                     {% for row in rows %}
                     <tr>
+                        <td><strong>{{ row.tail_number }}</strong></td>
+                        <td>{{ row.arrival_eta }}</td>
+                        <td>{{ row.arrival_status }}</td>
+                        <td class="neoscorpion-dispatch-divider-cell" aria-label="Arrival to departure"><span aria-hidden="true"></span></td>
                         <td><strong>{{ row.mission.flight_number }}</strong></td>
-                        <td>{{ row.tail_number }}</td>
-                        <td>{{ row.aircraft_type }}</td>
                         <td>{{ row.destination }}</td>
-                        <td>{{ row.departure_time or '-' }}</td>
                         <td>{{ row.parking_position }}</td>
+                        <td>{{ row.departure_time or '-' }}</td>
+                        <td>{{ row.aircraft_type }}</td>
                         {% if can_edit %}
                         <form method="post">
                             <input type="hidden" name="mission_id" value="{{ row.mission.id }}">
