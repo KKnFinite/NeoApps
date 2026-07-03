@@ -1498,6 +1498,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("centered-command-page", html)
+        self.assertIn("motherbrain-gateway-matrix-page", html)
         self.assertIn("gateway-matrix-heading-block", html)
         self.assertIn("SET ACTIVE SORTS FOR RFD", html)
         for sort_header in ("Sunrise Sort", "Day Sort", "Twilight Sort", "Night Sort"):
@@ -1514,6 +1515,15 @@ class MotherBrainRoutesTest(unittest.TestCase):
             html.index('name="monday_twilight"'),
             html.index('name="monday_night"'),
         )
+        css = Path("app/static/css/base.css").read_text()
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-gateway-matrix-page .centered-command-page.manage-sort-sidebar-page {\n"
+            "        padding: 0;\n"
+            "        border: 0;\n"
+            "        background: transparent;",
+            css,
+        )
+        self.assertIn("body.mobile-app-chrome.motherbrain-gateway-matrix-page .manage-sort-main", css)
 
     def test_gateway_matrix_saves_current_gateway_sort_toggles(self):
         response = self.client.post(
@@ -6084,18 +6094,41 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/departure")
         html = response.data.decode()
+        css = Path("app/static/css/base.css").read_text()
         mobile_list = html.split('data-mobile-departure-list', 1)[1].split("</section>", 1)[0]
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("planning-page planning-page-departure", html)
         self.assertIn("planning-mobile-current-departures", html)
+        self.assertIn("planning-mobile-sort-title neo-brand-title", mobile_list)
+        self.assertIn("RFD Night 06-01-2026", mobile_list)
+        self.assertIn("planning-mobile-departure-list", mobile_list)
+        self.assertIn("planning-mobile-departure-row", mobile_list)
+        self.assertIn("planning-mobile-departure-flight", mobile_list)
+        self.assertIn("planning-mobile-departure-tail", mobile_list)
+        self.assertIn("planning-mobile-departure-destination", mobile_list)
+        self.assertIn("planning-mobile-departure-parking", mobile_list)
         self.assertIn("UPS5678", mobile_list)
         self.assertIn("N567UP", mobile_list)
         self.assertIn("OMA", mobile_list)
         self.assertIn("B02", mobile_list)
         self.assertIn("data-mobile-tail-swap-options", mobile_list)
         self.assertIn("planning-mobile-tail-swap-form", mobile_list)
+        self.assertIn('<select name="replacement_tail"', mobile_list)
+        self.assertNotIn("planning-mobile-mission-card", mobile_list)
+        self.assertNotIn("planning-mobile-mission-fields", mobile_list)
         self.assertNotIn("PASTE ALP", mobile_list)
+        self.assertIn(
+            "body.mobile-app-chrome .planning-mobile-departure-row {\n"
+            "        display: grid;",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome .planning-mobile-departure-row > * {\n"
+            "        min-width: 0;\n"
+            "        overflow: hidden;",
+            css,
+        )
 
     def test_window_update_accepts_zero_or_positive_values(self):
         operation = self._operation()
@@ -10172,6 +10205,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         a01_html = html.split('id="PARKING-POSITION-A01"', 1)[1].split("</section>", 1)[0]
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn("motherbrain-parking-throat-disabled", html)
         self.assertIn("data-mobile-parking-ramp-cards", html)
         for ramp_name in ("ALPHA", "BRAVO", "CHARLIE", "DELTA", "ECHO", "REMOTE"):
             self.assertIn(ramp_name, ramp_html)
@@ -10198,7 +10232,23 @@ class MotherBrainRoutesTest(unittest.TestCase):
             '            "left3 right3"\n'
             '            "left2 right2"\n'
             '            "left1 right1"\n'
-            '            "top bottom";',
+            '            "bottom top";',
+            css,
+        )
+        self.assertIn("gap: 30px;", css)
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-parking-plan-page.motherbrain-parking-throat-disabled .parking-position-grid:not(.parking-position-grid-r) {\n"
+            "        grid-template-areas:\n"
+            '            "left4 right4"\n'
+            '            "left3 right3"\n'
+            '            "left2 right2"\n'
+            '            "left1 right1";',
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome.motherbrain-parking-plan-page.motherbrain-parking-throat-disabled .parking-position-slot-top,\n"
+            "    body.mobile-app-chrome.motherbrain-parking-plan-page.motherbrain-parking-throat-disabled .parking-position-slot-bottom {\n"
+            "        display: none !important;",
             css,
         )
         self.assertIn(

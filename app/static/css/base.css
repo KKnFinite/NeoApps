@@ -12735,6 +12735,13 @@ select::-ms-expand {
         overflow-x: hidden;
     }
 
+    body.mobile-app-chrome .planning-mobile-departure-list {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+        overflow-x: hidden;
+    }
+
     body.mobile-app-chrome .planning-mobile-arrival-row {
         display: grid;
         grid-template-columns:
@@ -12800,6 +12807,61 @@ select::-ms-expand {
 
     body.mobile-app-chrome .planning-mobile-arrival-row.is-arrival-late .planning-mobile-arrival-variance {
         color: #ff8c8c;
+    }
+
+    body.mobile-app-chrome .planning-mobile-departure-row {
+        display: grid;
+        grid-template-columns:
+            minmax(58px, 1.08fr)
+            minmax(58px, 1fr)
+            minmax(42px, 0.72fr)
+            minmax(42px, 0.72fr)
+            minmax(108px, 1.55fr);
+        align-items: center;
+        gap: 3px;
+        min-width: 0;
+        padding: 7px 6px;
+        border: 1px solid rgba(var(--node-highlight-rgb), 0.24);
+        border-radius: 6px;
+        background:
+            linear-gradient(90deg, rgba(var(--node-highlight-rgb), 0.14), transparent 32%),
+            rgba(5, 6, 9, 0.9);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+        color: var(--neo-bright-silver);
+    }
+
+    body.mobile-app-chrome .planning-mobile-departure-row > * {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    body.mobile-app-chrome .planning-mobile-departure-row.needs-tail {
+        border-color: rgba(255, 190, 80, 0.42);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            0 0 13px rgba(255, 190, 80, 0.12);
+    }
+
+    body.mobile-app-chrome .planning-mobile-departure-row.is-cancelled {
+        color: rgba(238, 246, 255, 0.48);
+        text-decoration: line-through;
+    }
+
+    body.mobile-app-chrome .planning-mobile-departure-flight,
+    body.mobile-app-chrome .planning-mobile-departure-tail {
+        font-size: 0.6rem;
+        font-weight: 950;
+        letter-spacing: 0.01em;
+        text-transform: uppercase;
+    }
+
+    body.mobile-app-chrome .planning-mobile-departure-destination,
+    body.mobile-app-chrome .planning-mobile-departure-parking {
+        font-size: 0.58rem;
+        font-weight: 850;
+        text-transform: uppercase;
     }
 
     body.mobile-app-chrome .planning-mobile-mission-card {
@@ -12884,13 +12946,18 @@ select::-ms-expand {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto auto;
         align-items: center;
-        gap: 6px;
+        gap: 4px;
     }
 
-    body.mobile-app-chrome .planning-mobile-tail-swap-form input[type="text"] {
+    body.mobile-app-chrome .planning-mobile-departure-row .planning-mobile-tail-swap {
+        grid-column: auto;
+    }
+
+    body.mobile-app-chrome .planning-mobile-tail-swap-form input[type="text"],
+    body.mobile-app-chrome .planning-mobile-tail-swap-form select {
         min-width: 0;
         width: 100%;
-        min-height: 36px;
+        min-height: 32px;
         border: 1px solid rgba(var(--node-rgb), 0.38);
         border-radius: 5px;
         background: rgba(2, 3, 5, 0.86);
@@ -12904,10 +12971,26 @@ select::-ms-expand {
     body.mobile-app-chrome .planning-mobile-tail-swap-form label {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
+        gap: 3px;
         color: var(--muted);
-        font-size: 0.6rem;
+        font-size: 0.54rem;
         font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    body.mobile-app-chrome .planning-mobile-tail-swap-form .table-row-button {
+        min-height: 32px;
+        min-width: 40px;
+        padding: 5px 6px;
+        font-size: 0.52rem;
+    }
+
+    body.mobile-app-chrome .planning-mobile-tail-swap-note {
+        display: block;
+        color: var(--muted);
+        font-size: 0.56rem;
+        font-weight: 900;
+        text-align: center;
         text-transform: uppercase;
     }
 
@@ -12937,7 +13020,7 @@ select::-ms-expand {
     body.mobile-app-chrome.motherbrain-parking-plan-page .parking-ramp-layout {
         display: grid;
         grid-template-columns: 1fr;
-        gap: 10px;
+        gap: 30px;
         width: 100%;
         max-height: none;
         overflow: visible;
@@ -12960,8 +13043,21 @@ select::-ms-expand {
             "left3 right3"
             "left2 right2"
             "left1 right1"
-            "top bottom";
+            "bottom top";
         gap: 6px;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page.motherbrain-parking-throat-disabled .parking-position-grid:not(.parking-position-grid-r) {
+        grid-template-areas:
+            "left4 right4"
+            "left3 right3"
+            "left2 right2"
+            "left1 right1";
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page.motherbrain-parking-throat-disabled .parking-position-slot-top,
+    body.mobile-app-chrome.motherbrain-parking-plan-page.motherbrain-parking-throat-disabled .parking-position-slot-bottom {
+        display: none !important;
     }
 
     body.mobile-app-chrome.motherbrain-parking-plan-page .parking-position-grid-r {
@@ -13051,6 +13147,24 @@ select::-ms-expand {
         font-size: 0.58rem;
         font-weight: 900;
         text-transform: uppercase;
+    }
+
+    body.mobile-app-chrome.motherbrain-gateway-matrix-page .centered-command-page.manage-sort-sidebar-page {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+    }
+
+    body.mobile-app-chrome.motherbrain-gateway-matrix-page .manage-sort-shell {
+        margin-top: 0;
+    }
+
+    body.mobile-app-chrome.motherbrain-gateway-matrix-page .manage-sort-main {
+        display: grid;
+        gap: 10px;
+        min-width: 0;
     }
 
     .node-strip {

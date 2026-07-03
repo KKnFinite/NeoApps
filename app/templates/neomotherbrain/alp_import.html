@@ -322,11 +322,16 @@
         aria-label="Mobile current {{ label|lower }} list"
         {% if mission_type == "arrival" %}data-mobile-arrival-list{% else %}data-mobile-departure-list{% endif %}
     >
-        {% if mission_type == "arrival" %}
-        <div class="planning-mobile-sort-title neo-brand-title" data-mobile-arrival-sort-header>
+        <div
+            class="planning-mobile-sort-title neo-brand-title"
+            {% if mission_type == "arrival" %}data-mobile-arrival-sort-header{% else %}data-mobile-departure-sort-header{% endif %}
+        >
             {{ operation.gateway_code|upper }} {{ operation.sort_name|title }} {{ operation.sort_date.strftime("%m-%d-%Y") }}
         </div>
+        {% if mission_type == "arrival" %}
         <div class="planning-mobile-arrival-list" role="list" aria-label="Current arrival missions">
+        {% else %}
+        <div class="planning-mobile-departure-list" role="list" aria-label="Current departure missions">
         {% endif %}
         {% for row in mission_rows %}
         {% set mission = row.mission %}
@@ -345,62 +350,44 @@
             <span class="planning-mobile-arrival-variance">{{ row.eta_delta_display }}</span>
         </article>
         {% else %}
-        <article class="planning-mobile-mission-card{% if mission_type == 'arrival' and row.is_late %} is-arrival-late{% endif %}">
-            <div class="planning-mobile-mission-head">
-                <strong>{{ mission.flight_number|upper }}</strong>
-                <span>
-                    {% if mission.departure_status == "cancelled" %}
-                    CANCELLED
-                    {% elif row.needs_replacement_tail %}
-                    NEEDS TAIL
+        <article
+            class="planning-mobile-departure-row{% if row.is_cancelled %} is-cancelled{% elif row.needs_replacement_tail %} needs-tail{% endif %}"
+            role="listitem"
+            aria-label="Flight {{ mission.flight_number|upper }} tail {{ mission.assigned_tail_number|upper if mission.assigned_tail_number else '-' }} destination {{ mission.destination|upper if mission.destination else '-' }} parking {{ parking.label|upper if parking and parking.has_tail else '-' }}"
+        >
+            <strong class="planning-mobile-departure-flight">{{ mission.flight_number|upper }}</strong>
+            <span class="planning-mobile-departure-tail">{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</span>
+            <span class="planning-mobile-departure-destination">{{ mission.destination|upper if mission.destination else "-" }}</span>
+            <span class="planning-mobile-departure-parking">{{ parking.label|upper if parking and parking.has_tail else "-" }}</span>
+            <div class="planning-mobile-tail-swap" data-mobile-tail-swap-options>
+                {% if can_edit %}
+                    {% if row.is_cancelled %}
+                    <span class="planning-mobile-tail-swap-note">Restore</span>
                     {% else %}
-                    {{ mission.departure_status|status_label if mission.departure_status else "-" }}
+                    <form class="planning-mobile-tail-swap-form" method="post" action="{{ url_for('neomotherbrain.tail_swap_mission', operation_id=operation.id, mission_id=mission.id) }}">
+                        <select name="replacement_tail" aria-label="Replacement tail for {{ mission.flight_number|upper }}" required {% if not tail_swap_options %}disabled{% endif %}>
+                            <option value="">TAIL</option>
+                            {% for tail in tail_swap_options %}
+                            <option value="{{ tail }}">{{ tail }}</option>
+                            {% endfor %}
+                        </select>
+                        <label class="planning-mobile-tail-swap-confirm">
+                            <input type="checkbox" name="confirm_tail_swap" value="1">
+                            OK
+                        </label>
+                        <button class="table-row-button" type="submit" {% if not tail_swap_options %}disabled{% endif %}>Swap</button>
+                    </form>
                     {% endif %}
-                </span>
+                {% else %}
+                <span class="planning-mobile-tail-swap-note">View</span>
+                {% endif %}
             </div>
-            <dl class="planning-mobile-mission-fields">
-                <div>
-                    <dt>Tail</dt>
-                    <dd>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</dd>
-                </div>
-                <div>
-                    <dt>Destination</dt>
-                    <dd>{{ mission.destination|upper if mission.destination else "-" }}</dd>
-                </div>
-                <div>
-                    <dt>Parking</dt>
-                    <dd>{{ parking.label|upper if parking and parking.has_tail else "-" }}</dd>
-                </div>
-                <div class="planning-mobile-tail-swap" data-mobile-tail-swap-options>
-                    <dt>Tail Swap</dt>
-                    <dd>
-                        {% if can_edit %}
-                            {% if row.is_cancelled %}
-                            <span class="muted">Restore first</span>
-                            {% else %}
-                            <form class="planning-mobile-tail-swap-form" method="post" action="{{ url_for('neomotherbrain.tail_swap_mission', operation_id=operation.id, mission_id=mission.id) }}">
-                                <input type="text" name="replacement_tail" list="tail-swap-options" placeholder="TAIL" aria-label="Replacement tail for {{ mission.flight_number|upper }}" required>
-                                <label>
-                                    <input type="checkbox" name="confirm_tail_swap" value="1">
-                                    Confirm
-                                </label>
-                                <button class="table-row-button" type="submit">Swap</button>
-                            </form>
-                            {% endif %}
-                        {% else %}
-                        <span class="muted">View only</span>
-                        {% endif %}
-                    </dd>
-                </div>
-            </dl>
         </article>
         {% endif %}
         {% else %}
         <p class="planning-mobile-empty">No current {{ label|lower }} missions found.</p>
         {% endfor %}
-        {% if mission_type == "arrival" %}
         </div>
-        {% endif %}
     </section>
 
     <section class="planning-mission-section" aria-labelledby="planning-mission-title">
