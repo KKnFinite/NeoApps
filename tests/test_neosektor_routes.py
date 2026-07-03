@@ -72,6 +72,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoSektor", response.data)
+        self.assertIn(b"node-desktop-nav-page", response.data)
+        self.assertIn(b"data-node-desktop-side-nav", response.data)
+        self.assertIn(b'data-node-desktop-shell="sektor"', response.data)
+        self.assertIn(b'<span class="neo-page-title motherbrain-desktop-top-title-text">DASHBOARD</span>', response.data)
         self.assertIn(b"neo-brand--sektor", response.data)
         self.assertIn(b"neo-brand__neo neo-word", response.data)
         self.assertIn(b"neo-brand__node node-word", response.data)
@@ -85,13 +89,22 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn(b'src="/static/images/neosektor_logo1.png"', response.data)
         self.assertNotIn(b"<h1>NeoSektor</h1>", response.data)
         self.assertIn(b"Live Counts", response.data)
+        self.assertIn(b"data-node-desktop-dashboard", response.data)
+        self.assertIn(b'data-node-dashboard="sektor"', response.data)
+        self.assertIn(b'data-node-dashboard-tile="live-counts"', response.data)
+        self.assertIn(b'data-node-dashboard-tile="ebm"', response.data)
+        self.assertIn(b'data-node-dashboard-tile="wbm"', response.data)
+        self.assertIn(b'data-node-dashboard-tile="discharge"', response.data)
+        self.assertIn(b'data-node-dashboard-tile="driver-routing"', response.data)
         self.assertNotIn(b"data-live-counts", response.data)
         self.assertIn(b"Operations Menu", response.data)
         self.assertIn(b"neosektor-standalone-header mobile-shell-duplicate-title", response.data)
         self.assertNotIn(b"class=\"readonly-count\"", response.data)
         self.assertIn(b'href="/neosektor/live-counts"', response.data)
         self.assertIn(b'data-neosektor-mobile-tile="ebm"', response.data)
-        self.assertIn(b"motherbrain-header-nav", response.data)
+        self.assertIn(b"data-node-desktop-side-nav", response.data)
+        self.assertIn(b'data-node-desktop-shell="sektor"', response.data)
+        self.assertNotIn(b"motherbrain-header-nav", response.data)
         self.assertNotIn(b"data-neosektor-internal-menu", response.data)
 
     def test_tunnel_conductor_marks_duplicate_title_for_mobile_shell(self):
@@ -148,6 +161,14 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"data-neosektor-mobile-dashboard", response.data)
+        self.assertIn(b"data-node-desktop-dashboard", response.data)
+        self.assertIn(b'data-node-dashboard="sektor"', response.data)
+        self.assertIn(b'data-node-dashboard-tile="live-counts"', response.data)
+        self.assertIn(b'data-node-dashboard-tile="tunnel"', response.data)
+        self.assertIn(b'data-node-dashboard-tile="ebm"', response.data)
+        self.assertIn(b'data-node-dashboard-tile="wbm"', response.data)
+        self.assertIn(b'data-node-dashboard-tile="discharge"', response.data)
+        self.assertIn(b'data-node-dashboard-tile="driver-routing"', response.data)
         self.assertIn(b"neosektor-mobile-dashboard-grid", response.data)
         self.assertIn(b'data-neosektor-mobile-tile="live-counts"', response.data)
         self.assertIn(b'data-neosektor-mobile-tile="tunnel"', response.data)
@@ -289,7 +310,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 response = self.client.get("/neosektor")
 
                 self.assertEqual(response.status_code, 200)
-                self.assertIn(b"motherbrain-header-nav", response.data)
+                self.assertIn(b"data-node-desktop-side-nav", response.data)
+                self.assertIn(b'data-node-desktop-shell="sektor"', response.data)
+                self.assertNotIn(b"motherbrain-header-nav", response.data)
                 self.assertNotIn(b"data-neosektor-internal-menu", response.data)
                 for label in expected_labels[role]:
                     self.assertIn(label, response.data)
@@ -337,7 +360,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     continue
                 else:
                     self.assertEqual(response.data.count(b"data-neosektor-internal-menu"), 0)
-                    self.assertIn(b"motherbrain-header-nav", response.data)
+                    self.assertIn(b"data-node-desktop-side-nav", response.data)
+                    self.assertIn(b'data-node-desktop-shell="sektor"', response.data)
+                    self.assertNotIn(b"motherbrain-header-nav", response.data)
                 for label in (
                     b"Live Counts",
                     b"Tunnel Conductor",
@@ -346,15 +371,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     b"Driver Routing",
                     b"Discharge",
                 ):
-                    if label == b"Live Counts":
-                        if path in standalone_menu_paths:
-                            self.assertIn(label, response.data)
-                        else:
-                            self.assertIn(label.upper(), response.data)
-                    elif path in standalone_menu_paths:
-                        self.assertIn(label, response.data)
-                    else:
-                        self.assertIn(label.upper(), response.data)
+                    self.assertIn(label, response.data)
                 for href in (
                     b'href="/neosektor"',
                     b'href="/neosektor/tunnel-conductor"',
@@ -454,7 +471,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(b"neosektor-standalone-header", response.data)
-                self.assertIn(b"character-switcher-standalone", response.data)
+                self.assertIn(b"character-switcher-header", response.data)
+                self.assertNotIn(b"character-switcher-standalone", response.data)
                 self.assertEqual(response.data.count(b'<details class="character-switcher'), 1)
                 self.assertIn(b"Change Characters", response.data)
                 switcher = response.data.split(b"data-character-switcher", 1)[1].split(

@@ -18,12 +18,13 @@
                 <span>OPERATIONS</span>
                 <strong>{{ gateway.code }}</strong>
             </div>
-            <nav class="neosektor-mobile-dashboard-grid" aria-label="NeoSektor operations">
+            <nav class="neosektor-mobile-dashboard-grid" aria-label="NeoSektor operations" data-node-desktop-dashboard data-node-dashboard="sektor">
                 {% for item in mobile_dashboard_items %}
                 <a
                     class="neosektor-mobile-dashboard-tile neosektor-mobile-dashboard-tile-{{ item.key }}{% if item.active %} is-active{% endif %}"
                     href="{{ url_for(item.endpoint) }}"
                     data-neosektor-mobile-tile="{{ item.key }}"
+                    data-node-dashboard-tile="{{ item.key }}"
                     {% if item.active %}aria-current="page"{% endif %}
                 >
                     <span class="neosektor-mobile-dashboard-icon" aria-hidden="true">

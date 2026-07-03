@@ -26,8 +26,8 @@
             <span>OPERATIONS</span>
             <strong>{{ gateway.code }}</strong>
         </div>
-        <nav class="neoermac-dashboard-tiles" aria-label="NeoErmac dashboard actions">
-            <a class="neoermac-dashboard-tile neoermac-dashboard-tile-door-view" href="{{ url_for('neoermac.door_view') }}" data-neoermac-mobile-tile="door-view">
+        <nav class="neoermac-dashboard-tiles" aria-label="NeoErmac dashboard actions" data-node-desktop-dashboard data-node-dashboard="ermac">
+            <a class="neoermac-dashboard-tile neoermac-dashboard-tile-door-view" href="{{ url_for('neoermac.door_view') }}" data-neoermac-mobile-tile="door-view" data-node-dashboard-tile="door-view">
                 <span class="neoermac-dashboard-tile-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M5 4h10v16H5V4Zm2 2v12h6V6H7Zm10 4h2v10h-2V10Zm-7 2h2v2h-2v-2Z"/></svg>
                 </span>
@@ -35,7 +35,7 @@
                     <strong>DOOR VIEW</strong>
                 </span>
             </a>
-            <a class="neoermac-dashboard-tile neoermac-dashboard-tile-lineup" href="{{ url_for('neoermac.building_lineup') }}" data-neoermac-mobile-tile="building-lineup">
+            <a class="neoermac-dashboard-tile neoermac-dashboard-tile-lineup" href="{{ url_for('neoermac.building_lineup') }}" data-neoermac-mobile-tile="building-lineup" data-node-dashboard-tile="building-lineup">
                 <span class="neoermac-dashboard-tile-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M4 5h7v5H4V5Zm9 0h7v5h-7V5ZM4 14h7v5H4v-5Zm9 0h7v5h-7v-5Zm-2-2h2v2h-2v-2Z"/></svg>
                 </span>
@@ -43,7 +43,7 @@
                     <strong>BUILDING LINEUP</strong>
                 </span>
             </a>
-            <a class="neoermac-dashboard-tile neoermac-dashboard-tile-outbound" href="{{ url_for('neoermac.view_outbound') }}" data-neoermac-mobile-tile="view-outbound">
+            <a class="neoermac-dashboard-tile neoermac-dashboard-tile-outbound" href="{{ url_for('neoermac.view_outbound') }}" data-neoermac-mobile-tile="view-outbound" data-node-dashboard-tile="view-outbound">
                 <span class="neoermac-dashboard-tile-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M4 6h12l4 4v8H4V6Zm2 2v8h12v-5h-4V8H6Zm2 2h4v2H8v-2Zm0 3h7v2H8v-2Z"/></svg>
                 </span>
@@ -51,7 +51,7 @@
                     <strong>VIEW OUTBOUND</strong>
                 </span>
             </a>
-            <a class="neoermac-dashboard-tile neoermac-dashboard-tile-upcoming" href="{{ url_for('neoermac.upcoming_pulls') }}" data-neoermac-mobile-tile="upcoming-pulls">
+            <a class="neoermac-dashboard-tile neoermac-dashboard-tile-upcoming" href="{{ url_for('neoermac.upcoming_pulls') }}" data-neoermac-mobile-tile="upcoming-pulls" data-node-dashboard-tile="upcoming-pulls">
                 <span class="neoermac-dashboard-tile-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-2.1-5H14v2h6V3h-2v2.1A8.9 8.9 0 0 0 12 3Zm-1 4h2v5.2l4 2.3-1 1.7-5-3V7Z"/></svg>
                 </span>
@@ -59,7 +59,7 @@
                     <strong>UPCOMING PULLS</strong>
                 </span>
             </a>
-            <a class="neoermac-dashboard-tile neoermac-dashboard-tile-tugs is-placeholder" href="{{ url_for('neoermac.tug_assignments') }}" data-neoermac-mobile-tile="tug-assignments">
+            <a class="neoermac-dashboard-tile neoermac-dashboard-tile-tugs is-placeholder" href="{{ url_for('neoermac.tug_assignments') }}" data-neoermac-mobile-tile="tug-assignments" data-node-dashboard-tile="tug-assignments">
                 <span class="neoermac-dashboard-tile-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M5 8h10l4 4v5h-2a3 3 0 0 1-6 0H9a3 3 0 0 1-6 0H2v-6h3V8Zm2 2v3h7v-3H7Zm9 1.4V13h1.6L16 11.4ZM6 18a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm8 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg>
                 </span>

@@ -25,9 +25,9 @@
             <span>FUELING OPERATIONS</span>
             <strong>{{ gateway.code }}</strong>
         </div>
-        <nav class="neoscorpion-dashboard-grid" aria-label="NeoScorpion dashboard actions">
+        <nav class="neoscorpion-dashboard-grid" aria-label="NeoScorpion dashboard actions" data-node-desktop-dashboard data-node-dashboard="scorpion">
             {% for item in menu_items %}
-            <a class="neoscorpion-dashboard-tile neoscorpion-dashboard-tile-{{ item.key }}" href="{{ url_for(item.endpoint) }}" data-neoscorpion-dashboard-tile="{{ item.key }}">
+            <a class="neoscorpion-dashboard-tile neoscorpion-dashboard-tile-{{ item.key }}" href="{{ url_for(item.endpoint) }}" data-neoscorpion-dashboard-tile="{{ item.key }}" data-node-dashboard-tile="{{ item.key }}">
                 <span class="neoscorpion-dashboard-icon" aria-hidden="true">
                     {% if item.key == "dispatch" %}
                     <svg viewBox="0 0 24 24"><path d="M4 5h16v12H4V5Zm2 2v8h12V7H6Zm1 11h10v2H7v-2Zm3-8h4v2h-4v-2Z"/></svg>

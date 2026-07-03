@@ -33,6 +33,7 @@
 {% set is_neoreptile_page = is_authenticated_app and request.blueprint == "neoreptile" %}
 {% set is_neosubzero_page = is_authenticated_app and request.blueprint == "neosubzero" %}
 {% set is_neorain_page = is_authenticated_app and request.blueprint == "neorain" %}
+{% set uses_node_desktop_shell = is_neoermac_page or is_neoscorpion_page or (is_neosektor_page and not request.path.startswith("/neosektor/driver-routing")) %}
 {% set is_neosektor_landing = is_neosektor_page and request.path.rstrip("/") == "/neosektor" %}
 {% set is_gateway_matrix_page = is_motherbrain_page and request.path.startswith("/motherbrain/gateway-matrix") %}
 {% set is_master_schedule_page = is_motherbrain_page and request.path.startswith("/motherbrain/master-schedule") %}
@@ -59,7 +60,7 @@
 {% set is_neosektor_live_counts_page = is_neosektor_page and request.path.startswith("/neosektor/live-counts") %}
 {% set is_neosektor_driver_page = is_neosektor_page and request.path.startswith("/neosektor/driver-routing") %}
 {% set is_neosektor_standalone_operator_page = is_neosektor_ballmat_operator_page or is_neosektor_tunnel_operator_page or is_neosektor_live_counts_page %}
-{% set uses_node_header = uses_motherbrain_header or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page or (is_neosektor_page and not is_neosektor_standalone_operator_page and not is_neosektor_driver_page) %}
+{% set uses_node_header = uses_motherbrain_header or is_neoermac_page or is_neoscorpion_page or is_neoreptile_page or is_neosubzero_page or is_neorain_page or (is_neosektor_page and not is_neosektor_driver_page) %}
 {% set neosektor_current_label = "TUNNEL CONDUCTOR" if request.path.startswith("/neosektor/tunnel-conductor") else ("EBM" if is_neosektor_ebm_page else ("WBM" if is_neosektor_wbm_page else ("DISCHARGE" if request.path.startswith("/neosektor/discharge") else ("LIVE COUNTS" if is_neosektor_live_counts_page else ("DRIVER ROUTING" if request.path.startswith("/neosektor/driver-routing") else "DASHBOARD"))))) %}
 {% set node_home_endpoint = "neosektor.index" if is_neosektor_page else ("neoermac.index" if is_neoermac_page else ("neoscorpion.index" if is_neoscorpion_page else ("neoreptile.index" if is_neoreptile_page else ("neosubzero.index" if is_neosubzero_page else ("neorain.index" if is_neorain_page else "neomotherbrain.motherbrain"))))) %}
 {% set motherbrain_locked_icon = "images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png" %}
@@ -87,9 +88,9 @@
 {% set mobile_account_initial = mobile_account_initial_source[:1]|upper %}
 {% set uses_mobile_chrome = is_authenticated_app and not is_neosektor_driver_page %}
 {% set show_mobile_bottom_nav = uses_mobile_chrome and not is_rfd_hub_page %}
-<body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_mobile_chrome %} mobile-app-chrome has-mobile-topbar{% endif %}{% if show_mobile_bottom_nav %} has-mobile-bottom-nav{% endif %}{% if is_portal_dashboard_page %} portal-shell-page{% endif %}{% if is_rfd_hub_page %} rfd-hub-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if uses_motherbrain_header %} motherbrain-desktop-nav-page{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_standalone_operator_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_motherbrain_mobile_tile_landing %} motherbrain-mobile-landing-shell{% endif %}{% if is_motherbrain_manage_sort_detail %} motherbrain-mobile-manage-sort-shell{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}{% if is_parking_plan_page and optimizer_defaults is defined and not optimizer_defaults.include_throat %} motherbrain-parking-throat-disabled{% endif %}{% if is_parking_rules_page %} motherbrain-parking-rules-page{% endif %}{% if is_permission_management_page %} motherbrain-permission-rules-page{% endif %}{% if is_gateway_matrix_page %} motherbrain-gateway-matrix-page{% endif %}">
+<body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_mobile_chrome %} mobile-app-chrome has-mobile-topbar{% endif %}{% if show_mobile_bottom_nav %} has-mobile-bottom-nav{% endif %}{% if is_portal_dashboard_page %} portal-shell-page{% endif %}{% if is_rfd_hub_page %} rfd-hub-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if uses_motherbrain_header %} motherbrain-desktop-nav-page{% endif %}{% if uses_node_desktop_shell %} node-desktop-nav-page{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_motherbrain_mobile_tile_landing %} motherbrain-mobile-landing-shell{% endif %}{% if is_motherbrain_manage_sort_detail %} motherbrain-mobile-manage-sort-shell{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}{% if is_parking_plan_page and optimizer_defaults is defined and not optimizer_defaults.include_throat %} motherbrain-parking-throat-disabled{% endif %}{% if is_parking_rules_page %} motherbrain-parking-rules-page{% endif %}{% if is_permission_management_page %} motherbrain-permission-rules-page{% endif %}{% if is_gateway_matrix_page %} motherbrain-gateway-matrix-page{% endif %}">
     <div class="shell">
-        {% if not public_landing|default(false) and not is_neosektor_driver_page and not is_neosektor_standalone_operator_page %}
+        {% if not public_landing|default(false) and not is_neosektor_driver_page %}
         <header class="topbar">
             {% if uses_node_header %}
             <a class="motherbrain-header-logo-link" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">
@@ -119,9 +120,9 @@
                 </span>
                 <strong>{{ node_current_label }}</strong>
             </div>
-            {% if uses_motherbrain_header %}
-            <div class="motherbrain-desktop-top-title" aria-label="Current MotherBrain page">
-                <span class="neo-page-title motherbrain-desktop-top-title-text">{{ motherbrain_current_label }}</span>
+            {% if uses_motherbrain_header or uses_node_desktop_shell %}
+            <div class="motherbrain-desktop-top-title" aria-label="Current {{ node_header_name }} page">
+                <span class="neo-page-title motherbrain-desktop-top-title-text">{{ node_current_label }}</span>
             </div>
             {% endif %}
             {% else %}
@@ -190,6 +191,7 @@
                     </div>
                     <a class="logout-link mobile-banner-logout" href="{{ url_for('auth.logout') }}">Logout</a>
                 </div>
+                {% if not uses_node_desktop_shell %}
                 <button class="motherbrain-menu-button" type="button" aria-expanded="false" aria-controls="motherbrain-mobile-menu" data-motherbrain-menu-button>
                     <span>Menu</span>
                     <span class="motherbrain-menu-icon" aria-hidden="true"></span>
@@ -222,6 +224,7 @@
                     {% endif %}
                     {% endif %}
                 </nav>
+                {% endif %}
                 {% else %}
                 {% if is_rfd_hub_page %}
                 {% set rfd_sort_operations = gateway_active_sort_operations if gateway_active_sort_operations is defined else [] %}
@@ -339,6 +342,8 @@
 
         {% if uses_motherbrain_header %}
         {% include "neomotherbrain/_motherbrain_desktop_sidebar.html" %}
+        {% elif uses_node_desktop_shell %}
+        {% include "neonodes/_node_desktop_sidebar.html" %}
         {% endif %}
 
         <main class="content">

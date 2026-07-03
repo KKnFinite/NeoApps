@@ -1,0 +1,48 @@
+{% from "_neo_brand.html" import neo_brand %}
+<aside class="motherbrain-desktop-side-nav node-desktop-side-nav node-{{ node_header_key }}" aria-label="{{ node_header_name }} desktop navigation" data-node-desktop-side-nav data-node-desktop-shell="{{ node_header_key }}">
+    <a class="motherbrain-desktop-side-brand node-desktop-side-brand" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} dashboard">
+        <img src="{{ url_for('static', filename=node_header_logo) }}" alt="{{ node_header_alt }}" width="128" height="128" decoding="async">
+        {% if is_neoermac_page %}
+        {% with neoermac_brand_class="motherbrain-sidebar-brand-title" %}
+        {% include "neonodes/neoermac/_brand_title.html" %}
+        {% endwith %}
+        {% elif is_neoscorpion_page %}
+        {% with neoscorpion_brand_class="motherbrain-sidebar-brand-title" %}
+        {% include "neonodes/neoscorpion/_brand_title.html" %}
+        {% endwith %}
+        {% elif is_neosektor_page %}
+        <span class="motherbrain-sidebar-brand-title neo-brand-title neo-brand neo-brand--sektor neo-node-name neo-node-sektor brand-inline-name node-sektor" aria-label="NeoSektor">
+            <span class="neo-brand__neo neo-word neo-brand-title__neo">NEO</span><span class="neo-brand__node node-word neo-brand-title__node neo-brand-title__node--sektor">SEKTOR</span>
+        </span>
+        {% else %}
+        {{ neo_brand(node_header_word, node_header_key, "motherbrain-sidebar-brand-title", node_header_name) }}
+        {% endif %}
+    </a>
+
+    <div class="motherbrain-desktop-side-context node-desktop-side-context">
+        <span class="eyebrow">{{ node_header_name }}</span>
+        <strong>{{ default_gateway.code if default_gateway is defined else "RFD" }} OPERATIONS</strong>
+        <span class="node-desktop-current-label">{{ node_current_label }}</span>
+    </div>
+
+    <nav class="motherbrain-desktop-side-menu node-desktop-side-menu" aria-label="{{ node_header_name }} desktop menu">
+        {% if is_neoermac_page %}
+        <a class="motherbrain-desktop-side-link{% if request.endpoint == 'neoermac.index' %} is-active{% endif %}" href="{{ url_for('neoermac.index') }}" {% if request.endpoint == 'neoermac.index' %}aria-current="page"{% endif %}>Dashboard</a>
+        <a class="motherbrain-desktop-side-link{% if request.path.startswith('/neoermac/door-view') %} is-active{% endif %}" href="{{ url_for('neoermac.door_view') }}" {% if request.path.startswith('/neoermac/door-view') %}aria-current="page"{% endif %}>Door View</a>
+        <a class="motherbrain-desktop-side-link{% if request.path.startswith('/neoermac/building-lineup') %} is-active{% endif %}" href="{{ url_for('neoermac.building_lineup') }}" {% if request.path.startswith('/neoermac/building-lineup') %}aria-current="page"{% endif %}>Building Lineup</a>
+        <a class="motherbrain-desktop-side-link{% if is_neoermac_view_outbound_page %} is-active{% endif %}" href="{{ url_for('neoermac.view_outbound') }}" {% if is_neoermac_view_outbound_page %}aria-current="page"{% endif %}>View Outbound</a>
+        <a class="motherbrain-desktop-side-link{% if request.path.startswith('/neoermac/upcoming-pulls') %} is-active{% endif %}" href="{{ url_for('neoermac.upcoming_pulls') }}" {% if request.path.startswith('/neoermac/upcoming-pulls') %}aria-current="page"{% endif %}>Upcoming Pulls</a>
+        <a class="motherbrain-desktop-side-link{% if request.path.startswith('/neoermac/tug-assignments') %} is-active{% endif %}" href="{{ url_for('neoermac.tug_assignments') }}" {% if request.path.startswith('/neoermac/tug-assignments') %}aria-current="page"{% endif %}>Tug Assignments</a>
+        {% elif is_neosektor_page %}
+        <a class="motherbrain-desktop-side-link{% if request.endpoint == 'neosektor.index' %} is-active{% endif %}" href="{{ url_for('neosektor.index') }}" {% if request.endpoint == 'neosektor.index' %}aria-current="page"{% endif %}>Dashboard</a>
+        {% for item in neosektor_internal_menu_items() %}
+        <a class="motherbrain-desktop-side-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
+        {% endfor %}
+        {% elif is_neoscorpion_page %}
+        <a class="motherbrain-desktop-side-link{% if request.endpoint == 'neoscorpion.index' %} is-active{% endif %}" href="{{ url_for('neoscorpion.index') }}" {% if request.endpoint == 'neoscorpion.index' %}aria-current="page"{% endif %}>Dashboard</a>
+        {% for item in neoscorpion_internal_menu_items() %}
+        <a class="motherbrain-desktop-side-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
+        {% endfor %}
+        {% endif %}
+    </nav>
+</aside>

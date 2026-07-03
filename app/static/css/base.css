@@ -21123,3 +21123,179 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 .neo-brand-title__node--rain {
   color: #A45CFF;
 }
+
+@media (min-width: 901px) {
+    body.node-desktop-nav-page {
+        --motherbrain-side-nav-width: 292px;
+    }
+
+    body.node-desktop-nav-page .shell {
+        width: 100%;
+        max-width: none;
+    }
+
+    body.node-desktop-nav-page.node-fixed-header .topbar {
+        position: fixed;
+        top: 14px;
+        right: 18px;
+        left: calc(var(--motherbrain-side-nav-width) + 34px);
+        z-index: 95;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 14px;
+        width: auto;
+        min-height: 62px;
+        margin: 0;
+        padding: 9px 12px 9px 16px;
+        border: 1px solid rgba(var(--node-rgb), 0.26);
+        border-radius: 10px;
+        background:
+            linear-gradient(135deg, rgba(var(--node-rgb), 0.12), transparent 42%),
+            rgba(3, 4, 7, 0.84);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            0 14px 30px rgba(0, 0, 0, 0.3),
+            0 0 22px rgba(var(--node-rgb), 0.12);
+        transform: none;
+        backdrop-filter: blur(14px);
+        overflow: visible;
+    }
+
+    body.node-desktop-nav-page .motherbrain-header-logo-link,
+    body.node-desktop-nav-page .motherbrain-header-identity,
+    body.node-desktop-nav-page .motherbrain-menu-button,
+    body.node-desktop-nav-page .motherbrain-header-nav {
+        display: none;
+    }
+
+    body.node-desktop-nav-page .motherbrain-desktop-top-title {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+    }
+
+    body.node-desktop-nav-page .motherbrain-desktop-top-title-text {
+        display: block;
+        min-width: 0;
+        overflow: hidden;
+        color: var(--neo-bright-silver);
+        font-size: clamp(1.34rem, 2.6vw, 2.14rem);
+        line-height: 0.95;
+        text-overflow: ellipsis;
+        text-shadow:
+            0 0 18px rgba(var(--node-rgb), 0.32),
+            0 2px 0 rgba(0, 0, 0, 0.72);
+        white-space: nowrap;
+    }
+
+    body.node-desktop-nav-page.node-fixed-header .topbar-actions {
+        display: flex;
+        flex-wrap: wrap;
+        grid-template-columns: none;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+        width: auto;
+        min-width: 0;
+        overflow: visible;
+    }
+
+    body.node-desktop-nav-page.node-fixed-header .character-switcher,
+    body.node-desktop-nav-page.node-fixed-header .topbar-user-row {
+        grid-column: auto;
+        grid-row: auto;
+    }
+
+    body.node-desktop-nav-page .motherbrain-desktop-utility {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        width: auto;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+        overflow: visible;
+    }
+
+    body.node-desktop-nav-page.node-fixed-header .content {
+        width: 100%;
+        max-width: none;
+        min-height: 100vh;
+        padding: 92px 24px 48px calc(var(--motherbrain-side-nav-width) + 34px);
+    }
+
+    body.node-desktop-nav-page .mobile-shell-duplicate-title,
+    body.node-desktop-nav-page .neoscorpion-screen-menu,
+    body.node-desktop-nav-page .neosektor-standalone-header.app-header {
+        display: none;
+    }
+
+    body.node-desktop-nav-page .node-desktop-side-nav {
+        display: grid;
+    }
+
+    body.node-desktop-nav-page .node-desktop-side-context strong {
+        color: var(--neo-bright-silver);
+    }
+
+    body.node-desktop-nav-page .node-desktop-current-label {
+        color: rgba(221, 235, 255, 0.68);
+        font-size: 0.74rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+
+    body.node-desktop-nav-page .neoermac-shell,
+    body.node-desktop-nav-page .neoscorpion-shell,
+    body.node-desktop-nav-page .neosektor-standalone-page {
+        width: 100%;
+        max-width: none;
+    }
+
+    body.node-desktop-nav-page .neoermac-dashboard-shell,
+    body.node-desktop-nav-page .neoscorpion-dashboard-shell,
+    body.node-desktop-nav-page .neosektor-dashboard-shell {
+        display: grid;
+        justify-items: center;
+        align-content: start;
+    }
+
+    body.node-desktop-nav-page .neoermac-dashboard-panel,
+    body.node-desktop-nav-page .neoscorpion-dashboard-panel,
+    body.node-desktop-nav-page .neosektor-dashboard-wrap {
+        width: min(100%, 940px);
+        max-width: 940px;
+    }
+
+    body.node-desktop-nav-page .neoermac-dashboard-tiles,
+    body.node-desktop-nav-page .neoscorpion-dashboard-grid,
+    body.node-desktop-nav-page .neosektor-mobile-dashboard-grid {
+        grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+        gap: 14px;
+    }
+
+    body.node-desktop-nav-page .neoermac-dashboard-tile,
+    body.node-desktop-nav-page .neoscorpion-dashboard-tile,
+    body.node-desktop-nav-page .neosektor-mobile-dashboard-tile {
+        aspect-ratio: 1 / 1;
+        min-height: 0;
+        grid-template-columns: minmax(0, 1fr);
+        align-content: center;
+        justify-items: center;
+        padding: 16px 12px;
+        text-align: center;
+    }
+
+    body.node-desktop-nav-page .neoermac-dashboard-tile-icon,
+    body.node-desktop-nav-page .neoscorpion-dashboard-icon,
+    body.node-desktop-nav-page .neosektor-mobile-dashboard-icon {
+        width: 48px;
+        height: 48px;
+    }
+}
