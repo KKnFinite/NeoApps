@@ -8430,7 +8430,7 @@ body.blueprint-neostaffing {
 .neostaffing-home-shell {
     display: grid;
     gap: 22px;
-    width: min(980px, 100%);
+    width: min(1120px, 100%);
     margin: 0 auto;
 }
 
@@ -8448,6 +8448,10 @@ body.blueprint-neostaffing {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 16px;
+}
+
+.neostaffing-home-summary {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .neostaffing-menu-tile,
@@ -8510,6 +8514,13 @@ body.blueprint-neostaffing {
     font-weight: 700;
 }
 
+.neostaffing-unit-card small {
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 850;
+    line-height: 1.35;
+}
+
 .neostaffing-breadcrumb {
     display: flex;
     flex-wrap: wrap;
@@ -8552,6 +8563,38 @@ body.blueprint-neostaffing {
 
 .neostaffing-attendance-row {
     grid-template-columns: minmax(220px, 1fr) minmax(150px, 0.35fr) minmax(180px, 0.65fr);
+}
+
+.neostaffing-inline-actions,
+.neostaffing-report-counts,
+.neostaffing-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.neostaffing-report-counts span,
+.neostaffing-pagination a,
+.neostaffing-pagination span,
+.neostaffing-pagination strong {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.24);
+    border-radius: 999px;
+    background: rgba(4, 12, 18, 0.76);
+    color: var(--neo-silver);
+    font-size: 0.74rem;
+    font-weight: 900;
+    text-decoration: none;
+    text-transform: uppercase;
+}
+
+.neostaffing-report-counts strong,
+.neostaffing-pagination strong {
+    color: var(--node-primary);
 }
 
 .neostaffing-attendance-row strong,
@@ -8638,6 +8681,21 @@ body.blueprint-neostaffing {
     gap: 6px;
     padding: 14px;
     text-align: center;
+}
+
+.neostaffing-summary-strip article a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.3);
+    border-radius: 999px;
+    color: var(--node-primary);
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-decoration: none;
+    text-transform: uppercase;
 }
 
 .neostaffing-summary-strip span,

@@ -27,11 +27,27 @@
                     <option value="attendance" {% if filters.report_type == "attendance" %}selected{% endif %}>Attendance Report</option>
                 </select>
             </label>
+            <label><span>Sort</span>
+                <select name="sort_id">
+                    <option value="">All / Auto</option>
+                    {% for sort in reports.staffing.sorts %}
+                    <option value="{{ sort.id }}" {% if filters.sort_id|string == sort.id|string %}selected{% endif %}>{{ sort.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
             <label><span>Operation</span>
                 <select name="operation_id">
                     <option value="">All / Auto</option>
                     {% for operation in reports.staffing.operations %}
                     <option value="{{ operation.id }}" {% if filters.operation_id|string == operation.id|string %}selected{% endif %}>{{ unit_path(operation) }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label><span>Department</span>
+                <select name="department_id">
+                    <option value="">All</option>
+                    {% for department in reports.staffing.departments %}
+                    <option value="{{ department.id }}" {% if filters.department_id|string == department.id|string %}selected{% endif %}>{{ unit_path(department) }}</option>
                     {% endfor %}
                 </select>
             </label>
@@ -57,6 +73,13 @@
                     {% for value, label in reports.roster_status_choices %}
                     <option value="{{ value }}" {% if filters.roster_status == value %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
+                </select>
+            </label>
+            <label><span>Assignment</span>
+                <select name="assignment_status">
+                    <option value="">All</option>
+                    <option value="assigned" {% if filters.assignment_status == "assigned" %}selected{% endif %}>Assigned</option>
+                    <option value="unassigned" {% if filters.assignment_status == "unassigned" %}selected{% endif %}>Unassigned</option>
                 </select>
             </label>
             <label><span>Attendance Date</span><input type="date" name="attendance_date" value="{{ filters.attendance_date }}"></label>
@@ -93,6 +116,13 @@
     {% elif reports.report_type == "attendance" %}
     <section class="neostaffing-data-card">
         <h2>ATTENDANCE REPORT</h2>
+        {% if reports.attendance_counts %}
+        <div class="neostaffing-report-counts">
+            {% for status, count in reports.attendance_counts.items() %}
+            <span>{{ attendance_status_labels[status] }} <strong>{{ count }}</strong></span>
+            {% endfor %}
+        </div>
+        {% endif %}
         <div class="neostaffing-report-list">
             {% for record in reports.attendance_rows %}
             <div class="neostaffing-report-row">
@@ -111,6 +141,14 @@
     {% else %}
     <section class="neostaffing-data-card">
         <h2>STAFFING REPORT</h2>
+        <div class="neostaffing-report-counts">
+            {% for classification, count in reports.staffing_classification_counts.items() %}
+            <span>{{ classification_labels[classification] }} <strong>{{ count }}</strong></span>
+            {% endfor %}
+            {% for status, count in reports.staffing_roster_counts.items() %}
+            <span>{{ roster_status_labels[status] }} <strong>{{ count }}</strong></span>
+            {% endfor %}
+        </div>
         <div class="neostaffing-report-list">
             {% for row in reports.staffing.rows %}
             {% set person = row.person %}

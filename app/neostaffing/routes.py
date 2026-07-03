@@ -70,11 +70,13 @@ def neostaffing_app_required(minimum_role="watcher", permission_key=None):
 @neostaffing_app_required(permission_key=BOARD_VIEW_PERMISSION)
 def index():
     role = get_user_app_role(current_user, "neostaffing")
+    can_manage = user_can_access_app(current_user, "neostaffing", minimum_role="master")
     return render_template(
         "neostaffing/index.html",
         app_role=role,
-        can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
+        can_manage_app=can_manage,
         attendance_shortcut=staffing_service.management_attendance_context_for_user(current_user),
+        landing=staffing_service.landing_context(),
     )
 
 
@@ -119,6 +121,7 @@ def seniority():
 @bp.route("/people")
 @neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
 def people():
+    can_manage = user_can_access_app(current_user, "neostaffing", minimum_role="master")
     classification = request.args.get("classification", "").strip()
     if classification not in {choice[0] for choice in staffing_service.classification_choices()}:
         classification = ""
@@ -137,19 +140,24 @@ def people():
             "classification": classification,
             "roster_status": roster_status,
             "active": active,
+            "assignment_status": request.args.get("assignment_status", "").strip(),
+            "page": request.args.get("page", "").strip(),
+            "per_page": request.args.get("per_page", "").strip(),
             "leadership_only": request.args.get("leadership_only", "").strip(),
             "search": request.args.get("search", "").strip(),
             "person_id": request.args.get("person_id", "").strip(),
-        }
+        },
+        current_user if not can_manage else None,
     )
     return render_template(
         "neostaffing/people.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
-        can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
+        can_manage_app=can_manage,
         classification_choices=staffing_service.classification_choices(),
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
         roster_status_choices=staffing_service.roster_status_choices(),
         roster_status_labels=staffing_service.ROSTER_STATUS_LABELS,
+        work_areas=staffing_service.work_area_units(),
         unit_path=staffing_service.unit_path,
         people=context,
     )
@@ -227,6 +235,7 @@ def org_chart():
 @bp.route("/reports")
 @neostaffing_app_required(permission_key=REPORTS_VIEW_PERMISSION)
 def reports():
+    can_manage = user_can_access_app(current_user, "neostaffing", minimum_role="master")
     context = staffing_service.reports_context(
         {
             "report_type": request.args.get("report_type", "").strip(),
@@ -236,20 +245,53 @@ def reports():
             "work_area_id": request.args.get("work_area_id", "").strip(),
             "classification": request.args.get("classification", "").strip(),
             "roster_status": request.args.get("roster_status", "").strip(),
+            "assignment_status": request.args.get("assignment_status", "").strip(),
             "attendance_date": request.args.get("attendance_date", "").strip(),
             "attendance_status": request.args.get("attendance_status", "").strip(),
-        }
+        },
+        current_user if not can_manage else None,
     )
     return render_template(
         "neostaffing/reports.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
-        can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
+        can_manage_app=can_manage,
         reports=context,
         unit_path=staffing_service.unit_path,
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
         roster_status_labels=staffing_service.ROSTER_STATUS_LABELS,
         attendance_status_labels=staffing_service.ATTENDANCE_STATUS_LABELS,
     )
+
+
+@bp.route("/people/<int:person_id>/assign-work-area", methods=["POST"])
+@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
+def people_assign_work_area(person_id):
+    try:
+        staffing_service.assign_work_area(
+            _get_person(person_id),
+            _get_unit(request.form.get("work_area_unit_id")),
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Work area assignment updated.", "success")
+    return redirect(_people_return_url(person_id))
+
+
+@bp.route("/people/<int:person_id>/clear-work-area", methods=["POST"])
+@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
+def people_clear_work_area(person_id):
+    try:
+        staffing_service.clear_work_assignment(_get_person(person_id))
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Work area assignment cleared.", "success")
+    return redirect(_people_return_url(person_id))
 
 
 @bp.route("/app-management/hierarchy")
@@ -656,3 +698,25 @@ def _selected_scope_unit():
             continue
         return db.session.get(StaffingUnit, int(value))
     return None
+
+
+def _people_return_url(person_id):
+    query = {
+        key: request.form.get(key, "").strip()
+        for key in (
+            "sort_id",
+            "operation_id",
+            "department_id",
+            "work_area_id",
+            "classification",
+            "roster_status",
+            "active",
+            "assignment_status",
+            "search",
+            "page",
+            "per_page",
+        )
+        if request.form.get(key, "").strip()
+    }
+    query["person_id"] = person_id
+    return url_for("neostaffing.people", **query)

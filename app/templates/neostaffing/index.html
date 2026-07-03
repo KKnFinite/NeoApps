@@ -31,6 +31,15 @@
             </a>
         </nav>
 
+        <section class="neostaffing-summary-strip neostaffing-home-summary" aria-label="NeoStaffing summary">
+            <article><span>Total People</span><strong>{{ landing.summary.total_people }}</strong><a href="{{ url_for('neostaffing.people', active='all') }}">VIEW</a></article>
+            <article><span>Active Roster</span><strong>{{ landing.summary.active_roster }}</strong><a href="{{ url_for('neostaffing.people', active='active') }}">VIEW</a></article>
+            <article><span>Assigned</span><strong>{{ landing.summary.assigned }}</strong><a href="{{ url_for('neostaffing.people', assignment_status='assigned') }}">VIEW</a></article>
+            <article><span>Unassigned</span><strong>{{ landing.summary.unassigned }}</strong><a href="{{ url_for('neostaffing.people', assignment_status='unassigned') }}">VIEW</a></article>
+            <article><span>Work Areas</span><strong>{{ landing.summary.work_areas }}</strong><a href="{{ url_for('neostaffing.org_chart') }}">OPEN</a></article>
+            <article><span>Today Attendance</span><strong>{{ landing.summary.today_attendance }}</strong><a href="{{ url_for('neostaffing.people_attendance', attendance_date=landing.today.isoformat()) }}">OPEN</a></article>
+        </section>
+
         {% if attendance_shortcut.is_management %}
         <section class="neostaffing-attendance-shortcut" aria-label="Management attendance shortcut">
             {% if attendance_shortcut.assignments|length == 1 %}
@@ -51,7 +60,7 @@
                 </a>
                 {% endfor %}
             </div>
-            {% elif attendance_shortcut.message %}
+            {% elif attendance_shortcut.message and can_manage_app %}
             <div class="neostaffing-attendance-card is-setup">
                 <span>TAKE ATTENDANCE</span>
                 <strong>SETUP NEEDED</strong>

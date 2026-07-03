@@ -78,13 +78,17 @@
             </div>
             <div class="neostaffing-unit-card-grid">
                 {% for unit in org_chart.current_children %}
+                {% set meta = org_chart.unit_card_meta.get(unit.id) %}
                 <a class="neostaffing-unit-card{% if not unit.active %} is-inactive{% endif %}" href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}">
                     <span>{{ unit_type_labels[unit.unit_type] }}</span>
                     <strong>{{ unit.name }}</strong>
                     {% if unit.unit_type == "work_area" %}
                     <em>Headcount {{ unit.required_headcount if unit.required_headcount is not none else "-" }}</em>
                     {% else %}
-                    <em>{{ unit.children|length }} child scopes</em>
+                    <em>{{ meta.child_count if meta else unit.children|length }} child scopes</em>
+                    {% endif %}
+                    {% if meta %}
+                    <small>{{ meta.assigned_count }} Assigned{% if meta.leadership_names %} / {{ meta.leadership_names|join(", ") }}{% endif %}</small>
                     {% endif %}
                 </a>
                 {% else %}
@@ -101,11 +105,32 @@
                 <div><dt>Type</dt><dd>{{ unit_type_labels[selected.unit_type] }}</dd></div>
                 <div><dt>Path</dt><dd>{{ unit_path(selected) }}</dd></div>
                 <div><dt>Status</dt><dd>{{ "Active" if selected.active else "Inactive" }}</dd></div>
+                {% if org_chart.selected_detail %}
+                <div><dt>Child Scopes</dt><dd>{{ org_chart.selected_detail.child_count }}</dd></div>
+                <div><dt>Assigned People</dt><dd>{{ org_chart.selected_detail.assigned_count }}</dd></div>
+                {% endif %}
                 {% if selected.unit_type == "work_area" %}
                 <div><dt>Required Headcount</dt><dd>{{ selected.required_headcount if selected.required_headcount is not none else "-" }}</dd></div>
-                <div><dt>Assigned People</dt><dd>{{ org_chart.work_area_detail.assigned_count if org_chart.work_area_detail else 0 }}</dd></div>
                 {% endif %}
             </dl>
+            {% if org_chart.selected_detail %}
+            <section class="neostaffing-detail-section">
+                <h3>MANAGEMENT</h3>
+                {% if org_chart.selected_detail.leadership %}
+                <ul class="neostaffing-detail-list">
+                    {% for assignment in org_chart.selected_detail.leadership %}
+                    {% set linked_user = linked_user_for_person(assignment.person) %}
+                    <li>
+                        <strong>{{ assignment.person.full_name }}</strong>
+                        <span>{{ classification_labels[assignment.person.classification] }} / {{ "Linked User" if linked_user else "No User Link" }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="muted">No active management assigned.</p>
+                {% endif %}
+            </section>
+            {% endif %}
             {% if selected.unit_type == "work_area" and org_chart.work_area_detail %}
             <section class="neostaffing-detail-section">
                 <h3>PT SUPERVISORS</h3>

@@ -5,6 +5,13 @@
 {% block content %}
 {% set filters = attendance.filters %}
 <section class="neostaffing-page theme-staffing" aria-labelledby="staffing-attendance-title">
+    <nav class="neostaffing-mobile-tabs" aria-label="NeoStaffing mobile navigation">
+        <a href="{{ url_for('neostaffing.index') }}">HOME</a>
+        <a href="{{ url_for('neostaffing.people') }}">PEOPLE</a>
+        <a href="{{ url_for('neostaffing.org_chart') }}">ORG CHART</a>
+        <a href="{{ url_for('neostaffing.reports') }}">REPORTS</a>
+    </nav>
+
     <div class="neostaffing-hero neostaffing-hero-compact">
         <div class="neostaffing-hero-copy mobile-shell-duplicate-title">
             <p class="neostaffing-eyebrow">
@@ -58,14 +65,12 @@
     </section>
 
     <section class="neostaffing-summary-strip" aria-label="Attendance counts">
+        <article><span>Loaded People</span><strong>{{ attendance.total_loaded }}</strong></article>
         {% for value, label in attendance.status_choices %}
         {% if attendance.counts.get(value, 0) %}
         <article><span>{{ label }}</span><strong>{{ attendance.counts[value] }}</strong></article>
         {% endif %}
         {% endfor %}
-        {% if not attendance.counts %}
-        <article><span>Loaded People</span><strong>0</strong></article>
-        {% endif %}
     </section>
 
     <form class="neostaffing-data-card" method="post">
@@ -76,7 +81,12 @@
         <input type="hidden" name="work_area_id" value="{{ filters.work_area_id }}">
         <div class="neostaffing-panel-heading">
             <h2>DAILY ATTENDANCE</h2>
-            {% if can_edit_attendance %}<button class="action-button" type="submit">SAVE ATTENDANCE</button>{% endif %}
+            {% if can_edit_attendance %}
+            <div class="neostaffing-inline-actions">
+                <button class="action-button action-button-secondary" type="submit" name="bulk_status" value="here">ALL HERE</button>
+                <button class="action-button" type="submit">SAVE ATTENDANCE</button>
+            </div>
+            {% endif %}
         </div>
         <div class="neostaffing-attendance-list">
             {% for row in attendance.rows %}

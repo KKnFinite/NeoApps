@@ -6,6 +6,7 @@ from app.extensions import db
 from app.models import (
     GatewayMembership,
     PortalAppAccess,
+    StaffingDailyAttendance,
     StaffingPerson,
     StaffingUnit,
     StaffingWorkAssignment,
@@ -58,10 +59,72 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"/static/images/icons/neostaffing/inapp/neostaffing-inapp-128.png", response.data)
         self.assertIn(b"neostaffing-header-title", response.data)
         self.assertIn(b"neo-brand-title__node--staffing", response.data)
+        self.assertEqual(response.data.count(b"neostaffing-menu-tile"), 3)
+        self.assertNotIn(b'href="/neostaffing/people/attendance" class="neostaffing-menu-tile"', response.data)
+        self.assertIn(b"Total People", response.data)
+        self.assertIn(b"Active Roster", response.data)
+        self.assertIn(b"Assigned", response.data)
+        self.assertIn(b"Unassigned", response.data)
+        self.assertIn(b"Work Areas", response.data)
+        self.assertIn(b"Today Attendance", response.data)
         self.assertNotIn(b"TOTAL PLANNED STAFFING", response.data)
         self.assertNotIn(b"STAFFING BOARD", response.data)
         self.assertNotIn(b"NeoMotherBrain", response.data)
         self.assertNotIn(b"Change Characters", response.data)
+
+    def test_landing_attendance_shortcut_resolves_one_or_multiple_scopes(self):
+        _sort, _operation, department, work_area = self._staffing_hierarchy()
+        second_work_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "WBM", "parent_id": department.id}
+        )
+        supervisor = staffing_service.create_person(
+            {
+                "employee_id": "M100",
+                "first_name": "Pat",
+                "last_name": "Supervisor",
+                "seniority_date": "2018-01-01",
+                "classification": "part_time_supervisor",
+            }
+        )
+        staffing_service.create_leadership_assignment(supervisor, work_area)
+        one_scope_user = self._user("staffing_one_scope")
+        one_scope_user.employee_id = "M100"
+        one_scope_user.is_management = True
+        one_scope_user.management_level = "part_time_supervisor"
+        self._grant_app_access(one_scope_user, "neostaffing", "operator")
+        db.session.commit()
+
+        self._login(one_scope_user.username)
+        one_scope = self.client.get("/neostaffing")
+
+        self.assertEqual(one_scope.status_code, 200)
+        self.assertIn(b"TAKE ATTENDANCE", one_scope.data)
+        self.assertIn(f"/neostaffing/people/attendance?work_area_id={work_area.id}".encode(), one_scope.data)
+        self.assertNotIn(b"MY AREAS", one_scope.data)
+
+        staffing_service.create_leadership_assignment(supervisor, second_work_area)
+        db.session.commit()
+        multiple = self.client.get("/neostaffing")
+
+        self.assertEqual(multiple.status_code, 200)
+        self.assertIn(b"MY AREAS", multiple.data)
+        self.assertIn(f"work_area_id={work_area.id}".encode(), multiple.data)
+        self.assertIn(f"work_area_id={second_work_area.id}".encode(), multiple.data)
+
+    def test_landing_hides_attendance_shortcut_when_management_person_is_missing_for_lower_role(self):
+        user = self._user("staffing_missing_person")
+        user.employee_id = "M404"
+        user.is_management = True
+        user.management_level = "manager"
+        self._grant_app_access(user, "neostaffing", "operator")
+        db.session.commit()
+        self._login(user.username)
+
+        response = self.client.get("/neostaffing")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"TAKE ATTENDANCE", response.data)
+        self.assertNotIn(b"SETUP NEEDED", response.data)
 
     def test_org_chart_uses_hierarchy_driven_visual_layout(self):
         user = self._user("staffing_dashboard_master")
@@ -146,6 +209,61 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Night Sort / Shift Operation / East Shift Department / EBM", seniority.data)
         self.assertEqual(attendance.status_code, 200)
         self.assertIn(b"ATTENDANCE REPORT", attendance.data)
+
+    def test_reports_filter_staffing_and_attendance_by_scope_and_status(self):
+        user = self._user("staffing_reports_filters")
+        self._grant_app_access(user, "neostaffing", "master")
+        sort, operation, department, work_area = self._staffing_hierarchy()
+        second_work_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "WBM", "parent_id": operation.id}
+        )
+        avery = staffing_service.create_person(
+            {
+                "employee_id": "RF100",
+                "first_name": "Avery",
+                "last_name": "Filter",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+            }
+        )
+        morgan = staffing_service.create_person(
+            {
+                "employee_id": "RF101",
+                "first_name": "Morgan",
+                "last_name": "Filter",
+                "seniority_date": "2021-01-01",
+                "classification": "full_time_combo",
+            }
+        )
+        staffing_service.assign_work_area(avery, work_area)
+        staffing_service.assign_work_area(morgan, second_work_area)
+        recorder = self._user("attendance_report_recorder")
+        db.session.flush()
+        staffing_service.save_attendance(
+            {
+                "attendance_date": "2026-07-03",
+                "sort_id": str(sort.id),
+                f"status_{avery.id}": "call_in",
+                f"status_{morgan.id}": "here",
+            },
+            recorder,
+        )
+        db.session.commit()
+        self._login(user.username)
+
+        staffing = self.client.get(f"/neostaffing/reports?report_type=staffing&work_area_id={work_area.id}")
+        attendance = self.client.get(
+            f"/neostaffing/reports?report_type=attendance&operation_id={operation.id}&attendance_date=2026-07-03&attendance_status=call_in"
+        )
+
+        self.assertEqual(staffing.status_code, 200)
+        self.assertIn(b"RF100", staffing.data)
+        self.assertNotIn(b"RF101", staffing.data)
+        self.assertIn(b"Part Time", staffing.data)
+        self.assertEqual(attendance.status_code, 200)
+        self.assertIn(b"RF100", attendance.data)
+        self.assertIn(b"Call In", attendance.data)
+        self.assertNotIn(b"RF101", attendance.data)
 
     def test_user_without_neostaffing_access_cannot_open_dashboard(self):
         user = self._user("no_staffing")
@@ -423,6 +541,41 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Default Area", defaulted.data)
         self.assertIn(b"Required Headcount", defaulted.data)
 
+    def test_org_chart_detail_shows_management_and_assigned_counts(self):
+        user = self._user("staffing_org_detail")
+        self._grant_app_access(user, "neostaffing", "master")
+        _sort, _operation, _department, work_area = self._staffing_hierarchy()
+        employee = staffing_service.create_person(
+            {
+                "employee_id": "OC100",
+                "first_name": "Assigned",
+                "last_name": "Worker",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+            }
+        )
+        supervisor = staffing_service.create_person(
+            {
+                "employee_id": "OC200",
+                "first_name": "Scope",
+                "last_name": "Leader",
+                "seniority_date": "2018-01-01",
+                "classification": "part_time_supervisor",
+            }
+        )
+        staffing_service.assign_work_area(employee, work_area)
+        staffing_service.create_leadership_assignment(supervisor, work_area)
+        db.session.commit()
+        self._login(user.username)
+
+        response = self.client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"MANAGEMENT", response.data)
+        self.assertIn(b"Scope Leader", response.data)
+        self.assertIn(b"Assigned People", response.data)
+        self.assertIn(b"1", response.data)
+
     def test_portal_tile_opens_neostaffing_for_approved_user(self):
         user = self._user("staffing_portal")
         self._grant_app_access(user, "neostaffing", "operator")
@@ -608,6 +761,150 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"E812", leadership.data)
         self.assertIn(b"Work Area Supervisor", leadership.data)
         self.assertNotIn(b"E810", leadership.data)
+
+    def test_people_view_filters_assignment_status_and_paginates(self):
+        user = self._user("staffing_people_filters")
+        self._grant_app_access(user, "neostaffing", "master")
+        _sort, _operation, _department, work_area = self._staffing_hierarchy()
+        assigned = staffing_service.create_person(
+            {
+                "employee_id": "PF100",
+                "first_name": "Assigned",
+                "last_name": "Person",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+            }
+        )
+        unassigned = staffing_service.create_person(
+            {
+                "employee_id": "PF101",
+                "first_name": "Unassigned",
+                "last_name": "Person",
+                "seniority_date": "2020-01-02",
+                "classification": "part_time",
+            }
+        )
+        third = staffing_service.create_person(
+            {
+                "employee_id": "PF102",
+                "first_name": "Third",
+                "last_name": "Person",
+                "seniority_date": "2020-01-03",
+                "classification": "part_time",
+            }
+        )
+        staffing_service.assign_work_area(assigned, work_area)
+        db.session.commit()
+        self._login(user.username)
+
+        assigned_response = self.client.get("/neostaffing/people?assignment_status=assigned")
+        unassigned_response = self.client.get("/neostaffing/people?assignment_status=unassigned")
+        paged_response = self.client.get("/neostaffing/people?per_page=2")
+
+        self.assertEqual(assigned_response.status_code, 200)
+        self.assertIn(b"PF100", assigned_response.data)
+        self.assertNotIn(b"PF101", assigned_response.data)
+        self.assertEqual(unassigned_response.status_code, 200)
+        self.assertIn(b"PF101", unassigned_response.data)
+        self.assertIn(b"PF102", unassigned_response.data)
+        self.assertNotIn(b"PF100", unassigned_response.data)
+        self.assertEqual(paged_response.status_code, 200)
+        self.assertIn(b"PAGE 1 / 2", paged_response.data)
+        self.assertIn(b'data-people-result-limit="2"', paged_response.data)
+        self.assertIsNotNone(third)
+
+    def test_people_quick_assignment_requires_edit_role_and_updates_work_area(self):
+        master = self._user("staffing_quick_assign_master")
+        self._grant_app_access(master, "neostaffing", "master")
+        operator = self._user("staffing_quick_assign_operator")
+        self._grant_app_access(operator, "neostaffing", "operator")
+        _sort, _operation, department, work_area = self._staffing_hierarchy()
+        second_work_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "WBM", "parent_id": department.id}
+        )
+        person = staffing_service.create_person(
+            {
+                "employee_id": "QA100",
+                "first_name": "Quick",
+                "last_name": "Assign",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+            }
+        )
+        staffing_service.assign_work_area(person, work_area)
+        db.session.commit()
+
+        operator_client = self._logged_in_client(operator.username)
+        blocked = operator_client.post(
+            f"/neostaffing/people/{person.id}/assign-work-area",
+            data={"work_area_unit_id": str(second_work_area.id)},
+            follow_redirects=False,
+        )
+        self.assertEqual(blocked.status_code, 302)
+        self.assertEqual(blocked.location, "/neostaffing")
+        self.assertEqual(db.session.get(StaffingPerson, person.id).work_assignment.work_area_unit_id, work_area.id)
+
+        master_client = self._logged_in_client(master.username)
+        updated = master_client.post(
+            f"/neostaffing/people/{person.id}/assign-work-area",
+            data={"work_area_unit_id": str(second_work_area.id)},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(updated.status_code, 302)
+        self.assertIn("/neostaffing/people", updated.location)
+        self.assertEqual(db.session.get(StaffingPerson, person.id).work_assignment.work_area_unit_id, second_work_area.id)
+
+    def test_attendance_route_preselects_scope_and_updates_existing_daily_record(self):
+        user = self._user("staffing_attendance_master")
+        self._grant_app_access(user, "neostaffing", "master")
+        sort, _operation, _department, work_area = self._staffing_hierarchy()
+        person = staffing_service.create_person(
+            {
+                "employee_id": "AT100",
+                "first_name": "Daily",
+                "last_name": "Worker",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+                "roster_status": "fmla",
+            }
+        )
+        staffing_service.assign_work_area(person, work_area)
+        db.session.commit()
+        self._login(user.username)
+
+        page = self.client.get(f"/neostaffing/people/attendance?work_area_id={work_area.id}&attendance_date=2026-07-03")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(f'<option value="{work_area.id}" selected>'.encode(), page.data)
+        self.assertIn(b"AT100", page.data)
+
+        first = self.client.post(
+            "/neostaffing/people/attendance",
+            data={
+                "attendance_date": "2026-07-03",
+                "sort_id": str(sort.id),
+                "work_area_id": str(work_area.id),
+                f"status_{person.id}": "call_in",
+            },
+            follow_redirects=True,
+        )
+        second = self.client.post(
+            "/neostaffing/people/attendance",
+            data={
+                "attendance_date": "2026-07-03",
+                "sort_id": str(sort.id),
+                "work_area_id": str(work_area.id),
+                f"status_{person.id}": "here",
+            },
+            follow_redirects=True,
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(StaffingDailyAttendance.query.filter_by(person_id=person.id).count(), 1)
+        record = StaffingDailyAttendance.query.filter_by(person_id=person.id).first()
+        self.assertEqual(record.status, "here")
+        self.assertEqual(db.session.get(StaffingPerson, person.id).roster_status, "fmla")
 
     def _user(self, username):
         user = User(

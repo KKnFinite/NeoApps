@@ -25,7 +25,7 @@
 {% endmacro %}
 
 {% macro query_without_person() -%}
-    sort_id={{ people.filters.sort_id }}&operation_id={{ people.filters.operation_id }}&department_id={{ people.filters.department_id }}&work_area_id={{ people.filters.work_area_id }}&classification={{ people.filters.classification }}&roster_status={{ people.filters.roster_status }}&active={{ people.filters.active }}&leadership_only={{ people.filters.leadership_only }}&search={{ people.filters.search|urlencode }}
+    sort_id={{ people.filters.sort_id }}&operation_id={{ people.filters.operation_id }}&department_id={{ people.filters.department_id }}&work_area_id={{ people.filters.work_area_id }}&classification={{ people.filters.classification }}&roster_status={{ people.filters.roster_status }}&active={{ people.filters.active }}&assignment_status={{ people.filters.assignment_status }}&per_page={{ people.filters.per_page }}&leadership_only={{ people.filters.leadership_only }}&search={{ people.filters.search|urlencode }}
 {%- endmacro %}
 
 {% block content %}
@@ -34,14 +34,10 @@
 {% set selected = people.selected_person %}
 <section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="neostaffing-people-title">
     <nav class="neostaffing-mobile-tabs" aria-label="NeoStaffing mobile navigation">
-        <a href="{{ url_for('neostaffing.index') }}">BOARD</a>
+        <a href="{{ url_for('neostaffing.index') }}">HOME</a>
         <a href="{{ url_for('neostaffing.people') }}" aria-current="page">PEOPLE</a>
-        <a href="{{ url_for('neostaffing.seniority') }}">SENIORITY</a>
-        {% if can_manage_app %}
-        <a href="{{ url_for('neostaffing.app_management') }}">MANAGE</a>
-        {% else %}
-        <span>MANAGE</span>
-        {% endif %}
+        <a href="{{ url_for('neostaffing.org_chart') }}">ORG CHART</a>
+        <a href="{{ url_for('neostaffing.reports') }}">REPORTS</a>
     </nav>
 
     <div class="neostaffing-dashboard-shell">
@@ -52,16 +48,11 @@
                 {% include "neostaffing/_brand_title.html" %}
                 {% endwith %}
             </div>
-            <a href="{{ url_for('neostaffing.index') }}">DASHBOARD</a>
-            <span>STAFFING BOARD</span>
+            <a href="{{ url_for('neostaffing.index') }}">HOME</a>
             <a href="{{ url_for('neostaffing.people') }}" aria-current="page">PEOPLE</a>
-            <a href="{{ url_for('neostaffing.seniority') }}">SENIORITY</a>
-            {% if can_manage_app %}
-            <a href="{{ url_for('neostaffing.hierarchy') }}">WORK AREAS</a>
-            <a href="{{ url_for('neostaffing.work_assignments') }}">ASSIGNMENTS</a>
-            <a href="{{ url_for('neostaffing.management_assignments') }}">LEADERSHIP</a>
-            <a href="{{ url_for('neostaffing.app_management') }}">APP MANAGEMENT</a>
-            {% endif %}
+            <a href="{{ url_for('neostaffing.people_attendance') }}">PEOPLE / ATTENDANCE</a>
+            <a href="{{ url_for('neostaffing.org_chart') }}">ORG CHART</a>
+            <a href="{{ url_for('neostaffing.reports') }}">REPORTS</a>
             <a class="neostaffing-rail-return" href="{{ url_for('auth.portal_dashboard') }}">{{ neo_brand("Apps", "apps") }} PORTAL</a>
         </aside>
 
@@ -74,7 +65,6 @@
                         {% endwith %}
                     </p>
                     <h1 id="neostaffing-people-title">PEOPLE</h1>
-                    <p>Roster search by hierarchy, assignment, leadership, and status.</p>
                 </div>
                 <label class="neostaffing-search">
                     <span>Search</span>
@@ -87,6 +77,7 @@
                 {% if can_manage_app %}
                 <a class="action-button" href="{{ url_for('neostaffing.people_management') }}">APP MANAGEMENT</a>
                 {% endif %}
+                <a class="action-button action-button-secondary" href="{{ url_for('neostaffing.people_attendance') }}">ATTENDANCE</a>
             </header>
 
             <section class="neostaffing-summary-strip neostaffing-dashboard-metrics neostaffing-people-metrics" aria-label="NeoStaffing people totals">
@@ -95,6 +86,8 @@
                 <article><span>INACTIVE EMPLOYEES</span><strong>{{ counts.inactive }}</strong></article>
                 <article><span>SUPERVISORS</span><strong>{{ counts.supervisors }}</strong></article>
                 <article><span>MANAGERS</span><strong>{{ counts.managers }}</strong></article>
+                <article><span>ASSIGNED</span><strong>{{ counts.assigned }}</strong></article>
+                <article><span>UNASSIGNED</span><strong>{{ counts.unassigned }}</strong></article>
             </section>
 
             <section class="neostaffing-people-workspace" aria-label="NeoStaffing people workspace">
@@ -156,6 +149,21 @@
                                 <option value="all" {% if filters.active == "all" %}selected{% endif %}>All</option>
                             </select>
                         </label>
+                        <label><span>Assignment</span>
+                            <select name="assignment_status">
+                                <option value="">All</option>
+                                <option value="assigned" {% if filters.assignment_status == "assigned" %}selected{% endif %}>Assigned</option>
+                                <option value="unassigned" {% if filters.assignment_status == "unassigned" %}selected{% endif %}>Unassigned</option>
+                            </select>
+                        </label>
+                        <label><span>Limit</span>
+                            <select name="per_page">
+                                <option value="50" {% if filters.per_page == "50" %}selected{% endif %}>50</option>
+                                <option value="100" {% if filters.per_page == "100" %}selected{% endif %}>100</option>
+                                <option value="250" {% if filters.per_page == "250" %}selected{% endif %}>250</option>
+                                <option value="all" {% if filters.per_page == "all" %}selected{% endif %}>All</option>
+                            </select>
+                        </label>
                         <label class="neostaffing-toggle-field">
                             <span>Leadership Only</span>
                             <input type="checkbox" name="leadership_only" value="1" {% if people.leadership_only %}checked{% endif %}>
@@ -175,9 +183,9 @@
                 <article class="neostaffing-data-card neostaffing-people-list-panel">
                     <div class="neostaffing-panel-heading">
                         <h2>ROSTER</h2>
-                        <span>{{ counts.total }} SHOWN</span>
+                        <span>{{ counts.shown }} / {{ counts.total }} SHOWN</span>
                     </div>
-                    <div class="neostaffing-people-list">
+                    <div class="neostaffing-people-list" data-people-result-limit="{{ people.pagination.per_page }}">
                         {% for row in people.rows %}
                         {% set person = row.person %}
                         {% set is_selected = selected and selected.person.id == person.id %}
@@ -190,7 +198,7 @@
                             <div>
                                 <span>WORK AREA</span>
                                 <strong>{{ row.work_area.name if row.work_area else "-" }}</strong>
-                                <em>{{ row.department.name if row.department else "-" }}</em>
+                                <em>{{ unit_path(row.work_area) if row.work_area else "Unassigned" }}</em>
                             </div>
                             <div>
                                 <span>OPERATION</span>
@@ -212,6 +220,21 @@
                         <p class="muted">No people match the selected filters.</p>
                         {% endfor %}
                     </div>
+                    {% if people.pagination.total_pages > 1 %}
+                    <nav class="neostaffing-pagination" aria-label="People pages">
+                        {% if people.pagination.has_previous %}
+                        <a href="{{ url_for('neostaffing.people') }}?{{ query_without_person() }}&page={{ people.pagination.page - 1 }}">PREV</a>
+                        {% else %}
+                        <span>PREV</span>
+                        {% endif %}
+                        <strong>PAGE {{ people.pagination.page }} / {{ people.pagination.total_pages }}</strong>
+                        {% if people.pagination.has_next %}
+                        <a href="{{ url_for('neostaffing.people') }}?{{ query_without_person() }}&page={{ people.pagination.page + 1 }}">NEXT</a>
+                        {% else %}
+                        <span>NEXT</span>
+                        {% endif %}
+                    </nav>
+                    {% endif %}
                 </article>
 
                 <aside class="neostaffing-data-card neostaffing-detail-panel neostaffing-people-detail-panel" aria-label="Employee details">
@@ -261,6 +284,36 @@
                         <a class="action-button action-button-secondary" href="{{ url_for('neostaffing.seniority', operation_id=selected.seniority_operation.id, search=person.employee_id, include_management='1') }}">VIEW SENIORITY POSITION</a>
                         {% endif %}
                     </div>
+                    {% if can_manage_app %}
+                    <div class="neostaffing-detail-section">
+                        <h3>QUICK WORK AREA</h3>
+                        {% if person.classification in ["part_time", "full_time_combo"] %}
+                        <form class="operation-form neostaffing-compact-form" method="post" action="{{ url_for('neostaffing.people_assign_work_area', person_id=person.id) }}">
+                            {% for key, value in filters.items() %}
+                            <input type="hidden" name="{{ key }}" value="{{ value }}">
+                            {% endfor %}
+                            <label><span>Work Area</span>
+                                <select name="work_area_unit_id" required>
+                                    {% for work_area in work_areas %}
+                                    <option value="{{ work_area.id }}" {% if selected.work_area and selected.work_area.id == work_area.id %}selected{% endif %}>{{ unit_path(work_area) }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            <button type="submit">SAVE ASSIGNMENT</button>
+                        </form>
+                        {% if selected.work_area %}
+                        <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.people_clear_work_area', person_id=person.id) }}">
+                            {% for key, value in filters.items() %}
+                            <input type="hidden" name="{{ key }}" value="{{ value }}">
+                            {% endfor %}
+                            <button class="table-row-button" type="submit">CLEAR WORK AREA</button>
+                        </form>
+                        {% endif %}
+                        {% else %}
+                        <p class="muted">Work-area assignment is only for part time and full time combo employees.</p>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                     {% else %}
                     <p class="muted">Select an employee to view details.</p>
                     {% endif %}

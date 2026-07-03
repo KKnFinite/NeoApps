@@ -80,6 +80,8 @@ PARENT_TYPE_BY_UNIT_TYPE = {
     "work_area": ("department", "operation"),
 }
 STAFFING_NEAR_TARGET_THRESHOLD = 0.8
+PEOPLE_DEFAULT_PAGE_SIZE = 100
+PEOPLE_MAX_PAGE_SIZE = 250
 
 
 def classification_choices():
@@ -103,6 +105,30 @@ def unit_type_choices():
 
 def leadership_level_choices():
     return [(value, LEADERSHIP_LEVEL_LABELS[value]) for value in STAFFING_LEADERSHIP_LEVELS]
+
+
+def landing_context():
+    active_people = StaffingPerson.query.filter_by(active=True)
+    active_people_count = active_people.count()
+    active_work_assignments = StaffingWorkAssignment.query.filter_by(active=True).count()
+    active_work_area_count = StaffingUnit.query.filter_by(unit_type="work_area", active=True).count()
+    today = date.today()
+    today_attendance = StaffingDailyAttendance.query.filter_by(attendance_date=today).count()
+    active_non_management = active_people.filter(
+        StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS)
+    ).count()
+    unassigned = max(active_non_management - active_work_assignments, 0)
+    return {
+        "summary": {
+            "total_people": StaffingPerson.query.count(),
+            "active_roster": active_people_count,
+            "assigned": active_work_assignments,
+            "unassigned": unassigned,
+            "work_areas": active_work_area_count,
+            "today_attendance": today_attendance,
+        },
+        "today": today,
+    }
 
 
 def create_person(values):
@@ -183,6 +209,8 @@ def update_unit(unit, values, is_new=False):
 
     if not is_new and parent and parent.id == unit.id:
         raise ValueError("A unit cannot be its own parent.")
+    if not is_new and parent and _unit_is_descendant(parent, unit):
+        raise ValueError("A unit cannot move under one of its descendants.")
 
     unit.unit_type = unit_type
     unit.name = name
@@ -845,8 +873,10 @@ def seniority_context(filters=None):
     }
 
 
-def people_context(filters=None):
+def people_context(filters=None, user=None):
     filters = filters or {}
+    filters = _with_default_management_scope(filters, user)
+    has_scope_filter = _has_explicit_scope(filters)
     sorts = units_by_type("sort")
     all_operations = units_by_type("operation")
     selected_sort = _resolve_optional_unit(filters.get("sort_id"), "sort")
@@ -855,7 +885,11 @@ def people_context(filters=None):
         for operation in all_operations
         if selected_sort is None or operation.parent_id == selected_sort.id
     ]
-    selected_operation = _resolve_selected_operation(filters.get("operation_id"), operations, all_operations)
+    selected_operation = (
+        _resolve_selected_operation(filters.get("operation_id"), operations, all_operations)
+        if has_scope_filter
+        else _resolve_optional_unit(filters.get("operation_id"), "operation")
+    )
     if selected_operation and selected_sort is None:
         selected_sort = selected_operation.parent
     selected_department = _resolve_optional_unit(filters.get("department_id"), "department")
@@ -887,6 +921,7 @@ def people_context(filters=None):
             "selected_work_area": selected_work_area,
         },
     )
+    total_matches = len(rows)
     rows.sort(
         key=lambda row: (
             row["person"].last_name.lower(),
@@ -896,16 +931,34 @@ def people_context(filters=None):
         )
     )
 
+    page, per_page = _pagination_from_filters(filters)
+    if per_page:
+        total_pages = max((total_matches + per_page - 1) // per_page, 1)
+        page = min(page, total_pages)
+        start = (page - 1) * per_page
+        paginated_rows = rows[start : start + per_page]
+    else:
+        total_pages = 1
+        paginated_rows = rows
+
     selected_person = _resolve_people_detail(filters.get("person_id"), rows)
-    if selected_person is None and rows:
-        selected_person = rows[0]
+    if selected_person is None and paginated_rows:
+        selected_person = paginated_rows[0]
 
     counts = {
-        "total": len(rows),
+        "total": total_matches,
+        "shown": len(paginated_rows),
         "active": sum(1 for row in rows if row["person"].active),
         "inactive": sum(1 for row in rows if not row["person"].active),
         "supervisors": sum(1 for row in rows if row["person"].classification in SUPERVISOR_CLASSIFICATIONS),
         "managers": sum(1 for row in rows if row["person"].classification in MANAGER_CLASSIFICATIONS),
+        "assigned": sum(1 for row in rows if row["work_assignment"] and row["work_assignment"].active),
+        "unassigned": sum(
+            1
+            for row in rows
+            if row["person"].classification in NON_MANAGEMENT_CLASSIFICATIONS
+            and not (row["work_assignment"] and row["work_assignment"].active)
+        ),
     }
 
     return {
@@ -917,10 +970,20 @@ def people_context(filters=None):
         "selected_operation": selected_operation,
         "selected_department": selected_department,
         "selected_work_area": selected_work_area,
-        "rows": rows,
+        "rows": paginated_rows,
+        "all_rows": rows,
         "counts": counts,
         "selected_person": selected_person,
         "leadership_only": _parse_bool(filters.get("leadership_only"), default=False),
+        "assignment_status": str(filters.get("assignment_status") or "").strip(),
+        "pagination": {
+            "page": page,
+            "per_page": per_page or total_matches or PEOPLE_DEFAULT_PAGE_SIZE,
+            "total": total_matches,
+            "total_pages": total_pages,
+            "has_previous": bool(per_page and page > 1),
+            "has_next": bool(per_page and page < total_pages),
+        },
         "filters": {
             "sort_id": str(selected_sort.id) if selected_sort else "",
             "operation_id": str(selected_operation.id) if selected_operation else "",
@@ -929,6 +992,9 @@ def people_context(filters=None):
             "work_area_id": filters.get("work_area_id", ""),
             "search": filters.get("search", ""),
             "active": filters.get("active", "active") or "active",
+            "assignment_status": filters.get("assignment_status", ""),
+            "page": str(page),
+            "per_page": str(per_page or "all"),
             "leadership_only": "1" if _parse_bool(filters.get("leadership_only"), default=False) else "",
             "person_id": str(selected_person["person"].id) if selected_person else "",
         },
@@ -1001,6 +1067,8 @@ def org_chart_context(selected_unit_id=None):
         )
     else:
         current_children = root_units
+    unit_card_meta = _org_chart_unit_meta()
+    selected_detail = unit_card_meta.get(selected_unit.id) if selected_unit else None
     work_area_detail = None
     if selected_unit and selected_unit.unit_type == "work_area":
         assigned_count = StaffingWorkAssignment.query.filter_by(
@@ -1025,6 +1093,8 @@ def org_chart_context(selected_unit_id=None):
         "selected_unit": selected_unit,
         "breadcrumb": unit_breadcrumb(selected_unit),
         "current_children": current_children,
+        "unit_card_meta": unit_card_meta,
+        "selected_detail": selected_detail,
         "work_area_detail": work_area_detail,
         "units": StaffingUnit.query.order_by(
             StaffingUnit.unit_type,
@@ -1113,6 +1183,7 @@ def _attendance_scope_key(unit):
 def attendance_context(filters=None, user=None):
     filters = filters or {}
     attendance_date = _parse_optional_date(filters.get("attendance_date")) or date.today()
+    filters = _with_default_management_scope(filters, user)
     selected_scope = _resolve_attendance_scope(filters)
     selected_sort = _resolve_attendance_sort(filters, selected_scope)
     work_area_ids = set()
@@ -1164,6 +1235,7 @@ def attendance_context(filters=None, user=None):
         "selected_scope": selected_scope,
         "rows": rows,
         "counts": counts,
+        "total_loaded": len(rows),
         "sorts": units_by_type("sort"),
         "operations": units_by_type("operation"),
         "departments": units_by_type("department"),
@@ -1197,8 +1269,9 @@ def save_attendance(values, user):
         person = db.session.get(StaffingPerson, person_id)
         if not person:
             continue
+        status_value = values.get("bulk_status") or values.get(f"status_{person_id}") or "here"
         status = _normalize_choice(
-            values.get(f"status_{person_id}") or "here",
+            status_value,
             STAFFING_DAILY_ATTENDANCE_STATUSES,
             "attendance status",
         )
@@ -1257,8 +1330,9 @@ def _resolve_attendance_sort(filters, selected_scope):
     return sorts[0] if len(sorts) == 1 else None
 
 
-def reports_context(filters=None):
+def reports_context(filters=None, user=None):
     filters = filters or {}
+    filters = _with_default_management_scope(filters, user)
     report_type = str(filters.get("report_type") or "staffing").strip().lower()
     if report_type not in {"staffing", "seniority", "attendance"}:
         report_type = "staffing"
@@ -1272,6 +1346,8 @@ def reports_context(filters=None):
             "roster_status": filters.get("roster_status", ""),
             "active": filters.get("active", "active"),
             "search": filters.get("search", ""),
+            "assignment_status": filters.get("assignment_status", ""),
+            "per_page": "all",
         }
     )
     seniority = seniority_context(
@@ -1295,15 +1371,28 @@ def reports_context(filters=None):
         attendance_query = attendance_query.filter(
             StaffingDailyAttendance.status == attendance_status
         )
+    selected_scope = _resolve_attendance_scope(filters)
+    if selected_scope:
+        work_area_ids = work_area_ids_under(selected_scope)
+        attendance_query = attendance_query.filter(
+            StaffingDailyAttendance.work_area_unit_id.in_(work_area_ids or {-1})
+        )
+    attendance_rows = attendance_query.order_by(
+        StaffingDailyAttendance.attendance_date.desc(),
+        StaffingPerson.last_name,
+        StaffingPerson.first_name,
+    ).all()
+    attendance_counts = {}
+    for record in attendance_rows:
+        attendance_counts[record.status] = attendance_counts.get(record.status, 0) + 1
     return {
         "report_type": report_type,
         "staffing": staffing,
         "seniority": seniority,
-        "attendance_rows": attendance_query.order_by(
-            StaffingDailyAttendance.attendance_date.desc(),
-            StaffingPerson.last_name,
-            StaffingPerson.first_name,
-        ).all(),
+        "attendance_rows": attendance_rows,
+        "attendance_counts": attendance_counts,
+        "staffing_classification_counts": _people_count_by(staffing["all_rows"], "classification"),
+        "staffing_roster_counts": _people_count_by(staffing["all_rows"], "roster_status"),
         "attendance_status_choices": attendance_status_choices(),
         "classification_choices": classification_choices(),
         "roster_status_choices": roster_status_choices(),
@@ -1315,6 +1404,7 @@ def reports_context(filters=None):
             "work_area_id": filters.get("work_area_id", ""),
             "classification": filters.get("classification", ""),
             "roster_status": filters.get("roster_status", ""),
+            "assignment_status": filters.get("assignment_status", ""),
             "attendance_date": filters.get("attendance_date", ""),
             "attendance_status": filters.get("attendance_status", ""),
         },
@@ -1397,6 +1487,7 @@ def _filter_people_rows(rows, filters):
     roster_status = str(filters.get("roster_status") or "").strip()
     search = str(filters.get("search") or "").strip().lower()
     leadership_only = _parse_bool(filters.get("leadership_only"), default=False)
+    assignment_status = str(filters.get("assignment_status") or "").strip()
     selected_scope = (
         filters.get("selected_work_area")
         or filters.get("selected_department")
@@ -1415,6 +1506,13 @@ def _filter_people_rows(rows, filters):
         if roster_status in STAFFING_ROSTER_STATUSES and person.roster_status != roster_status:
             continue
         if leadership_only and not row["leadership_assignments"]:
+            continue
+        has_work_assignment = bool(row["work_assignment"] and row["work_assignment"].active)
+        if assignment_status == "assigned" and not has_work_assignment:
+            continue
+        if assignment_status == "unassigned" and (
+            has_work_assignment or person.classification not in NON_MANAGEMENT_CLASSIFICATIONS
+        ):
             continue
         if search:
             searchable = " ".join(
@@ -1495,6 +1593,84 @@ def _resolve_people_detail(person_id, rows):
         if row["person"].id == selected_id:
             return row
     return None
+
+
+def _pagination_from_filters(filters):
+    page = _parse_positive_int(filters.get("page"), default=1)
+    per_page_value = str(filters.get("per_page") or "").strip().lower()
+    if per_page_value == "all":
+        return page, None
+    per_page = _parse_positive_int(per_page_value, default=PEOPLE_DEFAULT_PAGE_SIZE)
+    per_page = min(per_page, PEOPLE_MAX_PAGE_SIZE)
+    return page, per_page
+
+
+def _parse_positive_int(value, default=1):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _with_default_management_scope(filters, user):
+    if not user or _has_explicit_scope(filters):
+        return filters
+    context = management_attendance_context_for_user(user)
+    assignments = context.get("assignments") or []
+    if not assignments:
+        return filters
+    first = assignments[0]
+    scoped = dict(filters)
+    scoped[first["scope_key"]] = str(first["unit"].id)
+    return scoped
+
+
+def _has_explicit_scope(filters):
+    return any(str(filters.get(key) or "").strip() for key in ("work_area_id", "department_id", "operation_id", "sort_id"))
+
+
+def _org_chart_unit_meta():
+    assigned_counts = _board_assigned_counts()
+    active_leadership = {}
+    for assignment in StaffingLeadershipAssignment.query.filter_by(active=True).all():
+        if assignment.unit_id:
+            active_leadership.setdefault(assignment.unit_id, []).append(assignment)
+    meta = {}
+    for unit in StaffingUnit.query.all():
+        child_count = len([child for child in unit.children if child.active])
+        work_area_ids = work_area_ids_under(unit)
+        assigned_count = sum(int(assigned_counts.get(work_area_id, 0) or 0) for work_area_id in work_area_ids)
+        leadership = sorted(
+            active_leadership.get(unit.id, []),
+            key=lambda row: (row.person.last_name.lower(), row.person.first_name.lower(), row.id),
+        )
+        meta[unit.id] = {
+            "child_count": child_count,
+            "assigned_count": assigned_count,
+            "leadership": leadership,
+            "leadership_names": [assignment.person.full_name for assignment in leadership],
+            "required_headcount": unit.required_headcount,
+        }
+    return meta
+
+
+def _people_count_by(rows, field):
+    counts = {}
+    for row in rows:
+        person = row["person"]
+        key = getattr(person, field, None)
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _unit_is_descendant(candidate_parent, unit):
+    current = candidate_parent
+    while current:
+        if current.id == unit.id:
+            return True
+        current = current.parent
+    return False
 
 
 def _seniority_work_assignment_rows(operation, allowed_work_area_ids, filters):
