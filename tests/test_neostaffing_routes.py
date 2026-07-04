@@ -61,6 +61,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"neo-brand-title__node--staffing", response.data)
         self.assertEqual(response.data.count(b"neostaffing-menu-tile"), 3)
         self.assertNotIn(b'href="/neostaffing/people/attendance" class="neostaffing-menu-tile"', response.data)
+        self.assertNotIn(b"APP ROLE", response.data)
+        self.assertNotIn(b"neostaffing-home-header", response.data)
         self.assertIn(b"Total People", response.data)
         self.assertIn(b"Active Roster", response.data)
         self.assertIn(b"Assigned", response.data)
@@ -71,6 +73,29 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"STAFFING BOARD", response.data)
         self.assertNotIn(b"NeoMotherBrain", response.data)
         self.assertNotIn(b"Change Characters", response.data)
+
+    def test_neostaffing_section_pages_render_clean_sidebar_navigation(self):
+        user = self._user("staffing_sidebar_operator")
+        self._grant_app_access(user, "neostaffing", "operator")
+        db.session.commit()
+        self._login(user.username)
+
+        for path, active_label in (
+            ("/neostaffing/people", b"People"),
+            ("/neostaffing/people/attendance", b"People / Attendance"),
+            ("/neostaffing/org-chart", b"Org Chart"),
+            ("/neostaffing/reports", b"Reports"),
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b'aria-label="NeoStaffing section navigation"', response.data)
+                for label in (b"Home", b"People", b"People / Attendance", b"Org Chart", b"Reports"):
+                    self.assertIn(label, response.data)
+                self.assertIn(active_label, response.data)
+                self.assertNotIn(b"neostaffing-rail-brand", response.data)
+                self.assertNotIn(b"neostaffing-rail-icon", response.data)
+                self.assertNotIn(b"neostaffing-rail-title", response.data)
 
     def test_landing_attendance_shortcut_resolves_one_or_multiple_scopes(self):
         _sort, _operation, department, work_area = self._staffing_hierarchy()

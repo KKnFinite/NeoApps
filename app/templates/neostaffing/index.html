@@ -4,21 +4,8 @@
 {% block title %}NeoStaffing{% endblock %}
 
 {% block content %}
-<section class="neostaffing-page neostaffing-home-page theme-staffing" aria-labelledby="neostaffing-title">
+<section class="neostaffing-page neostaffing-home-page theme-staffing" aria-label="NeoStaffing">
     <div class="neostaffing-home-shell">
-        <header class="neostaffing-home-header">
-            <div class="neostaffing-header-brandline">
-                <img class="neostaffing-header-icon" src="{{ url_for('static', filename='images/icons/neostaffing/inapp/neostaffing-inapp-128.png') }}" alt="NeoStaffing icon" width="128" height="128" loading="lazy">
-                {% with neostaffing_brand_class="neostaffing-header-title" %}
-                {% include "neostaffing/_brand_title.html" %}
-                {% endwith %}
-            </div>
-            <div class="neostaffing-status-card">
-                <span>APP ROLE</span>
-                <strong>{{ app_role|role_label }}</strong>
-            </div>
-        </header>
-
         <nav class="neostaffing-primary-menu" aria-label="NeoStaffing main menu">
             <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.people') }}">
                 <span>PEOPLE</span>

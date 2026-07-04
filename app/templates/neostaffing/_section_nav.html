@@ -1,0 +1,7 @@
+<aside class="neostaffing-rail" aria-label="NeoStaffing section navigation">
+    <a href="{{ url_for('neostaffing.index') }}" {% if request.endpoint == "neostaffing.index" %}aria-current="page"{% endif %}>Home</a>
+    <a href="{{ url_for('neostaffing.people') }}" {% if request.endpoint == "neostaffing.people" %}aria-current="page"{% endif %}>People</a>
+    <a href="{{ url_for('neostaffing.people_attendance') }}" {% if request.endpoint == "neostaffing.people_attendance" %}aria-current="page"{% endif %}>People / Attendance</a>
+    <a href="{{ url_for('neostaffing.org_chart') }}" {% if request.endpoint in ("neostaffing.org_chart", "neostaffing.hierarchy") %}aria-current="page"{% endif %}>Org Chart</a>
+    <a href="{{ url_for('neostaffing.reports') }}" {% if request.endpoint == "neostaffing.reports" %}aria-current="page"{% endif %}>Reports</a>
+</aside>

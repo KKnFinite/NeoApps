@@ -4,7 +4,7 @@
 
 {% block content %}
 {% set filters = attendance.filters %}
-<section class="neostaffing-page theme-staffing" aria-labelledby="staffing-attendance-title">
+<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="staffing-attendance-title">
     <nav class="neostaffing-mobile-tabs" aria-label="NeoStaffing mobile navigation">
         <a href="{{ url_for('neostaffing.index') }}">HOME</a>
         <a href="{{ url_for('neostaffing.people') }}">PEOPLE</a>
@@ -12,101 +12,101 @@
         <a href="{{ url_for('neostaffing.reports') }}">REPORTS</a>
     </nav>
 
-    <div class="neostaffing-hero neostaffing-hero-compact">
-        <div class="neostaffing-hero-copy mobile-shell-duplicate-title">
-            <p class="neostaffing-eyebrow">
-                {% with neostaffing_brand_class="neostaffing-eyebrow-brand" %}
-                {% include "neostaffing/_brand_title.html" %}
-                {% endwith %}
-            </p>
-            <h1 id="staffing-attendance-title">ATTENDANCE</h1>
-        </div>
-        <div class="neostaffing-status-card"><span>APP ROLE</span><strong>{{ app_role|role_label }}</strong></div>
-    </div>
-
-    <section class="neostaffing-data-card">
-        <h2>ATTENDANCE SCOPE</h2>
-        <form class="operation-form neostaffing-filter-form" method="get">
-            <label><span>Date</span><input type="date" name="attendance_date" value="{{ filters.attendance_date }}"></label>
-            <label><span>Sort</span>
-                <select name="sort_id">
-                    <option value="">Auto</option>
-                    {% for unit in attendance.sorts %}
-                    <option value="{{ unit.id }}" {% if filters.sort_id|string == unit.id|string %}selected{% endif %}>{{ unit.name }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label><span>Operation</span>
-                <select name="operation_id">
-                    <option value="">All</option>
-                    {% for unit in attendance.operations %}
-                    <option value="{{ unit.id }}" {% if filters.operation_id|string == unit.id|string %}selected{% endif %}>{{ unit_path(unit) }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label><span>Department</span>
-                <select name="department_id">
-                    <option value="">All</option>
-                    {% for unit in attendance.departments %}
-                    <option value="{{ unit.id }}" {% if filters.department_id|string == unit.id|string %}selected{% endif %}>{{ unit_path(unit) }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label><span>Work Area</span>
-                <select name="work_area_id">
-                    <option value="">All</option>
-                    {% for unit in attendance.work_areas %}
-                    <option value="{{ unit.id }}" {% if filters.work_area_id|string == unit.id|string %}selected{% endif %}>{{ unit_path(unit) }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <button type="submit">LOAD</button>
-        </form>
-    </section>
-
-    <section class="neostaffing-summary-strip" aria-label="Attendance counts">
-        <article><span>Loaded People</span><strong>{{ attendance.total_loaded }}</strong></article>
-        {% for value, label in attendance.status_choices %}
-        {% if attendance.counts.get(value, 0) %}
-        <article><span>{{ label }}</span><strong>{{ attendance.counts[value] }}</strong></article>
-        {% endif %}
-        {% endfor %}
-    </section>
-
-    <form class="neostaffing-data-card" method="post">
-        <input type="hidden" name="attendance_date" value="{{ filters.attendance_date }}">
-        <input type="hidden" name="sort_id" value="{{ filters.sort_id }}">
-        <input type="hidden" name="operation_id" value="{{ filters.operation_id }}">
-        <input type="hidden" name="department_id" value="{{ filters.department_id }}">
-        <input type="hidden" name="work_area_id" value="{{ filters.work_area_id }}">
-        <div class="neostaffing-panel-heading">
-            <h2>DAILY ATTENDANCE</h2>
-            {% if can_edit_attendance %}
-            <div class="neostaffing-inline-actions">
-                <button class="action-button action-button-secondary" type="submit" name="bulk_status" value="here">ALL HERE</button>
-                <button class="action-button" type="submit">SAVE ATTENDANCE</button>
-            </div>
-            {% endif %}
-        </div>
-        <div class="neostaffing-attendance-list">
-            {% for row in attendance.rows %}
-            <div class="neostaffing-attendance-row">
-                <div>
-                    <span>{{ row.person.employee_id }}</span>
-                    <strong>{{ row.person.last_name }}, {{ row.person.first_name }}</strong>
-                    <em>{{ row.work_area.name if row.work_area else "Unassigned" }}</em>
+    <div class="neostaffing-dashboard-shell">
+        {% include "neostaffing/_section_nav.html" %}
+        <div class="neostaffing-dashboard-main">
+            <div class="neostaffing-hero neostaffing-hero-compact">
+                <div class="neostaffing-hero-copy mobile-shell-duplicate-title">
+                    <h1 id="staffing-attendance-title">ATTENDANCE</h1>
                 </div>
-                <select name="status_{{ row.person.id }}" {% if not can_edit_attendance %}disabled{% endif %}>
-                    {% for value, label in attendance.status_choices %}
-                    <option value="{{ value }}" {% if row.status == value %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-                <input name="note_{{ row.person.id }}" value="{{ row.note }}" placeholder="Note" {% if not can_edit_attendance %}disabled{% endif %}>
+                <div class="neostaffing-status-card"><span>APP ROLE</span><strong>{{ app_role|role_label }}</strong></div>
             </div>
-            {% else %}
-            <p class="muted">No assigned employees match this attendance scope.</p>
-            {% endfor %}
+
+            <section class="neostaffing-data-card">
+                <h2>ATTENDANCE SCOPE</h2>
+                <form class="operation-form neostaffing-filter-form" method="get">
+                    <label><span>Date</span><input type="date" name="attendance_date" value="{{ filters.attendance_date }}"></label>
+                    <label><span>Sort</span>
+                        <select name="sort_id">
+                            <option value="">Auto</option>
+                            {% for unit in attendance.sorts %}
+                            <option value="{{ unit.id }}" {% if filters.sort_id|string == unit.id|string %}selected{% endif %}>{{ unit.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label><span>Operation</span>
+                        <select name="operation_id">
+                            <option value="">All</option>
+                            {% for unit in attendance.operations %}
+                            <option value="{{ unit.id }}" {% if filters.operation_id|string == unit.id|string %}selected{% endif %}>{{ unit_path(unit) }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label><span>Department</span>
+                        <select name="department_id">
+                            <option value="">All</option>
+                            {% for unit in attendance.departments %}
+                            <option value="{{ unit.id }}" {% if filters.department_id|string == unit.id|string %}selected{% endif %}>{{ unit_path(unit) }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label><span>Work Area</span>
+                        <select name="work_area_id">
+                            <option value="">All</option>
+                            {% for unit in attendance.work_areas %}
+                            <option value="{{ unit.id }}" {% if filters.work_area_id|string == unit.id|string %}selected{% endif %}>{{ unit_path(unit) }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <button type="submit">LOAD</button>
+                </form>
+            </section>
+
+            <section class="neostaffing-summary-strip" aria-label="Attendance counts">
+                <article><span>Loaded People</span><strong>{{ attendance.total_loaded }}</strong></article>
+                {% for value, label in attendance.status_choices %}
+                {% if attendance.counts.get(value, 0) %}
+                <article><span>{{ label }}</span><strong>{{ attendance.counts[value] }}</strong></article>
+                {% endif %}
+                {% endfor %}
+            </section>
+
+            <form class="neostaffing-data-card" method="post">
+                <input type="hidden" name="attendance_date" value="{{ filters.attendance_date }}">
+                <input type="hidden" name="sort_id" value="{{ filters.sort_id }}">
+                <input type="hidden" name="operation_id" value="{{ filters.operation_id }}">
+                <input type="hidden" name="department_id" value="{{ filters.department_id }}">
+                <input type="hidden" name="work_area_id" value="{{ filters.work_area_id }}">
+                <div class="neostaffing-panel-heading">
+                    <h2>DAILY ATTENDANCE</h2>
+                    {% if can_edit_attendance %}
+                    <div class="neostaffing-inline-actions">
+                        <button class="action-button action-button-secondary" type="submit" name="bulk_status" value="here">ALL HERE</button>
+                        <button class="action-button" type="submit">SAVE ATTENDANCE</button>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="neostaffing-attendance-list">
+                    {% for row in attendance.rows %}
+                    <div class="neostaffing-attendance-row">
+                        <div>
+                            <span>{{ row.person.employee_id }}</span>
+                            <strong>{{ row.person.last_name }}, {{ row.person.first_name }}</strong>
+                            <em>{{ row.work_area.name if row.work_area else "Unassigned" }}</em>
+                        </div>
+                        <select name="status_{{ row.person.id }}" {% if not can_edit_attendance %}disabled{% endif %}>
+                            {% for value, label in attendance.status_choices %}
+                            <option value="{{ value }}" {% if row.status == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        <input name="note_{{ row.person.id }}" value="{{ row.note }}" placeholder="Note" {% if not can_edit_attendance %}disabled{% endif %}>
+                    </div>
+                    {% else %}
+                    <p class="muted">No assigned employees match this attendance scope.</p>
+                    {% endfor %}
+                </div>
+            </form>
         </div>
-    </form>
+    </div>
 </section>
 {% endblock %}

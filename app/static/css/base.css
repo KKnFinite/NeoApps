@@ -7626,24 +7626,30 @@ body.blueprint-neostaffing {
 
 .neostaffing-dashboard-shell {
     display: grid;
-    grid-template-columns: 210px minmax(0, 1fr);
-    gap: 16px;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 18px;
     align-items: start;
+    min-width: 0;
 }
 
 .neostaffing-rail {
     position: sticky;
     top: 96px;
     display: grid;
-    gap: 8px;
-    min-height: calc(100vh - 128px);
-    padding: 16px;
-    border: 1px solid rgba(var(--node-rgb), 0.22);
-    border-radius: 9px;
+    align-content: start;
+    gap: 7px;
+    width: 220px;
+    min-width: 0;
+    padding: 12px;
+    overflow: hidden;
+    border: 1px solid rgba(var(--node-rgb), 0.26);
+    border-radius: 8px;
     background:
-        linear-gradient(180deg, rgba(var(--node-rgb), 0.08), transparent 30%),
-        rgba(8, 17, 24, 0.92);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        linear-gradient(180deg, rgba(18, 28, 37, 0.94), rgba(3, 9, 14, 0.96)),
+        rgba(5, 12, 18, 0.96);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 18px rgba(var(--node-rgb), 0.08);
 }
 
 .neostaffing-rail-brand {
@@ -7708,12 +7714,13 @@ body.blueprint-neostaffing {
 .neostaffing-mobile-tabs span {
     display: flex;
     align-items: center;
-    min-height: 40px;
-    padding: 0 12px;
+    min-width: 0;
+    min-height: 36px;
+    padding: 0 10px;
     border: 1px solid transparent;
-    border-radius: 7px;
+    border-radius: 6px;
     color: var(--neo-silver);
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     font-weight: 900;
     letter-spacing: 0.04em;
     text-decoration: none;
@@ -7728,9 +7735,12 @@ body.blueprint-neostaffing {
 .neostaffing-rail a:hover,
 .neostaffing-rail a[aria-current="page"],
 .neostaffing-mobile-tabs a[aria-current="page"] {
-    border-color: rgba(var(--node-rgb), 0.48);
-    background: rgba(var(--node-rgb), 0.12);
+    border-color: rgba(var(--node-rgb), 0.58);
+    background:
+        linear-gradient(90deg, rgba(var(--node-rgb), 0.2), rgba(var(--node-rgb), 0.06)),
+        rgba(2, 9, 13, 0.88);
     color: var(--node-primary);
+    box-shadow: inset 3px 0 0 var(--node-primary), 0 0 16px rgba(var(--node-rgb), 0.12);
 }
 
 .neostaffing-rail-return {
@@ -8422,14 +8432,14 @@ body.blueprint-neostaffing {
 }
 
 .neostaffing-home-page {
-    min-height: calc(100vh - 140px);
+    min-height: auto;
     display: grid;
-    align-items: center;
+    align-items: start;
 }
 
 .neostaffing-home-shell {
     display: grid;
-    gap: 22px;
+    gap: 16px;
     width: min(1120px, 100%);
     margin: 0 auto;
 }

@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_neo_brand.html" import neo_brand %}
 
 {% block title %}NeoStaffing People{% endblock %}
 
@@ -41,29 +40,11 @@
     </nav>
 
     <div class="neostaffing-dashboard-shell">
-        <aside class="neostaffing-rail" aria-label="NeoStaffing navigation">
-            <div class="neostaffing-rail-brand">
-                <img class="neostaffing-rail-icon" src="{{ url_for('static', filename='images/icons/neostaffing/inapp/neostaffing-inapp-128.png') }}" alt="NeoStaffing icon" width="128" height="128" loading="lazy">
-                {% with neostaffing_brand_class="neostaffing-rail-title" %}
-                {% include "neostaffing/_brand_title.html" %}
-                {% endwith %}
-            </div>
-            <a href="{{ url_for('neostaffing.index') }}">HOME</a>
-            <a href="{{ url_for('neostaffing.people') }}" aria-current="page">PEOPLE</a>
-            <a href="{{ url_for('neostaffing.people_attendance') }}">PEOPLE / ATTENDANCE</a>
-            <a href="{{ url_for('neostaffing.org_chart') }}">ORG CHART</a>
-            <a href="{{ url_for('neostaffing.reports') }}">REPORTS</a>
-            <a class="neostaffing-rail-return" href="{{ url_for('auth.portal_dashboard') }}">{{ neo_brand("Apps", "apps") }} PORTAL</a>
-        </aside>
+        {% include "neostaffing/_section_nav.html" %}
 
         <main class="neostaffing-dashboard-main">
             <header class="neostaffing-dashboard-topbar">
                 <div class="mobile-shell-duplicate-title">
-                    <p class="neostaffing-eyebrow">
-                        {% with neostaffing_brand_class="neostaffing-eyebrow-brand" %}
-                        {% include "neostaffing/_brand_title.html" %}
-                        {% endwith %}
-                    </p>
                     <h1 id="neostaffing-people-title">PEOPLE</h1>
                 </div>
                 <label class="neostaffing-search">
