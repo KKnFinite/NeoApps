@@ -5,8 +5,10 @@ from app import create_app
 from app.extensions import db
 from app.models import (
     GatewayMembership,
+    PermissionRule,
     PortalAppAccess,
     StaffingDailyAttendance,
+    StaffingLeadershipAssignment,
     StaffingPerson,
     StaffingUnit,
     StaffingWorkAssignment,
@@ -14,6 +16,7 @@ from app.models import (
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services import neostaffing as staffing_service
+from app.services.permission_rules import ensure_default_permission_rules
 
 
 class NeoStaffingRoutesTest(unittest.TestCase):
@@ -96,6 +99,71 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 self.assertNotIn(b"neostaffing-rail-brand", response.data)
                 self.assertNotIn(b"neostaffing-rail-icon", response.data)
                 self.assertNotIn(b"neostaffing-rail-title", response.data)
+
+    def test_neostaffing_permission_defaults_are_registered(self):
+        ensure_default_permission_rules()
+        defaults = {
+            rule.permission_key: rule.minimum_role
+            for rule in PermissionRule.query.filter(
+                PermissionRule.permission_key.in_(
+                    [
+                        "neostaffing.people.view",
+                        "neostaffing.people.edit",
+                        "neostaffing.people.bulk_actions",
+                        "neostaffing.attendance.take",
+                        "neostaffing.reports.view",
+                        "neostaffing.management.assign",
+                        "neostaffing.org_chart.view",
+                        "neostaffing.org_chart.edit_structure",
+                    ]
+                )
+            ).all()
+        }
+
+        self.assertEqual(defaults["neostaffing.people.view"], "watcher")
+        self.assertEqual(defaults["neostaffing.people.edit"], "simulator")
+        self.assertEqual(defaults["neostaffing.people.bulk_actions"], "simulator")
+        self.assertEqual(defaults["neostaffing.attendance.take"], "operator")
+        self.assertEqual(defaults["neostaffing.reports.view"], "operator")
+        self.assertEqual(defaults["neostaffing.management.assign"], "simulator")
+        self.assertEqual(defaults["neostaffing.org_chart.view"], "watcher")
+        self.assertEqual(defaults["neostaffing.org_chart.edit_structure"], "master")
+
+    def test_operator_can_take_attendance_and_view_reports(self):
+        user = self._user("staffing_operator_permissions")
+        self._grant_app_access(user, "neostaffing", "operator")
+        sort, _operation, _department, work_area = self._staffing_hierarchy()
+        person = staffing_service.create_person(
+            {
+                "employee_id": "OP100",
+                "first_name": "Opal",
+                "last_name": "Operator",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+            }
+        )
+        staffing_service.assign_work_area(person, work_area)
+        db.session.commit()
+        self._login(user.username)
+
+        reports = self.client.get("/neostaffing/reports")
+        attendance = self.client.post(
+            "/neostaffing/people/attendance",
+            data={
+                "attendance_date": "2026-07-03",
+                "sort_id": str(sort.id),
+                "work_area_id": str(work_area.id),
+                f"status_{person.id}": "here",
+            },
+            follow_redirects=True,
+        )
+
+        self.assertEqual(reports.status_code, 200)
+        self.assertEqual(attendance.status_code, 200)
+        self.assertEqual(
+            StaffingDailyAttendance.query.filter_by(person_id=person.id, status="here").count(),
+            1,
+        )
 
     def test_landing_attendance_shortcut_resolves_one_or_multiple_scopes(self):
         _sort, _operation, department, work_area = self._staffing_hierarchy()
@@ -411,6 +479,86 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"Build Sort > Operation > Department > Work Area structure.", response.data)
         self.assertNotIn(b"Set daily staffing plans for each Work Area.", response.data)
         self.assertNotIn(b"Future NeoStaffing-specific permission controls.", response.data)
+
+    def test_simulator_can_edit_people_and_assign_management_but_not_org_structure(self):
+        simulator = self._user("staffing_simulator_permissions")
+        self._grant_app_access(simulator, "neostaffing", "simulator")
+        master = self._user("staffing_master_structure_permissions")
+        self._grant_app_access(master, "neostaffing", "master")
+        _sort, operation, _department, work_area = self._staffing_hierarchy()
+        supervisor = staffing_service.create_person(
+            {
+                "employee_id": "MG100",
+                "first_name": "Manage",
+                "last_name": "Assign",
+                "seniority_date": "2019-01-01",
+                "classification": "part_time_supervisor",
+            }
+        )
+        db.session.commit()
+
+        simulator_client = self._logged_in_client(simulator.username)
+        people_page = simulator_client.get("/neostaffing/app-management/people")
+        created = simulator_client.post(
+            "/neostaffing/app-management/people",
+            data={
+                "employee_id": "SIM100",
+                "first_name": "Sim",
+                "last_name": "Worker",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+                "employee_status": "active",
+            },
+            follow_redirects=False,
+        )
+        person = StaffingPerson.query.filter_by(employee_id="SIM100").one()
+        updated = simulator_client.post(
+            f"/neostaffing/app-management/people/{person.id}/update",
+            data={
+                "employee_id": "SIM100",
+                "first_name": "Sim",
+                "last_name": "Updated",
+                "seniority_date": "2020-01-01",
+                "classification": "full_time_combo",
+                "employee_status": "active",
+                "active": "1",
+            },
+            follow_redirects=False,
+        )
+        management_page = simulator_client.get("/neostaffing/app-management/management-assignments")
+        management = simulator_client.post(
+            "/neostaffing/app-management/management-assignments",
+            data={"person_id": str(supervisor.id), "unit_id": str(work_area.id)},
+            follow_redirects=False,
+        )
+        blocked_structure = simulator_client.post(
+            "/neostaffing/app-management/hierarchy/units",
+            data={"unit_type": "department", "parent_id": str(operation.id), "name": "Blocked Dept"},
+            follow_redirects=False,
+        )
+
+        master_client = self._logged_in_client(master.username)
+        allowed_structure = master_client.post(
+            "/neostaffing/app-management/hierarchy/units",
+            data={"unit_type": "department", "parent_id": str(operation.id), "name": "Allowed Dept"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(people_page.status_code, 200)
+        self.assertEqual(created.status_code, 302)
+        self.assertEqual(updated.status_code, 302)
+        self.assertEqual(db.session.get(StaffingPerson, person.id).last_name, "Updated")
+        self.assertEqual(management_page.status_code, 200)
+        self.assertEqual(management.status_code, 302)
+        self.assertEqual(
+            StaffingLeadershipAssignment.query.filter_by(person_id=supervisor.id, unit_id=work_area.id).count(),
+            1,
+        )
+        self.assertEqual(blocked_structure.status_code, 302)
+        self.assertEqual(blocked_structure.location, "/neostaffing")
+        self.assertIsNone(StaffingUnit.query.filter_by(name="Blocked Dept").first())
+        self.assertEqual(allowed_structure.status_code, 302)
+        self.assertIsNotNone(StaffingUnit.query.filter_by(name="Allowed Dept").first())
 
     def test_app_management_crud_pages_use_operations_card_layout(self):
         user = self._user("staffing_card_layout")
@@ -842,8 +990,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIsNotNone(third)
 
     def test_people_quick_assignment_requires_edit_role_and_updates_work_area(self):
-        master = self._user("staffing_quick_assign_master")
-        self._grant_app_access(master, "neostaffing", "master")
+        simulator = self._user("staffing_quick_assign_simulator")
+        self._grant_app_access(simulator, "neostaffing", "simulator")
         operator = self._user("staffing_quick_assign_operator")
         self._grant_app_access(operator, "neostaffing", "operator")
         _sort, _operation, department, work_area = self._staffing_hierarchy()
@@ -872,8 +1020,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(blocked.location, "/neostaffing")
         self.assertEqual(db.session.get(StaffingPerson, person.id).work_assignment.work_area_unit_id, work_area.id)
 
-        master_client = self._logged_in_client(master.username)
-        updated = master_client.post(
+        simulator_client = self._logged_in_client(simulator.username)
+        updated = simulator_client.post(
             f"/neostaffing/people/{person.id}/assign-work-area",
             data={"work_area_unit_id": str(second_work_area.id)},
             follow_redirects=False,
@@ -882,6 +1030,94 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(updated.status_code, 302)
         self.assertIn("/neostaffing/people", updated.location)
         self.assertEqual(db.session.get(StaffingPerson, person.id).work_assignment.work_area_unit_id, second_work_area.id)
+
+    def test_people_bulk_actions_assign_skip_management_and_clear_assignments(self):
+        simulator = self._user("staffing_bulk_simulator")
+        self._grant_app_access(simulator, "neostaffing", "simulator")
+        operator = self._user("staffing_bulk_operator")
+        self._grant_app_access(operator, "neostaffing", "operator")
+        _sort, _operation, department, first_work_area = self._staffing_hierarchy()
+        second_work_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "WBM", "parent_id": department.id}
+        )
+        part_time = staffing_service.create_person(
+            {
+                "employee_id": "BA100",
+                "first_name": "Bulk",
+                "last_name": "Part",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+            }
+        )
+        combo = staffing_service.create_person(
+            {
+                "employee_id": "BA101",
+                "first_name": "Bulk",
+                "last_name": "Combo",
+                "seniority_date": "2020-01-02",
+                "classification": "full_time_combo",
+            }
+        )
+        supervisor = staffing_service.create_person(
+            {
+                "employee_id": "BA102",
+                "first_name": "Bulk",
+                "last_name": "Supervisor",
+                "seniority_date": "2019-01-01",
+                "classification": "part_time_supervisor",
+            }
+        )
+        staffing_service.assign_work_area(part_time, first_work_area)
+        db.session.commit()
+
+        operator_client = self._logged_in_client(operator.username)
+        operator_page = operator_client.get("/neostaffing/people")
+        operator_blocked = operator_client.post(
+            "/neostaffing/people/bulk-work-area",
+            data={
+                "bulk_action": "move",
+                "work_area_unit_id": str(second_work_area.id),
+                "person_ids": [str(part_time.id), str(combo.id)],
+            },
+            follow_redirects=False,
+        )
+
+        simulator_client = self._logged_in_client(simulator.username)
+        simulator_page = simulator_client.get("/neostaffing/people")
+        assigned = simulator_client.post(
+            "/neostaffing/people/bulk-work-area",
+            data={
+                "bulk_action": "move",
+                "work_area_unit_id": str(second_work_area.id),
+                "person_ids": [str(part_time.id), str(combo.id), str(supervisor.id)],
+            },
+            follow_redirects=True,
+        )
+        cleared = simulator_client.post(
+            "/neostaffing/people/bulk-work-area",
+            data={
+                "bulk_action": "clear",
+                "person_ids": [str(part_time.id), str(combo.id)],
+            },
+            follow_redirects=True,
+        )
+
+        self.assertEqual(operator_page.status_code, 200)
+        self.assertNotIn(b"APPLY BULK ACTION", operator_page.data)
+        self.assertEqual(operator_blocked.status_code, 302)
+        self.assertEqual(operator_blocked.location, "/neostaffing")
+        self.assertEqual(simulator_page.status_code, 200)
+        self.assertIn(b"APPLY BULK ACTION", simulator_page.data)
+        self.assertIn(b"Select all visible", simulator_page.data)
+        self.assertEqual(assigned.status_code, 200)
+        self.assertIn(b"Bulk work-area action updated 2 people.", assigned.data)
+        self.assertIn(b"Skipped management classifications", assigned.data)
+        self.assertEqual(db.session.get(StaffingPerson, part_time.id).work_assignment.work_area_unit_id, second_work_area.id)
+        self.assertEqual(db.session.get(StaffingPerson, combo.id).work_assignment.work_area_unit_id, second_work_area.id)
+        self.assertIsNone(db.session.get(StaffingPerson, supervisor.id).work_assignment)
+        self.assertEqual(cleared.status_code, 200)
+        self.assertFalse(db.session.get(StaffingPerson, part_time.id).work_assignment.active)
+        self.assertFalse(db.session.get(StaffingPerson, combo.id).work_assignment.active)
 
     def test_attendance_route_preselects_scope_and_updates_existing_daily_record(self):
         user = self._user("staffing_attendance_master")

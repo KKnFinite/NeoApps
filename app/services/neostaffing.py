@@ -263,6 +263,47 @@ def clear_work_assignment(person):
     return None
 
 
+def bulk_update_work_area_assignments(person_ids, action, work_area=None):
+    normalized_action = str(action or "").strip().lower()
+    if normalized_action not in {"assign", "move", "clear"}:
+        raise ValueError("Choose a valid bulk action.")
+
+    ids = _normalized_person_ids(person_ids)
+    if not ids:
+        raise ValueError("Select at least one person.")
+
+    if normalized_action in {"assign", "move"}:
+        if not work_area or work_area.unit_type != "work_area":
+            raise ValueError("Select a valid Work Area.")
+
+    people = (
+        StaffingPerson.query.filter(StaffingPerson.id.in_(ids))
+        .order_by(StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.id)
+        .all()
+    )
+    people_by_id = {person.id: person for person in people}
+    result = {"updated": 0, "skipped": [], "missing": []}
+
+    for person_id in ids:
+        person = people_by_id.get(person_id)
+        if not person:
+            result["missing"].append(str(person_id))
+            continue
+
+        if person.classification not in NON_MANAGEMENT_CLASSIFICATIONS:
+            result["skipped"].append(person.full_name or person.employee_id)
+            continue
+
+        if normalized_action == "clear":
+            clear_work_assignment(person)
+        else:
+            assign_work_area(person, work_area)
+        result["updated"] += 1
+
+    db.session.flush()
+    return result
+
+
 def create_leadership_assignment(person, unit, leadership_level=None):
     level = leadership_level or default_leadership_level_for(person, unit)
     _validate_leadership_assignment(person, unit, level)
@@ -1930,6 +1971,21 @@ def _parse_optional_int(value, minimum=None, label="Value"):
     if minimum is not None and parsed < minimum:
         raise ValueError(f"{label} cannot be negative.")
     return parsed
+
+
+def _normalized_person_ids(values):
+    normalized = []
+    seen = set()
+    for value in values or []:
+        try:
+            person_id = int(value)
+        except (TypeError, ValueError):
+            continue
+        if person_id <= 0 or person_id in seen:
+            continue
+        normalized.append(person_id)
+        seen.add(person_id)
+    return normalized
 
 
 def _parse_bool(value, default=False):

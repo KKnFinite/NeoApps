@@ -9027,6 +9027,62 @@ body.blueprint-neostaffing {
     gap: 10px;
 }
 
+.neostaffing-people-bulk-form {
+    display: grid;
+    gap: 10px;
+}
+
+.neostaffing-people-bulk-panel {
+    display: grid;
+    grid-template-columns: minmax(130px, 0.55fr) minmax(160px, 0.8fr) minmax(220px, 1fr) auto;
+    gap: 10px;
+    align-items: end;
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.28);
+    border-radius: 8px;
+    background: rgba(3, 9, 14, 0.72);
+}
+
+.neostaffing-people-select-all,
+.neostaffing-people-select-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--neo-bright-silver);
+    font-size: 0.72rem;
+    font-weight: 950;
+    text-transform: uppercase;
+}
+
+.neostaffing-people-select-all {
+    min-height: 42px;
+}
+
+.neostaffing-people-select-all input,
+.neostaffing-people-select-row input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--node-primary);
+}
+
+.neostaffing-people-selection-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px;
+    align-items: stretch;
+    min-width: 0;
+}
+
+.neostaffing-people-select-row {
+    justify-content: center;
+    min-width: 74px;
+    padding: 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.2);
+    border-radius: 8px;
+    background: rgba(2, 8, 12, 0.64);
+}
+
 .neostaffing-seniority-card {
     display: grid;
     grid-template-columns: 72px minmax(170px, 1.2fr) minmax(160px, 1fr) minmax(110px, 0.55fr);
@@ -9260,6 +9316,10 @@ body.blueprint-neostaffing {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .neostaffing-people-bulk-panel {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .neostaffing-primary-menu,
     .neostaffing-my-area-grid,
     .neostaffing-unit-card-grid,
@@ -9373,6 +9433,15 @@ body.blueprint-neostaffing {
 
     .neostaffing-people-card {
         grid-template-columns: 1fr;
+    }
+
+    .neostaffing-people-bulk-panel,
+    .neostaffing-people-selection-row {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-people-select-row {
+        justify-content: flex-start;
     }
 
     .neostaffing-rollup-grid,

@@ -15,22 +15,17 @@ from app.services.permission_rules import user_can
 BOARD_VIEW_PERMISSION = "neostaffing.board.view"
 SENIORITY_VIEW_PERMISSION = "neostaffing.seniority.view"
 PEOPLE_VIEW_PERMISSION = "neostaffing.people.view"
-PEOPLE_EDIT_PERMISSION = "neostaffing.people_management.edit"
-ATTENDANCE_EDIT_PERMISSION = "neostaffing.attendance.edit"
+PEOPLE_EDIT_PERMISSION = "neostaffing.people.edit"
+PEOPLE_BULK_ACTIONS_PERMISSION = "neostaffing.people.bulk_actions"
+ATTENDANCE_TAKE_PERMISSION = "neostaffing.attendance.take"
 ORG_CHART_VIEW_PERMISSION = "neostaffing.org_chart.view"
-ORG_CHART_EDIT_PERMISSION = "neostaffing.org_chart.edit"
+ORG_CHART_EDIT_STRUCTURE_PERMISSION = "neostaffing.org_chart.edit_structure"
 REPORTS_VIEW_PERMISSION = "neostaffing.reports.view"
+MANAGEMENT_ASSIGN_PERMISSION = "neostaffing.management.assign"
 APP_MANAGEMENT_VIEW_PERMISSION = "neostaffing.app_management.view"
 HIERARCHY_VIEW_PERMISSION = "neostaffing.hierarchy.view"
-HIERARCHY_EDIT_PERMISSION = "neostaffing.hierarchy.edit"
 PLANNED_STAFFING_VIEW_PERMISSION = "neostaffing.planned_staffing.view"
 PLANNED_STAFFING_EDIT_PERMISSION = "neostaffing.planned_staffing.edit"
-PEOPLE_MANAGEMENT_VIEW_PERMISSION = "neostaffing.people_management.view"
-PEOPLE_MANAGEMENT_EDIT_PERMISSION = "neostaffing.people_management.edit"
-WORK_ASSIGNMENTS_VIEW_PERMISSION = "neostaffing.work_assignments.view"
-WORK_ASSIGNMENTS_EDIT_PERMISSION = "neostaffing.work_assignments.edit"
-MANAGEMENT_ASSIGNMENTS_VIEW_PERMISSION = "neostaffing.management_assignments.view"
-MANAGEMENT_ASSIGNMENTS_EDIT_PERMISSION = "neostaffing.management_assignments.edit"
 
 
 def neostaffing_app_required(minimum_role="watcher", permission_key=None):
@@ -122,6 +117,8 @@ def seniority():
 @neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
 def people():
     can_manage = user_can_access_app(current_user, "neostaffing", minimum_role="master")
+    can_edit_people = user_can(PEOPLE_EDIT_PERMISSION)
+    can_bulk_people = user_can(PEOPLE_BULK_ACTIONS_PERMISSION)
     classification = request.args.get("classification", "").strip()
     if classification not in {choice[0] for choice in staffing_service.classification_choices()}:
         classification = ""
@@ -153,6 +150,8 @@ def people():
         "neostaffing/people.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
         can_manage_app=can_manage,
+        can_edit_people=can_edit_people,
+        can_bulk_people=can_bulk_people,
         classification_choices=staffing_service.classification_choices(),
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
         employee_status_choices=staffing_service.employee_status_choices(),
@@ -167,7 +166,7 @@ def people():
 @neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
 def people_attendance():
     management_context = staffing_service.management_attendance_context_for_user(current_user)
-    can_edit = user_can(ATTENDANCE_EDIT_PERMISSION) or bool(management_context.get("assignments"))
+    can_edit = user_can(ATTENDANCE_TAKE_PERMISSION)
     if request.method == "POST":
         if not can_edit:
             flash("NeoStaffing attendance edits require an assigned management scope.", "error")
@@ -294,6 +293,35 @@ def people_clear_work_area(person_id):
     return redirect(_people_return_url(person_id))
 
 
+@bp.route("/people/bulk-work-area", methods=["POST"])
+@neostaffing_app_required(permission_key=PEOPLE_BULK_ACTIONS_PERMISSION)
+def people_bulk_work_area():
+    action = request.form.get("bulk_action", "").strip()
+    try:
+        work_area = None
+        if action in {"assign", "move"}:
+            work_area = _get_unit(request.form.get("work_area_unit_id"))
+        result = staffing_service.bulk_update_work_area_assignments(
+            request.form.getlist("person_ids"),
+            action,
+            work_area,
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash(f"Bulk work-area action updated {result['updated']} people.", "success")
+        if result["skipped"]:
+            flash(
+                "Skipped management classifications: " + ", ".join(result["skipped"]),
+                "warning",
+            )
+        if result["missing"]:
+            flash("Skipped missing people: " + ", ".join(result["missing"]), "warning")
+    return redirect(_people_return_url())
+
+
 @bp.route("/app-management/hierarchy")
 @neostaffing_app_required(permission_key=HIERARCHY_VIEW_PERMISSION)
 def hierarchy():
@@ -306,6 +334,8 @@ def _render_org_chart():
         "neostaffing/org_chart.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
         can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
+        can_edit_structure=user_can(ORG_CHART_EDIT_STRUCTURE_PERMISSION),
+        can_assign_management=user_can(MANAGEMENT_ASSIGN_PERMISSION),
         org_chart=context,
         hierarchy=context["tree"],
         units=context["units"],
@@ -322,7 +352,7 @@ def _render_org_chart():
 
 
 @bp.route("/app-management/hierarchy/units", methods=["POST"])
-@neostaffing_app_required(permission_key=ORG_CHART_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=ORG_CHART_EDIT_STRUCTURE_PERMISSION)
 def create_unit():
     return _mutate(
         lambda: staffing_service.create_unit(request.form),
@@ -332,7 +362,7 @@ def create_unit():
 
 
 @bp.route("/app-management/hierarchy/units/<int:unit_id>/update", methods=["POST"])
-@neostaffing_app_required(permission_key=ORG_CHART_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=ORG_CHART_EDIT_STRUCTURE_PERMISSION)
 def update_unit(unit_id):
     unit = _get_unit(unit_id)
     return _mutate(
@@ -343,7 +373,7 @@ def update_unit(unit_id):
 
 
 @bp.route("/app-management/hierarchy/units/<int:unit_id>/toggle-active", methods=["POST"])
-@neostaffing_app_required(permission_key=ORG_CHART_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=ORG_CHART_EDIT_STRUCTURE_PERMISSION)
 def toggle_unit_active(unit_id):
     unit = _get_unit(unit_id)
 
@@ -354,7 +384,7 @@ def toggle_unit_active(unit_id):
 
 
 @bp.route("/app-management/hierarchy/units/<int:unit_id>/delete", methods=["POST"])
-@neostaffing_app_required(permission_key=ORG_CHART_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=ORG_CHART_EDIT_STRUCTURE_PERMISSION)
 def delete_unit(unit_id):
     unit = _get_unit(unit_id)
     return _mutate(
@@ -413,7 +443,7 @@ def update_planned_staffing(unit_id):
 
 
 @bp.route("/app-management/people")
-@neostaffing_app_required(permission_key=PEOPLE_MANAGEMENT_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def people_management():
     search = request.args.get("search", "").strip()
     classification = request.args.get("classification", "").strip()
@@ -447,7 +477,7 @@ def people_management():
 
 
 @bp.route("/app-management/people", methods=["POST"])
-@neostaffing_app_required(permission_key=PEOPLE_MANAGEMENT_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def create_person():
     return _mutate(
         lambda: staffing_service.create_person(request.form),
@@ -457,7 +487,7 @@ def create_person():
 
 
 @bp.route("/app-management/people/<int:person_id>/update", methods=["POST"])
-@neostaffing_app_required(permission_key=PEOPLE_MANAGEMENT_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def update_person(person_id):
     person = _get_person(person_id)
     return _mutate(
@@ -468,7 +498,7 @@ def update_person(person_id):
 
 
 @bp.route("/app-management/people/<int:person_id>/toggle-active", methods=["POST"])
-@neostaffing_app_required(permission_key=PEOPLE_MANAGEMENT_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def toggle_person_active(person_id):
     person = _get_person(person_id)
 
@@ -479,7 +509,7 @@ def toggle_person_active(person_id):
 
 
 @bp.route("/app-management/people/<int:person_id>/delete", methods=["POST"])
-@neostaffing_app_required(permission_key=PEOPLE_MANAGEMENT_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def delete_person(person_id):
     person = _get_person(person_id)
     return _mutate(
@@ -490,7 +520,7 @@ def delete_person(person_id):
 
 
 @bp.route("/app-management/work-assignments")
-@neostaffing_app_required(permission_key=WORK_ASSIGNMENTS_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def work_assignments():
     people_rows = staffing_service.people_query(
         classification=request.args.get("classification") or None,
@@ -523,7 +553,7 @@ def work_assignments():
 
 
 @bp.route("/app-management/work-assignments/assign", methods=["POST"])
-@neostaffing_app_required(permission_key=WORK_ASSIGNMENTS_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def assign_work_area():
     return _mutate(
         lambda: staffing_service.assign_work_area(
@@ -537,7 +567,7 @@ def assign_work_area():
 
 
 @bp.route("/app-management/work-assignments/<int:person_id>/clear", methods=["POST"])
-@neostaffing_app_required(permission_key=WORK_ASSIGNMENTS_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def clear_work_assignment(person_id):
     person = _get_person(person_id)
     return _mutate(
@@ -548,7 +578,7 @@ def clear_work_assignment(person_id):
 
 
 @bp.route("/app-management/management-assignments")
-@neostaffing_app_required(permission_key=MANAGEMENT_ASSIGNMENTS_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=MANAGEMENT_ASSIGN_PERMISSION)
 def management_assignments():
     assignments = (
         StaffingLeadershipAssignment.query.join(StaffingPerson)
@@ -586,7 +616,7 @@ def management_assignments():
 
 
 @bp.route("/app-management/management-assignments", methods=["POST"])
-@neostaffing_app_required(permission_key=MANAGEMENT_ASSIGNMENTS_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=MANAGEMENT_ASSIGN_PERMISSION)
 def create_management_assignment():
     return _mutate(
         lambda: staffing_service.create_leadership_assignment(
@@ -600,7 +630,7 @@ def create_management_assignment():
 
 
 @bp.route("/app-management/management-assignments/<int:assignment_id>/delete", methods=["POST"])
-@neostaffing_app_required(permission_key=MANAGEMENT_ASSIGNMENTS_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=MANAGEMENT_ASSIGN_PERMISSION)
 def delete_management_assignment(assignment_id):
     assignment = db.session.get(StaffingLeadershipAssignment, assignment_id)
     if not assignment:
@@ -700,7 +730,7 @@ def _selected_scope_unit():
     return None
 
 
-def _people_return_url(person_id):
+def _people_return_url(person_id=None):
     query = {
         key: request.form.get(key, "").strip()
         for key in (
@@ -718,5 +748,6 @@ def _people_return_url(person_id):
         )
         if request.form.get(key, "").strip()
     }
-    query["person_id"] = person_id
+    if person_id:
+        query["person_id"] = person_id
     return url_for("neostaffing.people", **query)

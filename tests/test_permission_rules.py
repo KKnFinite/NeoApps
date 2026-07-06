@@ -54,7 +54,12 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertEqual(rules["neoapps.portal.view"], "watcher")
         self.assertEqual(rules["neogateway.landing.view"], "watcher")
         self.assertEqual(rules["neostaffing.board.view"], "watcher")
-        self.assertEqual(rules["neostaffing.hierarchy.edit"], "master")
+        self.assertEqual(rules["neostaffing.people.edit"], "simulator")
+        self.assertEqual(rules["neostaffing.people.bulk_actions"], "simulator")
+        self.assertEqual(rules["neostaffing.attendance.take"], "operator")
+        self.assertEqual(rules["neostaffing.reports.view"], "operator")
+        self.assertEqual(rules["neostaffing.management.assign"], "simulator")
+        self.assertEqual(rules["neostaffing.org_chart.edit_structure"], "master")
         self.assertEqual(rules["neobid.placeholder.view"], "watcher")
         self.assertEqual(rules["neoermac.dashboard.view"], "watcher")
         self.assertEqual(rules["neosektor.dashboard.view"], "watcher")
@@ -120,6 +125,8 @@ class PermissionRulesTest(unittest.TestCase):
                 "neostaffing.board.view",
                 "neostaffing.seniority.view",
                 "neostaffing.people.view",
+                "neostaffing.org_chart.view",
+                "neostaffing.reports.view",
                 "neostaffing.app_management.view",
                 "neostaffing.hierarchy.view",
                 "neostaffing.planned_staffing.view",
@@ -206,13 +213,13 @@ class PermissionRulesTest(unittest.TestCase):
         portal_user.role = "grandmaster"
         self.assertTrue(user_can("neoapps.portal_management.view", portal_user))
         self.assertTrue(user_can("neostaffing.board.view", staffing_user))
-        self.assertFalse(user_can("neostaffing.hierarchy.view", staffing_user))
+        self.assertFalse(user_can("neostaffing.reports.view", staffing_user))
 
         staffing_access.role = "master"
         db.session.commit()
 
         self.assertTrue(user_can("neostaffing.hierarchy.view", staffing_user))
-        self.assertTrue(user_can("neostaffing.hierarchy.edit", staffing_user))
+        self.assertTrue(user_can("neostaffing.org_chart.edit_structure", staffing_user))
 
     def test_neostaffing_route_uses_saved_view_permission(self):
         view_rule = PermissionRule.query.filter_by(

@@ -371,8 +371,18 @@ DEFAULT_PERMISSION_RULES = (
         "View NeoStaffing People screens.",
     ),
     (
-        "neostaffing.attendance.edit",
-        "master",
+        "neostaffing.people.edit",
+        "simulator",
+        "Create, update, deactivate, delete, assign, move, or clear NeoStaffing people records.",
+    ),
+    (
+        "neostaffing.people.bulk_actions",
+        "simulator",
+        "Bulk assign, move, or clear NeoStaffing People work-area assignments.",
+    ),
+    (
+        "neostaffing.attendance.take",
+        "operator",
         "Record or update NeoStaffing daily attendance.",
     ),
     (
@@ -381,14 +391,19 @@ DEFAULT_PERMISSION_RULES = (
         "View the NeoStaffing Org Chart.",
     ),
     (
-        "neostaffing.org_chart.edit",
+        "neostaffing.org_chart.edit_structure",
         "master",
         "Create, update, move, deactivate, or remove NeoStaffing org units.",
     ),
     (
         "neostaffing.reports.view",
-        "watcher",
+        "operator",
         "View NeoStaffing Reports.",
+    ),
+    (
+        "neostaffing.management.assign",
+        "simulator",
+        "Assign or remove NeoStaffing management leadership scopes.",
     ),
     (
         "neostaffing.app_management.view",
@@ -422,7 +437,7 @@ DEFAULT_PERMISSION_RULES = (
     ),
     (
         "neostaffing.people_management.edit",
-        "master",
+        "simulator",
         "Create, update, deactivate, or delete NeoStaffing people.",
     ),
     (
@@ -432,7 +447,7 @@ DEFAULT_PERMISSION_RULES = (
     ),
     (
         "neostaffing.work_assignments.edit",
-        "master",
+        "simulator",
         "Assign or clear NeoStaffing work areas.",
     ),
     (
@@ -442,10 +457,17 @@ DEFAULT_PERMISSION_RULES = (
     ),
     (
         "neostaffing.management_assignments.edit",
-        "master",
+        "simulator",
         "Create or remove NeoStaffing management assignments.",
     ),
 )
+
+LEGACY_PERMISSION_MINIMUM_ROLES = {
+    "neostaffing.reports.view": {"watcher"},
+    "neostaffing.people_management.edit": {"master"},
+    "neostaffing.work_assignments.edit": {"master"},
+    "neostaffing.management_assignments.edit": {"master"},
+}
 
 LEGACY_PERMISSION_DESCRIPTIONS = {
     "neoapps.user_management.edit": {
@@ -945,10 +967,19 @@ PERMISSION_RULE_ITEMS = (
         "staffing",
         "neostaffing.people",
         "People",
-        "NeoStaffing People directory.",
+        "NeoStaffing People directory, records, and work-area assignment controls.",
         {
             "view": "neostaffing.people.view",
-            "edit": "neostaffing.people_management.edit",
+            "edit": "neostaffing.people.edit",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.people_bulk_actions",
+        "People Bulk Actions",
+        "NeoStaffing People bulk work-area assignment controls.",
+        {
+            "edit": "neostaffing.people.bulk_actions",
         },
     ),
     (
@@ -958,7 +989,7 @@ PERMISSION_RULE_ITEMS = (
         "NeoStaffing daily attendance entry.",
         {
             "view": "neostaffing.people.view",
-            "edit": "neostaffing.attendance.edit",
+            "edit": "neostaffing.attendance.take",
         },
     ),
     (
@@ -968,7 +999,7 @@ PERMISSION_RULE_ITEMS = (
         "NeoStaffing hierarchy explorer and management.",
         {
             "view": "neostaffing.org_chart.view",
-            "edit": "neostaffing.org_chart.edit",
+            "edit": "neostaffing.org_chart.edit_structure",
         },
     ),
     (
@@ -1036,7 +1067,7 @@ PERMISSION_RULE_ITEMS = (
         "NeoStaffing Management Assignments.",
         {
             "view": "neostaffing.management_assignments.view",
-            "edit": "neostaffing.management_assignments.edit",
+            "edit": "neostaffing.management.assign",
         },
     ),
 )
@@ -1056,6 +1087,8 @@ def ensure_default_permission_rules():
             continue
 
         if not rule.minimum_role:
+            rule.minimum_role = minimum_role
+        elif rule.minimum_role in LEGACY_PERMISSION_MINIMUM_ROLES.get(permission_key, set()):
             rule.minimum_role = minimum_role
         legacy_descriptions = LEGACY_PERMISSION_DESCRIPTIONS.get(permission_key, set())
         if not rule.description or rule.description in legacy_descriptions:

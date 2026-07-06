@@ -55,7 +55,7 @@
                     <span>APP ROLE</span>
                     <strong>{{ app_role|role_label }}</strong>
                 </div>
-                {% if can_manage_app %}
+                {% if can_edit_people %}
                 <a class="action-button" href="{{ url_for('neostaffing.people_management') }}">APP MANAGEMENT</a>
                 {% endif %}
                 <a class="action-button action-button-secondary" href="{{ url_for('neostaffing.people_attendance') }}">ATTENDANCE</a>
@@ -166,10 +166,45 @@
                         <h2>ROSTER</h2>
                         <span>{{ counts.shown }} / {{ counts.total }} SHOWN</span>
                     </div>
+                    {% if can_bulk_people %}
+                    <form class="neostaffing-people-bulk-form" method="post" action="{{ url_for('neostaffing.people_bulk_work_area') }}">
+                        {% for key, value in filters.items() %}
+                        <input type="hidden" name="{{ key }}" value="{{ value }}">
+                        {% endfor %}
+                        <div class="neostaffing-people-bulk-panel" data-neostaffing-bulk-panel>
+                            <label class="neostaffing-people-select-all">
+                                <input type="checkbox" data-neostaffing-select-all-visible>
+                                <span>Select all visible</span>
+                            </label>
+                            <label><span>Bulk Action</span>
+                                <select name="bulk_action" required>
+                                    <option value="assign">Assign to Work Area</option>
+                                    <option value="move">Move to Work Area</option>
+                                    <option value="clear">Clear Work Area</option>
+                                </select>
+                            </label>
+                            <label><span>Work Area</span>
+                                <select name="work_area_unit_id">
+                                    <option value="">Select Work Area</option>
+                                    {% for work_area in work_areas %}
+                                    <option value="{{ work_area.id }}">{{ unit_path(work_area) }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            <button type="submit">APPLY BULK ACTION</button>
+                        </div>
+                    {% endif %}
                     <div class="neostaffing-people-list" data-people-result-limit="{{ people.pagination.per_page }}">
                         {% for row in people.rows %}
                         {% set person = row.person %}
                         {% set is_selected = selected and selected.person.id == person.id %}
+                        {% if can_bulk_people %}
+                        <div class="neostaffing-people-selection-row">
+                            <label class="neostaffing-people-select-row">
+                                <input type="checkbox" name="person_ids" value="{{ person.id }}">
+                                <span>Select</span>
+                            </label>
+                        {% endif %}
                         <a class="neostaffing-people-card{% if not person.active %} is-inactive{% endif %}{% if is_selected %} is-selected{% endif %}" href="{{ url_for('neostaffing.people') }}?{{ query_without_person() }}&person_id={{ person.id }}">
                             <div class="neostaffing-people-identity">
                                 <span>{{ person.employee_id }}</span>
@@ -197,10 +232,30 @@
                                 {% endif %}
                             </div>
                         </a>
+                        {% if can_bulk_people %}
+                        </div>
+                        {% endif %}
                         {% else %}
                         <p class="muted">No people match the selected filters.</p>
                         {% endfor %}
                     </div>
+                    {% if can_bulk_people %}
+                    </form>
+                    <script>
+                    (() => {
+                        const panel = document.querySelector("[data-neostaffing-bulk-panel]");
+                        if (!panel) return;
+                        const selectAll = panel.querySelector("[data-neostaffing-select-all-visible]");
+                        const form = panel.closest("form");
+                        if (!selectAll || !form) return;
+                        selectAll.addEventListener("change", () => {
+                            form.querySelectorAll('input[name="person_ids"]').forEach((checkbox) => {
+                                checkbox.checked = selectAll.checked;
+                            });
+                        });
+                    })();
+                    </script>
+                    {% endif %}
                     {% if people.pagination.total_pages > 1 %}
                     <nav class="neostaffing-pagination" aria-label="People pages">
                         {% if people.pagination.has_previous %}
@@ -256,7 +311,7 @@
                         {% endif %}
                     </div>
                     <div class="neostaffing-card-actions">
-                        {% if can_manage_app %}
+                        {% if can_edit_people %}
                         <a class="action-button" href="{{ url_for('neostaffing.people_management', search=person.employee_id) }}">OPEN IN APP MANAGEMENT</a>
                         {% else %}
                         <button class="action-button" type="button" disabled>APP MANAGEMENT LOCKED</button>
@@ -265,7 +320,7 @@
                         <a class="action-button action-button-secondary" href="{{ url_for('neostaffing.seniority', operation_id=selected.seniority_operation.id, search=person.employee_id, include_management='1') }}">VIEW SENIORITY POSITION</a>
                         {% endif %}
                     </div>
-                    {% if can_manage_app %}
+                    {% if can_edit_people %}
                     <div class="neostaffing-detail-section">
                         <h3>QUICK WORK AREA</h3>
                         {% if person.classification in ["part_time", "full_time_combo"] %}

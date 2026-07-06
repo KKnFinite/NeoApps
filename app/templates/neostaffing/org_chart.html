@@ -165,7 +165,7 @@
         {% endif %}
     </section>
 
-    {% if can_manage_app %}
+    {% if can_edit_structure %}
     <section class="neostaffing-data-grid">
         <article class="neostaffing-data-card">
             <h2>ADD SORT</h2>
@@ -242,8 +242,9 @@
             {% endfor %}
         </div>
     </section>
+    {% endif %}
 
-    {% if selected %}
+    {% if selected and can_assign_management %}
     <section class="neostaffing-data-card">
         <h2>MANAGEMENT ASSIGNMENTS</h2>
         <form class="operation-form neostaffing-filter-form" method="post" action="{{ url_for('neostaffing.create_management_assignment') }}">
@@ -286,7 +287,6 @@
             {% endfor %}
         </div>
     </section>
-    {% endif %}
     {% endif %}
         </div>
     </div>
