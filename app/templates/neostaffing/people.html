@@ -51,10 +51,6 @@
                     <span>Search</span>
                     <input form="people-filter-form" type="search" name="search" value="{{ filters.search }}" placeholder="Search employee ID or name">
                 </label>
-                <div class="neostaffing-status-card">
-                    <span>APP ROLE</span>
-                    <strong>{{ app_role|role_label }}</strong>
-                </div>
                 {% if can_edit_people %}
                 <a class="action-button" href="{{ url_for('neostaffing.people_management') }}">APP MANAGEMENT</a>
                 {% endif %}

@@ -96,6 +96,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 for label in (b"Home", b"People", b"People / Attendance", b"Org Chart", b"Reports"):
                     self.assertIn(label, response.data)
                 self.assertIn(active_label, response.data)
+                self.assertNotIn(b"APP ROLE", response.data)
                 self.assertNotIn(b"neostaffing-rail-brand", response.data)
                 self.assertNotIn(b"neostaffing-rail-icon", response.data)
                 self.assertNotIn(b"neostaffing-rail-title", response.data)
@@ -501,6 +502,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 master_client = self._logged_in_client(master.username)
                 response = master_client.get(path, follow_redirects=False)
                 self.assertEqual(response.status_code, 200, response.location)
+                self.assertNotIn(b"APP ROLE", response.data)
             with self.subTest(path=path, access="operator"):
                 operator_client = self._logged_in_client(operator.username)
                 blocked = operator_client.get(path, follow_redirects=False)

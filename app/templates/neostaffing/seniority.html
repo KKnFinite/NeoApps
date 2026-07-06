@@ -75,10 +75,6 @@
                     <span>Search</span>
                     <input form="seniority-filter-form" type="search" name="search" value="{{ filters.search }}" placeholder="Search employee ID or name">
                 </label>
-                <div class="neostaffing-status-card">
-                    <span>APP ROLE</span>
-                    <strong>{{ app_role|role_label }}</strong>
-                </div>
                 {% if can_manage_app %}
                 <a class="action-button" href="{{ url_for('neostaffing.work_assignments') }}">ASSIGNMENTS</a>
                 {% endif %}
