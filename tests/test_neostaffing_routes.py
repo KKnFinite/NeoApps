@@ -165,6 +165,43 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             1,
         )
 
+    def test_watcher_can_view_but_cannot_take_attendance(self):
+        user = self._user("staffing_attendance_watcher")
+        self._grant_app_access(user, "neostaffing", "watcher")
+        sort, _operation, _department, work_area = self._staffing_hierarchy()
+        person = staffing_service.create_person(
+            {
+                "employee_id": "WA100",
+                "first_name": "Watch",
+                "last_name": "Viewer",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+            }
+        )
+        staffing_service.assign_work_area(person, work_area)
+        db.session.commit()
+        self._login(user.username)
+
+        page = self.client.get(f"/neostaffing/people/attendance?work_area_id={work_area.id}")
+        blocked = self.client.post(
+            "/neostaffing/people/attendance",
+            data={
+                "attendance_date": "2026-07-03",
+                "sort_id": str(sort.id),
+                "work_area_id": str(work_area.id),
+                f"status_{person.id}": "call_in",
+            },
+            follow_redirects=True,
+        )
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"WA100", page.data)
+        self.assertNotIn(b"ALL HERE", page.data)
+        self.assertNotIn(b"SAVE ATTENDANCE", page.data)
+        self.assertEqual(blocked.status_code, 200)
+        self.assertIn(b"Taking NeoStaffing attendance requires Operator access.", blocked.data)
+        self.assertEqual(StaffingDailyAttendance.query.filter_by(person_id=person.id).count(), 0)
+
     def test_landing_attendance_shortcut_resolves_one_or_multiple_scopes(self):
         _sort, _operation, department, work_area = self._staffing_hierarchy()
         second_work_area = staffing_service.create_unit(
@@ -1169,6 +1206,150 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         record = StaffingDailyAttendance.query.filter_by(person_id=person.id).first()
         self.assertEqual(record.status, "here")
         self.assertEqual(db.session.get(StaffingPerson, person.id).employee_status, "fmla")
+
+    def test_attendance_defaults_to_logged_in_management_scope(self):
+        user = self._user("staffing_attendance_scope_user")
+        user.employee_id = "MS100"
+        user.is_management = True
+        user.management_level = "part_time_supervisor"
+        self._grant_app_access(user, "neostaffing", "operator")
+        _sort, _operation, _department, work_area = self._staffing_hierarchy()
+        supervisor = staffing_service.create_person(
+            {
+                "employee_id": "MS100",
+                "first_name": "Scope",
+                "last_name": "Supervisor",
+                "seniority_date": "2018-01-01",
+                "classification": "part_time_supervisor",
+            }
+        )
+        person = staffing_service.create_person(
+            {
+                "employee_id": "MS101",
+                "first_name": "Assigned",
+                "last_name": "Worker",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+            }
+        )
+        staffing_service.create_leadership_assignment(supervisor, work_area)
+        staffing_service.assign_work_area(person, work_area)
+        db.session.commit()
+        self._login(user.username)
+
+        page = self.client.get("/neostaffing/people/attendance")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(f'<option value="{work_area.id}" selected>'.encode(), page.data)
+        self.assertIn(b"MS101", page.data)
+
+    def test_attendance_operation_scope_includes_direct_and_nested_work_areas(self):
+        user = self._user("staffing_attendance_operation")
+        self._grant_app_access(user, "neostaffing", "operator")
+        sort, operation, _department, nested_work_area = self._staffing_hierarchy()
+        direct_work_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "Load Planning", "parent_id": operation.id}
+        )
+        nested_person = staffing_service.create_person(
+            {
+                "employee_id": "AO100",
+                "first_name": "Nested",
+                "last_name": "Worker",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+            }
+        )
+        direct_person = staffing_service.create_person(
+            {
+                "employee_id": "AO101",
+                "first_name": "Direct",
+                "last_name": "Worker",
+                "seniority_date": "2021-01-01",
+                "classification": "full_time_combo",
+            }
+        )
+        staffing_service.assign_work_area(nested_person, nested_work_area)
+        staffing_service.assign_work_area(direct_person, direct_work_area)
+        staffing_service.save_attendance(
+            {
+                "attendance_date": "2026-07-03",
+                "sort_id": str(sort.id),
+                "operation_id": str(operation.id),
+                f"status_{nested_person.id}": "call_in",
+                f"status_{direct_person.id}": "here",
+            },
+            user,
+        )
+        db.session.commit()
+        self._login(user.username)
+
+        page = self.client.get(
+            f"/neostaffing/people/attendance?operation_id={operation.id}&attendance_date=2026-07-03"
+        )
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"AO100", page.data)
+        self.assertIn(b"AO101", page.data)
+        self.assertIn(b'option value="call_in" selected', page.data)
+        self.assertIn(b"Loaded People", page.data)
+        self.assertIn(b"2", page.data)
+
+    def test_attendance_all_here_updates_existing_records_and_counts(self):
+        user = self._user("staffing_attendance_all_here")
+        self._grant_app_access(user, "neostaffing", "operator")
+        sort, _operation, _department, work_area = self._staffing_hierarchy()
+        first_person = staffing_service.create_person(
+            {
+                "employee_id": "AH100",
+                "first_name": "First",
+                "last_name": "Attend",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+                "employee_status": "fmla",
+            }
+        )
+        second_person = staffing_service.create_person(
+            {
+                "employee_id": "AH101",
+                "first_name": "Second",
+                "last_name": "Attend",
+                "seniority_date": "2021-01-01",
+                "classification": "full_time_combo",
+            }
+        )
+        staffing_service.assign_work_area(first_person, work_area)
+        staffing_service.assign_work_area(second_person, work_area)
+        staffing_service.save_attendance(
+            {
+                "attendance_date": "2026-07-03",
+                "sort_id": str(sort.id),
+                "work_area_id": str(work_area.id),
+                f"status_{first_person.id}": "call_in",
+                f"status_{second_person.id}": "vacation",
+            },
+            user,
+        )
+        db.session.commit()
+        self._login(user.username)
+
+        saved = self.client.post(
+            "/neostaffing/people/attendance",
+            data={
+                "attendance_date": "2026-07-03",
+                "sort_id": str(sort.id),
+                "work_area_id": str(work_area.id),
+                "bulk_status": "here",
+                f"status_{first_person.id}": "call_in",
+                f"status_{second_person.id}": "vacation",
+            },
+            follow_redirects=True,
+        )
+
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(StaffingDailyAttendance.query.filter_by(attendance_date=date(2026, 7, 3)).count(), 2)
+        self.assertEqual(StaffingDailyAttendance.query.filter_by(status="here").count(), 2)
+        self.assertIn(b"Here", saved.data)
+        self.assertEqual(db.session.get(StaffingPerson, first_person.id).employee_status, "fmla")
 
     def _user(self, username):
         user = User(

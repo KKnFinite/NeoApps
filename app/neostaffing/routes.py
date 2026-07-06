@@ -169,7 +169,7 @@ def people_attendance():
     can_edit = user_can(ATTENDANCE_TAKE_PERMISSION)
     if request.method == "POST":
         if not can_edit:
-            flash("NeoStaffing attendance edits require an assigned management scope.", "error")
+            flash("Taking NeoStaffing attendance requires Operator access.", "error")
             return redirect(url_for("neostaffing.people_attendance", **request.args))
         try:
             saved = staffing_service.save_attendance(request.form, current_user)

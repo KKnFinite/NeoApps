@@ -1228,25 +1228,8 @@ def attendance_context(filters=None, user=None):
     filters = _with_default_management_scope(filters, user)
     selected_scope = _resolve_attendance_scope(filters)
     selected_sort = _resolve_attendance_sort(filters, selected_scope)
-    work_area_ids = set()
-    if selected_scope:
-        work_area_ids = work_area_ids_under(selected_scope)
-    elif selected_sort:
-        work_area_ids = work_area_ids_under(selected_sort)
     rows = []
-    assignments = (
-        StaffingWorkAssignment.query.join(StaffingPerson)
-        .join(StaffingUnit)
-        .filter(
-            StaffingWorkAssignment.active.is_(True),
-            StaffingPerson.active.is_(True),
-            StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS),
-        )
-    )
-    if work_area_ids:
-        assignments = assignments.filter(
-            StaffingWorkAssignment.work_area_unit_id.in_(work_area_ids)
-        )
+    assignments = _attendance_assignments_for_scope(selected_scope, selected_sort)
     existing = {}
     if selected_sort:
         existing = {
@@ -1256,7 +1239,7 @@ def attendance_context(filters=None, user=None):
                 sort_unit_id=selected_sort.id,
             ).all()
         }
-    for assignment in assignments.order_by(StaffingPerson.last_name, StaffingPerson.first_name).all():
+    for assignment in assignments:
         record = existing.get(assignment.person_id)
         rows.append(
             {
@@ -1300,6 +1283,10 @@ def save_attendance(values, user):
     if not sort:
         raise ValueError("Select a Sort before saving attendance.")
     saved = 0
+    eligible_person_ids = {
+        assignment.person_id
+        for assignment in _attendance_assignments_for_scope(selected_scope, sort)
+    }
     person_ids = set()
     for key in values.keys():
         if str(key).startswith("status_"):
@@ -1307,6 +1294,7 @@ def save_attendance(values, user):
                 person_ids.add(int(str(key).split("_", 1)[1]))
             except (TypeError, ValueError):
                 continue
+    person_ids &= eligible_person_ids
     for person_id in sorted(person_ids):
         person = db.session.get(StaffingPerson, person_id)
         if not person:
@@ -1339,6 +1327,28 @@ def save_attendance(values, user):
         saved += 1
     db.session.flush()
     return saved
+
+
+def _attendance_assignments_for_scope(selected_scope, selected_sort):
+    work_area_ids = set()
+    if selected_scope:
+        work_area_ids = work_area_ids_under(selected_scope)
+    elif selected_sort:
+        work_area_ids = work_area_ids_under(selected_sort)
+    if (selected_scope or selected_sort) and not work_area_ids:
+        return []
+    query = (
+        StaffingWorkAssignment.query.join(StaffingPerson)
+        .join(StaffingUnit)
+        .filter(
+            StaffingWorkAssignment.active.is_(True),
+            StaffingPerson.active.is_(True),
+            StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS),
+        )
+    )
+    if work_area_ids:
+        query = query.filter(StaffingWorkAssignment.work_area_unit_id.in_(work_area_ids))
+    return query.order_by(StaffingPerson.last_name, StaffingPerson.first_name).all()
 
 
 def _attendance_work_area_for_person(person):
