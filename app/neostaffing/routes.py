@@ -618,6 +618,9 @@ def management_assignments():
 @bp.route("/app-management/management-assignments", methods=["POST"])
 @neostaffing_app_required(permission_key=MANAGEMENT_ASSIGN_PERMISSION)
 def create_management_assignment():
+    return_unit_id = request.form.get("return_unit_id", "").strip()
+    redirect_endpoint = "neostaffing.org_chart" if return_unit_id else "neostaffing.management_assignments"
+    redirect_values = {"unit_id": return_unit_id} if return_unit_id else None
     return _mutate(
         lambda: staffing_service.create_leadership_assignment(
             _get_person(request.form.get("person_id")),
@@ -625,7 +628,8 @@ def create_management_assignment():
             request.form.get("leadership_level") or None,
         ),
         "Management assignment added.",
-        "neostaffing.management_assignments",
+        redirect_endpoint,
+        redirect_values,
     )
 
 
@@ -636,14 +640,18 @@ def delete_management_assignment(assignment_id):
     if not assignment:
         flash("Management assignment was not found.", "error")
         return redirect(url_for("neostaffing.management_assignments"))
+    return_unit_id = request.form.get("return_unit_id", "").strip()
+    redirect_endpoint = "neostaffing.org_chart" if return_unit_id else "neostaffing.management_assignments"
+    redirect_values = {"unit_id": return_unit_id} if return_unit_id else None
     return _mutate(
         lambda: staffing_service.delete_leadership_assignment(assignment),
         "Management assignment deactivated.",
-        "neostaffing.management_assignments",
+        redirect_endpoint,
+        redirect_values,
     )
 
 
-def _mutate(callback, success_message, redirect_endpoint):
+def _mutate(callback, success_message, redirect_endpoint, redirect_values=None):
     try:
         callback()
         db.session.commit()
@@ -653,7 +661,7 @@ def _mutate(callback, success_message, redirect_endpoint):
         flash(message, "error")
     else:
         flash(success_message, "success")
-    return redirect(url_for(redirect_endpoint))
+    return redirect(url_for(redirect_endpoint, **(redirect_values or {})))
 
 
 def _get_person(person_id):

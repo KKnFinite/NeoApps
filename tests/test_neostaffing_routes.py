@@ -289,24 +289,39 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
         db.session.add_all([sort, operation, department, work_area, person])
         db.session.flush()
+        direct_work_area = staffing_service.create_unit(
+            {
+                "unit_type": "work_area",
+                "name": "Load Planning",
+                "parent_id": operation.id,
+                "required_headcount": "1",
+            }
+        )
         db.session.add(StaffingWorkAssignment(person=person, work_area=work_area))
         db.session.commit()
         self._login(user.username)
 
         response = self.client.get(f"/neostaffing/org-chart?unit_id={operation.id}")
+        department_response = self.client.get(f"/neostaffing/org-chart?unit_id={department.id}")
         work_area_response = self.client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Night Sort", response.data)
         self.assertIn(b"Shift Operation", response.data)
         self.assertIn(b"East Shift Department", response.data)
+        self.assertIn(b"Load Planning", response.data)
         self.assertIn(b"EBM", response.data)
         self.assertIn(b"ORG TREE", response.data)
         self.assertIn(b"neostaffing-unit-card", response.data)
+        self.assertIn(b"Child", response.data)
+        self.assertIn(b"Assigned", response.data)
+        self.assertEqual(department_response.status_code, 200)
+        self.assertIn(b"EBM", department_response.data)
         self.assertEqual(work_area_response.status_code, 200)
         self.assertIn(b"Required Headcount", work_area_response.data)
         self.assertIn(b"Assigned People", work_area_response.data)
         self.assertIn(b"1", work_area_response.data)
+        self.assertIsNotNone(direct_work_area)
 
     def test_reports_render_staffing_seniority_and_attendance_shells(self):
         user = self._user("staffing_reports")
@@ -785,6 +800,77 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Scope Leader", response.data)
         self.assertIn(b"Assigned People", response.data)
         self.assertIn(b"1", response.data)
+
+    def test_org_chart_management_and_structure_controls_follow_permissions(self):
+        watcher = self._user("staffing_org_watcher")
+        self._grant_app_access(watcher, "neostaffing", "watcher")
+        simulator = self._user("staffing_org_simulator")
+        self._grant_app_access(simulator, "neostaffing", "simulator")
+        master = self._user("staffing_org_master")
+        self._grant_app_access(master, "neostaffing", "master")
+        _sort, operation, _department, work_area = self._staffing_hierarchy()
+        supervisor = staffing_service.create_person(
+            {
+                "employee_id": "OG200",
+                "first_name": "Org",
+                "last_name": "Supervisor",
+                "seniority_date": "2018-01-01",
+                "classification": "part_time_supervisor",
+            }
+        )
+        db.session.commit()
+
+        watcher_page = self._logged_in_client(watcher.username).get(
+            f"/neostaffing/org-chart?unit_id={work_area.id}"
+        )
+        simulator_client = self._logged_in_client(simulator.username)
+        simulator_page = simulator_client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
+        assigned = simulator_client.post(
+            "/neostaffing/app-management/management-assignments",
+            data={
+                "person_id": str(supervisor.id),
+                "unit_id": str(work_area.id),
+                "return_unit_id": str(work_area.id),
+            },
+            follow_redirects=False,
+        )
+        blocked_structure = simulator_client.post(
+            "/neostaffing/app-management/hierarchy/units",
+            data={"unit_type": "department", "parent_id": str(operation.id), "name": "Blocked Org Dept"},
+            follow_redirects=False,
+        )
+
+        master_client = self._logged_in_client(master.username)
+        master_page = master_client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
+        created_structure = master_client.post(
+            "/neostaffing/app-management/hierarchy/units",
+            data={"unit_type": "department", "parent_id": str(operation.id), "name": "Allowed Org Dept"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(watcher_page.status_code, 200)
+        self.assertNotIn(b"ASSIGN MANAGEMENT", watcher_page.data)
+        self.assertNotIn(b"UNIT CONTROL DECK", watcher_page.data)
+        self.assertEqual(simulator_page.status_code, 200)
+        self.assertIn(b"MANAGEMENT ASSIGNMENTS", simulator_page.data)
+        self.assertIn(b"ASSIGN MANAGEMENT", simulator_page.data)
+        self.assertIn(b"No User Link", simulator_page.data)
+        self.assertNotIn(b"UNIT CONTROL DECK", simulator_page.data)
+        self.assertEqual(assigned.status_code, 302)
+        self.assertEqual(assigned.location, f"/neostaffing/org-chart?unit_id={work_area.id}")
+        assignment = StaffingLeadershipAssignment.query.filter_by(
+            person_id=supervisor.id,
+            unit_id=work_area.id,
+        ).one()
+        self.assertEqual(assignment.person, supervisor)
+        self.assertEqual(blocked_structure.status_code, 302)
+        self.assertEqual(blocked_structure.location, "/neostaffing")
+        self.assertIsNone(StaffingUnit.query.filter_by(name="Blocked Org Dept").first())
+        self.assertEqual(master_page.status_code, 200)
+        self.assertIn(b"UNIT CONTROL DECK", master_page.data)
+        self.assertIn(b"SAVE UNIT", master_page.data)
+        self.assertEqual(created_structure.status_code, 302)
+        self.assertIsNotNone(StaffingUnit.query.filter_by(name="Allowed Org Dept").first())
 
     def test_portal_tile_opens_neostaffing_for_approved_user(self):
         user = self._user("staffing_portal")

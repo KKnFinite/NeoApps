@@ -63,7 +63,6 @@
         <div class="neostaffing-hero-copy mobile-shell-duplicate-title">
             <h1 id="staffing-org-title">ORG CHART</h1>
         </div>
-        <div class="neostaffing-status-card"><span>APP ROLE</span><strong>{{ app_role|role_label }}</strong></div>
     </div>
 
     <nav class="neostaffing-breadcrumb" aria-label="Org chart breadcrumb">
@@ -93,7 +92,7 @@
                     <em>{{ meta.child_count if meta else unit.children|length }} child scopes</em>
                     {% endif %}
                     {% if meta %}
-                    <small>{{ meta.assigned_count }} Assigned{% if meta.leadership_names %} / {{ meta.leadership_names|join(", ") }}{% endif %}</small>
+                    <small>{{ meta.child_count }} Child / {{ meta.assigned_count }} Assigned{% if unit.unit_type == "work_area" %} / HC {{ unit.required_headcount if unit.required_headcount is not none else "-" }}{% endif %}{% if meta.leadership_names %} / {{ meta.leadership_names|join(", ") }}{% endif %}</small>
                     {% endif %}
                 </a>
                 {% else %}
@@ -249,10 +248,12 @@
         <h2>MANAGEMENT ASSIGNMENTS</h2>
         <form class="operation-form neostaffing-filter-form" method="post" action="{{ url_for('neostaffing.create_management_assignment') }}">
             <input type="hidden" name="unit_id" value="{{ selected.id }}">
+            <input type="hidden" name="return_unit_id" value="{{ selected.id }}">
             <label><span>Person</span>
                 <select name="person_id" required>
                     {% for person in people %}
-                    <option value="{{ person.id }}">{{ person.employee_id }} - {{ person.full_name }} / {{ classification_labels[person.classification] }}</option>
+                    {% set linked_user = linked_user_for_person(person) %}
+                    <option value="{{ person.id }}">{{ person.employee_id }} - {{ person.full_name }} / {{ classification_labels[person.classification] }} / {{ "Linked User" if linked_user else "No User Link" }}</option>
                     {% endfor %}
                 </select>
             </label>
@@ -279,6 +280,7 @@
                 </header>
                 <p class="neostaffing-record-path">{{ classification_labels[assignment.person.classification] }} / {{ unit_path(assignment.unit) }}</p>
                 <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.delete_management_assignment', assignment_id=assignment.id) }}">
+                    <input type="hidden" name="return_unit_id" value="{{ selected.id }}">
                     <button class="table-row-button" type="submit">REMOVE ASSIGNMENT</button>
                 </form>
             </article>

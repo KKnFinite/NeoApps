@@ -145,6 +145,73 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
                 {"unit_type": "sort", "name": "Bad Sort", "parent_id": sort.id}
             )
 
+    def test_unit_reparent_preserves_identity_assignments_and_blocks_invalid_moves(self):
+        sort = staffing_service.create_unit({"unit_type": "sort", "name": "Night Sort"})
+        operation = staffing_service.create_unit(
+            {"unit_type": "operation", "name": "Shift Operation", "parent_id": sort.id}
+        )
+        second_operation = staffing_service.create_unit(
+            {"unit_type": "operation", "name": "Ramp Operation", "parent_id": sort.id}
+        )
+        department = staffing_service.create_unit(
+            {"unit_type": "department", "name": "East Shift Department", "parent_id": operation.id}
+        )
+        work_area = staffing_service.create_unit(
+            {
+                "unit_type": "work_area",
+                "name": "EBM",
+                "parent_id": department.id,
+                "required_headcount": "3",
+            }
+        )
+        employee = self._person("E150", "part_time")
+        supervisor = self._person("E151", "part_time_supervisor")
+        work_assignment = staffing_service.assign_work_area(employee, work_area)
+        leadership = staffing_service.create_leadership_assignment(supervisor, work_area)
+        original_department_id = department.id
+        original_work_area_id = work_area.id
+
+        staffing_service.update_unit(
+            department,
+            {
+                "unit_type": "department",
+                "name": "East Shift Department",
+                "parent_id": second_operation.id,
+                "display_order": "9",
+            },
+        )
+        staffing_service.update_unit(
+            work_area,
+            {
+                "unit_type": "work_area",
+                "name": "EBM",
+                "parent_id": second_operation.id,
+                "required_headcount": "5",
+            },
+        )
+
+        self.assertEqual(department.id, original_department_id)
+        self.assertEqual(department.parent, second_operation)
+        self.assertEqual(work_area.id, original_work_area_id)
+        self.assertEqual(work_area.parent, second_operation)
+        self.assertEqual(work_area.required_headcount, 5)
+        self.assertEqual(work_assignment.work_area_unit_id, original_work_area_id)
+        self.assertEqual(leadership.unit_id, original_work_area_id)
+        self.assertEqual(work_assignment.person, employee)
+        self.assertEqual(leadership.person, supervisor)
+
+        with self.assertRaisesRegex(ValueError, "Work Area parent must be a Department or Operation"):
+            staffing_service.update_unit(
+                work_area,
+                {
+                    "unit_type": "work_area",
+                    "name": "EBM",
+                    "parent_id": work_area.id,
+                    "required_headcount": "5",
+                },
+            )
+        self.assertEqual(work_area.parent, second_operation)
+
     def test_work_assignment_allows_only_non_management_people_to_work_areas(self):
         _sort, _operation, department, work_area = self._hierarchy()
         second_work_area = staffing_service.create_unit(
