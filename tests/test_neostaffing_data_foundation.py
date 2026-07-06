@@ -50,7 +50,7 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
 
         self.assertEqual(person.employee_id, "E100")
         self.assertEqual(person.seniority_date, date(2020, 1, 2))
-        self.assertEqual(person.roster_status, "active")
+        self.assertEqual(person.employee_status, "active")
 
         with self.assertRaisesRegex(ValueError, "First name is required"):
             staffing_service.create_person(
@@ -85,7 +85,7 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
                 }
             )
 
-        with self.assertRaisesRegex(ValueError, "Unsupported roster status"):
+        with self.assertRaisesRegex(ValueError, "Unsupported Employee Status"):
             staffing_service.create_person(
                 {
                     "employee_id": "E103",
@@ -93,7 +93,7 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
                     "last_name": "Status",
                     "seniority_date": "2020-01-02",
                     "classification": "part_time",
-                    "roster_status": "daily_call_in",
+                    "employee_status": "daily_call_in",
                 }
             )
 
@@ -599,10 +599,10 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         self.assertEqual(context["selected_person"]["leadership_labels"][0]["unit"], work_area)
         self.assertEqual(context["selected_person"]["seniority_operation"], operation)
 
-    def test_daily_attendance_is_separate_from_roster_status_and_unique(self):
+    def test_daily_attendance_is_separate_from_employee_status_and_unique(self):
         sort, _operation, _department, work_area = self._hierarchy()
         employee = self._person_with_name("E730", "part_time", "Attend", "Worker", "2020-01-01")
-        employee.roster_status = "fmla"
+        employee.employee_status = "fmla"
         staffing_service.assign_work_area(employee, work_area)
         user = User(username="recorder", employee_id="REC1", role="watcher", password_hash="x")
         db.session.add(user)
@@ -629,7 +629,7 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
 
         self.assertEqual(saved, 1)
         self.assertEqual(second_saved, 1)
-        self.assertEqual(employee.roster_status, "fmla")
+        self.assertEqual(employee.employee_status, "fmla")
         self.assertEqual(
             StaffingDailyAttendance.query.filter_by(person_id=employee.id).count(),
             1,

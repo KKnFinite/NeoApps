@@ -13,7 +13,7 @@ STAFFING_CLASSIFICATIONS = (
     "division_manager",
 )
 
-STAFFING_ROSTER_STATUSES = (
+STAFFING_EMPLOYEE_STATUSES = (
     "active",
     "disability",
     "comp",
@@ -31,8 +31,8 @@ class StaffingPerson(db.Model):
             name="ck_staffing_people_classification",
         ),
         db.CheckConstraint(
-            "roster_status IN ('active', 'disability', 'comp', 'military', 'fmla')",
-            name="ck_staffing_people_roster_status",
+            "employee_status IN ('active', 'disability', 'comp', 'military', 'fmla')",
+            name="ck_staffing_people_employee_status",
         ),
     )
 
@@ -43,7 +43,7 @@ class StaffingPerson(db.Model):
     seniority_date = db.Column(db.Date, nullable=False, index=True)
     phone_number = db.Column(db.String(40), nullable=True)
     classification = db.Column(db.String(40), nullable=False, index=True)
-    roster_status = db.Column(
+    employee_status = db.Column(
         db.String(24),
         nullable=False,
         default="active",

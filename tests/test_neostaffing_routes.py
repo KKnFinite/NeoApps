@@ -779,6 +779,9 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"CURRENT WORK ASSIGNMENT", response.data)
         self.assertIn(b"OPEN IN APP MANAGEMENT", response.data)
         self.assertIn(b"VIEW SENIORITY POSITION", response.data)
+        self.assertIn(b"Employee Status", response.data)
+        self.assertNotIn(b"Roster Status", response.data)
+        self.assertNotIn(b"roster_status", response.data)
         self.assertEqual(searched.status_code, 200)
         self.assertIn(b"E810", searched.data)
         self.assertNotIn(b"E811", searched.data)
@@ -891,7 +894,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "last_name": "Worker",
                 "seniority_date": "2020-01-01",
                 "classification": "part_time",
-                "roster_status": "fmla",
+                "employee_status": "fmla",
             }
         )
         staffing_service.assign_work_area(person, work_area)
@@ -929,7 +932,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(StaffingDailyAttendance.query.filter_by(person_id=person.id).count(), 1)
         record = StaffingDailyAttendance.query.filter_by(person_id=person.id).first()
         self.assertEqual(record.status, "here")
-        self.assertEqual(db.session.get(StaffingPerson, person.id).roster_status, "fmla")
+        self.assertEqual(db.session.get(StaffingPerson, person.id).employee_status, "fmla")
 
     def _user(self, username):
         user = User(

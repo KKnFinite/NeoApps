@@ -24,7 +24,7 @@
 {% endmacro %}
 
 {% macro query_without_person() -%}
-    sort_id={{ people.filters.sort_id }}&operation_id={{ people.filters.operation_id }}&department_id={{ people.filters.department_id }}&work_area_id={{ people.filters.work_area_id }}&classification={{ people.filters.classification }}&roster_status={{ people.filters.roster_status }}&active={{ people.filters.active }}&assignment_status={{ people.filters.assignment_status }}&per_page={{ people.filters.per_page }}&leadership_only={{ people.filters.leadership_only }}&search={{ people.filters.search|urlencode }}
+    sort_id={{ people.filters.sort_id }}&operation_id={{ people.filters.operation_id }}&department_id={{ people.filters.department_id }}&work_area_id={{ people.filters.work_area_id }}&classification={{ people.filters.classification }}&employee_status={{ people.filters.employee_status }}&active={{ people.filters.active }}&assignment_status={{ people.filters.assignment_status }}&per_page={{ people.filters.per_page }}&leadership_only={{ people.filters.leadership_only }}&search={{ people.filters.search|urlencode }}
 {%- endmacro %}
 
 {% block content %}
@@ -115,11 +115,11 @@
                                 {% endfor %}
                             </select>
                         </label>
-                        <label><span>Roster Status</span>
-                            <select name="roster_status">
+                        <label><span>Employee Status</span>
+                            <select name="employee_status">
                                 <option value="">All</option>
-                                {% for value, label in roster_status_choices %}
-                                <option value="{{ value }}" {% if filters.roster_status == value %}selected{% endif %}>{{ label }}</option>
+                                {% for value, label in employee_status_choices %}
+                                <option value="{{ value }}" {% if filters.employee_status == value %}selected{% endif %}>{{ label }}</option>
                                 {% endfor %}
                             </select>
                         </label>
@@ -184,7 +184,7 @@
                             <div>
                                 <span>OPERATION</span>
                                 <strong>{{ row.operation.name if row.operation else "-" }}</strong>
-                                <em>{{ roster_status_labels[person.roster_status] }}</em>
+                                <em>{{ employee_status_labels[person.employee_status] }}</em>
                             </div>
                             <div class="neostaffing-people-leadership">
                                 <span>LEADERSHIP</span>
@@ -225,11 +225,11 @@
                     <div class="neostaffing-people-detail-head">
                         <span>{{ person.employee_id }}</span>
                         <strong>{{ person.first_name }} {{ person.last_name }}</strong>
-                        <em>{{ roster_status_labels[person.roster_status] }}</em>
+                        <em>{{ employee_status_labels[person.employee_status] }}</em>
                     </div>
                     <dl>
                         <div><dt>Classification</dt><dd>{{ classification_labels[person.classification] }}</dd></div>
-                        <div><dt>Roster Status</dt><dd>{{ roster_status_labels[person.roster_status] }}</dd></div>
+                        <div><dt>Employee Status</dt><dd>{{ employee_status_labels[person.employee_status] }}</dd></div>
                         <div><dt>Seniority Date</dt><dd>{{ person.seniority_date.isoformat() }}</dd></div>
                         <div><dt>Work Area</dt><dd>{{ selected.work_area.name if selected.work_area else "-" }}</dd></div>
                         <div><dt>Department</dt><dd>{{ selected.department.name if selected.department else "-" }}</dd></div>

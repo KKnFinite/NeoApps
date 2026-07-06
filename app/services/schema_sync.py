@@ -84,7 +84,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "effective_date": "DATE",
     },
     "staffing_people": {
-        "roster_status": "VARCHAR(24) DEFAULT 'active'",
+        "employee_status": "VARCHAR(24)",
     },
     "staffing_leadership_assignments": {
         "active": "BOOLEAN DEFAULT 1",
@@ -163,7 +163,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "effective_date": "DATE",
     },
     "staffing_people": {
-        "roster_status": "VARCHAR(24) DEFAULT 'active'",
+        "employee_status": "VARCHAR(24)",
     },
     "staffing_leadership_assignments": {
         "active": "BOOLEAN DEFAULT TRUE",
@@ -223,6 +223,7 @@ def sync_local_sqlite_schema(app):
                 text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
             )
 
+    _sync_staffing_people_employee_status_sqlite(table_names)
     _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names)
     _sync_uld_request_unique_constraint_sqlite(inspector, table_names)
     db.session.flush()
@@ -256,9 +257,85 @@ def sync_database_schema(app):
                 )
             )
 
+    _sync_staffing_people_employee_status_postgres(table_names)
     _sync_sort_date_mission_status_constraints_postgres(table_names)
     _sync_uld_request_unique_constraint_postgres(table_names)
     db.session.flush()
+
+
+def _sync_staffing_people_employee_status_sqlite(table_names):
+    if "staffing_people" not in table_names:
+        return
+
+    existing_columns = {
+        row[1] for row in db.session.execute(text("PRAGMA table_info(staffing_people)")).all()
+    }
+    if "employee_status" not in existing_columns:
+        return
+
+    if "roster_status" in existing_columns:
+        db.session.execute(
+            text(
+                """
+                UPDATE staffing_people
+                SET employee_status = COALESCE(NULLIF(employee_status, ''), roster_status, 'active')
+                WHERE employee_status IS NULL OR employee_status = ''
+                """
+            )
+        )
+        return
+
+    db.session.execute(
+        text(
+            """
+            UPDATE staffing_people
+            SET employee_status = 'active'
+            WHERE employee_status IS NULL OR employee_status = ''
+            """
+        )
+    )
+
+
+def _sync_staffing_people_employee_status_postgres(table_names):
+    if "staffing_people" not in table_names:
+        return
+
+    column_names = {
+        row[0]
+        for row in db.session.execute(
+            text(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'staffing_people'
+                """
+            )
+        ).all()
+    }
+    if "employee_status" not in column_names:
+        return
+
+    if "roster_status" in column_names:
+        db.session.execute(
+            text(
+                """
+                UPDATE staffing_people
+                SET employee_status = COALESCE(NULLIF(employee_status, ''), roster_status, 'active')
+                WHERE employee_status IS NULL OR employee_status = ''
+                """
+            )
+        )
+        return
+
+    db.session.execute(
+        text(
+            """
+            UPDATE staffing_people
+            SET employee_status = 'active'
+            WHERE employee_status IS NULL OR employee_status = ''
+            """
+        )
+    )
 
 
 def _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names):

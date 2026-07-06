@@ -72,11 +72,11 @@
                     {% endfor %}
                 </select>
             </label>
-            <label><span>Roster Status</span>
-                <select name="roster_status">
+            <label><span>Employee Status</span>
+                <select name="employee_status">
                     <option value="">All</option>
-                    {% for value, label in reports.roster_status_choices %}
-                    <option value="{{ value }}" {% if filters.roster_status == value %}selected{% endif %}>{{ label }}</option>
+                    {% for value, label in reports.employee_status_choices %}
+                    <option value="{{ value }}" {% if filters.employee_status == value %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </label>
@@ -150,8 +150,8 @@
             {% for classification, count in reports.staffing_classification_counts.items() %}
             <span>{{ classification_labels[classification] }} <strong>{{ count }}</strong></span>
             {% endfor %}
-            {% for status, count in reports.staffing_roster_counts.items() %}
-            <span>{{ roster_status_labels[status] }} <strong>{{ count }}</strong></span>
+            {% for status, count in reports.staffing_employee_status_counts.items() %}
+            <span>{{ employee_status_labels[status] }} <strong>{{ count }}</strong></span>
             {% endfor %}
         </div>
         <div class="neostaffing-report-list">
@@ -161,7 +161,7 @@
                 <strong>{{ person.employee_id }}</strong>
                 <span>{{ person.last_name }}, {{ person.first_name }}</span>
                 <span>{{ classification_labels[person.classification] }}</span>
-                <span>{{ roster_status_labels[person.roster_status] }}</span>
+                <span>{{ employee_status_labels[person.employee_status] }}</span>
                 <span>{{ person.seniority_date.isoformat() }}</span>
                 <span>{{ person.phone_number or "-" }}</span>
                 <span>{{ row.work_area.name if row.work_area else "Unassigned" }}</span>

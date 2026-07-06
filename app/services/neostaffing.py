@@ -13,7 +13,7 @@ from app.models import (
 )
 from app.models.staffing_leadership_assignment import STAFFING_LEADERSHIP_LEVELS
 from app.models.staffing_daily_attendance import STAFFING_DAILY_ATTENDANCE_STATUSES
-from app.models.staffing_person import STAFFING_CLASSIFICATIONS, STAFFING_ROSTER_STATUSES
+from app.models.staffing_person import STAFFING_CLASSIFICATIONS, STAFFING_EMPLOYEE_STATUSES
 from app.models.staffing_unit import STAFFING_UNIT_TYPES
 
 
@@ -41,7 +41,7 @@ LEADERSHIP_LEVEL_LABELS = {
     "sort": "Sort",
 }
 
-ROSTER_STATUS_LABELS = {
+EMPLOYEE_STATUS_LABELS = {
     "active": "Active",
     "disability": "Disability",
     "comp": "Comp",
@@ -88,8 +88,8 @@ def classification_choices():
     return [(value, CLASSIFICATION_LABELS[value]) for value in STAFFING_CLASSIFICATIONS]
 
 
-def roster_status_choices():
-    return [(value, ROSTER_STATUS_LABELS[value]) for value in STAFFING_ROSTER_STATUSES]
+def employee_status_choices():
+    return [(value, EMPLOYEE_STATUS_LABELS[value]) for value in STAFFING_EMPLOYEE_STATUSES]
 
 
 def attendance_status_choices():
@@ -149,10 +149,10 @@ def update_person(person, values, is_new=False):
         STAFFING_CLASSIFICATIONS,
         "classification",
     )
-    roster_status = _normalize_choice(
-        values.get("roster_status") or "active",
-        STAFFING_ROSTER_STATUSES,
-        "roster status",
+    employee_status = _normalize_choice(
+        values.get("employee_status") or "active",
+        STAFFING_EMPLOYEE_STATUSES,
+        "Employee Status",
     )
     phone_number = _optional_text(values.get("phone_number"))
     active = _parse_bool(values.get("active"), default=True)
@@ -169,7 +169,7 @@ def update_person(person, values, is_new=False):
     person.seniority_date = seniority_date
     person.phone_number = phone_number
     person.classification = classification
-    person.roster_status = roster_status
+    person.employee_status = employee_status
     person.active = active
 
     if old_classification and old_classification != classification:
@@ -862,7 +862,7 @@ def seniority_context(filters=None):
             "sort_id": str(selected_sort.id) if selected_sort else "",
             "operation_id": str(selected_operation.id) if selected_operation else "",
             "classification": filters.get("classification", ""),
-            "roster_status": filters.get("roster_status", ""),
+            "employee_status": filters.get("employee_status", ""),
             "department_id": filters.get("department_id", ""),
             "work_area_id": filters.get("work_area_id", ""),
             "search": filters.get("search", ""),
@@ -988,6 +988,7 @@ def people_context(filters=None, user=None):
             "sort_id": str(selected_sort.id) if selected_sort else "",
             "operation_id": str(selected_operation.id) if selected_operation else "",
             "classification": filters.get("classification", ""),
+            "employee_status": filters.get("employee_status", ""),
             "department_id": filters.get("department_id", ""),
             "work_area_id": filters.get("work_area_id", ""),
             "search": filters.get("search", ""),
@@ -1343,7 +1344,7 @@ def reports_context(filters=None, user=None):
             "department_id": filters.get("department_id", ""),
             "work_area_id": filters.get("work_area_id", ""),
             "classification": filters.get("classification", ""),
-            "roster_status": filters.get("roster_status", ""),
+            "employee_status": filters.get("employee_status", ""),
             "active": filters.get("active", "active"),
             "search": filters.get("search", ""),
             "assignment_status": filters.get("assignment_status", ""),
@@ -1357,6 +1358,7 @@ def reports_context(filters=None, user=None):
             "department_id": filters.get("department_id", ""),
             "work_area_id": filters.get("work_area_id", ""),
             "classification": filters.get("classification", ""),
+            "employee_status": filters.get("employee_status", ""),
             "active": filters.get("active", "active"),
         }
     )
@@ -1392,10 +1394,10 @@ def reports_context(filters=None, user=None):
         "attendance_rows": attendance_rows,
         "attendance_counts": attendance_counts,
         "staffing_classification_counts": _people_count_by(staffing["all_rows"], "classification"),
-        "staffing_roster_counts": _people_count_by(staffing["all_rows"], "roster_status"),
+        "staffing_employee_status_counts": _people_count_by(staffing["all_rows"], "employee_status"),
         "attendance_status_choices": attendance_status_choices(),
         "classification_choices": classification_choices(),
-        "roster_status_choices": roster_status_choices(),
+        "employee_status_choices": employee_status_choices(),
         "filters": {
             "report_type": report_type,
             "sort_id": filters.get("sort_id", ""),
@@ -1403,7 +1405,7 @@ def reports_context(filters=None, user=None):
             "department_id": filters.get("department_id", ""),
             "work_area_id": filters.get("work_area_id", ""),
             "classification": filters.get("classification", ""),
-            "roster_status": filters.get("roster_status", ""),
+            "employee_status": filters.get("employee_status", ""),
             "assignment_status": filters.get("assignment_status", ""),
             "attendance_date": filters.get("attendance_date", ""),
             "attendance_status": filters.get("attendance_status", ""),
@@ -1419,7 +1421,7 @@ def linked_user_for_person(person):
     ).first()
 
 
-def people_query(search=None, classification=None, active=None, roster_status=None):
+def people_query(search=None, classification=None, active=None, employee_status=None):
     query = StaffingPerson.query
     if search:
         pattern = f"%{search.strip()}%"
@@ -1432,8 +1434,8 @@ def people_query(search=None, classification=None, active=None, roster_status=No
         )
     if classification:
         query = query.filter_by(classification=classification)
-    if roster_status:
-        query = query.filter_by(roster_status=roster_status)
+    if employee_status:
+        query = query.filter_by(employee_status=employee_status)
     if active in {"active", "inactive"}:
         query = query.filter_by(active=(active == "active"))
     return query.order_by(StaffingPerson.seniority_date, StaffingPerson.last_name, StaffingPerson.first_name)
@@ -1484,7 +1486,7 @@ def _people_rows():
 def _filter_people_rows(rows, filters):
     active = filters.get("active", "active")
     classification = str(filters.get("classification") or "").strip()
-    roster_status = str(filters.get("roster_status") or "").strip()
+    employee_status = str(filters.get("employee_status") or "").strip()
     search = str(filters.get("search") or "").strip().lower()
     leadership_only = _parse_bool(filters.get("leadership_only"), default=False)
     assignment_status = str(filters.get("assignment_status") or "").strip()
@@ -1503,7 +1505,7 @@ def _filter_people_rows(rows, filters):
             continue
         if classification in STAFFING_CLASSIFICATIONS and person.classification != classification:
             continue
-        if roster_status in STAFFING_ROSTER_STATUSES and person.roster_status != roster_status:
+        if employee_status in STAFFING_EMPLOYEE_STATUSES and person.employee_status != employee_status:
             continue
         if leadership_only and not row["leadership_assignments"]:
             continue
@@ -1755,6 +1757,9 @@ def _apply_seniority_person_filters(query, filters, management_only=False):
         query = query.filter(StaffingPerson.classification.in_(MANAGEMENT_CLASSIFICATIONS))
     else:
         query = query.filter(StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS))
+    employee_status = str(filters.get("employee_status") or "").strip()
+    if employee_status in STAFFING_EMPLOYEE_STATUSES:
+        query = query.filter(StaffingPerson.employee_status == employee_status)
 
     search = str(filters.get("search") or "").strip()
     if search:

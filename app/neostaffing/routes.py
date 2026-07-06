@@ -128,9 +128,9 @@ def people():
     active = request.args.get("active", "active").strip() or "active"
     if active not in {"active", "inactive", "all"}:
         active = "active"
-    roster_status = request.args.get("roster_status", "").strip()
-    if roster_status not in {choice[0] for choice in staffing_service.roster_status_choices()}:
-        roster_status = ""
+    employee_status = request.args.get("employee_status", "").strip()
+    if employee_status not in {choice[0] for choice in staffing_service.employee_status_choices()}:
+        employee_status = ""
     context = staffing_service.people_context(
         {
             "sort_id": request.args.get("sort_id", "").strip(),
@@ -138,7 +138,7 @@ def people():
             "department_id": request.args.get("department_id", "").strip(),
             "work_area_id": request.args.get("work_area_id", "").strip(),
             "classification": classification,
-            "roster_status": roster_status,
+            "employee_status": employee_status,
             "active": active,
             "assignment_status": request.args.get("assignment_status", "").strip(),
             "page": request.args.get("page", "").strip(),
@@ -155,8 +155,8 @@ def people():
         can_manage_app=can_manage,
         classification_choices=staffing_service.classification_choices(),
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
-        roster_status_choices=staffing_service.roster_status_choices(),
-        roster_status_labels=staffing_service.ROSTER_STATUS_LABELS,
+        employee_status_choices=staffing_service.employee_status_choices(),
+        employee_status_labels=staffing_service.EMPLOYEE_STATUS_LABELS,
         work_areas=staffing_service.work_area_units(),
         unit_path=staffing_service.unit_path,
         people=context,
@@ -244,7 +244,7 @@ def reports():
             "department_id": request.args.get("department_id", "").strip(),
             "work_area_id": request.args.get("work_area_id", "").strip(),
             "classification": request.args.get("classification", "").strip(),
-            "roster_status": request.args.get("roster_status", "").strip(),
+            "employee_status": request.args.get("employee_status", "").strip(),
             "assignment_status": request.args.get("assignment_status", "").strip(),
             "attendance_date": request.args.get("attendance_date", "").strip(),
             "attendance_status": request.args.get("attendance_status", "").strip(),
@@ -258,7 +258,7 @@ def reports():
         reports=context,
         unit_path=staffing_service.unit_path,
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
-        roster_status_labels=staffing_service.ROSTER_STATUS_LABELS,
+        employee_status_labels=staffing_service.EMPLOYEE_STATUS_LABELS,
         attendance_status_labels=staffing_service.ATTENDANCE_STATUS_LABELS,
     )
 
@@ -418,16 +418,16 @@ def people_management():
     search = request.args.get("search", "").strip()
     classification = request.args.get("classification", "").strip()
     active = request.args.get("active", "").strip()
-    roster_status = request.args.get("roster_status", "").strip()
+    employee_status = request.args.get("employee_status", "").strip()
     if classification not in {choice[0] for choice in staffing_service.classification_choices()}:
         classification = ""
-    if roster_status not in {choice[0] for choice in staffing_service.roster_status_choices()}:
-        roster_status = ""
+    if employee_status not in {choice[0] for choice in staffing_service.employee_status_choices()}:
+        employee_status = ""
     people_rows = staffing_service.people_query(
         search=search,
         classification=classification or None,
         active=active or None,
-        roster_status=roster_status or None,
+        employee_status=employee_status or None,
     ).all()
     return render_template(
         "neostaffing/people_management.html",
@@ -435,13 +435,13 @@ def people_management():
         people=people_rows,
         classification_choices=staffing_service.classification_choices(),
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
-        roster_status_choices=staffing_service.roster_status_choices(),
-        roster_status_labels=staffing_service.ROSTER_STATUS_LABELS,
+        employee_status_choices=staffing_service.employee_status_choices(),
+        employee_status_labels=staffing_service.EMPLOYEE_STATUS_LABELS,
         filters={
             "search": search,
             "classification": classification,
             "active": active,
-            "roster_status": roster_status,
+            "employee_status": employee_status,
         },
     )
 
@@ -709,7 +709,7 @@ def _people_return_url(person_id):
             "department_id",
             "work_area_id",
             "classification",
-            "roster_status",
+            "employee_status",
             "active",
             "assignment_status",
             "search",
