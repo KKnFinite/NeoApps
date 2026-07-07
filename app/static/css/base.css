@@ -8460,10 +8460,6 @@ body.blueprint-neostaffing {
     gap: 16px;
 }
 
-.neostaffing-home-summary {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-}
-
 .neostaffing-menu-tile,
 .neostaffing-attendance-card,
 .neostaffing-unit-card {
