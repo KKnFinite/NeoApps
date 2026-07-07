@@ -302,25 +302,41 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login(user.username)
 
+        sort_response = self.client.get(f"/neostaffing/org-chart?unit_id={sort.id}")
         response = self.client.get(f"/neostaffing/org-chart?unit_id={operation.id}")
         department_response = self.client.get(f"/neostaffing/org-chart?unit_id={department.id}")
         work_area_response = self.client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
 
+        self.assertEqual(sort_response.status_code, 200)
+        self.assertIn(b"FULL TREE", sort_response.data)
+        self.assertIn(b"neostaffing-tree-editor", sort_response.data)
+        self.assertIn(b"neostaffing-tree-branch", sort_response.data)
+        self.assertIn(b"neostaffing-tree-toggle", sort_response.data)
+        self.assertIn(b"+ Operation", sort_response.data)
+        self.assertIn(b"Assign Division Manager", sort_response.data)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Night Sort", response.data)
         self.assertIn(b"Shift Operation", response.data)
         self.assertIn(b"East Shift Department", response.data)
         self.assertIn(b"Load Planning", response.data)
         self.assertIn(b"EBM", response.data)
-        self.assertIn(b"ORG TREE", response.data)
-        self.assertIn(b"neostaffing-unit-card", response.data)
-        self.assertIn(b"Child", response.data)
+        self.assertIn(b"FULL TREE", response.data)
+        self.assertIn(b"neostaffing-tree-node", response.data)
+        self.assertIn(b"Child /", response.data)
         self.assertIn(b"Assigned", response.data)
+        self.assertIn(b"+ Department", response.data)
+        self.assertIn(b"+ Work Area", response.data)
+        self.assertIn(b"Assign Manager", response.data)
         self.assertEqual(department_response.status_code, 200)
         self.assertIn(b"EBM", department_response.data)
+        self.assertIn(b"+ Work Area", department_response.data)
+        self.assertIn(b"Assign FT Supervisor", department_response.data)
         self.assertEqual(work_area_response.status_code, 200)
-        self.assertIn(b"Required Headcount", work_area_response.data)
-        self.assertIn(b"Assigned People", work_area_response.data)
+        self.assertIn(b"Required HC", work_area_response.data)
+        self.assertIn(b"Assigned Count", work_area_response.data)
+        self.assertIn(b"+ People", work_area_response.data)
+        self.assertIn(b"+ PT Sup", work_area_response.data)
+        self.assertIn(b"ASSIGN PT SUPERVISOR", work_area_response.data)
         self.assertIn(b"1", work_area_response.data)
         self.assertIsNotNone(direct_work_area)
 
@@ -646,8 +662,13 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login(user.username)
 
+        hierarchy = self.client.get("/neostaffing/app-management/hierarchy")
+        self.assertEqual(hierarchy.status_code, 200)
+        self.assertIn(b"FULL TREE", hierarchy.data)
+        self.assertIn(b"neostaffing-tree-editor", hierarchy.data)
+        self.assertIn(b"+ Sort", hierarchy.data)
+
         for path, marker in (
-            ("/neostaffing/app-management/hierarchy", b"UNIT CONTROL DECK"),
             ("/neostaffing/app-management/planned-staffing", b"PLANNED STAFFING DECK"),
             ("/neostaffing/app-management/people", b"PEOPLE CONTROL DECK"),
             ("/neostaffing/app-management/work-assignments", b"WORK AREA ASSIGNMENT DECK"),
@@ -759,14 +780,14 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         defaulted = self.client.get(f"/neostaffing/org-chart?unit_id={default_area.id}")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Required Headcount", response.data)
-        self.assertIn(b"Assigned People", response.data)
+        self.assertIn(b"Required HC", response.data)
+        self.assertIn(b"Assigned Count", response.data)
         self.assertIn(b"East Shift Department", response.data)
         self.assertIn(b"Shift Operation", response.data)
-        self.assertIn(b"Headcount 2", response.data)
+        self.assertIn(b"HC 2", response.data)
         self.assertEqual(defaulted.status_code, 200)
         self.assertIn(b"Default Area", defaulted.data)
-        self.assertIn(b"Required Headcount", defaulted.data)
+        self.assertIn(b"Required HC", defaulted.data)
 
     def test_org_chart_detail_shows_management_and_assigned_counts(self):
         user = self._user("staffing_org_detail")
@@ -800,7 +821,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"MANAGEMENT", response.data)
         self.assertIn(b"Scope Leader", response.data)
-        self.assertIn(b"Assigned People", response.data)
+        self.assertIn(b"Assigned Count", response.data)
         self.assertIn(b"1", response.data)
 
     def test_org_chart_management_and_structure_controls_follow_permissions(self):
@@ -852,12 +873,16 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertEqual(watcher_page.status_code, 200)
         self.assertNotIn(b"ASSIGN MANAGEMENT", watcher_page.data)
-        self.assertNotIn(b"UNIT CONTROL DECK", watcher_page.data)
+        self.assertNotIn(b"ASSIGN PT SUPERVISOR", watcher_page.data)
+        self.assertNotIn(b"STRUCTURE ACTIONS", watcher_page.data)
+        self.assertNotIn(b"+ People", watcher_page.data)
         self.assertEqual(simulator_page.status_code, 200)
-        self.assertIn(b"MANAGEMENT ASSIGNMENTS", simulator_page.data)
+        self.assertIn(b"ASSIGN PT SUPERVISOR", simulator_page.data)
         self.assertIn(b"ASSIGN MANAGEMENT", simulator_page.data)
+        self.assertIn(b"+ People", simulator_page.data)
         self.assertIn(b"No User Link", simulator_page.data)
-        self.assertNotIn(b"UNIT CONTROL DECK", simulator_page.data)
+        self.assertNotIn(b"STRUCTURE ACTIONS", simulator_page.data)
+        self.assertNotIn(b"SAVE UNIT", simulator_page.data)
         self.assertEqual(assigned.status_code, 302)
         self.assertEqual(assigned.location, f"/neostaffing/org-chart?unit_id={work_area.id}")
         assignment = StaffingLeadershipAssignment.query.filter_by(
@@ -869,8 +894,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(blocked_structure.location, "/neostaffing")
         self.assertIsNone(StaffingUnit.query.filter_by(name="Blocked Org Dept").first())
         self.assertEqual(master_page.status_code, 200)
-        self.assertIn(b"UNIT CONTROL DECK", master_page.data)
+        self.assertIn(b"STRUCTURE ACTIONS", master_page.data)
         self.assertIn(b"SAVE UNIT", master_page.data)
+        self.assertIn(b"DEACTIVATE", master_page.data)
+        self.assertIn(b"MOVE", master_page.data)
         self.assertEqual(created_structure.status_code, 302)
         self.assertIsNotNone(StaffingUnit.query.filter_by(name="Allowed Org Dept").first())
 

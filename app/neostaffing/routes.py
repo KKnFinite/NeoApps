@@ -336,6 +336,7 @@ def _render_org_chart():
         can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
         can_edit_structure=user_can(ORG_CHART_EDIT_STRUCTURE_PERMISSION),
         can_assign_management=user_can(MANAGEMENT_ASSIGN_PERMISSION),
+        can_edit_people=user_can(PEOPLE_EDIT_PERMISSION),
         org_chart=context,
         hierarchy=context["tree"],
         units=context["units"],
