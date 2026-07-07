@@ -8555,6 +8555,10 @@ body.blueprint-neostaffing {
     align-items: start;
 }
 
+.neostaffing-tree-editor.is-tree-only {
+    grid-template-columns: minmax(0, 1fr);
+}
+
 .neostaffing-tree-panel,
 .neostaffing-tree-detail {
     align-content: start;
@@ -8728,6 +8732,59 @@ body.blueprint-neostaffing {
     background: rgba(var(--node-rgb), 0.1);
     font-size: 0.62rem;
     white-space: nowrap;
+}
+
+.neostaffing-tree-add-sort {
+    position: relative;
+    justify-self: end;
+}
+
+.neostaffing-tree-add-sort > summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.neostaffing-tree-add-sort > summary::-webkit-details-marker {
+    display: none;
+}
+
+.neostaffing-tree-add-sort-form {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 8px);
+    right: 0;
+    width: min(320px, 82vw);
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.32);
+    border-radius: 8px;
+    background: rgba(3, 10, 14, 0.98);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.36);
+}
+
+.neostaffing-selected-scope {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid rgba(var(--node-rgb), 0.24);
+    border-radius: 8px;
+    background: rgba(2, 8, 12, 0.66);
+}
+
+.neostaffing-selected-scope h2 {
+    margin: 0;
+}
+
+.neostaffing-selected-scope strong {
+    color: var(--neo-bright-silver);
+    font-size: 1.05rem;
+    font-weight: 950;
+}
+
+.neostaffing-selected-scope span {
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 800;
 }
 
 .neostaffing-tree-control-section {
@@ -9571,6 +9628,17 @@ body.blueprint-neostaffing {
 
     .neostaffing-tree-list .neostaffing-tree-list {
         padding-left: 12px;
+    }
+
+    .neostaffing-tree-add-sort {
+        justify-self: stretch;
+    }
+
+    .neostaffing-tree-add-sort-form {
+        position: static;
+        width: 100%;
+        margin-top: 8px;
+        grid-template-columns: 1fr;
     }
 
     .neostaffing-home-header {
@@ -20674,6 +20742,15 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         letter-spacing: 0;
         line-height: 1.1;
         text-transform: uppercase;
+    }
+
+    body.blueprint-neostaffing.mobile-app-chrome .mobile-topbar-title > span,
+    body.blueprint-neostaffing.mobile-app-chrome .mobile-topbar-title strong {
+        max-width: min(62vw, 280px);
+    }
+
+    body.blueprint-neostaffing.mobile-app-chrome .mobile-topbar-title strong {
+        text-transform: none;
     }
 
     .mobile-account-menu {

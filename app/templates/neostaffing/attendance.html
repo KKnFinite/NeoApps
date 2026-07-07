@@ -5,19 +5,12 @@
 {% block content %}
 {% set filters = attendance.filters %}
 <section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="staffing-attendance-title">
-    <nav class="neostaffing-mobile-tabs" aria-label="NeoStaffing mobile navigation">
-        <a href="{{ url_for('neostaffing.index') }}">HOME</a>
-        <a href="{{ url_for('neostaffing.people') }}">PEOPLE</a>
-        <a href="{{ url_for('neostaffing.org_chart') }}">ORG CHART</a>
-        <a href="{{ url_for('neostaffing.reports') }}">REPORTS</a>
-    </nav>
-
     <div class="neostaffing-dashboard-shell">
         {% include "neostaffing/_section_nav.html" %}
         <div class="neostaffing-dashboard-main">
             <div class="neostaffing-hero neostaffing-hero-compact">
                 <div class="neostaffing-hero-copy mobile-shell-duplicate-title">
-                    <h1 id="staffing-attendance-title">ATTENDANCE</h1>
+                    <h1 id="staffing-attendance-title">People / Attendance</h1>
                 </div>
             </div>
 

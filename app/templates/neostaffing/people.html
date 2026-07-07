@@ -31,21 +31,15 @@
 {% set counts = people.counts %}
 {% set filters = people.filters %}
 {% set selected = people.selected_person %}
+{% set selected_scope = people.selected_work_area or people.selected_department or people.selected_operation or people.selected_sort %}
 <section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="neostaffing-people-title">
-    <nav class="neostaffing-mobile-tabs" aria-label="NeoStaffing mobile navigation">
-        <a href="{{ url_for('neostaffing.index') }}">HOME</a>
-        <a href="{{ url_for('neostaffing.people') }}" aria-current="page">PEOPLE</a>
-        <a href="{{ url_for('neostaffing.org_chart') }}">ORG CHART</a>
-        <a href="{{ url_for('neostaffing.reports') }}">REPORTS</a>
-    </nav>
-
     <div class="neostaffing-dashboard-shell">
         {% include "neostaffing/_section_nav.html" %}
 
         <main class="neostaffing-dashboard-main">
             <header class="neostaffing-dashboard-topbar">
                 <div class="mobile-shell-duplicate-title">
-                    <h1 id="neostaffing-people-title">PEOPLE</h1>
+                    <h1 id="neostaffing-people-title">People</h1>
                 </div>
                 <label class="neostaffing-search">
                     <span>Search</span>
@@ -57,19 +51,9 @@
                 <a class="action-button action-button-secondary" href="{{ url_for('neostaffing.people_attendance') }}">ATTENDANCE</a>
             </header>
 
-            <section class="neostaffing-summary-strip neostaffing-dashboard-metrics neostaffing-people-metrics" aria-label="NeoStaffing people totals">
-                <article><span>TOTAL EMPLOYEES</span><strong>{{ counts.total }}</strong></article>
-                <article><span>ACTIVE EMPLOYEES</span><strong>{{ counts.active }}</strong></article>
-                <article><span>INACTIVE EMPLOYEES</span><strong>{{ counts.inactive }}</strong></article>
-                <article><span>SUPERVISORS</span><strong>{{ counts.supervisors }}</strong></article>
-                <article><span>MANAGERS</span><strong>{{ counts.managers }}</strong></article>
-                <article><span>ASSIGNED</span><strong>{{ counts.assigned }}</strong></article>
-                <article><span>UNASSIGNED</span><strong>{{ counts.unassigned }}</strong></article>
-            </section>
-
             <section class="neostaffing-people-workspace" aria-label="NeoStaffing people workspace">
                 <aside class="neostaffing-data-card neostaffing-people-filter-panel">
-                    <h2>FILTERS</h2>
+                    <h2>SELECT SCOPE</h2>
                     <form id="people-filter-form" class="operation-form neostaffing-people-filter-form" method="get">
                         <label><span>Sort</span>
                             <select name="sort_id">
@@ -119,13 +103,7 @@
                                 {% endfor %}
                             </select>
                         </label>
-                        <label><span>Status</span>
-                            <select name="active">
-                                <option value="active" {% if filters.active == "active" %}selected{% endif %}>Active Only</option>
-                                <option value="inactive" {% if filters.active == "inactive" %}selected{% endif %}>Inactive Only</option>
-                                <option value="all" {% if filters.active == "all" %}selected{% endif %}>All</option>
-                            </select>
-                        </label>
+                        <input type="hidden" name="active" value="{{ filters.active }}">
                         <label><span>Assignment</span>
                             <select name="assignment_status">
                                 <option value="">All</option>
@@ -141,12 +119,26 @@
                                 <option value="all" {% if filters.per_page == "all" %}selected{% endif %}>All</option>
                             </select>
                         </label>
-                        <label class="neostaffing-toggle-field">
-                            <span>Leadership Only</span>
-                            <input type="checkbox" name="leadership_only" value="1" {% if people.leadership_only %}checked{% endif %}>
-                        </label>
+                        <input type="hidden" name="leadership_only" value="{{ filters.leadership_only }}">
                         <button type="submit">APPLY FILTERS</button>
                     </form>
+                    <section class="neostaffing-selected-scope">
+                        <h2>SELECTED SCOPE</h2>
+                        {% if selected_scope %}
+                        <strong>{{ selected_scope.name }}</strong>
+                        <span>{{ unit_path(selected_scope) }}</span>
+                        <div class="neostaffing-card-actions">
+                            {% if can_edit_people %}
+                            <a class="table-row-button" href="{{ url_for('neostaffing.people_management') }}">ADD PERSON</a>
+                            {% endif %}
+                            {% if can_assign_management %}
+                            <a class="table-row-button" href="{{ url_for('neostaffing.org_chart', unit_id=selected_scope.id) }}#management-editor">ASSIGN MANAGEMENT</a>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <p class="muted">Select a Sort, Operation, Department, or Work Area.</p>
+                        {% endif %}
+                    </section>
                     <div class="neostaffing-people-tree">
                         <h2>HIERARCHY</h2>
                         {% if people.hierarchy %}

@@ -79,19 +79,12 @@
 {% block content %}
 {% set selected = org_chart.selected_unit %}
 <section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="staffing-org-title">
-    <nav class="neostaffing-mobile-tabs" aria-label="NeoStaffing mobile navigation">
-        <a href="{{ url_for('neostaffing.index') }}">HOME</a>
-        <a href="{{ url_for('neostaffing.people') }}">PEOPLE</a>
-        <a href="{{ url_for('neostaffing.org_chart') }}" aria-current="page">ORG CHART</a>
-        <a href="{{ url_for('neostaffing.reports') }}">REPORTS</a>
-    </nav>
-
     <div class="neostaffing-dashboard-shell">
         {% include "neostaffing/_section_nav.html" %}
         <div class="neostaffing-dashboard-main">
             <div class="neostaffing-hero neostaffing-hero-compact">
                 <div class="neostaffing-hero-copy mobile-shell-duplicate-title">
-                    <h1 id="staffing-org-title">ORG CHART</h1>
+                    <h1 id="staffing-org-title">Org Chart</h1>
                 </div>
             </div>
 
@@ -102,12 +95,21 @@
                 {% endfor %}
             </nav>
 
-            <section class="neostaffing-tree-editor" aria-label="NeoStaffing visual org chart editor">
+            <section class="neostaffing-tree-editor{% if not selected %} is-tree-only{% endif %}" aria-label="NeoStaffing visual org chart editor">
                 <article class="neostaffing-data-card neostaffing-tree-panel">
                     <div class="neostaffing-panel-heading">
                         <h2>FULL TREE</h2>
-                        {% if can_edit_structure and not selected %}
-                        <span class="neostaffing-tree-action-chip">+ Sort</span>
+                        {% if can_edit_structure %}
+                        <details class="neostaffing-tree-add-sort">
+                            <summary class="neostaffing-tree-action-chip">+ Sort</summary>
+                            <form class="operation-form neostaffing-tree-add-sort-form" method="post" action="{{ url_for('neostaffing.create_unit') }}">
+                                <input type="hidden" name="unit_type" value="sort">
+                                <input type="hidden" name="parent_id" value="">
+                                <label><span>Name</span><input name="name" required></label>
+                                <input type="hidden" name="display_order" value="0">
+                                <button type="submit">SAVE</button>
+                            </form>
+                        </details>
                         {% endif %}
                     </div>
                     {% if hierarchy %}
@@ -117,15 +119,13 @@
                     {% endif %}
                 </article>
 
+                {% if selected %}
                 <aside class="neostaffing-data-card neostaffing-tree-detail" aria-label="Selected unit details">
                     <div class="neostaffing-panel-heading">
                         <h2>DETAIL</h2>
-                        {% if selected %}
                         <span class="neostaffing-tree-action-chip">{{ "ACTIVE" if selected.active else "INACTIVE" }}</span>
-                        {% endif %}
                     </div>
 
-                    {% if selected %}
                     {% set selected_detail = org_chart.selected_detail %}
                     <div class="neostaffing-tree-detail-title">
                         <span>{{ unit_type_labels[selected.unit_type] }}</span>
@@ -267,22 +267,8 @@
                     </section>
                     {% endif %}
 
-                    {% else %}
-                    <p class="muted">Select a Sort, Operation, Department, or Work Area from the tree.</p>
-                    {% if can_edit_structure %}
-                    <section id="structure-add" class="neostaffing-tree-control-section">
-                        <h2>ADD SORT</h2>
-                        <form class="operation-form neostaffing-tree-add-form" method="post" action="{{ url_for('neostaffing.create_unit') }}">
-                            <input type="hidden" name="unit_type" value="sort">
-                            <input type="hidden" name="parent_id" value="">
-                            <label><span>Name</span><input name="name" required></label>
-                            <input type="hidden" name="display_order" value="0">
-                            <button type="submit">+ Sort</button>
-                        </form>
-                    </section>
-                    {% endif %}
-                    {% endif %}
                 </aside>
+                {% endif %}
             </section>
         </div>
     </div>

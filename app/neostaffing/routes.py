@@ -152,6 +152,7 @@ def people():
         can_manage_app=can_manage,
         can_edit_people=can_edit_people,
         can_bulk_people=can_bulk_people,
+        can_assign_management=user_can(MANAGEMENT_ASSIGN_PERMISSION),
         classification_choices=staffing_service.classification_choices(),
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
         employee_status_choices=staffing_service.employee_status_choices(),

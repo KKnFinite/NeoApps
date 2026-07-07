@@ -28,17 +28,6 @@
 {% set counts = seniority.counts %}
 {% set filters = seniority.filters %}
 <section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="neostaffing-seniority-title">
-    <nav class="neostaffing-mobile-tabs" aria-label="NeoStaffing mobile navigation">
-        <a href="{{ url_for('neostaffing.index') }}">BOARD</a>
-        <a href="{{ url_for('neostaffing.people') }}">PEOPLE</a>
-        <a href="{{ url_for('neostaffing.seniority') }}" aria-current="page">SENIORITY</a>
-        {% if can_manage_app %}
-        <a href="{{ url_for('neostaffing.app_management') }}">MANAGE</a>
-        {% else %}
-        <span>MANAGE</span>
-        {% endif %}
-    </nav>
-
     <div class="neostaffing-dashboard-shell">
         <aside class="neostaffing-rail" aria-label="NeoStaffing navigation">
             <div class="neostaffing-rail-brand">
@@ -47,7 +36,7 @@
                 {% include "neostaffing/_brand_title.html" %}
                 {% endwith %}
             </div>
-            <a href="{{ url_for('neostaffing.index') }}">DASHBOARD</a>
+            <a href="{{ url_for('neostaffing.index') }}">HOME</a>
             <span>STAFFING BOARD</span>
             <a href="{{ url_for('neostaffing.people') }}">PEOPLE</a>
             <a href="{{ url_for('neostaffing.seniority') }}" aria-current="page">SENIORITY</a>

@@ -97,6 +97,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 for label in (b"Home", b"People", b"People / Attendance", b"Org Chart", b"Reports"):
                     self.assertIn(label, response.data)
                 self.assertIn(active_label, response.data)
+                self.assertIn(b"mobile-bottom-nav", response.data)
+                self.assertIn(b"<strong>" + active_label + b"</strong>", response.data)
+                self.assertNotIn(b"neostaffing-mobile-tabs", response.data)
+                self.assertNotIn(b"<strong>DASHBOARD</strong>", response.data)
                 self.assertNotIn(b"APP ROLE", response.data)
                 self.assertNotIn(b"neostaffing-rail-brand", response.data)
                 self.assertNotIn(b"neostaffing-rail-icon", response.data)
@@ -674,6 +678,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"FULL TREE", hierarchy.data)
         self.assertIn(b"neostaffing-tree-editor", hierarchy.data)
         self.assertIn(b"+ Sort", hierarchy.data)
+        self.assertNotIn(b'aria-label="Selected unit details"', hierarchy.data)
+        self.assertNotIn(b"<h2>DETAIL</h2>", hierarchy.data)
+        self.assertNotIn(b"ADD UNDER", hierarchy.data)
+        self.assertNotIn(b"ADD SORT", hierarchy.data)
 
         for path, marker in (
             ("/neostaffing/app-management/planned-staffing", b"PLANNED STAFFING DECK"),
@@ -854,6 +862,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         watcher_page = self._logged_in_client(watcher.username).get(
             f"/neostaffing/org-chart?unit_id={work_area.id}"
         )
+        watcher_tree = self._logged_in_client(watcher.username).get("/neostaffing/org-chart")
         simulator_client = self._logged_in_client(simulator.username)
         simulator_page = simulator_client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
         assigned = simulator_client.post(
@@ -872,6 +881,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
 
         master_client = self._logged_in_client(master.username)
+        master_tree = master_client.get("/neostaffing/org-chart")
         master_page = master_client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
         created_structure = master_client.post(
             "/neostaffing/app-management/hierarchy/units",
@@ -886,6 +896,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"+ People", watcher_page.data)
         self.assertNotIn(b"+ PT Sup", watcher_page.data)
         self.assertNotIn(b"Add/Assign People", watcher_page.data)
+        self.assertEqual(watcher_tree.status_code, 200)
+        self.assertNotIn(b"+ Sort", watcher_tree.data)
         self.assertEqual(simulator_page.status_code, 200)
         self.assertIn(b"ASSIGN PT SUPERVISOR", simulator_page.data)
         self.assertIn(b"ASSIGN MANAGEMENT", simulator_page.data)
@@ -906,6 +918,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(blocked_structure.location, "/neostaffing")
         self.assertIsNone(StaffingUnit.query.filter_by(name="Blocked Org Dept").first())
         self.assertEqual(master_page.status_code, 200)
+        self.assertIn(b"+ Sort", master_tree.data)
         self.assertIn(b"STRUCTURE ACTIONS", master_page.data)
         self.assertIn(b"SAVE UNIT", master_page.data)
         self.assertIn(b"DEACTIVATE", master_page.data)
@@ -1016,10 +1029,20 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         response = self.client.get("/neostaffing/people")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"PEOPLE", response.data)
-        self.assertIn(b"FILTERS", response.data)
-        self.assertIn(b"TOTAL EMPLOYEES", response.data)
-        self.assertIn(b"Leadership Only", response.data)
+        self.assertIn(b"People", response.data)
+        self.assertIn(b"SELECT SCOPE", response.data)
+        self.assertIn(b"ROSTER", response.data)
+        self.assertIn(b"Employee Status", response.data)
+        self.assertIn(b"Assignment", response.data)
+        self.assertIn(b"mobile-bottom-nav", response.data)
+        self.assertNotIn(b"neostaffing-mobile-tabs", response.data)
+        self.assertNotIn(b"TOTAL EMPLOYEES", response.data)
+        self.assertNotIn(b"ACTIVE EMPLOYEES", response.data)
+        self.assertNotIn(b"INACTIVE EMPLOYEES", response.data)
+        self.assertNotIn(b"SUPERVISORS", response.data)
+        self.assertNotIn(b"MANAGERS", response.data)
+        self.assertNotIn(b"<span>Status</span>", response.data)
+        self.assertNotIn(b"Leadership Only", response.data)
         self.assertIn(b'href="/neostaffing/people"', dashboard.data)
 
     def test_people_view_blocks_user_without_neostaffing_access(self):
@@ -1091,9 +1114,13 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"CURRENT WORK ASSIGNMENT", response.data)
         self.assertIn(b"OPEN IN APP MANAGEMENT", response.data)
         self.assertIn(b"VIEW SENIORITY POSITION", response.data)
+        self.assertIn(b"SELECTED SCOPE", response.data)
+        self.assertIn(b"ADD PERSON", response.data)
+        self.assertIn(b"ASSIGN MANAGEMENT", response.data)
         self.assertIn(b"Employee Status", response.data)
         self.assertNotIn(b"Roster Status", response.data)
         self.assertNotIn(b"roster_status", response.data)
+        self.assertNotIn(b"<span>Status</span>", response.data)
         self.assertEqual(searched.status_code, 200)
         self.assertIn(b"E810", searched.data)
         self.assertNotIn(b"E811", searched.data)
