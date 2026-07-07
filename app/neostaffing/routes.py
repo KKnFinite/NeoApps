@@ -161,15 +161,27 @@ def people():
     )
 
 
+@bp.route("/attendance", methods=["GET", "POST"])
+@neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
+def attendance():
+    return _handle_attendance()
+
+
 @bp.route("/people/attendance", methods=["GET", "POST"])
 @neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
 def people_attendance():
+    if request.method == "GET":
+        return redirect(url_for("neostaffing.attendance", **request.args))
+    return _handle_attendance()
+
+
+def _handle_attendance():
     management_context = staffing_service.management_attendance_context_for_user(current_user)
     can_edit = user_can(ATTENDANCE_TAKE_PERMISSION)
     if request.method == "POST":
         if not can_edit:
             flash("Taking NeoStaffing attendance requires Operator access.", "error")
-            return redirect(url_for("neostaffing.people_attendance", **request.args))
+            return redirect(url_for("neostaffing.attendance", **request.args))
         try:
             saved = staffing_service.save_attendance(request.form, current_user)
             db.session.commit()
@@ -180,7 +192,7 @@ def people_attendance():
             flash(f"Attendance saved for {saved} people.", "success")
         return redirect(
             url_for(
-                "neostaffing.people_attendance",
+                "neostaffing.attendance",
                 attendance_date=request.form.get("attendance_date", ""),
                 sort_id=request.form.get("sort_id", ""),
                 operation_id=request.form.get("operation_id", ""),

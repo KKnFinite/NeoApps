@@ -16,13 +16,16 @@
             <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.reports') }}">
                 <span>REPORTS</span>
             </a>
+            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.attendance') }}">
+                <span>ATTENDANCE</span>
+            </a>
         </nav>
 
         {% if attendance_shortcut.is_management %}
         <section class="neostaffing-attendance-shortcut" aria-label="Management attendance shortcut">
             {% if attendance_shortcut.assignments|length == 1 %}
             {% set card = attendance_shortcut.assignments[0] %}
-            <a class="neostaffing-attendance-card" href="{{ url_for('neostaffing.people_attendance') }}?{{ card.scope_key }}={{ card.unit.id }}">
+            <a class="neostaffing-attendance-card" href="{{ url_for('neostaffing.attendance') }}?{{ card.scope_key }}={{ card.unit.id }}">
                 <span>TAKE ATTENDANCE</span>
                 <strong>{{ card.unit.name }}</strong>
                 <em>{{ card.label }}</em>
@@ -31,7 +34,7 @@
             <h2>MY AREAS</h2>
             <div class="neostaffing-my-area-grid">
                 {% for card in attendance_shortcut.assignments %}
-                <a class="neostaffing-attendance-card" href="{{ url_for('neostaffing.people_attendance') }}?{{ card.scope_key }}={{ card.unit.id }}">
+                <a class="neostaffing-attendance-card" href="{{ url_for('neostaffing.attendance') }}?{{ card.scope_key }}={{ card.unit.id }}">
                     <span>{{ card.label }}</span>
                     <strong>{{ card.unit.name }}</strong>
                     <em>{{ card.path }}</em>

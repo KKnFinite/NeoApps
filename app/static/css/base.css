@@ -9242,8 +9242,19 @@ body.blueprint-neostaffing {
 
 .neostaffing-people-workspace {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(240px, 310px);
+    grid-template-columns: minmax(230px, 300px) minmax(0, 1fr);
     gap: 14px;
+    align-items: start;
+}
+
+.neostaffing-people-workarea-layout {
+    min-width: 0;
+}
+
+.neostaffing-people-roster-shell {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
 }
 
 .neostaffing-seniority-filter-panel,
@@ -9263,7 +9274,7 @@ body.blueprint-neostaffing {
 .neostaffing-people-scope-panel {
     display: grid;
     gap: 12px;
-    margin-bottom: 14px;
+    align-content: start;
 }
 
 .neostaffing-people-scope-form {
@@ -9279,12 +9290,44 @@ body.blueprint-neostaffing {
 }
 
 .neostaffing-people-scope-row {
-    grid-template-columns: repeat(4, minmax(150px, 1fr));
+    grid-template-columns: 1fr;
 }
 
 .neostaffing-people-refine-row {
-    grid-template-columns: repeat(4, minmax(130px, 0.8fr)) auto;
+    grid-template-columns: minmax(180px, 1fr) repeat(2, minmax(130px, 0.65fr)) auto;
     align-items: end;
+}
+
+.neostaffing-people-scope-status {
+    display: grid;
+    gap: 4px;
+    padding: 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.2);
+    border-radius: 8px;
+    background: rgba(2, 8, 12, 0.58);
+}
+
+.neostaffing-people-scope-status span,
+.neostaffing-people-scope-status em {
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-style: normal;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.neostaffing-people-scope-status strong {
+    overflow: hidden;
+    color: var(--neo-bright-silver);
+    font-size: 1rem;
+    font-weight: 950;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.neostaffing-people-empty-roster {
+    min-height: 220px;
+    align-content: center;
 }
 
 .neostaffing-inline-editor {
@@ -9457,7 +9500,7 @@ body.blueprint-neostaffing {
 
 .neostaffing-people-card {
     display: grid;
-    grid-template-columns: minmax(160px, 1.1fr) minmax(140px, 0.9fr) minmax(130px, 0.75fr) minmax(150px, 0.85fr);
+    grid-template-columns: minmax(180px, 1.1fr) minmax(160px, 0.8fr);
     gap: 10px;
     align-items: center;
     min-width: 0;
@@ -9618,7 +9661,6 @@ body.blueprint-neostaffing {
         grid-template-columns: 1fr;
     }
 
-    .neostaffing-people-scope-row,
     .neostaffing-people-refine-row {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -9804,7 +9846,6 @@ body.blueprint-neostaffing {
         grid-template-columns: 1fr;
     }
 
-    .neostaffing-people-scope-row,
     .neostaffing-people-refine-row {
         grid-template-columns: 1fr;
     }
