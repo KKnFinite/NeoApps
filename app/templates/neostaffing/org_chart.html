@@ -27,7 +27,6 @@
     <ul class="neostaffing-tree-list neostaffing-tree-editor-list">
         {% for row in nodes %}
         {% set unit = row.unit %}
-        {% set meta = org_chart.unit_card_meta.get(unit.id) %}
         <li>
             <details class="neostaffing-tree-branch{% if selected and selected.id == unit.id %} is-selected{% endif %}{% if not unit.active %} is-inactive{% endif %}" open>
                 <summary class="neostaffing-tree-summary">
@@ -35,8 +34,25 @@
                     <a class="neostaffing-tree-node" href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}">
                         <span>{{ unit_type_labels[unit.unit_type] }}</span>
                         <strong>{{ unit.name }}</strong>
-                        <small>{{ meta.child_count if meta else 0 }} Child / {{ meta.assigned_count if meta else 0 }} Assigned{% if unit.unit_type == "work_area" %} / HC {{ unit.required_headcount if unit.required_headcount is not none else "-" }}{% endif %}</small>
                     </a>
+                    <span class="neostaffing-tree-row-actions">
+                        {% if can_edit_structure %}
+                            {% if unit.unit_type == "sort" %}
+                            <a href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}#structure-add">+ Operation</a>
+                            {% elif unit.unit_type == "operation" %}
+                            <a href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}#structure-add">+ Department</a>
+                            <a href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}#structure-add">+ Work Area</a>
+                            {% elif unit.unit_type == "department" %}
+                            <a href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}#structure-add">+ Work Area</a>
+                            {% endif %}
+                        {% endif %}
+                        {% if unit.unit_type == "work_area" and can_edit_people %}
+                        <a href="{{ url_for('neostaffing.people', work_area_id=unit.id) }}">+ People</a>
+                        {% endif %}
+                        {% if unit.unit_type == "work_area" and can_assign_management %}
+                        <a href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}#management-editor">+ PT Sup</a>
+                        {% endif %}
+                    </span>
                 </summary>
                 {% if row.children %}
                 {{ render_tree(row.children) }}
@@ -126,31 +142,19 @@
                     </dl>
 
                     <div class="neostaffing-tree-context-actions" aria-label="Selected unit contextual actions">
-                        {% if can_edit_structure %}
-                            {% if selected.unit_type == "sort" %}
-                            <a href="#structure-editor">EDIT</a><a href="#structure-add">+ Operation</a>
-                            {% elif selected.unit_type == "operation" %}
-                            <a href="#structure-editor">EDIT</a><a href="#structure-editor">MOVE</a><a href="#structure-add">+ Department</a><a href="#structure-add">+ Work Area</a>
-                            {% elif selected.unit_type == "department" %}
-                            <a href="#structure-editor">EDIT</a><a href="#structure-editor">MOVE</a><a href="#structure-add">+ Work Area</a>
-                            {% elif selected.unit_type == "work_area" %}
-                            <a href="#structure-editor">EDIT</a><a href="#structure-editor">MOVE</a>
-                            {% endif %}
-                            <a href="#structure-editor">DEACTIVATE</a>
-                        {% endif %}
-                        {% if selected.unit_type == "work_area" and can_edit_people %}
-                        <a href="{{ url_for('neostaffing.people', work_area_id=selected.id) }}">+ People</a>
-                        {% endif %}
-                        {% if can_assign_management %}
-                            {% if selected.unit_type == "sort" %}
-                            <a href="#management-editor">Assign Division Manager</a>
-                            {% elif selected.unit_type == "operation" %}
-                            <a href="#management-editor">Assign Manager</a>
-                            {% elif selected.unit_type == "department" %}
-                            <a href="#management-editor">Assign FT Supervisor</a>
-                            {% elif selected.unit_type == "work_area" %}
-                            <a href="#management-editor">+ PT Sup</a>
-                            {% endif %}
+                        {% if selected.unit_type == "sort" %}
+                            {% if can_edit_structure %}<a href="#structure-add">Add Operation</a><a href="#structure-editor">Edit</a>{% endif %}
+                            {% if can_assign_management %}<a href="#management-editor">Assign Division Manager</a>{% endif %}
+                        {% elif selected.unit_type == "operation" %}
+                            {% if can_edit_structure %}<a href="#structure-add">Add Department</a><a href="#structure-add">Add Work Area</a><a href="#structure-editor">Edit</a><a href="#structure-editor">Move</a>{% endif %}
+                            {% if can_assign_management %}<a href="#management-editor">Assign Manager</a>{% endif %}
+                        {% elif selected.unit_type == "department" %}
+                            {% if can_edit_structure %}<a href="#structure-add">Add Work Area</a><a href="#structure-editor">Edit</a><a href="#structure-editor">Move</a>{% endif %}
+                            {% if can_assign_management %}<a href="#management-editor">Assign FT Supervisor</a>{% endif %}
+                        {% elif selected.unit_type == "work_area" %}
+                            {% if can_edit_people %}<a href="{{ url_for('neostaffing.people', work_area_id=selected.id) }}">Add/Assign People</a>{% endif %}
+                            {% if can_assign_management %}<a href="#management-editor">Assign PT Supervisor</a>{% endif %}
+                            {% if can_edit_structure %}<a href="#structure-editor">Edit</a><a href="#structure-editor">Move</a><a href="#structure-editor">Set Headcount</a>{% endif %}
                         {% endif %}
                     </div>
 
