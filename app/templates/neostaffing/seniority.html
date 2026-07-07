@@ -41,10 +41,7 @@
             <a href="{{ url_for('neostaffing.people') }}">PEOPLE</a>
             <a href="{{ url_for('neostaffing.seniority') }}" aria-current="page">SENIORITY</a>
             {% if can_manage_app %}
-            <a href="{{ url_for('neostaffing.hierarchy') }}">WORK AREAS</a>
-            <a href="{{ url_for('neostaffing.work_assignments') }}">ASSIGNMENTS</a>
-            <a href="{{ url_for('neostaffing.management_assignments') }}">LEADERSHIP</a>
-            <a href="{{ url_for('neostaffing.app_management') }}">APP MANAGEMENT</a>
+            <a href="{{ url_for('neostaffing.org_chart') }}">ORG CHART</a>
             {% endif %}
             <a class="neostaffing-rail-return" href="{{ url_for('auth.portal_dashboard') }}">{{ neo_brand("Apps", "apps") }} PORTAL</a>
         </aside>
@@ -65,7 +62,7 @@
                     <input form="seniority-filter-form" type="search" name="search" value="{{ filters.search }}" placeholder="Search employee ID or name">
                 </label>
                 {% if can_manage_app %}
-                <a class="action-button" href="{{ url_for('neostaffing.work_assignments') }}">ASSIGNMENTS</a>
+                <a class="action-button" href="{{ url_for('neostaffing.people') }}">PEOPLE</a>
                 {% endif %}
             </header>
 

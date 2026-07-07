@@ -5,7 +5,7 @@ from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
-from app.models import StaffingLeadershipAssignment, StaffingPerson, StaffingUnit, StaffingWorkAssignment
+from app.models import StaffingLeadershipAssignment, StaffingPerson, StaffingUnit
 from app.neostaffing import bp
 from app.services.access_control import get_user_app_role, user_can_access_app, user_has_app_access
 from app.services import neostaffing as staffing_service
@@ -22,9 +22,7 @@ ORG_CHART_VIEW_PERMISSION = "neostaffing.org_chart.view"
 ORG_CHART_EDIT_STRUCTURE_PERMISSION = "neostaffing.org_chart.edit_structure"
 REPORTS_VIEW_PERMISSION = "neostaffing.reports.view"
 MANAGEMENT_ASSIGN_PERMISSION = "neostaffing.management.assign"
-APP_MANAGEMENT_VIEW_PERMISSION = "neostaffing.app_management.view"
 HIERARCHY_VIEW_PERMISSION = "neostaffing.hierarchy.view"
-PLANNED_STAFFING_VIEW_PERMISSION = "neostaffing.planned_staffing.view"
 PLANNED_STAFFING_EDIT_PERMISSION = "neostaffing.planned_staffing.edit"
 
 
@@ -211,19 +209,9 @@ def people_attendance():
 
 
 @bp.route("/app-management")
-@neostaffing_app_required(permission_key=APP_MANAGEMENT_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
 def app_management():
-    return render_template(
-        "neostaffing/app_management.html",
-        app_role=get_user_app_role(current_user, "neostaffing"),
-        counts={
-            "people": StaffingPerson.query.filter_by(active=True).count(),
-            "units": StaffingUnit.query.filter_by(active=True).count(),
-            "work_areas": StaffingUnit.query.filter_by(unit_type="work_area", active=True).count(),
-            "work_assignments": StaffingWorkAssignment.query.filter_by(active=True).count(),
-            "leadership": StaffingLeadershipAssignment.query.filter_by(active=True).count(),
-        },
-    )
+    return redirect(url_for("neostaffing.people", **request.args))
 
 
 @bp.route("/org-chart")
@@ -397,28 +385,15 @@ def delete_unit(unit_id):
 
 
 @bp.route("/app-management/required-headcount")
-@neostaffing_app_required(permission_key=PLANNED_STAFFING_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=ORG_CHART_VIEW_PERMISSION)
 def required_headcount():
-    return redirect(url_for("neostaffing.planned_staffing", **request.args))
+    return _redirect_legacy_scope_to_org_chart()
 
 
 @bp.route("/app-management/planned-staffing")
-@neostaffing_app_required(permission_key=PLANNED_STAFFING_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=ORG_CHART_VIEW_PERMISSION)
 def planned_staffing():
-    context = staffing_service.required_headcount_context(
-        {
-            "sort_id": request.args.get("sort_id", "").strip(),
-            "operation_id": request.args.get("operation_id", "").strip(),
-            "department_id": request.args.get("department_id", "").strip(),
-            "work_area_id": request.args.get("work_area_id", "").strip(),
-        }
-    )
-    return render_template(
-        "neostaffing/planned_staffing.html",
-        app_role=get_user_app_role(current_user, "neostaffing"),
-        planned_staffing=context,
-        unit_path=staffing_service.unit_path,
-    )
+    return _redirect_legacy_scope_to_org_chart()
 
 
 @bp.route("/app-management/required-headcount/<int:unit_id>/update", methods=["POST"])
@@ -445,57 +420,37 @@ def update_planned_staffing(unit_id):
 
 
 @bp.route("/app-management/people")
-@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
 def people_management():
-    search = request.args.get("search", "").strip()
-    classification = request.args.get("classification", "").strip()
-    active = request.args.get("active", "").strip()
-    employee_status = request.args.get("employee_status", "").strip()
-    if classification not in {choice[0] for choice in staffing_service.classification_choices()}:
-        classification = ""
-    if employee_status not in {choice[0] for choice in staffing_service.employee_status_choices()}:
-        employee_status = ""
-    people_rows = staffing_service.people_query(
-        search=search,
-        classification=classification or None,
-        active=active or None,
-        employee_status=employee_status or None,
-    ).all()
-    return render_template(
-        "neostaffing/people_management.html",
-        app_role=get_user_app_role(current_user, "neostaffing"),
-        people=people_rows,
-        classification_choices=staffing_service.classification_choices(),
-        classification_labels=staffing_service.CLASSIFICATION_LABELS,
-        employee_status_choices=staffing_service.employee_status_choices(),
-        employee_status_labels=staffing_service.EMPLOYEE_STATUS_LABELS,
-        filters={
-            "search": search,
-            "classification": classification,
-            "active": active,
-            "employee_status": employee_status,
-        },
-    )
+    return redirect(url_for("neostaffing.people", **request.args))
 
 
 @bp.route("/app-management/people", methods=["POST"])
 @neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def create_person():
-    return _mutate(
-        lambda: staffing_service.create_person(request.form),
-        "Person added.",
-        "neostaffing.people_management",
-    )
+    person = None
+    try:
+        person = staffing_service.create_person(request.form)
+        initial_work_area_id = request.form.get("initial_work_area_unit_id", "").strip()
+        if initial_work_area_id:
+            staffing_service.assign_work_area(person, _get_unit(initial_work_area_id))
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Person added.", "success")
+    return redirect(_people_return_url(person.id if person else None))
 
 
 @bp.route("/app-management/people/<int:person_id>/update", methods=["POST"])
 @neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def update_person(person_id):
     person = _get_person(person_id)
-    return _mutate(
+    return _mutate_to_people(
         lambda: staffing_service.update_person(person, request.form),
         "Person updated.",
-        "neostaffing.people_management",
+        person_id,
     )
 
 
@@ -507,51 +462,20 @@ def toggle_person_active(person_id):
     def toggle():
         person.active = not person.active
 
-    return _mutate(toggle, "Person status updated.", "neostaffing.people_management")
+    return _mutate_to_people(toggle, "Person status updated.", person_id)
 
 
 @bp.route("/app-management/people/<int:person_id>/delete", methods=["POST"])
 @neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def delete_person(person_id):
     person = _get_person(person_id)
-    return _mutate(
-        lambda: staffing_service.delete_person(person),
-        "Person deleted.",
-        "neostaffing.people_management",
-    )
+    return _mutate_to_people(lambda: staffing_service.delete_person(person), "Person deleted.")
 
 
 @bp.route("/app-management/work-assignments")
-@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
+@neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
 def work_assignments():
-    people_rows = staffing_service.people_query(
-        classification=request.args.get("classification") or None,
-        active=request.args.get("active") or None,
-    ).all()
-    people_rows = _filter_people_for_work_assignment_page(people_rows)
-    work_areas = staffing_service.work_area_units()
-    return render_template(
-        "neostaffing/work_assignments.html",
-        app_role=get_user_app_role(current_user, "neostaffing"),
-        people=people_rows,
-        work_areas=work_areas,
-        sorts=staffing_service.units_by_type("sort"),
-        operations=staffing_service.units_by_type("operation"),
-        departments=staffing_service.units_by_type("department"),
-        classification_choices=staffing_service.classification_choices(),
-        classification_labels=staffing_service.CLASSIFICATION_LABELS,
-        non_management_classifications=staffing_service.NON_MANAGEMENT_CLASSIFICATIONS,
-        unit_path=staffing_service.unit_path,
-        filters={
-            "classification": request.args.get("classification", ""),
-            "active": request.args.get("active", ""),
-            "assignment_status": request.args.get("assignment_status", ""),
-            "sort_id": request.args.get("sort_id", ""),
-            "operation_id": request.args.get("operation_id", ""),
-            "department_id": request.args.get("department_id", ""),
-            "work_area_id": request.args.get("work_area_id", ""),
-        },
-    )
+    return redirect(url_for("neostaffing.people", **request.args))
 
 
 @bp.route("/app-management/work-assignments/assign", methods=["POST"])
@@ -580,41 +504,9 @@ def clear_work_assignment(person_id):
 
 
 @bp.route("/app-management/management-assignments")
-@neostaffing_app_required(permission_key=MANAGEMENT_ASSIGN_PERMISSION)
+@neostaffing_app_required(permission_key=ORG_CHART_VIEW_PERMISSION)
 def management_assignments():
-    assignments = (
-        StaffingLeadershipAssignment.query.join(StaffingPerson)
-        .join(StaffingUnit)
-        .order_by(StaffingPerson.last_name, StaffingPerson.first_name, StaffingUnit.unit_type)
-        .all()
-    )
-    assignments = _filter_leadership_assignments(assignments)
-    people_rows = staffing_service.people_query(active=request.args.get("active") or None).all()
-    units = StaffingUnit.query.order_by(StaffingUnit.unit_type, StaffingUnit.display_order, StaffingUnit.name).all()
-    return render_template(
-        "neostaffing/management_assignments.html",
-        app_role=get_user_app_role(current_user, "neostaffing"),
-        assignments=assignments,
-        people=people_rows,
-        units=units,
-        sorts=staffing_service.units_by_type("sort"),
-        operations=staffing_service.units_by_type("operation"),
-        departments=staffing_service.units_by_type("department"),
-        work_areas=staffing_service.units_by_type("work_area"),
-        classification_labels=staffing_service.CLASSIFICATION_LABELS,
-        leadership_level_labels=staffing_service.LEADERSHIP_LEVEL_LABELS,
-        unit_type_labels=staffing_service.UNIT_TYPE_LABELS,
-        unit_path=staffing_service.unit_path,
-        filters={
-            "leadership_level": request.args.get("leadership_level", ""),
-            "person_id": request.args.get("person_id", ""),
-            "active": request.args.get("active", ""),
-            "sort_id": request.args.get("sort_id", ""),
-            "operation_id": request.args.get("operation_id", ""),
-            "department_id": request.args.get("department_id", ""),
-            "work_area_id": request.args.get("work_area_id", ""),
-        },
-    )
+    return redirect(url_for("neostaffing.org_chart", **request.args))
 
 
 @bp.route("/app-management/management-assignments", methods=["POST"])
@@ -664,6 +556,31 @@ def _mutate(callback, success_message, redirect_endpoint, redirect_values=None):
     else:
         flash(success_message, "success")
     return redirect(url_for(redirect_endpoint, **(redirect_values or {})))
+
+
+def _redirect_legacy_scope_to_org_chart():
+    query = dict(request.args)
+    for key in ("work_area_id", "department_id", "operation_id", "sort_id"):
+        unit_id = query.get(key)
+        if unit_id:
+            query["unit_id"] = unit_id
+            break
+    for key in ("work_area_id", "department_id", "operation_id", "sort_id"):
+        query.pop(key, None)
+    return redirect(url_for("neostaffing.org_chart", **query))
+
+
+def _mutate_to_people(callback, success_message, person_id=None):
+    try:
+        callback()
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        message = str(getattr(error, "orig", None) or error)
+        flash(message, "error")
+    else:
+        flash(success_message, "success")
+    return redirect(_people_return_url(person_id))
 
 
 def _get_person(person_id):

@@ -2,29 +2,16 @@
 
 {% block title %}NeoStaffing People{% endblock %}
 
-{% macro render_tree(nodes) %}
-    <ul class="neostaffing-dashboard-tree">
-        {% for row in nodes %}
-        {% set unit = row.unit %}
-        <li>
-            <div class="neostaffing-dashboard-tree-node">
-                <span>{{ unit.name }}</span>
-                {% if people.selected_operation and unit.id == people.selected_operation.id %}
-                <strong>ON</strong>
-                {% elif unit.unit_type == "work_area" %}
-                <strong>{{ unit.required_headcount if unit.required_headcount is not none else "-" }}</strong>
-                {% endif %}
-            </div>
-            {% if row.children %}
-            {{ render_tree(row.children) }}
-            {% endif %}
-        </li>
-        {% endfor %}
-    </ul>
-{% endmacro %}
-
 {% macro query_without_person() -%}
     sort_id={{ people.filters.sort_id }}&operation_id={{ people.filters.operation_id }}&department_id={{ people.filters.department_id }}&work_area_id={{ people.filters.work_area_id }}&classification={{ people.filters.classification }}&employee_status={{ people.filters.employee_status }}&active={{ people.filters.active }}&assignment_status={{ people.filters.assignment_status }}&per_page={{ people.filters.per_page }}&leadership_only={{ people.filters.leadership_only }}&search={{ people.filters.search|urlencode }}
+{%- endmacro %}
+
+{% macro preserve_people_filters(filters, include_person=False) -%}
+    {% for key, value in filters.items() %}
+    {% if include_person or key != "person_id" %}
+    <input type="hidden" name="{{ key }}" value="{{ value }}">
+    {% endif %}
+    {% endfor %}
 {%- endmacro %}
 
 {% block content %}
@@ -43,21 +30,21 @@
                 </div>
                 <label class="neostaffing-search">
                     <span>Search</span>
-                    <input form="people-filter-form" type="search" name="search" value="{{ filters.search }}" placeholder="Search employee ID or name">
+                    <input form="people-filter-form" type="search" name="search" value="{{ filters.search }}" placeholder="Employee ID or name">
                 </label>
-                {% if can_edit_people %}
-                <a class="action-button" href="{{ url_for('neostaffing.people_management') }}">APP MANAGEMENT</a>
-                {% endif %}
                 <a class="action-button action-button-secondary" href="{{ url_for('neostaffing.people_attendance') }}">ATTENDANCE</a>
             </header>
 
-            <section class="neostaffing-people-workspace" aria-label="NeoStaffing people workspace">
-                <aside class="neostaffing-data-card neostaffing-people-filter-panel">
+            <section class="neostaffing-data-card neostaffing-people-scope-panel" aria-label="People scope selector">
+                <div class="neostaffing-panel-heading">
                     <h2>SELECT SCOPE</h2>
-                    <form id="people-filter-form" class="operation-form neostaffing-people-filter-form" method="get">
+                    <span>{{ counts.shown }} / {{ counts.total }} SHOWN</span>
+                </div>
+                <form id="people-filter-form" class="operation-form neostaffing-people-scope-form" method="get">
+                    <div class="neostaffing-people-scope-row">
                         <label><span>Sort</span>
                             <select name="sort_id">
-                                <option value="">All Sorts</option>
+                                <option value="">Select Sort</option>
                                 {% for sort in people.sorts %}
                                 <option value="{{ sort.id }}" {% if filters.sort_id|string == sort.id|string %}selected{% endif %}>{{ sort.name }}</option>
                                 {% endfor %}
@@ -65,15 +52,15 @@
                         </label>
                         <label><span>Operation</span>
                             <select name="operation_id">
-                                <option value="">Auto</option>
+                                <option value="">Select Operation</option>
                                 {% for operation in people.operations %}
                                 <option value="{{ operation.id }}" {% if filters.operation_id|string == operation.id|string %}selected{% endif %}>{{ unit_path(operation) }}</option>
                                 {% endfor %}
                             </select>
                         </label>
-                        <label><span>Department</span>
+                        <label><span>Department / Direct Work Area</span>
                             <select name="department_id">
-                                <option value="">All Departments</option>
+                                <option value="">Any Department</option>
                                 {% for department in people.departments %}
                                 <option value="{{ department.id }}" {% if filters.department_id|string == department.id|string %}selected{% endif %}>{{ department.name }}</option>
                                 {% endfor %}
@@ -81,12 +68,14 @@
                         </label>
                         <label><span>Work Area</span>
                             <select name="work_area_id">
-                                <option value="">All Work Areas</option>
+                                <option value="">Any Work Area</option>
                                 {% for work_area in people.work_areas %}
                                 <option value="{{ work_area.id }}" {% if filters.work_area_id|string == work_area.id|string %}selected{% endif %}>{{ work_area.name }}</option>
                                 {% endfor %}
                             </select>
                         </label>
+                    </div>
+                    <div class="neostaffing-people-refine-row">
                         <label><span>Classification</span>
                             <select name="classification">
                                 <option value="">All</option>
@@ -103,7 +92,6 @@
                                 {% endfor %}
                             </select>
                         </label>
-                        <input type="hidden" name="active" value="{{ filters.active }}">
                         <label><span>Assignment</span>
                             <select name="assignment_status">
                                 <option value="">All</option>
@@ -119,36 +107,70 @@
                                 <option value="all" {% if filters.per_page == "all" %}selected{% endif %}>All</option>
                             </select>
                         </label>
+                        <input type="hidden" name="active" value="{{ filters.active }}">
                         <input type="hidden" name="leadership_only" value="{{ filters.leadership_only }}">
-                        <button type="submit">APPLY FILTERS</button>
-                    </form>
-                    <section class="neostaffing-selected-scope">
-                        <h2>SELECTED SCOPE</h2>
-                        {% if selected_scope %}
-                        <strong>{{ selected_scope.name }}</strong>
-                        <span>{{ unit_path(selected_scope) }}</span>
-                        <div class="neostaffing-card-actions">
-                            {% if can_edit_people %}
-                            <a class="table-row-button" href="{{ url_for('neostaffing.people_management') }}">ADD PERSON</a>
-                            {% endif %}
-                            {% if can_assign_management %}
-                            <a class="table-row-button" href="{{ url_for('neostaffing.org_chart', unit_id=selected_scope.id) }}#management-editor">ASSIGN MANAGEMENT</a>
-                            {% endif %}
-                        </div>
-                        {% else %}
-                        <p class="muted">Select a Sort, Operation, Department, or Work Area.</p>
+                        <button type="submit">APPLY</button>
+                    </div>
+                </form>
+                <section class="neostaffing-selected-scope">
+                    <h2>SELECTED SCOPE</h2>
+                    {% if selected_scope %}
+                    <strong>{{ selected_scope.name }}</strong>
+                    <span>{{ unit_path(selected_scope) }}</span>
+                    <div class="neostaffing-card-actions">
+                        {% if can_edit_people %}
+                        <details class="neostaffing-inline-editor">
+                            <summary class="table-row-button">ADD PERSON</summary>
+                            <form class="operation-form neostaffing-people-form" method="post" action="{{ url_for('neostaffing.create_person') }}">
+                                {{ preserve_people_filters(filters) }}
+                                <input type="hidden" name="active" value="1">
+                                {% if people.selected_work_area %}
+                                <input type="hidden" name="initial_work_area_unit_id" value="{{ people.selected_work_area.id }}">
+                                {% endif %}
+                                <label><span>Employee ID</span><input name="employee_id" required></label>
+                                <label><span>First Name</span><input name="first_name" required></label>
+                                <label><span>Last Name</span><input name="last_name" required></label>
+                                <label><span>Seniority Date</span><input type="date" name="seniority_date" required></label>
+                                <label><span>Phone</span><input name="phone_number"></label>
+                                <label><span>Classification</span>
+                                    <select name="classification" required>
+                                        {% for value, label in classification_choices %}
+                                        <option value="{{ value }}">{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </label>
+                                <label><span>Employee Status</span>
+                                    <select name="employee_status" required>
+                                        {% for value, label in employee_status_choices %}
+                                        <option value="{{ value }}">{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </label>
+                                {% if not people.selected_work_area %}
+                                <label><span>Initial Work Area</span>
+                                    <select name="initial_work_area_unit_id">
+                                        <option value="">Unassigned</option>
+                                        {% for work_area in work_areas %}
+                                        <option value="{{ work_area.id }}">{{ unit_path(work_area) }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </label>
+                                {% endif %}
+                                <button type="submit">SAVE PERSON</button>
+                            </form>
+                        </details>
                         {% endif %}
-                    </section>
-                    <div class="neostaffing-people-tree">
-                        <h2>HIERARCHY</h2>
-                        {% if people.hierarchy %}
-                        {{ render_tree(people.hierarchy) }}
-                        {% else %}
-                        <p class="muted">Build hierarchy in App Management.</p>
+                        {% if can_assign_management %}
+                        <a class="table-row-button" href="{{ url_for('neostaffing.org_chart', unit_id=selected_scope.id) }}#management-editor">ASSIGN MANAGEMENT</a>
                         {% endif %}
                     </div>
-                </aside>
+                    {% else %}
+                    <p class="muted">Select a Sort, Operation, Department, or Work Area.</p>
+                    {% endif %}
+                </section>
+            </section>
 
+            <section class="neostaffing-people-workspace" aria-label="NeoStaffing people workspace">
                 <article class="neostaffing-data-card neostaffing-people-list-panel">
                     <div class="neostaffing-panel-heading">
                         <h2>ROSTER</h2>
@@ -156,9 +178,7 @@
                     </div>
                     {% if can_bulk_people %}
                     <form class="neostaffing-people-bulk-form" method="post" action="{{ url_for('neostaffing.people_bulk_work_area') }}">
-                        {% for key, value in filters.items() %}
-                        <input type="hidden" name="{{ key }}" value="{{ value }}">
-                        {% endfor %}
+                        {{ preserve_people_filters(filters) }}
                         <div class="neostaffing-people-bulk-panel" data-neostaffing-bulk-panel>
                             <label class="neostaffing-people-select-all">
                                 <input type="checkbox" data-neostaffing-select-all-visible>
@@ -224,7 +244,7 @@
                         </div>
                         {% endif %}
                         {% else %}
-                        <p class="muted">No people match the selected filters.</p>
+                        <p class="muted">No people match the selected scope.</p>
                         {% endfor %}
                     </div>
                     {% if can_bulk_people %}
@@ -278,6 +298,35 @@
                         <div><dt>Department</dt><dd>{{ selected.department.name if selected.department else "-" }}</dd></div>
                         <div><dt>Operation</dt><dd>{{ selected.operation.name if selected.operation else "-" }}</dd></div>
                     </dl>
+                    {% if can_edit_people %}
+                    <div class="neostaffing-detail-section">
+                        <h3>EDIT PERSON</h3>
+                        <form class="operation-form neostaffing-compact-form" method="post" action="{{ url_for('neostaffing.update_person', person_id=person.id) }}">
+                            {{ preserve_people_filters(filters, include_person=True) }}
+                            <label><span>Employee ID</span><input name="employee_id" value="{{ person.employee_id }}" required></label>
+                            <label><span>First Name</span><input name="first_name" value="{{ person.first_name }}" required></label>
+                            <label><span>Last Name</span><input name="last_name" value="{{ person.last_name }}" required></label>
+                            <label><span>Seniority Date</span><input type="date" name="seniority_date" value="{{ person.seniority_date.isoformat() }}" required></label>
+                            <label><span>Phone</span><input name="phone_number" value="{{ person.phone_number or '' }}"></label>
+                            <label><span>Classification</span>
+                                <select name="classification" required>
+                                    {% for value, label in classification_choices %}
+                                    <option value="{{ value }}" {% if person.classification == value %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            <label><span>Employee Status</span>
+                                <select name="employee_status" required>
+                                    {% for value, label in employee_status_choices %}
+                                    <option value="{{ value }}" {% if person.employee_status == value %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            <input type="hidden" name="active" value="{{ 1 if person.active else 0 }}">
+                            <button type="submit">SAVE PERSON</button>
+                        </form>
+                    </div>
+                    {% endif %}
                     <div class="neostaffing-detail-section">
                         <h3>CURRENT WORK ASSIGNMENT</h3>
                         {% if selected.work_area %}
@@ -298,24 +347,12 @@
                         <p class="muted">No active leadership assignments.</p>
                         {% endif %}
                     </div>
-                    <div class="neostaffing-card-actions">
-                        {% if can_edit_people %}
-                        <a class="action-button" href="{{ url_for('neostaffing.people_management', search=person.employee_id) }}">OPEN IN APP MANAGEMENT</a>
-                        {% else %}
-                        <button class="action-button" type="button" disabled>APP MANAGEMENT LOCKED</button>
-                        {% endif %}
-                        {% if selected.seniority_operation %}
-                        <a class="action-button action-button-secondary" href="{{ url_for('neostaffing.seniority', operation_id=selected.seniority_operation.id, search=person.employee_id, include_management='1') }}">VIEW SENIORITY POSITION</a>
-                        {% endif %}
-                    </div>
                     {% if can_edit_people %}
                     <div class="neostaffing-detail-section">
-                        <h3>QUICK WORK AREA</h3>
+                        <h3>MOVE PERSON</h3>
                         {% if person.classification in ["part_time", "full_time_combo"] %}
                         <form class="operation-form neostaffing-compact-form" method="post" action="{{ url_for('neostaffing.people_assign_work_area', person_id=person.id) }}">
-                            {% for key, value in filters.items() %}
-                            <input type="hidden" name="{{ key }}" value="{{ value }}">
-                            {% endfor %}
+                            {{ preserve_people_filters(filters, include_person=True) }}
                             <label><span>Work Area</span>
                                 <select name="work_area_unit_id" required>
                                     {% for work_area in work_areas %}
@@ -323,19 +360,30 @@
                                     {% endfor %}
                                 </select>
                             </label>
-                            <button type="submit">SAVE ASSIGNMENT</button>
+                            <button type="submit">SAVE WORK AREA</button>
                         </form>
                         {% if selected.work_area %}
                         <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.people_clear_work_area', person_id=person.id) }}">
-                            {% for key, value in filters.items() %}
-                            <input type="hidden" name="{{ key }}" value="{{ value }}">
-                            {% endfor %}
+                            {{ preserve_people_filters(filters, include_person=True) }}
                             <button class="table-row-button" type="submit">CLEAR WORK AREA</button>
                         </form>
                         {% endif %}
                         {% else %}
                         <p class="muted">Work-area assignment is only for part time and full time combo employees.</p>
                         {% endif %}
+                    </div>
+                    <div class="neostaffing-detail-section">
+                        <h3>REMOVE PERSON</h3>
+                        <div class="neostaffing-card-actions">
+                            <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.toggle_person_active', person_id=person.id) }}">
+                                {{ preserve_people_filters(filters, include_person=True) }}
+                                <button class="table-row-button" type="submit">{{ "DEACTIVATE" if person.active else "ACTIVATE" }}</button>
+                            </form>
+                            <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.delete_person', person_id=person.id) }}">
+                                {{ preserve_people_filters(filters) }}
+                                <button class="table-row-button" type="submit">DELETE PERSON</button>
+                            </form>
+                        </div>
                     </div>
                     {% endif %}
                     {% else %}

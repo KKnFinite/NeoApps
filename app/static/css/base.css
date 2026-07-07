@@ -9242,7 +9242,7 @@ body.blueprint-neostaffing {
 
 .neostaffing-people-workspace {
     display: grid;
-    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(240px, 300px);
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 310px);
     gap: 14px;
 }
 
@@ -9258,6 +9258,56 @@ body.blueprint-neostaffing {
 .neostaffing-people-filter-form {
     display: grid;
     gap: 10px;
+}
+
+.neostaffing-people-scope-panel {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.neostaffing-people-scope-form {
+    display: grid;
+    gap: 10px;
+}
+
+.neostaffing-people-scope-row,
+.neostaffing-people-refine-row {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+}
+
+.neostaffing-people-scope-row {
+    grid-template-columns: repeat(4, minmax(150px, 1fr));
+}
+
+.neostaffing-people-refine-row {
+    grid-template-columns: repeat(4, minmax(130px, 0.8fr)) auto;
+    align-items: end;
+}
+
+.neostaffing-inline-editor {
+    min-width: min(100%, 720px);
+}
+
+.neostaffing-inline-editor summary {
+    cursor: pointer;
+    list-style: none;
+}
+
+.neostaffing-inline-editor summary::-webkit-details-marker {
+    display: none;
+}
+
+.neostaffing-inline-editor[open] {
+    display: grid;
+    gap: 10px;
+    width: 100%;
+    padding: 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.24);
+    border-radius: 8px;
+    background: rgba(2, 8, 12, 0.62);
 }
 
 .neostaffing-toggle-field {
@@ -9568,6 +9618,11 @@ body.blueprint-neostaffing {
         grid-template-columns: 1fr;
     }
 
+    .neostaffing-people-scope-row,
+    .neostaffing-people-refine-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .neostaffing-seniority-card {
         grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr);
     }
@@ -9746,6 +9801,11 @@ body.blueprint-neostaffing {
     }
 
     .neostaffing-people-card {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-people-scope-row,
+    .neostaffing-people-refine-row {
         grid-template-columns: 1fr;
     }
 
