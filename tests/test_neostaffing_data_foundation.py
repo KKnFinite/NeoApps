@@ -244,17 +244,33 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
             {"unit_type": "work_area", "name": "WBM", "parent_id": department.id}
         )
         part_time_supervisor = self._person("E300", "part_time_supervisor")
+        second_part_time_supervisor = self._person("E305", "part_time_supervisor")
         full_time_supervisor = self._person("E301", "full_time_supervisor")
         specialist = self._person("E302", "full_time_specialist")
         manager = self._person("E303", "manager")
         division_manager = self._person("E304", "division_manager")
+        unlinked_manager = staffing_service.create_person(
+            {
+                "employee_id": "E306",
+                "first_name": "No",
+                "last_name": "Account",
+                "seniority_date": "2018-01-01",
+                "classification": "manager",
+            }
+        )
 
         first = staffing_service.create_leadership_assignment(part_time_supervisor, work_area)
         second = staffing_service.create_leadership_assignment(part_time_supervisor, second_work_area)
+        third = staffing_service.create_leadership_assignment(second_part_time_supervisor, work_area)
         self.assertEqual(first.leadership_level, "work_area")
         self.assertEqual(second.leadership_level, "work_area")
+        self.assertEqual(third.leadership_level, "work_area")
         self.assertEqual(
             StaffingLeadershipAssignment.query.filter_by(person_id=part_time_supervisor.id).count(),
+            2,
+        )
+        self.assertEqual(
+            StaffingLeadershipAssignment.query.filter_by(unit_id=work_area.id, leadership_level="work_area").count(),
             2,
         )
         self.assertEqual(
@@ -280,6 +296,9 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "already exists"):
             staffing_service.create_leadership_assignment(part_time_supervisor, work_area)
+
+        with self.assertRaisesRegex(ValueError, "matching NeoApps user account"):
+            staffing_service.create_leadership_assignment(unlinked_manager, operation)
 
         with self.assertRaisesRegex(ValueError, "cannot lead"):
             staffing_service.create_leadership_assignment(manager, work_area)
@@ -308,6 +327,7 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         )
         self.assertFalse(employee.work_assignment.active)
 
+        self._linked_user_for_person(employee)
         staffing_service.create_leadership_assignment(employee, operation)
         staffing_service.update_person(
             employee,
@@ -717,15 +737,9 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
             "2018-01-01",
         )
         staffing_service.create_leadership_assignment(supervisor, work_area)
-        user = User(
-            username="ptsup",
-            employee_id="M100",
-            role="watcher",
-            password_hash="x",
-            is_management=True,
-            management_level="part_time_supervisor",
-        )
-        db.session.add(user)
+        user = staffing_service.linked_user_for_person(supervisor)
+        user.is_management = True
+        user.management_level = "part_time_supervisor"
         db.session.flush()
 
         context = staffing_service.management_attendance_context_for_user(user)
@@ -784,7 +798,7 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         return sort, operation, department, work_area
 
     def _person(self, employee_id, classification):
-        return staffing_service.create_person(
+        person = staffing_service.create_person(
             {
                 "employee_id": employee_id,
                 "first_name": "Test",
@@ -793,9 +807,12 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
                 "classification": classification,
             }
         )
+        if classification in staffing_service.MANAGEMENT_CLASSIFICATIONS:
+            self._linked_user_for_person(person)
+        return person
 
     def _person_with_name(self, employee_id, classification, first_name, last_name, seniority_date):
-        return staffing_service.create_person(
+        person = staffing_service.create_person(
             {
                 "employee_id": employee_id,
                 "first_name": first_name,
@@ -804,6 +821,26 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
                 "classification": classification,
             }
         )
+        if classification in staffing_service.MANAGEMENT_CLASSIFICATIONS:
+            self._linked_user_for_person(person)
+        return person
+
+    def _linked_user_for_person(self, person):
+        user = User(
+            username=f"user_{person.employee_id.lower()}",
+            email=f"{person.employee_id.lower()}@example.com",
+            first_name=person.first_name,
+            last_name=person.last_name,
+            full_name=person.full_name,
+            employee_id=person.employee_id,
+            role="watcher",
+            is_active=True,
+            email_verified_at=datetime.utcnow(),
+        )
+        user.set_password("Password123!")
+        db.session.add(user)
+        db.session.flush()
+        return user
 
 
 if __name__ == "__main__":

@@ -236,12 +236,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "classification": "part_time_supervisor",
             }
         )
-        staffing_service.create_leadership_assignment(supervisor, work_area)
-        one_scope_user = self._user("staffing_one_scope")
-        one_scope_user.employee_id = "M100"
+        one_scope_user = self._link_user_for_person(supervisor, "staffing_one_scope")
         one_scope_user.is_management = True
         one_scope_user.management_level = "part_time_supervisor"
         self._grant_app_access(one_scope_user, "neostaffing", "operator")
+        staffing_service.create_leadership_assignment(supervisor, work_area)
         db.session.commit()
 
         self._login(one_scope_user.username)
@@ -570,7 +569,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             b"PEOPLE CONTROL DECK",
         ):
             self.assertNotIn(stale_label, response.data)
-        self.assertIn(b"SELECT WORK AREA", response.data)
+        self.assertIn(b"Select Sort", response.data)
         self.assertIn(b"ADD EMPLOYEE", response.data)
         self.assertIn(b"ROSTER", response.data)
         self.assertIn(b"Employee Status", response.data)
@@ -592,6 +591,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "classification": "part_time_supervisor",
             }
         )
+        self._link_user_for_person(supervisor, "staffing_mg100")
         db.session.commit()
 
         simulator_client = self._logged_in_client(simulator.username)
@@ -642,7 +642,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
 
         self.assertEqual(people_page.status_code, 200)
-        self.assertIn(b"SELECT WORK AREA", people_page.data)
+        self.assertIn(b"Select Sort", people_page.data)
         self.assertEqual(created.status_code, 302)
         self.assertEqual(updated.status_code, 302)
         self.assertEqual(db.session.get(StaffingPerson, person.id).last_name, "Updated")
@@ -703,7 +703,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         people_page = self.client.get(f"/neostaffing/people?work_area_id={work_area.id}")
         self.assertEqual(people_page.status_code, 200)
-        self.assertIn(b"SELECT WORK AREA", people_page.data)
+        self.assertIn(b"Select Sort", people_page.data)
         self.assertIn(b"ADD EMPLOYEE", people_page.data)
         self.assertIn(b"ROSTER", people_page.data)
         self.assertIn(b"neostaffing-people-card", people_page.data)
@@ -835,6 +835,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "classification": "part_time_supervisor",
             }
         )
+        self._link_user_for_person(supervisor, "staffing_oc200")
         staffing_service.assign_work_area(employee, work_area)
         staffing_service.create_leadership_assignment(supervisor, work_area)
         db.session.commit()
@@ -865,6 +866,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "classification": "part_time_supervisor",
             }
         )
+        self._link_user_for_person(supervisor, "staffing_og200")
         db.session.commit()
 
         watcher_page = self._logged_in_client(watcher.username).get(
@@ -912,7 +914,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"+ People", simulator_page.data)
         self.assertIn(b"+ PT Sup", simulator_page.data)
         self.assertIn(b"Add/Assign People", simulator_page.data)
-        self.assertIn(b"No User Link", simulator_page.data)
+        self.assertIn(b"Linked User", simulator_page.data)
         self.assertNotIn(b"STRUCTURE ACTIONS", simulator_page.data)
         self.assertNotIn(b"SAVE UNIT", simulator_page.data)
         self.assertEqual(assigned.status_code, 302)
@@ -1038,9 +1040,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"People", response.data)
-        self.assertIn(b"SELECT WORK AREA", response.data)
-        self.assertIn(b"Step 1 Select Sort", response.data)
-        self.assertIn(b"STEP 5 ROSTER / ACTIONS", response.data)
+        self.assertIn(b"Select Sort", response.data)
+        self.assertNotIn(b"Step 1", response.data)
+        self.assertNotIn(b"Step 2", response.data)
+        self.assertNotIn(b"Select Operation", response.data)
+        self.assertIn(b"SELECT A UNIT", response.data)
         self.assertIn(b"mobile-bottom-nav", response.data)
         self.assertNotIn(b"neostaffing-mobile-tabs", response.data)
         self.assertNotIn(b'action-button action-button-secondary" href="/neostaffing/attendance"', response.data)
@@ -1053,6 +1057,80 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"<span>Status</span>", response.data)
         self.assertNotIn(b"Leadership Only", response.data)
         self.assertIn(b'href="/neostaffing/people"', dashboard.data)
+
+    def test_people_drilldown_reveals_one_unit_level_at_a_time(self):
+        user = self._user("staffing_people_drilldown")
+        self._grant_app_access(user, "neostaffing", "master")
+        sort, operation, department, work_area = self._staffing_hierarchy()
+        direct_work_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "Load Planning", "parent_id": operation.id}
+        )
+        employee = staffing_service.create_person(
+            {
+                "employee_id": "PD100",
+                "first_name": "Direct",
+                "last_name": "Worker",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+            }
+        )
+        staffing_service.assign_work_area(employee, direct_work_area)
+        manager = staffing_service.create_person(
+            {
+                "employee_id": "PD200",
+                "first_name": "Linked",
+                "last_name": "Manager",
+                "seniority_date": "2018-01-01",
+                "classification": "manager",
+            }
+        )
+        self._link_user_for_person(manager, "staffing_pd200")
+        db.session.commit()
+        self._login(user.username)
+
+        initial = self.client.get("/neostaffing/people")
+        by_sort = self.client.get(f"/neostaffing/people?sort_id={sort.id}")
+        by_operation = self.client.get(
+            f"/neostaffing/people?sort_id={sort.id}&operation_id={operation.id}"
+        )
+        by_department = self.client.get(
+            f"/neostaffing/people?sort_id={sort.id}&operation_id={operation.id}&department_id={department.id}"
+        )
+        by_direct_work_area = self.client.get(
+            f"/neostaffing/people?sort_id={sort.id}&operation_id={operation.id}&work_area_id={direct_work_area.id}"
+        )
+
+        self.assertEqual(initial.status_code, 200)
+        self.assertIn(b"Select Sort", initial.data)
+        self.assertNotIn(b"Select Operation", initial.data)
+        self.assertNotIn(b"Select Department", initial.data)
+        self.assertNotIn(b"Step 1", initial.data)
+        self.assertNotIn(b"ADD EMPLOYEE", initial.data)
+
+        self.assertEqual(by_sort.status_code, 200)
+        self.assertIn(b"Select Operation", by_sort.data)
+        self.assertNotIn(b"Select Department", by_sort.data)
+        self.assertIn(b"ASSIGN MANAGEMENT", by_sort.data)
+        self.assertNotIn(b"ADD EMPLOYEE", by_sort.data)
+
+        self.assertEqual(by_operation.status_code, 200)
+        self.assertIn(b"Select Department", by_operation.data)
+        self.assertIn(b"Select Direct Work Area", by_operation.data)
+        self.assertNotIn(b"ADD EMPLOYEE", by_operation.data)
+
+        self.assertEqual(by_department.status_code, 200)
+        self.assertIn(b"Select Work Area", by_department.data)
+        self.assertNotIn(b"ADD EMPLOYEE", by_department.data)
+
+        self.assertEqual(by_direct_work_area.status_code, 200)
+        self.assertIn(b"ADD EMPLOYEE", by_direct_work_area.data)
+        self.assertIn(b"ASSIGN MANAGEMENT", by_direct_work_area.data)
+        self.assertIn(b"LOAD ROSTER", by_direct_work_area.data)
+        self.assertIn(b"PD100", by_direct_work_area.data)
+        self.assertIn(b"Load Planning", by_direct_work_area.data)
+        self.assertIn(b'<select name="person_id"', by_direct_work_area.data)
+        self.assertNotIn(b"management_name", by_direct_work_area.data)
+        self.assertNotIn(b"/neostaffing/people/attendance", by_direct_work_area.data)
 
     def test_people_view_blocks_user_without_neostaffing_access(self):
         user = self._user("staffing_people_blocked")
@@ -1098,6 +1176,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "classification": "part_time_supervisor",
             }
         )
+        self._link_user_for_person(supervisor, "staffing_e812")
         staffing_service.assign_work_area(avery, work_area)
         staffing_service.assign_work_area(morgan, second_work_area)
         staffing_service.create_leadership_assignment(supervisor, work_area)
@@ -1123,7 +1202,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"EDIT PERSON", response.data)
         self.assertIn(b"MOVE PERSON", response.data)
         self.assertIn(b"REMOVE PERSON", response.data)
-        self.assertIn(b"WORK AREA ROSTER", response.data)
+        self.assertIn(b"ROSTER", response.data)
         self.assertIn(b"ADD EMPLOYEE", response.data)
         self.assertNotIn(b"OPEN IN APP MANAGEMENT", response.data)
         self.assertIn(b"Employee Status", response.data)
@@ -1178,7 +1257,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         filtered_response = self.client.get(f"/neostaffing/people?work_area_id={work_area.id}&search=assigned")
 
         self.assertEqual(assigned_response.status_code, 200)
-        self.assertIn(b"WORK AREA ROSTER", assigned_response.data)
+        self.assertIn(b"ROSTER", assigned_response.data)
         self.assertIn(b"PF100", assigned_response.data)
         self.assertIn(b"PF102", assigned_response.data)
         self.assertNotIn(b"PF101", assigned_response.data)
@@ -1559,6 +1638,24 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             follow_redirects=False,
         )
         return client
+
+    def _link_user_for_person(self, person, username=None):
+        username = username or f"user_{person.employee_id.lower()}"
+        user = User(
+            username=username,
+            email=f"{username}@example.com",
+            first_name=person.first_name,
+            last_name=person.last_name,
+            full_name=person.full_name,
+            employee_id=person.employee_id,
+            role="watcher",
+            is_active=True,
+            email_verified_at=datetime.utcnow(),
+        )
+        user.set_password("Password123!")
+        db.session.add(user)
+        db.session.flush()
+        return user
 
     def _staffing_hierarchy(self):
         sort = staffing_service.create_unit({"unit_type": "sort", "name": "Night Sort"})

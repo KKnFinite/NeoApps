@@ -155,6 +155,8 @@ def people():
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
         employee_status_choices=staffing_service.employee_status_choices(),
         employee_status_labels=staffing_service.EMPLOYEE_STATUS_LABELS,
+        leadership_level_labels=staffing_service.LEADERSHIP_LEVEL_LABELS,
+        unit_type_labels=staffing_service.UNIT_TYPE_LABELS,
         work_areas=staffing_service.work_area_units(),
         unit_path=staffing_service.unit_path,
         people=context,
@@ -342,6 +344,7 @@ def _render_org_chart():
         hierarchy=context["tree"],
         units=context["units"],
         people=staffing_service.people_query(active="active").all(),
+        management_candidates=staffing_service.management_candidates_for_unit(context["selected_unit"]),
         sorts=staffing_service.selectable_parent_units("operation"),
         operations=staffing_service.selectable_parent_units("department"),
         departments=staffing_service.units_by_type("department"),
@@ -525,8 +528,29 @@ def management_assignments():
 @neostaffing_app_required(permission_key=MANAGEMENT_ASSIGN_PERMISSION)
 def create_management_assignment():
     return_unit_id = request.form.get("return_unit_id", "").strip()
-    redirect_endpoint = "neostaffing.org_chart" if return_unit_id else "neostaffing.management_assignments"
-    redirect_values = {"unit_id": return_unit_id} if return_unit_id else None
+    return_people = request.form.get("return_people", "").strip()
+    if return_people:
+        redirect_endpoint = "neostaffing.people"
+        redirect_values = {
+            key: request.form.get(key, "").strip()
+            for key in (
+                "sort_id",
+                "operation_id",
+                "department_id",
+                "work_area_id",
+                "classification",
+                "employee_status",
+                "active",
+                "assignment_status",
+                "search",
+                "page",
+                "per_page",
+            )
+            if request.form.get(key, "").strip()
+        }
+    else:
+        redirect_endpoint = "neostaffing.org_chart" if return_unit_id else "neostaffing.management_assignments"
+        redirect_values = {"unit_id": return_unit_id} if return_unit_id else None
     return _mutate(
         lambda: staffing_service.create_leadership_assignment(
             _get_person(request.form.get("person_id")),

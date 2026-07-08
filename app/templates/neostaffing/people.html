@@ -2,10 +2,6 @@
 
 {% block title %}NeoStaffing People{% endblock %}
 
-{% macro query_without_person() -%}
-    sort_id={{ people.filters.sort_id }}&operation_id={{ people.filters.operation_id }}&department_id={{ people.filters.department_id }}&work_area_id={{ people.filters.work_area_id }}&classification={{ people.filters.classification }}&employee_status={{ people.filters.employee_status }}&active={{ people.filters.active }}&assignment_status={{ people.filters.assignment_status }}&per_page={{ people.filters.per_page }}&leadership_only={{ people.filters.leadership_only }}&search={{ people.filters.search|urlencode }}
-{%- endmacro %}
-
 {% macro preserve_people_filters(filters, include_person=False) -%}
     {% for key, value in filters.items() %}
     {% if include_person or key != "person_id" %}
@@ -14,11 +10,21 @@
     {% endfor %}
 {%- endmacro %}
 
+{% macro people_query(filters, person_id=None) -%}
+sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department_id={{ filters.department_id }}&work_area_id={{ filters.work_area_id }}&classification={{ filters.classification }}&employee_status={{ filters.employee_status }}&active={{ filters.active }}&assignment_status={{ filters.assignment_status }}&per_page={{ filters.per_page }}&leadership_only={{ filters.leadership_only }}&search={{ filters.search|urlencode }}{% if person_id %}&person_id={{ person_id }}{% endif %}
+{%- endmacro %}
+
+{% macro hidden_scope(filters) -%}
+    {% if filters.sort_id %}<input type="hidden" name="sort_id" value="{{ filters.sort_id }}">{% endif %}
+    {% if filters.operation_id %}<input type="hidden" name="operation_id" value="{{ filters.operation_id }}">{% endif %}
+    {% if filters.department_id %}<input type="hidden" name="department_id" value="{{ filters.department_id }}">{% endif %}
+    {% if filters.work_area_id %}<input type="hidden" name="work_area_id" value="{{ filters.work_area_id }}">{% endif %}
+{%- endmacro %}
+
 {% block content %}
-{% set counts = people.counts %}
 {% set filters = people.filters %}
 {% set selected = people.selected_person %}
-{% set selected_scope = people.selected_work_area or people.selected_department or people.selected_operation or people.selected_sort %}
+{% set selected_scope = people.selected_unit %}
 {% set work_area_selected = people.selected_work_area %}
 <section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="neostaffing-people-title">
     <div class="neostaffing-dashboard-shell">
@@ -32,45 +38,8 @@
             </header>
 
             <section class="neostaffing-people-workspace neostaffing-people-workarea-layout" aria-label="NeoStaffing people work area roster">
-                <aside class="neostaffing-data-card neostaffing-people-scope-panel" aria-label="People scope selector">
-                    <div class="neostaffing-panel-heading">
-                        <h2>SELECT WORK AREA</h2>
-                    </div>
-                    <form id="people-filter-form" class="operation-form neostaffing-people-scope-form" method="get">
-                        <div class="neostaffing-people-scope-row" aria-label="People scope steps">
-                            <label><span>Step 1 Select Sort</span>
-                                <select name="sort_id">
-                                    <option value="">Select Sort</option>
-                                    {% for sort in people.sorts %}
-                                    <option value="{{ sort.id }}" {% if filters.sort_id|string == sort.id|string %}selected{% endif %}>{{ sort.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </label>
-                            <label><span>Step 2 Select Operation</span>
-                                <select name="operation_id">
-                                    <option value="">Select Operation</option>
-                                    {% for operation in people.operations %}
-                                    <option value="{{ operation.id }}" {% if filters.operation_id|string == operation.id|string %}selected{% endif %}>{{ operation.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </label>
-                            <label><span>Step 3 Department or Direct Work Area</span>
-                                <select name="department_id">
-                                    <option value="">Department Optional</option>
-                                    {% for department in people.departments %}
-                                    <option value="{{ department.id }}" {% if filters.department_id|string == department.id|string %}selected{% endif %}>{{ department.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </label>
-                            <label><span>Step 4 Select Work Area</span>
-                                <select name="work_area_id">
-                                    <option value="">Select Work Area</option>
-                                    {% for work_area in people.work_areas %}
-                                    <option value="{{ work_area.id }}" {% if filters.work_area_id|string == work_area.id|string %}selected{% endif %}>{{ work_area.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </label>
-                        </div>
+                <aside class="neostaffing-people-drilldown-panel" aria-label="People unit selector">
+                    <form id="people-scope-form" class="neostaffing-people-drilldown-form" method="get">
                         <input type="hidden" name="classification" value="{{ filters.classification }}">
                         <input type="hidden" name="employee_status" value="{{ filters.employee_status }}">
                         <input type="hidden" name="active" value="{{ filters.active }}">
@@ -78,70 +47,169 @@
                         <input type="hidden" name="per_page" value="100">
                         <input type="hidden" name="leadership_only" value="{{ filters.leadership_only }}">
                         <input type="hidden" name="search" value="{{ filters.search }}">
-                        <button type="submit">LOAD ROSTER</button>
+
+                        <label class="neostaffing-drilldown-field">
+                            <span>Select Sort</span>
+                            <select name="sort_id" required>
+                                <option value="">Choose Sort</option>
+                                {% for sort in people.sorts %}
+                                <option value="{{ sort.id }}" {% if filters.sort_id|string == sort.id|string %}selected{% endif %}>{{ sort.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+
+                        {% if people.selected_sort %}
+                        <label class="neostaffing-drilldown-field">
+                            <span>Select Operation</span>
+                            <select name="operation_id">
+                                <option value="">Choose Operation</option>
+                                {% for operation in people.operations %}
+                                <option value="{{ operation.id }}" {% if filters.operation_id|string == operation.id|string %}selected{% endif %}>{{ operation.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        {% endif %}
+
+                        {% if people.selected_operation and not people.selected_work_area %}
+                            {% if not people.selected_department %}
+                            <label class="neostaffing-drilldown-field">
+                                <span>Select Department</span>
+                                <select name="department_id">
+                                    <option value="">No Department Selected</option>
+                                    {% for department in people.departments %}
+                                    <option value="{{ department.id }}">{{ department.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            <label class="neostaffing-drilldown-field">
+                                <span>Select Direct Work Area</span>
+                                <select name="work_area_id">
+                                    <option value="">No Direct Work Area Selected</option>
+                                    {% for work_area in people.direct_work_areas %}
+                                    <option value="{{ work_area.id }}">{{ work_area.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            {% else %}
+                            <input type="hidden" name="department_id" value="{{ people.selected_department.id }}">
+                            <label class="neostaffing-drilldown-field">
+                                <span>Select Work Area</span>
+                                <select name="work_area_id">
+                                    <option value="">Choose Work Area</option>
+                                    {% for work_area in people.department_work_areas %}
+                                    <option value="{{ work_area.id }}" {% if filters.work_area_id|string == work_area.id|string %}selected{% endif %}>{{ work_area.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            {% endif %}
+                        {% endif %}
+
+                        {% if people.selected_work_area %}
+                        <input type="hidden" name="work_area_id" value="{{ people.selected_work_area.id }}">
+                        {% if people.selected_department %}
+                        <input type="hidden" name="department_id" value="{{ people.selected_department.id }}">
+                        {% endif %}
+                        {% endif %}
+
+                        <div class="neostaffing-people-action-row">
+                            <button type="submit">LOAD ROSTER</button>
+                            {% if people.selected_sort %}
+                            <a class="table-row-button" href="{{ url_for('neostaffing.people') }}">CHANGE SORT</a>
+                            {% endif %}
+                        </div>
                     </form>
 
-                    <div class="neostaffing-people-scope-status">
-                        {% if selected_scope %}
-                        <span>Selected Scope</span>
+                    {% if selected_scope %}
+                    <div class="neostaffing-people-selected-path">
+                        <span>{{ unit_type_labels[selected_scope.unit_type] }}</span>
                         <strong>{{ selected_scope.name }}</strong>
                         <em>{{ unit_path(selected_scope) }}</em>
-                        {% else %}
-                        <span>Selected Scope</span>
-                        <strong>None</strong>
-                        <em>Choose a Work Area to load people.</em>
+                    </div>
+                    <div class="neostaffing-people-action-row">
+                        {% if can_edit_people and work_area_selected %}
+                        <details class="neostaffing-inline-editor neostaffing-people-action-details">
+                            <summary class="table-row-button">ADD EMPLOYEE</summary>
+                            <form class="operation-form neostaffing-people-form" method="post" action="{{ url_for('neostaffing.create_person') }}">
+                                {{ preserve_people_filters(filters) }}
+                                <input type="hidden" name="active" value="1">
+                                <input type="hidden" name="initial_work_area_unit_id" value="{{ work_area_selected.id }}">
+                                <label><span>Employee ID</span><input name="employee_id" required></label>
+                                <label><span>First Name</span><input name="first_name" required></label>
+                                <label><span>Last Name</span><input name="last_name" required></label>
+                                <label><span>Seniority Date</span><input type="date" name="seniority_date" required></label>
+                                <label><span>Phone</span><input name="phone_number"></label>
+                                <label><span>Classification</span>
+                                    <select name="classification" required>
+                                        {% for value, label in classification_choices %}
+                                        <option value="{{ value }}">{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </label>
+                                <label><span>Employee Status</span>
+                                    <select name="employee_status" required>
+                                        {% for value, label in employee_status_choices %}
+                                        <option value="{{ value }}">{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </label>
+                                <button type="submit">SAVE EMPLOYEE</button>
+                            </form>
+                        </details>
+                        {% endif %}
+
+                        {% if can_assign_management %}
+                        <details class="neostaffing-inline-editor neostaffing-people-action-details">
+                            <summary class="table-row-button">ASSIGN MANAGEMENT</summary>
+                            <form class="operation-form neostaffing-compact-form" method="post" action="{{ url_for('neostaffing.create_management_assignment') }}">
+                                {{ preserve_people_filters(filters) }}
+                                <input type="hidden" name="return_people" value="1">
+                                <input type="hidden" name="unit_id" value="{{ selected_scope.id }}">
+                                <input type="hidden" name="leadership_level" value="{{ selected_scope.unit_type }}">
+                                <label><span>Management Person</span>
+                                    <select name="person_id" required {% if not people.management_candidates %}disabled{% endif %}>
+                                        <option value="">Select linked management person</option>
+                                        {% for candidate in people.management_candidates %}
+                                        <option value="{{ candidate.person.id }}">{{ candidate.person.full_name }} - {{ classification_labels[candidate.person.classification] }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </label>
+                                <button type="submit" {% if not people.management_candidates %}disabled{% endif %}>SAVE MANAGEMENT</button>
+                            </form>
+                            {% if not people.management_candidates %}
+                            <p class="muted">No linked NeoApps management accounts are eligible for this unit.</p>
+                            {% endif %}
+                        </details>
                         {% endif %}
                     </div>
+                    {% endif %}
                 </aside>
 
                 <section class="neostaffing-people-roster-shell">
-                    {% if work_area_selected %}
+                    {% if selected_scope %}
                     <article class="neostaffing-data-card neostaffing-selected-scope">
                         <div class="neostaffing-panel-heading">
                             <div>
-                                <h2>WORK AREA ROSTER</h2>
-                                <strong>{{ work_area_selected.name }}</strong>
-                                <span>{{ unit_path(work_area_selected) }}</span>
+                                <h2>ROSTER</h2>
+                                <strong>{{ selected_scope.name }}</strong>
+                                <span>{{ unit_path(selected_scope) }}</span>
                             </div>
-                            {% if can_edit_people %}
-                            <details class="neostaffing-inline-editor">
-                                <summary class="table-row-button">ADD EMPLOYEE</summary>
-                                <form class="operation-form neostaffing-people-form" method="post" action="{{ url_for('neostaffing.create_person') }}">
-                                    {{ preserve_people_filters(filters) }}
-                                    <input type="hidden" name="active" value="1">
-                                    <input type="hidden" name="initial_work_area_unit_id" value="{{ work_area_selected.id }}">
-                                    <label><span>Employee ID</span><input name="employee_id" required></label>
-                                    <label><span>First Name</span><input name="first_name" required></label>
-                                    <label><span>Last Name</span><input name="last_name" required></label>
-                                    <label><span>Seniority Date</span><input type="date" name="seniority_date" required></label>
-                                    <label><span>Phone</span><input name="phone_number"></label>
-                                    <label><span>Classification</span>
-                                        <select name="classification" required>
-                                            {% for value, label in classification_choices %}
-                                            <option value="{{ value }}">{{ label }}</option>
-                                            {% endfor %}
-                                        </select>
-                                    </label>
-                                    <label><span>Employee Status</span>
-                                        <select name="employee_status" required>
-                                            {% for value, label in employee_status_choices %}
-                                            <option value="{{ value }}">{{ label }}</option>
-                                            {% endfor %}
-                                        </select>
-                                    </label>
-                                    <button type="submit">SAVE EMPLOYEE</button>
-                                </form>
-                            </details>
-                            {% endif %}
+                            <span>{{ people.counts.shown }} / {{ people.counts.total }} SHOWN</span>
                         </div>
-                    </article>
 
-                    <article class="neostaffing-data-card neostaffing-people-list-panel">
+                        {% if people.selected_unit_leadership %}
+                        <div class="neostaffing-management-list" aria-label="Assigned management">
+                            <h3>ASSIGNED MANAGEMENT</h3>
+                            {% for assignment in people.selected_unit_leadership %}
+                            <div class="neostaffing-management-row">
+                                <strong>{{ assignment.person.full_name }}</strong>
+                                <span>{{ classification_labels[assignment.person.classification] }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
                         <form id="people-refine-form" class="operation-form neostaffing-people-refine-row" method="get">
-                            <input type="hidden" name="sort_id" value="{{ filters.sort_id }}">
-                            <input type="hidden" name="operation_id" value="{{ filters.operation_id }}">
-                            <input type="hidden" name="department_id" value="{{ filters.department_id }}">
-                            <input type="hidden" name="work_area_id" value="{{ filters.work_area_id }}">
+                            {{ hidden_scope(filters) }}
                             <input type="hidden" name="active" value="{{ filters.active }}">
                             <input type="hidden" name="assignment_status" value="{{ filters.assignment_status }}">
                             <input type="hidden" name="per_page" value="100">
@@ -167,12 +235,10 @@
                             </label>
                             <button type="submit">FILTER</button>
                         </form>
+                    </article>
 
-                        <div class="neostaffing-panel-heading">
-                            <h2>ROSTER</h2>
-                            <span>{{ counts.shown }} / {{ counts.total }} SHOWN</span>
-                        </div>
-                        {% if can_bulk_people %}
+                    <article class="neostaffing-data-card neostaffing-people-list-panel">
+                        {% if can_bulk_people and work_area_selected %}
                         <form class="neostaffing-people-bulk-form" method="post" action="{{ url_for('neostaffing.people_bulk_work_area') }}">
                             {{ preserve_people_filters(filters) }}
                             <div class="neostaffing-people-bulk-panel" data-neostaffing-bulk-panel>
@@ -198,18 +264,19 @@
                                 <button type="submit">APPLY BULK ACTION</button>
                             </div>
                         {% endif %}
+
                         <div class="neostaffing-people-list" data-people-result-limit="{{ people.pagination.per_page }}">
                             {% for row in people.rows %}
                             {% set person = row.person %}
                             {% set is_selected = selected and selected.person.id == person.id %}
-                            {% if can_bulk_people %}
+                            {% if can_bulk_people and work_area_selected %}
                             <div class="neostaffing-people-selection-row">
                                 <label class="neostaffing-people-select-row">
                                     <input type="checkbox" name="person_ids" value="{{ person.id }}">
                                     <span>Select</span>
                                 </label>
                             {% endif %}
-                            <a class="neostaffing-people-card{% if not person.active %} is-inactive{% endif %}{% if is_selected %} is-selected{% endif %}" href="{{ url_for('neostaffing.people') }}?{{ query_without_person() }}&person_id={{ person.id }}">
+                            <a class="neostaffing-people-card{% if not person.active %} is-inactive{% endif %}{% if is_selected %} is-selected{% endif %}" href="{{ url_for('neostaffing.people') }}?{{ people_query(filters, person.id) }}">
                                 <div class="neostaffing-people-identity">
                                     <span>{{ person.employee_id }}</span>
                                     <strong>{{ person.last_name }}, {{ person.first_name }}</strong>
@@ -221,14 +288,15 @@
                                     <em>{{ employee_status_labels[person.employee_status] }}</em>
                                 </div>
                             </a>
-                            {% if can_bulk_people %}
+                            {% if can_bulk_people and work_area_selected %}
                             </div>
                             {% endif %}
                             {% else %}
-                            <p class="muted">No people are assigned to this Work Area.</p>
+                            <p class="muted">No people or management assignments match this unit.</p>
                             {% endfor %}
                         </div>
-                        {% if can_bulk_people %}
+
+                        {% if can_bulk_people and work_area_selected %}
                         </form>
                         <script>
                         (() => {
@@ -333,9 +401,9 @@
                         {% endif %}
                     </aside>
                     {% else %}
-                    <article class="neostaffing-data-card neostaffing-people-empty-roster">
-                        <h2>STEP 5 ROSTER / ACTIONS</h2>
-                        <p class="muted">Select a Work Area to load the roster and employee actions.</p>
+                    <article class="neostaffing-people-empty-roster">
+                        <h2>SELECT A UNIT</h2>
+                        <p class="muted">Choose a Sort, then continue through the active unit structure.</p>
                     </article>
                     {% endif %}
                 </section>

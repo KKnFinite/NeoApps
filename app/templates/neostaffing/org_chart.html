@@ -234,15 +234,18 @@
                             <input type="hidden" name="return_unit_id" value="{{ selected.id }}">
                             <input type="hidden" name="leadership_level" value="{{ selected.unit_type }}">
                             <label><span>Person</span>
-                                <select name="person_id" required>
-                                    {% for person in people %}
-                                    {% set linked_user = linked_user_for_person(person) %}
-                                    <option value="{{ person.id }}">{{ person.employee_id }} - {{ person.full_name }} / {{ classification_labels[person.classification] }} / {{ "Linked User" if linked_user else "No User Link" }}</option>
+                                <select name="person_id" required {% if not management_candidates %}disabled{% endif %}>
+                                    <option value="">Select linked management person</option>
+                                    {% for candidate in management_candidates %}
+                                    <option value="{{ candidate.person.id }}">{{ candidate.person.employee_id }} - {{ candidate.person.full_name }} / {{ classification_labels[candidate.person.classification] }} / Linked User</option>
                                     {% endfor %}
                                 </select>
                             </label>
-                            <button type="submit">ASSIGN MANAGEMENT</button>
+                            <button type="submit" {% if not management_candidates %}disabled{% endif %}>ASSIGN MANAGEMENT</button>
                         </form>
+                        {% if not management_candidates %}
+                        <p class="muted">No linked NeoApps management accounts are eligible for this unit.</p>
+                        {% endif %}
                         <div class="neostaffing-record-grid neostaffing-tree-assignment-grid">
                             {% for assignment in selected.leadership_assignments if assignment.active %}
                             {% set linked_user = linked_user_for_person(assignment.person) %}

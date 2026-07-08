@@ -9242,7 +9242,7 @@ body.blueprint-neostaffing {
 
 .neostaffing-people-workspace {
     display: grid;
-    grid-template-columns: minmax(230px, 300px) minmax(0, 1fr);
+    grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
     gap: 14px;
     align-items: start;
 }
@@ -9271,15 +9271,80 @@ body.blueprint-neostaffing {
     gap: 10px;
 }
 
+.neostaffing-people-drilldown-panel,
 .neostaffing-people-scope-panel {
     display: grid;
-    gap: 12px;
+    gap: 14px;
     align-content: start;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid rgba(var(--node-rgb), 0.18);
+    border-radius: 8px;
+    background: linear-gradient(180deg, rgba(15, 24, 32, 0.82), rgba(5, 10, 14, 0.9));
 }
 
+.neostaffing-people-drilldown-form,
 .neostaffing-people-scope-form {
     display: grid;
     gap: 10px;
+}
+
+.neostaffing-drilldown-field {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+
+.neostaffing-drilldown-field span {
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 950;
+    text-transform: uppercase;
+}
+
+.neostaffing-people-action-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.neostaffing-people-action-details {
+    min-width: 0;
+}
+
+.neostaffing-people-action-details[open] {
+    flex-basis: 100%;
+}
+
+.neostaffing-people-selected-path {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    padding: 10px;
+    border-left: 3px solid var(--node-primary);
+    background: rgba(var(--node-rgb), 0.08);
+}
+
+.neostaffing-people-selected-path span,
+.neostaffing-people-selected-path em {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-style: normal;
+    font-weight: 950;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.neostaffing-people-selected-path strong {
+    overflow: hidden;
+    color: var(--neo-bright-silver);
+    font-size: 1rem;
+    font-weight: 950;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .neostaffing-people-scope-row,
@@ -9328,6 +9393,43 @@ body.blueprint-neostaffing {
 .neostaffing-people-empty-roster {
     min-height: 220px;
     align-content: center;
+}
+
+.neostaffing-management-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.neostaffing-management-list h3 {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.neostaffing-management-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.18);
+    border-radius: 8px;
+    background: rgba(2, 8, 12, 0.48);
+}
+
+.neostaffing-management-row strong {
+    color: var(--neo-bright-silver);
+}
+
+.neostaffing-management-row span {
+    color: var(--node-primary);
+    font-size: 0.72rem;
+    font-weight: 950;
+    text-transform: uppercase;
 }
 
 .neostaffing-inline-editor {

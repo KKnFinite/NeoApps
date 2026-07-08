@@ -917,7 +917,6 @@ def seniority_context(filters=None):
 def people_context(filters=None, user=None):
     filters = filters or {}
     filters = _with_default_management_scope(filters, user)
-    has_scope_filter = _has_explicit_scope(filters)
     sorts = units_by_type("sort")
     all_operations = units_by_type("operation")
     selected_sort = _resolve_optional_unit(filters.get("sort_id"), "sort")
@@ -926,11 +925,9 @@ def people_context(filters=None, user=None):
         for operation in all_operations
         if selected_sort is None or operation.parent_id == selected_sort.id
     ]
-    selected_operation = (
-        _resolve_selected_operation(filters.get("operation_id"), operations, all_operations)
-        if has_scope_filter
-        else _resolve_optional_unit(filters.get("operation_id"), "operation")
-    )
+    selected_operation = _resolve_optional_unit(filters.get("operation_id"), "operation")
+    if selected_operation and selected_sort and selected_operation.parent_id != selected_sort.id:
+        selected_operation = None
     if selected_operation and selected_sort is None:
         selected_sort = selected_operation.parent
     selected_department = _resolve_optional_unit(filters.get("department_id"), "department")
@@ -1002,15 +999,22 @@ def people_context(filters=None, user=None):
         ),
     }
 
+    selected_unit = selected_work_area or selected_department or selected_operation or selected_sort
+
     return {
         "sorts": sorts,
         "operations": operations,
         "departments": _departments_under(selected_operation),
+        "direct_work_areas": _direct_child_work_areas(selected_operation),
+        "department_work_areas": _direct_child_work_areas(selected_department),
         "work_areas": _work_areas_under(selected_operation),
         "selected_sort": selected_sort,
         "selected_operation": selected_operation,
         "selected_department": selected_department,
         "selected_work_area": selected_work_area,
+        "selected_unit": selected_unit,
+        "selected_unit_leadership": _leadership_assignments_for_unit(selected_unit),
+        "management_candidates": management_candidates_for_unit(selected_unit),
         "rows": paginated_rows,
         "all_rows": rows,
         "counts": counts,
@@ -1067,6 +1071,36 @@ def work_area_units():
         .order_by(StaffingUnit.display_order, StaffingUnit.name)
         .all()
     )
+
+
+def management_candidates_for_unit(unit):
+    if not unit:
+        return []
+    candidates = []
+    people = (
+        StaffingPerson.query.filter(
+            StaffingPerson.active.is_(True),
+            StaffingPerson.classification.in_(MANAGEMENT_CLASSIFICATIONS),
+        )
+        .order_by(StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.employee_id)
+        .all()
+    )
+    for person in people:
+        try:
+            leadership_level = default_leadership_level_for(person, unit)
+        except ValueError:
+            continue
+        linked_user = linked_user_for_person(person)
+        if not linked_user:
+            continue
+        candidates.append(
+            {
+                "person": person,
+                "leadership_level": leadership_level,
+                "linked_user": linked_user,
+            }
+        )
+    return candidates
 
 
 def units_by_type(unit_type):
@@ -1870,6 +1904,27 @@ def _work_areas_under(operation):
     )
 
 
+def _direct_child_work_areas(parent):
+    if not parent:
+        return []
+    return (
+        StaffingUnit.query.filter_by(unit_type="work_area", parent_id=parent.id, active=True)
+        .order_by(StaffingUnit.display_order, StaffingUnit.name)
+        .all()
+    )
+
+
+def _leadership_assignments_for_unit(unit):
+    if not unit:
+        return []
+    return (
+        StaffingLeadershipAssignment.query.filter_by(unit_id=unit.id, active=True)
+        .join(StaffingPerson)
+        .order_by(StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.employee_id)
+        .all()
+    )
+
+
 def unit_path(unit):
     path = []
     current = unit
@@ -1888,6 +1943,8 @@ def _validate_work_assignment(person, work_area):
 
 def _validate_leadership_assignment(person, unit, leadership_level):
     _normalize_choice(leadership_level, STAFFING_LEADERSHIP_LEVELS, "leadership level")
+    if not linked_user_for_person(person):
+        raise ValueError("Management assignments require a matching NeoApps user account.")
     if leadership_level != unit.unit_type:
         raise ValueError("Leadership level must match the selected unit scope.")
     expected_level = default_leadership_level_for(person, unit)
