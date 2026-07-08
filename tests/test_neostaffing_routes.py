@@ -1102,20 +1102,24 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertEqual(initial.status_code, 200)
         self.assertIn(b"Select Sort", initial.data)
+        self.assertIn(b"data-neostaffing-drilldown-select", initial.data)
         self.assertNotIn(b"Select Operation", initial.data)
         self.assertNotIn(b"Select Department", initial.data)
         self.assertNotIn(b"Step 1", initial.data)
+        self.assertNotIn(b"LOAD ROSTER", initial.data)
         self.assertNotIn(b"ADD EMPLOYEE", initial.data)
 
         self.assertEqual(by_sort.status_code, 200)
         self.assertIn(b"Select Operation", by_sort.data)
         self.assertNotIn(b"Select Department", by_sort.data)
+        self.assertNotIn(b"LOAD ROSTER", by_sort.data)
         self.assertIn(b"ASSIGN MANAGEMENT", by_sort.data)
         self.assertNotIn(b"ADD EMPLOYEE", by_sort.data)
 
         self.assertEqual(by_operation.status_code, 200)
         self.assertIn(b"Select Department", by_operation.data)
         self.assertIn(b"Select Direct Work Area", by_operation.data)
+        self.assertIn(b"LOAD ROSTER", by_operation.data)
         self.assertNotIn(b"ADD EMPLOYEE", by_operation.data)
 
         self.assertEqual(by_department.status_code, 200)

@@ -26,6 +26,7 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
 {% set selected = people.selected_person %}
 {% set selected_scope = people.selected_unit %}
 {% set work_area_selected = people.selected_work_area %}
+{% set can_load_roster = people.selected_operation or people.selected_department or people.selected_work_area %}
 <section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="neostaffing-people-title">
     <div class="neostaffing-dashboard-shell">
         {% include "neostaffing/_section_nav.html" %}
@@ -50,7 +51,7 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
 
                         <label class="neostaffing-drilldown-field">
                             <span>Select Sort</span>
-                            <select name="sort_id" required>
+                            <select name="sort_id" required data-neostaffing-drilldown-select data-clear-fields="operation_id department_id work_area_id">
                                 <option value="">Choose Sort</option>
                                 {% for sort in people.sorts %}
                                 <option value="{{ sort.id }}" {% if filters.sort_id|string == sort.id|string %}selected{% endif %}>{{ sort.name }}</option>
@@ -61,7 +62,7 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
                         {% if people.selected_sort %}
                         <label class="neostaffing-drilldown-field">
                             <span>Select Operation</span>
-                            <select name="operation_id">
+                            <select name="operation_id" data-neostaffing-drilldown-select data-clear-fields="department_id work_area_id">
                                 <option value="">Choose Operation</option>
                                 {% for operation in people.operations %}
                                 <option value="{{ operation.id }}" {% if filters.operation_id|string == operation.id|string %}selected{% endif %}>{{ operation.name }}</option>
@@ -74,7 +75,7 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
                             {% if not people.selected_department %}
                             <label class="neostaffing-drilldown-field">
                                 <span>Select Department</span>
-                                <select name="department_id">
+                                <select name="department_id" data-neostaffing-drilldown-select data-clear-fields="work_area_id">
                                     <option value="">No Department Selected</option>
                                     {% for department in people.departments %}
                                     <option value="{{ department.id }}">{{ department.name }}</option>
@@ -83,7 +84,7 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
                             </label>
                             <label class="neostaffing-drilldown-field">
                                 <span>Select Direct Work Area</span>
-                                <select name="work_area_id">
+                                <select name="work_area_id" data-neostaffing-drilldown-select>
                                     <option value="">No Direct Work Area Selected</option>
                                     {% for work_area in people.direct_work_areas %}
                                     <option value="{{ work_area.id }}">{{ work_area.name }}</option>
@@ -94,7 +95,7 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
                             <input type="hidden" name="department_id" value="{{ people.selected_department.id }}">
                             <label class="neostaffing-drilldown-field">
                                 <span>Select Work Area</span>
-                                <select name="work_area_id">
+                                <select name="work_area_id" data-neostaffing-drilldown-select>
                                     <option value="">Choose Work Area</option>
                                     {% for work_area in people.department_work_areas %}
                                     <option value="{{ work_area.id }}" {% if filters.work_area_id|string == work_area.id|string %}selected{% endif %}>{{ work_area.name }}</option>
@@ -112,12 +113,36 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
                         {% endif %}
 
                         <div class="neostaffing-people-action-row">
+                            {% if can_load_roster %}
                             <button type="submit">LOAD ROSTER</button>
+                            {% endif %}
                             {% if people.selected_sort %}
                             <a class="table-row-button" href="{{ url_for('neostaffing.people') }}">CHANGE SORT</a>
                             {% endif %}
                         </div>
+                        <noscript>
+                            <button type="submit">CONTINUE</button>
+                        </noscript>
                     </form>
+                    <script>
+                    (() => {
+                        const form = document.getElementById("people-scope-form");
+                        if (!form) return;
+                        form.querySelectorAll("[data-neostaffing-drilldown-select]").forEach((select) => {
+                            select.addEventListener("change", () => {
+                                const clearFields = (select.dataset.clearFields || "")
+                                    .split(/\s+/)
+                                    .filter(Boolean);
+                                clearFields.forEach((name) => {
+                                    form.querySelectorAll(`[name="${name}"]`).forEach((field) => {
+                                        field.value = "";
+                                    });
+                                });
+                                form.submit();
+                            });
+                        });
+                    })();
+                    </script>
 
                     {% if selected_scope %}
                     <div class="neostaffing-people-selected-path">
