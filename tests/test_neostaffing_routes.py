@@ -351,6 +351,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"0 Assigned", response.data)
         self.assertIn(b"+ Department", response.data)
         self.assertIn(b"+ Work Area", response.data)
+        self.assertIn(
+            f'href="/neostaffing/org-chart?unit_id={operation.id}#structure-add"'.encode(),
+            response.data,
+        )
         self.assertIn(b"Add Department", response.data)
         self.assertIn(b"Add Work Area", response.data)
         self.assertIn(b"Assign Manager", response.data)
@@ -360,6 +364,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Add Work Area", department_response.data)
         self.assertIn(b"Assign FT Supervisor", department_response.data)
         self.assertEqual(work_area_response.status_code, 200)
+        self.assertIn(b'data-org-chart-workspace', work_area_response.data)
+        self.assertNotIn(b'data-org-chart-workspace-empty', work_area_response.data)
         self.assertIn(
             f'id="neostaffing-org-unit-{work_area.id}" class="neostaffing-tree-branch is-selected'.encode(),
             work_area_response.data,
@@ -467,6 +473,9 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         restored = self.client.get(headcount.location)
         self.assertEqual(restored.status_code, 200)
+        self.assertIn(b"FULL TREE", restored.data)
+        self.assertIn(b'data-org-chart-workspace', restored.data)
+        self.assertNotIn(b'data-org-chart-workspace-empty', restored.data)
         self.assertIn(
             f'id="neostaffing-org-unit-{work_area.id}" class="neostaffing-tree-branch is-selected'.encode(),
             restored.data,
@@ -805,7 +814,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"FULL TREE", hierarchy.data)
         self.assertIn(b"neostaffing-tree-editor", hierarchy.data)
         self.assertIn(b"+ Sort", hierarchy.data)
-        self.assertNotIn(b'aria-label="Selected unit details"', hierarchy.data)
+        self.assertIn(b'data-org-chart-workspace', hierarchy.data)
+        self.assertIn(b'data-org-chart-workspace-empty', hierarchy.data)
+        self.assertIn(b'neostaffing-tree-detail is-empty', hierarchy.data)
+        self.assertNotIn(b"is-tree-only", hierarchy.data)
         self.assertNotIn(b"<h2>DETAIL</h2>", hierarchy.data)
         self.assertNotIn(b"ADD UNDER", hierarchy.data)
         self.assertNotIn(b"ADD SORT", hierarchy.data)

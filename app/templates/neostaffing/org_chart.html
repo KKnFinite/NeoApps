@@ -93,7 +93,7 @@
                 {% endfor %}
             </nav>
 
-            <section class="neostaffing-tree-editor{% if not selected %} is-tree-only{% endif %}" aria-label="NeoStaffing visual org chart editor">
+            <section class="neostaffing-tree-editor" aria-label="NeoStaffing visual org chart editor">
                 <article id="neostaffing-org-chart-tree" class="neostaffing-data-card neostaffing-tree-panel" data-org-chart-tree data-org-chart-selected-unit="{{ selected.id if selected else '' }}">
                     <div class="neostaffing-panel-heading">
                         <h2>FULL TREE</h2>
@@ -118,8 +118,8 @@
                     {% endif %}
                 </article>
 
-                {% if selected %}
-                <aside class="neostaffing-data-card neostaffing-tree-detail" aria-label="Selected unit details">
+                <aside class="neostaffing-data-card neostaffing-tree-detail{% if not selected %} is-empty{% endif %}" aria-label="Org Chart workspace" data-org-chart-workspace{% if not selected %} data-org-chart-workspace-empty{% endif %}>
+                    {% if selected %}
                     <div class="neostaffing-panel-heading">
                         <h2>DETAIL</h2>
                         <span class="neostaffing-tree-action-chip">{{ "ACTIVE" if selected.active else "INACTIVE" }}</span>
@@ -271,8 +271,8 @@
                     </section>
                     {% endif %}
 
+                    {% endif %}
                 </aside>
-                {% endif %}
             </section>
         </div>
     </div>
