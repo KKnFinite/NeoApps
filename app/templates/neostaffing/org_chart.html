@@ -130,15 +130,27 @@
                         <span>{{ unit_type_labels[selected.unit_type] }}</span>
                         <strong>{{ selected.name }}</strong>
                         <em>{{ unit_path(selected) }}</em>
+                        {% if selected.unit_type == "work_area" %}
+                        <small>Required HC: {{ selected.required_headcount if selected.required_headcount is not none else "-" }}</small>
+                        {% endif %}
                     </div>
 
-                    <dl class="neostaffing-tree-stats">
-                        <div><dt>Child Count</dt><dd>{{ selected_detail.child_count if selected_detail else 0 }}</dd></div>
-                        <div><dt>Assigned Count</dt><dd>{{ selected_detail.assigned_count if selected_detail else 0 }}</dd></div>
-                        {% if selected.unit_type == "work_area" %}
-                        <div><dt>Required HC</dt><dd>{{ selected.required_headcount if selected.required_headcount is not none else "-" }}</dd></div>
+                    <section class="neostaffing-tree-management-summary" aria-label="Assigned management">
+                        <h3>MANAGEMENT</h3>
+                        {% if selected_detail and selected_detail.leadership %}
+                        <ul class="neostaffing-detail-list">
+                            {% for assignment in selected_detail.leadership %}
+                            {% set linked_user = linked_user_for_person(assignment.person) %}
+                            <li>
+                                <strong>{{ assignment.person.full_name }}</strong>
+                                <span>{{ classification_labels[assignment.person.classification] }} / {{ "Linked User" if linked_user else "No User Link" }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="neostaffing-tree-management-empty">No active management assigned.</p>
                         {% endif %}
-                    </dl>
+                    </section>
 
                     <div class="neostaffing-tree-context-actions" aria-label="Selected unit contextual actions">
                         {% if selected.unit_type == "sort" %}
@@ -155,25 +167,6 @@
                             {% if can_edit_structure %}<a href="#structure-editor">Edit</a><a href="#structure-editor">Move</a><a href="#structure-editor">Set Headcount</a>{% endif %}
                         {% endif %}
                     </div>
-
-                    {% if selected_detail %}
-                    <section class="neostaffing-detail-section">
-                        <h3>MANAGEMENT</h3>
-                        {% if selected_detail.leadership %}
-                        <ul class="neostaffing-detail-list">
-                            {% for assignment in selected_detail.leadership %}
-                            {% set linked_user = linked_user_for_person(assignment.person) %}
-                            <li>
-                                <strong>{{ assignment.person.full_name }}</strong>
-                                <span>{{ classification_labels[assignment.person.classification] }} / {{ "Linked User" if linked_user else "No User Link" }}</span>
-                            </li>
-                            {% endfor %}
-                        </ul>
-                        {% else %}
-                        <p class="muted">No active management assigned.</p>
-                        {% endif %}
-                    </section>
-                    {% endif %}
 
                     {% if can_edit_structure %}
                     <section id="structure-editor" class="neostaffing-tree-control-section">

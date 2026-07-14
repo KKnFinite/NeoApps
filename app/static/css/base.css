@@ -8635,7 +8635,8 @@ body.blueprint-neostaffing {
 }
 
 .neostaffing-tree-detail-title span,
-.neostaffing-tree-detail-title em {
+.neostaffing-tree-detail-title em,
+.neostaffing-tree-detail-title small {
     color: var(--muted);
     font-size: 0.72rem;
     font-style: normal;
@@ -8650,37 +8651,6 @@ body.blueprint-neostaffing {
     font-weight: 950;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-}
-
-.neostaffing-tree-stats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-    margin: 0;
-}
-
-.neostaffing-tree-stats div {
-    display: grid;
-    gap: 5px;
-    padding: 10px;
-    border: 1px solid rgba(var(--node-rgb), 0.24);
-    border-radius: 7px;
-    background: rgba(3, 10, 14, 0.78);
-}
-
-.neostaffing-tree-stats dt {
-    color: var(--muted);
-    font-size: 0.66rem;
-    font-weight: 950;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
-.neostaffing-tree-stats dd {
-    margin: 0;
-    color: var(--node-primary);
-    font-size: 1.2rem;
-    font-weight: 950;
 }
 
 .neostaffing-tree-context-actions {
@@ -9686,6 +9656,31 @@ body.blueprint-neostaffing {
 
 .neostaffing-detail-section p {
     margin: 0;
+}
+
+.neostaffing-tree-management-summary {
+    display: grid;
+    gap: 7px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(var(--node-rgb), 0.16);
+}
+
+.neostaffing-tree-management-summary h3 {
+    margin: 0;
+    color: var(--node-primary);
+    font-size: 0.72rem;
+    font-weight: 950;
+}
+
+.neostaffing-tree-management-summary .neostaffing-detail-list {
+    gap: 5px;
+}
+
+.neostaffing-tree-management-empty {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.76rem;
 }
 
 .neostaffing-detail-list {

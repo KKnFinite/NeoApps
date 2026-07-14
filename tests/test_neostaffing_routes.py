@@ -372,7 +372,19 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
         self.assertIn(b'aria-current="page"', work_area_response.data)
         self.assertIn(b"Required HC", work_area_response.data)
-        self.assertIn(b"Assigned Count", work_area_response.data)
+        self.assertIn(b"No active management assigned.", work_area_response.data)
+        self.assertNotIn(b"Child Count", work_area_response.data)
+        self.assertNotIn(b"Assigned Count", work_area_response.data)
+        self.assertNotIn(b"neostaffing-tree-stats", work_area_response.data)
+        self.assertNotIn(b"neostaffing-detail-section", work_area_response.data)
+        self.assertLess(
+            work_area_response.data.index(b"neostaffing-tree-detail-title"),
+            work_area_response.data.index(b"neostaffing-tree-management-summary"),
+        )
+        self.assertLess(
+            work_area_response.data.index(b"neostaffing-tree-management-summary"),
+            work_area_response.data.index(b"Selected unit contextual actions"),
+        )
         self.assertNotIn(b"+ People", work_area_response.data)
         self.assertIn(b"+ PT Sup", work_area_response.data)
         self.assertNotIn(b"Add/Assign People", work_area_response.data)
@@ -924,8 +936,12 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         defaulted = self.client.get(f"/neostaffing/org-chart?unit_id={default_area.id}")
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Work Area", response.data)
+        self.assertIn(b"EBM", response.data)
+        self.assertIn(b"Night Sort / Shift Operation / East Shift Department / EBM", response.data)
         self.assertIn(b"Required HC", response.data)
-        self.assertIn(b"Assigned Count", response.data)
+        self.assertNotIn(b"Child Count", response.data)
+        self.assertNotIn(b"Assigned Count", response.data)
         self.assertIn(b"East Shift Department", response.data)
         self.assertIn(b"Shift Operation", response.data)
         self.assertIn(b'value="2"', response.data)
@@ -934,7 +950,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Default Area", defaulted.data)
         self.assertIn(b"Required HC", defaulted.data)
 
-    def test_org_chart_detail_shows_management_and_assigned_counts(self):
+    def test_org_chart_detail_shows_management_summary_beneath_unit_header(self):
         user = self._user("staffing_org_detail")
         self._grant_app_access(user, "neostaffing", "master")
         _sort, _operation, _department, work_area = self._staffing_hierarchy()
@@ -967,8 +983,18 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"MANAGEMENT", response.data)
         self.assertIn(b"Scope Leader", response.data)
-        self.assertIn(b"Assigned Count", response.data)
-        self.assertIn(b"1", response.data)
+        self.assertIn(b"Linked User", response.data)
+        self.assertNotIn(b"Child Count", response.data)
+        self.assertNotIn(b"Assigned Count", response.data)
+        self.assertNotIn(b"No active management assigned.", response.data)
+        self.assertLess(
+            response.data.index(b"neostaffing-tree-detail-title"),
+            response.data.index(b"neostaffing-tree-management-summary"),
+        )
+        self.assertLess(
+            response.data.index(b"neostaffing-tree-management-summary"),
+            response.data.index(b"Selected unit contextual actions"),
+        )
 
     def test_org_chart_management_and_structure_controls_follow_permissions(self):
         watcher = self._user("staffing_org_watcher")
