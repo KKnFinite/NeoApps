@@ -330,6 +330,12 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"neostaffing-tree-editor", sort_response.data)
         self.assertIn(b"neostaffing-tree-branch", sort_response.data)
         self.assertIn(b"neostaffing-tree-toggle", sort_response.data)
+        self.assertIn(b"data-org-chart-tree", sort_response.data)
+        self.assertIn(b"data-org-chart-branch", sort_response.data)
+        self.assertIn(b"data-org-chart-state-form", sort_response.data)
+        self.assertIn(b"neostaffing-org-chart-tree-state", sort_response.data)
+        self.assertIn(b"sessionStorage", sort_response.data)
+        self.assertIn(b"scrollTop", sort_response.data)
         self.assertIn(b"+ Operation", sort_response.data)
         self.assertIn(b"Add Operation", sort_response.data)
         self.assertIn(b"Assign Division Manager", sort_response.data)
@@ -354,6 +360,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Add Work Area", department_response.data)
         self.assertIn(b"Assign FT Supervisor", department_response.data)
         self.assertEqual(work_area_response.status_code, 200)
+        self.assertIn(
+            f'id="neostaffing-org-unit-{work_area.id}" class="neostaffing-tree-branch is-selected'.encode(),
+            work_area_response.data,
+        )
+        self.assertIn(b'aria-current="page"', work_area_response.data)
         self.assertIn(b"Required HC", work_area_response.data)
         self.assertIn(b"Assigned Count", work_area_response.data)
         self.assertNotIn(b"+ People", work_area_response.data)
@@ -363,6 +374,104 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Set Headcount", work_area_response.data)
         self.assertIn(b"1", work_area_response.data)
         self.assertIsNotNone(direct_work_area)
+
+    def test_org_chart_mutations_preserve_selected_unit_context(self):
+        user = self._user("staffing_org_state_master")
+        self._grant_app_access(user, "neostaffing", "master")
+        _sort, operation, _department, work_area = self._staffing_hierarchy()
+        manager = staffing_service.create_person(
+            {
+                "employee_id": "STATE200",
+                "first_name": "State",
+                "last_name": "Manager",
+                "seniority_date": "2017-01-01",
+                "classification": "manager",
+            }
+        )
+        self._link_user_for_person(manager, "staffing_org_state_manager")
+        db.session.commit()
+        self._login(user.username)
+
+        added = self.client.post(
+            "/neostaffing/app-management/hierarchy/units",
+            data={
+                "unit_type": "work_area",
+                "name": "State Child Area",
+                "parent_id": str(operation.id),
+                "required_headcount": "2",
+                "display_order": "0",
+                "return_unit_id": str(operation.id),
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(added.location, f"/neostaffing/org-chart?unit_id={operation.id}")
+        after_add = self.client.get(added.location)
+        self.assertIn(b"State Child Area", after_add.data)
+        self.assertIn(
+            f'id="neostaffing-org-unit-{operation.id}" class="neostaffing-tree-branch is-selected'.encode(),
+            after_add.data,
+        )
+
+        updated = self.client.post(
+            f"/neostaffing/app-management/hierarchy/units/{work_area.id}/update",
+            data={
+                "unit_type": "work_area",
+                "name": "EBM",
+                "parent_id": str(operation.id),
+                "required_headcount": "5",
+                "display_order": "0",
+                "active": "1",
+                "return_unit_id": str(work_area.id),
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(updated.location, f"/neostaffing/org-chart?unit_id={work_area.id}")
+        self.assertEqual(db.session.get(StaffingUnit, work_area.id).parent_id, operation.id)
+        self.assertEqual(db.session.get(StaffingUnit, work_area.id).required_headcount, 5)
+
+        toggled = self.client.post(
+            f"/neostaffing/app-management/hierarchy/units/{work_area.id}/toggle-active",
+            data={"return_unit_id": str(work_area.id)},
+            follow_redirects=False,
+        )
+        self.assertEqual(toggled.location, f"/neostaffing/org-chart?unit_id={work_area.id}")
+
+        assigned = self.client.post(
+            "/neostaffing/app-management/management-assignments",
+            data={
+                "person_id": str(manager.id),
+                "unit_id": str(operation.id),
+                "return_unit_id": str(operation.id),
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(assigned.location, f"/neostaffing/org-chart?unit_id={operation.id}")
+        assignment = StaffingLeadershipAssignment.query.filter_by(
+            person_id=manager.id,
+            unit_id=operation.id,
+        ).one()
+
+        removed_assignment = self.client.post(
+            f"/neostaffing/app-management/management-assignments/{assignment.id}/delete",
+            data={"return_unit_id": str(operation.id)},
+            follow_redirects=False,
+        )
+        self.assertEqual(removed_assignment.location, f"/neostaffing/org-chart?unit_id={operation.id}")
+
+        headcount = self.client.post(
+            f"/neostaffing/app-management/planned-staffing/{work_area.id}/update",
+            data={"required_headcount": "6", "return_unit_id": str(work_area.id)},
+            follow_redirects=False,
+        )
+        self.assertEqual(headcount.location, f"/neostaffing/org-chart?unit_id={work_area.id}")
+
+        restored = self.client.get(headcount.location)
+        self.assertEqual(restored.status_code, 200)
+        self.assertIn(
+            f'id="neostaffing-org-unit-{work_area.id}" class="neostaffing-tree-branch is-selected'.encode(),
+            restored.data,
+        )
+        self.assertIn(f'name="return_unit_id" value="{work_area.id}"'.encode(), restored.data)
 
     def test_reports_render_staffing_seniority_and_attendance_shells(self):
         user = self._user("staffing_reports")

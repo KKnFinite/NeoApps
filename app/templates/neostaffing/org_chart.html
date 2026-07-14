@@ -23,15 +23,15 @@
     {% endif %}
 {% endmacro %}
 
-{% macro render_tree(nodes) %}
+{% macro render_tree(nodes, selected_unit) %}
     <ul class="neostaffing-tree-list neostaffing-tree-editor-list">
         {% for row in nodes %}
         {% set unit = row.unit %}
         <li>
-            <details class="neostaffing-tree-branch{% if selected and selected.id == unit.id %} is-selected{% endif %}{% if not unit.active %} is-inactive{% endif %}" open>
+            <details id="neostaffing-org-unit-{{ unit.id }}" class="neostaffing-tree-branch{% if selected_unit and selected_unit.id == unit.id %} is-selected{% endif %}{% if not unit.active %} is-inactive{% endif %}" data-org-chart-branch data-org-chart-unit-id="{{ unit.id }}" open>
                 <summary class="neostaffing-tree-summary">
                     <span class="neostaffing-tree-toggle" aria-hidden="true"></span>
-                    <a class="neostaffing-tree-node" href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}">
+                    <a class="neostaffing-tree-node" href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}" {% if selected_unit and selected_unit.id == unit.id %}aria-current="page"{% endif %}>
                         <span>{{ unit_type_labels[unit.unit_type] }}</span>
                         <strong>{{ unit.name }}</strong>
                     </a>
@@ -52,7 +52,7 @@
                     </span>
                 </summary>
                 {% if row.children %}
-                {{ render_tree(row.children) }}
+                {{ render_tree(row.children, selected_unit) }}
                 {% endif %}
             </details>
         </li>
@@ -60,10 +60,11 @@
     </ul>
 {% endmacro %}
 
-{% macro add_unit_form(unit_type, parent_id, button_label) %}
-    <form class="operation-form neostaffing-tree-add-form" method="post" action="{{ url_for('neostaffing.create_unit') }}">
+{% macro add_unit_form(unit_type, parent_id, button_label, return_unit_id=none) %}
+    <form class="operation-form neostaffing-tree-add-form" method="post" action="{{ url_for('neostaffing.create_unit') }}" data-org-chart-state-form>
         <input type="hidden" name="unit_type" value="{{ unit_type }}">
         <input type="hidden" name="parent_id" value="{{ parent_id or '' }}">
+        <input type="hidden" name="return_unit_id" value="{{ return_unit_id or parent_id or '' }}">
         <label><span>Name</span><input name="name" required></label>
         {% if unit_type == "work_area" %}
         <label><span>Required HC</span><input type="number" min="0" name="required_headcount"></label>
@@ -93,15 +94,16 @@
             </nav>
 
             <section class="neostaffing-tree-editor{% if not selected %} is-tree-only{% endif %}" aria-label="NeoStaffing visual org chart editor">
-                <article class="neostaffing-data-card neostaffing-tree-panel">
+                <article id="neostaffing-org-chart-tree" class="neostaffing-data-card neostaffing-tree-panel" data-org-chart-tree data-org-chart-selected-unit="{{ selected.id if selected else '' }}">
                     <div class="neostaffing-panel-heading">
                         <h2>FULL TREE</h2>
                         {% if can_edit_structure %}
                         <details class="neostaffing-tree-add-sort">
                             <summary class="neostaffing-tree-action-chip">+ Sort</summary>
-                            <form class="operation-form neostaffing-tree-add-sort-form" method="post" action="{{ url_for('neostaffing.create_unit') }}">
+                            <form class="operation-form neostaffing-tree-add-sort-form" method="post" action="{{ url_for('neostaffing.create_unit') }}" data-org-chart-state-form>
                                 <input type="hidden" name="unit_type" value="sort">
                                 <input type="hidden" name="parent_id" value="">
+                                <input type="hidden" name="return_unit_id" value="{{ selected.id if selected else '' }}">
                                 <label><span>Name</span><input name="name" required></label>
                                 <input type="hidden" name="display_order" value="0">
                                 <button type="submit">SAVE</button>
@@ -110,7 +112,7 @@
                         {% endif %}
                     </div>
                     {% if hierarchy %}
-                    {{ render_tree(hierarchy) }}
+                    {{ render_tree(hierarchy, selected) }}
                     {% else %}
                     <p class="muted">No staffing units have been created yet.</p>
                     {% endif %}
@@ -176,8 +178,9 @@
                     {% if can_edit_structure %}
                     <section id="structure-editor" class="neostaffing-tree-control-section">
                         <h2>STRUCTURE ACTIONS</h2>
-                        <form class="operation-form neostaffing-tree-edit-form" method="post" action="{{ url_for('neostaffing.update_unit', unit_id=selected.id) }}">
+                        <form class="operation-form neostaffing-tree-edit-form" method="post" action="{{ url_for('neostaffing.update_unit', unit_id=selected.id) }}" data-org-chart-state-form>
                             <input type="hidden" name="unit_type" value="{{ selected.unit_type }}">
+                            <input type="hidden" name="return_unit_id" value="{{ selected.id }}">
                             <label><span>Name</span><input name="name" value="{{ selected.name }}" required></label>
                             <label><span>Move / Parent</span>{{ parent_select(selected.unit_type, selected.parent_id) }}</label>
                             {% if selected.unit_type == "work_area" %}
@@ -190,10 +193,12 @@
                             <button type="submit">SAVE UNIT</button>
                         </form>
                         <div class="neostaffing-card-actions">
-                            <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.toggle_unit_active', unit_id=selected.id) }}">
+                            <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.toggle_unit_active', unit_id=selected.id) }}" data-org-chart-state-form>
+                                <input type="hidden" name="return_unit_id" value="{{ selected.id }}">
                                 <button class="table-row-button" type="submit">{{ "DEACTIVATE" if selected.active else "ACTIVATE" }}</button>
                             </form>
-                            <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.delete_unit', unit_id=selected.id) }}">
+                            <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.delete_unit', unit_id=selected.id) }}" data-org-chart-state-form>
+                                <input type="hidden" name="return_unit_id" value="{{ selected.parent_id or '' }}">
                                 <button class="table-row-button" type="submit">DELETE</button>
                             </form>
                         </div>
@@ -202,12 +207,12 @@
                     <section id="structure-add" class="neostaffing-tree-control-section">
                         <h2>ADD UNDER {{ selected.name }}</h2>
                         {% if selected.unit_type == "sort" %}
-                        {{ add_unit_form("operation", selected.id, "+ Operation") }}
+                        {{ add_unit_form("operation", selected.id, "+ Operation", selected.id) }}
                         {% elif selected.unit_type == "operation" %}
-                        {{ add_unit_form("department", selected.id, "+ Department") }}
-                        {{ add_unit_form("work_area", selected.id, "+ Work Area") }}
+                        {{ add_unit_form("department", selected.id, "+ Department", selected.id) }}
+                        {{ add_unit_form("work_area", selected.id, "+ Work Area", selected.id) }}
                         {% elif selected.unit_type == "department" %}
-                        {{ add_unit_form("work_area", selected.id, "+ Work Area") }}
+                        {{ add_unit_form("work_area", selected.id, "+ Work Area", selected.id) }}
                         {% else %}
                         <p class="muted">Work Areas cannot contain child units.</p>
                         {% endif %}
@@ -225,7 +230,7 @@
                         {% else %}
                         <h2>ASSIGN PT SUPERVISOR</h2>
                         {% endif %}
-                        <form class="operation-form neostaffing-tree-add-form" method="post" action="{{ url_for('neostaffing.create_management_assignment') }}">
+                        <form class="operation-form neostaffing-tree-add-form" method="post" action="{{ url_for('neostaffing.create_management_assignment') }}" data-org-chart-state-form>
                             <input type="hidden" name="unit_id" value="{{ selected.id }}">
                             <input type="hidden" name="return_unit_id" value="{{ selected.id }}">
                             <input type="hidden" name="leadership_level" value="{{ selected.unit_type }}">
@@ -254,7 +259,7 @@
                                     <em>{{ "LINKED USER" if linked_user else "NO USER LINK" }}</em>
                                 </header>
                                 <p class="neostaffing-record-path">{{ classification_labels[assignment.person.classification] }} / {{ unit_path(assignment.unit) }}</p>
-                                <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.delete_management_assignment', assignment_id=assignment.id) }}">
+                                <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.delete_management_assignment', assignment_id=assignment.id) }}" data-org-chart-state-form>
                                     <input type="hidden" name="return_unit_id" value="{{ selected.id }}">
                                     <button class="table-row-button" type="submit">REMOVE ASSIGNMENT</button>
                                 </form>
@@ -272,4 +277,70 @@
         </div>
     </div>
 </section>
+<script>
+(() => {
+    const stateKey = "neostaffing-org-chart-tree-state";
+    const tree = document.querySelector("[data-org-chart-tree]");
+    if (!tree) {
+        return;
+    }
+
+    const branches = [...tree.querySelectorAll("[data-org-chart-branch]")];
+    const selectedId = tree.dataset.orgChartSelectedUnit;
+    let savedState = {};
+    try {
+        savedState = JSON.parse(window.sessionStorage.getItem(stateKey) || "{}") || {};
+    } catch (_error) {
+        savedState = {};
+    }
+
+    const saveState = () => {
+        const expanded = Object.fromEntries(branches.map((branch) => [
+            branch.dataset.orgChartUnitId,
+            branch.open,
+        ]));
+        try {
+            window.sessionStorage.setItem(stateKey, JSON.stringify({
+                expanded,
+                scrollTop: tree.scrollTop,
+            }));
+        } catch (_error) {
+            // State restoration is an enhancement; tree editing remains server-rendered.
+        }
+    };
+
+    if (savedState.expanded) {
+        branches.forEach((branch) => {
+            const unitId = branch.dataset.orgChartUnitId;
+            if (Object.prototype.hasOwnProperty.call(savedState.expanded, unitId)) {
+                branch.open = Boolean(savedState.expanded[unitId]);
+            }
+        });
+    }
+
+    const selectedBranch = selectedId
+        ? tree.querySelector(`[data-org-chart-unit-id="${selectedId}"]`)
+        : null;
+    if (selectedBranch) {
+        let current = selectedBranch.parentElement?.closest("[data-org-chart-branch]");
+        while (current) {
+            current.open = true;
+            current = current.parentElement?.closest("[data-org-chart-branch]");
+        }
+    }
+
+    window.requestAnimationFrame(() => {
+        if (Number.isFinite(savedState.scrollTop)) {
+            tree.scrollTop = savedState.scrollTop;
+        }
+    });
+
+    branches.forEach((branch) => branch.addEventListener("toggle", saveState));
+    tree.addEventListener("scroll", saveState, { passive: true });
+    document.querySelectorAll("[data-org-chart-state-form]").forEach((form) => {
+        form.addEventListener("submit", saveState);
+    });
+    window.addEventListener("pagehide", saveState);
+})();
+</script>
 {% endblock %}

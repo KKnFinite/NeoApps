@@ -361,6 +361,7 @@ def create_unit():
         lambda: staffing_service.create_unit(request.form),
         "Staffing unit added.",
         "neostaffing.org_chart",
+        _org_chart_return_values(),
     )
 
 
@@ -372,6 +373,7 @@ def update_unit(unit_id):
         lambda: staffing_service.update_unit(unit, request.form),
         "Staffing unit updated.",
         "neostaffing.org_chart",
+        _org_chart_return_values(unit.id),
     )
 
 
@@ -383,17 +385,24 @@ def toggle_unit_active(unit_id):
     def toggle():
         unit.active = not unit.active
 
-    return _mutate(toggle, "Staffing unit status updated.", "neostaffing.org_chart")
+    return _mutate(
+        toggle,
+        "Staffing unit status updated.",
+        "neostaffing.org_chart",
+        _org_chart_return_values(unit.id),
+    )
 
 
 @bp.route("/app-management/hierarchy/units/<int:unit_id>/delete", methods=["POST"])
 @neostaffing_app_required(permission_key=ORG_CHART_EDIT_STRUCTURE_PERMISSION)
 def delete_unit(unit_id):
     unit = _get_unit(unit_id)
+    parent_id = unit.parent_id
     return _mutate(
         lambda: staffing_service.delete_unit(unit),
         "Staffing unit deleted.",
         "neostaffing.org_chart",
+        _org_chart_return_values(parent_id),
     )
 
 
@@ -424,12 +433,7 @@ def update_planned_staffing(unit_id):
     else:
         flash("Planned staffing updated.", "success")
 
-    query = {
-        key: request.form.get(key, "").strip()
-        for key in ("sort_id", "operation_id", "department_id", "work_area_id")
-        if request.form.get(key, "").strip()
-    }
-    return redirect(url_for("neostaffing.planned_staffing", **query))
+    return redirect(url_for("neostaffing.org_chart", **_org_chart_return_values(unit.id)))
 
 
 @bp.route("/app-management/people")
@@ -590,6 +594,12 @@ def _mutate(callback, success_message, redirect_endpoint, redirect_values=None):
     else:
         flash(success_message, "success")
     return redirect(url_for(redirect_endpoint, **(redirect_values or {})))
+
+
+def _org_chart_return_values(default_unit_id=None):
+    """Keep the selected tree unit stable after an Org Chart mutation."""
+    unit_id = request.form.get("return_unit_id", "").strip() or str(default_unit_id or "")
+    return {"unit_id": unit_id} if unit_id else {}
 
 
 def _redirect_legacy_scope_to_org_chart():
