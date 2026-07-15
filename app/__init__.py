@@ -22,6 +22,13 @@ from app.services.auth_session_security import (
     session_version_matches_user,
 )
 from app.services.auth_rate_limits import initialize_auth_rate_limit_storage
+from app.services.csrf import (
+    csrf_failure_response,
+    csrf_field,
+    csrf_token,
+    inject_csrf_tokens,
+    validate_csrf_request,
+)
 from app.services.password_policy import user_requires_password_change
 from app.services.time_display import format_local_hhmm
 
@@ -98,6 +105,9 @@ def register_template_helpers(app):
             return ""
         normalized = str(value).strip().lower()
         return role_labels.get(normalized, str(value).strip().replace("_", " ").title())
+
+    app.jinja_env.globals["csrf_token"] = csrf_token
+    app.jinja_env.globals["csrf_field"] = csrf_field
 
     def format_status_label(value):
         if not value:
@@ -361,6 +371,16 @@ def register_request_guards(app):
             return None
 
         return redirect(url_for("auth.change_password"))
+
+    @app.before_request
+    def protect_unsafe_requests_with_csrf():
+        if validate_csrf_request():
+            return None
+        return csrf_failure_response()
+
+    @app.after_request
+    def add_csrf_tokens_to_rendered_forms(response):
+        return inject_csrf_tokens(response)
 
 
 def register_security_headers(app):

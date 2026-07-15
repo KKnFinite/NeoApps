@@ -55,6 +55,18 @@ AUTH_TRUST_PROXY_HEADERS=true
 AUTH_TRUSTED_PROXY_IPS=known-proxy-ip-or-cidr
 ```
 
+## CSRF Protection
+
+NeoApps protects every POST, PUT, PATCH, and DELETE request with a shared,
+session-bound CSRF token. Tokens are injected into rendered unsafe forms and
+the base shell automatically supplies `X-CSRF-Token` to same-origin unsafe
+`fetch` requests. Logout is POST-only.
+
+`CSRF_ENABLED` defaults to `true` and `CSRF_TOKEN_TTL_SECONDS` defaults to
+`7200`. Test fixtures can opt into live validation with
+`CSRF_PROTECT_TESTING=true`; production validation is always enabled unless
+`CSRF_ENABLED=false` is explicitly configured for controlled troubleshooting.
+
 Do not enable forwarded-header trust without the known production proxy list.
 
 ## Production Bootstrap

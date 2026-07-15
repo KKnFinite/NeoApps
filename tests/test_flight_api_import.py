@@ -3144,7 +3144,7 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.context.pop()
 
     def _login_motherbrain_role(self, username, role):
-        self.client.get("/logout")
+        self.client.post("/logout")
         user = User(username=username, role=role)
         user.set_password("TestPassword123!")
         db.session.add(user)

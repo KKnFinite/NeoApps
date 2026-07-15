@@ -287,7 +287,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertIn(b"Logout", response.data)
                 self.assertNotIn(b"motherbrain-main-menu-return", response.data)
                 self.assertIn(b'href="/motherbrain/manage-sort"', response.data)
-                self.assertIn(b'href="/logout"', response.data)
+                self.assertIn(b'action="/logout"', response.data)
                 self.assertIn(b'data-motherbrain-menu-button', response.data)
                 self.assertIn(b'aria-controls="motherbrain-mobile-menu"', response.data)
                 self.assertIn(b'id="motherbrain-mobile-menu"', response.data)
@@ -319,7 +319,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(".motherbrain-desktop-top-title-text", css)
         self.assertIn(".motherbrain-desktop-utility", css)
 
-        logout_response = self.client.get("/logout", follow_redirects=False)
+        logout_response = self.client.post("/logout", follow_redirects=False)
         self.assertEqual(logout_response.status_code, 302)
 
     def test_motherbrain_desktop_titles_match_side_menu_labels(self):
@@ -2046,7 +2046,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         operation = self._operation()
         db.session.add(operation)
         db.session.commit()
-        self.client.get("/logout")
+        self.client.post("/logout")
 
         protected_paths = (
             "/motherbrain/master-schedule",
@@ -11605,7 +11605,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         return values
 
     def _login_motherbrain_role(self, username, role):
-        self.client.get("/logout")
+        self.client.post("/logout")
         user = User(username=username, role=role)
         user.set_password("TestPassword123!")
         db.session.add(user)

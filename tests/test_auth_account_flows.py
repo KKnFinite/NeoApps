@@ -224,7 +224,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
             f"/admin/access-requests/{verified_membership.id}/approve",
             follow_redirects=False,
         )
-        self.client.get("/logout")
+        self.client.post("/logout")
         self._login(grandmaster.username)
 
         blocked = self.client.post(
@@ -609,7 +609,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
                 "confirm_password": "password123!",
             },
         )
-        self.client.get("/logout")
+        self.client.post("/logout")
 
         self._login(grandmaster.username)
         emergency_response = self.client.post(
@@ -712,7 +712,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
             )
             stale_target_session = dict(active_session)
 
-        self.client.get("/logout")
+        self.client.post("/logout")
         self._login(grandmaster.username)
         reset_response = self.client.post(
             f"/admin/users/{target_id}/emergency-reset",
@@ -762,7 +762,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         with self.client.session_transaction() as login_session:
             self.assertIn(FORCED_PASSWORD_CHANGE_SESSION_KEY, login_session)
 
-        logout_response = self.client.get("/logout", follow_redirects=False)
+        logout_response = self.client.post("/logout", follow_redirects=False)
         with self.client.session_transaction() as logged_out_session:
             self.assertNotIn(AUTH_SESSION_VERSION_SESSION_KEY, logged_out_session)
             self.assertNotIn(FORCED_PASSWORD_CHANGE_SESSION_KEY, logged_out_session)
@@ -897,7 +897,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
             },
             follow_redirects=False,
         )
-        self.client.get("/logout")
+        self.client.post("/logout")
 
         self._login(grandmaster.username)
         grandmaster_response = self.client.post(
@@ -909,7 +909,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
             },
             follow_redirects=False,
         )
-        self.client.get("/logout")
+        self.client.post("/logout")
 
         target_login = self.client.post(
             "/login",
@@ -991,13 +991,13 @@ class AuthAccountFlowsTest(unittest.TestCase):
             data={"email": "loginchoice@example.com", "password": "Password123!"},
             follow_redirects=False,
         )
-        self.client.get("/logout")
+        self.client.post("/logout")
         legacy_username_login = self.client.post(
             "/login",
             data={"username": "loginchoice", "password": "Password123!"},
             follow_redirects=False,
         )
-        self.client.get("/logout")
+        self.client.post("/logout")
         employee_login = self.client.post(
             "/login",
             data={"email": "EMP-loginchoice", "password": "Password123!"},

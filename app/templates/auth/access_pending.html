@@ -31,7 +31,9 @@
     {% endif %}
     <div class="action-row">
         <a class="action-button" href="{{ url_for('auth.portal_dashboard') }}">{{ neo_brand("Apps", "apps") }} Portal</a>
-        <a class="action-button action-button-secondary" href="{{ url_for('auth.logout') }}">Logout</a>
+        <form class="logout-form" method="post" action="{{ url_for('auth.logout') }}">
+            <button class="action-button action-button-secondary" type="submit">Logout</button>
+        </form>
     </div>
 </section>
 {% endblock %}

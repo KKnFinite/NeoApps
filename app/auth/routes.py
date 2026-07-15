@@ -40,6 +40,7 @@ from app.services.auth_rate_limits import (
     record_login_failure,
     record_password_reset_request,
 )
+from app.services.csrf import clear_csrf_session_state
 from app.services.password_policy import (
     PASSWORD_POLICY_GUIDANCE,
     set_user_password,
@@ -126,6 +127,7 @@ def login():
 
         clear_login_failures(client_ip, login_identifier)
         login_user(user)
+        clear_csrf_session_state()
         user.last_login = datetime.utcnow()
 
         try:
@@ -149,10 +151,12 @@ def login():
     return render_template("auth/login.html")
 
 
-@bp.route("/logout")
+@bp.route("/logout", methods=["POST"])
+@login_required
 def logout():
     logout_user()
     clear_authenticated_session_security_state(session)
+    clear_csrf_session_state()
     flash("You have been logged out.", "info")
     return redirect(url_for("auth.login"))
 

@@ -28,7 +28,9 @@
         {% set character_switcher_modifier = "character-switcher-standalone" %}
         {% include "_change_characters.html" %}
         {% endif %}
-        <a class="header-link mobile-banner-logout" href="{{ url_for('auth.logout') }}">Logout</a>
+        <form class="logout-form mobile-banner-logout" method="post" action="{{ url_for('auth.logout') }}">
+            <button class="header-link" type="submit">Logout</button>
+        </form>
         {% set neosektor_internal_menu_modifier = "neosektor-internal-menu-standalone" %}
         {% include "neonodes/neosektor/_internal_menu.html" %}
         <span class="visually-hidden">{{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>

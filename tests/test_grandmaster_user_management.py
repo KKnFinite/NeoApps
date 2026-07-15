@@ -632,7 +632,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
             },
             follow_redirects=False,
         )
-        self.client.get("/logout")
+        self.client.post("/logout")
 
         self._login(grandmaster.username)
         grandmaster_response = self.client.post(
@@ -644,7 +644,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
             },
             follow_redirects=False,
         )
-        self.client.get("/logout")
+        self.client.post("/logout")
 
         login_response = self.client.post(
             "/login",
@@ -729,7 +729,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
 
         for user in (pending, denied, no_membership):
             with self.subTest(username=user.username):
-                self.client.get("/logout")
+                self.client.post("/logout")
                 login = self.client.post(
                     "/login",
                     data={"username": user.username, "password": "Password123!"},

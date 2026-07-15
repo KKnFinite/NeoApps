@@ -2223,6 +2223,19 @@ a {
     font-size: 0.9rem;
     letter-spacing: 0.05em;
     text-transform: uppercase;
+    appearance: none;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.logout-form {
+    margin: 0;
+}
+
+.logout-form > button {
+    appearance: none;
+    cursor: pointer;
+    font: inherit;
 }
 
 .permission-rule-copy p {
@@ -21044,6 +21057,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     .mobile-account-panel a,
+    .mobile-account-panel button,
     .mobile-shell-menu-link,
     .mobile-bottom-switcher-link {
         display: flex;
@@ -21063,6 +21077,14 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         text-transform: uppercase;
     }
 
+    .mobile-account-panel .logout-form {
+        display: flex;
+    }
+
+    .mobile-account-panel .logout-form button {
+        width: 100%;
+    }
+
     .mobile-shell-menu-link {
         justify-content: center;
         min-height: 40px;
@@ -21072,6 +21094,8 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     .mobile-account-panel a:hover,
     .mobile-account-panel a:focus-visible,
+    .mobile-account-panel button:hover,
+    .mobile-account-panel button:focus-visible,
     .mobile-shell-menu-link:hover,
     .mobile-shell-menu-link:focus-visible,
     .mobile-shell-menu-link.is-active,

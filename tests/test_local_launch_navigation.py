@@ -641,7 +641,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("neo-brand--apps", html)
         self.assertIn("Portal", html)
         self.assertNotIn("neo-brand--portal", html)
-        self.assertIn('href="/logout"', html)
+        self.assertIn('action="/logout"', html)
         self.assertIn("<span>Home</span>", html)
         self.assertIn("<span>Alerts</span>", html)
         self.assertIn("<span>Switch</span>", html)
@@ -749,7 +749,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn('<span class="mobile-account-fallback" aria-hidden="true">Z</span>', topbar_actions)
         self.assertIn('href="/portal"', topbar_actions)
         self.assertIn("Portal", topbar_actions)
-        self.assertIn('href="/logout"', topbar_actions)
+        self.assertIn('action="/logout"', topbar_actions)
         self.assertIn('<nav class="mobile-bottom-nav', html)
         self.assertIn("data-mobile-bottom-nav", html)
 
@@ -1163,7 +1163,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         right_positions = [right_column.index(f'aria-label="{node}"') for node in right_order]
         self.assertEqual(left_positions, sorted(left_positions))
         self.assertEqual(right_positions, sorted(right_positions))
-        self.assertIn(b'href="/logout"', hub_response.data)
+        self.assertIn(b'action="/logout"', hub_response.data)
         self.assertIn("Logout", nav_html)
         self.assertNotIn("NeoRFD", nav_html)
         self.assertNotIn("NeoMotherBrain", nav_html)

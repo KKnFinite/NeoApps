@@ -51,6 +51,10 @@ class Config:
         os.getenv("EMAIL_VERIFICATION_TOKEN_HOURS", "24")
     )
     PASSWORD_RESET_TOKEN_HOURS = int(os.getenv("PASSWORD_RESET_TOKEN_HOURS", "1"))
+    CSRF_ENABLED = env_flag("CSRF_ENABLED", True)
+    CSRF_TOKEN_TTL_SECONDS = int(os.getenv("CSRF_TOKEN_TTL_SECONDS", "7200"))
+    # Existing test fixtures opt in where they need to assert CSRF behavior.
+    CSRF_PROTECT_TESTING = env_flag("CSRF_PROTECT_TESTING", False)
     AUTH_RATE_LIMIT_ENABLED = env_flag("AUTH_RATE_LIMIT_ENABLED", True)
     AUTH_RATE_LIMIT_STORAGE = os.getenv(
         "AUTH_RATE_LIMIT_STORAGE", "database"

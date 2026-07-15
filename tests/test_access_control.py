@@ -244,7 +244,7 @@ class AccessControlTest(unittest.TestCase):
         right_positions = [right_column.index(f'aria-label="{node}"') for node in right_order]
         self.assertEqual(left_positions, sorted(left_positions))
         self.assertEqual(right_positions, sorted(right_positions))
-        self.assertIn(b'href="/logout"', hub.data)
+        self.assertIn(b'action="/logout"', hub.data)
         self.assertNotIn(b'href="/motherbrain/operations"', hub.data)
         self.assertNotIn(b'href="/motherbrain/master-schedule"', hub.data)
         self.assertNotIn(b"Nightly Operations", hub.data)
