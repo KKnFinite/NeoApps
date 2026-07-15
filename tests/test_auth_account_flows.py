@@ -144,6 +144,49 @@ class AuthAccountFlowsTest(unittest.TestCase):
         )
         self.assertEqual(exact_minimum.status_code, 200)
 
+    def test_account_registration_conflicts_use_one_generic_response(self):
+        self._user("existing_email", email="existing@example.com")
+        employee_conflict = self._user("existing_employee")
+        self._user("legacy@example.com", email="legacy-account@example.com")
+        db.session.commit()
+
+        scenarios = (
+            ("existing@example.com", "NEW-EMPLOYEE"),
+            ("new@example.com", employee_conflict.employee_id),
+            ("existing@example.com", employee_conflict.employee_id),
+            ("legacy@example.com", "ANOTHER-EMPLOYEE"),
+        )
+        generic_message = (
+            b"An account may already exist with the information provided. "
+            b"Use password reset or contact an administrator if you need help."
+        )
+
+        for email, employee_id in scenarios:
+            with self.subTest(email=email, employee_id=employee_id):
+                response = self.client.post(
+                    "/create-account",
+                    data=self._account_form(email=email, employee_id=employee_id),
+                )
+
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(generic_message, response.data)
+                self.assertNotIn(b"That email is already in use.", response.data)
+                self.assertNotIn(b"That email cannot be used.", response.data)
+                self.assertNotIn(b"That employee ID is already in use.", response.data)
+
+    def test_account_registration_keeps_non_conflict_validation_specific(self):
+        response = self.client.post(
+            "/create-account",
+            data=self._account_form(employee_id=""),
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"Employee ID required.", response.data)
+        self.assertNotIn(
+            b"An account may already exist with the information provided.",
+            response.data,
+        )
+
     def test_pending_account_cannot_access_operational_data_before_approval(self):
         user = self._user("pending", email="pending@example.com", verified=True)
         gateway = ensure_default_gateway_and_nodes()

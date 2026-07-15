@@ -4,7 +4,7 @@ from functools import wraps
 from flask import current_app, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy import func
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.auth import bp
 from app.extensions import db
@@ -58,6 +58,10 @@ from app.services.user_tokens import (
 
 
 GENERIC_RESET_RESPONSE = "If an account exists for that email, a reset link has been sent."
+GENERIC_REGISTRATION_CONFLICT_RESPONSE = (
+    "An account may already exist with the information provided. "
+    "Use password reset or contact an administrator if you need help."
+)
 ROLE_CHOICES = ("watcher", "operator", "simulator", "master", "grandmaster")
 ROLE_DISPLAY_LABELS = {
     "watcher": "Watcher",
@@ -242,6 +246,16 @@ def create_account():
         except ValueError as error:
             db.session.rollback()
             flash(str(error), "error")
+            return render_template(
+                "auth/create_account.html",
+                app_definitions=portal_app_definitions(),
+                form=form,
+            ), 400
+        except IntegrityError:
+            # A concurrent registration can pass the preflight identity check.
+            # Keep that database-level uniqueness outcome indistinguishable too.
+            db.session.rollback()
+            flash(GENERIC_REGISTRATION_CONFLICT_RESPONSE, "error")
             return render_template(
                 "auth/create_account.html",
                 app_definitions=portal_app_definitions(),
@@ -955,7 +969,11 @@ def _build_user_from_account_form(form):
     if missing:
         raise ValueError(f"{', '.join(missing)} required.")
 
-    _raise_for_duplicate_identity(email, employee_id)
+    _raise_for_duplicate_identity(
+        email,
+        employee_id,
+        generic_registration_conflict=True,
+    )
 
     user = User(
         username=username,
@@ -982,23 +1000,33 @@ def _build_user_from_account_form(form):
     return user
 
 
-def _raise_for_duplicate_identity(email, employee_id, user_id=None):
+def _raise_for_duplicate_identity(
+    email,
+    employee_id,
+    user_id=None,
+    generic_registration_conflict=False,
+):
+    def raise_conflict(message):
+        if generic_registration_conflict:
+            raise ValueError(GENERIC_REGISTRATION_CONFLICT_RESPONSE)
+        raise ValueError(message)
+
     if User.query.filter(func.lower(User.email) == email.lower()).first():
         existing = User.query.filter(func.lower(User.email) == email.lower()).first()
         if not user_id or existing.id != user_id:
-            raise ValueError("That email is already in use.")
+            raise_conflict("That email is already in use.")
 
     if User.query.filter(func.lower(User.username) == email.lower()).first():
         existing = User.query.filter(func.lower(User.username) == email.lower()).first()
         if not user_id or existing.id != user_id:
-            raise ValueError("That email cannot be used.")
+            raise_conflict("That email cannot be used.")
 
     if User.query.filter(func.lower(User.employee_id) == employee_id.lower()).first():
         existing = User.query.filter(
             func.lower(User.employee_id) == employee_id.lower()
         ).first()
         if not user_id or existing.id != user_id:
-            raise ValueError("That employee ID is already in use.")
+            raise_conflict("That employee ID is already in use.")
 
 
 def _find_user_by_login(login_value):
