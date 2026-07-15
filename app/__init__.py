@@ -1,7 +1,11 @@
+import base64
 import json
 import os
+import re
+import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import Flask, abort, flash, redirect, request, send_from_directory, session, url_for
@@ -384,6 +388,8 @@ def register_request_guards(app):
 
 
 def register_security_headers(app):
+    _validate_security_headers_configuration(app)
+
     @app.after_request
     def add_security_headers(response):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -393,7 +399,128 @@ def register_security_headers(app):
             "Permissions-Policy",
             "camera=(), microphone=(), geolocation=()",
         )
+
+        if _should_apply_csp(app):
+            nonce = _csp_nonce()
+            response.headers.setdefault(
+                "Content-Security-Policy",
+                _content_security_policy(nonce),
+            )
+            _inject_csp_nonce(response, nonce)
+
+        if _should_apply_hsts(app):
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                (
+                    "max-age="
+                    f"{app.config['SECURITY_HEADERS_HSTS_MAX_AGE']}; "
+                    "includeSubDomains"
+                ),
+            )
         return response
+
+
+HSTS_MINIMUM_MAX_AGE_SECONDS = 31_536_000
+_CSP_NONCE_ATTRIBUTE_PATTERN = re.compile(
+    r"<script\b(?![^>]*\bnonce\s*=)",
+    flags=re.IGNORECASE,
+)
+
+
+def _is_production_environment(app):
+    return str(app.config.get("NEOAPPS_ENV") or "").strip().lower() in {
+        "production",
+        "prod",
+    }
+
+
+def _app_base_url_uses_https(app):
+    return urlparse(str(app.config.get("APP_BASE_URL") or "")).scheme == "https"
+
+
+def _should_apply_csp(app):
+    if not app.config.get("SECURITY_HEADERS_CSP_ENABLED", True):
+        return False
+    return _is_production_environment(app) or bool(
+        app.config.get("SECURITY_HEADERS_CSP_ALLOW_NON_PRODUCTION", False)
+    )
+
+
+def _should_apply_hsts(app):
+    if not app.config.get("SECURITY_HEADERS_HSTS_ENABLED", True):
+        return False
+    if not _app_base_url_uses_https(app):
+        return False
+    return _is_production_environment(app) or bool(
+        app.config.get("SECURITY_HEADERS_HSTS_ALLOW_NON_PRODUCTION", False)
+    )
+
+
+def _validate_security_headers_configuration(app):
+    if not _is_production_environment(app):
+        return
+
+    if app.config.get("SECURITY_HEADERS_HSTS_ENABLED", True):
+        if not _app_base_url_uses_https(app):
+            raise RuntimeError(
+                "APP_BASE_URL configuration error: production HSTS requires an "
+                "https:// APP_BASE_URL."
+            )
+        if int(app.config["SECURITY_HEADERS_HSTS_MAX_AGE"]) < HSTS_MINIMUM_MAX_AGE_SECONDS:
+            raise RuntimeError(
+                "SECURITY_HEADERS_HSTS_MAX_AGE must be at least 31536000 in production."
+            )
+
+
+def _csp_nonce():
+    from flask import g
+
+    nonce = getattr(g, "_neoapps_csp_nonce", None)
+    if not nonce:
+        nonce = base64.b64encode(secrets.token_bytes(32)).decode("ascii")
+        g._neoapps_csp_nonce = nonce
+    return nonce
+
+
+def _content_security_policy(nonce):
+    return "; ".join(
+        (
+            "default-src 'self'",
+            f"script-src 'self' 'nonce-{nonce}'",
+            "script-src-attr 'none'",
+            "style-src 'self'",
+            "style-src-attr 'none'",
+            (
+                "img-src 'self' data: https://commons.wikimedia.org "
+                "https://upload.wikimedia.org https://mortalkombat.fandom.com "
+                "https://static.wikia.nocookie.net https://vignette.wikia.nocookie.net"
+            ),
+            "font-src 'self' data:",
+            "connect-src 'self'",
+            "manifest-src 'self'",
+            "worker-src 'self'",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "frame-ancestors 'self'",
+            "form-action 'self'",
+        )
+    )
+
+
+def _inject_csp_nonce(response, nonce):
+    if response.mimetype != "text/html" or response.is_streamed:
+        return
+
+    body = response.get_data(as_text=True)
+    if "<script" not in body.lower():
+        return
+
+    response.set_data(
+        _CSP_NONCE_ATTRIBUTE_PATTERN.sub(
+            f'<script nonce="{nonce}"',
+            body,
+        )
+    )
 
 
 def register_pwa_assets(app):

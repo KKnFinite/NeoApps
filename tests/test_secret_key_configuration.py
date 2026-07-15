@@ -10,6 +10,7 @@ class SecretKeyConfigurationTest(unittest.TestCase):
             "DEBUG": False,
             "NEOAPPS_ENV": "production",
             "SECRET_KEY": secret_key,
+            "APP_BASE_URL": "https://neoapps.example.test",
             "SQLALCHEMY_DATABASE_URI": "postgresql://unused",
             "SQLALCHEMY_TRACK_MODIFICATIONS": False,
             "TESTING": False,

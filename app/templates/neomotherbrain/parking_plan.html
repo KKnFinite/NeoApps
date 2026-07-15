@@ -417,7 +417,7 @@
                     <form
                         method="post"
                         action="{{ url_for('neomotherbrain.clear_parking_plan_assignments', operation_id=operation.id) }}"
-                        onsubmit="return window.confirm('Clear all parked tails for this sort operation?');"
+                        data-confirm-message="Clear all parked tails for this sort operation?"
                     >
                         <input type="hidden" name="operation_id" value="{{ operation.id }}">
                         <button class="parking-clear-button" type="submit">CLEAR PARKING</button>

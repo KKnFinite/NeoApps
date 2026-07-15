@@ -54,6 +54,19 @@ class Config:
     EMERGENCY_PASSWORD_EXPIRATION_HOURS = int(
         os.getenv("EMERGENCY_PASSWORD_EXPIRATION_HOURS", "24")
     )
+    SECURITY_HEADERS_CSP_ENABLED = env_flag("SECURITY_HEADERS_CSP_ENABLED", True)
+    SECURITY_HEADERS_CSP_ALLOW_NON_PRODUCTION = env_flag(
+        "SECURITY_HEADERS_CSP_ALLOW_NON_PRODUCTION",
+        False,
+    )
+    SECURITY_HEADERS_HSTS_ENABLED = env_flag("SECURITY_HEADERS_HSTS_ENABLED", True)
+    SECURITY_HEADERS_HSTS_ALLOW_NON_PRODUCTION = env_flag(
+        "SECURITY_HEADERS_HSTS_ALLOW_NON_PRODUCTION",
+        False,
+    )
+    SECURITY_HEADERS_HSTS_MAX_AGE = int(
+        os.getenv("SECURITY_HEADERS_HSTS_MAX_AGE", "31536000")
+    )
     CSRF_ENABLED = env_flag("CSRF_ENABLED", True)
     CSRF_TOKEN_TTL_SECONDS = int(os.getenv("CSRF_TOKEN_TTL_SECONDS", "7200"))
     # Existing test fixtures opt in where they need to assert CSRF behavior.

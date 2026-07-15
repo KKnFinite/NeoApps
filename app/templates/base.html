@@ -65,6 +65,21 @@
             field.value = token;
             form.prepend(field);
         }, true);
+
+        document.addEventListener("change", (event) => {
+            const select = event.target instanceof HTMLSelectElement ? event.target : null;
+            if (select?.matches("[data-submit-on-change]") && select.form) {
+                select.form.requestSubmit();
+            }
+        });
+
+        document.addEventListener("submit", (event) => {
+            const form = event.target instanceof HTMLFormElement ? event.target : null;
+            const message = form?.dataset.confirmMessage;
+            if (message && !window.confirm(message)) {
+                event.preventDefault();
+            }
+        });
     })();
     </script>
 </head>
@@ -287,7 +302,7 @@
                 <form class="rfd-active-sort-control" method="get" action="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="Active sort selector">
                     <label>
                         <span>Active Sort</span>
-                        <select class="rfd-active-sort-select" name="operation_id" onchange="this.form.submit()">
+                        <select class="rfd-active-sort-select" name="operation_id" data-submit-on-change>
                             {% for sort_operation in rfd_sort_operations %}
                             <option value="{{ sort_operation.id }}" {% if gateway_active_sort_operation and sort_operation.id == gateway_active_sort_operation.id %}selected{% endif %}>
                                 {{ sort_operation.gateway_code }} {{ sort_operation.sort_name|upper }} {{ sort_operation.sort_date.month }}/{{ sort_operation.sort_date.day }}/{{ '%02d'|format(sort_operation.sort_date.year % 100) }}
