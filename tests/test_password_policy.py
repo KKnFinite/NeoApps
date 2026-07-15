@@ -3,11 +3,14 @@ import unittest
 from unittest.mock import patch
 from urllib.error import URLError
 
+from app.models import User
 from app.services.password_policy import (
     HIBP_RANGE_API_URL,
     PasswordPolicyError,
+    set_user_password,
     validate_password,
 )
+from werkzeug.security import generate_password_hash
 
 
 class _HibpResponse:
@@ -102,6 +105,31 @@ class PasswordPolicyHibpTest(unittest.TestCase):
         self.assertNotIn(password, logged_text)
         self.assertNotIn(full_hash, logged_text)
         self.assertNotIn(suffix, logged_text)
+
+    def test_direct_user_password_write_is_rejected(self):
+        user = User(username="unchecked-password-write")
+
+        with self.assertRaisesRegex(RuntimeError, "set_user_password"):
+            user.set_password("violet river lantern phrase")
+
+        self.assertIsNone(user.password_hash)
+
+    @patch("app.services.password_policy._hibp_check_enabled", return_value=False)
+    def test_validated_password_service_assigns_password(self, _enabled):
+        user = User(username="validated-password-write")
+
+        set_user_password(user, "violet river lantern phrase")
+
+        self.assertTrue(user.check_password("violet river lantern phrase"))
+        self.assertIsNotNone(user.password_changed_at)
+
+    def test_existing_password_hashes_remain_verifiable(self):
+        user = User(
+            username="legacy-password-hash",
+            password_hash=generate_password_hash("legacy violet river phrase"),
+        )
+
+        self.assertTrue(user.check_password("legacy violet river phrase"))
 
 
 if __name__ == "__main__":

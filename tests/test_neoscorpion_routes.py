@@ -27,6 +27,7 @@ from app.services.neoscorpion import (
     lbs_to_gallons,
 )
 from app.services.permission_rules import ensure_default_permission_rules
+from app.services.password_policy import set_user_password
 
 
 class NeoScorpionRoutesTest(unittest.TestCase):
@@ -203,7 +204,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         operation, first = self._add_current_departure("UPS301", "N123UP", "SDF")
         _operation, second = self._add_current_departure("UPS302", "N456UP", "EWR")
         other = User(username="other_fueler", email="other@example.test", role="watcher")
-        other.set_password("TestPassword123!")
+        set_user_password(other, "TestPassword123!")
         db.session.add(other)
         db.session.flush()
         db.session.add_all(
@@ -288,7 +289,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             email=f"neoscorpion_{role}@example.test",
             role="watcher",
         )
-        user.set_password("TestPassword123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
 

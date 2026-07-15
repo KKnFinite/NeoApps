@@ -12,6 +12,7 @@ from app.services.permission_rules import (
     user_can,
 )
 from app.models.user import ROLE_LEVELS
+from app.services.password_policy import set_user_password
 
 
 class PermissionRulesTest(unittest.TestCase):
@@ -510,7 +511,7 @@ class PermissionRulesTest(unittest.TestCase):
 
     def _user(self, username, role="watcher"):
         user = User(username=username, role=role)
-        user.set_password("TestPassword123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.commit()
         return user
@@ -530,7 +531,7 @@ class PermissionRulesTest(unittest.TestCase):
 
     def _user_with_ermac_role(self, username, role):
         user = User(username=username, role="watcher")
-        user.set_password("TestPassword123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
 
@@ -559,7 +560,7 @@ class PermissionRulesTest(unittest.TestCase):
 
     def _user_with_node_role(self, username, node_code, role):
         user = User(username=username, role="watcher")
-        user.set_password("TestPassword123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
 

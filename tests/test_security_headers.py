@@ -6,6 +6,7 @@ from app.extensions import db
 from app.models import PortalAppAccess, User
 from app.services.access_control import backfill_default_gateway_node_roles, ensure_default_gateway_and_nodes
 from app.services.permission_rules import ensure_default_permission_rules
+from app.services.password_policy import set_user_password
 
 
 class SecurityHeadersTest(unittest.TestCase):
@@ -110,7 +111,7 @@ class SecurityHeadersTest(unittest.TestCase):
         db.session.commit()
         self.client.post(
             "/login",
-            data={"username": user.username, "password": "Password123!"},
+            data={"username": user.username, "password": "TestPassword123!"},
             base_url="https://neoapps.example.test",
             follow_redirects=False,
         )
@@ -133,7 +134,7 @@ class SecurityHeadersTest(unittest.TestCase):
             role="grandmaster",
             is_active=True,
         )
-        user.set_password("Password123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
         backfill_default_gateway_node_roles(user, role="grandmaster")

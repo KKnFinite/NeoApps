@@ -83,7 +83,15 @@ class User(UserMixin, db.Model):
         foreign_keys=[last_password_reset_by_user_id],
     )
 
-    def set_password(self, password):
+    def set_password(self, _password):
+        """Reject unchecked password writes outside the shared policy service."""
+        raise RuntimeError(
+            "Direct password writes are unsupported. "
+            "Use app.services.password_policy.set_user_password()."
+        )
+
+    def _set_password_hash(self, password):
+        """Low-level hash assignment for the validated password policy service only."""
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):

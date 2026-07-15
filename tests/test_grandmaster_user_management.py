@@ -12,6 +12,7 @@ from app.services.access_control import (
     get_user_node_role,
     user_can_access_node,
 )
+from app.services.password_policy import set_user_password
 
 
 class GrandmasterUserManagementTest(unittest.TestCase):
@@ -699,7 +700,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
 
         login_response = self.client.post(
             "/login",
-            data={"username": "kessler", "password": "Password123!"},
+            data={"username": "kessler", "password": "TestPassword123!"},
             follow_redirects=False,
         )
         users_response = self.client.get("/admin/users")
@@ -732,7 +733,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
                 self.client.post("/logout")
                 login = self.client.post(
                     "/login",
-                    data={"username": user.username, "password": "Password123!"},
+                    data={"username": user.username, "password": "TestPassword123!"},
                     follow_redirects=False,
                 )
                 motherbrain = self.client.get("/motherbrain", follow_redirects=False)
@@ -776,7 +777,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         )
         if verified:
             user.email_verified_at = datetime.utcnow()
-        user.set_password("Password123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
         return user
@@ -817,7 +818,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
     def _login(self, username):
         return self.client.post(
             "/login",
-            data={"username": username, "password": "Password123!"},
+            data={"username": username, "password": "TestPassword123!"},
             follow_redirects=False,
         )
 

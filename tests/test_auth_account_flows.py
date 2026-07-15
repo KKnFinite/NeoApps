@@ -29,6 +29,7 @@ from app.services.auth_session_security import (
     FORCED_PASSWORD_CHANGE_SESSION_KEY,
     FORCED_PASSWORD_CHANGE_SESSION_TTL_SECONDS,
 )
+from app.services.password_policy import set_user_password
 from app.services.user_tokens import (
     EMAIL_VERIFICATION,
     PASSWORD_RESET,
@@ -94,6 +95,19 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertNotEqual(token.token_hash, raw_token)
         self.assertNotIn(raw_token, token.token_hash)
         self.assertFalse(user.password_policy_update_required)
+
+    def test_login_verification_does_not_revalidate_or_check_hibp(self):
+        self._user("login_without_policy_check", verified=True)
+        db.session.commit()
+
+        with patch("app.services.password_policy.validate_password") as validate, patch(
+            "app.services.password_policy._password_is_breached"
+        ) as hibp_check:
+            response = self._login("login_without_policy_check")
+
+        self.assertEqual(response.status_code, 302)
+        validate.assert_not_called()
+        hibp_check.assert_not_called()
 
     def test_account_registration_enforces_shared_password_policy(self):
         rejected_cases = (
@@ -202,7 +216,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
         login = self.client.post(
             "/login",
-            data={"username": "pending", "password": "Password123!"},
+            data={"username": "pending", "password": "TestPassword123!"},
             follow_redirects=False,
         )
         motherbrain = self.client.get("/motherbrain", follow_redirects=False)
@@ -536,7 +550,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self._login_attempt(user.username, "wrong password", remote_addr="198.51.100.12")
         limited = self._login_attempt(
             user.username,
-            "Password123!",
+            "TestPassword123!",
             remote_addr="198.51.100.13",
         )
 
@@ -554,7 +568,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self._login_attempt(user.username, "wrong password", remote_addr="198.51.100.14")
         successful = self._login_attempt(
             user.username,
-            "Password123!",
+            "TestPassword123!",
             remote_addr="198.51.100.14",
         )
 
@@ -582,7 +596,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
         successful = self._login_attempt(
             user.username,
-            "Password123!",
+            "TestPassword123!",
             remote_addr="198.51.100.15",
         )
 
@@ -734,7 +748,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         change_response = self.client.post(
             "/change-password",
             data={
-                "current_password": "Password123!",
+                "current_password": "TestPassword123!",
                 "password": "password123!",
                 "confirm_password": "password123!",
             },
@@ -754,8 +768,8 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(reset_response.status_code, 400)
         self.assertEqual(change_response.status_code, 400)
         self.assertEqual(emergency_response.status_code, 400)
-        self.assertTrue(user.check_password("Password123!"))
-        self.assertTrue(target.check_password("Password123!"))
+        self.assertTrue(user.check_password("TestPassword123!"))
+        self.assertTrue(target.check_password("TestPassword123!"))
 
     def test_existing_user_policy_update_waits_for_login_then_blocks_until_changed(self):
         user, _membership = self._approved_user("policy_user", "policy@example.com")
@@ -814,7 +828,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         changed_response = self.client.post(
             "/change-password",
             data={
-                "current_password": "Password123!",
+                "current_password": "TestPassword123!",
                 "password": "violet river lantern",
                 "confirm_password": "violet river lantern",
             },
@@ -841,7 +855,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         changed_response = self.client.post(
             "/change-password",
             data={
-                "current_password": "Password123!",
+                "current_password": "TestPassword123!",
                 "password": "violet river lantern",
                 "confirm_password": "violet river lantern",
             },
@@ -1187,7 +1201,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
         response = self.client.post(
             "/login",
-            data={"username": user.username, "password": "Password123!"},
+            data={"username": user.username, "password": "TestPassword123!"},
             follow_redirects=False,
         )
 
@@ -1250,7 +1264,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         changed = self.client.post(
             "/change-password",
             data={
-                "current_password": "Password123!",
+                "current_password": "TestPassword123!",
                 "password": "violet river lantern",
                 "confirm_password": "violet river lantern",
             },
@@ -1288,7 +1302,8 @@ class AuthAccountFlowsTest(unittest.TestCase):
     def test_emergency_reset_updates_password_changed_at(self):
         grandmaster = self._admin("timestamp_admin", "grandmaster")
         target = self._user("timestamp_target", verified=True)
-        self.assertIsNone(target.password_changed_at)
+        original_password_changed_at = target.password_changed_at
+        self.assertIsNotNone(original_password_changed_at)
         db.session.commit()
         self._login(grandmaster.username)
 
@@ -1305,7 +1320,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         updated = db.session.get(User, target.id)
         self.assertEqual(response.status_code, 302)
         self.assertTrue(updated.password_reset_required)
-        self.assertTrue(updated.password_changed_at)
+        self.assertGreater(updated.password_changed_at, original_password_changed_at)
 
     def test_expired_password_reset_token_is_rejected(self):
         user = self._user("expiredreset", email="expiredreset@example.com", verified=True)
@@ -1428,19 +1443,19 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
         email_login = self.client.post(
             "/login",
-            data={"email": "loginchoice@example.com", "password": "Password123!"},
+            data={"email": "loginchoice@example.com", "password": "TestPassword123!"},
             follow_redirects=False,
         )
         self.client.post("/logout")
         legacy_username_login = self.client.post(
             "/login",
-            data={"username": "loginchoice", "password": "Password123!"},
+            data={"username": "loginchoice", "password": "TestPassword123!"},
             follow_redirects=False,
         )
         self.client.post("/logout")
         employee_login = self.client.post(
             "/login",
-            data={"email": "EMP-loginchoice", "password": "Password123!"},
+            data={"email": "EMP-loginchoice", "password": "TestPassword123!"},
             follow_redirects=False,
         )
 
@@ -1764,7 +1779,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         )
         if verified:
             user.email_verified_at = datetime.utcnow()
-        user.set_password("Password123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
         return user
@@ -1805,7 +1820,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
     def _login(self, username):
         return self.client.post(
             "/login",
-            data={"username": username, "password": "Password123!"},
+            data={"username": username, "password": "TestPassword123!"},
             follow_redirects=False,
         )
 

@@ -24,6 +24,7 @@ from app.models import (
 )
 from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.permission_rules import ensure_default_permission_rules
+from app.services.password_policy import set_user_password
 from app.services.gateway_matrix import current_gateway_local_datetime
 from app.services import flight_api as flight_api_service
 from app.neomotherbrain import routes as neomotherbrain_routes
@@ -3120,7 +3121,7 @@ class FlightApiTestPageTest(unittest.TestCase):
         )
         db.session.add(self.gateway)
         user = User(username="Kessler", role="grandmaster")
-        user.set_password("TestPassword123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
         backfill_default_gateway_node_roles(user, role="grandmaster")
@@ -3146,7 +3147,7 @@ class FlightApiTestPageTest(unittest.TestCase):
     def _login_motherbrain_role(self, username, role):
         self.client.post("/logout")
         user = User(username=username, role=role)
-        user.set_password("TestPassword123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
         backfill_default_gateway_node_roles(user, role=role)

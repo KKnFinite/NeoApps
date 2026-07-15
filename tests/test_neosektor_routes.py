@@ -24,6 +24,7 @@ from app.models import (
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.permission_rules import ensure_default_permission_rules
+from app.services.password_policy import set_user_password
 from app.services.sort_timeline import ensure_sort_timeline_settings
 from app.services.uld_requests import (
     active_on_the_way_events,
@@ -2651,7 +2652,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             role="watcher",
             is_active=True,
         )
-        user.set_password("TestPassword123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
 

@@ -104,7 +104,7 @@ def set_user_password(user, password, confirmation=None, *, email=None, employee
         email=email,
         employee_id=employee_id,
     )
-    user.set_password(password)
+    user._set_password_hash(password)
     user.password_changed_at = datetime.utcnow()
     if getattr(user, "id", None) is not None:
         rotate_user_session_version(user)

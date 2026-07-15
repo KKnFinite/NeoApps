@@ -25,6 +25,7 @@ from app.models import (
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.gateway_matrix import current_gateway_local_datetime
 from app.services.permission_rules import ensure_default_permission_rules
+from app.services.password_policy import set_user_password
 from app.services.sort_timeline import ensure_sort_timeline_settings
 from app.services.time_display import format_local_hhmm
 
@@ -2494,7 +2495,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             email=f"neoermac_{role}@example.test",
             role="watcher",
         )
-        user.set_password("TestPassword123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
 

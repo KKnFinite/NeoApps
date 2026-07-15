@@ -59,6 +59,7 @@ from app.services.parking_rules import (
     parking_schedule_rule_key,
 )
 from app.services.permission_rules import ensure_default_permission_rules
+from app.services.password_policy import set_user_password
 from app.services.sort_timeline import (
     ensure_sort_timeline_settings,
     record_sort_timeline_api_attempt,
@@ -85,7 +86,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.create_all()
 
         user = User(username="Kessler", role="grandmaster")
-        user.set_password("TestPassword123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
         backfill_default_gateway_node_roles(user, role="grandmaster")
@@ -2062,7 +2063,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
     def test_user_without_rfd_access_cannot_enter_motherbrain(self):
         dfw_gateway = self._gateway("DFW", "NeoDFW")
         user = User(username="dfw_only", role="grandmaster")
-        user.set_password("TestPassword123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
         db.session.add(
@@ -11607,7 +11608,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
     def _login_motherbrain_role(self, username, role):
         self.client.post("/logout")
         user = User(username=username, role=role)
-        user.set_password("TestPassword123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
         backfill_default_gateway_node_roles(user, role=role)

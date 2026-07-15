@@ -18,6 +18,7 @@ from app.services.access_control import (
     user_has_gateway_access,
 )
 from app.services.permission_rules import ensure_default_permission_rules
+from app.services.password_policy import set_user_password
 
 
 class AccessControlTest(unittest.TestCase):
@@ -553,7 +554,7 @@ class AccessControlTest(unittest.TestCase):
 
     def _user(self, username):
         user = User(username=username, role="watcher")
-        user.set_password("TestPassword123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
         return user

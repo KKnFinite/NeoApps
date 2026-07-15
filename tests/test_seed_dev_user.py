@@ -7,6 +7,7 @@ from app import create_app
 from app.extensions import db
 from app.models import GatewayMembership, GatewayNodeRole, NeoNode, SortDateOperation, User
 from app.services.access_control import user_can_access_node
+from app.services.password_policy import set_user_password
 from scripts.seed_dev_user import (
     LOCAL_SQLITE_FALLBACK_PASSWORD,
     seed_dev_grandmaster,
@@ -54,7 +55,7 @@ class SeedDevUserTest(unittest.TestCase):
     def test_seed_updates_existing_user_password_role_and_active_state(self):
         db.create_all()
         user = User(username="Kessler", role="watcher", is_active=False)
-        user.set_password("OldPassword123!")
+        set_user_password(user, "OldPassword123!")
         db.session.add(user)
         db.session.commit()
 

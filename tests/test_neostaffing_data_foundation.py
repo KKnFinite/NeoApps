@@ -12,6 +12,7 @@ from app.models import (
     User,
 )
 from app.services import neostaffing as staffing_service
+from app.services.password_policy import set_user_password
 
 
 class NeoStaffingDataFoundationTest(unittest.TestCase):
@@ -691,7 +692,8 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         employee = self._person_with_name("E730", "part_time", "Attend", "Worker", "2020-01-01")
         employee.employee_status = "fmla"
         staffing_service.assign_work_area(employee, work_area)
-        user = User(username="recorder", employee_id="REC1", role="watcher", password_hash="x")
+        user = User(username="recorder", employee_id="REC1", role="watcher")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
 
@@ -743,16 +745,15 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         db.session.flush()
 
         context = staffing_service.management_attendance_context_for_user(user)
-        missing = staffing_service.management_attendance_context_for_user(
-            User(
-                username="missing-person",
-                employee_id="M404",
-                role="watcher",
-                password_hash="x",
-                is_management=True,
-                management_level="manager",
-            )
+        missing_user = User(
+            username="missing-person",
+            employee_id="M404",
+            role="watcher",
+            is_management=True,
+            management_level="manager",
         )
+        set_user_password(missing_user, "TestPassword123!")
+        missing = staffing_service.management_attendance_context_for_user(missing_user)
 
         self.assertTrue(context["is_management"])
         self.assertEqual(context["person"], supervisor)
@@ -837,7 +838,7 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
             is_active=True,
             email_verified_at=datetime.utcnow(),
         )
-        user.set_password("Password123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
         return user

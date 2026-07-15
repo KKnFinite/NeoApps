@@ -17,6 +17,7 @@ from app.models import (
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services import neostaffing as staffing_service
 from app.services.permission_rules import ensure_default_permission_rules
+from app.services.password_policy import set_user_password
 
 
 class NeoStaffingRoutesTest(unittest.TestCase):
@@ -619,7 +620,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 db.session.commit()
                 client.post(
                     "/login",
-                    data={"username": user.username, "password": "Password123!"},
+                    data={"username": user.username, "password": "TestPassword123!"},
                     follow_redirects=False,
                 )
 
@@ -1756,7 +1757,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             is_active=True,
             email_verified_at=datetime.utcnow(),
         )
-        user.set_password("Password123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
         return user
@@ -1777,7 +1778,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
     def _login(self, username):
         return self.client.post(
             "/login",
-            data={"username": username, "password": "Password123!"},
+            data={"username": username, "password": "TestPassword123!"},
             follow_redirects=False,
         )
 
@@ -1785,7 +1786,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         client = self.app.test_client()
         client.post(
             "/login",
-            data={"username": username, "password": "Password123!"},
+            data={"username": username, "password": "TestPassword123!"},
             follow_redirects=False,
         )
         return client
@@ -1803,7 +1804,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             is_active=True,
             email_verified_at=datetime.utcnow(),
         )
-        user.set_password("Password123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
         return user

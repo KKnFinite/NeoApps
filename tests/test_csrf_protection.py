@@ -16,6 +16,7 @@ from app.models import (
 from app.services import neostaffing as staffing_service
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.permission_rules import ensure_default_permission_rules
+from app.services.password_policy import set_user_password
 
 
 class CsrfProtectionTest(unittest.TestCase):
@@ -52,13 +53,13 @@ class CsrfProtectionTest(unittest.TestCase):
 
         without_token = self.client.post(
             "/login",
-            data={"username": user.username, "password": "Password123!"},
+            data={"username": user.username, "password": "TestPassword123!"},
         )
         invalid_token = self.client.post(
             "/login",
             data={
                 "username": user.username,
-                "password": "Password123!",
+                "password": "TestPassword123!",
                 "csrf_token": "invalid",
             },
         )
@@ -68,7 +69,7 @@ class CsrfProtectionTest(unittest.TestCase):
             "/login",
             data={
                 "username": user.username,
-                "password": "Password123!",
+                "password": "TestPassword123!",
                 "csrf_token": token,
             },
             follow_redirects=False,
@@ -93,7 +94,7 @@ class CsrfProtectionTest(unittest.TestCase):
                 "/login",
                 data={
                     "username": user.username,
-                    "password": "Password123!",
+                    "password": "TestPassword123!",
                     "csrf_token": token,
                 },
             )
@@ -228,7 +229,7 @@ class CsrfProtectionTest(unittest.TestCase):
             "/login",
             data={
                 "username": user.username,
-                "password": "Password123!",
+                "password": "TestPassword123!",
                 "csrf_token": token,
             },
             follow_redirects=False,
@@ -244,7 +245,7 @@ class CsrfProtectionTest(unittest.TestCase):
             is_active=True,
             email_verified_at=datetime.utcnow(),
         )
-        user.set_password("Password123!")
+        set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
         return user

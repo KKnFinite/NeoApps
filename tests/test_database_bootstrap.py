@@ -10,6 +10,7 @@ from app.extensions import db
 from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, User
 from app.services.access_control import DEFAULT_NEONODES, user_can_access_node
 from app.services.permission_rules import DEFAULT_PERMISSION_RULES
+from app.services.password_policy import set_user_password
 from app.services.database_bootstrap import (
     LOCAL_SQLITE_FALLBACK_PASSWORD,
     bootstrap_database,
@@ -108,7 +109,7 @@ class DatabaseBootstrapTest(unittest.TestCase):
             role="watcher",
             is_active=False,
         )
-        user.set_password("OldPassword123!")
+        set_user_password(user, "OldPassword123!")
         db.session.add(user)
         db.session.commit()
 
@@ -163,9 +164,9 @@ class DatabaseBootstrapTest(unittest.TestCase):
     def test_password_policy_migration_marks_existing_approved_users_only(self):
         db.create_all()
         approved_user = User(username="approved_policy_user")
-        approved_user.set_password("Password123!")
+        set_user_password(approved_user, "TestPassword123!")
         pending_user = User(username="pending_policy_user")
-        pending_user.set_password("Password123!")
+        set_user_password(pending_user, "TestPassword123!")
         db.session.add_all((approved_user, pending_user))
         db.session.flush()
         gateway = Gateway(code="PW", name="Password Policy")
