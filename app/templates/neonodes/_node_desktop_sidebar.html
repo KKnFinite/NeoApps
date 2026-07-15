@@ -19,11 +19,13 @@
         {% endif %}
     </a>
 
+    {% if not is_neosektor_page %}
     <div class="motherbrain-desktop-side-context node-desktop-side-context">
         <span class="eyebrow">{{ node_header_name }}</span>
         <strong>{{ default_gateway.code if default_gateway is defined else "RFD" }} OPERATIONS</strong>
         <span class="node-desktop-current-label">{{ node_current_label }}</span>
     </div>
+    {% endif %}
 
     <nav class="motherbrain-desktop-side-menu node-desktop-side-menu" aria-label="{{ node_header_name }} desktop menu">
         {% if is_neoermac_page %}

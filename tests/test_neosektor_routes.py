@@ -107,6 +107,30 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn(b"motherbrain-header-nav", response.data)
         self.assertNotIn(b"data-neosektor-internal-menu", response.data)
 
+    def test_neosektor_desktop_dashboard_uses_compact_tiles_without_sidebar_context_card(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neosektor")
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"node-desktop-side-context", response.data)
+        self.assertNotIn(b"RFD OPERATIONS", response.data)
+        self.assertIn('grid-template-columns: repeat(3, minmax(0, 1fr));', css)
+        self.assertIn('aspect-ratio: 1.18 / 1;', css)
+        self.assertIn('height: calc(100vh - 140px);', css)
+        self.assertIn('grid-template-rows: auto minmax(0, 1fr);', css)
+
+    def test_desktop_ballmat_and_character_switcher_compaction_rules_are_present(self):
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertIn('body.blueprint-neosektor.node-desktop-nav-page.neosektor-ballmat-operator-page', css)
+        self.assertIn('font-size: clamp(1.32rem, 1.9vw, 1.7rem);', css)
+        self.assertIn('width: min(216px, calc(100vw - 32px));', css)
+        self.assertIn('min-height: 28px;', css)
+        self.assertIn('width: 20px;', css)
+        self.assertIn('@media (min-width: 901px)', css)
+
     def test_tunnel_conductor_marks_duplicate_title_for_mobile_shell(self):
         self._login_approved_user(role="simulator")
 

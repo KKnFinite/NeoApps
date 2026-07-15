@@ -21965,6 +21965,31 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 }
 
 @media (min-width: 901px) {
+    /* Keep the shared desktop character picker compact without changing mobile controls. */
+    .character-switcher-panel {
+        top: calc(100% + 6px);
+        gap: 4px;
+        width: min(216px, calc(100vw - 32px));
+        padding: 6px;
+    }
+
+    .character-switcher-link {
+        gap: 7px;
+        min-height: 28px;
+        padding: 5px 7px;
+        font-size: 0.64rem;
+    }
+
+    .character-switcher-icon {
+        width: 20px;
+        height: 20px;
+        border-radius: 5px;
+    }
+
+    .character-switcher-suffix {
+        font-size: 0.5rem;
+    }
+
     body.node-desktop-nav-page {
         --motherbrain-side-nav-width: 292px;
     }
@@ -22137,6 +22162,47 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     body.node-desktop-nav-page .neosektor-mobile-dashboard-icon {
         width: 48px;
         height: 48px;
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page .node-desktop-side-nav {
+        grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page .neosektor-dashboard-shell {
+        height: calc(100vh - 140px);
+        min-height: 0;
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page .neosektor-dashboard-wrap,
+    body.blueprint-neosektor.node-desktop-nav-page .neosektor-dashboard-shell .neosektor-mobile-dashboard {
+        width: min(100%, 780px);
+        max-width: 780px;
+        min-height: 0;
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page .neosektor-dashboard-wrap {
+        height: 100%;
+        padding: 0;
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page .neosektor-dashboard-shell .neosektor-mobile-dashboard {
+        height: 100%;
+        align-content: center;
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page .neosektor-mobile-dashboard-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page .neosektor-mobile-dashboard-tile {
+        aspect-ratio: 1.18 / 1;
+        padding: 12px 10px;
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_arrive"],
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_unload"] {
+        font-size: clamp(1.32rem, 1.9vw, 1.7rem);
     }
 }
 
