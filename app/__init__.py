@@ -4,8 +4,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from flask import Flask, abort, redirect, request, send_from_directory, session, url_for
-from flask_login import current_user
+from flask import Flask, abort, flash, redirect, request, send_from_directory, session, url_for
+from flask_login import current_user, logout_user
 
 from app.auth.permissions import (
     can_enter_data,
@@ -17,7 +17,11 @@ from app.config import Config, configure_secret_key
 from app.extensions import db, login_manager
 from app.services.access_control import user_can_access_node, user_has_gateway_access
 from app.services.permission_rules import permission_access, user_can
-from app.services.password_policy import PASSWORD_POLICY_LOGIN_SESSION_KEY
+from app.services.auth_session_security import (
+    clear_authenticated_session_security_state,
+    session_version_matches_user,
+)
+from app.services.password_policy import user_requires_password_change
 from app.services.time_display import format_local_hhmm
 
 
@@ -337,13 +341,13 @@ def register_request_guards(app):
         if not current_user.is_authenticated:
             return None
 
-        emergency_reset_required = bool(
-            getattr(current_user, "password_reset_required", False)
-        )
-        policy_update_required = bool(
-            getattr(current_user, "password_policy_update_required", False)
-        ) and session.get(PASSWORD_POLICY_LOGIN_SESSION_KEY) == current_user.id
-        if not emergency_reset_required and not policy_update_required:
+        if not session_version_matches_user(session, current_user):
+            logout_user()
+            clear_authenticated_session_security_state(session)
+            flash("Your session has expired. Please sign in again.", "info")
+            return redirect(url_for("auth.login"))
+
+        if not user_requires_password_change(current_user):
             return None
 
         allowed_endpoints = {

@@ -60,6 +60,7 @@ class User(UserMixin, db.Model):
         nullable=False,
         default=False,
     )
+    auth_session_version = db.Column(db.Integer, nullable=False, default=1)
     password_changed_at = db.Column(db.DateTime, nullable=True)
     last_password_reset_by_user_id = db.Column(
         db.Integer,

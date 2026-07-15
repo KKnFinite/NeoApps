@@ -24,6 +24,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "email_verified_at": "DATETIME",
         "password_reset_required": "BOOLEAN DEFAULT 0",
         "password_policy_update_required": "BOOLEAN DEFAULT 0",
+        "auth_session_version": "INTEGER NOT NULL DEFAULT 1",
         "password_changed_at": "DATETIME",
         "last_password_reset_by_user_id": "INTEGER",
         "last_password_reset_at": "DATETIME",
@@ -117,6 +118,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "is_management": "BOOLEAN DEFAULT FALSE",
         "management_level": "VARCHAR(40)",
         "password_policy_update_required": "BOOLEAN DEFAULT FALSE",
+        "auth_session_version": "INTEGER NOT NULL DEFAULT 1",
     },
     "sort_date_missions": {
         "arrival_status": "VARCHAR(32)",

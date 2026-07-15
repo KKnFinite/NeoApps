@@ -25,9 +25,15 @@ from app.services.access_control import (
     user_has_gateway_access,
 )
 from app.services.permission_rules import ensure_default_permission_rules, grouped_permission_rules, user_can
+from app.services.auth_session_security import (
+    clear_authenticated_session_security_state,
+    clear_forced_password_change_session,
+    establish_authenticated_session,
+    forced_password_change_session_is_fresh,
+    user_session_version,
+)
 from app.services.password_policy import (
     PASSWORD_POLICY_GUIDANCE,
-    PASSWORD_POLICY_LOGIN_SESSION_KEY,
     set_user_password,
     user_requires_password_change,
 )
@@ -117,13 +123,14 @@ def login():
             return render_template("auth/login.html"), 500
 
         if user_requires_password_change(user):
-            if user.password_policy_update_required:
-                session[PASSWORD_POLICY_LOGIN_SESSION_KEY] = user.id
-            else:
-                session.pop(PASSWORD_POLICY_LOGIN_SESSION_KEY, None)
+            establish_authenticated_session(
+                session,
+                user,
+                forced_password_change=True,
+            )
             return redirect(url_for("auth.change_password"))
 
-        session.pop(PASSWORD_POLICY_LOGIN_SESSION_KEY, None)
+        establish_authenticated_session(session, user)
         return redirect(url_for("auth.portal_dashboard"))
 
     return render_template("auth/login.html")
@@ -131,8 +138,8 @@ def login():
 
 @bp.route("/logout")
 def logout():
-    session.pop(PASSWORD_POLICY_LOGIN_SESSION_KEY, None)
     logout_user()
+    clear_authenticated_session_security_state(session)
     flash("You have been logged out.", "info")
     return redirect(url_for("auth.login"))
 
@@ -337,7 +344,9 @@ def reset_password(token):
 @bp.route("/change-password", methods=["GET", "POST"])
 @login_required
 def change_password():
-    forced_change = user_requires_password_change(current_user)
+    forced_change = user_requires_password_change(
+        current_user
+    ) and forced_password_change_session_is_fresh(session, current_user)
     if request.method == "POST":
         if not forced_change and not current_user.check_password(
             request.form.get("current_password", "")
@@ -363,7 +372,7 @@ def change_password():
 
         current_user.password_reset_required = False
         current_user.password_policy_update_required = False
-        session.pop(PASSWORD_POLICY_LOGIN_SESSION_KEY, None)
+        clear_forced_password_change_session(session)
         db.session.commit()
         flash("Password changed.", "info")
         return redirect(url_for("auth.portal_dashboard"))
@@ -728,6 +737,7 @@ def emergency_reset_user_password(user_id):
 
         target_user.password_reset_required = True
         target_user.password_policy_update_required = False
+        target_user.auth_session_version = user_session_version(target_user) + 1
         target_user.last_password_reset_by_user_id = current_user.id
         target_user.last_password_reset_at = datetime.utcnow()
         target_user.last_password_reset_reason = reason

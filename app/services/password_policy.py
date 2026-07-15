@@ -13,7 +13,6 @@ from flask import current_app, has_app_context
 
 MIN_PASSWORD_LENGTH = 12
 MAX_PASSWORD_LENGTH = 128
-PASSWORD_POLICY_LOGIN_SESSION_KEY = "password_policy_login_user_id"
 HIBP_RANGE_API_URL = "https://api.pwnedpasswords.com/range/"
 HIBP_REQUEST_TIMEOUT_SECONDS = 3
 PASSWORD_POLICY_GUIDANCE = (

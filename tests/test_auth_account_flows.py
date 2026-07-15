@@ -3,6 +3,8 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+from flask import g
+
 from app import create_app
 from create_grandmaster import create_grandmaster_user
 from app.extensions import db
@@ -12,6 +14,12 @@ from app.services.access_control import (
     backfill_default_gateway_node_roles,
     ensure_default_gateway_and_nodes,
     user_can_access_node,
+)
+from app.services.auth_session_security import (
+    AUTH_SESSION_VERSION_SESSION_KEY,
+    FORCED_PASSWORD_CHANGE_AUTHENTICATED_AT_SESSION_KEY,
+    FORCED_PASSWORD_CHANGE_SESSION_KEY,
+    FORCED_PASSWORD_CHANGE_SESSION_TTL_SECONDS,
 )
 from app.services.user_tokens import (
     EMAIL_VERIFICATION,
@@ -389,6 +397,14 @@ class AuthAccountFlowsTest(unittest.TestCase):
         db.session.commit()
 
         login_response = self._login(user.username)
+        with self.client.session_transaction() as login_session:
+            self.assertEqual(
+                login_session[FORCED_PASSWORD_CHANGE_SESSION_KEY], user.id
+            )
+            self.assertIn(
+                FORCED_PASSWORD_CHANGE_AUTHENTICATED_AT_SESSION_KEY,
+                login_session,
+            )
         blocked_response = self.client.get("/motherbrain", follow_redirects=False)
         changed_response = self.client.post(
             "/change-password",
@@ -407,17 +423,141 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertFalse(updated.password_reset_required)
         self.assertTrue(updated.password_changed_at)
         self.assertTrue(updated.check_password("violet river lantern"))
+        with self.client.session_transaction() as changed_session:
+            self.assertNotIn(FORCED_PASSWORD_CHANGE_SESSION_KEY, changed_session)
+            self.assertNotIn(
+                FORCED_PASSWORD_CHANGE_AUTHENTICATED_AT_SESSION_KEY,
+                changed_session,
+            )
 
-    def test_policy_update_does_not_interrupt_an_existing_session(self):
+    def test_existing_session_cannot_bypass_forced_change_after_flag_is_set(self):
         user, _membership = self._approved_user("active_session", "active@example.com")
         db.session.commit()
         self._login(user.username)
 
         user.password_policy_update_required = True
         db.session.commit()
-        response = self.client.get("/portal", follow_redirects=False)
+        blocked_response = self.client.get("/portal", follow_redirects=False)
+        bypass_response = self.client.post(
+            "/change-password",
+            data={
+                "password": "violet river lantern",
+                "confirm_password": "violet river lantern",
+            },
+        )
+        changed_response = self.client.post(
+            "/change-password",
+            data={
+                "current_password": "Password123!",
+                "password": "violet river lantern",
+                "confirm_password": "violet river lantern",
+            },
+            follow_redirects=False,
+        )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(blocked_response.location, "/change-password")
+        self.assertEqual(bypass_response.status_code, 400)
+        self.assertIn(b"Current password is incorrect", bypass_response.data)
+        self.assertEqual(changed_response.location, "/portal")
+        self.assertTrue(db.session.get(User, user.id).check_password("violet river lantern"))
+
+    def test_emergency_reset_invalidates_existing_user_sessions(self):
+        grandmaster = self._admin("session_reset_admin", "grandmaster")
+        target = self._user("session_reset_target", verified=True)
+        db.session.commit()
+        target_id = target.id
+        initial_session_version = target.auth_session_version
+
+        active_login = self._login(target.username)
+        with self.client.session_transaction() as active_session:
+            self.assertEqual(
+                active_session[AUTH_SESSION_VERSION_SESSION_KEY],
+                initial_session_version,
+            )
+            stale_target_session = dict(active_session)
+
+        self.client.get("/logout")
+        self._login(grandmaster.username)
+        reset_response = self.client.post(
+            f"/admin/users/{target_id}/emergency-reset",
+            data={
+                "reason": "Security response.",
+                "password": "twilight harbor signal",
+                "confirm_password": "twilight harbor signal",
+            },
+            follow_redirects=False,
+        )
+        db.session.expire_all()
+        updated_target = db.session.get(User, target_id)
+        with self.client.session_transaction() as active_session:
+            active_session.clear()
+            active_session.update(stale_target_session)
+            self.assertEqual(
+                active_session[AUTH_SESSION_VERSION_SESSION_KEY],
+                initial_session_version,
+            )
+        g.pop("_login_user", None)
+        invalidated_response = self.client.get(
+            "/change-password",
+            follow_redirects=False,
+        )
+
+        self.assertEqual(active_login.status_code, 302)
+        self.assertEqual(reset_response.status_code, 302)
+        self.assertEqual(
+            reset_response.location,
+            f"/portal/manage/users/{target_id}",
+        )
+        self.assertEqual(
+            updated_target.auth_session_version,
+            initial_session_version + 1,
+        )
+        self.assertEqual(invalidated_response.location, "/login")
+        with self.client.session_transaction() as invalidated_session:
+            self.assertNotIn(AUTH_SESSION_VERSION_SESSION_KEY, invalidated_session)
+            self.assertNotIn(FORCED_PASSWORD_CHANGE_SESSION_KEY, invalidated_session)
+
+    def test_forced_change_marker_is_cleared_on_logout(self):
+        user = self._user("forced_marker_logout", verified=True)
+        user.password_reset_required = True
+        db.session.commit()
+
+        login_response = self._login(user.username)
+        with self.client.session_transaction() as login_session:
+            self.assertIn(FORCED_PASSWORD_CHANGE_SESSION_KEY, login_session)
+
+        logout_response = self.client.get("/logout", follow_redirects=False)
+        with self.client.session_transaction() as logged_out_session:
+            self.assertNotIn(AUTH_SESSION_VERSION_SESSION_KEY, logged_out_session)
+            self.assertNotIn(FORCED_PASSWORD_CHANGE_SESSION_KEY, logged_out_session)
+            self.assertNotIn(
+                FORCED_PASSWORD_CHANGE_AUTHENTICATED_AT_SESSION_KEY,
+                logged_out_session,
+            )
+
+        self.assertEqual(login_response.location, "/change-password")
+        self.assertEqual(logout_response.location, "/login")
+
+    def test_expired_forced_change_marker_requires_current_password(self):
+        user = self._user("expired_forced_marker", verified=True)
+        user.password_reset_required = True
+        db.session.commit()
+
+        self._login(user.username)
+        with self.client.session_transaction() as login_session:
+            login_session[FORCED_PASSWORD_CHANGE_AUTHENTICATED_AT_SESSION_KEY] -= (
+                FORCED_PASSWORD_CHANGE_SESSION_TTL_SECONDS + 1
+            )
+        response = self.client.post(
+            "/change-password",
+            data={
+                "password": "violet river lantern",
+                "confirm_password": "violet river lantern",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"Current password is incorrect", response.data)
 
     def test_voluntary_password_change_requires_current_password(self):
         user = self._user("voluntary", email="voluntary@example.com", verified=True)
