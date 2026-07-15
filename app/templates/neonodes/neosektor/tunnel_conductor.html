@@ -138,21 +138,6 @@
                 {% endfor %}
             </div>
         </section>
-            </div>
-
-        <section class="tunnel-panel tunnel-bay-panel" aria-label="Bay status" data-tunnel-bay-column>
-            <h2>Bay Status</h2>
-            <div class="tunnel-bay-grid">
-                {% for side_key in ["east", "west"] %}
-                {% for bay in state.sides[side_key].bays %}
-                <article class="tunnel-bay-card" data-tunnel-bay="{{ bay.bay_name }}">
-                    <span>{{ bay.bay_name }}</span>
-                    <strong>{{ bay.status }}</strong>
-                </article>
-                {% endfor %}
-                {% endfor %}
-            </div>
-        </section>
 
         <section class="tunnel-panel tunnel-operations-card" aria-label="Operations" data-tunnel-operations-card>
         <section class="tunnel-panel tunnel-settings-panel" aria-label="Left to unload settings">
@@ -230,6 +215,21 @@
                 </div>
             </div>
         </section>
+        </section>
+            </div>
+
+        <section class="tunnel-panel tunnel-bay-panel" aria-label="Bay status" data-tunnel-bay-column>
+            <h2>Bay Status</h2>
+            <div class="tunnel-bay-grid">
+                {% for side_key in ["east", "west"] %}
+                {% for bay in state.sides[side_key].bays %}
+                <article class="tunnel-bay-card" data-tunnel-bay="{{ bay.bay_name }}">
+                    <span>{{ bay.bay_name }}</span>
+                    <strong>{{ bay.status }}</strong>
+                </article>
+                {% endfor %}
+                {% endfor %}
+            </div>
         </section>
         </div>
         <div class="neosektor-inline-edit-error" data-neosektor-edit-error hidden aria-live="polite"></div>

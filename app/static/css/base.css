@@ -22299,18 +22299,26 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-desktop-workspace {
         display: grid;
-        grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(190px, 0.82fr);
-        grid-template-rows: repeat(3, minmax(0, 1fr));
-        grid-template-areas:
-            "wave-first east-first west-first bays"
-            "wave-second east-second west-second bays"
-            "operations east-open west-open bays";
+        grid-template-columns: minmax(0, 1fr) minmax(210px, 0.3fr);
+        grid-template-rows: minmax(0, 1fr);
         gap: 7px;
         min-height: 0;
         height: 100%;
     }
 
-    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-desktop-left,
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-desktop-left {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) repeat(2, minmax(0, 0.9fr));
+        grid-template-rows: repeat(3, minmax(0, 1fr));
+        grid-template-areas:
+            "wave-first east-first west-first"
+            "wave-second east-second west-second"
+            "operations east-open west-open";
+        gap: 7px;
+        min-height: 0;
+        height: 100%;
+    }
+
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-grid,
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-counts-panel,
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-grid,
@@ -22484,7 +22492,8 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-bay-panel {
-        grid-area: bays;
+        grid-column: 2;
+        grid-row: 1;
         display: grid;
         grid-template-rows: auto minmax(0, 1fr);
         gap: 6px;
@@ -22528,5 +22537,23 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         bottom: 12px;
         left: 12px;
         z-index: 4;
+    }
+}
+
+@media (max-width: 900px) {
+    /* Keep the established mobile reading order after nesting Operations in the desktop workspace. */
+    .blueprint-neosektor .tunnel-desktop-workspace,
+    .blueprint-neosektor .tunnel-desktop-left,
+    .blueprint-neosektor .tunnel-operations-card {
+        display: contents;
+    }
+
+    .blueprint-neosektor .tunnel-bay-panel {
+        order: 3;
+    }
+
+    .blueprint-neosektor .tunnel-settings-panel,
+    .blueprint-neosektor .tunnel-offset-panel {
+        order: 4;
     }
 }

@@ -1296,11 +1296,22 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"data-tunnel-wave-input=\"first\"", response.data)
         self.assertIn(b"data-tunnel-wave-input=\"second\"", response.data)
         self.assertIn(b"data-open-bays", response.data)
-        self.assertIn("grid-template-areas:\n            \"wave-first east-first west-first bays\"", css)
-        self.assertIn("grid-template-columns: minmax(0, 1fr);", css)
+        self.assertIn(
+            "grid-template-columns: minmax(0, 1fr) minmax(210px, 0.3fr);",
+            css,
+        )
+        self.assertIn(
+            "grid-template-areas:\n"
+            "            \"wave-first east-first west-first\"\n"
+            "            \"wave-second east-second west-second\"\n"
+            "            \"operations east-open west-open\";",
+            css,
+        )
+        self.assertIn("grid-column: 2;", css)
         self.assertIn("grid-auto-rows: minmax(0, 1fr);", css)
         self.assertIn(".blueprint-neosektor .tunnel-operations-card {\n    display: contents;", css)
         self.assertIn("@media (min-width: 901px)", css)
+        self.assertIn("@media (max-width: 900px)", css)
 
     def test_neosektor_numeric_inputs_render_no_spinner_class_and_css(self):
         self._login_approved_user(role="simulator")
