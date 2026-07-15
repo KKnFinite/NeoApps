@@ -10,6 +10,8 @@ from urllib.request import Request, urlopen
 
 from flask import current_app, has_app_context
 
+from app.services.auth_session_security import rotate_user_session_version
+
 
 MIN_PASSWORD_LENGTH = 12
 MAX_PASSWORD_LENGTH = 128
@@ -104,6 +106,8 @@ def set_user_password(user, password, confirmation=None, *, email=None, employee
     )
     user.set_password(password)
     user.password_changed_at = datetime.utcnow()
+    if getattr(user, "id", None) is not None:
+        rotate_user_session_version(user)
 
 
 def user_requires_password_change(user):

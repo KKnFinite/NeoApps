@@ -784,6 +784,102 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(changed_response.location, "/portal")
         self.assertTrue(db.session.get(User, user.id).check_password("violet river lantern"))
 
+    def test_voluntary_password_change_invalidates_other_sessions_only(self):
+        user, _membership = self._approved_user(
+            "voluntary_session_change",
+            "voluntary-session@example.com",
+        )
+        db.session.commit()
+        user_id = user.id
+        initial_version = user.auth_session_version
+
+        self._login(user.username)
+        stale_session = self._session_state()
+        changed_response = self.client.post(
+            "/change-password",
+            data={
+                "current_password": "Password123!",
+                "password": "violet river lantern",
+                "confirm_password": "violet river lantern",
+            },
+            follow_redirects=False,
+        )
+        db.session.expire_all()
+        updated_user = db.session.get(User, user_id)
+        current_session_response = self.client.get("/portal", follow_redirects=False)
+
+        self._restore_session(stale_session)
+        stale_session_response = self.client.get("/portal", follow_redirects=False)
+
+        self.assertEqual(changed_response.location, "/portal")
+        self.assertEqual(updated_user.auth_session_version, initial_version + 1)
+        self.assertEqual(current_session_response.status_code, 200)
+        self.assertEqual(stale_session_response.location, "/login")
+
+    def test_forced_password_change_invalidates_other_sessions_and_keeps_current_session(self):
+        user, _membership = self._approved_user(
+            "forced_session_change",
+            "forced-session@example.com",
+        )
+        user.password_reset_required = True
+        db.session.commit()
+        user_id = user.id
+        initial_version = user.auth_session_version
+
+        login_response = self._login(user.username)
+        stale_session = self._session_state()
+        changed_response = self.client.post(
+            "/change-password",
+            data={
+                "password": "violet river lantern",
+                "confirm_password": "violet river lantern",
+            },
+            follow_redirects=False,
+        )
+        db.session.expire_all()
+        updated_user = db.session.get(User, user_id)
+        current_session_response = self.client.get("/portal", follow_redirects=False)
+
+        self._restore_session(stale_session)
+        stale_session_response = self.client.get("/portal", follow_redirects=False)
+
+        self.assertEqual(login_response.location, "/change-password")
+        self.assertEqual(changed_response.location, "/portal")
+        self.assertEqual(updated_user.auth_session_version, initial_version + 1)
+        self.assertEqual(current_session_response.status_code, 200)
+        self.assertEqual(stale_session_response.location, "/login")
+
+    def test_password_reset_invalidates_existing_authenticated_sessions(self):
+        user, _membership = self._approved_user(
+            "reset_session_change",
+            "reset-session@example.com",
+        )
+        raw_token, _token_record = create_user_token(user, PASSWORD_RESET)
+        db.session.commit()
+        user_id = user.id
+        initial_version = user.auth_session_version
+
+        self._login(user.username)
+        stale_session = self._session_state()
+        self.client.post("/logout")
+        reset_response = self.client.post(
+            f"/reset-password/{raw_token}",
+            data={
+                "password": "violet river lantern",
+                "confirm_password": "violet river lantern",
+            },
+            follow_redirects=False,
+        )
+        db.session.expire_all()
+        updated_user = db.session.get(User, user_id)
+
+        self._restore_session(stale_session)
+        stale_session_response = self.client.get("/portal", follow_redirects=False)
+
+        self.assertEqual(reset_response.location, "/login")
+        self.assertEqual(updated_user.auth_session_version, initial_version + 1)
+        self.assertEqual(stale_session_response.location, "/login")
+
     def test_emergency_reset_invalidates_existing_user_sessions(self):
         grandmaster = self._admin("session_reset_admin", "grandmaster")
         target = self._user("session_reset_target", verified=True)
@@ -810,6 +906,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
             },
             follow_redirects=False,
         )
+        administrator_session_response = self.client.get("/portal", follow_redirects=False)
         db.session.expire_all()
         updated_target = db.session.get(User, target_id)
         with self.client.session_transaction() as active_session:
@@ -835,6 +932,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
             updated_target.auth_session_version,
             initial_session_version + 1,
         )
+        self.assertEqual(administrator_session_response.status_code, 200)
         self.assertEqual(invalidated_response.location, "/login")
         with self.client.session_transaction() as invalidated_session:
             self.assertNotIn(AUTH_SESSION_VERSION_SESSION_KEY, invalidated_session)
@@ -1455,6 +1553,16 @@ class AuthAccountFlowsTest(unittest.TestCase):
             data={"username": username, "password": "Password123!"},
             follow_redirects=False,
         )
+
+    def _session_state(self):
+        with self.client.session_transaction() as active_session:
+            return dict(active_session)
+
+    def _restore_session(self, session_state):
+        with self.client.session_transaction() as active_session:
+            active_session.clear()
+            active_session.update(session_state)
+        g.pop("_login_user", None)
 
     def _login_attempt(self, identifier, password, *, remote_addr, forwarded_for=None):
         headers = {"X-Forwarded-For": forwarded_for} if forwarded_for else None

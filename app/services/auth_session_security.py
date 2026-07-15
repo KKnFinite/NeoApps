@@ -16,6 +16,12 @@ def user_session_version(user):
     return int(getattr(user, "auth_session_version", 1) or 1)
 
 
+def rotate_user_session_version(user):
+    """Invalidate sessions issued before a successful password change."""
+    user.auth_session_version = user_session_version(user) + 1
+    return user.auth_session_version
+
+
 def session_version_matches_user(session_data, user):
     """Whether this browser session was issued for the user's current version."""
     return session_data.get(AUTH_SESSION_VERSION_SESSION_KEY) == user_session_version(user)
