@@ -62,6 +62,7 @@ class User(UserMixin, db.Model):
     )
     auth_session_version = db.Column(db.Integer, nullable=False, default=1)
     password_changed_at = db.Column(db.DateTime, nullable=True)
+    temporary_password_expires_at = db.Column(db.DateTime(timezone=True), nullable=True)
     last_password_reset_by_user_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id"),

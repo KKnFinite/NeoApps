@@ -1,6 +1,7 @@
 """Session-bound authorization state for sensitive account flows."""
 
 import time
+from datetime import datetime, timedelta, timezone
 
 
 AUTH_SESSION_VERSION_SESSION_KEY = "auth_session_version"
@@ -20,6 +21,23 @@ def rotate_user_session_version(user):
     """Invalidate sessions issued before a successful password change."""
     user.auth_session_version = user_session_version(user) + 1
     return user.auth_session_version
+
+
+def temporary_password_expiration(hours, *, now=None):
+    """Return a UTC expiration timestamp for an administrator-issued password."""
+    return _as_utc(now or datetime.now(timezone.utc)) + timedelta(hours=int(hours))
+
+
+def temporary_password_is_expired(user, *, now=None):
+    """Whether a current emergency password has passed its UTC expiration."""
+    if not user or not getattr(user, "password_reset_required", False):
+        return False
+
+    expires_at = getattr(user, "temporary_password_expires_at", None)
+    if expires_at is None:
+        return False
+
+    return _as_utc(expires_at) <= _as_utc(now or datetime.now(timezone.utc))
 
 
 def session_version_matches_user(session_data, user):
@@ -63,3 +81,10 @@ def clear_authenticated_session_security_state(session_data):
     """Discard all session data used to authenticate or bypass a password prompt."""
     session_data.pop(AUTH_SESSION_VERSION_SESSION_KEY, None)
     clear_forced_password_change_session(session_data)
+
+
+def _as_utc(value):
+    """Normalize legacy naive database timestamps as UTC for safe comparison."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)

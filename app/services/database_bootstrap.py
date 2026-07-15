@@ -49,6 +49,7 @@ def bootstrap_database(app=None):
         user.is_active = True
         user.email_verified_at = user.email_verified_at or datetime.utcnow()
         user.password_reset_required = False
+        user.temporary_password_expires_at = None
         user.password_changed_at = user.password_changed_at or datetime.utcnow()
         user.mfa_required = False
         user.mfa_enabled = False

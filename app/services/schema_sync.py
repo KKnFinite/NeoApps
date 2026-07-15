@@ -26,6 +26,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "password_policy_update_required": "BOOLEAN DEFAULT 0",
         "auth_session_version": "INTEGER NOT NULL DEFAULT 1",
         "password_changed_at": "DATETIME",
+        "temporary_password_expires_at": "DATETIME",
         "last_password_reset_by_user_id": "INTEGER",
         "last_password_reset_at": "DATETIME",
         "last_password_reset_reason": "TEXT",
@@ -119,6 +120,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "management_level": "VARCHAR(40)",
         "password_policy_update_required": "BOOLEAN DEFAULT FALSE",
         "auth_session_version": "INTEGER NOT NULL DEFAULT 1",
+        "temporary_password_expires_at": "TIMESTAMP WITH TIME ZONE",
     },
     "sort_date_missions": {
         "arrival_status": "VARCHAR(32)",

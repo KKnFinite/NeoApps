@@ -51,6 +51,9 @@ class Config:
         os.getenv("EMAIL_VERIFICATION_TOKEN_HOURS", "24")
     )
     PASSWORD_RESET_TOKEN_HOURS = int(os.getenv("PASSWORD_RESET_TOKEN_HOURS", "1"))
+    EMERGENCY_PASSWORD_EXPIRATION_HOURS = int(
+        os.getenv("EMERGENCY_PASSWORD_EXPIRATION_HOURS", "24")
+    )
     CSRF_ENABLED = env_flag("CSRF_ENABLED", True)
     CSRF_TOKEN_TTL_SECONDS = int(os.getenv("CSRF_TOKEN_TTL_SECONDS", "7200"))
     # Existing test fixtures opt in where they need to assert CSRF behavior.

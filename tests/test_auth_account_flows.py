@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -932,11 +932,223 @@ class AuthAccountFlowsTest(unittest.TestCase):
             updated_target.auth_session_version,
             initial_session_version + 1,
         )
+        self.assertIsNotNone(updated_target.temporary_password_expires_at)
         self.assertEqual(administrator_session_response.status_code, 200)
         self.assertEqual(invalidated_response.location, "/login")
         with self.client.session_transaction() as invalidated_session:
             self.assertNotIn(AUTH_SESSION_VERSION_SESSION_KEY, invalidated_session)
             self.assertNotIn(FORCED_PASSWORD_CHANGE_SESSION_KEY, invalidated_session)
+
+    def test_emergency_temporary_password_routes_only_to_forced_change_before_expiration(self):
+        grandmaster = self._admin("temporary_expiry_admin", "grandmaster")
+        target = self._user("temporary_expiry_target", verified=True)
+        db.session.commit()
+        target_id = target.id
+
+        self._login(grandmaster.username)
+        reset_response = self.client.post(
+            f"/admin/users/{target_id}/emergency-reset",
+            data={
+                "reason": "Security response.",
+                "password": "twilight harbor signal",
+                "confirm_password": "twilight harbor signal",
+            },
+            follow_redirects=False,
+        )
+        db.session.expire_all()
+        updated_target = db.session.get(User, target_id)
+        expiration = updated_target.temporary_password_expires_at
+
+        self.client.post("/logout")
+        login_response = self.client.post(
+            "/login",
+            data={
+                "username": target.username,
+                "password": "twilight harbor signal",
+            },
+            follow_redirects=False,
+        )
+        blocked_response = self.client.get("/portal", follow_redirects=False)
+
+        self.assertEqual(reset_response.status_code, 302)
+        self.assertEqual(self.app.config["EMERGENCY_PASSWORD_EXPIRATION_HOURS"], 24)
+        self.assertIsNotNone(expiration)
+        expiration_utc = (
+            expiration.replace(tzinfo=timezone.utc)
+            if expiration.tzinfo is None
+            else expiration
+        )
+        remaining_lifetime = expiration_utc - datetime.now(timezone.utc)
+        self.assertGreater(
+            remaining_lifetime,
+            timedelta(hours=23, minutes=59),
+        )
+        self.assertLessEqual(remaining_lifetime, timedelta(hours=24, seconds=1))
+        self.assertEqual(login_response.location, "/change-password")
+        self.assertEqual(blocked_response.location, "/change-password")
+
+    def test_expired_emergency_temporary_password_is_rejected_generically(self):
+        grandmaster = self._admin("expired_temporary_admin", "grandmaster")
+        target = self._user("expired_temporary_target", verified=True)
+        db.session.commit()
+
+        self._login(grandmaster.username)
+        self.client.post(
+            f"/admin/users/{target.id}/emergency-reset",
+            data={
+                "reason": "Security response.",
+                "password": "twilight harbor signal",
+                "confirm_password": "twilight harbor signal",
+            },
+            follow_redirects=False,
+        )
+        target.temporary_password_expires_at = datetime.now(timezone.utc) - timedelta(
+            seconds=1
+        )
+        db.session.commit()
+
+        self.client.post("/logout")
+        response = self.client.post(
+            "/login",
+            data={
+                "username": target.username,
+                "password": "twilight harbor signal",
+            },
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertIn(b"Invalid email or password.", response.data)
+
+    def test_forced_change_clears_temporary_expiration_and_replaces_temporary_password(self):
+        grandmaster = self._admin("temporary_replacement_admin", "grandmaster")
+        target = self._user("temporary_replacement_target", verified=True)
+        db.session.commit()
+        target_id = target.id
+
+        self._login(grandmaster.username)
+        self.client.post(
+            f"/admin/users/{target_id}/emergency-reset",
+            data={
+                "reason": "Security response.",
+                "password": "twilight harbor signal",
+                "confirm_password": "twilight harbor signal",
+            },
+            follow_redirects=False,
+        )
+        self.client.post("/logout")
+        self.client.post(
+            "/login",
+            data={
+                "username": target.username,
+                "password": "twilight harbor signal",
+            },
+            follow_redirects=False,
+        )
+        change_response = self.client.post(
+            "/change-password",
+            data={
+                "password": "violet river lantern",
+                "confirm_password": "violet river lantern",
+            },
+            follow_redirects=False,
+        )
+        db.session.expire_all()
+        updated_target = db.session.get(User, target_id)
+
+        self.client.post("/logout")
+        old_password_response = self.client.post(
+            "/login",
+            data={
+                "username": target.username,
+                "password": "twilight harbor signal",
+            },
+        )
+        new_password_response = self.client.post(
+            "/login",
+            data={
+                "username": target.username,
+                "password": "violet river lantern",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(change_response.location, "/portal")
+        self.assertFalse(updated_target.password_reset_required)
+        self.assertIsNone(updated_target.temporary_password_expires_at)
+        self.assertEqual(old_password_response.status_code, 401)
+        self.assertEqual(new_password_response.location, "/portal")
+
+    def test_second_emergency_reset_replaces_temporary_password_and_expiration(self):
+        grandmaster = self._admin("second_temporary_admin", "grandmaster")
+        target = self._user("second_temporary_target", verified=True)
+        db.session.commit()
+        target_id = target.id
+
+        self._login(grandmaster.username)
+        first_reset = self.client.post(
+            f"/admin/users/{target_id}/emergency-reset",
+            data={
+                "reason": "First security response.",
+                "password": "twilight harbor signal",
+                "confirm_password": "twilight harbor signal",
+            },
+            follow_redirects=False,
+        )
+        db.session.expire_all()
+        first_expiration = db.session.get(User, target_id).temporary_password_expires_at
+
+        second_reset = self.client.post(
+            f"/admin/users/{target_id}/emergency-reset",
+            data={
+                "reason": "Second security response.",
+                "password": "violet river lantern",
+                "confirm_password": "violet river lantern",
+            },
+            follow_redirects=False,
+        )
+        db.session.expire_all()
+        updated_target = db.session.get(User, target_id)
+
+        self.client.post("/logout")
+        first_password_response = self.client.post(
+            "/login",
+            data={
+                "username": target.username,
+                "password": "twilight harbor signal",
+            },
+        )
+        second_password_response = self.client.post(
+            "/login",
+            data={
+                "username": target.username,
+                "password": "violet river lantern",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(first_reset.status_code, 302)
+        self.assertEqual(second_reset.status_code, 302)
+        self.assertFalse(updated_target.check_password("twilight harbor signal"))
+        self.assertTrue(updated_target.check_password("violet river lantern"))
+        self.assertNotEqual(updated_target.temporary_password_expires_at, first_expiration)
+        self.assertEqual(first_password_response.status_code, 401)
+        self.assertEqual(second_password_response.location, "/change-password")
+
+    def test_expired_temporary_field_does_not_block_permanent_password_login(self):
+        user = self._user("permanent_password_target", verified=True)
+        user.temporary_password_expires_at = datetime.now(timezone.utc) - timedelta(
+            seconds=1
+        )
+        user.password_reset_required = False
+        db.session.commit()
+
+        response = self.client.post(
+            "/login",
+            data={"username": user.username, "password": "Password123!"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.location, "/portal")
 
     def test_forced_change_marker_is_cleared_on_logout(self):
         user = self._user("forced_marker_logout", verified=True)

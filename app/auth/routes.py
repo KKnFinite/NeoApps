@@ -1,7 +1,7 @@
 from datetime import datetime
 from functools import wraps
 
-from flask import flash, redirect, render_template, request, session, url_for
+from flask import current_app, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
@@ -29,6 +29,8 @@ from app.services.auth_session_security import (
     clear_authenticated_session_security_state,
     establish_authenticated_session,
     forced_password_change_session_is_fresh,
+    temporary_password_expiration,
+    temporary_password_is_expired,
 )
 from app.services.auth_rate_limits import (
     clear_login_failures,
@@ -118,7 +120,10 @@ def login():
 
         user = _find_user_by_login(login_identifier) if login_identifier else None
 
-        if not user or not user.check_password(password) or not user.is_active:
+        credentials_valid = bool(
+            user and user.check_password(password) and user.is_active
+        )
+        if not credentials_valid or temporary_password_is_expired(user):
             record_login_failure(client_ip, login_identifier)
             db.session.commit()
             flash("Invalid email or password.", "error")
@@ -352,6 +357,7 @@ def reset_password(token):
 
         token_record.user.password_reset_required = False
         token_record.user.password_policy_update_required = False
+        token_record.user.temporary_password_expires_at = None
         revoke_unused_password_reset_tokens(token_record.user)
         db.session.commit()
         flash("Password reset complete. You can log in now.", "info")
@@ -396,6 +402,7 @@ def change_password():
 
         current_user.password_reset_required = False
         current_user.password_policy_update_required = False
+        current_user.temporary_password_expires_at = None
         db.session.commit()
         establish_authenticated_session(session, current_user)
         flash("Password changed.", "info")
@@ -761,6 +768,9 @@ def emergency_reset_user_password(user_id):
 
         target_user.password_reset_required = True
         target_user.password_policy_update_required = False
+        target_user.temporary_password_expires_at = temporary_password_expiration(
+            current_app.config["EMERGENCY_PASSWORD_EXPIRATION_HOURS"]
+        )
         target_user.last_password_reset_by_user_id = current_user.id
         target_user.last_password_reset_at = datetime.utcnow()
         target_user.last_password_reset_reason = reason
