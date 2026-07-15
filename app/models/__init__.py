@@ -1,3 +1,4 @@
+from app.models.auth_rate_limit_state import AuthRateLimitState
 from app.models.crew import Crew
 from app.models.flight_api_review_item import FlightApiReviewItem
 from app.models.gateway import Gateway
@@ -54,6 +55,7 @@ from app.models.user_token import UserToken
 
 __all__ = [
     "User",
+    "AuthRateLimitState",
     "UserToken",
     "FlightApiReviewItem",
     "Gateway",

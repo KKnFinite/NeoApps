@@ -630,6 +630,7 @@ def _sync_uld_request_unique_constraint_postgres(table_names):
 
 def _create_missing_application_tables(existing_table_names):
     from app.models import (
+        AuthRateLimitState,
         FlightApiReviewItem,
         MotherBrainAlert,
         MotherBrainParkingRule,
@@ -654,6 +655,7 @@ def _create_missing_application_tables(existing_table_names):
     )
 
     for model in (
+        AuthRateLimitState,
         FlightApiReviewItem,
         MotherBrainAlert,
         MotherBrainParkingRule,

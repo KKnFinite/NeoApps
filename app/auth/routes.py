@@ -32,6 +32,14 @@ from app.services.auth_session_security import (
     forced_password_change_session_is_fresh,
     user_session_version,
 )
+from app.services.auth_rate_limits import (
+    clear_login_failures,
+    client_ip_for_request,
+    login_is_limited,
+    password_reset_is_limited,
+    record_login_failure,
+    record_password_reset_request,
+)
 from app.services.password_policy import (
     PASSWORD_POLICY_GUIDANCE,
     set_user_password,
@@ -102,16 +110,21 @@ def login():
         legacy_username = request.form.get("username", "").strip()
         login_identifier = email or legacy_username
         password = request.form.get("password", "")
-        user = _find_user_by_login(login_identifier) if login_identifier else None
+        client_ip = client_ip_for_request(request)
 
-        if not user or not user.check_password(password):
+        if login_is_limited(client_ip, login_identifier):
             flash("Invalid email or password.", "error")
             return render_template("auth/login.html"), 401
 
-        if not user.is_active:
-            flash("This account is inactive.", "error")
-            return render_template("auth/login.html"), 403
+        user = _find_user_by_login(login_identifier) if login_identifier else None
 
+        if not user or not user.check_password(password) or not user.is_active:
+            record_login_failure(client_ip, login_identifier)
+            db.session.commit()
+            flash("Invalid email or password.", "error")
+            return render_template("auth/login.html"), 401
+
+        clear_login_failures(client_ip, login_identifier)
         login_user(user)
         user.last_login = datetime.utcnow()
 
@@ -293,11 +306,19 @@ def access_pending():
 def forgot_password():
     if request.method == "POST":
         email = _normalize_email(request.form.get("email"))
+        client_ip = client_ip_for_request(request)
+
+        if password_reset_is_limited(client_ip, email):
+            flash(GENERIC_RESET_RESPONSE, "info")
+            return render_template("auth/forgot_password.html", submitted=True)
+
         user = _find_user_by_email(email) if email else None
+        record_password_reset_request(client_ip, email)
 
         if user:
             raw_token, _token_record = create_user_token(user, PASSWORD_RESET)
-            db.session.commit()
+        db.session.commit()
+        if user:
             email_service.send_password_reset(user, raw_token)
 
         flash(GENERIC_RESET_RESPONSE, "info")

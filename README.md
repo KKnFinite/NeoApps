@@ -35,6 +35,28 @@ Local development uses SQLite when `DATABASE_URL` is not set. Render/production 
 
 Do not commit `DATABASE_URL` or database credentials.
 
+## Authentication Abuse Protection
+
+Login and forgot-password requests use the shared database table
+`auth_rate_limit_states`, so limits apply across all production workers. The
+normal schema sync/bootstrap workflow creates the table, including during
+`scripts\bootstrap_database.py` deployments.
+
+Defaults: login allows 10 failures per IP and 5 per account identifier in 15
+minutes; forgot-password allows 5 requests per IP and 3 per email in one hour.
+Both use escalating temporary cooldowns, never permanent account lockouts.
+
+Rate limiting is enabled by default with `AUTH_RATE_LIMIT_STORAGE=database`.
+Use `AUTH_RATE_LIMIT_ENABLED=false` only for controlled local troubleshooting.
+Forwarded client IP headers are ignored unless both settings are configured:
+
+```text
+AUTH_TRUST_PROXY_HEADERS=true
+AUTH_TRUSTED_PROXY_IPS=known-proxy-ip-or-cidr
+```
+
+Do not enable forwarded-header trust without the known production proxy list.
+
 ## Production Bootstrap
 
 After deploying with a fresh Neon database, run the safe idempotent bootstrap:

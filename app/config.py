@@ -51,6 +51,42 @@ class Config:
         os.getenv("EMAIL_VERIFICATION_TOKEN_HOURS", "24")
     )
     PASSWORD_RESET_TOKEN_HOURS = int(os.getenv("PASSWORD_RESET_TOKEN_HOURS", "1"))
+    AUTH_RATE_LIMIT_ENABLED = env_flag("AUTH_RATE_LIMIT_ENABLED", True)
+    AUTH_RATE_LIMIT_STORAGE = os.getenv(
+        "AUTH_RATE_LIMIT_STORAGE", "database"
+    ).strip().lower()
+    AUTH_TRUST_PROXY_HEADERS = env_flag("AUTH_TRUST_PROXY_HEADERS", False)
+    AUTH_TRUSTED_PROXY_IPS = tuple(
+        value.strip()
+        for value in os.getenv("AUTH_TRUSTED_PROXY_IPS", "").split(",")
+        if value.strip()
+    )
+    AUTH_LOGIN_WINDOW_SECONDS = int(os.getenv("AUTH_LOGIN_WINDOW_SECONDS", "900"))
+    AUTH_LOGIN_IP_MAX_FAILURES = int(os.getenv("AUTH_LOGIN_IP_MAX_FAILURES", "10"))
+    AUTH_LOGIN_IDENTIFIER_MAX_FAILURES = int(
+        os.getenv("AUTH_LOGIN_IDENTIFIER_MAX_FAILURES", "5")
+    )
+    AUTH_LOGIN_BASE_COOLDOWN_SECONDS = int(
+        os.getenv("AUTH_LOGIN_BASE_COOLDOWN_SECONDS", "30")
+    )
+    AUTH_LOGIN_MAX_COOLDOWN_SECONDS = int(
+        os.getenv("AUTH_LOGIN_MAX_COOLDOWN_SECONDS", "900")
+    )
+    AUTH_PASSWORD_RESET_WINDOW_SECONDS = int(
+        os.getenv("AUTH_PASSWORD_RESET_WINDOW_SECONDS", "3600")
+    )
+    AUTH_PASSWORD_RESET_IP_MAX_ATTEMPTS = int(
+        os.getenv("AUTH_PASSWORD_RESET_IP_MAX_ATTEMPTS", "5")
+    )
+    AUTH_PASSWORD_RESET_IDENTIFIER_MAX_ATTEMPTS = int(
+        os.getenv("AUTH_PASSWORD_RESET_IDENTIFIER_MAX_ATTEMPTS", "3")
+    )
+    AUTH_PASSWORD_RESET_BASE_COOLDOWN_SECONDS = int(
+        os.getenv("AUTH_PASSWORD_RESET_BASE_COOLDOWN_SECONDS", "300")
+    )
+    AUTH_PASSWORD_RESET_MAX_COOLDOWN_SECONDS = int(
+        os.getenv("AUTH_PASSWORD_RESET_MAX_COOLDOWN_SECONDS", "3600")
+    )
     SQLALCHEMY_DATABASE_URI = resolve_database_uri()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SESSION_COOKIE_HTTPONLY = True

@@ -21,6 +21,7 @@ from app.services.auth_session_security import (
     clear_authenticated_session_security_state,
     session_version_matches_user,
 )
+from app.services.auth_rate_limits import initialize_auth_rate_limit_storage
 from app.services.password_policy import user_requires_password_change
 from app.services.time_display import format_local_hhmm
 
@@ -41,6 +42,7 @@ def create_app(config_class=Config, auto_bootstrap=True):
 
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)
+    initialize_auth_rate_limit_storage(app)
     register_pwa_assets(app)
     register_blueprints(app)
     register_template_helpers(app)

@@ -8,7 +8,15 @@ from flask import g
 from app import create_app
 from create_grandmaster import create_grandmaster_user
 from app.extensions import db
-from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess, User, UserToken
+from app.models import (
+    AuthRateLimitState,
+    GatewayMembership,
+    GatewayNodeRole,
+    NeoNode,
+    PortalAppAccess,
+    User,
+    UserToken,
+)
 from app.services.access_control import (
     DEFAULT_NEONODES,
     backfill_default_gateway_node_roles,
@@ -351,6 +359,234 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertNotEqual(updated.password_hash, old_hash)
         self.assertTrue(updated.check_password("NewPassword123!"))
         self.assertFalse(updated.password_reset_required)
+
+    def test_login_rate_limit_applies_to_repeated_failures_from_one_ip(self):
+        self._configure_rate_limits(
+            login_ip_max_failures=2,
+            login_identifier_max_failures=10,
+        )
+
+        first = self._login_attempt(
+            "unknown-one",
+            "wrong password",
+            remote_addr="198.51.100.10",
+        )
+        second = self._login_attempt(
+            "unknown-two",
+            "wrong password",
+            remote_addr="198.51.100.10",
+        )
+        with patch("app.auth.routes._find_user_by_login", return_value=None) as find_user:
+            limited = self._login_attempt(
+                "unknown-three",
+                "wrong password",
+                remote_addr="198.51.100.10",
+            )
+
+        self.assertEqual(first.status_code, 401)
+        self.assertEqual(second.status_code, 401)
+        self.assertEqual(limited.status_code, 401)
+        self.assertIn(b"Invalid email or password", limited.data)
+        self.assertEqual(find_user.call_count, 0)
+        self.assertTrue(
+            AuthRateLimitState.query.filter_by(action="login", subject_type="ip")
+            .one()
+            .blocked_until
+        )
+
+    def test_login_rate_limit_applies_to_one_identifier_across_ips(self):
+        user = self._user("shared_login", verified=True)
+        db.session.commit()
+        self._configure_rate_limits(
+            login_ip_max_failures=10,
+            login_identifier_max_failures=2,
+        )
+
+        self._login_attempt(user.username, "wrong password", remote_addr="198.51.100.11")
+        self._login_attempt(user.username, "wrong password", remote_addr="198.51.100.12")
+        limited = self._login_attempt(
+            user.username,
+            "Password123!",
+            remote_addr="198.51.100.13",
+        )
+
+        self.assertEqual(limited.status_code, 401)
+        self.assertIn(b"Invalid email or password", limited.data)
+
+    def test_successful_login_clears_failure_state(self):
+        user = self._user("clear_login", verified=True)
+        db.session.commit()
+        self._configure_rate_limits(
+            login_ip_max_failures=10,
+            login_identifier_max_failures=10,
+        )
+
+        self._login_attempt(user.username, "wrong password", remote_addr="198.51.100.14")
+        successful = self._login_attempt(
+            user.username,
+            "Password123!",
+            remote_addr="198.51.100.14",
+        )
+
+        self.assertEqual(successful.status_code, 302)
+        self.assertEqual(
+            AuthRateLimitState.query.filter_by(action="login").count(),
+            0,
+        )
+
+    def test_login_cooldown_expires_without_permanent_lockout(self):
+        user = self._user("temporary_login_limit", verified=True)
+        db.session.commit()
+        self._configure_rate_limits(
+            login_ip_max_failures=1,
+            login_identifier_max_failures=10,
+        )
+
+        self._login_attempt(user.username, "wrong password", remote_addr="198.51.100.15")
+        state = AuthRateLimitState.query.filter_by(
+            action="login",
+            subject_type="ip",
+        ).one()
+        state.blocked_until = datetime.utcnow() - timedelta(seconds=1)
+        db.session.commit()
+
+        successful = self._login_attempt(
+            user.username,
+            "Password123!",
+            remote_addr="198.51.100.15",
+        )
+
+        self.assertEqual(successful.status_code, 302)
+
+    def test_forgot_password_rate_limit_applies_to_repeated_requests_from_one_ip(self):
+        user = self._user("reset_ip_limit", email="reset-ip@example.com", verified=True)
+        db.session.commit()
+        self._configure_rate_limits(
+            password_reset_ip_max_attempts=2,
+            password_reset_identifier_max_attempts=10,
+        )
+
+        with patch(
+            "app.auth.routes.email_service.send_password_reset",
+            return_value={"sent": False, "reason": "test"},
+        ) as send_reset:
+            responses = [
+                self._forgot_password_attempt(
+                    user.email,
+                    remote_addr="198.51.100.16",
+                )
+                for _ in range(3)
+            ]
+
+        self.assertEqual(send_reset.call_count, 2)
+        self.assertTrue(all(response.status_code == 200 for response in responses))
+        self.assertTrue(
+            AuthRateLimitState.query.filter_by(
+                action="password_reset",
+                subject_type="ip",
+            )
+            .one()
+            .blocked_until
+        )
+
+    def test_forgot_password_rate_limit_applies_to_one_email_across_ips(self):
+        user = self._user("reset_identifier_limit", email="reset-email@example.com", verified=True)
+        db.session.commit()
+        self._configure_rate_limits(
+            password_reset_ip_max_attempts=10,
+            password_reset_identifier_max_attempts=2,
+        )
+
+        with patch(
+            "app.auth.routes.email_service.send_password_reset",
+            return_value={"sent": False, "reason": "test"},
+        ) as send_reset:
+            self._forgot_password_attempt(user.email, remote_addr="198.51.100.17")
+            self._forgot_password_attempt(user.email, remote_addr="198.51.100.18")
+            limited = self._forgot_password_attempt(
+                user.email,
+                remote_addr="198.51.100.19",
+            )
+
+        self.assertEqual(send_reset.call_count, 2)
+        self.assertEqual(limited.status_code, 200)
+        self.assertIn(b"If an account exists", limited.data)
+
+    def test_login_and_forgot_password_responses_do_not_reveal_account_existence(self):
+        user = self._user("response_privacy", email="response@example.com", verified=True)
+        db.session.commit()
+
+        existing_login = self._login_attempt(
+            user.username,
+            "wrong password",
+            remote_addr="198.51.100.20",
+        )
+        missing_login = self._login_attempt(
+            "missing-response-user",
+            "wrong password",
+            remote_addr="198.51.100.21",
+        )
+        with patch(
+            "app.auth.routes.email_service.send_password_reset",
+            return_value={"sent": False, "reason": "test"},
+        ):
+            existing_reset = self._forgot_password_attempt(
+                user.email,
+                remote_addr="198.51.100.22",
+            )
+            missing_reset = self._forgot_password_attempt(
+                "missing-response@example.com",
+                remote_addr="198.51.100.23",
+            )
+
+        self.assertEqual(existing_login.status_code, missing_login.status_code)
+        self.assertEqual(existing_login.data, missing_login.data)
+        self.assertEqual(existing_reset.status_code, missing_reset.status_code)
+        self.assertEqual(existing_reset.data, missing_reset.data)
+
+    def test_forwarded_client_ip_is_used_only_for_a_configured_trusted_proxy(self):
+        self._configure_rate_limits(
+            login_ip_max_failures=1,
+            login_identifier_max_failures=10,
+        )
+        untrusted_proxy = "198.51.100.24"
+
+        with patch("app.auth.routes._find_user_by_login", return_value=None) as find_user:
+            self._login_attempt(
+                "proxy-one",
+                "wrong password",
+                remote_addr=untrusted_proxy,
+                forwarded_for="203.0.113.10",
+            )
+            self._login_attempt(
+                "proxy-two",
+                "wrong password",
+                remote_addr=untrusted_proxy,
+                forwarded_for="203.0.113.11",
+            )
+
+        self.assertEqual(find_user.call_count, 1)
+
+        AuthRateLimitState.query.delete()
+        self.app.config.update(
+            AUTH_TRUST_PROXY_HEADERS=True,
+            AUTH_TRUSTED_PROXY_IPS=(untrusted_proxy,),
+        )
+        with patch("app.auth.routes._find_user_by_login", return_value=None) as find_user:
+            self._login_attempt(
+                "trusted-proxy-one",
+                "wrong password",
+                remote_addr=untrusted_proxy,
+                forwarded_for="203.0.113.12",
+            )
+            self._login_attempt(
+                "trusted-proxy-two",
+                "wrong password",
+                remote_addr=untrusted_proxy,
+                forwarded_for="203.0.113.13",
+            )
+
+        self.assertEqual(find_user.call_count, 2)
 
     def test_reset_change_and_emergency_password_writers_enforce_shared_policy(self):
         user = self._user("writer", email="writer@example.com", verified=True)
@@ -1131,6 +1367,49 @@ class AuthAccountFlowsTest(unittest.TestCase):
             "/login",
             data={"username": username, "password": "Password123!"},
             follow_redirects=False,
+        )
+
+    def _login_attempt(self, identifier, password, *, remote_addr, forwarded_for=None):
+        headers = {"X-Forwarded-For": forwarded_for} if forwarded_for else None
+        return self.client.post(
+            "/login",
+            data={"username": identifier, "password": password},
+            headers=headers,
+            environ_overrides={"REMOTE_ADDR": remote_addr},
+            follow_redirects=False,
+        )
+
+    def _forgot_password_attempt(self, email, *, remote_addr):
+        return self.client.post(
+            "/forgot-password",
+            data={"email": email},
+            environ_overrides={"REMOTE_ADDR": remote_addr},
+        )
+
+    def _configure_rate_limits(
+        self,
+        *,
+        login_ip_max_failures=10,
+        login_identifier_max_failures=5,
+        password_reset_ip_max_attempts=5,
+        password_reset_identifier_max_attempts=3,
+    ):
+        self.app.config.update(
+            AUTH_RATE_LIMIT_ENABLED=True,
+            AUTH_LOGIN_WINDOW_SECONDS=900,
+            AUTH_LOGIN_IP_MAX_FAILURES=login_ip_max_failures,
+            AUTH_LOGIN_IDENTIFIER_MAX_FAILURES=login_identifier_max_failures,
+            AUTH_LOGIN_BASE_COOLDOWN_SECONDS=30,
+            AUTH_LOGIN_MAX_COOLDOWN_SECONDS=900,
+            AUTH_PASSWORD_RESET_WINDOW_SECONDS=3600,
+            AUTH_PASSWORD_RESET_IP_MAX_ATTEMPTS=password_reset_ip_max_attempts,
+            AUTH_PASSWORD_RESET_IDENTIFIER_MAX_ATTEMPTS=(
+                password_reset_identifier_max_attempts
+            ),
+            AUTH_PASSWORD_RESET_BASE_COOLDOWN_SECONDS=300,
+            AUTH_PASSWORD_RESET_MAX_COOLDOWN_SECONDS=3600,
+            AUTH_TRUST_PROXY_HEADERS=False,
+            AUTH_TRUSTED_PROXY_IPS=(),
         )
 
 
