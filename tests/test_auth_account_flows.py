@@ -33,6 +33,8 @@ from app.services.user_tokens import (
     EMAIL_VERIFICATION,
     PASSWORD_RESET,
     create_user_token,
+    get_valid_token_record,
+    hash_user_token,
 )
 
 
@@ -359,6 +361,91 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertNotEqual(updated.password_hash, old_hash)
         self.assertTrue(updated.check_password("NewPassword123!"))
         self.assertFalse(updated.password_reset_required)
+
+    def test_each_new_reset_request_revokes_the_previous_reset_link(self):
+        user = self._user("reset_rotation", email="reset-rotation@example.com", verified=True)
+        db.session.commit()
+
+        with patch(
+            "app.auth.routes.email_service.send_password_reset",
+            return_value={"sent": False, "reason": "test"},
+        ) as send_reset:
+            responses = [
+                self.client.post("/forgot-password", data={"email": user.email})
+                for _ in range(3)
+            ]
+
+        first_token, second_token, third_token = [
+            call.args[1] for call in send_reset.call_args_list
+        ]
+        reset_tokens = UserToken.query.filter_by(
+            user_id=user.id,
+            token_type=PASSWORD_RESET,
+        ).order_by(UserToken.id).all()
+
+        self.assertEqual(send_reset.call_count, 3)
+        self.assertTrue(all(b"If an account exists" in response.data for response in responses))
+        self.assertIsNone(get_valid_token_record(first_token, PASSWORD_RESET))
+        self.assertIsNone(get_valid_token_record(second_token, PASSWORD_RESET))
+        self.assertIsNotNone(get_valid_token_record(third_token, PASSWORD_RESET))
+        self.assertTrue(reset_tokens[0].is_used)
+        self.assertTrue(reset_tokens[1].is_used)
+        self.assertFalse(reset_tokens[2].is_used)
+
+        old_link = self.client.get(f"/reset-password/{first_token}")
+        active_link = self.client.get(f"/reset-password/{third_token}")
+        self.assertEqual(old_link.status_code, 400)
+        self.assertEqual(active_link.status_code, 200)
+
+    def test_reset_completion_revokes_all_remaining_reset_tokens(self):
+        user = self._user("reset_completion", email="reset-completion@example.com", verified=True)
+        current_token, current_record = create_user_token(user, PASSWORD_RESET)
+        legacy_tokens = ("legacy-reset-link-one", "legacy-reset-link-two")
+        for raw_token in legacy_tokens:
+            db.session.add(
+                UserToken(
+                    user_id=user.id,
+                    token_hash=hash_user_token(raw_token),
+                    token_type=PASSWORD_RESET,
+                    expires_at=datetime.utcnow() + timedelta(hours=1),
+                )
+            )
+        db.session.commit()
+
+        response = self.client.post(
+            f"/reset-password/{current_token}",
+            data={
+                "password": "new harbor lantern signal",
+                "confirm_password": "new harbor lantern signal",
+            },
+            follow_redirects=False,
+        )
+
+        reset_tokens = UserToken.query.filter_by(
+            user_id=user.id,
+            token_type=PASSWORD_RESET,
+        ).all()
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(all(token.is_used for token in reset_tokens))
+        self.assertIsNotNone(db.session.get(UserToken, current_record.id).used_at)
+        for raw_token in legacy_tokens:
+            self.assertEqual(
+                self.client.get(f"/reset-password/{raw_token}").status_code,
+                400,
+            )
+
+    def test_email_verification_tokens_are_not_revoked_by_new_reset_tokens(self):
+        user = self._user("verify_tokens", email="verify-tokens@example.com")
+        first_token, first_record = create_user_token(user, EMAIL_VERIFICATION)
+        second_token, second_record = create_user_token(user, EMAIL_VERIFICATION)
+        reset_token, _reset_record = create_user_token(user, PASSWORD_RESET)
+        db.session.commit()
+
+        self.assertIsNotNone(get_valid_token_record(first_token, EMAIL_VERIFICATION))
+        self.assertIsNotNone(get_valid_token_record(second_token, EMAIL_VERIFICATION))
+        self.assertIsNotNone(get_valid_token_record(reset_token, PASSWORD_RESET))
+        self.assertFalse(db.session.get(UserToken, first_record.id).is_used)
+        self.assertFalse(db.session.get(UserToken, second_record.id).is_used)
 
     def test_login_rate_limit_applies_to_repeated_failures_from_one_ip(self):
         self._configure_rate_limits(

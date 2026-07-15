@@ -53,6 +53,7 @@ from app.services.user_tokens import (
     get_token_record,
     get_valid_token_record,
     mark_token_used,
+    revoke_unused_password_reset_tokens,
 )
 
 
@@ -353,7 +354,7 @@ def reset_password(token):
 
         token_record.user.password_reset_required = False
         token_record.user.password_policy_update_required = False
-        mark_token_used(token_record)
+        revoke_unused_password_reset_tokens(token_record.user)
         db.session.commit()
         flash("Password reset complete. You can log in now.", "info")
         return redirect(url_for("auth.login"))
