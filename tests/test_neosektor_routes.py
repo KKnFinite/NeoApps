@@ -1313,6 +1313,30 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("@media (min-width: 901px)", css)
         self.assertIn("@media (max-width: 900px)", css)
 
+    def test_neosektor_mobile_console_css_locks_viewport_and_compacts_operator_views(self):
+        self._login_approved_user(role="simulator")
+
+        dashboard = self.client.get("/neosektor")
+        live_counts = self.client.get("/neosektor/live-counts")
+        tunnel = self.client.get("/neosektor/tunnel-conductor")
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertEqual(live_counts.status_code, 200)
+        self.assertEqual(tunnel.status_code, 200)
+        self.assertIn(b"data-neosektor-mobile-dashboard", dashboard.data)
+        self.assertIn(b"data-live-counts", live_counts.data)
+        self.assertIn(b"data-tunnel-conductor", tunnel.data)
+        self.assertIn("html:has(body.blueprint-neosektor)", css)
+        self.assertIn("overscroll-behavior: none;", css)
+        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", css)
+        self.assertIn("grid-template-rows: repeat(3, minmax(0, 1fr));", css)
+        self.assertIn("min-height: clamp(38px, 6.4svh, 52px);", css)
+        self.assertIn("min-height: clamp(54px, 8.4svh, 64px);", css)
+        self.assertIn(".tunnel-unload-metric {\n        min-height: 30px;", css)
+        self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr));", css)
+        self.assertIn(".tunnel-bay-card {\n        min-height: 38px;", css)
+
     def test_neosektor_numeric_inputs_render_no_spinner_class_and_css(self):
         self._login_approved_user(role="simulator")
 
