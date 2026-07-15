@@ -9,6 +9,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app import create_app  # noqa: E402
+from app.config import DevelopmentConfig  # noqa: E402
 from app.extensions import db  # noqa: E402
 from app.models import User  # noqa: E402
 from app.services.access_control import backfill_default_gateway_node_roles  # noqa: E402
@@ -25,7 +26,7 @@ LOCAL_SQLITE_FALLBACK_PASSWORD = "LocalDevPassphrase2026!"
 
 
 def seed_dev_grandmaster(app=None):
-    app = app or create_app()
+    app = app or create_app(DevelopmentConfig)
 
     with app.app_context():
         _validate_seed_target(app)

@@ -13,7 +13,7 @@ from app.auth.permissions import (
     can_manage_system,
     can_manage_users,
 )
-from app.config import Config
+from app.config import Config, configure_secret_key
 from app.extensions import db, login_manager
 from app.services.access_control import user_can_access_node, user_has_gateway_access
 from app.services.permission_rules import permission_access, user_can
@@ -26,6 +26,7 @@ def create_app(config_class=Config, auto_bootstrap=True):
     app.config.from_object(Config)
     if config_class is not Config:
         app.config.from_object(config_class)
+    configure_secret_key(app.config)
 
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
 

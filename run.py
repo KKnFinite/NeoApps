@@ -1,9 +1,18 @@
 import os
 
 from app import create_app
+from app.config import DevelopmentConfig
 
 
-app = create_app()
+class RunEnvironmentConfig:
+    NEOAPPS_ENV = os.getenv("NEOAPPS_ENV", os.getenv("FLASK_ENV", ""))
+
+
+app = (
+    create_app(DevelopmentConfig)
+    if __name__ == "__main__"
+    else create_app(RunEnvironmentConfig)
+)
 
 
 if __name__ == "__main__":

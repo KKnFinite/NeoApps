@@ -1,7 +1,9 @@
 from datetime import date
 import importlib
+import os
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from flask import Flask
 
@@ -36,7 +38,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.context.pop()
 
     def test_run_py_imports_current_flask_app(self):
-        run_module = importlib.import_module("run")
+        with patch.dict(os.environ, {"NEOAPPS_ENV": "development"}, clear=False):
+            run_module = importlib.import_module("run")
 
         self.assertIsInstance(run_module.app, Flask)
 

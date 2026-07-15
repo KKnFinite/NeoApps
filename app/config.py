@@ -8,6 +8,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 
+DEFAULT_DEVELOPMENT_SECRET_KEY = "dev-change-me"
+MIN_PRODUCTION_SECRET_KEY_LENGTH = 32
+
+
 def env_flag(name, default=False):
     value = os.getenv(name)
     if value is None:
@@ -25,7 +29,8 @@ def resolve_database_uri():
 
 
 class Config:
-    SECRET_KEY = os.getenv("SECRET_KEY", "dev-change-me")
+    SECRET_KEY = os.getenv("SECRET_KEY")
+    NEOAPPS_ENV = os.getenv("NEOAPPS_ENV", os.getenv("FLASK_ENV", "")).strip().lower()
     STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20260623-3")
     DEBUG = os.getenv("FLASK_DEBUG", "0").lower() in {"1", "true", "yes", "on"}
     DEFAULT_GATEWAY_CODE = os.getenv("DEFAULT_GATEWAY_CODE", "RFD").upper()
@@ -55,3 +60,45 @@ class Config:
     REMEMBER_COOKIE_SAMESITE = "Lax"
     REMEMBER_COOKIE_SECURE = SESSION_COOKIE_SECURE
     AUTO_BOOTSTRAP_DATABASE = env_flag("AUTO_BOOTSTRAP_DATABASE")
+
+
+class DevelopmentConfig(Config):
+    """Explicit local-development configuration used by the local launch helpers."""
+
+    NEOAPPS_ENV = "development"
+
+
+def configure_secret_key(config):
+    """Require a non-default signing key unless this is an explicit dev/test app."""
+    secret_key = config.get("SECRET_KEY")
+    if _allows_development_secret_key(config):
+        if not isinstance(secret_key, str) or not secret_key.strip():
+            config["SECRET_KEY"] = DEFAULT_DEVELOPMENT_SECRET_KEY
+        return
+
+    normalized_secret = secret_key.strip() if isinstance(secret_key, str) else ""
+    insecure_values = {
+        "change-me",
+        DEFAULT_DEVELOPMENT_SECRET_KEY,
+        "default",
+        "password",
+        "secret",
+    }
+    if (
+        len(normalized_secret) < MIN_PRODUCTION_SECRET_KEY_LENGTH
+        or normalized_secret.casefold() in insecure_values
+        or len(set(normalized_secret)) == 1
+    ):
+        raise RuntimeError(
+            "SECRET_KEY configuration error: set a unique SECRET_KEY of at least "
+            f"{MIN_PRODUCTION_SECRET_KEY_LENGTH} characters before starting NeoApps."
+        )
+
+
+def _allows_development_secret_key(config):
+    environment = str(config.get("NEOAPPS_ENV") or "").strip().lower()
+    if environment in {"development", "dev", "testing", "test"}:
+        return True
+    if config.get("TESTING"):
+        return True
+    return bool(config.get("DEBUG")) and environment != "production"
