@@ -41,6 +41,8 @@
             <span>{{ state.refresh.operation_label }} · {{ state.refresh.window_label }}</span>
             {% endif %}
         </div>
+        <div class="tunnel-desktop-workspace" data-tunnel-desktop-workspace>
+            <div class="tunnel-desktop-left" data-tunnel-desktop-left>
         <section class="tunnel-wave-grid" aria-label="Wave summary">
             {% for wave_key, wave in [("first", state.waves[0]), ("second", state.waves[1])] %}
             <article class="tunnel-panel tunnel-wave-panel" data-tunnel-wave-key="{{ wave_key }}">
@@ -78,15 +80,16 @@
         </section>
 
         <section class="tunnel-panel tunnel-counts-panel" aria-label="Ballmat counts">
-            <h2>Ballmat Counts</h2>
+            <h2 class="tunnel-mobile-section-title">Ballmat Counts</h2>
             <div class="tunnel-ballmat-grid">
                 {% for side_key in ["east", "west"] %}
                 {% set side = state.sides[side_key] %}
                 <section class="tunnel-ballmat-column" data-tunnel-side="{{ side.key }}">
-                    <h3>{{ side.label.title() }} Ballmat</h3>
+                    <h3 class="tunnel-mobile-side-title">{{ side.label.title() }} Ballmat</h3>
                     {% for wave in side.waves %}
                     <article class="tunnel-readonly-card tunnel-ballmat-card" data-wave="{{ wave.key }}">
-                        <span>{{ wave.name }}</span>
+                        <span class="tunnel-mobile-label">{{ wave.name }}</span>
+                        <span class="tunnel-desktop-label">{{ wave.name }} {{ side.label.title() }} Ballmat Count</span>
                         {% if can_edit %}
                         <div class="counter-control tunnel-count-control" aria-label="{{ side.label }} {{ wave.name }} controls">
                             <button type="button" data-tunnel-count-step="-1" aria-label="Decrease {{ side.label }} {{ wave.name }}">-</button>
@@ -109,7 +112,8 @@
                     </article>
                     {% endfor %}
                     <article class="tunnel-readonly-card tunnel-ballmat-card tunnel-open-bays-card">
-                        <span>Open Bays</span>
+                        <span class="tunnel-mobile-label">Open Bays</span>
+                        <span class="tunnel-desktop-label">{{ side.label.title() }} Ballmat Open Bays</span>
                         {% if can_edit %}
                         <div class="counter-control tunnel-count-control" aria-label="{{ side.label }} open bays controls">
                             <button type="button" data-tunnel-count-step="-1" aria-label="Decrease {{ side.label }} open bays">-</button>
@@ -134,8 +138,9 @@
                 {% endfor %}
             </div>
         </section>
+            </div>
 
-        <section class="tunnel-panel tunnel-bay-panel" aria-label="Bay status">
+        <section class="tunnel-panel tunnel-bay-panel" aria-label="Bay status" data-tunnel-bay-column>
             <h2>Bay Status</h2>
             <div class="tunnel-bay-grid">
                 {% for side_key in ["east", "west"] %}
@@ -149,8 +154,9 @@
             </div>
         </section>
 
+        <section class="tunnel-panel tunnel-operations-card" aria-label="Operations" data-tunnel-operations-card>
         <section class="tunnel-panel tunnel-settings-panel" aria-label="Left to unload settings">
-            <h2>Unload Settings</h2>
+            <h2 class="tunnel-mobile-section-title">Unload Settings</h2>
             <div class="tunnel-settings-grid">
                 <label class="tunnel-setting-card">
                     <span>MOD 1</span>
@@ -202,9 +208,10 @@
         </section>
 
         <section class="tunnel-panel tunnel-offset-panel" aria-label="Driver route offset">
-            <h2>Driver Route Offset</h2>
+            <h2 class="tunnel-mobile-section-title">Driver Route Offset</h2>
             <div class="tunnel-offset-control-card">
-                <span>West Offset</span>
+                <span class="tunnel-mobile-label">West Offset</span>
+                <span class="tunnel-desktop-label">Driver Route Offset</span>
                 <div class="neosektor-driver-offset-control">
                     <button type="button" data-tunnel-offset-step="-1" {% if not can_edit %}disabled{% endif %}>-</button>
                     <input
@@ -223,6 +230,8 @@
                 </div>
             </div>
         </section>
+        </section>
+        </div>
         <div class="neosektor-inline-edit-error" data-neosektor-edit-error hidden aria-live="polite"></div>
     </main>
 </section>

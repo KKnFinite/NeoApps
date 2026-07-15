@@ -1237,6 +1237,32 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("align-content: start;", css)
         self.assertIn("min-height: 44px;", css)
 
+    def test_tunnel_conductor_has_desktop_workspace_and_mobile_fallback_hooks(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neosektor/tunnel-conductor")
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"data-tunnel-desktop-workspace", response.data)
+        self.assertIn(b"data-tunnel-desktop-left", response.data)
+        self.assertIn(b"data-tunnel-bay-column", response.data)
+        self.assertIn(b"data-tunnel-operations-card", response.data)
+        self.assertIn(b"1ST WAVE East Ballmat Count", response.data)
+        self.assertIn(b"2ND WAVE West Ballmat Count", response.data)
+        self.assertIn(b"East Ballmat Open Bays", response.data)
+        self.assertIn(b"West Ballmat Open Bays", response.data)
+        self.assertIn(b"class=\"tunnel-mobile-section-title\">Ballmat Counts", response.data)
+        self.assertIn(b"class=\"tunnel-mobile-label\">West Offset", response.data)
+        self.assertIn(b"data-tunnel-wave-input=\"first\"", response.data)
+        self.assertIn(b"data-tunnel-wave-input=\"second\"", response.data)
+        self.assertIn(b"data-open-bays", response.data)
+        self.assertIn("grid-template-areas:\n            \"wave-first east-first west-first bays\"", css)
+        self.assertIn("grid-template-columns: minmax(0, 1fr);", css)
+        self.assertIn("grid-auto-rows: minmax(0, 1fr);", css)
+        self.assertIn(".blueprint-neosektor .tunnel-operations-card {\n    display: contents;", css)
+        self.assertIn("@media (min-width: 901px)", css)
+
     def test_neosektor_numeric_inputs_render_no_spinner_class_and_css(self):
         self._login_approved_user(role="simulator")
 
