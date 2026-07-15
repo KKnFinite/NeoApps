@@ -121,6 +121,21 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn('height: calc(100vh - 140px);', css)
         self.assertIn('grid-template-rows: auto minmax(0, 1fr);', css)
 
+    def test_node_desktop_shell_portal_return_precedes_character_switcher(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neosektor")
+        html = response.data.decode()
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('class="node-desktop-portal-link neo-menu-text" href="/portal"', html)
+        self.assertIn("Back to NeoPortal", html)
+        self.assertLess(html.index("node-desktop-portal-link"), html.index("data-character-switcher"))
+        self.assertIn(".node-desktop-portal-link {\n    display: none;", css)
+        self.assertIn("@media (min-width: 901px) {\n    .node-desktop-portal-link {", css)
+        self.assertIn("font-size: 0.58rem;", css)
+
     def test_desktop_ballmat_and_character_switcher_compaction_rules_are_present(self):
         css = Path("app/static/css/base.css").read_text()
 
