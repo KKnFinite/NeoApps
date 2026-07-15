@@ -55,6 +55,11 @@ class User(UserMixin, db.Model):
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     email_verified_at = db.Column(db.DateTime, nullable=True)
     password_reset_required = db.Column(db.Boolean, nullable=False, default=False)
+    password_policy_update_required = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False,
+    )
     password_changed_at = db.Column(db.DateTime, nullable=True)
     last_password_reset_by_user_id = db.Column(
         db.Integer,

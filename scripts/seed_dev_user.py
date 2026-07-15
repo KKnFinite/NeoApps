@@ -12,6 +12,7 @@ from app import create_app  # noqa: E402
 from app.extensions import db  # noqa: E402
 from app.models import User  # noqa: E402
 from app.services.access_control import backfill_default_gateway_node_roles  # noqa: E402
+from app.services.password_policy import set_user_password  # noqa: E402
 from app.services.schema_sync import sync_database_schema  # noqa: E402
 
 
@@ -20,7 +21,7 @@ DEV_PASSWORD_ENV = "NEOAPPS_DEV_GRANDMASTER_PASSWORD"
 ALLOW_NON_SQLITE_ENV = "NEOAPPS_ALLOW_DEV_USER_SEED"
 
 DEFAULT_DEV_USERNAME = "Kessler"
-LOCAL_SQLITE_FALLBACK_PASSWORD = "1313"
+LOCAL_SQLITE_FALLBACK_PASSWORD = "LocalDevPassphrase2026!"
 
 
 def seed_dev_grandmaster(app=None):
@@ -47,12 +48,12 @@ def seed_dev_grandmaster(app=None):
         user.full_name = user.full_name or "Kessler"
         user.email_verified_at = user.email_verified_at or datetime.utcnow()
         user.password_reset_required = False
-        user.password_changed_at = user.password_changed_at or datetime.utcnow()
+        user.password_policy_update_required = False
         user.mfa_required = False
         user.mfa_enabled = False
         user.mfa_secret = None
         user.mfa_verified_at = None
-        user.set_password(password)
+        set_user_password(user, password)
         db.session.flush()
 
         backfill_default_gateway_node_roles(user, role="grandmaster")

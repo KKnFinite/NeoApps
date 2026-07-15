@@ -8,6 +8,7 @@ from app.services.access_control import (
     ensure_default_gateway_and_nodes,
 )
 from app.services.permission_rules import ensure_default_permission_rules
+from app.services.password_policy import set_user_password
 from app.services.schema_sync import sync_database_schema
 
 
@@ -17,7 +18,7 @@ BOOTSTRAP_PASSWORD_ENV = "BOOTSTRAP_ADMIN_PASSWORD"
 
 DEFAULT_BOOTSTRAP_USERNAME = "Kessler"
 DEFAULT_BOOTSTRAP_EMAIL = "bootstrap-admin@local.neoapps"
-LOCAL_SQLITE_FALLBACK_PASSWORD = "1313"
+LOCAL_SQLITE_FALLBACK_PASSWORD = "LocalDevPassphrase2026!"
 
 
 def bootstrap_database(app=None):
@@ -56,7 +57,7 @@ def bootstrap_database(app=None):
 
         password_applied = created_user or not user.password_hash
         if password_applied:
-            user.set_password(password)
+            set_user_password(user, password)
 
         db.session.flush()
 

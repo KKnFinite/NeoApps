@@ -80,6 +80,15 @@ class SeedDevUserTest(unittest.TestCase):
         self.assertTrue(result["used_fallback_password"])
         self.assertTrue(user.check_password(LOCAL_SQLITE_FALLBACK_PASSWORD))
 
+    def test_seed_rejects_passwords_that_fail_shared_policy(self):
+        with patch.dict(
+            os.environ,
+            {"NEOAPPS_DEV_GRANDMASTER_PASSWORD": "password123!"},
+            clear=False,
+        ):
+            with self.assertRaisesRegex(ValueError, "commonly compromised"):
+                seed_dev_grandmaster(self.app)
+
     def test_seed_backfills_approved_rfd_membership_and_node_roles(self):
         with patch.dict(os.environ, {}, clear=True):
             seed_dev_grandmaster(self.app)

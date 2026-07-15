@@ -9,7 +9,7 @@ from app import create_app
 from app.extensions import db
 from app.models import SortDateOperation, User
 from app.services.gateway_matrix import current_gateway_local_date
-from scripts.seed_dev_user import seed_dev_grandmaster
+from scripts.seed_dev_user import LOCAL_SQLITE_FALLBACK_PASSWORD, seed_dev_grandmaster
 
 
 class LocalLaunchNavigationTest(unittest.TestCase):
@@ -566,7 +566,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
         response = self.client.post(
             "/login",
-            data={"email": " kessler@local.neoapps ", "password": "1313"},
+            data={"email": " kessler@local.neoapps ", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
             follow_redirects=False,
         )
 
@@ -583,7 +583,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
         self.client.post(
             "/login",
-            data={"username": "Kessler", "password": "1313"},
+            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
         )
         response = self.client.get("/portal")
         html = response.data.decode()
@@ -603,7 +603,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
         self.client.post(
             "/login",
-            data={"username": "Kessler", "password": "1313"},
+            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
         )
         response = self.client.get("/portal")
         html = response.data.decode()
@@ -616,7 +616,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         seed_dev_grandmaster(self.app)
         self.client.post(
             "/login",
-            data={"username": "Kessler", "password": "1313"},
+            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
         )
 
         response = self.client.get("/motherbrain/manage-sort")
@@ -665,7 +665,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         seed_dev_grandmaster(self.app)
         self.client.post(
             "/login",
-            data={"username": "Kessler", "password": "1313"},
+            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
         )
 
         response = self.client.get("/motherbrain/manage-sort", follow_redirects=True)
@@ -719,7 +719,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         db.session.commit()
         self.client.post(
             "/login",
-            data={"username": "Kessler", "password": "1313"},
+            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
         )
 
         response = self.client.get("/motherbrain/manage-sort")
@@ -761,7 +761,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         db.session.commit()
         self.client.post(
             "/login",
-            data={"username": "Kessler", "password": "1313"},
+            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
         )
 
         response = self.client.get(f"/rfd?operation_id={operation.id}")
@@ -874,7 +874,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         seed_dev_grandmaster(self.app)
         self.client.post(
             "/login",
-            data={"username": "Kessler", "password": "1313"},
+            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
         )
 
         response = self.client.get("/portal")
@@ -893,7 +893,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         seed_dev_grandmaster(self.app)
         self.client.post(
             "/login",
-            data={"username": "Kessler", "password": "1313"},
+            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
         )
 
         cases = (
@@ -930,7 +930,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         seed_dev_grandmaster(self.app)
         self.client.post(
             "/login",
-            data={"username": "Kessler", "password": "1313"},
+            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
         )
 
         response = self.client.get("/neosektor")
@@ -1032,7 +1032,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         db.session.commit()
         self.client.post(
             "/login",
-            data={"username": "Kessler", "password": "1313"},
+            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
         )
 
         expected_icons = {
@@ -1062,7 +1062,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         seed_dev_grandmaster(self.app)
         self.client.post(
             "/login",
-            data={"username": "Kessler", "password": "1313"},
+            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
         )
 
         response = self.client.get("/portal")
@@ -1094,7 +1094,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
 
         login_response = self.client.post(
             "/login",
-            data={"username": "Kessler", "password": "1313"},
+            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
             follow_redirects=False,
         )
 

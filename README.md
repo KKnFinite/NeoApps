@@ -123,10 +123,10 @@ The local development seed script creates or updates a Grandmaster account:
 
 ```text
 Username: Kessler
-Password: 1313
+Password: LocalDevPassphrase2026!
 ```
 
-To use a different local password, set `NEOAPPS_DEV_GRANDMASTER_PASSWORD` before running the seed script.
+To use a different local password, set `NEOAPPS_DEV_GRANDMASTER_PASSWORD` before running the seed script. Passwords must meet the NeoApps 12-128 character policy.
 
 ## Codex Result Summary Format
 

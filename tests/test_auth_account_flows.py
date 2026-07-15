@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from app import create_app
+from create_grandmaster import create_grandmaster_user
 from app.extensions import db
 from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess, User, UserToken
 from app.services.access_control import (
@@ -74,6 +75,56 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(send_verification.call_count, 1)
         self.assertNotEqual(token.token_hash, raw_token)
         self.assertNotIn(raw_token, token.token_hash)
+        self.assertFalse(user.password_policy_update_required)
+
+    def test_account_registration_enforces_shared_password_policy(self):
+        rejected_cases = (
+            ("elevenchars", "elevenchars", b"at least 12 characters"),
+            ("x" * 129, "x" * 129, b"no more than 128 characters"),
+            (" " * 12, " " * 12, b"only of whitespace"),
+            ("twelvechars!", "different value", b"Passwords do not match"),
+            ("password123!", "password123!", b"commonly compromised"),
+            ("neogateway passphrase", "neogateway passphrase", b"NeoApps or NeoGateway"),
+            ("safe-new@example.com-password", "safe-new@example.com-password", b"account information"),
+            ("safe-E12345-passphrase", "safe-E12345-passphrase", b"account information"),
+        )
+
+        for password, confirm_password, message in rejected_cases:
+            with self.subTest(password=password):
+                response = self.client.post(
+                    "/create-account",
+                    data=self._account_form(
+                        password=password,
+                        confirm_password=confirm_password,
+                    ),
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(message, response.data)
+
+        accepted = self.client.post(
+            "/create-account",
+            data=self._account_form(
+                email="passphrase@example.com",
+                employee_id="PASS12",
+                password="violet river lantern",
+                confirm_password="violet river lantern",
+            ),
+        )
+
+        user = User.query.filter_by(email="passphrase@example.com").one()
+        self.assertEqual(accepted.status_code, 200)
+        self.assertTrue(user.check_password("violet river lantern"))
+
+        exact_minimum = self.client.post(
+            "/create-account",
+            data=self._account_form(
+                email="minimum@example.com",
+                employee_id="MIN12",
+                password="twelvechars!",
+                confirm_password="twelvechars!",
+            ),
+        )
+        self.assertEqual(exact_minimum.status_code, 200)
 
     def test_pending_account_cannot_access_operational_data_before_approval(self):
         user = self._user("pending", email="pending@example.com", verified=True)
@@ -293,6 +344,153 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertTrue(updated.check_password("NewPassword123!"))
         self.assertFalse(updated.password_reset_required)
 
+    def test_reset_change_and_emergency_password_writers_enforce_shared_policy(self):
+        user = self._user("writer", email="writer@example.com", verified=True)
+        target = self._user("writer_target", email="target@example.com", verified=True)
+        grandmaster = self._admin("writer_admin", "grandmaster")
+        raw_token, _token_record = create_user_token(user, PASSWORD_RESET)
+        db.session.commit()
+
+        reset_response = self.client.post(
+            f"/reset-password/{raw_token}",
+            data={"password": "password123!", "confirm_password": "password123!"},
+        )
+
+        self._login(user.username)
+        change_response = self.client.post(
+            "/change-password",
+            data={
+                "current_password": "Password123!",
+                "password": "password123!",
+                "confirm_password": "password123!",
+            },
+        )
+        self.client.get("/logout")
+
+        self._login(grandmaster.username)
+        emergency_response = self.client.post(
+            f"/admin/users/{target.id}/emergency-reset",
+            data={
+                "reason": "Support call.",
+                "password": "password123!",
+                "confirm_password": "password123!",
+            },
+        )
+
+        self.assertEqual(reset_response.status_code, 400)
+        self.assertEqual(change_response.status_code, 400)
+        self.assertEqual(emergency_response.status_code, 400)
+        self.assertTrue(user.check_password("Password123!"))
+        self.assertTrue(target.check_password("Password123!"))
+
+    def test_existing_user_policy_update_waits_for_login_then_blocks_until_changed(self):
+        user, _membership = self._approved_user("policy_user", "policy@example.com")
+        user.password_policy_update_required = True
+        db.session.commit()
+
+        login_response = self._login(user.username)
+        blocked_response = self.client.get("/motherbrain", follow_redirects=False)
+        changed_response = self.client.post(
+            "/change-password",
+            data={
+                "password": "violet river lantern",
+                "confirm_password": "violet river lantern",
+            },
+            follow_redirects=False,
+        )
+
+        updated = db.session.get(User, user.id)
+        self.assertEqual(login_response.location, "/change-password")
+        self.assertEqual(blocked_response.location, "/change-password")
+        self.assertEqual(changed_response.location, "/portal")
+        self.assertFalse(updated.password_policy_update_required)
+        self.assertFalse(updated.password_reset_required)
+        self.assertTrue(updated.password_changed_at)
+        self.assertTrue(updated.check_password("violet river lantern"))
+
+    def test_policy_update_does_not_interrupt_an_existing_session(self):
+        user, _membership = self._approved_user("active_session", "active@example.com")
+        db.session.commit()
+        self._login(user.username)
+
+        user.password_policy_update_required = True
+        db.session.commit()
+        response = self.client.get("/portal", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_voluntary_password_change_requires_current_password(self):
+        user = self._user("voluntary", email="voluntary@example.com", verified=True)
+        db.session.commit()
+        self._login(user.username)
+
+        missing_current = self.client.post(
+            "/change-password",
+            data={
+                "password": "violet river lantern",
+                "confirm_password": "violet river lantern",
+            },
+        )
+        changed = self.client.post(
+            "/change-password",
+            data={
+                "current_password": "Password123!",
+                "password": "violet river lantern",
+                "confirm_password": "violet river lantern",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(missing_current.status_code, 400)
+        self.assertIn(b"Current password is incorrect", missing_current.data)
+        self.assertEqual(changed.location, "/portal")
+        self.assertTrue(db.session.get(User, user.id).check_password("violet river lantern"))
+
+    def test_grandmaster_creation_uses_shared_password_policy(self):
+        with self.assertRaisesRegex(ValueError, "commonly compromised"):
+            create_grandmaster_user(
+                "policy_grandmaster",
+                "password123!",
+                "password123!",
+                app=self.app,
+            )
+
+        created = create_grandmaster_user(
+            "policy_grandmaster",
+            "twilight harbor signal",
+            "twilight harbor signal",
+            app=self.app,
+        )
+
+        self.assertEqual(created.username, "policy_grandmaster")
+        self.assertTrue(
+            User.query.filter_by(username="policy_grandmaster").one().check_password(
+                "twilight harbor signal"
+            )
+        )
+
+    def test_emergency_reset_updates_password_changed_at(self):
+        grandmaster = self._admin("timestamp_admin", "grandmaster")
+        target = self._user("timestamp_target", verified=True)
+        self.assertIsNone(target.password_changed_at)
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        response = self.client.post(
+            f"/admin/users/{target.id}/emergency-reset",
+            data={
+                "reason": "Support call.",
+                "password": "twilight harbor signal",
+                "confirm_password": "twilight harbor signal",
+            },
+            follow_redirects=False,
+        )
+
+        updated = db.session.get(User, target.id)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(updated.password_reset_required)
+        self.assertTrue(updated.password_changed_at)
+
     def test_expired_password_reset_token_is_rejected(self):
         user = self._user("expiredreset", email="expiredreset@example.com", verified=True)
         raw_token, token_record = create_user_token(user, PASSWORD_RESET)
@@ -393,6 +591,9 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertIn(b'NeoGateway', response.data)
         self.assertIn(b'NeoStaffing', response.data)
         self.assertIn(b'NeoBid', response.data)
+        self.assertIn(b'minlength="12"', response.data)
+        self.assertIn(b'maxlength="128"', response.data)
+        self.assertIn(b"Common or compromised passwords are not allowed.", response.data)
         self.assertNotIn(b'name="full_name"', response.data)
         self.assertNotIn(b'name="username"', response.data)
 

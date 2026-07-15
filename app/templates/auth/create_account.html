@@ -56,12 +56,13 @@
         </fieldset>
         <label>
             <span>Password</span>
-            <input name="password" type="password" autocomplete="new-password" required>
+            <input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
         </label>
         <label>
             <span>Confirm Password</span>
-            <input name="confirm_password" type="password" autocomplete="new-password" required>
+            <input name="confirm_password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
         </label>
+        <p class="muted">Use 12–128 characters. Longer passphrases are recommended. Common or compromised passwords are not allowed.</p>
         <button type="submit">Request Access</button>
     </form>
 

@@ -23,6 +23,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "access_reason": "TEXT",
         "email_verified_at": "DATETIME",
         "password_reset_required": "BOOLEAN DEFAULT 0",
+        "password_policy_update_required": "BOOLEAN DEFAULT 0",
         "password_changed_at": "DATETIME",
         "last_password_reset_by_user_id": "INTEGER",
         "last_password_reset_at": "DATETIME",
@@ -115,6 +116,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "last_name": "VARCHAR(80)",
         "is_management": "BOOLEAN DEFAULT FALSE",
         "management_level": "VARCHAR(40)",
+        "password_policy_update_required": "BOOLEAN DEFAULT FALSE",
     },
     "sort_date_missions": {
         "arrival_status": "VARCHAR(32)",
@@ -199,6 +201,10 @@ def sync_local_sqlite_schema(app):
     _create_missing_application_tables(table_names)
     inspector = inspect(db.engine)
     table_names = set(inspector.get_table_names())
+    migrate_existing_approved_users = _users_missing_password_policy_column(
+        inspector,
+        table_names,
+    )
 
     for table_name, column_name in LOCAL_SQLITE_GATEWAY_COLUMNS.items():
         if table_name not in table_names:
@@ -226,6 +232,8 @@ def sync_local_sqlite_schema(app):
     _sync_staffing_people_employee_status_sqlite(table_names)
     _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names)
     _sync_uld_request_unique_constraint_sqlite(inspector, table_names)
+    if migrate_existing_approved_users:
+        _mark_existing_approved_users_for_password_policy_update(table_names)
     db.session.flush()
 
 
@@ -240,6 +248,10 @@ def sync_database_schema(app):
     _create_missing_application_tables(table_names)
     inspector = inspect(db.engine)
     table_names = set(inspector.get_table_names())
+    migrate_existing_approved_users = _users_missing_password_policy_column(
+        inspector,
+        table_names,
+    )
 
     for table_name, columns in POSTGRES_OPTIONAL_COLUMNS.items():
         if table_name not in table_names:
@@ -260,7 +272,40 @@ def sync_database_schema(app):
     _sync_staffing_people_employee_status_postgres(table_names)
     _sync_sort_date_mission_status_constraints_postgres(table_names)
     _sync_uld_request_unique_constraint_postgres(table_names)
+    if migrate_existing_approved_users:
+        _mark_existing_approved_users_for_password_policy_update(table_names)
     db.session.flush()
+
+
+def _users_missing_password_policy_column(inspector, table_names):
+    if "users" not in table_names:
+        return False
+
+    existing_columns = {column["name"] for column in inspector.get_columns("users")}
+    return "password_policy_update_required" not in existing_columns
+
+
+def _mark_existing_approved_users_for_password_policy_update(table_names):
+    approved_user_queries = []
+    if "gateway_memberships" in table_names:
+        approved_user_queries.append(
+            "SELECT user_id FROM gateway_memberships "
+            "WHERE status = 'approved' AND is_active IS TRUE"
+        )
+    if "portal_app_accesses" in table_names:
+        approved_user_queries.append(
+            "SELECT user_id FROM portal_app_accesses "
+            "WHERE status = 'approved' AND is_active IS TRUE"
+        )
+    if not approved_user_queries:
+        return
+
+    db.session.execute(
+        text(
+            "UPDATE users SET password_policy_update_required = TRUE "
+            f"WHERE id IN ({' UNION '.join(approved_user_queries)})"
+        )
+    )
 
 
 def _sync_staffing_people_employee_status_sqlite(table_names):

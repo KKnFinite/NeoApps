@@ -1,7 +1,7 @@
 from datetime import datetime
 from functools import wraps
 
-from flask import flash, redirect, render_template, request, url_for
+from flask import flash, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
@@ -25,6 +25,12 @@ from app.services.access_control import (
     user_has_gateway_access,
 )
 from app.services.permission_rules import ensure_default_permission_rules, grouped_permission_rules, user_can
+from app.services.password_policy import (
+    PASSWORD_POLICY_GUIDANCE,
+    PASSWORD_POLICY_LOGIN_SESSION_KEY,
+    set_user_password,
+    user_requires_password_change,
+)
 from app.services.user_tokens import (
     EMAIL_VERIFICATION,
     PASSWORD_RESET,
@@ -110,9 +116,14 @@ def login():
             flash("Login failed. Please try again.", "error")
             return render_template("auth/login.html"), 500
 
-        if user.password_reset_required:
+        if user_requires_password_change(user):
+            if user.password_policy_update_required:
+                session[PASSWORD_POLICY_LOGIN_SESSION_KEY] = user.id
+            else:
+                session.pop(PASSWORD_POLICY_LOGIN_SESSION_KEY, None)
             return redirect(url_for("auth.change_password"))
 
+        session.pop(PASSWORD_POLICY_LOGIN_SESSION_KEY, None)
         return redirect(url_for("auth.portal_dashboard"))
 
     return render_template("auth/login.html")
@@ -120,6 +131,7 @@ def login():
 
 @bp.route("/logout")
 def logout():
+    session.pop(PASSWORD_POLICY_LOGIN_SESSION_KEY, None)
     logout_user()
     flash("You have been logged out.", "info")
     return redirect(url_for("auth.login"))
@@ -297,42 +309,70 @@ def reset_password(token):
         password = request.form.get("password", "")
         confirm_password = request.form.get("confirm_password", "")
         try:
-            _validate_password_pair(password, confirm_password)
+            set_user_password(token_record.user, password, confirm_password)
         except ValueError as error:
             flash(str(error), "error")
-            return render_template("auth/reset_password.html", token=token, valid=True), 400
+            return render_template(
+                "auth/reset_password.html",
+                token=token,
+                valid=True,
+                password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
+            ), 400
 
-        token_record.user.set_password(password)
-        token_record.user.password_changed_at = datetime.utcnow()
         token_record.user.password_reset_required = False
+        token_record.user.password_policy_update_required = False
         mark_token_used(token_record)
         db.session.commit()
         flash("Password reset complete. You can log in now.", "info")
         return redirect(url_for("auth.login"))
 
-    return render_template("auth/reset_password.html", token=token, valid=True)
+    return render_template(
+        "auth/reset_password.html",
+        token=token,
+        valid=True,
+        password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
+    )
 
 
 @bp.route("/change-password", methods=["GET", "POST"])
 @login_required
 def change_password():
+    forced_change = user_requires_password_change(current_user)
     if request.method == "POST":
+        if not forced_change and not current_user.check_password(
+            request.form.get("current_password", "")
+        ):
+            flash("Current password is incorrect.", "error")
+            return render_template(
+                "auth/change_password.html",
+                password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
+                require_current_password=True,
+            ), 400
+
         password = request.form.get("password", "")
         confirm_password = request.form.get("confirm_password", "")
         try:
-            _validate_password_pair(password, confirm_password)
+            set_user_password(current_user, password, confirm_password)
         except ValueError as error:
             flash(str(error), "error")
-            return render_template("auth/change_password.html"), 400
+            return render_template(
+                "auth/change_password.html",
+                password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
+                require_current_password=not forced_change,
+            ), 400
 
-        current_user.set_password(password)
-        current_user.password_changed_at = datetime.utcnow()
         current_user.password_reset_required = False
+        current_user.password_policy_update_required = False
+        session.pop(PASSWORD_POLICY_LOGIN_SESSION_KEY, None)
         db.session.commit()
         flash("Password changed.", "info")
         return redirect(url_for("auth.portal_dashboard"))
 
-    return render_template("auth/change_password.html")
+    return render_template(
+        "auth/change_password.html",
+        password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
+        require_current_password=not forced_change,
+    )
 
 
 @bp.route("/portal/manage")
@@ -677,13 +717,17 @@ def emergency_reset_user_password(user_id):
             return render_template("auth/emergency_reset.html", target_user=target_user), 400
 
         try:
-            _validate_password_pair(password, confirm_password)
+            set_user_password(target_user, password, confirm_password)
         except ValueError as error:
             flash(str(error), "error")
-            return render_template("auth/emergency_reset.html", target_user=target_user), 400
+            return render_template(
+                "auth/emergency_reset.html",
+                target_user=target_user,
+                password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
+            ), 400
 
-        target_user.set_password(password)
         target_user.password_reset_required = True
+        target_user.password_policy_update_required = False
         target_user.last_password_reset_by_user_id = current_user.id
         target_user.last_password_reset_at = datetime.utcnow()
         target_user.last_password_reset_reason = reason
@@ -691,7 +735,11 @@ def emergency_reset_user_password(user_id):
         flash("Temporary password set. User must change it on next login.", "info")
         return redirect(url_for("auth.user_detail", user_id=target_user.id))
 
-    return render_template("auth/emergency_reset.html", target_user=target_user)
+    return render_template(
+        "auth/emergency_reset.html",
+        target_user=target_user,
+        password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
+    )
 
 
 def _requested_portal_apps_from_form():
@@ -864,7 +912,6 @@ def _build_user_from_account_form(form):
     if missing:
         raise ValueError(f"{', '.join(missing)} required.")
 
-    _validate_password_pair(password, confirm_password)
     _raise_for_duplicate_identity(email, employee_id)
 
     user = User(
@@ -879,9 +926,14 @@ def _build_user_from_account_form(form):
         access_reason=form["access_reason"].strip(),
         role="watcher",
         is_active=True,
-        password_changed_at=datetime.utcnow(),
     )
-    user.set_password(password)
+    set_user_password(
+        user,
+        password,
+        confirm_password,
+        email=email,
+        employee_id=employee_id,
+    )
     db.session.add(user)
     db.session.flush()
     return user
@@ -1064,13 +1116,6 @@ def _find_user_by_email(email):
 
 def _normalize_email(value):
     return (value or "").strip().lower()
-
-
-def _validate_password_pair(password, confirm_password):
-    if password != confirm_password:
-        raise ValueError("Passwords do not match.")
-    if len(password) < 8:
-        raise ValueError("Password must be at least 8 characters.")
 
 
 def _membership_or_404(membership_id):

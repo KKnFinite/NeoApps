@@ -10,7 +10,11 @@ from app.extensions import db
 from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, User
 from app.services.access_control import DEFAULT_NEONODES, user_can_access_node
 from app.services.permission_rules import DEFAULT_PERMISSION_RULES
-from app.services.database_bootstrap import bootstrap_database
+from app.services.database_bootstrap import (
+    LOCAL_SQLITE_FALLBACK_PASSWORD,
+    bootstrap_database,
+)
+from app.services.schema_sync import _mark_existing_approved_users_for_password_policy_update
 
 
 class DatabaseBootstrapTest(unittest.TestCase):
@@ -70,7 +74,7 @@ class DatabaseBootstrapTest(unittest.TestCase):
         self.assertTrue(user.is_active)
         self.assertTrue(user.email_verified_at)
         self.assertFalse(user.password_reset_required)
-        self.assertTrue(user.check_password("1313"))
+        self.assertTrue(user.check_password(LOCAL_SQLITE_FALLBACK_PASSWORD))
         self.assertTrue(result["created_user"])
         self.assertTrue(result["password_applied"])
         self.assertEqual(membership.status, "approved")
@@ -112,7 +116,7 @@ class DatabaseBootstrapTest(unittest.TestCase):
             os.environ,
             {
                 "BOOTSTRAP_ADMIN_EMAIL": "bootstrap@example.com",
-                "BOOTSTRAP_ADMIN_PASSWORD": "NewBootstrapPassword123!",
+                "BOOTSTRAP_ADMIN_PASSWORD": "NewHarborSignal123!",
             },
             clear=False,
         ):
@@ -125,7 +129,7 @@ class DatabaseBootstrapTest(unittest.TestCase):
         self.assertTrue(updated.is_active)
         self.assertTrue(updated.email_verified_at)
         self.assertTrue(updated.check_password("OldPassword123!"))
-        self.assertFalse(updated.check_password("NewBootstrapPassword123!"))
+        self.assertFalse(updated.check_password("NewHarborSignal123!"))
         self.assertTrue(user_can_access_node(updated, "RFD", "motherbrain", "grandmaster"))
 
     def test_bootstrap_can_run_twice_without_duplicates(self):
@@ -146,6 +150,52 @@ class DatabaseBootstrapTest(unittest.TestCase):
             GatewayNodeRole.query.filter_by(gateway_membership_id=membership.id).count(),
             len(DEFAULT_NEONODES),
         )
+
+    def test_bootstrap_rejects_passwords_that_fail_shared_policy(self):
+        with patch.dict(
+            os.environ,
+            {"BOOTSTRAP_ADMIN_PASSWORD": "password123!"},
+            clear=False,
+        ):
+            with self.assertRaisesRegex(ValueError, "commonly compromised"):
+                bootstrap_database(self.app)
+
+    def test_password_policy_migration_marks_existing_approved_users_only(self):
+        db.create_all()
+        approved_user = User(username="approved_policy_user")
+        approved_user.set_password("Password123!")
+        pending_user = User(username="pending_policy_user")
+        pending_user.set_password("Password123!")
+        db.session.add_all((approved_user, pending_user))
+        db.session.flush()
+        gateway = Gateway(code="PW", name="Password Policy")
+        db.session.add(gateway)
+        db.session.flush()
+        db.session.add_all(
+            (
+                GatewayMembership(
+                    user_id=approved_user.id,
+                    gateway_id=gateway.id,
+                    status="approved",
+                    is_active=True,
+                ),
+                GatewayMembership(
+                    user_id=pending_user.id,
+                    gateway_id=gateway.id,
+                    status="pending",
+                    is_active=True,
+                ),
+            )
+        )
+        db.session.flush()
+
+        _mark_existing_approved_users_for_password_policy_update(
+            {"users", "gateway_memberships"}
+        )
+        db.session.commit()
+
+        self.assertTrue(db.session.get(User, approved_user.id).password_policy_update_required)
+        self.assertFalse(db.session.get(User, pending_user.id).password_policy_update_required)
 
     def test_non_sqlite_bootstrap_requires_password_env(self):
         TestConfig = type(
@@ -218,8 +268,8 @@ class AutoDatabaseBootstrapTest(unittest.TestCase):
             db.drop_all()
 
     def test_auto_bootstrap_can_run_twice_without_duplicates_or_password_overwrite(self):
-        first_env = self._render_env(password="FirstBootstrapPassword123!")
-        second_env = self._render_env(password="SecondBootstrapPassword123!")
+        first_env = self._render_env(password="FirstHarborSignal123!")
+        second_env = self._render_env(password="SecondHarborSignal123!")
 
         with patch.dict(os.environ, first_env, clear=True):
             app = create_app(self._config(auto_bootstrap=True))
@@ -239,14 +289,14 @@ class AutoDatabaseBootstrapTest(unittest.TestCase):
                 GatewayNodeRole.query.filter_by(gateway_membership_id=membership.id).count(),
                 len(DEFAULT_NEONODES),
             )
-            self.assertTrue(user.check_password("FirstBootstrapPassword123!"))
-            self.assertFalse(user.check_password("SecondBootstrapPassword123!"))
+            self.assertTrue(user.check_password("FirstHarborSignal123!"))
+            self.assertFalse(user.check_password("SecondHarborSignal123!"))
             db.drop_all()
 
     def test_auto_bootstrap_does_not_log_secrets(self):
         env = self._render_env(
             database_url="postgresql://neo_user:dbpass-placeholder@example.neon.tech/neogateway",
-            password="BootstrapPasswordPlaceholder123!",
+            password="HarborSignalPlaceholder123!",
         )
         env["BREVO_API_KEY"] = "brevo-api-key-placeholder"
 
@@ -258,7 +308,7 @@ class AutoDatabaseBootstrapTest(unittest.TestCase):
         output = stdout.getvalue() + "\n".join(logs.output)
         self.assertIn("Auto bootstrap enabled", output)
         self.assertIn("Bootstrap completed", output)
-        self.assertNotIn("BootstrapPasswordPlaceholder123!", output)
+        self.assertNotIn("HarborSignalPlaceholder123!", output)
         self.assertNotIn("dbpass-placeholder", output)
         self.assertNotIn(env["DATABASE_URL"], output)
         self.assertNotIn("brevo-api-key-placeholder", output)
@@ -282,7 +332,7 @@ class AutoDatabaseBootstrapTest(unittest.TestCase):
     def _render_env(
         self,
         database_url="postgresql://neo_user:dbpass@example.neon.tech/neogateway",
-        password="BootstrapPassword123!",
+        password="HarborSignalPassword123!",
     ):
         return {
             "DATABASE_URL": database_url,

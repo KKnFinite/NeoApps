@@ -15,12 +15,13 @@
         </label>
         <label>
             <span>Temporary Password</span>
-            <input name="password" type="password" autocomplete="new-password" required>
+            <input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
         </label>
         <label>
             <span>Confirm Temporary Password</span>
-            <input name="confirm_password" type="password" autocomplete="new-password" required>
+            <input name="confirm_password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
         </label>
+        <p class="muted">{{ password_policy_guidance }}</p>
         <button type="submit">Set Temporary Password</button>
     </form>
 </section>
