@@ -474,6 +474,63 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(role.role, "master")
 
+    def test_approved_user_role_update_does_not_resend_access_email(self):
+        grandmaster = self._admin("role_update_grandmaster", "grandmaster")
+        user, membership = self._approved_user("role_update_user", "roleupdate@example.com")
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        sektor = NeoNode.query.filter_by(code="sektor").one()
+        form = self._edit_user_form(user, membership)
+        form.update(
+            {
+                "app_status_neogateway": "approved",
+                "app_active_neogateway": "1",
+                f"node_{sektor.id}": "operator",
+            }
+        )
+
+        with patch("app.auth.routes.email_service.send_access_approved") as send_approved:
+            response = self.client.post(
+                f"/admin/users/{user.id}/edit",
+                data=form,
+                follow_redirects=False,
+            )
+
+        role = GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            node_id=sektor.id,
+        ).one()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(role.role, "operator")
+        self.assertEqual(send_approved.call_count, 0)
+
+    def test_approved_user_profile_edit_does_not_resend_access_email(self):
+        grandmaster = self._admin("profile_edit_grandmaster", "grandmaster")
+        user, membership = self._approved_user("profile_edit_user", "profileedit@example.com")
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        form = self._edit_user_form(user, membership)
+        form.update(
+            {
+                "first_name": "Updated",
+                "app_status_neogateway": "approved",
+                "app_active_neogateway": "1",
+            }
+        )
+
+        with patch("app.auth.routes.email_service.send_access_approved") as send_approved:
+            response = self.client.post(
+                f"/admin/users/{user.id}/edit",
+                data=form,
+                follow_redirects=False,
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(db.session.get(User, user.id).first_name, "Updated")
+        self.assertEqual(send_approved.call_count, 0)
+
     def test_non_kessler_grandmaster_cannot_assign_grandmaster_role(self):
         grandmaster = self._admin("ordinary_grandmaster", "grandmaster")
         user, membership = self._approved_user("future_grandmaster", "future@example.com")

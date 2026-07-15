@@ -1448,6 +1448,7 @@ def _approve_membership(membership, notes, seed_role="watcher"):
     if not membership.user.email_verified_at:
         raise ValueError("Email not verified yet.")
 
+    was_approved = membership.status == "approved"
     membership.status = "approved"
     membership.is_active = True
     membership.approved_by_user_id = current_user.id
@@ -1471,9 +1472,10 @@ def _approve_membership(membership, notes, seed_role="watcher"):
         app_access.denial_notes = None
         seed_gateway_node_roles(membership, seed_role, overwrite_existing=False)
 
-    send_result = email_service.send_access_approved(membership.user, membership.gateway)
-    if send_result.get("sent"):
-        membership.approval_email_sent_at = datetime.utcnow()
+    if not was_approved:
+        send_result = email_service.send_access_approved(membership.user, membership.gateway)
+        if send_result.get("sent"):
+            membership.approval_email_sent_at = datetime.utcnow()
 
 
 def _deny_membership(membership, notes):
