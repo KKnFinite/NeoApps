@@ -1348,7 +1348,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(".tunnel-unload-metric {\n        min-height: 26px;", css)
         self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr));", css)
         self.assertIn(".tunnel-bay-card {\n        min-height: 34px;", css)
-        self.assertIn("grid-template-rows: auto repeat(3, minmax(0, 1fr));", css)
+        self.assertIn("grid-template-rows: 12px repeat(3, minmax(0, 1fr));", css)
 
     def test_neosektor_mobile_shell_paints_the_safe_area_dark(self):
         self._login_approved_user(role="simulator")
@@ -1414,7 +1414,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn("transform:", mobile_layout)
         self.assertNotIn("margin-top: -", mobile_layout)
 
-    def test_tunnel_mobile_ballmat_count_rows_reserve_labels_and_equal_tracks(self):
+    def test_tunnel_mobile_ballmat_count_cards_use_taller_equal_normal_flow_tracks(self):
         self._login_approved_user(role="simulator")
 
         response = self.client.get("/neosektor/tunnel-conductor")
@@ -1437,9 +1437,27 @@ class NeoSektorRoutesTest(unittest.TestCase):
             response.data.count(b'<span class="tunnel-mobile-label">Open Bays</span>'),
             2,
         )
-        self.assertIn("grid-template-rows: auto repeat(3, minmax(0, 1fr));", css)
-        self.assertIn("grid-template-rows: auto minmax(32px, 1fr);", css)
-        self.assertIn("align-self: stretch;\n        min-height: 32px;", css)
+        layout_start = css.index(
+            "/* Expand the six equal mobile count cards without taking space from bays or settings. */"
+        )
+        layout_end = css.index(
+            "body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-operations-card",
+            layout_start,
+        )
+        mobile_layout = css[layout_start:layout_end]
+
+        self.assertIn(
+            "minmax(0, 0.9fr)\n            minmax(0, 1.5fr)\n            minmax(0, 0.5fr)\n            minmax(0, 0.5fr);",
+            css,
+        )
+        self.assertIn("grid-auto-flow: row;", mobile_layout)
+        self.assertIn("grid-template-rows: 12px repeat(3, minmax(0, 1fr));", mobile_layout)
+        self.assertIn("grid-template-rows: auto minmax(32px, auto);", mobile_layout)
+        self.assertIn("align-content: center;", mobile_layout)
+        self.assertIn("align-self: center;\n        min-height: 32px;", mobile_layout)
+        self.assertNotIn("position: absolute", mobile_layout)
+        self.assertNotIn("transform:", mobile_layout)
+        self.assertNotIn("margin-top: -", mobile_layout)
 
     def test_tunnel_mobile_option_row_uses_shared_label_and_control_tracks(self):
         self._login_approved_user(role="simulator")
@@ -2718,8 +2736,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
             css,
         )
         self.assertIn("grid-template-columns: 30px minmax(0, 1fr) 30px;", css)
-        self.assertIn("minmax(0, 1.02fr)", css)
-        self.assertIn("minmax(0, 1.38fr)", css)
+        self.assertIn("minmax(0, 0.9fr)", css)
+        self.assertIn("minmax(0, 1.5fr)", css)
         self.assertIn("grid-template-rows: auto minmax(0, 1fr) minmax(0, 0.68fr);", css)
         self.assertIn("min-height: 32px;", css)
         self.assertIn("height: 30px;", css)
