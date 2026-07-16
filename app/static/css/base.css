@@ -23241,13 +23241,16 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         padding: 3px 5px;
     }
 
-    /* Reserve equal, readable bay tracks in the locked EBM/WBM mobile console. */
+    /* NeoSektor EBM/WBM mobile normal-flow layout. */
     body.blueprint-neosektor.neosektor-ballmat-operator-page .counts-wrap {
-        grid-template-rows: minmax(0, 0.28fr) minmax(0, 0.72fr);
+        grid-template-rows: minmax(0, 0.27fr) minmax(0, 0.73fr);
         gap: 4px;
     }
 
-    body.blueprint-neosektor.neosektor-ballmat-operator-page .wave-strip {
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .wave-strip,
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .ops-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 4px;
     }
 
@@ -23262,10 +23265,13 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     body.blueprint-neosektor.neosektor-ballmat-operator-page .ops-column {
         display: grid;
-        grid-template-rows: 12px repeat(3, minmax(44px, 0.2fr)) minmax(0, 2.6fr);
+        grid-auto-flow: row;
+        grid-template-rows: 12px repeat(3, minmax(40px, 1fr)) minmax(96px, 1.75fr);
+        align-content: stretch;
+        align-items: stretch;
         gap: 3px;
         padding: 4px;
-        overflow: hidden;
+        overflow: visible;
     }
 
     body.blueprint-neosektor.neosektor-ballmat-operator-page .ops-column h2 {
@@ -23276,10 +23282,13 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     body.blueprint-neosektor.neosektor-ballmat-operator-page .counter-card {
+        display: grid;
         grid-template-rows: auto minmax(32px, 1fr);
         align-content: stretch;
+        align-items: stretch;
         gap: 3px;
         min-height: 0;
+        overflow: hidden;
         padding: 4px;
     }
 
@@ -23294,6 +23303,12 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         min-height: 32px;
     }
 
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .readonly-count {
+        align-self: stretch;
+        display: grid;
+        place-items: center;
+    }
+
     body.blueprint-neosektor.neosektor-ballmat-operator-page .counter-control button,
     body.blueprint-neosektor.neosektor-ballmat-operator-page .counter-number,
     body.blueprint-neosektor.neosektor-ballmat-operator-page .readonly-count,
@@ -23302,9 +23317,12 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     body.blueprint-neosektor.neosektor-ballmat-operator-page .column-bays {
+        display: grid;
+        grid-auto-flow: row;
         grid-template-rows: 12px repeat(3, minmax(0, 1fr));
         grid-auto-rows: unset;
         align-content: stretch;
+        align-items: stretch;
         gap: 3px;
         height: 100%;
         min-height: 0;
@@ -23324,6 +23342,8 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     body.blueprint-neosektor.neosektor-ballmat-operator-page .bay-card {
         display: grid;
+        grid-template-rows: minmax(0, 1fr) auto;
+        align-items: center;
         align-content: center;
         gap: 2px;
         min-height: 0;

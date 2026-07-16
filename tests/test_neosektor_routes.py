@@ -1380,7 +1380,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("background-color: #050506;", css)
         self.assertIn("overscroll-behavior: none;", css)
 
-    def test_mobile_ebm_and_wbm_use_equal_visible_bay_tracks(self):
+    def test_mobile_ebm_and_wbm_use_normal_flow_visible_bay_tracks(self):
         self._login_approved_user(role="simulator")
 
         ebm = self.client.get("/neosektor/ebm")
@@ -1395,13 +1395,24 @@ class NeoSektorRoutesTest(unittest.TestCase):
             for bay_name in (b"Bay 1", b"Bay 2", b"Bay 3", b"Bay 4", b"Bay 5"):
                 self.assertIn(bay_name, response.data)
 
-        self.assertIn(
-            "grid-template-rows: 12px repeat(3, minmax(44px, 0.2fr)) minmax(0, 2.6fr);",
-            css,
+        layout_start = css.index("/* NeoSektor EBM/WBM mobile normal-flow layout. */")
+        layout_end = css.index(
+            "body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap",
+            layout_start,
         )
-        self.assertIn("grid-template-rows: 12px repeat(3, minmax(0, 1fr));", css)
-        self.assertIn("grid-auto-rows: unset;", css)
-        self.assertIn("min-height: 14px;\n        height: 14px;", css)
+        mobile_layout = css[layout_start:layout_end]
+
+        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", mobile_layout)
+        self.assertIn("grid-auto-flow: row;", mobile_layout)
+        self.assertIn(
+            "grid-template-rows: 12px repeat(3, minmax(40px, 1fr)) minmax(96px, 1.75fr);",
+            mobile_layout,
+        )
+        self.assertIn("grid-template-rows: 12px repeat(3, minmax(0, 1fr));", mobile_layout)
+        self.assertIn("grid-template-rows: auto minmax(32px, 1fr);", mobile_layout)
+        self.assertNotIn("position: absolute", mobile_layout)
+        self.assertNotIn("transform:", mobile_layout)
+        self.assertNotIn("margin-top: -", mobile_layout)
 
     def test_tunnel_mobile_ballmat_count_rows_reserve_labels_and_equal_tracks(self):
         self._login_approved_user(role="simulator")
