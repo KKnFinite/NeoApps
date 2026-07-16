@@ -2560,6 +2560,57 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn("overflow-wrap: anywhere;", bay_status_block)
         self.assertIn("text-transform: none;", bay_status_block)
 
+    def test_neosektor_mobile_viewport_layout_hooks_cover_all_operation_screens(self):
+        self._login_approved_user(role="simulator")
+
+        responses = {
+            "dashboard": self.client.get("/neosektor"),
+            "live": self.client.get("/neosektor/live-counts"),
+            "ebm": self.client.get("/neosektor/ebm"),
+            "wbm": self.client.get("/neosektor/wbm"),
+            "tunnel": self.client.get("/neosektor/tunnel-conductor"),
+        }
+        css = Path("app/static/css/base.css").read_text()
+
+        for response in responses.values():
+            self.assertEqual(response.status_code, 200)
+
+        self.assertIn(b"neosektor-mobile-dashboard-grid", responses["dashboard"].data)
+        self.assertIn(b"id=\"neosektor-live-title\">Live Counts</h1>", responses["live"].data)
+        self.assertIn(b"data-live-bay=\"Bay 1\"", responses["live"].data)
+        self.assertIn(b"data-live-bay=\"Bay 5\"", responses["live"].data)
+        self.assertIn(b"data-ballmat-side=\"east\"", responses["ebm"].data)
+        self.assertIn(b"data-ballmat-side=\"west\"", responses["wbm"].data)
+        self.assertIn(b"data-tunnel-wave-key=\"first\"", responses["tunnel"].data)
+        self.assertIn(b"data-tunnel-wave-key=\"second\"", responses["tunnel"].data)
+        self.assertIn(b"data-tunnel-setting=\"down_timer_minutes\"", responses["tunnel"].data)
+
+        self.assertIn("/* NeoSektor mobile viewport balance: preserve the locked console shell. */", css)
+        self.assertIn("overflow: hidden;", css)
+        self.assertIn("grid-template-columns: 42px minmax(0, 1fr);", css)
+        self.assertIn("width: 38px;", css)
+        self.assertIn("font-size: clamp(0.8rem, 3.55vw, 0.94rem);", css)
+        self.assertIn(
+            "body.blueprint-neosektor.neosektor-live-counts-page .mobile-topbar-page-name {",
+            css,
+        )
+        self.assertIn("text-overflow: clip;", css)
+        self.assertIn(
+            "grid-template-rows: minmax(0, 0.72fr) minmax(0, 1.28fr);",
+            css,
+        )
+        self.assertIn("grid-auto-rows: minmax(0, 1fr);", css)
+        self.assertIn(
+            "grid-template-rows: auto repeat(3, minmax(0, 1fr)) minmax(0, 1.42fr);",
+            css,
+        )
+        self.assertIn("grid-template-columns: 30px minmax(0, 1fr) 30px;", css)
+        self.assertIn("minmax(0, 1.02fr)", css)
+        self.assertIn("minmax(0, 1.38fr)", css)
+        self.assertIn("grid-template-rows: auto minmax(0, 1fr) minmax(0, 0.68fr);", css)
+        self.assertIn("min-height: 32px;", css)
+        self.assertIn("height: 30px;", css)
+
     def test_neosektor_visual_standardization_colors_are_scoped(self):
         self._login_approved_user(role="simulator")
         tunnel = self.client.get("/neosektor/tunnel-conductor")
