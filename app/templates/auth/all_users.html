@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}All Users | Portal Management{% endblock %}
+
+{% block content %}
+<section class="panel users-panel centered-command-page portal-management-page all-users-page" data-portal-management-workspace>
+    <div class="section-heading portal-management-heading">
+        <div>
+            <h1 class="portal-management-screen-title neo-page-title">All Users</h1>
+            <p class="muted">{{ rows|length }} NeoApps users</p>
+        </div>
+        <a class="action-button action-button-secondary portal-management-back-link" href="{{ url_for('auth.portal_management') }}">BACK TO PORTAL MANAGEMENT</a>
+    </div>
+
+    <div class="table-wrap portal-management-table-wrap">
+        <table class="data-table all-users-table" data-all-users-table>
+            <thead>
+                <tr>
+                    <th>FULL NAME</th>
+                    <th>EMPLOYEE ID</th>
+                    <th>EMAIL</th>
+                    <th>APPROVAL STATUS</th>
+                    <th>EMAIL VERIFIED</th>
+                    <th>CURRENT ROLE / ACCESS</th>
+                    <th aria-label="Manage user"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td data-label="Full Name"><a class="all-users-name-link" href="{{ url_for('auth.edit_user' if can_edit_users else 'auth.user_detail', user_id=row.user.id) }}">{{ row.user.display_name }}</a></td>
+                    <td data-label="Employee ID">{{ row.user.employee_id or "" }}</td>
+                    <td data-label="Email">{{ row.user.email or "" }}</td>
+                    <td data-label="Approval Status">{{ row.approval_summary }}</td>
+                    <td data-label="Email Verified">{{ "Yes" if row.user.email_verified_at else "No" }}</td>
+                    <td data-label="Current Role / Access">{{ row.access_summary }}</td>
+                    <td class="action-cell" data-label="">
+                        <div class="table-actions">
+                            <a href="{{ url_for('auth.edit_user' if can_edit_users else 'auth.user_detail', user_id=row.user.id) }}">{{ "MANAGE" if can_edit_users else "VIEW" }}</a>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7">No users found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

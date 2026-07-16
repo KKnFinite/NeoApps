@@ -449,6 +449,7 @@ def portal_management():
         role_choices=ROLE_CHOICES,
         rows=rows,
         search=search,
+        can_list_all_users=user_can(USER_MANAGEMENT_VIEW_PERMISSION),
     )
 
 
@@ -495,6 +496,20 @@ def users():
         role_choices=ROLE_CHOICES,
         rows=rows,
         search=search,
+    )
+
+
+@bp.route("/admin/users/all")
+@bp.route("/portal/manage/users/all")
+@portal_permission_required(USER_MANAGEMENT_VIEW_PERMISSION, "User Management access denied.")
+def all_users():
+    """List every NeoApps user and enter the established user edit workflow."""
+    gateway = get_current_gateway()
+    return render_template(
+        "auth/all_users.html",
+        can_edit_users=user_can(USER_MANAGEMENT_EDIT_PERMISSION),
+        gateway=gateway,
+        rows=_all_user_management_rows(gateway),
     )
 
 
@@ -1266,24 +1281,108 @@ def _search_user_management_rows(gateway, search):
         User.full_name.asc(),
         User.email.asc(),
     ).limit(50).all()
+    return _user_management_rows(gateway, users)
+
+
+def _all_user_management_rows(gateway):
+    """Return every user in the stable administrative directory order."""
+    users = User.query.order_by(
+        func.lower(User.last_name).asc(),
+        func.lower(User.first_name).asc(),
+        func.lower(User.full_name).asc(),
+        func.lower(User.email).asc(),
+    ).all()
+    return _user_management_rows(gateway, users)
+
+
+def _user_management_rows(gateway, users):
     memberships_by_user_id = _gateway_memberships_by_user_id(gateway)
     node_roles_by_user_id = _node_roles_by_user_id(gateway)
+    app_accesses_by_user_id = _portal_app_accesses_by_user_id(users)
     return [
-        _user_management_row(user, memberships_by_user_id, node_roles_by_user_id)
+        _user_management_row(
+            user,
+            memberships_by_user_id,
+            node_roles_by_user_id,
+            app_accesses_by_user_id,
+        )
         for user in users
     ]
 
 
-def _user_management_row(user, memberships_by_user_id, node_roles_by_user_id):
+def _portal_app_accesses_by_user_id(users):
+    user_ids = [user.id for user in users]
+    if not user_ids:
+        return {}
+
+    access_rows = PortalAppAccess.query.filter(
+        PortalAppAccess.user_id.in_(user_ids)
+    ).all()
+    accesses_by_user_id = {}
+    for access in access_rows:
+        accesses_by_user_id.setdefault(access.user_id, []).append(access)
+    return accesses_by_user_id
+
+
+def _user_management_row(
+    user,
+    memberships_by_user_id,
+    node_roles_by_user_id,
+    app_accesses_by_user_id,
+):
     membership = memberships_by_user_id.get(user.id)
     node_roles = node_roles_by_user_id.get(user.id, [])
+    app_accesses = app_accesses_by_user_id.get(user.id, [])
     return {
         "user": user,
         "membership": membership,
         "membership_status": membership.status if membership else "none",
         "important_roles": _important_node_roles(node_roles),
         "highest_role": _highest_node_role(node_roles),
+        "approval_summary": _user_approval_summary(membership, app_accesses),
+        "access_summary": _user_access_summary(membership, node_roles, app_accesses),
     }
+
+
+def _user_approval_summary(membership, app_accesses):
+    statuses = []
+    if membership:
+        statuses.append(f"RFD: {_access_status_label(membership)}")
+
+    app_names = {app["code"]: app["name"] for app in portal_app_definitions()}
+    for access in sorted(app_accesses, key=lambda row: row.app_code):
+        if access.app_code == "neogateway":
+            continue
+        statuses.append(
+            f"{app_names.get(access.app_code, access.app_code)}: "
+            f"{_access_status_label(access)}"
+        )
+    return " | ".join(statuses) if statuses else "No app access requested"
+
+
+def _user_access_summary(membership, node_roles, app_accesses):
+    access_levels = []
+    if membership:
+        if _membership_is_approved_active(membership):
+            access_levels.append(f"RFD: {_role_label(_highest_node_role(node_roles))}")
+        else:
+            access_levels.append(f"RFD: {_access_status_label(membership)}")
+
+    app_names = {app["code"]: app["name"] for app in portal_app_definitions()}
+    for access in sorted(app_accesses, key=lambda row: row.app_code):
+        if access.app_code == "neogateway":
+            continue
+        if access.status == "approved" and access.is_active:
+            value = _role_label(access.role)
+        else:
+            value = _access_status_label(access)
+        access_levels.append(f"{app_names.get(access.app_code, access.app_code)}: {value}")
+    return " | ".join(access_levels) if access_levels else "No active app access"
+
+
+def _access_status_label(access):
+    label = str(access.status or "none").strip().replace("_", " ").title()
+    return label if access.is_active else f"{label} (inactive)"
 
 
 def _user_management_summary(gateway):

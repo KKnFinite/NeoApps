@@ -2164,6 +2164,152 @@ a {
     text-transform: uppercase;
 }
 
+.portal-management-heading > div,
+.portal-management-user-heading > div {
+    min-width: 0;
+}
+
+.portal-management-heading h1,
+.portal-management-user-heading h2 {
+    margin: 0;
+}
+
+.portal-management-screen-title {
+    color: var(--neo-bright-silver);
+    font-size: clamp(1.3rem, 2.4vw, 1.85rem) !important;
+    line-height: 1;
+}
+
+.portal-management-heading .muted,
+.portal-management-user-heading .muted {
+    margin: 6px 0 0;
+}
+
+.portal-management-back-link,
+.portal-management-all-users-link {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.all-users-name-link {
+    color: var(--neo-bright-silver);
+    font-weight: 850;
+}
+
+.all-users-name-link:hover,
+.all-users-name-link:focus-visible {
+    color: var(--node-highlight);
+}
+
+@media (min-width: 901px) {
+    .portal-management-heading,
+    .portal-management-user-heading {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+
+    .portal-management-user-heading {
+        align-items: center;
+    }
+
+    body.motherbrain-desktop-nav-page .portal-management-page {
+        width: 100%;
+        max-width: none;
+        margin: 0;
+        padding: 20px 22px 24px;
+        text-align: left;
+    }
+
+    body.motherbrain-desktop-nav-page .portal-management-page .section-heading {
+        max-width: none;
+        margin-inline: 0;
+        text-align: left;
+    }
+
+    body.motherbrain-desktop-nav-page .portal-management-page .section-heading .muted {
+        margin-inline: 0;
+        text-align: left;
+    }
+
+    .portal-management-page .portal-management-table-wrap,
+    .portal-management-page .user-search-results {
+        overflow-x: visible;
+    }
+
+    .portal-management-page .portal-management-access-table,
+    .portal-management-page .user-role-table,
+    .portal-management-page .all-users-table {
+        min-width: 0;
+        table-layout: fixed;
+    }
+
+    .portal-management-access-table th:nth-child(1) { width: 12%; }
+    .portal-management-access-table th:nth-child(2) { width: 9%; }
+    .portal-management-access-table th:nth-child(3) { width: 16%; }
+    .portal-management-access-table th:nth-child(4) { width: 11%; }
+    .portal-management-access-table th:nth-child(5) { width: 10%; }
+    .portal-management-access-table th:nth-child(6) { width: 42%; }
+
+    .portal-management-page .user-role-table th:nth-child(1) { width: 13%; }
+    .portal-management-page .user-role-table th:nth-child(2) { width: 11%; }
+    .portal-management-page .user-role-table th:nth-child(3) { width: 16%; }
+    .portal-management-page .user-role-table th:nth-child(4) { width: 12%; }
+    .portal-management-page .user-role-table th:nth-child(5) { width: 9%; }
+    .portal-management-page .user-role-table th:nth-child(6) { width: 11%; }
+    .portal-management-page .user-role-table th:nth-child(7) { width: 16%; }
+    .portal-management-page .user-role-table th:nth-child(8) { width: 8%; }
+    .portal-management-page .user-role-table th:nth-child(9) { width: 4%; }
+
+    .all-users-table th:nth-child(1) { width: 14%; }
+    .all-users-table th:nth-child(2) { width: 12%; }
+    .all-users-table th:nth-child(3) { width: 16%; }
+    .all-users-table th:nth-child(4) { width: 18%; }
+    .all-users-table th:nth-child(5) { width: 9%; }
+    .all-users-table th:nth-child(6) { width: 23%; }
+    .all-users-table th:nth-child(7) { width: 8%; }
+
+    .portal-management-page .data-table th,
+    .portal-management-page .data-table td {
+        padding: 10px 8px;
+        overflow-wrap: anywhere;
+        vertical-align: top;
+    }
+
+    .portal-management-access-table .table-actions {
+        align-items: flex-start;
+        justify-content: flex-start;
+        gap: 6px;
+    }
+
+    .portal-management-access-table .inline-button-form {
+        flex: 1 1 100%;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .portal-management-access-table .compact-action-input {
+        flex: 1 1 112px;
+        width: min(100%, 142px);
+    }
+
+    .portal-management-access-table .table-actions a,
+    .portal-management-access-table .table-actions .inline-button-form button,
+    .all-users-table .table-actions a {
+        min-height: 30px;
+        padding: 6px 8px;
+        font-size: 0.68rem;
+    }
+}
+
+@media (max-width: 900px) {
+    .portal-management-all-users-link {
+        display: none;
+    }
+}
+
 .permission-rule-groups {
     display: grid;
     gap: 18px;
@@ -14719,28 +14865,35 @@ select::-ms-expand {
 
     .blueprint-auth .user-role-table,
     .blueprint-auth .pending-users-table,
+    .blueprint-auth .all-users-table,
     .blueprint-auth .user-role-table tbody,
     .blueprint-auth .pending-users-table tbody,
+    .blueprint-auth .all-users-table tbody,
     .blueprint-auth .user-role-table tr,
     .blueprint-auth .pending-users-table tr,
+    .blueprint-auth .all-users-table tr,
     .blueprint-auth .user-role-table td,
-    .blueprint-auth .pending-users-table td {
+    .blueprint-auth .pending-users-table td,
+    .blueprint-auth .all-users-table td {
         display: block;
         width: 100%;
     }
 
     .blueprint-auth .user-role-table,
-    .blueprint-auth .pending-users-table {
+    .blueprint-auth .pending-users-table,
+    .blueprint-auth .all-users-table {
         min-width: 0;
     }
 
     .blueprint-auth .user-role-table thead,
-    .blueprint-auth .pending-users-table thead {
+    .blueprint-auth .pending-users-table thead,
+    .blueprint-auth .all-users-table thead {
         display: none;
     }
 
     .blueprint-auth .user-role-table tr,
-    .blueprint-auth .pending-users-table tr {
+    .blueprint-auth .pending-users-table tr,
+    .blueprint-auth .all-users-table tr {
         margin-bottom: 14px;
         padding: 12px;
         border: 1px solid rgba(var(--node-rgb), 0.28);
@@ -14751,7 +14904,8 @@ select::-ms-expand {
     }
 
     .blueprint-auth .user-role-table td,
-    .blueprint-auth .pending-users-table td {
+    .blueprint-auth .pending-users-table td,
+    .blueprint-auth .all-users-table td {
         display: flex;
         justify-content: space-between;
         gap: 14px;
@@ -14761,7 +14915,8 @@ select::-ms-expand {
     }
 
     .blueprint-auth .user-role-table td::before,
-    .blueprint-auth .pending-users-table td::before {
+    .blueprint-auth .pending-users-table td::before,
+    .blueprint-auth .all-users-table td::before {
         content: attr(data-label);
         flex: 0 0 auto;
         color: var(--muted);
@@ -14772,13 +14927,15 @@ select::-ms-expand {
     }
 
     .blueprint-auth .user-role-table td .table-actions,
-    .blueprint-auth .pending-users-table td .table-actions {
+    .blueprint-auth .pending-users-table td .table-actions,
+    .blueprint-auth .all-users-table td .table-actions {
         justify-content: center;
         width: 100%;
     }
 
     .blueprint-auth .user-role-table td .table-actions a,
-    .blueprint-auth .pending-users-table td .table-actions a {
+    .blueprint-auth .pending-users-table td .table-actions a,
+    .blueprint-auth .all-users-table td .table-actions a {
         flex: 1 1 0;
     }
 
@@ -14788,7 +14945,8 @@ select::-ms-expand {
     }
 
     .blueprint-auth .user-role-table td[data-label=""]::before,
-    .blueprint-auth .pending-users-table td[data-label=""]::before {
+    .blueprint-auth .pending-users-table td[data-label=""]::before,
+    .blueprint-auth .all-users-table td[data-label=""]::before {
         display: none;
     }
 

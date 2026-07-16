@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -49,6 +50,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
             "/admin/permissions",
             "/admin/users/pending",
             "/admin/users/edit-users",
+            "/admin/users/all",
             f"/admin/users/{target.id}",
             f"/admin/users/{target.id}/edit",
             f"/admin/users/{target.id}/roles",
@@ -99,6 +101,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
             "/admin/permissions",
             "/admin/users/pending",
             "/admin/users/edit-users",
+            "/admin/users/all",
             f"/admin/users/{target.id}",
             f"/admin/users/{target.id}/edit",
             f"/admin/users/{target.id}/roles",
@@ -189,6 +192,87 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertIn(b"Beta User", employee_response.data)
         self.assertNotIn(b"Alpha User", employee_response.data)
         self.assertIn(b"Alpha User", email_response.data)
+
+    def test_all_users_lists_identifying_access_fields_in_last_first_name_order(self):
+        grandmaster = self._admin("all_users_grandmaster", "grandmaster")
+        zulu, _membership = self._approved_user("zulu_user", "zulu@example.com")
+        alpha, _membership = self._approved_user("alpha_user", "alpha@example.com")
+        beta, _membership = self._approved_user("beta_user", "beta@example.com")
+        zulu.first_name, zulu.last_name, zulu.full_name = "Zoe", "Anderson", "Zoe Anderson"
+        alpha.first_name, alpha.last_name, alpha.full_name = "Aaron", "Brown", "Aaron Brown"
+        beta.first_name, beta.last_name, beta.full_name = "Bella", "Brown", "Bella Brown"
+        db.session.add(
+            PortalAppAccess(
+                user_id=alpha.id,
+                app_code="neostaffing",
+                status="approved",
+                role="master",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        portal_response = self.client.get("/portal/manage")
+        response = self.client.get("/portal/manage/users/all")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"LIST ALL USERS", portal_response.data)
+        self.assertIn(b"data-all-users-table", response.data)
+        self.assertIn(b"FULL NAME", response.data)
+        self.assertIn(b"EMPLOYEE ID", response.data)
+        self.assertIn(b"EMAIL", response.data)
+        self.assertIn(b"APPROVAL STATUS", response.data)
+        self.assertIn(b"EMAIL VERIFIED", response.data)
+        self.assertIn(b"CURRENT ROLE / ACCESS", response.data)
+        self.assertIn(b"NeoStaffing: Master", response.data)
+        self.assertLess(html.index("Zoe Anderson"), html.index("Aaron Brown"))
+        self.assertLess(html.index("Aaron Brown"), html.index("Bella Brown"))
+        self.assertIn(f'href="/portal/manage/users/{alpha.id}/edit"', html)
+
+    def test_all_users_requires_existing_user_management_permission(self):
+        master = self._admin("all_users_master", "master")
+        target, _membership = self._approved_user("all_users_target", "target@example.com")
+        db.session.commit()
+        self._login(master.username)
+
+        list_response = self.client.get("/portal/manage/users/all", follow_redirects=False)
+        edit_response = self.client.get(
+            f"/portal/manage/users/{target.id}/edit",
+            follow_redirects=False,
+        )
+
+        self.assertEqual(list_response.status_code, 302)
+        self.assertEqual(list_response.location, "/portal")
+        self.assertEqual(edit_response.status_code, 302)
+        self.assertEqual(edit_response.location, "/portal")
+
+    def test_portal_management_desktop_workspace_uses_full_width_table_hooks(self):
+        grandmaster = self._admin("layout_grandmaster", "grandmaster")
+        requester = self._user("layout_requester", "layout-requester@example.com", verified=True)
+        db.session.add(
+            PortalAppAccess(
+                user_id=requester.id,
+                app_code="neostaffing",
+                status="pending",
+                role="watcher",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        response = self.client.get("/portal/manage")
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"data-portal-management-workspace", response.data)
+        self.assertIn(b"portal-management-table-wrap", response.data)
+        self.assertIn(".portal-management-page .portal-management-table-wrap,\n    .portal-management-page .user-search-results {\n        overflow-x: visible;", css)
+        self.assertIn(".portal-management-page .portal-management-access-table,", css)
+        self.assertIn(".portal-management-page .user-role-table,", css)
+        self.assertIn(".portal-management-page .all-users-table {", css)
 
     def test_grandmaster_can_edit_user_split_name_email_and_employee_id(self):
         grandmaster = self._admin("edit_grandmaster", "grandmaster")

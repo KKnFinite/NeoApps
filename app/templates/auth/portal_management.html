@@ -4,10 +4,12 @@
 {% block title %}Portal Management | NeoApps{% endblock %}
 
 {% block content %}
-<section class="panel users-panel centered-command-page">
-    <div class="section-heading">
-        <h1 class="motherbrain-body-duplicate-title">Portal Management</h1>
-        <p class="muted">Manage {{ neo_brand("Apps", "apps") }} users and app-level access.</p>
+<section class="panel users-panel centered-command-page portal-management-page" data-portal-management-workspace>
+    <div class="section-heading portal-management-heading">
+        <div>
+            <h1 class="motherbrain-body-duplicate-title">Portal Management</h1>
+            <p class="muted">Manage {{ neo_brand("Apps", "apps") }} users and app-level access.</p>
+        </div>
     </div>
 
     <section class="user-management-stack" aria-labelledby="app-access-requests-title">
@@ -16,8 +18,8 @@
         </div>
 
         {% if app_access_requests %}
-        <div class="table-wrap">
-            <table class="data-table wide-data-table pending-users-table">
+        <div class="table-wrap portal-management-table-wrap">
+            <table class="data-table pending-users-table portal-management-access-table">
                 <thead>
                     <tr>
                         <th>NAME</th>
@@ -74,9 +76,14 @@
     </section>
 
     <section class="user-management-stack" aria-labelledby="edit-users-title">
-        <div class="section-heading">
-            <h2 id="edit-users-title">USER MANAGEMENT</h2>
-            <p class="muted">Search by name, employee ID, or email to edit user profile and app access.</p>
+        <div class="section-heading portal-management-user-heading">
+            <div>
+                <h2 id="edit-users-title">USER MANAGEMENT</h2>
+                <p class="muted">Search by name, employee ID, or email to edit user profile and app access.</p>
+            </div>
+            {% if can_list_all_users %}
+            <a class="action-button action-button-secondary portal-management-all-users-link" href="{{ url_for('auth.all_users') }}">LIST ALL USERS</a>
+            {% endif %}
         </div>
 
         {% set search_action = url_for('auth.portal_management') %}
