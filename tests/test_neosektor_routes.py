@@ -1377,6 +1377,23 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("grid-template-rows: auto minmax(32px, 1fr);", css)
         self.assertIn("align-self: stretch;\n        min-height: 32px;", css)
 
+    def test_tunnel_mobile_option_row_uses_shared_label_and_control_tracks(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neosektor/tunnel-conductor")
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'class="tunnel-mobile-label">West Offset', response.data)
+        self.assertIn(b'data-tunnel-setting="first_modifier"', response.data)
+        self.assertIn(b'data-tunnel-setting="second_modifier"', response.data)
+        self.assertIn(b'data-tunnel-setting="down_timer_minutes"', response.data)
+        self.assertIn(b"<em>min</em>", response.data)
+        self.assertIn("grid-template-rows: 11px minmax(30px, 1fr) 8px;", css)
+        self.assertIn("grid-row: 1;\n        align-self: start;", css)
+        self.assertIn("grid-row: 2;\n        align-self: center;", css)
+        self.assertIn("grid-row: 3;\n        align-self: end;", css)
+
     def test_neosektor_numeric_inputs_render_no_spinner_class_and_css(self):
         self._login_approved_user(role="simulator")
 

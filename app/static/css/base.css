@@ -23296,8 +23296,29 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-operations-card .tunnel-offset-control-card,
     body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-operations-card .tunnel-setting-card {
-        grid-template-rows: auto minmax(0, 1fr);
+        grid-template-rows: 11px minmax(30px, 1fr) 8px;
+        align-content: stretch;
         align-items: center;
+        height: 100%;
+    }
+
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-operations-card .tunnel-offset-control-card > .tunnel-mobile-label,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-operations-card .tunnel-setting-card > span {
+        grid-row: 1;
+        align-self: start;
+    }
+
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-operations-card .neosektor-driver-offset-control,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-operations-card .tunnel-setting-card input {
+        grid-row: 2;
+        align-self: center;
+    }
+
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-operations-card .tunnel-setting-card em {
+        grid-row: 3;
+        align-self: end;
+        min-height: 8px;
+        line-height: 1;
     }
 
     body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-operations-card .neosektor-driver-offset-control button,
