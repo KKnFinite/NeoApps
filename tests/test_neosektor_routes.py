@@ -1348,7 +1348,34 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(".tunnel-unload-metric {\n        min-height: 26px;", css)
         self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr));", css)
         self.assertIn(".tunnel-bay-card {\n        min-height: 34px;", css)
-        self.assertIn(".tunnel-ballmat-column {\n        grid-template-rows: repeat(3, minmax(0, 1fr));", css)
+        self.assertIn("grid-template-rows: auto repeat(3, minmax(0, 1fr));", css)
+
+    def test_tunnel_mobile_ballmat_count_rows_reserve_labels_and_equal_tracks(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neosektor/tunnel-conductor")
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data.count(b'class="tunnel-readonly-card tunnel-ballmat-card'),
+            6,
+        )
+        self.assertEqual(
+            response.data.count(b'<span class="tunnel-mobile-label">1ST WAVE</span>'),
+            2,
+        )
+        self.assertEqual(
+            response.data.count(b'<span class="tunnel-mobile-label">2ND WAVE</span>'),
+            2,
+        )
+        self.assertEqual(
+            response.data.count(b'<span class="tunnel-mobile-label">Open Bays</span>'),
+            2,
+        )
+        self.assertIn("grid-template-rows: auto repeat(3, minmax(0, 1fr));", css)
+        self.assertIn("grid-template-rows: auto minmax(32px, 1fr);", css)
+        self.assertIn("align-self: stretch;\n        min-height: 32px;", css)
 
     def test_neosektor_numeric_inputs_render_no_spinner_class_and_css(self):
         self._login_approved_user(role="simulator")

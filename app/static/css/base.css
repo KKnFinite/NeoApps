@@ -23248,6 +23248,48 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         font-size: 0.94rem;
     }
 
+    /* Keep the three East/West count rows equal while reserving their side label. */
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-counts-panel {
+        gap: 3px;
+        padding: 4px;
+    }
+
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-grid {
+        gap: 4px;
+    }
+
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-column {
+        grid-template-rows: auto repeat(3, minmax(0, 1fr));
+        gap: 4px;
+    }
+
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-mobile-side-title {
+        min-height: 12px;
+        margin: 0;
+        font-size: 0.56rem;
+        line-height: 1.1;
+    }
+
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card {
+        grid-template-rows: auto minmax(32px, 1fr);
+        align-content: stretch;
+        align-items: stretch;
+        gap: 4px;
+        height: 100%;
+        padding: 5px;
+    }
+
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card .tunnel-mobile-label {
+        align-self: start;
+        line-height: 1.1;
+        padding-top: 1px;
+    }
+
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card .tunnel-count-control {
+        align-self: stretch;
+        min-height: 32px;
+    }
+
     body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-operations-card {
         align-items: stretch;
     }
