@@ -1350,6 +1350,29 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(".tunnel-bay-card {\n        min-height: 34px;", css)
         self.assertIn("grid-template-rows: auto repeat(3, minmax(0, 1fr));", css)
 
+    def test_mobile_ebm_and_wbm_use_equal_visible_bay_tracks(self):
+        self._login_approved_user(role="simulator")
+
+        ebm = self.client.get("/neosektor/ebm")
+        wbm = self.client.get("/neosektor/wbm")
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(ebm.status_code, 200)
+        self.assertEqual(wbm.status_code, 200)
+        for response in (ebm, wbm):
+            self.assertIn(b"East Bays", response.data)
+            self.assertIn(b"West Bays", response.data)
+            for bay_name in (b"Bay 1", b"Bay 2", b"Bay 3", b"Bay 4", b"Bay 5"):
+                self.assertIn(bay_name, response.data)
+
+        self.assertIn(
+            "grid-template-rows: 12px repeat(3, minmax(44px, 0.2fr)) minmax(0, 2.6fr);",
+            css,
+        )
+        self.assertIn("grid-template-rows: 12px repeat(3, minmax(0, 1fr));", css)
+        self.assertIn("grid-auto-rows: unset;", css)
+        self.assertIn("min-height: 14px;\n        height: 14px;", css)
+
     def test_tunnel_mobile_ballmat_count_rows_reserve_labels_and_equal_tracks(self):
         self._login_approved_user(role="simulator")
 
