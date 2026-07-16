@@ -1350,6 +1350,36 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(".tunnel-bay-card {\n        min-height: 34px;", css)
         self.assertIn("grid-template-rows: auto repeat(3, minmax(0, 1fr));", css)
 
+    def test_neosektor_mobile_shell_paints_the_safe_area_dark(self):
+        self._login_approved_user(role="simulator")
+
+        responses = [
+            self.client.get(path)
+            for path in (
+                "/neosektor",
+                "/neosektor/live-counts",
+                "/neosektor/ebm",
+                "/neosektor/wbm",
+                "/neosektor/tunnel-conductor",
+                "/neosektor/driver-routing",
+                "/neosektor/discharge",
+            )
+        ]
+        css = Path("app/static/css/base.css").read_text()
+
+        for response in responses:
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(b"blueprint-neosektor", response.data)
+
+        self.assertIn(
+            "html:has(body.blueprint-neosektor),\n"
+            "    body.blueprint-neosektor {\n"
+            "        height: 100svh;",
+            css,
+        )
+        self.assertIn("background-color: #050506;", css)
+        self.assertIn("overscroll-behavior: none;", css)
+
     def test_mobile_ebm_and_wbm_use_equal_visible_bay_tracks(self):
         self._login_approved_user(role="simulator")
 

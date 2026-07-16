@@ -22747,6 +22747,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         height: 100svh;
         min-height: 100svh;
         max-width: 100vw;
+        background-color: #050506;
         overflow: hidden;
         overscroll-behavior: none;
     }
