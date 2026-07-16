@@ -23404,11 +23404,16 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     /* Expand the six equal mobile count cards without taking space from bays or settings. */
     body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-counts-panel {
+        grid-template-rows: 14px minmax(0, 1fr);
+        align-items: stretch;
         gap: 3px;
         padding: 4px;
     }
 
     body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-grid {
+        grid-template-rows: minmax(0, 1fr);
+        align-content: stretch;
+        align-items: stretch;
         gap: 4px;
     }
 
@@ -23418,6 +23423,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         align-content: stretch;
         align-items: stretch;
         gap: 4px;
+        height: 100%;
     }
 
     body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-mobile-side-title {

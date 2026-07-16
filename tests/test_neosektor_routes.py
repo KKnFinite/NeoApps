@@ -1450,6 +1450,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
             "minmax(0, 0.9fr)\n            minmax(0, 1.5fr)\n            minmax(0, 0.5fr)\n            minmax(0, 0.5fr);",
             css,
         )
+        self.assertIn("grid-template-rows: 14px minmax(0, 1fr);", mobile_layout)
+        self.assertIn("grid-template-rows: minmax(0, 1fr);", mobile_layout)
         self.assertIn("grid-auto-flow: row;", mobile_layout)
         self.assertIn("grid-template-rows: 12px repeat(3, minmax(0, 1fr));", mobile_layout)
         self.assertIn("grid-template-rows: auto minmax(32px, auto);", mobile_layout)
