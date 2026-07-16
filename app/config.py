@@ -107,6 +107,16 @@ class Config:
     AUTH_PASSWORD_RESET_MAX_COOLDOWN_SECONDS = int(
         os.getenv("AUTH_PASSWORD_RESET_MAX_COOLDOWN_SECONDS", "3600")
     )
+    # When the standalone NeoSektor Sheets credentials are configured, mirror
+    # NeoGateway user updates to that same sheet during the transition.
+    NEOSEKTOR_SHEETS_COMPAT_ENABLED = env_flag(
+        "NEOSEKTOR_SHEETS_COMPAT_ENABLED",
+        True,
+    )
+    NEOSEKTOR_SHEETS_COMPAT_ALLOW_TESTING = env_flag(
+        "NEOSEKTOR_SHEETS_COMPAT_ALLOW_TESTING",
+        False,
+    )
     SQLALCHEMY_DATABASE_URI = resolve_database_uri()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SESSION_COOKIE_HTTPONLY = True

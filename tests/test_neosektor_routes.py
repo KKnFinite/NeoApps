@@ -1,6 +1,7 @@
 import unittest
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from app import create_app
 from app.extensions import db
@@ -32,6 +33,14 @@ from app.services.uld_requests import (
     send_uld_on_the_way,
     update_uld_request,
 )
+
+
+class _FakeNeoSektorWorksheet:
+    def __init__(self):
+        self.updates = []
+
+    def update_acell(self, cell, value):
+        self.updates.append((cell, value))
 
 
 class NeoSektorRoutesTest(unittest.TestCase):
@@ -1443,6 +1452,179 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(
             NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one().planned_count,
             42,
+        )
+
+    def test_neogateway_update_commits_database_and_mirrors_standalone_sheet_cells(self):
+        self._login_approved_user(role="simulator")
+        worksheet = _FakeNeoSektorWorksheet()
+
+        with (
+            patch(
+                "app.services.neosektor_sheets_compat.sheets_compatibility_enabled",
+                return_value=True,
+            ),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            response = self.client.post(
+                "/neosektor/ballmat/update?side=east",
+                json={
+                    "side": "east",
+                    "waves": {"first": {"count": 7, "status": "Full"}},
+                    "open_bays": 2,
+                    "bay_statuses": {"Bay 1": "Full"},
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        first_wave = NeoSektorBallmatWaveCount.query.filter_by(
+            side="EAST",
+            wave_name="1ST WAVE",
+        ).one()
+        self.assertEqual(first_wave.count, 7)
+        self.assertEqual(worksheet.updates, [("B2", 7), ("B4", 2), ("B6", "Full")])
+
+    def test_neogateway_tunnel_update_mirrors_the_standalone_left_to_arrive_cell(self):
+        self._login_approved_user(role="simulator")
+        worksheet = _FakeNeoSektorWorksheet()
+
+        with (
+            patch(
+                "app.services.neosektor_sheets_compat.sheets_compatibility_enabled",
+                return_value=True,
+            ),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            response = self.client.post(
+                "/neosektor/tunnel-conductor/wave",
+                json={"wave": "first", "value": 12},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(worksheet.updates, [("D2", 12)])
+        self.assertEqual(
+            NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one().planned_count,
+            12,
+        )
+
+    def test_neogateway_settings_mirror_existing_standalone_modifier_cells(self):
+        self._login_approved_user(role="simulator")
+        worksheet = _FakeNeoSektorWorksheet()
+
+        with (
+            patch(
+                "app.services.neosektor_sheets_compat.sheets_compatibility_enabled",
+                return_value=True,
+            ),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            response = self.client.post(
+                "/neosektor/tunnel-conductor/settings",
+                json={
+                    "first_modifier": 52,
+                    "second_modifier": 31,
+                    "down_timer_minutes": 20,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(worksheet.updates, [("B13", 52), ("B14", 31)])
+
+    def test_neogateway_sheet_bridge_skips_page_loads_and_polling(self):
+        self._login_approved_user(role="simulator")
+
+        with patch(
+            "app.neonodes.neosektor.routes.mirror_neosektor_sheet_update"
+        ) as mirror_update:
+            for path in (
+                "/neosektor/live-counts",
+                "/neosektor/live-counts/state",
+                "/neosektor/tunnel-conductor",
+                "/neosektor/tunnel-conductor/state",
+                "/neosektor/ebm",
+                "/neosektor/ballmat/state",
+                "/neosektor/driver-routing/state",
+            ):
+                with self.subTest(path=path):
+                    self.assertEqual(self.client.get(path).status_code, 200)
+
+        mirror_update.assert_not_called()
+
+    def test_neogateway_sheet_bridge_does_not_repeat_unchanged_updates(self):
+        self._login_approved_user(role="simulator")
+        worksheet = _FakeNeoSektorWorksheet()
+        payload = {
+            "side": "east",
+            "waves": {"first": {"count": 8, "status": "Light"}},
+            "open_bays": 1,
+            "bay_statuses": {"Bay 1": "Light"},
+        }
+
+        with (
+            patch(
+                "app.services.neosektor_sheets_compat.sheets_compatibility_enabled",
+                return_value=True,
+            ),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            self.assertEqual(
+                self.client.post("/neosektor/ballmat/update?side=east", json=payload).status_code,
+                200,
+            )
+            worksheet.updates.clear()
+            self.assertEqual(
+                self.client.post("/neosektor/ballmat/update?side=east", json=payload).status_code,
+                200,
+            )
+
+        self.assertEqual(worksheet.updates, [])
+
+    def test_neogateway_sheet_failure_does_not_rollback_database_update(self):
+        self._login_approved_user(role="simulator")
+
+        with (
+            patch(
+                "app.services.neosektor_sheets_compat.sheets_compatibility_enabled",
+                return_value=True,
+            ),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                side_effect=RuntimeError("sheet unavailable"),
+            ),
+            self.assertLogs(
+                "app.services.neosektor_sheets_compat",
+                level="WARNING",
+            ) as logs,
+        ):
+            response = self.client.post(
+                "/neosektor/tunnel-conductor/offset",
+                json={"west_offset": 4},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["state"]["routing"]["west_offset"], 4)
+        self.assertTrue(any("exception_class" in line for line in logs.output))
+
+    def test_neogateway_sheet_bridge_uses_existing_standalone_cell_contract(self):
+        from app.services.neosektor_sheets_compat import SHEET_CELL_ORDER
+
+        self.assertEqual(
+            SHEET_CELL_ORDER,
+            (
+                "B2", "C2", "D2", "B3", "C3", "D3", "B4", "C4",
+                "B6", "B8", "B10", "C6", "C8", "B13", "B14", "B15",
+            ),
         )
 
     def test_neosektor_operational_settings_default_when_missing(self):

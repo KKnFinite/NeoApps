@@ -20,6 +20,7 @@ from app.services.neosektor_live_counts import (
     update_tunnel_driver_offset,
     update_ballmat_side,
 )
+from app.services.neosektor_sheets_compat import mirror_neosektor_sheet_update
 from app.services.permission_rules import user_can
 from app.services.uld_requests import (
     discharge_context,
@@ -210,8 +211,10 @@ def tunnel_conductor_wave():
 
     payload = request.get_json(silent=True) or request.form
     try:
+        gateway = get_current_gateway()
+        before_state = driver_routing_state_payload(gateway)
         state = adjust_tunnel_wave_arrivals(
-            get_current_gateway(),
+            gateway,
             payload.get("wave"),
             payload.get("delta"),
             value=payload.get("value") if "value" in payload else None,
@@ -219,7 +222,7 @@ def tunnel_conductor_wave():
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
-    db.session.commit()
+    _commit_neosektor_update_and_mirror(before_state, state)
     return jsonify({"ok": True, "state": state})
 
 
@@ -234,8 +237,10 @@ def tunnel_conductor_offset():
         return jsonify({"ok": False, "error": "Edit access denied."}), 403
 
     payload = request.get_json(silent=True) or request.form
-    state = update_tunnel_driver_offset(get_current_gateway(), payload)
-    db.session.commit()
+    gateway = get_current_gateway()
+    before_state = driver_routing_state_payload(gateway)
+    state = update_tunnel_driver_offset(gateway, payload)
+    _commit_neosektor_update_and_mirror(before_state, state)
     return jsonify({"ok": True, "state": state})
 
 
@@ -250,8 +255,10 @@ def tunnel_conductor_settings():
         return jsonify({"ok": False, "error": "Edit access denied."}), 403
 
     payload = request.get_json(silent=True) or request.form
-    state = update_neosektor_operational_settings(get_current_gateway(), payload)
-    db.session.commit()
+    gateway = get_current_gateway()
+    before_state = driver_routing_state_payload(gateway)
+    state = update_neosektor_operational_settings(gateway, payload)
+    _commit_neosektor_update_and_mirror(before_state, state)
     return jsonify({"ok": True, "state": state})
 
 
@@ -272,12 +279,13 @@ def tunnel_conductor_ballmat():
 
     try:
         gateway = get_current_gateway()
+        before_state = driver_routing_state_payload(gateway)
         update_ballmat_side(gateway, side, payload)
         state = driver_routing_state_payload(gateway)
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
-    db.session.commit()
+    _commit_neosektor_update_and_mirror(before_state, state)
     return jsonify({"ok": True, "state": state})
 
 
@@ -340,12 +348,14 @@ def ballmat_update():
 
     payload = request.get_json(silent=True) or request.form.to_dict(flat=False)
     try:
-        state = update_ballmat_side(get_current_gateway(), selected_side, payload)
+        gateway = get_current_gateway()
+        before_state = driver_routing_state_payload(gateway)
+        state = update_ballmat_side(gateway, selected_side, payload)
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 403
 
     session["neosektor_ballmat_side"] = selected_side
-    db.session.commit()
+    _commit_neosektor_update_and_mirror(before_state, state)
     return jsonify({"ok": True, "state": state})
 
 
@@ -620,3 +630,9 @@ def _ballmat_route_for_side(side):
     selected_side = normalize_ballmat_side(side)
     endpoint = "neosektor.wbm" if selected_side == "west" else "neosektor.ebm"
     return url_for(endpoint)
+
+
+def _commit_neosektor_update_and_mirror(before_state, after_state):
+    """Commit NeoGateway state first, then best-effort mirror the shared sheet."""
+    db.session.commit()
+    mirror_neosektor_sheet_update(before_state, after_state)

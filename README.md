@@ -69,6 +69,25 @@ the base shell automatically supplies `X-CSRF-Token` to same-origin unsafe
 
 Do not enable forwarded-header trust without the known production proxy list.
 
+## NeoSektor Google Sheets Compatibility
+
+During the NeoSektor transition, NeoGateway remains database-first and mirrors
+user-initiated updates to the existing standalone NeoSektor sheet when its
+existing environment configuration is present:
+
+```text
+GOOGLE_SHEETS_ID
+GOOGLE_SHEETS_TAB
+GOOGLE_SERVICE_ACCOUNT_JSON
+```
+
+`NEOSEKTOR_SHEETS_COMPAT_ENABLED` defaults to `true` and may be set to `false`
+to disable the temporary bridge. The bridge only writes the established
+standalone Live Counts cells after a successful NeoGateway database commit; it
+does not read from Sheets or write during page loads, polling, or refreshes.
+The standalone sheet has no cell for NeoGateway-only Discharge events or the
+custom down-timer value, so the bridge does not alter that sheet layout.
+
 ## Production Bootstrap
 
 After deploying with a fresh Neon database, run the safe idempotent bootstrap:
