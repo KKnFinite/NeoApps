@@ -2765,6 +2765,41 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(refresh["window_end_local"], "04:00")
         self.assertEqual(refresh["reason"], "active")
 
+    def test_mobile_live_counts_wave_cards_match_the_ballmat_two_card_structure(self):
+        self._login_approved_user(role="watcher")
+
+        response = self.client.get("/neosektor/live-counts")
+        css = Path("app/static/css/base.css").read_text()
+        layout_start = css.index(
+            "body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-counts-grid {\n"
+            "        grid-template-rows: minmax(78px, 0.26fr) minmax(0, 1.74fr);"
+        )
+        layout_end = css.index(
+            "body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-ballmat-row .ops-column",
+            layout_start,
+        )
+        mobile_wave_layout = css[layout_start:layout_end]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data.count(b'class="wave-metric-label">Left to Arrive'),
+            2,
+        )
+        self.assertEqual(
+            response.data.count(b'class="wave-metric-label">Left to Unload'),
+            2,
+        )
+        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", mobile_wave_layout)
+        self.assertIn("grid-template-rows: 18px minmax(0, 1fr);", mobile_wave_layout)
+        self.assertIn("grid-template-rows: auto auto;", mobile_wave_layout)
+        self.assertIn("place-content: center;", mobile_wave_layout)
+        self.assertIn("justify-items: center;", mobile_wave_layout)
+        self.assertIn("font-size: 0.54rem;", mobile_wave_layout)
+        self.assertIn("font-size: clamp(0.9rem, 4.65vw, 1.2rem);", mobile_wave_layout)
+        self.assertNotIn("position: absolute", mobile_wave_layout)
+        self.assertNotIn("transform:", mobile_wave_layout)
+        self.assertNotIn("margin-top: -", mobile_wave_layout)
+
     def test_discharge_auto_refresh_uses_operation_window(self):
         self._login_approved_user(role="operator")
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 30, 1, 0)
@@ -2894,7 +2929,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
         self.assertIn("text-overflow: clip;", css)
         self.assertIn(
-            "grid-template-rows: minmax(0, 0.72fr) minmax(0, 1.28fr);",
+            "grid-template-rows: minmax(78px, 0.26fr) minmax(0, 1.74fr);",
             css,
         )
         self.assertIn("grid-auto-rows: minmax(0, 1fr);", css)
