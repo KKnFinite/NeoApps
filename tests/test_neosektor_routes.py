@@ -1297,8 +1297,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"data-tunnel-desktop-left", response.data)
         self.assertIn(b"data-tunnel-bay-column", response.data)
         self.assertIn(b"data-tunnel-operations-card", response.data)
-        self.assertIn(b"1ST WAVE East Ballmat Count", response.data)
-        self.assertIn(b"2ND WAVE West Ballmat Count", response.data)
+        self.assertNotIn(b"1ST WAVE East Ballmat Count", response.data)
+        self.assertNotIn(b"2ND WAVE West Ballmat Count", response.data)
+        self.assertEqual(response.data.count(b"East Ballmat Count"), 2)
+        self.assertEqual(response.data.count(b"West Ballmat Count"), 2)
         self.assertIn(b"East Ballmat Open Bays", response.data)
         self.assertIn(b"West Ballmat Open Bays", response.data)
         self.assertIn(b"class=\"tunnel-mobile-section-title\">Ballmat Counts", response.data)
@@ -1322,6 +1324,26 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(".blueprint-neosektor .tunnel-operations-card {\n    display: contents;", css)
         self.assertIn("@media (min-width: 901px)", css)
         self.assertIn("@media (max-width: 900px)", css)
+
+    def test_tunnel_conductor_desktop_typography_and_bay_pairs_use_readable_compact_rules(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neosektor/tunnel-conductor")
+        css = Path("app/static/css/base.css").read_text()
+        desktop_start = css.index("@media (min-width: 901px) {", css.index("/* Tunnel Conductor keeps"))
+        desktop_end = css.index("@media (max-width: 900px)", desktop_start)
+        desktop_css = css[desktop_start:desktop_end]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("color: var(--neo-bright-silver);", desktop_css)
+        self.assertIn("font-size: 0.94rem;", desktop_css)
+        self.assertIn("font-size: 0.8rem;", desktop_css)
+        self.assertIn("font-size: 0.78rem;", desktop_css)
+        self.assertIn("grid-template-columns: auto auto;", desktop_css)
+        self.assertIn("justify-content: center;", desktop_css)
+        self.assertIn("column-gap: 12px;", desktop_css)
+        self.assertIn("font-size: clamp(0.9rem, 1.15vw, 1.08rem);", desktop_css)
+        self.assertIn("font-size: clamp(0.98rem, 1.3vw, 1.24rem);", desktop_css)
 
     def test_neosektor_mobile_console_css_locks_viewport_and_compacts_operator_views(self):
         self._login_approved_user(role="simulator")

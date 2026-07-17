@@ -91,7 +91,7 @@
                     {% for wave in side.waves %}
                     <article class="tunnel-readonly-card tunnel-ballmat-card" data-wave="{{ wave.key }}">
                         <span class="tunnel-mobile-label">{{ wave.name }}</span>
-                        <span class="tunnel-desktop-label">{{ wave.name }} {{ side.label.title() }} Ballmat Count</span>
+                        <span class="tunnel-desktop-label">{{ side.label.title() }} Ballmat Count</span>
                         {% if can_edit %}
                         <div class="counter-control tunnel-count-control" aria-label="{{ side.label }} {{ wave.name }} controls">
                             <button type="button" data-tunnel-count-step="-1" aria-label="Decrease {{ side.label }} {{ wave.name }}">-</button>
