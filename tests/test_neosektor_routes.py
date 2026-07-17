@@ -1419,10 +1419,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
         self.assertIn(".counts-wrap.has-refresh-notice", mobile_layout)
         self.assertIn(
-            "grid-template-rows: 14px repeat(3, minmax(52px, 1fr)) minmax(150px, 1.7fr);",
+            "grid-template-rows: 20px repeat(3, minmax(52px, 1fr)) minmax(174px, 1.9fr);",
             mobile_layout,
         )
-        self.assertIn("grid-template-rows: 14px repeat(3, minmax(42px, 1fr));", mobile_layout)
+        self.assertIn("grid-template-rows: 18px repeat(3, minmax(48px, 1fr));", mobile_layout)
         self.assertIn("grid-template-rows: 12px minmax(30px, 1fr);", mobile_layout)
         self.assertNotIn("position: absolute", mobile_layout)
         self.assertNotIn("transform:", mobile_layout)
@@ -1455,10 +1455,47 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("grid-template-rows: auto auto;", mobile_layout)
         self.assertIn("place-content: center;", mobile_layout)
         self.assertIn("justify-items: center;", mobile_layout)
-        self.assertIn("grid-template-rows: 14px minmax(0, 1fr);", mobile_layout)
-        self.assertIn("grid-template-rows: 14px repeat(3, minmax(52px, 1fr)) minmax(150px, 1.7fr);", mobile_layout)
-        self.assertIn("grid-template-rows: 14px repeat(3, minmax(42px, 1fr));", mobile_layout)
-        self.assertIn("padding: 5px 6px;", mobile_layout)
+        self.assertIn("grid-template-rows: 18px minmax(0, 1fr);", mobile_layout)
+        self.assertIn("grid-template-rows: 20px repeat(3, minmax(52px, 1fr)) minmax(174px, 1.9fr);", mobile_layout)
+        self.assertIn("grid-template-rows: 18px repeat(3, minmax(48px, 1fr));", mobile_layout)
+        self.assertIn("padding: 6px 7px;", mobile_layout)
+        self.assertNotIn("position: absolute", mobile_layout)
+        self.assertNotIn("transform:", mobile_layout)
+        self.assertNotIn("margin-top: -", mobile_layout)
+
+    def test_mobile_ebm_and_wbm_enlarge_centered_section_headings_and_bay_sliders(self):
+        self._login_approved_user(role="simulator")
+
+        responses = [
+            self.client.get(path)
+            for path in ("/neosektor/ebm", "/neosektor/wbm")
+        ]
+        css = Path("app/static/css/base.css").read_text()
+        layout_start = css.index("/* NeoSektor EBM/WBM mobile normal-flow layout. */")
+        layout_end = css.index(
+            "body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap",
+            layout_start,
+        )
+        mobile_layout = css[layout_start:layout_end]
+
+        for response in responses:
+            self.assertEqual(response.status_code, 200)
+            for heading in (
+                b"1ST WAVE",
+                b"2ND WAVE",
+                b"East Ballmat",
+                b"West Ballmat",
+                b"East Bays",
+                b"West Bays",
+            ):
+                self.assertIn(heading, response.data)
+
+        self.assertGreaterEqual(mobile_layout.count("place-items: center;"), 3)
+        self.assertIn("font-size: 0.74rem;", mobile_layout)
+        self.assertIn("font-size: 0.72rem;", mobile_layout)
+        self.assertIn("grid-template-rows: minmax(0, 1fr) 18px;", mobile_layout)
+        self.assertIn("min-height: 16px;", mobile_layout)
+        self.assertIn("height: 16px;", mobile_layout)
         self.assertNotIn("position: absolute", mobile_layout)
         self.assertNotIn("transform:", mobile_layout)
         self.assertNotIn("margin-top: -", mobile_layout)
