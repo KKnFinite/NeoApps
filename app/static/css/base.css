@@ -22952,6 +22952,11 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         overflow: hidden;
     }
 
+    /* The Ballmat grid can use the space between its content and the fixed nav. */
+    body.blueprint-neosektor.neosektor-ballmat-operator-page.mobile-app-chrome.has-mobile-bottom-nav .content {
+        padding-bottom: calc(76px + env(safe-area-inset-bottom));
+    }
+
     body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-counts-grid,
     body.blueprint-neosektor.neosektor-ballmat-operator-page .counts-wrap,
     body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap {

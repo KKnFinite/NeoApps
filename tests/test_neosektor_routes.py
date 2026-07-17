@@ -1480,6 +1480,42 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn("transform:", mobile_layout)
         self.assertNotIn("margin-top: -", mobile_layout)
 
+    def test_mobile_ebm_and_wbm_reclaim_safe_space_for_equal_card_tracks(self):
+        self._login_approved_user(role="simulator")
+
+        responses = [
+            self.client.get(path)
+            for path in ("/neosektor/ebm", "/neosektor/wbm")
+        ]
+        css = Path("app/static/css/base.css").read_text()
+        layout_start = css.index("/* NeoSektor EBM/WBM mobile normal-flow layout. */")
+        layout_end = css.index(
+            "body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap",
+            layout_start,
+        )
+        mobile_layout = css[layout_start:layout_end]
+
+        for response in responses:
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data.count(b'class="counter-card"'), 6)
+            self.assertEqual(response.data.count(b'class="bay-card"'), 5)
+
+        self.assertIn(
+            "body.blueprint-neosektor.neosektor-ballmat-operator-page.mobile-app-chrome "
+            "has-mobile-bottom-nav .content {\n"
+            "        padding-bottom: calc(76px + env(safe-area-inset-bottom));",
+            css,
+        )
+        self.assertIn(
+            "grid-template-rows: 20px repeat(3, minmax(52px, 1fr)) minmax(174px, 1.9fr);",
+            mobile_layout,
+        )
+        self.assertIn("grid-template-rows: 18px repeat(3, minmax(48px, 1fr));", mobile_layout)
+        self.assertIn("height: 100%;", mobile_layout)
+        self.assertNotIn("position: absolute", mobile_layout)
+        self.assertNotIn("transform:", mobile_layout)
+        self.assertNotIn("margin-top: -", mobile_layout)
+
     def test_mobile_ebm_and_wbm_center_status_values_in_equal_taller_bay_tracks(self):
         self._login_approved_user(role="simulator")
 
