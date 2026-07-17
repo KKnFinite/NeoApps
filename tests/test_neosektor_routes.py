@@ -1428,6 +1428,40 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn("transform:", mobile_layout)
         self.assertNotIn("margin-top: -", mobile_layout)
 
+    def test_mobile_ebm_and_wbm_wave_labels_use_reserved_normal_flow_rows(self):
+        self._login_approved_user(role="simulator")
+
+        responses = [
+            self.client.get(path)
+            for path in ("/neosektor/ebm", "/neosektor/wbm")
+        ]
+        css = Path("app/static/css/base.css").read_text()
+        layout_start = css.index("/* NeoSektor EBM/WBM mobile normal-flow layout. */")
+        layout_end = css.index(
+            "body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap",
+            layout_start,
+        )
+        mobile_layout = css[layout_start:layout_end]
+
+        for response in responses:
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(
+                response.data.count(b'class="wave-metric-label">Left to Arrive'),
+                2,
+            )
+            self.assertEqual(
+                response.data.count(b'class="wave-metric-label">Left to Unload'),
+                2,
+            )
+
+        self.assertIn("grid-template-rows: minmax(20px, auto) minmax(0, 1fr);", mobile_layout)
+        self.assertIn("padding: 4px 3px 3px;", mobile_layout)
+        self.assertIn("font-size: 0.46rem;", mobile_layout)
+        self.assertIn("line-height: 1.15;", mobile_layout)
+        self.assertNotIn("position: absolute", mobile_layout)
+        self.assertNotIn("transform:", mobile_layout)
+        self.assertNotIn("margin-top: -", mobile_layout)
+
     def test_mobile_ebm_and_wbm_reserve_an_operation_notice_row(self):
         self._login_approved_user(role="simulator")
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 29, 10, 0)

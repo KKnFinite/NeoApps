@@ -23334,7 +23334,6 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         height: 100%;
         gap: 3px;
         padding: 4px;
-        overflow: hidden;
     }
 
     body.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card h2 {
@@ -23356,13 +23355,27 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     body.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card .wave-metrics div {
         display: grid;
-        grid-template-rows: 10px minmax(0, 1fr);
-        align-content: center;
-        align-items: center;
+        grid-template-rows: minmax(20px, auto) minmax(0, 1fr);
+        align-content: stretch;
+        align-items: stretch;
         min-height: 0;
         gap: 2px;
-        padding: 3px;
-        overflow: hidden;
+        padding: 4px 3px 3px;
+    }
+
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card .wave-metric-label {
+        display: block;
+        align-self: start;
+        color: var(--neo-silver);
+        font-size: 0.46rem;
+        letter-spacing: 0.025em;
+        line-height: 1.15;
+        text-align: center;
+    }
+
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_arrive"],
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_unload"] {
+        align-self: center;
     }
 
     body.blueprint-neosektor.neosektor-ballmat-operator-page .ops-column {
