@@ -1344,12 +1344,19 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("column-gap: 12px;", desktop_css)
         self.assertIn("font-size: clamp(0.9rem, 1.15vw, 1.08rem);", desktop_css)
         self.assertIn("font-size: clamp(0.98rem, 1.3vw, 1.24rem);", desktop_css)
-        self.assertIn("grid-template-columns: 32px minmax(54px, 74px) 32px;", desktop_css)
+        self.assertIn("width: min(100%, 184px);", desktop_css)
+        self.assertIn("grid-template-columns: 28px minmax(0, 1fr) 28px;", desktop_css)
         self.assertIn("grid-template-columns: 32px minmax(52px, 72px) 32px;", desktop_css)
         self.assertIn("justify-content: center;", desktop_css)
-        self.assertIn("gap: 9px;", desktop_css)
-        self.assertIn("font-size: clamp(1.7rem, 2.5vw, 2.3rem);", desktop_css)
+        self.assertIn("gap: 8px;", desktop_css)
+        self.assertIn("background: transparent;", desktop_css)
+        self.assertIn("font-size: clamp(5rem, 5.5vw, 6.2rem);", desktop_css)
         self.assertIn("font-size: clamp(1.05rem, 1.7vw, 1.5rem);", desktop_css)
+        self.assertIn(
+            ".tunnel-arrive-control input.counter-number[data-metric=\"left_to_arrive\"]",
+            css,
+        )
+        self.assertIn("color: var(--neo-bright-silver);", css)
 
     def test_neosektor_mobile_console_css_locks_viewport_and_compacts_operator_views(self):
         self._login_approved_user(role="simulator")

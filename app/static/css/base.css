@@ -20755,6 +20755,12 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     line-height: 0.9;
 }
 
+/* Editable arrival inputs stay white; unload readouts retain the Sektor highlight. */
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-arrive-control input.counter-number[data-metric="left_to_arrive"] {
+    color: var(--neo-bright-silver);
+    text-shadow: 0 0 12px rgba(244, 247, 251, 0.2);
+}
+
 .blueprint-neosektor .tunnel-wave-panel .tunnel-metric {
     min-height: 72px;
     justify-content: center;
@@ -22620,16 +22626,26 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-card .tunnel-count-control {
-        grid-template-columns: 32px minmax(54px, 74px) 32px;
+        width: min(100%, 184px);
+        grid-template-columns: 28px minmax(0, 1fr) 28px;
         align-self: center;
+        justify-self: center;
         justify-content: center;
-        gap: 9px;
+        gap: 8px;
         min-height: 44px;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-card .counter-number {
-        min-height: 44px;
-        font-size: clamp(1.7rem, 2.5vw, 2.3rem);
+        min-height: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        font-size: clamp(5rem, 5.5vw, 6.2rem);
+        line-height: 0.82;
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-card .tunnel-count-control button {
