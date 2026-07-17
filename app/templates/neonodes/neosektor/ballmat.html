@@ -34,7 +34,7 @@
         <span class="visually-hidden">{{ selected_manager_label }} | {{ "EDIT ENABLED" if can_edit else "VIEW ONLY" }}</span>
     </header>
 
-    <main class="counts-wrap">
+    <main class="counts-wrap{% if not state.refresh.auto_refresh_enabled %} has-refresh-notice{% endif %}">
         <div class="neosektor-inline-edit-error" data-neosektor-edit-error hidden aria-live="polite"></div>
         <div class="neosektor-refresh-paused" data-neosektor-refresh-paused {% if state.refresh.auto_refresh_enabled %}hidden{% endif %} aria-live="polite">
             {{ state.refresh.message }}
@@ -165,6 +165,7 @@
     const selectedPanel = root.querySelector(`[data-ballmat-side="${selectedSide}"]`);
     const statusLabels = {{ status_labels|list|tojson }};
     const pendingEdits = new Map();
+    const countsWrap = root.querySelector(".counts-wrap");
     const editError = root.querySelector("[data-neosektor-edit-error]");
     const refreshPaused = root.querySelector("[data-neosektor-refresh-paused]");
     let pendingSequence = 0;
@@ -209,9 +210,11 @@
         }
         editError.textContent = message || "Update failed. Restored the latest server value.";
         editError.hidden = false;
+        countsWrap?.classList.add("has-edit-error");
         window.clearTimeout(showEditError.timer);
         showEditError.timer = window.setTimeout(() => {
             editError.hidden = true;
+            countsWrap?.classList.remove("has-edit-error");
         }, 5200);
     };
 
@@ -345,6 +348,7 @@
         const status = refresh || {};
         const isActive = status.auto_refresh_enabled !== false;
         root.dataset.refreshActive = isActive ? "true" : "false";
+        countsWrap?.classList.toggle("has-refresh-notice", !isActive);
 
         if (refreshPaused) {
             refreshPaused.hidden = isActive;

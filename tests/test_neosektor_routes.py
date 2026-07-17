@@ -1405,14 +1405,60 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", mobile_layout)
         self.assertIn("grid-auto-flow: row;", mobile_layout)
         self.assertIn(
-            "grid-template-rows: 12px repeat(3, minmax(40px, 1fr)) minmax(96px, 1.75fr);",
+            "grid-template-areas:\n"
+            "            \"waves\"\n"
+            "            \"ballmats\";",
+            mobile_layout,
+        )
+        self.assertIn(
+            "grid-template-areas:\n"
+            "            \"refresh\"\n"
+            "            \"waves\"\n"
+            "            \"ballmats\";",
+            mobile_layout,
+        )
+        self.assertIn(".counts-wrap.has-refresh-notice", mobile_layout)
+        self.assertIn(
+            "grid-template-rows: 12px repeat(3, minmax(48px, 1fr)) minmax(120px, 1.7fr);",
             mobile_layout,
         )
         self.assertIn("grid-template-rows: 12px repeat(3, minmax(0, 1fr));", mobile_layout)
-        self.assertIn("grid-template-rows: auto minmax(32px, 1fr);", mobile_layout)
+        self.assertIn("grid-template-rows: 10px minmax(30px, 1fr);", mobile_layout)
         self.assertNotIn("position: absolute", mobile_layout)
         self.assertNotIn("transform:", mobile_layout)
         self.assertNotIn("margin-top: -", mobile_layout)
+
+    def test_mobile_ebm_and_wbm_reserve_an_operation_notice_row(self):
+        self._login_approved_user(role="simulator")
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 29, 10, 0)
+        self._add_sort_operation(date(2026, 6, 29), "night")
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+
+        responses = [
+            self.client.get(path)
+            for path in ("/neosektor/ebm", "/neosektor/wbm")
+        ]
+        template = Path("app/templates/neonodes/neosektor/ballmat.html").read_text()
+        css = Path("app/static/css/base.css").read_text()
+        layout_start = css.index("/* NeoSektor EBM/WBM mobile normal-flow layout. */")
+        layout_end = css.index(
+            "body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap",
+            layout_start,
+        )
+        mobile_layout = css[layout_start:layout_end]
+
+        for response in responses:
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(b'class="counts-wrap has-refresh-notice"', response.data)
+            self.assertIn(b"Auto-refresh paused", response.data)
+            self.assertIn(b"RFD NIGHT 6/29/26", response.data)
+
+        self.assertIn(
+            'countsWrap?.classList.toggle("has-refresh-notice", !isActive);',
+            template,
+        )
+        self.assertIn("grid-area: refresh;", mobile_layout)
+        self.assertIn("minmax(32px, auto) minmax(0, 0.22fr) minmax(0, 0.78fr);", mobile_layout)
 
     def test_tunnel_mobile_ballmat_count_cards_use_taller_equal_normal_flow_tracks(self):
         self._login_approved_user(role="simulator")
