@@ -25,7 +25,7 @@
             </div>
             <div class="portal-app-state">
                 {% if status == "approved" and access.is_active %}
-                <span>Approved {{ access.role|role_label }}</span>
+                <span class="portal-app-access-status">Approved {{ access.role|role_label }}</span>
                 <a class="action-button" href="{{ url_for(app.endpoint) }}">Launch</a>
                 {% elif status == "pending" and access.is_active %}
                 <span>Pending</span>

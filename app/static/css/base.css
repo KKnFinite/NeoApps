@@ -13041,6 +13041,14 @@ select::-ms-expand {
         gap: 12px;
     }
 
+    body.mobile-app-chrome.portal-shell-page .portal-app-card.is-approved .portal-app-access-status {
+        display: none;
+    }
+
+    body.mobile-app-chrome.portal-shell-page .portal-app-card.is-approved .portal-app-state {
+        gap: 0;
+    }
+
     .portal-app-icon {
         width: 58px;
         height: 58px;

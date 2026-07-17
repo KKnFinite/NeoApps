@@ -1522,6 +1522,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertIn(b"neo-brand__node node-word", response.data)
         self.assertNotIn(b"<h2>NeoGateway</h2>", response.data)
         self.assertIn(b"Approved", response.data)
+        self.assertIn(b'class="portal-app-access-status">Approved Simulator</span>', response.data)
         self.assertIn(b"Launch", response.data)
         self.assertNotIn(b">OPEN</a>", response.data)
         self.assertIn(b'href="/rfd"', response.data)
@@ -1534,6 +1535,30 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertNotIn('class="portal-install-section"', html)
         self.assertNotIn("data-install-button", html)
         self.assertNotIn("beforeinstallprompt", html)
+
+    def test_portal_mobile_hides_approved_role_status_without_hiding_other_app_states(self):
+        user, _membership = self._approved_user("mobileportalstatus", "mobileportalstatus@example.com")
+        db.session.commit()
+
+        self._login(user.username)
+        response = self.client.get("/portal")
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'class="portal-app-access-status">Approved Watcher</span>', response.data)
+        self.assertIn(b"Coming Soon", response.data)
+        self.assertIn(
+            "body.mobile-app-chrome.portal-shell-page .portal-app-card.is-approved "
+            ".portal-app-access-status {\n"
+            "        display: none;",
+            css,
+        )
+        self.assertIn(
+            "body.mobile-app-chrome.portal-shell-page .portal-app-card.is-approved "
+            ".portal-app-state {\n"
+            "        gap: 0;",
+            css,
+        )
 
     def test_portal_desktop_branding_css_widens_cards_and_scopes_neofont_menu_text(self):
         css = Path("app/static/css/base.css").read_text()
