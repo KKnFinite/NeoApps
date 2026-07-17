@@ -1686,6 +1686,35 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn("transform:", mobile_layout)
         self.assertNotIn("margin-top: -", mobile_layout)
 
+    def test_mobile_ebm_and_wbm_frame_only_edit_controls(self):
+        self._login_approved_user(role="simulator")
+
+        responses = [
+            self.client.get(path)
+            for path in ("/neosektor/ebm", "/neosektor/wbm")
+        ]
+        css = Path("app/static/css/base.css").read_text()
+
+        for response in responses:
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(b'class="counter-number neosektor-numeric-input"', response.data)
+            self.assertIn(b'data-bay-status=', response.data)
+            self.assertIn(b'class="readonly-count"', response.data)
+
+        self.assertIn(
+            "body.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card .wave-metrics div,\n"
+            "    body.blueprint-neosektor.neosektor-ballmat-operator-page .counter-card,\n"
+            "    body.blueprint-neosektor.neosektor-ballmat-operator-page .counter-control,\n"
+            "    body.blueprint-neosektor.neosektor-ballmat-operator-page .bay-card,\n"
+            "    body.blueprint-neosektor.neosektor-ballmat-operator-page .readonly-count {\n"
+            "        border: 0;\n"
+            "        border-radius: 0;\n"
+            "        background: transparent;\n"
+            "        box-shadow: none;\n"
+            "    }",
+            css,
+        )
+
     def test_mobile_ebm_and_wbm_reserve_an_operation_notice_row(self):
         self._login_approved_user(role="simulator")
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 29, 10, 0)

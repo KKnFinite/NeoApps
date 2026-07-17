@@ -23740,6 +23740,18 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         margin: 0;
     }
 
+    /* Let the wave and Ballmat panels carry the frame; keep it only on actual inputs and buttons. */
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card .wave-metrics div,
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .counter-card,
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .counter-control,
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .bay-card,
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .readonly-count {
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
     /*
      * The desktop workspace is flattened for mobile.  Assign every resulting
      * panel to an explicit, normal-flow row so no panel competes for an
