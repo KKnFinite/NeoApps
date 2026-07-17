@@ -22588,9 +22588,15 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         line-height: 1.1;
     }
 
-    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .counter-control,
-    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .neosektor-driver-offset-control {
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .counter-control {
         grid-template-columns: 34px minmax(0, 1fr) 34px;
+        min-height: 40px;
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .neosektor-driver-offset-control {
+        grid-template-columns: 32px minmax(52px, 72px) 32px;
+        justify-content: center;
+        gap: 9px;
         min-height: 40px;
     }
 
@@ -22614,14 +22620,21 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-card .tunnel-count-control {
-        grid-template-columns: 32px minmax(0, 1fr) 32px;
-        min-height: 40px;
+        grid-template-columns: 32px minmax(54px, 74px) 32px;
+        align-self: center;
+        justify-content: center;
+        gap: 9px;
+        min-height: 44px;
     }
 
-    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-card .counter-number,
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-card .counter-number {
+        min-height: 44px;
+        font-size: clamp(1.7rem, 2.5vw, 2.3rem);
+    }
+
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-card .tunnel-count-control button {
         min-height: 40px;
-        font-size: clamp(1.35rem, 2.2vw, 2.05rem);
+        font-size: 1.06rem;
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-operations-card {
@@ -22681,9 +22694,11 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         grid-area: offset;
     }
 
-    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-operations-card .tunnel-setting-card input {
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-operations-card .tunnel-setting-card input,
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-operations-card .tunnel-offset-control-card .neosektor-driver-offset-control input {
         min-height: 34px;
         font-size: clamp(1.05rem, 1.7vw, 1.5rem);
+        font-weight: 950;
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-bay-panel {

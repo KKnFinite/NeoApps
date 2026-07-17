@@ -1325,7 +1325,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("@media (min-width: 901px)", css)
         self.assertIn("@media (max-width: 900px)", css)
 
-    def test_tunnel_conductor_desktop_typography_and_bay_pairs_use_readable_compact_rules(self):
+    def test_tunnel_conductor_desktop_typography_and_compact_count_controls_use_readable_rules(self):
         self._login_approved_user(role="simulator")
 
         response = self.client.get("/neosektor/tunnel-conductor")
@@ -1344,6 +1344,12 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("column-gap: 12px;", desktop_css)
         self.assertIn("font-size: clamp(0.9rem, 1.15vw, 1.08rem);", desktop_css)
         self.assertIn("font-size: clamp(0.98rem, 1.3vw, 1.24rem);", desktop_css)
+        self.assertIn("grid-template-columns: 32px minmax(54px, 74px) 32px;", desktop_css)
+        self.assertIn("grid-template-columns: 32px minmax(52px, 72px) 32px;", desktop_css)
+        self.assertIn("justify-content: center;", desktop_css)
+        self.assertIn("gap: 9px;", desktop_css)
+        self.assertIn("font-size: clamp(1.7rem, 2.5vw, 2.3rem);", desktop_css)
+        self.assertIn("font-size: clamp(1.05rem, 1.7vw, 1.5rem);", desktop_css)
 
     def test_neosektor_mobile_console_css_locks_viewport_and_compacts_operator_views(self):
         self._login_approved_user(role="simulator")
