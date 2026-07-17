@@ -23110,6 +23110,18 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         text-align: center;
     }
 
+    /* The outer mobile panels carry the visual frame; retain it only on direct inputs and controls. */
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-arrive-control.tunnel-editable,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-arrive-control .counter-control,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-bay-card,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-operations-card .tunnel-setting-card {
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
     body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-operations-card .tunnel-offset-control-card {
         grid-area: offset;
     }

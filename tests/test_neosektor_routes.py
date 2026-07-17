@@ -189,6 +189,30 @@ class NeoSektorRoutesTest(unittest.TestCase):
             css,
         )
 
+    def test_tunnel_mobile_frames_only_direct_edit_controls(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neosektor/tunnel-conductor")
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'data-tunnel-wave-input="first"', response.data)
+        self.assertIn(b'data-wave-count="first"', response.data)
+        self.assertIn(b'data-tunnel-setting="first_modifier"', response.data)
+        self.assertIn(
+            "body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-arrive-control.tunnel-editable,\n"
+            "    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-arrive-control .counter-control,\n"
+            "    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card,\n"
+            "    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-bay-card,\n"
+            "    body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-operations-card .tunnel-setting-card {\n"
+            "        border: 0;\n"
+            "        border-radius: 0;\n"
+            "        background: transparent;\n"
+            "        box-shadow: none;\n"
+            "    }",
+            css,
+        )
+
     def test_tunnel_mobile_header_keeps_the_full_page_title_visible(self):
         self._login_approved_user(role="simulator")
 
