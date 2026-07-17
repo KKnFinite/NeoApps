@@ -169,6 +169,26 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"neosektor-page-brand neo-brand-title", response.data)
         self.assertIn(b'id="neosektor-tunnel-title">Tunnel Conductor</h1>', response.data)
 
+    def test_tunnel_mobile_unload_metric_uses_the_outer_wave_card(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neosektor/tunnel-conductor")
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'class="tunnel-metric tunnel-unload-metric"', response.data)
+        self.assertIn(
+            "body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-unload-metric {\n"
+            "        min-height: 26px;\n"
+            "        padding-block: 2px;\n"
+            "        border: 0;\n"
+            "        border-radius: 0;\n"
+            "        background: transparent;\n"
+            "        box-shadow: none;\n"
+            "    }",
+            css,
+        )
+
     def test_tunnel_mobile_header_keeps_the_full_page_title_visible(self):
         self._login_approved_user(role="simulator")
 
@@ -1519,8 +1539,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
             self.assertEqual(response.data.count(b'class="bay-card"'), 5)
 
         self.assertIn(
-            "body.blueprint-neosektor.neosektor-ballmat-operator-page.mobile-app-chrome "
-            "has-mobile-bottom-nav .content {\n"
+            "body.blueprint-neosektor.neosektor-ballmat-operator-page.mobile-app-chrome"
+            ".has-mobile-bottom-nav .content {\n"
             "        padding-bottom: calc(76px + env(safe-area-inset-bottom));",
             css,
         )

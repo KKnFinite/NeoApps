@@ -23039,6 +23039,10 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-unload-metric {
         min-height: 26px;
         padding-block: 2px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
     }
 
     body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wave-panel .tunnel-arrive-control .counter-number[data-metric="left_to_arrive"],
