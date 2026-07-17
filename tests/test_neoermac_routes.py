@@ -199,10 +199,18 @@ class NeoErmacRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login_approved_user(role="operator")
 
-        reload_pages = (
-            "/neoermac/door-view",
-            "/neoermac/upcoming-pulls",
-        )
+        landing_response = self.client.get("/neoermac/door-view")
+        self.assertEqual(landing_response.status_code, 200)
+        self.assertIn(b"Select a door.", landing_response.data)
+        self.assertNotIn(b"data-door-view", landing_response.data)
+        self.assertNotIn(b"data-state-url", landing_response.data)
+        self.assertNotIn(b"data-refresh-active", landing_response.data)
+        self.assertNotIn(b"data-operation-refresh-reload", landing_response.data)
+        self.assertNotIn(b"neoermac-refresh-paused", landing_response.data)
+        self.assertNotIn(b"window.setInterval(refreshState, 5000)", landing_response.data)
+        self.assertNotIn(b"window.setInterval(() => window.location.reload(), 5000)", landing_response.data)
+
+        reload_pages = ("/neoermac/upcoming-pulls",)
         for path in reload_pages:
             with self.subTest(path=path):
                 response = self.client.get(path)
@@ -260,6 +268,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIsNone(payload["state"]["refresh"]["next_check_seconds"])
         self.assertNotIn(b"setTimeout(refreshState", response.data)
         self.assertNotIn(b"resumeTimer", response.data)
+
+        landing_response = self.client.get("/neoermac/door-view")
+        self.assertEqual(landing_response.status_code, 200)
+        self.assertNotIn(b"neoermac-refresh-paused", landing_response.data)
+        self.assertNotIn(b"Auto-refresh paused", landing_response.data)
+        self.assertNotIn(b"data-operation-refresh-reload", landing_response.data)
+        self.assertNotIn(b"window.setInterval", landing_response.data)
 
         reload_response = self.client.get("/neoermac/view-outbound")
         self.assertEqual(reload_response.status_code, 200)
@@ -970,7 +985,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
         )
         db.session.commit()
         page = self.client.get("/neoermac/door-view?door=D34")
-        rendered_page = page.data.split(b"<script>")[0]
+        rendered_page = page.data.split(
+            b'const root = document.querySelector("[data-door-view]");',
+            1,
+        )[0]
         self.assertIn(b"View-only access. ULD request controls are disabled.", page.data)
         self.assertNotIn(b"data-uld-request-form", rendered_page)
         self.assertIn(b"data-uld-request-row", rendered_page)
@@ -1176,7 +1194,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self._login_approved_user(role="operator")
 
         response = self.client.get("/neoermac/door-view?door=D34")
-        rendered_html = response.data.split(b"<script>")[0]
+        rendered_html = response.data.split(
+            b'const root = document.querySelector("[data-door-view]");',
+            1,
+        )[0]
 
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(b"is-pulls-complete", rendered_html)
@@ -1525,7 +1546,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self._login_approved_user(role="operator")
 
         response = self.client.get("/neoermac/door-view?door=D34")
-        rendered_html = response.data.split(b"<script>")[0]
+        rendered_html = response.data.split(
+            b'const root = document.querySelector("[data-door-view]");',
+            1,
+        )[0]
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(rendered_html.count(b"data-uld-request-row"), 2)

@@ -61,11 +61,7 @@
     <p class="neoermac-readonly-note">View Only</p>
     {% endif %}
 
-    {% if not selected_door %}
-    {% set operation_refresh_status = refresh_status %}
-    {% set operation_refresh_class = "neoermac-refresh-paused" %}
-    {% include "neonodes/_operation_refresh_reload.html" %}
-    {% else %}
+    {% if selected_door %}
     <div class="neoermac-refresh-paused" data-neoermac-refresh-paused {% if refresh_status.auto_refresh_enabled %}hidden{% endif %} aria-live="polite">
         {{ refresh_status.message }}
         {% if refresh_status.operation_label and refresh_status.window_label %}
@@ -560,7 +556,7 @@
 </script>
 {% endif %}
 
-{% if can_edit %}
+{% if selected_door and can_edit %}
 <script>
 (() => {
     const root = document.querySelector("[data-door-view]");
