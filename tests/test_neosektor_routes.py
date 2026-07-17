@@ -1419,10 +1419,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
         self.assertIn(".counts-wrap.has-refresh-notice", mobile_layout)
         self.assertIn(
-            "grid-template-rows: 14px repeat(3, minmax(52px, 1fr)) minmax(132px, 1.7fr);",
+            "grid-template-rows: 14px repeat(3, minmax(52px, 1fr)) minmax(150px, 1.7fr);",
             mobile_layout,
         )
-        self.assertIn("grid-template-rows: 14px repeat(3, minmax(36px, 1fr));", mobile_layout)
+        self.assertIn("grid-template-rows: 14px repeat(3, minmax(42px, 1fr));", mobile_layout)
         self.assertIn("grid-template-rows: 12px minmax(30px, 1fr);", mobile_layout)
         self.assertNotIn("position: absolute", mobile_layout)
         self.assertNotIn("transform:", mobile_layout)
@@ -1452,11 +1452,13 @@ class NeoSektorRoutesTest(unittest.TestCase):
             for bay_name in (b"Bay 1", b"Bay 2", b"Bay 3", b"Bay 4", b"Bay 5"):
                 self.assertIn(bay_name, response.data)
 
-        self.assertIn("display: grid;\n        align-self: stretch;\n        place-items: center;", mobile_layout)
+        self.assertIn("grid-template-rows: auto auto;", mobile_layout)
+        self.assertIn("place-content: center;", mobile_layout)
+        self.assertIn("justify-items: center;", mobile_layout)
         self.assertIn("grid-template-rows: 14px minmax(0, 1fr);", mobile_layout)
-        self.assertIn("grid-template-rows: 14px repeat(3, minmax(52px, 1fr)) minmax(132px, 1.7fr);", mobile_layout)
-        self.assertIn("grid-template-rows: 14px repeat(3, minmax(36px, 1fr));", mobile_layout)
-        self.assertIn("padding: 3px 5px;", mobile_layout)
+        self.assertIn("grid-template-rows: 14px repeat(3, minmax(52px, 1fr)) minmax(150px, 1.7fr);", mobile_layout)
+        self.assertIn("grid-template-rows: 14px repeat(3, minmax(42px, 1fr));", mobile_layout)
+        self.assertIn("padding: 5px 6px;", mobile_layout)
         self.assertNotIn("position: absolute", mobile_layout)
         self.assertNotIn("transform:", mobile_layout)
         self.assertNotIn("margin-top: -", mobile_layout)
@@ -1487,10 +1489,12 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 2,
             )
 
-        self.assertIn("grid-template-rows: minmax(20px, auto) minmax(0, 1fr);", mobile_layout)
-        self.assertIn("padding: 4px 3px 3px;", mobile_layout)
-        self.assertIn("font-size: 0.46rem;", mobile_layout)
-        self.assertIn("line-height: 1.15;", mobile_layout)
+        self.assertIn("grid-template-rows: auto auto;", mobile_layout)
+        self.assertIn("gap: 4px;", mobile_layout)
+        self.assertIn("padding: 5px 3px;", mobile_layout)
+        self.assertIn("font-size: 0.54rem;", mobile_layout)
+        self.assertIn("font-weight: 800;", mobile_layout)
+        self.assertIn("white-space: nowrap;", mobile_layout)
         self.assertNotIn("position: absolute", mobile_layout)
         self.assertNotIn("transform:", mobile_layout)
         self.assertNotIn("margin-top: -", mobile_layout)
