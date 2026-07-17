@@ -47,37 +47,40 @@
             <div class="tunnel-desktop-left" data-tunnel-desktop-left>
         <section class="tunnel-wave-grid" aria-label="Wave summary">
             {% for wave_key, wave in [("first", state.waves[0]), ("second", state.waves[1])] %}
-            <article class="tunnel-panel tunnel-wave-panel" data-tunnel-wave-key="{{ wave_key }}">
-                <h2>{{ wave.name }}</h2>
-                <div class="tunnel-metric tunnel-arrive-control tunnel-editable">
-                    <span>Left to Arrive</span>
-                    <div class="counter-control tunnel-control" aria-label="{{ wave.name }} left to arrive controls">
-                        <button type="button" data-tunnel-wave-delta="-1" {% if not can_edit %}disabled{% endif %}>-</button>
-                        {% if can_edit %}
-                        <input
-                            type="number"
-                            inputmode="numeric"
-                            min="0"
-                            max="999"
-                            value="{{ wave.planned }}"
-                            class="counter-number neosektor-numeric-input"
-                            data-wave-summary="{{ wave_key }}"
-                            data-metric="left_to_arrive"
-                            data-tunnel-wave-input="{{ wave_key }}"
-                            data-neosektor-edit-key="wave:{{ wave_key }}"
-                            aria-label="Set {{ wave.name }} left to arrive"
-                        >
-                        {% else %}
-                        <strong class="counter-number" data-wave-summary="{{ wave_key }}" data-metric="left_to_arrive">{{ wave.planned }}</strong>
-                        {% endif %}
-                        <button type="button" data-tunnel-wave-delta="1" {% if not can_edit %}disabled{% endif %}>+</button>
+            <div class="tunnel-wave-workspace" data-tunnel-wave-workspace="{{ wave_key }}">
+                <h2 class="tunnel-desktop-wave-heading">{{ wave.name }}</h2>
+                <article class="tunnel-panel tunnel-wave-panel" data-tunnel-wave-key="{{ wave_key }}">
+                    <h2>{{ wave.name }}</h2>
+                    <div class="tunnel-metric tunnel-arrive-control tunnel-editable">
+                        <span>Left to Arrive</span>
+                        <div class="counter-control tunnel-control" aria-label="{{ wave.name }} left to arrive controls">
+                            <button type="button" data-tunnel-wave-delta="-1" {% if not can_edit %}disabled{% endif %}>-</button>
+                            {% if can_edit %}
+                            <input
+                                type="number"
+                                inputmode="numeric"
+                                min="0"
+                                max="999"
+                                value="{{ wave.planned }}"
+                                class="counter-number neosektor-numeric-input"
+                                data-wave-summary="{{ wave_key }}"
+                                data-metric="left_to_arrive"
+                                data-tunnel-wave-input="{{ wave_key }}"
+                                data-neosektor-edit-key="wave:{{ wave_key }}"
+                                aria-label="Set {{ wave.name }} left to arrive"
+                            >
+                            {% else %}
+                            <strong class="counter-number" data-wave-summary="{{ wave_key }}" data-metric="left_to_arrive">{{ wave.planned }}</strong>
+                            {% endif %}
+                            <button type="button" data-tunnel-wave-delta="1" {% if not can_edit %}disabled{% endif %}>+</button>
+                        </div>
                     </div>
-                </div>
-                <div class="tunnel-metric tunnel-unload-metric">
-                    <span>Left to Unload</span>
-                    <strong data-wave-summary="{{ wave_key }}" data-metric="left_to_unload">{{ wave.left }}</strong>
-                </div>
-            </article>
+                    <div class="tunnel-metric tunnel-unload-metric">
+                        <span>Left to Unload</span>
+                        <strong data-wave-summary="{{ wave_key }}" data-metric="left_to_unload">{{ wave.left }}</strong>
+                    </div>
+                </article>
+            </div>
             {% endfor %}
         </section>
 

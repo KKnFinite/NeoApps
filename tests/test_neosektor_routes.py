@@ -1325,7 +1325,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("@media (min-width: 901px)", css)
         self.assertIn("@media (max-width: 900px)", css)
 
-    def test_tunnel_conductor_desktop_typography_and_compact_count_controls_use_readable_rules(self):
+    def test_tunnel_conductor_desktop_count_boxes_and_square_buttons_use_consistent_rules(self):
         self._login_approved_user(role="simulator")
 
         response = self.client.get("/neosektor/tunnel-conductor")
@@ -1335,6 +1335,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         desktop_css = css[desktop_start:desktop_end]
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b'class="tunnel-wave-workspace"', response.data)
+        self.assertIn(b'class="tunnel-desktop-wave-heading"', response.data)
         self.assertIn("color: var(--neo-bright-silver);", desktop_css)
         self.assertIn("font-size: 0.94rem;", desktop_css)
         self.assertIn("font-size: 0.8rem;", desktop_css)
@@ -1344,16 +1346,19 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("column-gap: 12px;", desktop_css)
         self.assertIn("font-size: clamp(0.9rem, 1.15vw, 1.08rem);", desktop_css)
         self.assertIn("font-size: clamp(0.98rem, 1.3vw, 1.24rem);", desktop_css)
-        self.assertIn("width: min(100%, 208px);", desktop_css)
-        self.assertIn("grid-template-columns: 28px minmax(0, 1fr) 28px;", desktop_css)
-        self.assertIn("width: min(100%, 160px);", desktop_css)
-        self.assertIn("grid-template-columns: 32px minmax(54px, 72px) 32px;", desktop_css)
-        self.assertIn("grid-template-columns: 32px minmax(52px, 72px) 32px;", desktop_css)
+        self.assertIn("width: min(100%, 240px);", desktop_css)
+        self.assertIn("grid-template-columns: 40px minmax(112px, 1fr) 40px;", desktop_css)
+        self.assertIn("width: min(100%, 184px);", desktop_css)
+        self.assertIn("grid-template-columns: 40px minmax(64px, 80px) 40px;", desktop_css)
+        self.assertIn("inline-size: 40px;", desktop_css)
+        self.assertIn("block-size: 40px;", desktop_css)
         self.assertIn("justify-content: center;", desktop_css)
-        self.assertIn("gap: 14px;", desktop_css)
+        self.assertIn("gap: 12px;", desktop_css)
         self.assertIn("background: transparent;", desktop_css)
         self.assertIn("background: rgba(5, 7, 11, 0.88);", desktop_css)
         self.assertIn("min-height: 96px;", desktop_css)
+        self.assertIn("min-width: 112px;", desktop_css)
+        self.assertIn("grid-row: 1 / -1;", desktop_css)
         self.assertIn("font-size: clamp(5rem, 5.5vw, 6.2rem);", desktop_css)
         self.assertIn("font-size: clamp(1.05rem, 1.7vw, 1.5rem);", desktop_css)
         self.assertIn(
