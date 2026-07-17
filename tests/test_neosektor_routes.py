@@ -1659,7 +1659,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             mobile_layout,
         )
 
-    def test_tunnel_mobile_ballmat_count_cards_use_taller_equal_normal_flow_tracks(self):
+    def test_tunnel_mobile_workspace_assigns_each_panel_a_normal_flow_row(self):
         self._login_approved_user(role="simulator")
 
         response = self.client.get("/neosektor/tunnel-conductor")
@@ -1683,7 +1683,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             2,
         )
         layout_start = css.index(
-            "/* Expand the six equal mobile count cards without taking space from bays or settings. */"
+            "The desktop workspace is flattened for mobile.  Assign every resulting"
         )
         layout_end = css.index(
             "body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-operations-card",
@@ -1692,19 +1692,31 @@ class NeoSektorRoutesTest(unittest.TestCase):
         mobile_layout = css[layout_start:layout_end]
 
         self.assertIn(
-            "minmax(0, 0.9fr)\n            minmax(0, 1.5fr)\n            minmax(0, 0.5fr)\n            minmax(0, 0.5fr);",
-            css,
+            '"notice"\n            "waves"\n            "counts"\n            "bays"\n            "operations";',
+            mobile_layout,
         )
-        self.assertIn("grid-template-rows: 14px minmax(0, 1fr);", mobile_layout)
-        self.assertIn("grid-template-rows: minmax(0, 1fr);", mobile_layout)
-        self.assertIn("grid-auto-flow: row;", mobile_layout)
-        self.assertIn("grid-template-rows: 12px repeat(3, minmax(0, 1fr));", mobile_layout)
-        self.assertIn("grid-template-rows: auto minmax(32px, auto);", mobile_layout)
-        self.assertIn("align-content: center;", mobile_layout)
-        self.assertIn("align-self: center;\n        min-height: 32px;", mobile_layout)
+        self.assertIn("grid-area: notice;", mobile_layout)
+        self.assertIn("grid-area: waves;", mobile_layout)
+        self.assertIn("grid-area: counts;", mobile_layout)
+        self.assertIn("grid-area: bays;", mobile_layout)
+        self.assertIn("padding-bottom: calc(76px + env(safe-area-inset-bottom));", mobile_layout)
         self.assertNotIn("position: absolute", mobile_layout)
         self.assertNotIn("transform:", mobile_layout)
         self.assertNotIn("margin-top: -", mobile_layout)
+
+        count_layout_start = css.index(
+            "/* Equal normal-flow tracks keep the six editable count cards legible. */"
+        )
+        count_layout_end = css.index(
+            "body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-operations-card",
+            count_layout_start,
+        )
+        count_layout = css[count_layout_start:count_layout_end]
+        self.assertIn("grid-template-rows: 16px minmax(0, 1fr);", count_layout)
+        self.assertIn("grid-auto-flow: row;", count_layout)
+        self.assertIn("grid-template-rows: 14px repeat(3, minmax(0, 1fr));", count_layout)
+        self.assertIn("grid-template-rows: 11px minmax(28px, 1fr);", count_layout)
+        self.assertIn("place-items: center;", count_layout)
 
     def test_tunnel_mobile_option_row_uses_shared_label_and_control_tracks(self):
         self._login_approved_user(role="simulator")
