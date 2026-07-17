@@ -23247,7 +23247,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         grid-template-areas:
             "waves"
             "ballmats";
-        grid-template-rows: minmax(0, 0.26fr) minmax(0, 0.74fr);
+        grid-template-rows: minmax(66px, 0.15fr) minmax(0, 0.85fr);
         grid-auto-flow: row;
         align-content: stretch;
         align-items: stretch;
@@ -23259,7 +23259,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
             "refresh"
             "waves"
             "ballmats";
-        grid-template-rows: minmax(32px, auto) minmax(0, 0.22fr) minmax(0, 0.78fr);
+        grid-template-rows: minmax(32px, auto) minmax(66px, 0.15fr) minmax(0, 0.85fr);
     }
 
     body.blueprint-neosektor.neosektor-ballmat-operator-page .counts-wrap.has-edit-error {
@@ -23267,7 +23267,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
             "error"
             "waves"
             "ballmats";
-        grid-template-rows: minmax(30px, auto) minmax(0, 0.22fr) minmax(0, 0.78fr);
+        grid-template-rows: minmax(30px, auto) minmax(66px, 0.15fr) minmax(0, 0.85fr);
     }
 
     body.blueprint-neosektor.neosektor-ballmat-operator-page .counts-wrap.has-refresh-notice.has-edit-error {
@@ -23279,8 +23279,8 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         grid-template-rows:
             minmax(30px, auto)
             minmax(32px, auto)
-            minmax(0, 0.2fr)
-            minmax(0, 0.8fr);
+            minmax(60px, 0.13fr)
+            minmax(0, 0.87fr);
     }
 
     body.blueprint-neosektor.neosektor-ballmat-operator-page .counts-wrap > .neosektor-inline-edit-error {

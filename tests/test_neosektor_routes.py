@@ -1417,6 +1417,14 @@ class NeoSektorRoutesTest(unittest.TestCase):
             "            \"ballmats\";",
             mobile_layout,
         )
+        self.assertIn(
+            "grid-template-rows: minmax(66px, 0.15fr) minmax(0, 0.85fr);",
+            mobile_layout,
+        )
+        self.assertIn(
+            "grid-template-rows: minmax(32px, auto) minmax(66px, 0.15fr) minmax(0, 0.85fr);",
+            mobile_layout,
+        )
         self.assertIn(".counts-wrap.has-refresh-notice", mobile_layout)
         self.assertIn(
             "grid-template-rows: 20px repeat(3, minmax(52px, 1fr)) minmax(174px, 1.9fr);",
@@ -1566,7 +1574,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
             template,
         )
         self.assertIn("grid-area: refresh;", mobile_layout)
-        self.assertIn("minmax(32px, auto) minmax(0, 0.22fr) minmax(0, 0.78fr);", mobile_layout)
+        self.assertIn(
+            "minmax(32px, auto) minmax(66px, 0.15fr) minmax(0, 0.85fr);",
+            mobile_layout,
+        )
 
     def test_tunnel_mobile_ballmat_count_cards_use_taller_equal_normal_flow_tracks(self):
         self._login_approved_user(role="simulator")
