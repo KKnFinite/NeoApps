@@ -169,6 +169,20 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"neosektor-page-brand neo-brand-title", response.data)
         self.assertIn(b'id="neosektor-tunnel-title">Tunnel Conductor</h1>', response.data)
 
+    def test_tunnel_mobile_header_keeps_the_full_page_title_visible(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neosektor/tunnel-conductor")
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b">Tunnel Conductor<", response.data)
+        self.assertIn(
+            "body.blueprint-neosektor.neosektor-tunnel-operator-page .mobile-topbar-page-name",
+            css,
+        )
+        self.assertIn("font-size: clamp(0.76rem, 3.2vw, 0.86rem);", css)
+
     def test_neosektor_page_headers_use_locked_title_branding(self):
         self._login_approved_user(role="simulator")
 
@@ -1392,7 +1406,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(".tunnel-unload-metric {\n        min-height: 26px;", css)
         self.assertIn("grid-template-columns: repeat(4, minmax(0, 1fr));", css)
         self.assertIn(".tunnel-bay-card {\n        min-height: 34px;", css)
-        self.assertIn("grid-template-rows: 12px repeat(3, minmax(0, 1fr));", css)
+        self.assertIn("grid-template-rows: 14px repeat(3, minmax(0, 1fr));", css)
 
     def test_neosektor_mobile_shell_paints_the_safe_area_dark(self):
         self._login_approved_user(role="simulator")
@@ -1497,7 +1511,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         for response in responses:
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.data.count(b'class="counter-card"'), 6)
+            self.assertEqual(response.data.count(b'class="counter-card"'), 4)
+            self.assertEqual(
+                response.data.count(b'class="counter-card neosektor-open-bay-control"'),
+                2,
+            )
             self.assertEqual(response.data.count(b'class="bay-card"'), 5)
 
         self.assertIn(

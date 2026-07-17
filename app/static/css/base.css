@@ -23251,6 +23251,27 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         text-overflow: clip;
     }
 
+    /* Tunnel Conductor uses the full span between the node and account controls. */
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .mobile-topbar {
+        gap: 6px;
+    }
+
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .mobile-topbar-left {
+        flex: 1 1 auto;
+        gap: 6px;
+    }
+
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .mobile-topbar-page-link {
+        flex: 1 1 auto;
+    }
+
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .mobile-topbar-page-name {
+        max-width: none;
+        font-size: clamp(0.76rem, 3.2vw, 0.86rem);
+        letter-spacing: 0.012em;
+        text-overflow: clip;
+    }
+
     body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-counts-grid {
         grid-template-rows: minmax(78px, 0.26fr) minmax(0, 1.74fr);
         gap: 5px;
