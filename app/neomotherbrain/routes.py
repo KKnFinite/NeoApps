@@ -3235,9 +3235,7 @@ def _master_schedule_board_row_is_complete(row):
     return (
         len(airport_code) == 3
         and airport_code.isalpha()
-        and time_field_is_complete("pure_pull_time_local")
-        and time_field_is_complete("first_mix_pull_time_local")
-        and time_field_is_complete("final_mix_pull_time_local")
+        and bool((row.get("aircraft_type") or "").strip())
     )
 
 
@@ -3258,6 +3256,8 @@ def _apply_master_schedule_form(master_schedule, form, gateway=None):
         raise ValueError("Mission type must be arrival or departure.")
     if not all((gateway_code, sort_name, flight_number, origin, destination)):
         raise ValueError("Gateway, sort, flight, origin, and destination are required.")
+    if mission_type == "departure" and master_schedule.id is None and not aircraft_type:
+        raise ValueError("AC Type is required for new departures.")
 
     planned_time_local = _parse_time(form["planned_time_local"], "Planned time")
 

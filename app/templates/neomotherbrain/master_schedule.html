@@ -233,10 +233,7 @@
         if (missionType === "arrival") {
             return fieldValue(row, "origin").length === 3;
         }
-        return fieldValue(row, "destination").length === 3
-            && timeComplete(row, "pure_pull_time_local")
-            && timeComplete(row, "first_mix_pull_time_local")
-            && timeComplete(row, "final_mix_pull_time_local");
+        return fieldValue(row, "destination").length === 3;
     };
 
     const shouldSaveRow = (row) => {

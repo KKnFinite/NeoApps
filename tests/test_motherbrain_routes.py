@@ -2535,29 +2535,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(updated.aircraft_type, "A300")
         self.assertIsNone(MasterFlightSchedule.query.filter_by(flight_number="PARTIAL").first())
 
-    def test_master_schedule_departure_add_row_requires_pull_times_and_allows_blank_aircraft_type(self):
-        partial = self.client.post(
-            "/motherbrain/master-schedule",
-            data={
-                "board_mission_type": "departure",
-                "row_indexes": ["departure_new"],
-                "row_departure_new_id": "",
-                "row_departure_new_mission_type": "departure",
-                "row_departure_new_sort_name": "night",
-                "row_departure_new_active": "1",
-                "row_departure_new_active_days": ["monday", "tuesday"],
-                "row_departure_new_flight_number": "depprt",
-                "row_departure_new_aircraft_type": "",
-                "row_departure_new_origin": "RFD",
-                "row_departure_new_destination": "sdf",
-                "row_departure_new_planned_time_local": "04:20",
-                "row_departure_new_pure_pull_time_local": "",
-                "row_departure_new_first_mix_pull_time_local": "",
-                "row_departure_new_final_mix_pull_time_local": "",
-            },
-            headers={"Accept": "application/json", "X-Requested-With": "fetch"},
-        )
-        complete = self.client.post(
+    def test_master_schedule_departure_add_row_accepts_blank_wave_and_pull_times(self):
+        response = self.client.post(
             "/motherbrain/master-schedule",
             data={
                 "board_mission_type": "departure",
@@ -2568,28 +2547,76 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "row_departure_new_sort_name": "night",
                 "row_departure_new_active": "1",
                 "row_departure_new_active_days": ["monday", "tuesday"],
-                "row_departure_new_flight_number": "depdone",
-                "row_departure_new_aircraft_type": "",
+                "row_departure_new_flight_number": "depprt",
+                "row_departure_new_aircraft_type": "757",
                 "row_departure_new_origin": "RFD",
-                "row_departure_new_destination": "ont",
-                "row_departure_new_planned_time_local": "05:20",
-                "row_departure_new_pure_pull_time_local": "03:10",
-                "row_departure_new_first_mix_pull_time_local": "03:25",
-                "row_departure_new_final_mix_pull_time_local": "03:40",
+                "row_departure_new_destination": "sdf",
+                "row_departure_new_planned_time_local": "04:20",
+                "row_departure_new_wave": "",
+                "row_departure_new_pure_pull_time_local": "",
+                "row_departure_new_first_mix_pull_time_local": "",
+                "row_departure_new_final_mix_pull_time_local": "",
             },
             headers={"Accept": "application/json", "X-Requested-With": "fetch"},
         )
 
-        created = MasterFlightSchedule.query.filter_by(flight_number="DEPDONE").first()
-        self.assertEqual(partial.status_code, 200)
-        self.assertEqual(partial.get_json()["created"], 0)
-        self.assertIsNone(MasterFlightSchedule.query.filter_by(flight_number="DEPPRT").first())
-        self.assertEqual(complete.status_code, 200)
-        self.assertEqual(complete.get_json()["created"], 1)
+        created = MasterFlightSchedule.query.filter_by(flight_number="DEPPRT").first()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["created"], 1)
         self.assertIsNotNone(created)
-        self.assertIsNone(created.aircraft_type)
-        self.assertEqual(created.destination, "ONT")
-        self.assertEqual(created.planned_time_local, time(5, 20))
+        self.assertEqual(created.aircraft_type, "757")
+        self.assertEqual(created.destination, "SDF")
+        self.assertEqual(created.planned_time_local, time(4, 20))
+        self.assertIsNone(created.wave)
+        self.assertIsNone(created.pure_pull_time_local)
+        self.assertIsNone(created.first_mix_pull_time_local)
+        self.assertIsNone(created.final_mix_pull_time_local)
+
+    def test_master_schedule_departure_add_row_rejects_each_missing_required_field(self):
+        required_fields = (
+            "flight_number",
+            "destination",
+            "aircraft_type",
+            "planned_time_local",
+        )
+        for missing_field in required_fields:
+            with self.subTest(missing_field=missing_field):
+                values = {
+                    "flight_number": "DEPREQ",
+                    "aircraft_type": "757",
+                    "destination": "SDF",
+                    "planned_time_local": "04:20",
+                }
+                values[missing_field] = ""
+                response = self.client.post(
+                    "/motherbrain/master-schedule",
+                    data={
+                        "board_mission_type": "departure",
+                        "master_save_row": "departure_new",
+                        "row_indexes": ["departure_new"],
+                        "row_departure_new_id": "",
+                        "row_departure_new_mission_type": "departure",
+                        "row_departure_new_sort_name": "night",
+                        "row_departure_new_active": "1",
+                        "row_departure_new_active_days": ["monday", "tuesday"],
+                        "row_departure_new_origin": "RFD",
+                        "row_departure_new_wave": "",
+                        "row_departure_new_pure_pull_time_local": "",
+                        "row_departure_new_first_mix_pull_time_local": "",
+                        "row_departure_new_final_mix_pull_time_local": "",
+                        **{
+                            f"row_departure_new_{field}": value
+                            for field, value in values.items()
+                        },
+                    },
+                    headers={"Accept": "application/json", "X-Requested-With": "fetch"},
+                )
+
+                payload = response.get_json()
+                self.assertEqual(response.status_code, 400)
+                self.assertFalse(payload["ok"])
+                self.assertIn("Complete all required fields", payload["message"])
+                self.assertIsNone(MasterFlightSchedule.query.filter_by(flight_number="DEPREQ").first())
 
     def test_master_schedule_existing_departure_autosave_does_not_create_unsaved_add_row(self):
         existing = self._add_master(
@@ -2789,11 +2816,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "row_departure_new0_active": "1",
                 "row_departure_new0_active_days": ["monday", "tuesday"],
                 "row_departure_new0_flight_number": "depsave",
-                "row_departure_new0_aircraft_type": "",
+                "row_departure_new0_aircraft_type": "757",
                 "row_departure_new0_origin": "RFD",
                 "row_departure_new0_destination": "ont",
                 "row_departure_new0_planned_time_local_hour": "4",
                 "row_departure_new0_planned_time_local_minute": "20",
+                "row_departure_new0_wave": "2",
                 "row_departure_new0_pure_pull_time_local_hour": "2",
                 "row_departure_new0_pure_pull_time_local_minute": "10",
                 "row_departure_new0_first_mix_pull_time_local_hour": "2",
@@ -2810,11 +2838,47 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.get_json()["created"], 1)
         self.assertIsNotNone(created)
         self.assertEqual(created.destination, "ONT")
-        self.assertIsNone(created.wave)
+        self.assertEqual(created.aircraft_type, "757")
+        self.assertEqual(created.wave, "2")
         self.assertEqual(created.planned_time_local, time(4, 20))
         self.assertEqual(created.pure_pull_time_local, time(2, 10))
+        self.assertEqual(created.first_mix_pull_time_local, time(2, 25))
         self.assertEqual(created.final_mix_pull_time_local, time(2, 40))
         self.assertIn(b"DEPSAVE", reload_response.data)
+
+    def test_master_schedule_existing_departure_edit_allows_blank_optional_fields(self):
+        master = self._add_master(
+            flight_number="DEPLEG1",
+            aircraft_type="",
+            wave=None,
+            pure_pull_time_local=None,
+            first_mix_pull_time_local=None,
+            final_mix_pull_time_local=None,
+        )
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/master-schedule/{master.id}/edit",
+            data=self._master_schedule_form_data(
+                flight_number="DEPLEG1",
+                aircraft_type="",
+                destination="ONT",
+                wave="",
+                pure_pull_time_local="",
+                first_mix_pull_time_local="",
+                final_mix_pull_time_local="",
+            ),
+            follow_redirects=False,
+        )
+
+        updated = db.session.get(MasterFlightSchedule, master.id)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(updated.destination, "ONT")
+        self.assertIsNone(updated.aircraft_type)
+        self.assertIsNone(updated.wave)
+        self.assertIsNone(updated.pure_pull_time_local)
+        self.assertIsNone(updated.first_mix_pull_time_local)
+        self.assertIsNone(updated.final_mix_pull_time_local)
 
     def test_master_schedule_explicit_new_row_save_rejects_invalid_partial_row(self):
         response = self.client.post(
@@ -3103,7 +3167,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(master.origin, "RFD")
         self.assertEqual(master.destination, "SDF")
 
-    def test_master_schedule_aircraft_type_saves_and_rejects_unknown(self):
+    def test_new_master_schedule_departure_requires_valid_aircraft_type(self):
         valid = self.client.post(
             "/motherbrain/master-schedule/new",
             data=self._master_schedule_form_data(
@@ -3119,11 +3183,21 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 aircraft_type="A330",
             ),
         )
+        missing = self.client.post(
+            "/motherbrain/master-schedule/new",
+            data=self._master_schedule_form_data(
+                flight_number="ACTYPE3",
+                aircraft_type="",
+            ),
+        )
 
         master = MasterFlightSchedule.query.filter_by(flight_number="ACTYPE1").first()
         self.assertEqual(valid.status_code, 302)
         self.assertEqual(master.aircraft_type, "Other")
         self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(missing.status_code, 400)
+        self.assertIn(b"AC Type is required for new departures.", missing.data)
+        self.assertIsNone(MasterFlightSchedule.query.filter_by(flight_number="ACTYPE3").first())
         self.assertIn(b"AC Type must be A300, 747, 757, 767, or Other.", invalid.data)
         self.assertIsNone(MasterFlightSchedule.query.filter_by(flight_number="ACTYPE2").first())
 
@@ -11575,6 +11649,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "active": True,
         }
         values.update(overrides)
+        if values["mission_type"] == "departure" and "aircraft_type" not in overrides:
+            values["aircraft_type"] = "757"
         active = values.pop("active")
         if active:
             values["active"] = "1"
