@@ -5684,6 +5684,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "tail_number": "N999UP",
                 "utc_datetime": "2026-06-24T07:24:00",
                 "reason": "No current operation mission match.",
+                "wave": "2",
             },
             follow_redirects=False,
         )
@@ -5693,6 +5694,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         marker = FlightApiReviewItem.query.filter_by(review_status="accepted").one()
         self.assertEqual(response.status_code, 302)
         self.assertEqual(mission.sort_date_operation_id, operation.id)
+        self.assertEqual(mission.wave, "2")
         self.assertEqual(marker.accepted_mission_id, mission.id)
         self.assertEqual(FlightApiReviewItem.query.filter_by(review_status="pending").count(), 0)
         self.assertIn(b"NO UNMATCHED ARRIVAL PLANNING ROWS.", persisted.data)
@@ -5821,6 +5823,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "tail_number": "N999UP",
                 "utc_datetime": "2026-06-24T07:24:00",
                 "reason": "No current operation mission match.",
+                "wave": "2",
             },
             follow_redirects=False,
         )
@@ -5832,6 +5835,86 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(marker.accepted_mission_id, mission.id)
         self.assertEqual(mission.assigned_tail_number, "N999UP")
         self.assertEqual(mission.tail_source, "alp")
+        self.assertEqual(mission.wave, "2")
+
+    def test_add_alp_arrival_planning_row_requires_wave(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        db.session.add(operation)
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/planning/arrival/alp/add",
+            data={
+                "line_number": "1",
+                "flight_number": "UPS999",
+                "airport": "SDF",
+                "tail_number": "N999UP",
+                "utc_datetime": "2026-06-24T07:24:00",
+                "reason": "No current operation mission match.",
+            },
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Wave is required. Select 1 or 2.", response.data)
+        self.assertEqual(SortDateMission.query.count(), 0)
+
+    def test_add_api_departure_planning_row_requires_wave(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        db.session.add(operation)
+        item = self._api_review_item(
+            operation,
+            mission_type="departure",
+            flight_number="UPS0856",
+            destination="DFW",
+            tail_number="N856UP",
+        )
+        db.session.add(item)
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/planning/api/{item.id}/add",
+            data={"mission_type": "departure"},
+            follow_redirects=True,
+        )
+
+        db.session.refresh(item)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Wave is required. Select 1 or 2.", response.data)
+        self.assertEqual(SortDateMission.query.count(), 0)
+        self.assertEqual(item.review_status, "pending")
+
+    def test_planning_review_preselects_inferred_wave(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        existing = self._mission(
+            operation,
+            "departure",
+            "UPS0856",
+            destination="DFW",
+            wave="2",
+        )
+        db.session.add_all([operation, existing])
+        db.session.flush()
+        item = self._api_review_item(
+            operation,
+            mission_type="departure",
+            flight_number="UPS0856",
+            destination="DFW",
+            tail_number="N856UP",
+        )
+        db.session.add(item)
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/departure")
+        html = response.data.decode()
+        add_form = html.split(
+            f'action="/motherbrain/operations/{operation.id}/planning/api/{item.id}/add"',
+            1,
+        )[1].split("</form>", 1)[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('<option value="2" selected>', add_form)
+        self.assertNotIn('<option value="" selected>', add_form)
 
     def test_departure_planning_renders_alp_and_api_unmatched_rows_with_hot(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
@@ -5863,6 +5946,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"API", response.data)
         self.assertIn(b"UPS0856", response.data)
         self.assertIn(b"ADD TO CURRENT SORT", response.data)
+        self.assertIn(b'name="wave"', response.data)
+        self.assertIn(b"SELECT WAVE", response.data)
         self.assertIn(b">HOT</button>", response.data)
         self.assertIn(b"IGNORE", response.data)
 
@@ -5997,6 +6082,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "tail_number": "N999UP",
                 "utc_datetime": "2026-06-24T07:24:00",
                 "reason": "No current operation mission match.",
+                "wave": "2",
             },
             follow_redirects=False,
         )
@@ -6011,6 +6097,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(mission.assigned_tail_number, "N999UP")
         self.assertEqual(mission.tail_source, "alp")
         self.assertEqual(mission.eta_datetime_utc, datetime(2026, 6, 24, 7, 24))
+        self.assertEqual(mission.wave, "2")
         self.assertTrue(mission.api_added_current_sort_only)
         self.assertIsNone(mission.master_flight_schedule_id)
         self.assertEqual(marker.accepted_mission_id, mission.id)
@@ -6032,7 +6119,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             f"/motherbrain/operations/{operation.id}/planning/api/{item.id}/add",
-            data={"mission_type": "departure"},
+            data={"mission_type": "departure", "wave": "2"},
             follow_redirects=False,
         )
 
@@ -6043,6 +6130,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(mission.mission_type, "departure")
         self.assertEqual(mission.destination, "DFW")
         self.assertEqual(mission.assigned_tail_number, "N856UP")
+        self.assertEqual(mission.wave, "2")
         self.assertTrue(mission.api_added_current_sort_only)
         self.assertIsNone(mission.master_flight_schedule_id)
         self.assertEqual(item.review_status, "accepted")

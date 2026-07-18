@@ -12547,6 +12547,29 @@ select::-ms-expand {
     gap: 6px;
 }
 
+.planning-review-wave-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--muted);
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    line-height: 1;
+}
+
+.planning-review-wave-field select {
+    min-height: 28px;
+    border: 1px solid rgba(235, 241, 246, 0.2);
+    border-radius: 4px;
+    background: rgba(3, 4, 6, 0.72);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.66rem;
+    font-weight: 800;
+    padding: 4px 6px;
+}
+
 .data-table.planning-mission-table {
     min-width: 0;
 }

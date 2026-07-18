@@ -1810,6 +1810,7 @@ def alp_import(operation_id, mission_type):
         sort_timeline_settings=settings,
         flight_api_operational_time=flight_api_operational_time_utc,
         format_flight_api_time=format_flight_api_local_time,
+        wave_options=WAVE_OPTIONS,
     )
 
 
@@ -1827,7 +1828,7 @@ def add_alp_planning_row(operation_id, mission_type):
         return redirect(_planning_url(operation.id, mission_type))
 
     try:
-        row = _alp_planning_row_from_form(operation, mission_type)
+        row = _alp_planning_row_from_form(operation, mission_type, require_wave=True)
         mission = _create_or_update_mission_from_alp_planning_row(operation, row)
         _record_alp_planning_marker(operation, row, "accepted", mission)
         db.session.commit()
@@ -1907,9 +1908,15 @@ def add_api_planning_row(operation_id, review_item_id):
         return redirect(_planning_url(operation.id, request.form.get("mission_type", "arrival")))
 
     mission_type = review_item.mission_type
-    accept_review_item(review_item)
-    db.session.commit()
-    flash("API flight added to current sort operation.", "info")
+    try:
+        wave = _planning_wave_from_form(required=True)
+        mission = accept_review_item(review_item)
+        mission.wave = wave
+        db.session.commit()
+        flash("API flight added to current sort operation.", "info")
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), "error")
     return redirect(_planning_url(operation.id, mission_type))
 
 
@@ -2447,6 +2454,11 @@ def _alp_planning_rows_from_preview(operation, mission_type, preview):
                 "utc_datetime": row.get("utc_datetime"),
                 "airport_value": row.get("airport") or "",
                 "tail_value": row.get("tail_number") or "",
+                "inferred_wave": _planning_inferred_wave(
+                    operation,
+                    mission_type,
+                    row.get("normalized_flight_number") or row.get("flight_number"),
+                ),
             }
         )
     return rows
@@ -2473,6 +2485,11 @@ def _api_planning_row(operation, item, settings):
             SortDateMission.query.filter_by(sort_date_operation_id=operation.id).all(),
         ),
         "review_key": item.review_key,
+        "inferred_wave": _planning_inferred_wave(
+            operation,
+            item.mission_type,
+            item.flight_number,
+        ),
     }
 
 
@@ -2503,6 +2520,11 @@ def _alp_planning_row_from_item(operation, item, payload):
         "utc_datetime": item.revised_time_utc,
         "airport_value": airport,
         "tail_value": item.tail_number or "",
+        "inferred_wave": _planning_inferred_wave(
+            operation,
+            item.mission_type,
+            item.flight_number,
+        ),
     }
 
 
@@ -2653,7 +2675,31 @@ def _persist_alp_unmatched_rows(operation, mission_type, preview):
         _record_alp_planning_marker(operation, row, "pending")
 
 
-def _alp_planning_row_from_form(operation, mission_type):
+def _planning_inferred_wave(operation, mission_type, flight_number):
+    flight_key = alp_flight_key(flight_number)
+    if not flight_key:
+        return ""
+
+    waves = {
+        normalize_wave(mission.wave)
+        for mission in SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id,
+            mission_type=mission_type,
+        ).all()
+        if alp_flight_key(mission.flight_number) == flight_key
+    }
+    waves.discard(None)
+    return waves.pop() if len(waves) == 1 else ""
+
+
+def _planning_wave_from_form(required=False):
+    wave = normalize_wave(request.form.get("wave"))
+    if required and wave not in WAVES:
+        raise ValueError("Wave is required. Select 1 or 2.")
+    return wave
+
+
+def _alp_planning_row_from_form(operation, mission_type, require_wave=False):
     flight_number = (
         request.form.get("flight_number")
         or request.form.get("normalized_flight_number")
@@ -2683,6 +2729,7 @@ def _alp_planning_row_from_form(operation, mission_type):
         "utc_datetime": utc_datetime,
         "reason": request.form.get("reason") or "",
         "reason_detail": request.form.get("reason_detail") or "",
+        "wave": _planning_wave_from_form(required=require_wave),
     }
     expected_key = _alp_planning_review_key(operation, mission_type, row)
     submitted_key = request.form.get("review_key") or expected_key
@@ -2718,7 +2765,7 @@ def _create_mission_from_alp_planning_row(operation, row):
         sort_name=operation.sort_name,
         mission_type=mission_type,
         mission_source="manual",
-        wave="1",
+        wave=row.get("wave") or "1",
         master_flight_schedule_id=None,
         flight_number=row["normalized_flight_number"],
         origin=airport if mission_type == "arrival" else operation.gateway_code,
@@ -2763,6 +2810,8 @@ def _create_or_update_mission_from_alp_planning_row(operation, row):
     existing.assigned_tail_number = row["tail_number"]
     existing.tail_source = "alp"
     existing.tail_updated_at = datetime.utcnow()
+    if row.get("wave") in WAVES:
+        existing.wave = row["wave"]
     if existing.mission_type == "arrival":
         existing.eta_datetime_utc = row["utc_datetime"]
         existing.eta_source = "alp"

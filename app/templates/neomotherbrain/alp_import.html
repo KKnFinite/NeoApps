@@ -21,6 +21,18 @@
     {% endif %}
 {%- endmacro %}
 
+{% macro planning_wave_field(row) -%}
+<label class="planning-review-wave-field">
+    <span>WAVE</span>
+    <select name="wave" required aria-label="Wave">
+        <option value=""{% if not row.inferred_wave %} selected{% endif %}>SELECT WAVE</option>
+        {% for wave_value, wave_label in wave_options %}
+        <option value="{{ wave_value }}"{% if row.inferred_wave == wave_value %} selected{% endif %}>{{ wave_label }}</option>
+        {% endfor %}
+    </select>
+</label>
+{%- endmacro %}
+
 {% block content %}
 <section class="panel centered-command-page manage-sort-sidebar-page planning-page planning-page-{{ mission_type }}">
     {% if can_edit and mission_type == "departure" %}
@@ -264,6 +276,7 @@
                                     <input type="hidden" name="utc_datetime" value="{{ row.utc_datetime.isoformat() if row.utc_datetime else '' }}">
                                     <input type="hidden" name="reason" value="{{ row.reason }}">
                                     <input type="hidden" name="reason_detail" value="{{ row.reason_detail }}">
+                                    {{ planning_wave_field(row) }}
                                     <button class="table-row-button" type="submit">ADD TO CURRENT SORT</button>
                                 </form>
                                 <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.hot_alp_planning_row', operation_id=operation.id, mission_type=mission_type) }}">
@@ -291,6 +304,7 @@
                                 {% else %}
                                 <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.add_api_planning_row', operation_id=operation.id, review_item_id=row.item.id) }}">
                                     <input type="hidden" name="mission_type" value="{{ mission_type }}">
+                                    {{ planning_wave_field(row) }}
                                     <button class="table-row-button" type="submit">ADD TO CURRENT SORT</button>
                                 </form>
                                 {% if mission_type == "departure" %}
