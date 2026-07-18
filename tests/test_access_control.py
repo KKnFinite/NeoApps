@@ -188,7 +188,8 @@ class AccessControlTest(unittest.TestCase):
         hub_html = hub.data.decode()
         left_column = hub_html.split('rfd-node-column-left"', 1)[1].split('rfd-node-column-right"', 1)[0]
         right_column = hub_html.split('rfd-node-column-right"', 1)[1].split("</section>", 1)[0]
-        self.assertIn(b"RFD Hub", hub.data)
+        self.assertIn(b"<title>RFD | NeoGateway</title>", hub.data)
+        self.assertNotIn(b"RFD Hub | NeoGateway", hub.data)
         self.assertNotIn(b"RFD Command Hub", hub.data)
         self.assertIn(b"NeoGateway - RFD", hub.data)
         self.assertIn(b"rfd-header-brand neo-brand-title", hub.data)

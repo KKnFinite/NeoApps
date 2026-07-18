@@ -26,6 +26,7 @@ from app.services.auth_session_security import (
     session_version_matches_user,
 )
 from app.services.auth_rate_limits import initialize_auth_rate_limit_storage
+from app.services.browser_titles import browser_tab_title
 from app.services.csrf import (
     csrf_failure_response,
     csrf_field,
@@ -306,6 +307,7 @@ def register_template_helpers(app):
             "permission_access": permission_access,
             "change_character_targets": change_character_targets,
             "current_pwa_manifest_key": current_pwa_manifest_key,
+            "browser_tab_title": browser_tab_title(request),
         }
 
     @app.context_processor
