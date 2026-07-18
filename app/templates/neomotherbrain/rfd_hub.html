@@ -13,28 +13,15 @@
     "scorpion": "images/icons/neoscorpion/inapp/neoscorpion-128x128.png"
 } %}
 
-{% macro node_card(slug, name, icon_folder) -%}
+{% macro node_card(slug, name, icon_folder, coming_soon=false) -%}
 <span class="rfd-node-card-icon-wrap" aria-hidden="true">
     <img class="rfd-node-card-icon" src="{{ url_for('static', filename=locked_node_icons.get(slug, 'images/icons/' ~ icon_folder ~ '/icon_192.png')) }}" alt="" loading="lazy" width="72" height="72">
 </span>
 <span class="rfd-node-card-copy">
     {{ node_label(slug, name) }}
-</span>
-{%- endmacro %}
-
-{% macro gateway_brand() -%}
-<span class="rfd-gateway-brand">
-    <img
-        class="rfd-gateway-brand-icon"
-        src="{{ url_for('static', filename='images/icons/neogateway/inapp/neogateway-inapp-128.png') }}"
-        alt=""
-        width="128"
-        height="128"
-        decoding="async"
-    >
-    <span class="rfd-gateway-brand-title neo-brand-title neo-brand neo-brand--gateway neo-node-name brand-inline-name node-gateway" aria-label="NeoGateway">
-        <span class="neo-brand__neo neo-word neo-brand-title__neo">NEO</span><span class="neo-brand__node node-word neo-brand-title__node neo-brand-title__node--gateway">GATEWAY</span>
-    </span>
+    {% if coming_soon %}
+    <span class="rfd-node-availability">Coming Soon</span>
+    {% endif %}
 </span>
 {%- endmacro %}
 
@@ -43,10 +30,7 @@
 {% block content %}
 <section class="motherbrain-command rfd-command-layout" aria-label="{{ gateway.code }} gateway hub">
     {% set selected_operation_id = gateway_active_sort_operation.id if gateway_active_sort_operation else none %}
-    <section class="rfd-node-menu" aria-label="{{ gateway.code }} NeoNode launcher">
-        <div class="rfd-gateway-brand-strip" aria-label="{{ gateway.code }} NeoGateway brand">
-            {{ gateway_brand() }}
-        </div>
+    <section class="rfd-node-menu{% if not gateway_active_sort_operation and gateway_active_sort_status %} has-rfd-sort-status{% endif %}" aria-label="{{ gateway.code }} NeoNode launcher">
         {% if not gateway_active_sort_operation and gateway_active_sort_status %}
         <p class="rfd-hub-sort-status">{{ gateway_active_sort_status }}</p>
         {% endif %}
@@ -76,10 +60,10 @@
                 </article>
                 {% endif %}
                 <article class="rfd-node-tile rfd-node-placeholder rfd-node-reptile" aria-disabled="true" aria-label="NeoReptile">
-                    {{ node_card("reptile", "Reptile", "reptile") }}
+                    {{ node_card("reptile", "Reptile", "reptile", coming_soon=true) }}
                 </article>
                 <article class="rfd-node-tile rfd-node-placeholder rfd-node-rain" aria-disabled="true" aria-label="NeoRain">
-                    {{ node_card("rain", "Rain", "rain") }}
+                    {{ node_card("rain", "Rain", "rain", coming_soon=true) }}
                 </article>
             </div>
 
@@ -94,7 +78,7 @@
                 </article>
                 {% endif %}
                 <article class="rfd-node-tile rfd-node-placeholder rfd-node-subzero" aria-disabled="true" aria-label="NeoSub-Zero">
-                    {{ node_card("subzero", "Sub-Zero", "subzero") }}
+                    {{ node_card("subzero", "Sub-Zero", "subzero", coming_soon=true) }}
                 </article>
                 {% if can_launch_scorpion %}
                 <a class="rfd-node-tile rfd-node-scorpion" href="{{ url_for('neoscorpion.index', operation_id=selected_operation_id) if selected_operation_id else url_for('neoscorpion.index') }}" aria-label="NeoScorpion">

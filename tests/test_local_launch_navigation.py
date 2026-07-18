@@ -954,6 +954,44 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             css,
         )
 
+    def test_desktop_gateway_landing_uses_compact_application_launcher(self):
+        seed_dev_grandmaster(self.app)
+        operation = SortDateOperation(
+            sort_date=current_gateway_local_date(),
+            gateway_code="RFD",
+            sort_name="night",
+        )
+        db.session.add(operation)
+        db.session.commit()
+        self.client.post(
+            "/login",
+            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
+        )
+
+        response = self.client.get(f"/rfd?operation_id={operation.id}")
+        html = response.data.decode()
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("rfd-gateway-brand-strip", html)
+        self.assertIn('class="rfd-node-tile rfd-node-motherbrain', html)
+        self.assertIn('class="rfd-node-tile rfd-node-sektor"', html)
+        self.assertEqual(html.count('class="rfd-node-availability">Coming Soon</span>'), 3)
+        self.assertIn("Compact desktop RFD application launcher", css)
+        self.assertIn("grid-template-columns: repeat(8, minmax(0, 1fr));", css)
+        self.assertIn("--rfd-launch-first-row: 1;", css)
+        self.assertIn("--rfd-launch-second-row: 2;", css)
+        self.assertIn("grid-template-rows: auto repeat(2, minmax(94px, 108px));", css)
+        self.assertIn("grid-column: 7 / span 2;", css)
+        self.assertIn("grid-row: var(--rfd-launch-second-row);", css)
+        self.assertIn("height: calc(100dvh - 70px);", css)
+        self.assertIn(
+            "body.rfd-hub-page .rfd-node-grid,\n"
+            "    body.rfd-hub-page .rfd-node-column {\n"
+            "        display: contents;",
+            css,
+        )
+
     def test_mobile_portal_header_uses_neofont_neoapps_brand(self):
         seed_dev_grandmaster(self.app)
         self.client.post(
@@ -1208,8 +1246,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertNotIn(b'neogateway_logo3_large.png', hub_response.data)
         self.assertNotIn(b'neogateway_logo3_medium.png', hub_response.data)
         self.assertNotIn(b'neogateway_logo3_small.png', hub_response.data)
-        self.assertIn(b'class="rfd-gateway-brand-strip"', hub_response.data)
-        self.assertIn(b'src="/static/images/icons/neogateway/inapp/neogateway-inapp-128.png"', hub_response.data)
+        self.assertNotIn(b'class="rfd-gateway-brand-strip"', hub_response.data)
+        self.assertNotIn(b'class="rfd-gateway-brand"', hub_response.data)
         self.assertIn(b'src="/static/images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png"', hub_response.data)
         self.assertIn(b'src="/static/images/icons/neosektor/inapp/neosektor-icon-128x128.png"', hub_response.data)
         self.assertIn(b'src="/static/images/icons/neoermac/inapp/neoermac-inapp-128.png"', hub_response.data)
