@@ -336,7 +336,7 @@ class AutoDatabaseBootstrapTest(unittest.TestCase):
     def test_auto_bootstrap_enabled_runs_bootstrap(self):
         with patch.dict(os.environ, self._render_env(), clear=True):
             with self.assertLogs("app", level="INFO") as logs:
-                app = create_app(self._config(auto_bootstrap=True))
+                app = create_app(self._config(auto_bootstrap=True), auto_bootstrap=True)
 
         output = "\n".join(logs.output)
         self.assertIn("Auto bootstrap enabled", output)
@@ -362,7 +362,7 @@ class AutoDatabaseBootstrapTest(unittest.TestCase):
 
         with patch.dict(os.environ, env, clear=True):
             with self.assertLogs("app", level="INFO") as logs:
-                app = create_app(self._config(auto_bootstrap=True))
+                app = create_app(self._config(auto_bootstrap=True), auto_bootstrap=True)
 
         self.assertIn("Bootstrap skipped", "\n".join(logs.output))
         with app.app_context():
@@ -375,7 +375,7 @@ class AutoDatabaseBootstrapTest(unittest.TestCase):
         second_env = self._render_env(password="SecondHarborSignal123!")
 
         with patch.dict(os.environ, first_env, clear=True):
-            app = create_app(self._config(auto_bootstrap=True))
+            app = create_app(self._config(auto_bootstrap=True), auto_bootstrap=True)
 
         with patch.dict(os.environ, second_env, clear=True):
             maybe_auto_bootstrap_database(app)
@@ -406,7 +406,7 @@ class AutoDatabaseBootstrapTest(unittest.TestCase):
         stdout = io.StringIO()
         with patch.dict(os.environ, env, clear=True):
             with redirect_stdout(stdout), self.assertLogs("app", level="INFO") as logs:
-                app = create_app(self._config(auto_bootstrap=True))
+                app = create_app(self._config(auto_bootstrap=True), auto_bootstrap=True)
 
         output = stdout.getvalue() + "\n".join(logs.output)
         self.assertIn("Auto bootstrap enabled", output)

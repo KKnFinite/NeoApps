@@ -9,9 +9,9 @@ class RunEnvironmentConfig:
 
 
 app = (
-    create_app(DevelopmentConfig)
+    create_app(DevelopmentConfig, auto_bootstrap=False)
     if __name__ == "__main__"
-    else create_app(RunEnvironmentConfig)
+    else create_app(RunEnvironmentConfig, auto_bootstrap=False)
 )
 
 

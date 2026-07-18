@@ -48,8 +48,14 @@ def run_startup_database_action(app, action, *, action_name):
     )
 
     for attempt in range(1, attempts + 1):
+        app.logger.info(
+            "Database startup action starting: action=%s attempt=%s/%s",
+            action_name,
+            attempt,
+            attempts,
+        )
         try:
-            return action()
+            result = action()
         except OperationalError as error:
             if not _is_transient_connection_error(error):
                 raise
@@ -77,6 +83,14 @@ def run_startup_database_action(app, action, *, action_name):
             )
             time.sleep(delay_seconds)
             delay_seconds = min(delay_seconds * 2, max_delay_seconds)
+        else:
+            app.logger.info(
+                "Database startup action completed: action=%s attempt=%s/%s",
+                action_name,
+                attempt,
+                attempts,
+            )
+            return result
 
 
 def _configured_attempts(app):

@@ -38,7 +38,13 @@ from app.services.password_policy import user_requires_password_change
 from app.services.time_display import format_local_hhmm
 
 
-def create_app(config_class=Config, auto_bootstrap=True):
+def create_app(config_class=Config, auto_bootstrap=False):
+    """Create the web application without blocking Gunicorn worker startup.
+
+    Database schema/bootstrap work belongs in the deployment bootstrap command.
+    Keeping it opt-in here prevents every worker import from independently
+    running long PostgreSQL retries before the web process can bind its port.
+    """
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(Config)
     if config_class is not Config:
