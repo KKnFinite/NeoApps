@@ -318,8 +318,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             tail="N701UP",
             parking="D13",
             pure_pull_time_local=time(1, 10),
-            first_mix_pull_time_local=time(1, 20),
-            final_mix_pull_time_local=time(1, 30),
+            mix_pull_time_local=time(1, 30),
         )
         self._add_operation_departure(
             "UPS702",
@@ -327,8 +326,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             tail="N702UP",
             parking="D32",
             pure_pull_time_local=time(1, 15),
-            first_mix_pull_time_local=time(1, 25),
-            final_mix_pull_time_local=time(1, 35),
+            mix_pull_time_local=time(1, 35),
         )
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -357,8 +355,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "UPS810",
             "DEN",
             pure_pull_time_local=time(1, 49),
-            first_mix_pull_time_local=time(2, 0),
-            final_mix_pull_time_local=time(2, 11),
+            mix_pull_time_local=time(2, 11),
         )
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -367,9 +364,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         east_html = self._upcoming_side_html(response, "East")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(east_html.count(b"DEN / - / -"), 3)
+        self.assertEqual(east_html.count(b"DEN / - / -"), 2)
         self.assertNotIn(b"UPS810 / DEN", east_html)
-        self.assertEqual(east_html.count(b"D9-D13 BRN/WHT BELT"), 3)
+        self.assertEqual(east_html.count(b"D9-D13 BRN/WHT BELT"), 2)
         self.assertNotIn(b"D9-D13 EAST BRN/WHT BELT", east_html)
         self.assertNotIn(b"D9-D13 WEST BRN/WHT BELT", east_html)
 
@@ -389,7 +386,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"OMA / - / -", east_html)
         self.assertNotIn(b"UPS811 / DEN", east_html)
         self.assertNotIn(b"UPS812 / OMA", east_html)
-        self.assertEqual(east_html.count(b"D9-D13 BRN/WHT BELT"), 5)
+        self.assertEqual(east_html.count(b"D9-D13 BRN/WHT BELT"), 4)
 
     def test_neoermac_upcoming_pulls_removes_actual_and_no_pull_items(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
@@ -397,8 +394,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "UPS703",
             "SDF",
             pure_pull_time_local=time(1, 20),
-            first_mix_pull_time_local=time(1, 40),
-            final_mix_pull_time_local=time(1, 55),
+            mix_pull_time_local=time(1, 55),
         )
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -411,7 +407,6 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 "destination_count": "1",
                 "destination_0": "SDF",
                 "actual_pure_0": "01:25",
-                "no_first_mix_0": "on",
             },
             follow_redirects=False,
         )
@@ -423,9 +418,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"01:20", west_html)
         self.assertNotIn(b"Pure", west_html)
         self.assertNotIn(b"01:40", west_html)
-        self.assertNotIn(b"1st Mix", west_html)
         self.assertIn(b"01:55", west_html)
-        self.assertIn(b"2nd Mix", west_html)
+        self.assertIn(b"Mix Pull", west_html)
 
     def test_neoermac_menu_keeps_multi_door_pull_until_all_required_doors_addressed(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "LAX")
@@ -434,8 +428,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "UPS704",
             "LAX",
             pure_pull_time_local=time(1, 20),
-            first_mix_pull_time_local=time(1, 40),
-            final_mix_pull_time_local=time(1, 55),
+            mix_pull_time_local=time(1, 55),
         )
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -447,7 +440,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 "action": "save_pulls",
                 "destination_count": "1",
                 "destination_0": "LAX",
-                "actual_first_mix_0": "01:45",
+                "no_mix_0": "on",
             },
             follow_redirects=False,
         )
@@ -457,8 +450,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(first_side_response.status_code, 302)
         self.assertEqual(one_side_dashboard.status_code, 200)
         self.assertIn(b"LAX / - / -", one_side_west_html)
-        self.assertIn(b"01:40", one_side_west_html)
-        self.assertIn(b"1st Mix", one_side_west_html)
+        self.assertIn(b"01:55", one_side_west_html)
+        self.assertIn(b"Mix Pull", one_side_west_html)
 
         second_side_response = self.client.post(
             "/neoermac/door-view?door=D34",
@@ -467,7 +460,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 "action": "save_pulls",
                 "destination_count": "1",
                 "destination_0": "LAX",
-                "no_first_mix_0": "on",
+                "no_mix_0": "on",
             },
             follow_redirects=False,
         )
@@ -476,8 +469,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(second_side_response.status_code, 302)
         self.assertEqual(complete_dashboard.status_code, 200)
-        self.assertNotIn(b"01:40", complete_west_html)
-        self.assertNotIn(b"1st Mix", complete_west_html)
+        self.assertNotIn(b"01:55", complete_west_html)
+        self.assertNotIn(b"Mix Pull", complete_west_html)
 
     def test_neoermac_menu_sorts_upcoming_pulls_and_limits_each_side(self):
         assignments = (
@@ -491,8 +484,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 f"UPS71{index}",
                 destination,
                 pure_pull_time_local=time(1, 20 + index),
-                first_mix_pull_time_local=time(1, 40 + index),
-                final_mix_pull_time_local=time(1, 55 + index),
+                mix_pull_time_local=time(1, 55 + index),
             )
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -909,7 +901,6 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.data.count(b"WINDOW 20 MIN"), 1)
         self.assertIn(b"01:40", response.data)
         self.assertIn(b"BASE 01:20 +20 MIN", response.data)
-        self.assertIn(b"02:00", response.data)
         self.assertIn(b"02:15", response.data)
 
     def test_door_view_warns_for_pull_due_within_five_minutes(self):
@@ -1062,9 +1053,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 "destination_count": "1",
                 "destination_0": "SDF",
                 "actual_pure_0": "01:15",
-                "actual_first_mix_0": "01:30",
-                "no_first_mix_0": "on",
-                "actual_second_mix_0": "01:55",
+                "actual_mix_0": "01:55",
             },
             follow_redirects=False,
         )
@@ -1072,10 +1061,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         saved = NeoErmacDoorPull.query.filter_by(door="D34", destination="SDF").one()
         self.assertEqual(response.status_code, 302)
         self.assertEqual(saved.actual_pure_pull_time_local, time(1, 15))
-        self.assertTrue(saved.no_first_mix_pull)
-        self.assertIsNone(saved.actual_first_mix_pull_time_local)
-        self.assertFalse(saved.no_second_mix_pull)
-        self.assertEqual(saved.actual_second_mix_pull_time_local, time(1, 55))
+        self.assertFalse(saved.no_mix_pull)
+        self.assertEqual(saved.actual_mix_pull_time_local, time(1, 55))
 
         reload_response = self.client.get("/neoermac/door-view?door=D34")
         self.assertIn(b'value="01:15"', reload_response.data)
@@ -1179,7 +1166,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             data={
                 "door": "D34",
                 "destination": "SDF",
-                "pull_key": "first_mix",
+                "pull_key": "mix",
                 "actual_pull": "14:07",
                 "no_pull": "1",
             },
@@ -1190,10 +1177,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
         mission = SortDateMission.query.filter_by(destination="SDF").one()
         self.assertEqual(response.status_code, 200)
         self.assertTrue(payload["ok"])
-        self.assertTrue(payload["card"]["no_pull"]["first_mix"])
-        self.assertTrue(saved.no_first_mix_pull)
-        self.assertIsNone(saved.actual_first_mix_pull_time_local)
-        self.assertIsNone(mission.actual_first_mix_pull_time_local)
+        self.assertTrue(payload["card"]["no_pull"]["mix"])
+        self.assertTrue(saved.no_mix_pull)
+        self.assertIsNone(saved.actual_mix_pull_time_local)
+        self.assertIsNone(mission.actual_mix_pull_time_local)
 
     def test_door_view_completed_pull_card_collapses_with_summary(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
@@ -1205,8 +1192,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 door="D34",
                 destination="SDF",
                 actual_pure_pull_time_local=time(14, 5),
-                actual_first_mix_pull_time_local=time(14, 7),
-                no_second_mix_pull=True,
+                no_mix_pull=True,
             )
         )
         db.session.commit()
@@ -1226,7 +1212,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"SDF A01 COMPLETE", summary_html)
         self.assertNotIn(b"PULLS COMPLETE", summary_html)
         self.assertNotIn(b"Parking", summary_html)
-        self.assertIn("PURE 14:05 · 1Mix 14:07 · 2Mix NONE".encode(), summary_html)
+        self.assertIn("PURE 14:05 · MIX NONE".encode(), summary_html)
         self.assertIn(b"EDIT PULLS", response.data)
         self.assertIn(b"data-pull-edit-toggle", response.data)
 
@@ -1240,7 +1226,6 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 door="D34",
                 destination="SDF",
                 actual_pure_pull_time_local=time(14, 5),
-                no_first_mix_pull=True,
             )
         )
         db.session.commit()
@@ -1515,8 +1500,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'name="uld_a1_count" min="0" step="1" inputmode="numeric" value="0"', response.data)
         self.assertIn(b'name="uld_amp_count" min="0" step="1" inputmode="numeric" value="0"', response.data)
         self.assertIn(b'class="neoermac-label-mobile">PURE</span>', response.data)
-        self.assertIn(b'class="neoermac-label-mobile">1ST</span>', response.data)
-        self.assertIn(b'class="neoermac-label-mobile">2ND</span>', response.data)
+        self.assertIn(b'class="neoermac-label-mobile">MIX</span>', response.data)
+        self.assertNotIn(b'class="neoermac-label-mobile">1ST</span>', response.data)
+        self.assertNotIn(b'class="neoermac-label-mobile">2ND</span>', response.data)
         self.assertIn(b"neoermac-setup-toggle neoermac-large-checkbox-toggle", response.data)
         self.assertIn(b"neoermac-none-toggle neoermac-large-checkbox-toggle", response.data)
         self.assertIn(b'class="neoermac-label-mobile">NO</span>', response.data)
@@ -1968,8 +1954,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"Blue/Black", response.data)
         self.assertNotIn(b"neoermac-pull-edge", response.data)
         self.assertIn(b"PURE", response.data)
-        self.assertIn(b"1ST MIX", response.data)
-        self.assertIn(b"2ND MIX", response.data)
+        self.assertIn(b"MIX", response.data)
+        self.assertNotIn(b"1ST MIX", response.data)
+        self.assertNotIn(b"2ND MIX", response.data)
         self.assertEqual(response.data.count(b"neoermac-belt-group"), 12)
         self.assertEqual(response.data.count(b"neoermac-sequence-door"), 13)
         self.assertIn(b"neoermac-belt-block", response.data)
@@ -2008,8 +1995,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "UPS105",
             "SDF",
             pure_pull_time_local=time(1, 10),
-            first_mix_pull_time_local=time(1, 25),
-            final_mix_pull_time_local=time(1, 40),
+            mix_pull_time_local=time(1, 40),
         )
         self._assign_lineup_destination("green_runout", "east_destination_1", "SDF")
         db.session.commit()
@@ -2019,7 +2005,6 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"01:10", response.data)
-        self.assertIn(b"01:25", response.data)
         self.assertIn(b"01:40", response.data)
 
     def test_building_lineup_displays_current_sort_mission_pull_times(self):
@@ -2028,8 +2013,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "UPS205",
             "SDF",
             pure_pull_time_local=time(0, 55),
-            first_mix_pull_time_local=time(1, 10),
-            final_mix_pull_time_local=time(1, 25),
+            mix_pull_time_local=time(1, 25),
         )
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -2038,7 +2022,6 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"00:55", response.data)
-        self.assertIn(b"01:10", response.data)
         self.assertIn(b"01:25", response.data)
 
     def test_building_lineup_renders_pull_times_for_each_destination_side(self):
@@ -2050,15 +2033,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "UPS210",
             "SDF",
             pure_pull_time_local=time(0, 55),
-            first_mix_pull_time_local=time(1, 10),
-            final_mix_pull_time_local=time(1, 25),
+            mix_pull_time_local=time(1, 25),
         )
         self._add_operation_departure(
             "UPS211",
             "ONT",
             pure_pull_time_local=time(2, 5),
-            first_mix_pull_time_local=time(2, 20),
-            final_mix_pull_time_local=time(2, 35),
+            mix_pull_time_local=time(2, 35),
         )
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -2073,17 +2054,17 @@ class NeoErmacRoutesTest(unittest.TestCase):
         ].split("</label>", 1)[0]
 
         self.assertEqual(response.status_code, 200)
-        for expected_time in ("00:55", "01:10", "01:25"):
+        for expected_time in ("00:55", "01:25"):
             self.assertIn(expected_time, upper_card)
             self.assertNotIn(expected_time, lower_card)
-        for expected_time in ("02:05", "02:20", "02:35"):
+        for expected_time in ("02:05", "02:35"):
             self.assertIn(expected_time, lower_card)
             self.assertNotIn(expected_time, upper_card)
         self.assertIn("neoermac-slot-pull-times", upper_card)
         self.assertIn("neoermac-slot-pull-times", lower_card)
         self.assertNotIn("neoermac-pull-edge", html)
 
-    def test_building_lineup_renders_first_and_second_pull_cards_inside_belts(self):
+    def test_building_lineup_renders_pure_and_mix_pull_cards_inside_belts(self):
         self._add_master_departure("UPS216", "SDF")
         self._add_master_departure("UPS217", "ONT")
         self._assign_lineup_destination("green_runout", "east_destination_1", "SDF")
@@ -2092,15 +2073,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "UPS216",
             "SDF",
             pure_pull_time_local=time(0, 45),
-            first_mix_pull_time_local=time(1, 0),
-            final_mix_pull_time_local=time(1, 15),
+            mix_pull_time_local=time(1, 15),
         )
         self._add_operation_departure(
             "UPS217",
             "ONT",
             pure_pull_time_local=time(2, 5),
-            first_mix_pull_time_local=time(2, 20),
-            final_mix_pull_time_local=time(2, 35),
+            mix_pull_time_local=time(2, 35),
         )
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -2121,11 +2100,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         )
         self.assertIn("neoermac-slot-pull-times", first_card)
         self.assertIn("00:45", first_card)
-        self.assertIn("01:00", first_card)
         self.assertIn("01:15", first_card)
         self.assertIn("neoermac-slot-pull-times", second_card)
         self.assertIn("02:05", second_card)
-        self.assertIn("02:20", second_card)
         self.assertIn("02:35", second_card)
 
     def test_building_lineup_mobile_stacked_destination_pairs_include_pull_times(self):
@@ -2137,15 +2114,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "UPS213",
             "SDF",
             pure_pull_time_local=time(0, 45),
-            first_mix_pull_time_local=time(1, 0),
-            final_mix_pull_time_local=time(1, 15),
+            mix_pull_time_local=time(1, 15),
         )
         self._add_operation_departure(
             "UPS214",
             "ONT",
             pure_pull_time_local=time(2, 5),
-            first_mix_pull_time_local=time(2, 20),
-            final_mix_pull_time_local=time(2, 35),
+            mix_pull_time_local=time(2, 35),
         )
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -2168,11 +2143,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertGreaterEqual(html.count("neoermac-belt-destination-card"), 4)
         self.assertIn("neoermac-slot-pull-times", left_pair)
         self.assertIn("00:45", left_pair)
-        self.assertIn("01:00", left_pair)
         self.assertIn("01:15", left_pair)
         self.assertIn("neoermac-slot-pull-times", right_pair)
         self.assertIn("02:05", right_pair)
-        self.assertIn("02:20", right_pair)
         self.assertIn("02:35", right_pair)
         self.assertNotIn("neoermac-mobile-slot-belt-name", html)
 
@@ -2190,8 +2163,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         )[0]
 
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(card.count('data-pull-time-key="'), 3)
-        self.assertGreaterEqual(card.count(">--</strong>"), 3)
+        self.assertGreaterEqual(card.count('data-pull-time-key="'), 2)
+        self.assertGreaterEqual(card.count(">--</strong>"), 2)
 
     def test_building_lineup_destination_options_come_from_master_departures(self):
         self._add_master_departure("UPS101", "sdf")
@@ -2339,8 +2312,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "UPS412",
             "ONT",
             pure_pull_time_local=time(2, 5),
-            first_mix_pull_time_local=time(2, 20),
-            final_mix_pull_time_local=time(2, 35),
+            mix_pull_time_local=time(2, 35),
         )
         db.session.commit()
         self._login_approved_user(role="simulator")
@@ -2362,8 +2334,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["destination"], "ONT")
         self.assertEqual(payload["pull_times"]["pure"], "02:05")
-        self.assertEqual(payload["pull_times"]["first_mix"], "02:20")
-        self.assertEqual(payload["pull_times"]["final_mix"], "02:35")
+        self.assertEqual(payload["pull_times"]["mix"], "02:35")
         self.assertEqual(saved.east_destination_1, "ONT")
         self.assertEqual(saved.west_destination_1, "PHX")
 
@@ -2472,8 +2443,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             parking="A14",
             window_minutes=20,
             pure_pull_time_local=time(1, 20),
-            first_mix_pull_time_local=time(1, 40),
-            final_mix_pull_time_local=time(1, 55),
+            mix_pull_time_local=time(1, 55),
         )
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -2486,9 +2456,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 "destination_count": "1",
                 "destination_0": "SDF",
                 "actual_pure_0": "01:45",
-                "actual_first_mix_0": "02:00",
-                "no_first_mix_0": "on",
-                "actual_second_mix_0": "02:20",
+                "actual_mix_0": "02:20",
             },
             follow_redirects=False,
         )
@@ -2497,8 +2465,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         mission = SortDateMission.query.filter_by(destination="SDF").one()
         self.assertEqual(save_response.status_code, 302)
         self.assertEqual(mission.actual_pure_pull_time_local, time(1, 45))
-        self.assertIsNone(mission.actual_first_mix_pull_time_local)
-        self.assertEqual(mission.actual_second_mix_pull_time_local, time(2, 20))
+        self.assertEqual(mission.actual_mix_pull_time_local, time(2, 20))
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'data-neoermac-outbound-layout="pull-table"', response.data)
         self.assertIn(b"data-neoermac-outbound-table", response.data)
@@ -2514,14 +2481,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"PURE ACT", response.data)
         self.assertIn(b"MIX PLAN", response.data)
         self.assertIn(b"MIX ACT", response.data)
-        self.assertIn(b"1ST", response.data)
-        self.assertIn(b"2ND", response.data)
         self.assertLess(response.data.index(b"PURE PLAN"), response.data.index(b"PURE ACT"))
         self.assertLess(response.data.index(b"MIX PLAN"), response.data.index(b"MIX ACT"))
         self.assertIn(b"01:20", response.data)
-        self.assertIn(b"01:40", response.data)
         self.assertIn(b"01:45", response.data)
-        self.assertIn(b"NO 1ST MIX", response.data)
         self.assertIn(b"02:20", response.data)
         self.assertIn(b"20 MIN", response.data)
 
@@ -2694,8 +2657,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         flight_number,
         destination,
         pure_pull_time_local=None,
-        first_mix_pull_time_local=None,
-        final_mix_pull_time_local=None,
+        mix_pull_time_local=None,
     ):
         db.session.add(
             MasterFlightSchedule(
@@ -2711,8 +2673,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 planned_time_local=time(23, 0),
                 timezone="America/Chicago",
                 pure_pull_time_local=pure_pull_time_local,
-                first_mix_pull_time_local=first_mix_pull_time_local,
-                final_mix_pull_time_local=final_mix_pull_time_local,
+                mix_pull_time_local=mix_pull_time_local,
             )
         )
 
@@ -2742,8 +2703,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         planned_datetime_local=None,
         planned_datetime_utc=None,
         pure_pull_time_local=None,
-        first_mix_pull_time_local=None,
-        final_mix_pull_time_local=None,
+        mix_pull_time_local=None,
     ):
         operation = SortDateOperation.query.filter_by(
             gateway_id=self.gateway.id,
@@ -2781,8 +2741,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             assigned_tail_number=tail,
             departure_status=departure_status,
             pure_pull_time_local=pure_pull_time_local or time(1, 20),
-            first_mix_pull_time_local=first_mix_pull_time_local or time(1, 40),
-            final_mix_pull_time_local=final_mix_pull_time_local or time(1, 55),
+            mix_pull_time_local=mix_pull_time_local or time(1, 55),
         )
         db.session.add(mission)
         db.session.flush()

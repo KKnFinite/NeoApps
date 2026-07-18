@@ -44,8 +44,8 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "arrival_status": "VARCHAR(32)",
         "wave": "VARCHAR(16)",
         "actual_pure_pull_time_local": "TIME",
-        "actual_first_mix_pull_time_local": "TIME",
-        "actual_second_mix_pull_time_local": "TIME",
+        "mix_pull_time_local": "TIME",
+        "actual_mix_pull_time_local": "TIME",
         "api_status": "VARCHAR(32)",
         "api_status_raw": "VARCHAR(120)",
         "api_runway_time_utc": "DATETIME",
@@ -73,6 +73,11 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "master_flight_schedules": {
         "aircraft_type": "VARCHAR(16)",
         "wave": "VARCHAR(16)",
+        "mix_pull_time_local": "TIME",
+    },
+    "neoermac_door_pulls": {
+        "actual_mix_pull_time_local": "TIME",
+        "no_mix_pull": "BOOLEAN",
     },
     "sort_timeline_settings": {
         "units_per_poll": "INTEGER DEFAULT 2",
@@ -126,8 +131,8 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "arrival_status": "VARCHAR(32)",
         "wave": "VARCHAR(16)",
         "actual_pure_pull_time_local": "TIME",
-        "actual_first_mix_pull_time_local": "TIME",
-        "actual_second_mix_pull_time_local": "TIME",
+        "mix_pull_time_local": "TIME",
+        "actual_mix_pull_time_local": "TIME",
         "api_status": "VARCHAR(32)",
         "api_status_raw": "VARCHAR(120)",
         "api_runway_time_utc": "TIMESTAMP",
@@ -155,6 +160,11 @@ POSTGRES_OPTIONAL_COLUMNS = {
     "master_flight_schedules": {
         "aircraft_type": "VARCHAR(16)",
         "wave": "VARCHAR(16)",
+        "mix_pull_time_local": "TIME",
+    },
+    "neoermac_door_pulls": {
+        "actual_mix_pull_time_local": "TIME",
+        "no_mix_pull": "BOOLEAN",
     },
     "sort_timeline_settings": {
         "units_per_poll": "INTEGER DEFAULT 2",
@@ -233,6 +243,7 @@ def sync_local_sqlite_schema(app):
                 text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
             )
 
+    _migrate_legacy_second_mix_pull_values(table_names)
     _sync_staffing_people_employee_status_sqlite(table_names)
     _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names)
     _sync_uld_request_unique_constraint_sqlite(inspector, table_names)
@@ -273,12 +284,59 @@ def sync_database_schema(app):
                 )
             )
 
+    _migrate_legacy_second_mix_pull_values(table_names)
     _sync_staffing_people_employee_status_postgres(table_names)
     _sync_sort_date_mission_status_constraints_postgres(table_names)
     _sync_uld_request_unique_constraint_postgres(table_names)
     if migrate_existing_approved_users:
         _mark_existing_approved_users_for_password_policy_update(table_names)
     db.session.flush()
+
+
+def _migrate_legacy_second_mix_pull_values(table_names):
+    """Copy the retired 2nd Mix values into the new Mix Pull columns once."""
+    migrations = (
+        (
+            "master_flight_schedules",
+            "mix_pull_time_local",
+            "final_mix_pull_time_local",
+        ),
+        (
+            "sort_date_missions",
+            "mix_pull_time_local",
+            "final_mix_pull_time_local",
+        ),
+        (
+            "sort_date_missions",
+            "actual_mix_pull_time_local",
+            "actual_second_mix_pull_time_local",
+        ),
+        (
+            "neoermac_door_pulls",
+            "actual_mix_pull_time_local",
+            "actual_second_mix_pull_time_local",
+        ),
+        (
+            "neoermac_door_pulls",
+            "no_mix_pull",
+            "no_second_mix_pull",
+        ),
+    )
+    inspector = inspect(db.engine)
+    for table_name, target_column, legacy_column in migrations:
+        if table_name not in table_names:
+            continue
+        existing_columns = {
+            column["name"] for column in inspector.get_columns(table_name)
+        }
+        if {target_column, legacy_column}.issubset(existing_columns):
+            db.session.execute(
+                text(
+                    f"UPDATE {table_name} "
+                    f"SET {target_column} = {legacy_column} "
+                    f"WHERE {target_column} IS NULL AND {legacy_column} IS NOT NULL"
+                )
+            )
 
 
 def _users_missing_password_policy_column(inspector, table_names):

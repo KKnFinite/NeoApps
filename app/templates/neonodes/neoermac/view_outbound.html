@@ -89,18 +89,8 @@
                         <td data-label="Location" data-outbound-field="location">{{ row.assigned_doors|join(" / ") if row.assigned_doors else "-" }}</td>
                         <td data-label="PURE PLAN" data-outbound-pull-cell="pure-plan">{{ row.planned_pulls.pure or "-" }}</td>
                         <td data-label="PURE ACT" data-outbound-pull-cell="pure-actual"><strong>{{ actual_pull(row, "pure", "Pure") }}</strong></td>
-                        <td data-label="MIX PLAN" data-outbound-pull-cell="mix-plan">
-                            <div class="neoermac-outbound-time-stack">
-                                <span><b>1ST</b> {{ row.planned_pulls.first_mix or "-" }}</span>
-                                <span><b>2ND</b> {{ row.planned_pulls.second_mix or "-" }}</span>
-                            </div>
-                        </td>
-                        <td data-label="MIX ACT" data-outbound-pull-cell="mix-actual">
-                            <div class="neoermac-outbound-time-stack">
-                                <span><b>1ST</b> {{ actual_pull(row, "first_mix", "1st Mix") }}</span>
-                                <span><b>2ND</b> {{ actual_pull(row, "second_mix", "2nd Mix") }}</span>
-                            </div>
-                        </td>
+                        <td data-label="MIX PLAN" data-outbound-pull-cell="mix-plan">{{ row.planned_pulls.mix or "-" }}</td>
+                        <td data-label="MIX ACT" data-outbound-pull-cell="mix-actual"><strong>{{ actual_pull(row, "mix", "Mix Pull") }}</strong></td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -126,7 +116,7 @@
                 <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="doors">{{ row.assigned_doors|join(", ") if row.assigned_doors else "-" }}</span>
                 <span class="neoermac-outbound-mobile-field neoermac-outbound-mobile-pulls" data-neoermac-outbound-mobile-field="pull-times">
                     <span><b>P</b> {{ row.planned_pulls.pure or "-" }} / {{ actual_pull(row, "pure", "Pure") }}</span>
-                    <span><b>M</b> {{ row.planned_pulls.second_mix or "-" }} / {{ actual_pull(row, "second_mix", "2nd Mix") }}</span>
+                    <span><b>M</b> {{ row.planned_pulls.mix or "-" }} / {{ actual_pull(row, "mix", "Mix Pull") }}</span>
                 </span>
                 <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="etd">{{ row.etd or "-" }}</span>
                 <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="delay">-</span>

@@ -70,7 +70,7 @@ BELT_COLOR_KEYS = {
     "GRN": "green",
 }
 
-DEFAULT_PULL_TIMES = {"pure": "--", "first_mix": "--", "final_mix": "--"}
+DEFAULT_PULL_TIMES = {"pure": "--", "mix": "--"}
 
 
 def get_outbound_door_options():
@@ -148,11 +148,10 @@ def get_departure_destination_pull_times(gateway):
 
         destination_times = pull_times.setdefault(
             destination,
-            {"pure": "--", "first_mix": "--", "final_mix": "--"},
+            {"pure": "--", "mix": "--"},
         )
         _fill_pull_time(destination_times, "pure", row.pure_pull_time_local)
-        _fill_pull_time(destination_times, "first_mix", row.first_mix_pull_time_local)
-        _fill_pull_time(destination_times, "final_mix", row.final_mix_pull_time_local)
+        _fill_pull_time(destination_times, "mix", row.mix_pull_time_local)
 
     return pull_times
 
@@ -301,7 +300,7 @@ def _current_sort_destination_pull_times(gateway):
         timing_data = mission_display_timing_data(mission, operation)
         destination_times = pull_times.setdefault(
             destination,
-            {"pure": "--", "first_mix": "--", "final_mix": "--"},
+            {"pure": "--", "mix": "--"},
         )
         _fill_pull_time(
             destination_times,
@@ -310,13 +309,8 @@ def _current_sort_destination_pull_times(gateway):
         )
         _fill_pull_time(
             destination_times,
-            "first_mix",
-            timing_data.get("base_first_mix_pull_time") or mission.first_mix_pull_time_local,
-        )
-        _fill_pull_time(
-            destination_times,
-            "final_mix",
-            timing_data.get("base_final_mix_pull_time") or mission.final_mix_pull_time_local,
+            "mix",
+            timing_data.get("base_mix_pull_time") or mission.mix_pull_time_local,
         )
 
     return pull_times

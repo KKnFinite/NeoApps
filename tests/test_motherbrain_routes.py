@@ -2153,8 +2153,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self._add_master(
             flight_number="DEP001",
             pure_pull_time_local=time(1, 10),
-            first_mix_pull_time_local=time(1, 25),
-            final_mix_pull_time_local=time(1, 40),
+            mix_pull_time_local=time(1, 40),
         )
         db.session.commit()
 
@@ -2182,11 +2181,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"<th>DESTINATION</th>", response.data)
         self.assertIn(b"<th>STD</th>", response.data)
         self.assertIn(b"<th>PURE PULL</th>", response.data)
-        self.assertIn(b"<th>1ST MIX</th>", response.data)
-        self.assertIn(b"<th>2ND MIX</th>", response.data)
+        self.assertIn(b"<th>MIX PULL</th>", response.data)
+        self.assertNotIn(b"1ST MIX", response.data)
+        self.assertNotIn(b"2ND MIX", response.data)
         self.assertIn(b"data-label=\"STD\"", response.data)
         self.assertIn(b"data-label=\"AC Type\"", response.data)
-        self.assertIn(b"data-label=\"2nd Mix\"", response.data)
+        self.assertIn(b"data-label=\"Mix Pull\"", response.data)
         self.assertIn(b"ARR001", response.data)
         self.assertIn(b"DEP001", response.data)
         self.assertIn(b"SDF", response.data)
@@ -2207,8 +2207,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b">1</option>", response.data)
         self.assertIn(b">2</option>", response.data)
         self.assertIn(b'name="row_departure_0_pure_pull_time_local_hour"', response.data)
-        self.assertIn(b'name="row_departure_0_first_mix_pull_time_local_hour"', response.data)
-        self.assertIn(b'name="row_departure_0_final_mix_pull_time_local_hour"', response.data)
+        self.assertIn(b'name="row_departure_0_mix_pull_time_local_hour"', response.data)
         self.assertIn(b'name="row_arrival_new__INDEX___flight_number"', response.data)
         self.assertIn(b'name="row_departure_new__INDEX___flight_number"', response.data)
         self.assertIn(b'class="table-row-button master-row-save-button"', response.data)
@@ -2247,7 +2246,6 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"<th>PARKING</th>", response.data)
         self.assertNotIn(b"<th>ETA</th>", response.data)
         self.assertNotIn(b"<th>ETD</th>", response.data)
-        self.assertNotIn(b"<th>FINAL MIX</th>", response.data)
         self.assertNotIn(b"data-label=\"Tail\"", response.data)
         self.assertNotIn(b"data-label=\"Parking\"", response.data)
         self.assertNotIn(b"data-label=\"ETA\"", response.data)
@@ -2459,8 +2457,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "row_departure_0_destination": "ont",
                 "row_departure_0_planned_time_local": "03:15",
                 "row_departure_0_pure_pull_time_local": "01:10",
-                "row_departure_0_first_mix_pull_time_local": "01:25",
-                "row_departure_0_final_mix_pull_time_local": "01:40",
+                "row_departure_0_mix_pull_time_local": "01:40",
                 "row_departure_new_id": "",
                 "row_departure_new_mission_type": "departure",
                 "row_departure_new_sort_name": "night",
@@ -2472,8 +2469,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "row_departure_new_destination": "sdf",
                 "row_departure_new_planned_time_local": "04:20",
                 "row_departure_new_pure_pull_time_local": "02:10",
-                "row_departure_new_first_mix_pull_time_local": "02:25",
-                "row_departure_new_final_mix_pull_time_local": "02:40",
+                "row_departure_new_mix_pull_time_local": "02:40",
             },
             follow_redirects=False,
         )
@@ -2491,7 +2487,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(created.destination, "SDF")
         self.assertEqual(created.aircraft_type, "747")
         self.assertEqual(created.planned_time_local, time(4, 20))
-        self.assertEqual(created.final_mix_pull_time_local, time(2, 40))
+        self.assertEqual(created.mix_pull_time_local, time(2, 40))
 
     def test_master_schedule_board_autosave_json_updates_and_skips_incomplete_add_row(self):
         existing = self._add_master(
@@ -2559,8 +2555,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "row_departure_new_planned_time_local": "04:20",
                 "row_departure_new_wave": "",
                 "row_departure_new_pure_pull_time_local": "",
-                "row_departure_new_first_mix_pull_time_local": "",
-                "row_departure_new_final_mix_pull_time_local": "",
+                "row_departure_new_mix_pull_time_local": "",
             },
             headers={"Accept": "application/json", "X-Requested-With": "fetch"},
         )
@@ -2574,8 +2569,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(created.planned_time_local, time(4, 20))
         self.assertIsNone(created.wave)
         self.assertIsNone(created.pure_pull_time_local)
-        self.assertIsNone(created.first_mix_pull_time_local)
-        self.assertIsNone(created.final_mix_pull_time_local)
+        self.assertIsNone(created.mix_pull_time_local)
 
     def test_master_schedule_departure_add_row_rejects_each_missing_required_field(self):
         required_fields = (
@@ -2607,8 +2601,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                         "row_departure_new_origin": "RFD",
                         "row_departure_new_wave": "",
                         "row_departure_new_pure_pull_time_local": "",
-                        "row_departure_new_first_mix_pull_time_local": "",
-                        "row_departure_new_final_mix_pull_time_local": "",
+                        "row_departure_new_mix_pull_time_local": "",
                         **{
                             f"row_departure_new_{field}": value
                             for field, value in values.items()
@@ -2649,10 +2642,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "row_departure_0_planned_time_local_minute": "15",
                 "row_departure_0_pure_pull_time_local_hour": "1",
                 "row_departure_0_pure_pull_time_local_minute": "10",
-                "row_departure_0_first_mix_pull_time_local_hour": "1",
-                "row_departure_0_first_mix_pull_time_local_minute": "25",
-                "row_departure_0_final_mix_pull_time_local_hour": "1",
-                "row_departure_0_final_mix_pull_time_local_minute": "40",
+                "row_departure_0_mix_pull_time_local_hour": "1",
+                "row_departure_0_mix_pull_time_local_minute": "40",
                 "row_departure_new0_id": "",
                 "row_departure_new0_mission_type": "departure",
                 "row_departure_new0_sort_name": "night",
@@ -2666,10 +2657,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "row_departure_new0_planned_time_local_minute": "20",
                 "row_departure_new0_pure_pull_time_local_hour": "2",
                 "row_departure_new0_pure_pull_time_local_minute": "10",
-                "row_departure_new0_first_mix_pull_time_local_hour": "2",
-                "row_departure_new0_first_mix_pull_time_local_minute": "25",
-                "row_departure_new0_final_mix_pull_time_local_hour": "2",
-                "row_departure_new0_final_mix_pull_time_local_minute": "40",
+                "row_departure_new0_mix_pull_time_local_hour": "2",
+                "row_departure_new0_mix_pull_time_local_minute": "40",
             },
             headers={"Accept": "application/json", "X-Requested-With": "fetch"},
         )
@@ -2829,10 +2818,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "row_departure_new0_wave": "2",
                 "row_departure_new0_pure_pull_time_local_hour": "2",
                 "row_departure_new0_pure_pull_time_local_minute": "10",
-                "row_departure_new0_first_mix_pull_time_local_hour": "2",
-                "row_departure_new0_first_mix_pull_time_local_minute": "25",
-                "row_departure_new0_final_mix_pull_time_local_hour": "2",
-                "row_departure_new0_final_mix_pull_time_local_minute": "40",
+                "row_departure_new0_mix_pull_time_local_hour": "2",
+                "row_departure_new0_mix_pull_time_local_minute": "40",
             },
             headers={"Accept": "application/json", "X-Requested-With": "fetch"},
         )
@@ -2847,8 +2834,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(created.wave, "2")
         self.assertEqual(created.planned_time_local, time(4, 20))
         self.assertEqual(created.pure_pull_time_local, time(2, 10))
-        self.assertEqual(created.first_mix_pull_time_local, time(2, 25))
-        self.assertEqual(created.final_mix_pull_time_local, time(2, 40))
+        self.assertEqual(created.mix_pull_time_local, time(2, 40))
         self.assertIn(b"DEPSAVE", reload_response.data)
 
     def test_master_schedule_existing_departure_edit_allows_blank_optional_fields(self):
@@ -2857,8 +2843,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             aircraft_type="",
             wave=None,
             pure_pull_time_local=None,
-            first_mix_pull_time_local=None,
-            final_mix_pull_time_local=None,
+            mix_pull_time_local=None,
         )
         db.session.commit()
 
@@ -2870,8 +2855,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 destination="ONT",
                 wave="",
                 pure_pull_time_local="",
-                first_mix_pull_time_local="",
-                final_mix_pull_time_local="",
+                mix_pull_time_local="",
             ),
             follow_redirects=False,
         )
@@ -2882,8 +2866,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIsNone(updated.aircraft_type)
         self.assertIsNone(updated.wave)
         self.assertIsNone(updated.pure_pull_time_local)
-        self.assertIsNone(updated.first_mix_pull_time_local)
-        self.assertIsNone(updated.final_mix_pull_time_local)
+        self.assertIsNone(updated.mix_pull_time_local)
 
     def test_master_schedule_explicit_new_row_save_rejects_invalid_partial_row(self):
         response = self.client.post(
@@ -2952,11 +2935,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b">DESTINATION</span>", response.data)
         self.assertNotIn(b">STD</span>", response.data)
         self.assertNotIn(b"PURE PULL", response.data)
-        self.assertNotIn(b"FIRST MIX PULL", response.data)
-        self.assertNotIn(b"FINAL MIX PULL", response.data)
+        self.assertNotIn(b"MIX PULL", response.data)
         self.assertNotIn(b"pure_pull_time_local_hour", response.data)
-        self.assertNotIn(b"first_mix_pull_time_local_hour", response.data)
-        self.assertNotIn(b"final_mix_pull_time_local_hour", response.data)
+        self.assertNotIn(b"mix_pull_time_local_hour", response.data)
 
     def test_master_schedule_arrival_mode_hides_pull_time_fields(self):
         master = self._add_master(
@@ -2983,11 +2964,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b">DESTINATION</span>", response.data)
         self.assertNotIn(b">STD</span>", response.data)
         self.assertNotIn(b"PURE PULL", response.data)
-        self.assertNotIn(b"FIRST MIX PULL", response.data)
-        self.assertNotIn(b"FINAL MIX PULL", response.data)
+        self.assertNotIn(b"MIX PULL", response.data)
         self.assertNotIn(b"pure_pull_time_local_hour", response.data)
-        self.assertNotIn(b"first_mix_pull_time_local_hour", response.data)
-        self.assertNotIn(b"final_mix_pull_time_local_hour", response.data)
+        self.assertNotIn(b"mix_pull_time_local_hour", response.data)
 
     def test_master_schedule_departure_mode_shows_pull_time_fields(self):
         response = self.client.get("/motherbrain/master-schedule/new")
@@ -3000,11 +2979,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b">DESTINATION</span>", response.data)
         self.assertNotIn(b">ORIGIN</span>", response.data)
         self.assertNotIn(b">STA</span>", response.data)
-        self.assertEqual(html.count('class="master-pull-field" data-departure-only'), 3)
+        self.assertEqual(html.count('class="master-pull-field" data-departure-only'), 2)
         self.assertNotIn("data-departure-only hidden", html)
         self.assertIn(b"PURE PULL", response.data)
-        self.assertIn(b"FIRST MIX PULL", response.data)
-        self.assertIn(b"FINAL MIX PULL", response.data)
+        self.assertIn(b"MIX PULL", response.data)
 
     def test_rfd_master_schedule_airport_defaults_use_current_gateway(self):
         arrival = self.client.get("/motherbrain/master-schedule/new?mission_type=arrival")
@@ -3115,7 +3093,6 @@ class MotherBrainRoutesTest(unittest.TestCase):
                     "origin": "RFD",
                     "destination": "SDF",
                     "planned_time_local": "05:20",
-                    "first_mix_pull_time_local": "04:45",
                 },
             ),
             follow_redirects=False,
@@ -3127,7 +3104,6 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(updated_first.destination, "ONT")
         self.assertEqual(updated_first.active_days, "monday,friday")
         self.assertEqual(updated_second.mission_type, "departure")
-        self.assertEqual(updated_second.first_mix_pull_time_local, time(4, 45))
 
     def test_master_schedule_rejects_unknown_sort_name(self):
         response = self.client.post(
@@ -3317,8 +3293,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             flight_number="PAD001",
             planned_time_local="",
             pure_pull_time_local="",
-            first_mix_pull_time_local="",
-            final_mix_pull_time_local="",
+            mix_pull_time_local="",
         )
         data.update(
             {
@@ -3326,10 +3301,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "planned_time_local_minute": "5",
                 "pure_pull_time_local_hour": "0",
                 "pure_pull_time_local_minute": "7",
-                "first_mix_pull_time_local_hour": "2",
-                "first_mix_pull_time_local_minute": "3",
-                "final_mix_pull_time_local_hour": "4",
-                "final_mix_pull_time_local_minute": "9",
+                "mix_pull_time_local_hour": "4",
+                "mix_pull_time_local_minute": "9",
             }
         )
 
@@ -3343,8 +3316,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(master.planned_time_local, time(1, 5))
         self.assertEqual(master.pure_pull_time_local, time(0, 7))
-        self.assertEqual(master.first_mix_pull_time_local, time(2, 3))
-        self.assertEqual(master.final_mix_pull_time_local, time(4, 9))
+        self.assertEqual(master.mix_pull_time_local, time(4, 9))
 
     def test_master_schedule_rejects_non_military_time(self):
         response = self.client.post(
@@ -3430,8 +3402,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             data=self._master_schedule_form_data(
                 flight_number="DEP100",
                 pure_pull_time_local="01:20",
-                first_mix_pull_time_local="01:40",
-                final_mix_pull_time_local="01:55",
+                mix_pull_time_local="01:55",
                 active_days=["monday", "wednesday"],
             ),
             follow_redirects=False,
@@ -3443,8 +3414,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(master.active_days, "monday,wednesday")
         self.assertEqual(master.timezone, "America/Chicago")
         self.assertEqual(master.pure_pull_time_local, time(1, 20))
-        self.assertEqual(master.first_mix_pull_time_local, time(1, 40))
-        self.assertEqual(master.final_mix_pull_time_local, time(1, 55))
+        self.assertEqual(master.mix_pull_time_local, time(1, 55))
 
     def test_create_arrival_master_row_clears_pull_times(self):
         response = self.client.post(
@@ -3455,8 +3425,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 origin="SDF",
                 destination="RFD",
                 pure_pull_time_local="01:20",
-                first_mix_pull_time_local="01:40",
-                final_mix_pull_time_local="01:55",
+                mix_pull_time_local="01:55",
             ),
             follow_redirects=False,
         )
@@ -3465,15 +3434,13 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(master.mission_type, "arrival")
         self.assertIsNone(master.pure_pull_time_local)
-        self.assertIsNone(master.first_mix_pull_time_local)
-        self.assertIsNone(master.final_mix_pull_time_local)
+        self.assertIsNone(master.mix_pull_time_local)
 
     def test_edit_arrival_clears_pull_times_after_type_change(self):
         master = self._add_master(
             flight_number="DEP200",
             pure_pull_time_local=time(1, 20),
-            first_mix_pull_time_local=time(1, 40),
-            final_mix_pull_time_local=time(1, 55),
+            mix_pull_time_local=time(1, 55),
         )
         db.session.commit()
 
@@ -3485,8 +3452,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 origin="SDF",
                 destination="RFD",
                 pure_pull_time_local="01:20",
-                first_mix_pull_time_local="01:40",
-                final_mix_pull_time_local="01:55",
+                mix_pull_time_local="01:55",
             ),
             follow_redirects=False,
         )
@@ -3495,8 +3461,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(updated.mission_type, "arrival")
         self.assertIsNone(updated.pure_pull_time_local)
-        self.assertIsNone(updated.first_mix_pull_time_local)
-        self.assertIsNone(updated.final_mix_pull_time_local)
+        self.assertIsNone(updated.mix_pull_time_local)
 
     def test_duplicate_active_master_row_is_rejected(self):
         self._add_master(flight_number="DEP300", active=True)
@@ -3624,8 +3589,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 assigned_tail_number="n123up",
                 arrival_status="en_route",
                 pure_pull_time_local="01:20",
-                first_mix_pull_time_local="01:40",
-                final_mix_pull_time_local="01:55",
+                mix_pull_time_local="01:55",
             ),
             follow_redirects=False,
         )
@@ -3641,8 +3605,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(mission.assigned_tail_number, "N123UP")
         self.assertEqual(mission.arrival_status, "en_route")
         self.assertIsNone(mission.pure_pull_time_local)
-        self.assertIsNone(mission.first_mix_pull_time_local)
-        self.assertIsNone(mission.final_mix_pull_time_local)
+        self.assertIsNone(mission.mix_pull_time_local)
         self.assertIsNone(mission.pull_time_source)
         self.assertEqual(tail_state.aircraft_type, "A300")
         self.assertEqual(tail_state.aircraft_type_source, "derived")
@@ -3659,8 +3622,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 origin="rfd",
                 destination="sdf",
                 pure_pull_time_local="01:20",
-                first_mix_pull_time_local="01:40",
-                final_mix_pull_time_local="01:55",
+                mix_pull_time_local="01:55",
                 departure_status="loading",
             ),
             follow_redirects=False,
@@ -3674,8 +3636,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(mission.origin, "RFD")
         self.assertEqual(mission.destination, "SDF")
         self.assertEqual(mission.pure_pull_time_local, time(1, 20))
-        self.assertEqual(mission.first_mix_pull_time_local, time(1, 40))
-        self.assertEqual(mission.final_mix_pull_time_local, time(1, 55))
+        self.assertEqual(mission.mix_pull_time_local, time(1, 55))
         self.assertEqual(mission.pull_time_source, "manual")
         self.assertEqual(mission.departure_status, "loading")
 
@@ -3698,8 +3659,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(b"PURE PULL", response.data)
-        self.assertNotIn(b"FIRST MIX PULL", response.data)
-        self.assertNotIn(b"FINAL MIX PULL", response.data)
+        self.assertNotIn(b"MIX PULL", response.data)
         self.assertNotIn(b"pure_pull_time_local_hour", response.data)
 
     def test_departure_mission_form_renders_pull_time_fields(self):
@@ -3711,8 +3671,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"PURE PULL", response.data)
-        self.assertIn(b"FIRST MIX PULL", response.data)
-        self.assertIn(b"FINAL MIX PULL", response.data)
+        self.assertIn(b"MIX PULL", response.data)
         self.assertIn(b"pure_pull_time_local_hour", response.data)
 
     def test_duplicate_mission_flight_number_is_rejected_inside_operation(self):
@@ -3744,8 +3703,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             mission_type="departure",
             flight_number="EDIT001",
             pure_pull_time_local=time(1, 20),
-            first_mix_pull_time_local=time(1, 40),
-            final_mix_pull_time_local=time(1, 55),
+            mix_pull_time_local=time(1, 55),
             pull_time_source="manual",
         )
         db.session.add(mission)
@@ -3759,8 +3717,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 origin="SDF",
                 destination="RFD",
                 pure_pull_time_local="01:20",
-                first_mix_pull_time_local="01:40",
-                final_mix_pull_time_local="01:55",
+                mix_pull_time_local="01:55",
             ),
             follow_redirects=False,
         )
@@ -3769,8 +3726,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(updated.mission_type, "arrival")
         self.assertIsNone(updated.pure_pull_time_local)
-        self.assertIsNone(updated.first_mix_pull_time_local)
-        self.assertIsNone(updated.final_mix_pull_time_local)
+        self.assertIsNone(updated.mix_pull_time_local)
         self.assertIsNone(updated.pull_time_source)
 
     def test_manual_arrival_appears_on_arrival_board(self):
@@ -3813,8 +3769,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 flight_number="WINMAN",
                 planned_datetime_local=datetime(2026, 6, 1, 2, 10),
                 pure_pull_time_local=time(1, 20),
-                first_mix_pull_time_local=time(1, 40),
-                final_mix_pull_time_local=time(1, 55),
+                mix_pull_time_local=time(1, 55),
             )
         )
         db.session.commit()
@@ -4464,8 +4419,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 flight_number="DEP999",
                 planned_datetime_local=datetime(2026, 6, 1, 2, 10),
                 pure_pull_time_local=time(1, 20),
-                first_mix_pull_time_local=time(1, 40),
-                final_mix_pull_time_local=time(1, 55),
+                mix_pull_time_local=time(1, 55),
             )
         )
         db.session.commit()
@@ -11870,8 +11824,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "timezone": "America/Chicago",
             "preferred_parking": "",
             "pure_pull_time_local": "",
-            "first_mix_pull_time_local": "",
-            "final_mix_pull_time_local": "",
+            "mix_pull_time_local": "",
             "active": True,
         }
         values.update(overrides)
@@ -11965,8 +11918,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "fuel_status": "",
             "departure_status": "",
             "pure_pull_time_local": "",
-            "first_mix_pull_time_local": "",
-            "final_mix_pull_time_local": "",
+            "mix_pull_time_local": "",
         }
         values.update(overrides)
         return values

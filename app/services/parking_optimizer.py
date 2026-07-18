@@ -2303,8 +2303,7 @@ def _departure_time_for_deice(row, timezone_name):
     if row.get("departure_datetime_local"):
         return row.get("departure_datetime_local")
     for field_name in (
-        "final_mix_pull_time_local",
-        "first_mix_pull_time_local",
+        "mix_pull_time_local",
         "pure_pull_time_local",
     ):
         pull_time = getattr(departure, field_name, None) if departure else None

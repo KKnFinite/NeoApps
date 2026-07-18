@@ -45,16 +45,14 @@ class SortDateOperationsTest(unittest.TestCase):
             mission_type="departure",
             planned_datetime_local=datetime(2026, 6, 1, 2, 10),
             pure_pull_time_local=time(1, 20),
-            first_mix_pull_time_local=time(1, 40),
-            final_mix_pull_time_local=time(1, 55),
+            mix_pull_time_local=time(1, 55),
         )
 
         data = mission_display_timing_data(mission, operation)
 
         self.assertEqual(data["adjusted_planned_departure_time"], datetime(2026, 6, 1, 2, 30))
         self.assertEqual(data["adjusted_pure_pull_time"], time(1, 40))
-        self.assertEqual(data["adjusted_first_mix_pull_time"], time(2, 0))
-        self.assertEqual(data["adjusted_final_mix_pull_time"], time(2, 15))
+        self.assertEqual(data["adjusted_mix_pull_time"], time(2, 15))
 
     def test_wave_specific_window_overrides_default_window(self):
         operation = self._operation(
@@ -126,16 +124,14 @@ class SortDateOperationsTest(unittest.TestCase):
             mission_type="departure",
             planned_datetime_local=datetime(2026, 6, 1, 2, 10),
             pure_pull_time_local=time(1, 20),
-            first_mix_pull_time_local=time(1, 40),
-            final_mix_pull_time_local=time(1, 55),
+            mix_pull_time_local=time(1, 55),
         )
 
         mission_display_timing_data(mission, operation)
 
         self.assertEqual(mission.planned_datetime_local, datetime(2026, 6, 1, 2, 10))
         self.assertEqual(mission.pure_pull_time_local, time(1, 20))
-        self.assertEqual(mission.first_mix_pull_time_local, time(1, 40))
-        self.assertEqual(mission.final_mix_pull_time_local, time(1, 55))
+        self.assertEqual(mission.mix_pull_time_local, time(1, 55))
 
     def test_window_does_not_apply_to_arrivals(self):
         operation = self._operation(window_minutes=20)

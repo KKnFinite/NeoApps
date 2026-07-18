@@ -65,12 +65,8 @@
             <dd>{{ master_schedule.pure_pull_time_local.strftime("%H:%M") if master_schedule.pure_pull_time_local else "-" }}</dd>
         </div>
         <div>
-            <dt>FIRST MIX PULL</dt>
-            <dd>{{ master_schedule.first_mix_pull_time_local.strftime("%H:%M") if master_schedule.first_mix_pull_time_local else "-" }}</dd>
-        </div>
-        <div>
-            <dt>FINAL MIX PULL</dt>
-            <dd>{{ master_schedule.final_mix_pull_time_local.strftime("%H:%M") if master_schedule.final_mix_pull_time_local else "-" }}</dd>
+            <dt>MIX PULL</dt>
+            <dd>{{ master_schedule.mix_pull_time_local.strftime("%H:%M") if master_schedule.mix_pull_time_local else "-" }}</dd>
         </div>
         <div>
             <dt>CREATED</dt>

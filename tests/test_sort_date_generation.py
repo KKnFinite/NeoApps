@@ -120,8 +120,7 @@ class SortDateGenerationTest(unittest.TestCase):
         self._add_master(
             mission_type="departure",
             pure_pull_time_local=time(1, 20),
-            first_mix_pull_time_local=time(1, 40),
-            final_mix_pull_time_local=time(1, 55),
+            mix_pull_time_local=time(1, 55),
         )
         db.session.commit()
 
@@ -133,8 +132,7 @@ class SortDateGenerationTest(unittest.TestCase):
 
         mission = operation.missions[0]
         self.assertEqual(mission.pure_pull_time_local, time(1, 20))
-        self.assertEqual(mission.first_mix_pull_time_local, time(1, 40))
-        self.assertEqual(mission.final_mix_pull_time_local, time(1, 55))
+        self.assertEqual(mission.mix_pull_time_local, time(1, 55))
         self.assertEqual(mission.pull_time_source, "master")
 
     def test_arrival_has_no_pull_times_or_pull_source(self):
@@ -143,8 +141,7 @@ class SortDateGenerationTest(unittest.TestCase):
             origin="SDF",
             destination="RFD",
             pure_pull_time_local=time(1, 20),
-            first_mix_pull_time_local=time(1, 40),
-            final_mix_pull_time_local=time(1, 55),
+            mix_pull_time_local=time(1, 55),
         )
         db.session.commit()
 
@@ -156,8 +153,7 @@ class SortDateGenerationTest(unittest.TestCase):
 
         mission = operation.missions[0]
         self.assertIsNone(mission.pure_pull_time_local)
-        self.assertIsNone(mission.first_mix_pull_time_local)
-        self.assertIsNone(mission.final_mix_pull_time_local)
+        self.assertIsNone(mission.mix_pull_time_local)
         self.assertIsNone(mission.pull_time_source)
         self.assertEqual(mission.arrival_status, "scheduled")
 
@@ -299,8 +295,7 @@ class SortDateGenerationTest(unittest.TestCase):
         master.destination = "ONT"
         master.planned_time_local = time(3, 15)
         master.wave = "2"
-        master.first_mix_pull_time_local = time(2, 45)
-        master.final_mix_pull_time_local = time(3, 0)
+        master.mix_pull_time_local = time(3, 0)
         master.updated_at = datetime(2026, 1, 2, 0, 0)
         db.session.commit()
 
@@ -311,8 +306,7 @@ class SortDateGenerationTest(unittest.TestCase):
         self.assertEqual(mission.destination, "ONT")
         self.assertEqual(mission.wave, "2")
         self.assertEqual(mission.planned_datetime_local, datetime(2026, 6, 2, 3, 15))
-        self.assertEqual(mission.first_mix_pull_time_local, time(2, 45))
-        self.assertEqual(mission.final_mix_pull_time_local, time(3, 0))
+        self.assertEqual(mission.mix_pull_time_local, time(3, 0))
         self.assertEqual(mission.pull_time_source, "master")
 
     def test_sync_does_not_duplicate_or_overwrite_manual_special_flights(self):

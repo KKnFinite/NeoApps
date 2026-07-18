@@ -15465,7 +15465,7 @@ select::-ms-expand {
             38px;
         grid-template-areas:
             "flight destination ac etd wave ."
-            "pure first second second second delete";
+            "pure mix mix mix mix delete";
         align-items: end;
         gap: 8px;
     }
@@ -15594,12 +15594,8 @@ select::-ms-expand {
         grid-area: pure;
     }
 
-    .blueprint-neomotherbrain .master-board-table .master-departure-row .master-cell-first-mix {
-        grid-area: first;
-    }
-
-    .blueprint-neomotherbrain .master-board-table .master-departure-row .master-cell-second-mix {
-        grid-area: second;
+    .blueprint-neomotherbrain .master-board-table .master-departure-row .master-cell-mix {
+        grid-area: mix;
     }
 
     .blueprint-neomotherbrain .master-board-table .table-row-button {
@@ -15767,14 +15763,10 @@ select::-ms-expand {
     }
 
     .blueprint-neomotherbrain .schedule-form-table td:nth-child(12)::before {
-        content: "First Mix";
+        content: "Mix Pull";
     }
 
     .blueprint-neomotherbrain .schedule-form-table td:nth-child(13)::before {
-        content: "Final Mix";
-    }
-
-    .blueprint-neomotherbrain .schedule-form-table td:nth-child(14)::before {
         content: "Row";
     }
 

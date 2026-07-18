@@ -194,13 +194,11 @@ def _planned_pull_time(mission, operation, pull_key):
     timing_data = mission_display_timing_data(mission, operation)
     adjusted_key = {
         "pure": "adjusted_pure_pull_time",
-        "first_mix": "adjusted_first_mix_pull_time",
-        "second_mix": "adjusted_final_mix_pull_time",
+        "mix": "adjusted_mix_pull_time",
     }[pull_key]
     planned_attr = {
         "pure": "pure_pull_time_local",
-        "first_mix": "first_mix_pull_time_local",
-        "second_mix": "final_mix_pull_time_local",
+        "mix": "mix_pull_time_local",
     }[pull_key]
     return timing_data.get(adjusted_key) or getattr(mission, planned_attr, None)
 

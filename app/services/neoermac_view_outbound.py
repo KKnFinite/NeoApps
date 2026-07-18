@@ -18,18 +18,11 @@ from app.services.sort_date_operations import mission_display_timing_data
 PULL_KEYS = (
     ("pure", "Pure", "pure_pull_time_local", "actual_pure_pull_time_local", "no_pure_pull"),
     (
-        "first_mix",
-        "1st Mix",
-        "first_mix_pull_time_local",
-        "actual_first_mix_pull_time_local",
-        "no_first_mix_pull",
-    ),
-    (
-        "second_mix",
-        "2nd Mix",
-        "final_mix_pull_time_local",
-        "actual_second_mix_pull_time_local",
-        "no_second_mix_pull",
+        "mix",
+        "Mix Pull",
+        "mix_pull_time_local",
+        "actual_mix_pull_time_local",
+        "no_mix_pull",
     ),
 )
 
@@ -246,8 +239,7 @@ def _adjusted_pull_value(timing_data, pull_key):
     return timing_data.get(
         {
             "pure": "adjusted_pure_pull_time",
-            "first_mix": "adjusted_first_mix_pull_time",
-            "second_mix": "adjusted_final_mix_pull_time",
+            "mix": "adjusted_mix_pull_time",
         }[pull_key]
     )
 
@@ -257,10 +249,8 @@ def _pull_has_data(door_pull):
         (
             door_pull.actual_pure_pull_time_local,
             door_pull.no_pure_pull,
-            door_pull.actual_first_mix_pull_time_local,
-            door_pull.no_first_mix_pull,
-            door_pull.actual_second_mix_pull_time_local,
-            door_pull.no_second_mix_pull,
+            door_pull.actual_mix_pull_time_local,
+            door_pull.no_mix_pull,
         )
     )
 

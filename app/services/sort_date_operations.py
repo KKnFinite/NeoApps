@@ -329,14 +329,9 @@ def mission_display_timing_data(mission, operation=None):
                 mission.pure_pull_time_local,
                 window_minutes,
             ),
-            "base_first_mix_pull_time": mission.first_mix_pull_time_local,
-            "adjusted_first_mix_pull_time": apply_window_minutes(
-                mission.first_mix_pull_time_local,
-                window_minutes,
-            ),
-            "base_final_mix_pull_time": mission.final_mix_pull_time_local,
-            "adjusted_final_mix_pull_time": apply_window_minutes(
-                mission.final_mix_pull_time_local,
+            "base_mix_pull_time": mission.mix_pull_time_local,
+            "adjusted_mix_pull_time": apply_window_minutes(
+                mission.mix_pull_time_local,
                 window_minutes,
             ),
         }
@@ -387,13 +382,11 @@ def _build_mission_from_master(operation, master_row, sort_date):
 
     if master_row.mission_type == "departure":
         mission.pure_pull_time_local = master_row.pure_pull_time_local
-        mission.first_mix_pull_time_local = master_row.first_mix_pull_time_local
-        mission.final_mix_pull_time_local = master_row.final_mix_pull_time_local
+        mission.mix_pull_time_local = master_row.mix_pull_time_local
         if any(
             (
                 mission.pure_pull_time_local,
-                mission.first_mix_pull_time_local,
-                mission.final_mix_pull_time_local,
+                mission.mix_pull_time_local,
             )
         ):
             mission.pull_time_source = "master"
@@ -433,21 +426,18 @@ def _apply_master_template_to_mission(mission, master_row, operation):
     if master_row.mission_type == "arrival":
         mission.arrival_status = mission.arrival_status or "scheduled"
         mission.pure_pull_time_local = None
-        mission.first_mix_pull_time_local = None
-        mission.final_mix_pull_time_local = None
+        mission.mix_pull_time_local = None
         mission.pull_time_source = None
     else:
         mission.arrival_status = None
         mission.pure_pull_time_local = master_row.pure_pull_time_local
-        mission.first_mix_pull_time_local = master_row.first_mix_pull_time_local
-        mission.final_mix_pull_time_local = master_row.final_mix_pull_time_local
+        mission.mix_pull_time_local = master_row.mix_pull_time_local
         mission.pull_time_source = (
             "master"
             if any(
                 (
                     mission.pure_pull_time_local,
-                    mission.first_mix_pull_time_local,
-                    mission.final_mix_pull_time_local,
+                    mission.mix_pull_time_local,
                 )
             )
             else None
@@ -474,8 +464,7 @@ def _master_template_snapshot(mission):
         mission.planned_source,
         mission.arrival_status,
         mission.pure_pull_time_local,
-        mission.first_mix_pull_time_local,
-        mission.final_mix_pull_time_local,
+        mission.mix_pull_time_local,
         mission.pull_time_source,
     )
 

@@ -74,12 +74,8 @@
             <dd>{{ mission.pure_pull_time_local.strftime("%H:%M") if mission.pure_pull_time_local else "-" }}</dd>
         </div>
         <div>
-            <dt>FIRST MIX PULL</dt>
-            <dd>{{ mission.first_mix_pull_time_local.strftime("%H:%M") if mission.first_mix_pull_time_local else "-" }}</dd>
-        </div>
-        <div>
-            <dt>FINAL MIX PULL</dt>
-            <dd>{{ mission.final_mix_pull_time_local.strftime("%H:%M") if mission.final_mix_pull_time_local else "-" }}</dd>
+            <dt>MIX PULL</dt>
+            <dd>{{ mission.mix_pull_time_local.strftime("%H:%M") if mission.mix_pull_time_local else "-" }}</dd>
         </div>
         <div>
             <dt>PULL TIME SOURCE</dt>

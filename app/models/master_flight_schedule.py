@@ -32,8 +32,7 @@ class MasterFlightSchedule(db.Model):
     timezone = db.Column(db.String(64), nullable=False, default="America/Chicago")
     preferred_parking = db.Column(db.String(64), nullable=True)
     pure_pull_time_local = db.Column(db.Time, nullable=True)
-    first_mix_pull_time_local = db.Column(db.Time, nullable=True)
-    final_mix_pull_time_local = db.Column(db.Time, nullable=True)
+    mix_pull_time_local = db.Column(db.Time, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

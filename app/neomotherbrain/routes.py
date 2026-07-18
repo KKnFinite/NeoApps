@@ -2964,21 +2964,16 @@ def _master_schedule_form_from_request(gateway=None, prefix="", source=None):
             source,
             f"{prefix}pure_pull_time_local",
         ),
-        "first_mix_pull_time_local": _time_value_from_form(
+        "mix_pull_time_local": _time_value_from_form(
             source,
-            f"{prefix}first_mix_pull_time_local",
-        ),
-        "final_mix_pull_time_local": _time_value_from_form(
-            source,
-            f"{prefix}final_mix_pull_time_local",
+            f"{prefix}mix_pull_time_local",
         ),
         "active": source.get(f"{prefix}active", active_default) == "1",
     }
     _apply_gateway_airport_defaults(form, gateway)
     if form["mission_type"] == "arrival":
         form["pure_pull_time_local"] = ""
-        form["first_mix_pull_time_local"] = ""
-        form["final_mix_pull_time_local"] = ""
+        form["mix_pull_time_local"] = ""
     return form
 
 
@@ -3001,8 +2996,7 @@ def _master_schedule_form_for_get(gateway=None, master_schedule=None):
         _apply_gateway_airport_defaults(form, gateway)
     if form["mission_type"] == "arrival":
         form["pure_pull_time_local"] = ""
-        form["first_mix_pull_time_local"] = ""
-        form["final_mix_pull_time_local"] = ""
+        form["mix_pull_time_local"] = ""
     return form
 
 
@@ -3020,8 +3014,7 @@ def _master_schedule_form_from_model(master_schedule):
         "planned_time_local": _format_time(master_schedule.planned_time_local),
         "timezone": master_schedule.timezone,
         "pure_pull_time_local": _format_time(master_schedule.pure_pull_time_local),
-        "first_mix_pull_time_local": _format_time(master_schedule.first_mix_pull_time_local),
-        "final_mix_pull_time_local": _format_time(master_schedule.final_mix_pull_time_local),
+        "mix_pull_time_local": _format_time(master_schedule.mix_pull_time_local),
         "active": master_schedule.active,
     }
 
@@ -3041,8 +3034,7 @@ def _blank_master_schedule_form(gateway=None):
         "planned_time_local": "",
         "timezone": _gateway_timezone(gateway),
         "pure_pull_time_local": "",
-        "first_mix_pull_time_local": "",
-        "final_mix_pull_time_local": "",
+        "mix_pull_time_local": "",
         "active": True,
     }
     _apply_gateway_airport_defaults(form, gateway)
@@ -3099,8 +3091,7 @@ def _master_schedule_row_has_data(row):
             (row.get("destination") or "").strip(),
             (row.get("planned_time_local") or "").strip(),
             (row.get("pure_pull_time_local") or "").strip(),
-            (row.get("first_mix_pull_time_local") or "").strip(),
-            (row.get("final_mix_pull_time_local") or "").strip(),
+            (row.get("mix_pull_time_local") or "").strip(),
             row.get("active_days"),
         )
     )
@@ -3235,8 +3226,7 @@ def _master_schedule_board_row_has_data(row):
             [
                 (row.get("destination") or "").strip(),
                 (row.get("pure_pull_time_local") or "").strip(),
-                (row.get("first_mix_pull_time_local") or "").strip(),
-                (row.get("final_mix_pull_time_local") or "").strip(),
+                (row.get("mix_pull_time_local") or "").strip(),
             ]
         )
     return any(fields)
@@ -3305,21 +3295,16 @@ def _apply_master_schedule_form(master_schedule, form, gateway=None):
 
     if mission_type == "arrival":
         master_schedule.pure_pull_time_local = None
-        master_schedule.first_mix_pull_time_local = None
-        master_schedule.final_mix_pull_time_local = None
+        master_schedule.mix_pull_time_local = None
         return
 
     master_schedule.pure_pull_time_local = _parse_optional_time(
         form["pure_pull_time_local"],
         "Pure pull time",
     )
-    master_schedule.first_mix_pull_time_local = _parse_optional_time(
-        form["first_mix_pull_time_local"],
-        "First mix pull time",
-    )
-    master_schedule.final_mix_pull_time_local = _parse_optional_time(
-        form["final_mix_pull_time_local"],
-        "Final mix pull time",
+    master_schedule.mix_pull_time_local = _parse_optional_time(
+        form["mix_pull_time_local"],
+        "Mix pull time",
     )
 
 
@@ -3528,13 +3513,9 @@ def _mission_form_from_request(operation):
             request.form,
             "pure_pull_time_local",
         ),
-        "first_mix_pull_time_local": _time_value_from_form(
+        "mix_pull_time_local": _time_value_from_form(
             request.form,
-            "first_mix_pull_time_local",
-        ),
-        "final_mix_pull_time_local": _time_value_from_form(
-            request.form,
-            "final_mix_pull_time_local",
+            "mix_pull_time_local",
         ),
     }
 
@@ -3565,8 +3546,7 @@ def _mission_form_from_model(mission):
         "arrival_status": mission.arrival_status or "",
         "departure_status": mission.departure_status or "",
         "pure_pull_time_local": _format_time(mission.pure_pull_time_local),
-        "first_mix_pull_time_local": _format_time(mission.first_mix_pull_time_local),
-        "final_mix_pull_time_local": _format_time(mission.final_mix_pull_time_local),
+        "mix_pull_time_local": _format_time(mission.mix_pull_time_local),
     }
 
 
@@ -3647,8 +3627,7 @@ def _apply_mission_form(mission, operation, form):
             "Arrival status",
         ) or "scheduled"
         mission.pure_pull_time_local = None
-        mission.first_mix_pull_time_local = None
-        mission.final_mix_pull_time_local = None
+        mission.mix_pull_time_local = None
         mission.pull_time_source = None
         mission.departure_status = None
         return
@@ -3663,19 +3642,14 @@ def _apply_mission_form(mission, operation, form):
         form["pure_pull_time_local"],
         "Pure pull time",
     )
-    mission.first_mix_pull_time_local = _parse_optional_time(
-        form["first_mix_pull_time_local"],
-        "First mix pull time",
-    )
-    mission.final_mix_pull_time_local = _parse_optional_time(
-        form["final_mix_pull_time_local"],
-        "Final mix pull time",
+    mission.mix_pull_time_local = _parse_optional_time(
+        form["mix_pull_time_local"],
+        "Mix pull time",
     )
     if any(
         (
             mission.pure_pull_time_local,
-            mission.first_mix_pull_time_local,
-            mission.final_mix_pull_time_local,
+            mission.mix_pull_time_local,
         )
     ):
         mission.pull_time_source = "manual"

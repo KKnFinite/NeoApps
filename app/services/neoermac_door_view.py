@@ -49,24 +49,14 @@ PULL_FIELDS = (
         "short_label": "PURE",
     },
     {
-        "key": "first_mix",
-        "label": "1st Mix",
-        "planned_attr": "first_mix_pull_time_local",
-        "actual_attr": "actual_first_mix_pull_time_local",
-        "no_attr": "no_first_mix_pull",
-        "actual_field": "actual_first_mix",
-        "no_field": "no_first_mix",
-        "short_label": "1ST",
-    },
-    {
-        "key": "second_mix",
-        "label": "2nd Mix",
-        "planned_attr": "final_mix_pull_time_local",
-        "actual_attr": "actual_second_mix_pull_time_local",
-        "no_attr": "no_second_mix_pull",
-        "actual_field": "actual_second_mix",
-        "no_field": "no_second_mix",
-        "short_label": "2ND",
+        "key": "mix",
+        "label": "Mix Pull",
+        "planned_attr": "mix_pull_time_local",
+        "actual_attr": "actual_mix_pull_time_local",
+        "no_attr": "no_mix_pull",
+        "actual_field": "actual_mix",
+        "no_field": "no_mix",
+        "short_label": "MIX",
     },
 )
 
@@ -299,27 +289,19 @@ def _destination_cards_for_door(gateway, selected_door, operation):
         timing_data = _mission_timing_data(mission, operation)
         planned_times = {
             "pure": _planned_pull_time(timing_data, master, "pure"),
-            "first_mix": _planned_pull_time(timing_data, master, "first_mix"),
-            "second_mix": _planned_pull_time(timing_data, master, "second_mix"),
+            "mix": _planned_pull_time(timing_data, master, "mix"),
         }
         base_planned_times = {
             "pure": _base_pull_time(timing_data, master, "pure"),
-            "first_mix": _base_pull_time(timing_data, master, "first_mix"),
-            "second_mix": _base_pull_time(timing_data, master, "second_mix"),
+            "mix": _base_pull_time(timing_data, master, "mix"),
         }
         actual = {
             "pure": _time_value(getattr(door_pull, "actual_pure_pull_time_local", None)),
-            "first_mix": _time_value(
-                getattr(door_pull, "actual_first_mix_pull_time_local", None)
-            ),
-            "second_mix": _time_value(
-                getattr(door_pull, "actual_second_mix_pull_time_local", None)
-            ),
+            "mix": _time_value(getattr(door_pull, "actual_mix_pull_time_local", None)),
         }
         no_pull = {
             "pure": bool(getattr(door_pull, "no_pure_pull", False)),
-            "first_mix": bool(getattr(door_pull, "no_first_mix_pull", False)),
-            "second_mix": bool(getattr(door_pull, "no_second_mix_pull", False)),
+            "mix": bool(getattr(door_pull, "no_mix_pull", False)),
         }
 
         cards.append(
@@ -334,13 +316,11 @@ def _destination_cards_for_door(gateway, selected_door, operation):
                 "window_minutes": timing_data.get("effective_window_minutes", 0),
                 "planned": {
                     "pure": _time_value(planned_times["pure"]),
-                    "first_mix": _time_value(planned_times["first_mix"]),
-                    "second_mix": _time_value(planned_times["second_mix"]),
+                    "mix": _time_value(planned_times["mix"]),
                 },
                 "base_planned": {
                     "pure": _time_value(base_planned_times["pure"]),
-                    "first_mix": _time_value(base_planned_times["first_mix"]),
-                    "second_mix": _time_value(base_planned_times["second_mix"]),
+                    "mix": _time_value(base_planned_times["mix"]),
                 },
                 "actual": actual,
                 "no_pull": no_pull,
@@ -517,12 +497,8 @@ def _sync_mission_actual_pulls(gateway, operation, destination, door_pull):
             "no_pure_pull",
         ),
         (
-            "actual_first_mix_pull_time_local",
-            "no_first_mix_pull",
-        ),
-        (
-            "actual_second_mix_pull_time_local",
-            "no_second_mix_pull",
+            "actual_mix_pull_time_local",
+            "no_mix_pull",
         ),
     )
     for actual_attr, no_attr in sync_fields:
@@ -587,8 +563,7 @@ def _card_sort_priority(mission, master):
 def _planned_pull_time(timing_data, master, pull_key):
     adjusted_key = {
         "pure": "adjusted_pure_pull_time",
-        "first_mix": "adjusted_first_mix_pull_time",
-        "second_mix": "adjusted_final_mix_pull_time",
+        "mix": "adjusted_mix_pull_time",
     }[pull_key]
     return timing_data.get(adjusted_key) or _master_pull_time(master, pull_key)
 
@@ -596,8 +571,7 @@ def _planned_pull_time(timing_data, master, pull_key):
 def _base_pull_time(timing_data, master, pull_key):
     base_key = {
         "pure": "base_pure_pull_time",
-        "first_mix": "base_first_mix_pull_time",
-        "second_mix": "base_final_mix_pull_time",
+        "mix": "base_mix_pull_time",
     }[pull_key]
     return timing_data.get(base_key) or _master_pull_time(master, pull_key)
 
@@ -605,8 +579,7 @@ def _base_pull_time(timing_data, master, pull_key):
 def _master_pull_time(master, pull_key):
     attr = {
         "pure": "pure_pull_time_local",
-        "first_mix": "first_mix_pull_time_local",
-        "second_mix": "final_mix_pull_time_local",
+        "mix": "mix_pull_time_local",
     }[pull_key]
     return getattr(master, attr, None)
 
@@ -737,8 +710,7 @@ def _pulls_complete(actual, no_pull):
 def _pull_summary(actual, no_pull):
     labels = {
         "pure": "PURE",
-        "first_mix": "1Mix",
-        "second_mix": "2Mix",
+        "mix": "MIX",
     }
     parts = []
     for field in PULL_FIELDS:

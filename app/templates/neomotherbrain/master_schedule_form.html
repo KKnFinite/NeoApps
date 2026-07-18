@@ -94,8 +94,7 @@
     <td>{{ military_time_select("row_" ~ row.index ~ "_planned_time_local", row.planned_time_local) }}</td>
     <td>{{ wave_field(row) }}</td>
     <td>{{ military_time_select("row_" ~ row.index ~ "_pure_pull_time_local", row.pure_pull_time_local) }}</td>
-    <td>{{ military_time_select("row_" ~ row.index ~ "_first_mix_pull_time_local", row.first_mix_pull_time_local) }}</td>
-    <td>{{ military_time_select("row_" ~ row.index ~ "_final_mix_pull_time_local", row.final_mix_pull_time_local) }}</td>
+    <td>{{ military_time_select("row_" ~ row.index ~ "_mix_pull_time_local", row.mix_pull_time_local) }}</td>
     <td>
         <button class="table-row-button table-row-delete-button" type="button" data-remove-schedule-row aria-label="Remove row">&times;</button>
     </td>
@@ -172,12 +171,8 @@
         {{ military_time_select("row_" ~ row.index ~ "_pure_pull_time_local", row.pure_pull_time_local) }}
     </label>
     <label class="master-pull-field" data-departure-only>
-        <span>FIRST MIX PULL</span>
-        {{ military_time_select("row_" ~ row.index ~ "_first_mix_pull_time_local", row.first_mix_pull_time_local) }}
-    </label>
-    <label class="master-pull-field" data-departure-only>
-        <span>FINAL MIX PULL</span>
-        {{ military_time_select("row_" ~ row.index ~ "_final_mix_pull_time_local", row.final_mix_pull_time_local) }}
+        <span>MIX PULL</span>
+        {{ military_time_select("row_" ~ row.index ~ "_mix_pull_time_local", row.mix_pull_time_local) }}
     </label>
     {% endif %}
 </div>
@@ -215,8 +210,7 @@
                         <th>STA/STD</th>
                         <th>WAVE</th>
                         <th>PURE PULL</th>
-                        <th>FIRST MIX</th>
-                        <th>FINAL MIX</th>
+                        <th>MIX PULL</th>
                         <th>ROW</th>
                     </tr>
                 </thead>

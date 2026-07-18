@@ -18,10 +18,8 @@ class NeoErmacDoorPull(db.Model):
     destination = db.Column(db.String(8), nullable=False, index=True)
     actual_pure_pull_time_local = db.Column(db.Time, nullable=True)
     no_pure_pull = db.Column(db.Boolean, nullable=False, default=False)
-    actual_first_mix_pull_time_local = db.Column(db.Time, nullable=True)
-    no_first_mix_pull = db.Column(db.Boolean, nullable=False, default=False)
-    actual_second_mix_pull_time_local = db.Column(db.Time, nullable=True)
-    no_second_mix_pull = db.Column(db.Boolean, nullable=False, default=False)
+    actual_mix_pull_time_local = db.Column(db.Time, nullable=True)
+    no_mix_pull = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

@@ -568,11 +568,10 @@
     const root = document.querySelector("[data-door-view]");
     const pullForm = document.querySelector("[data-door-pull-form]");
     const saveUrl = root?.dataset.pullSaveUrl;
-    const pullKeys = ["pure", "first_mix", "second_mix"];
+    const pullKeys = ["pure", "mix"];
     const pullLabels = {
         pure: "PURE",
-        first_mix: "1Mix",
-        second_mix: "2Mix",
+        mix: "MIX",
     };
     const pendingSaves = new WeakMap();
     const hhmmPattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;

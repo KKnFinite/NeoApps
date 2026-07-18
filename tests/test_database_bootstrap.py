@@ -7,7 +7,19 @@ from unittest.mock import patch
 from app import create_app, maybe_auto_bootstrap_database
 from app.config import resolve_database_uri
 from app.extensions import db
-from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, User
+from datetime import time
+
+from sqlalchemy import inspect, text
+
+from app.models import (
+    Gateway,
+    GatewayMembership,
+    GatewayNodeRole,
+    MasterFlightSchedule,
+    NeoNode,
+    PermissionRule,
+    User,
+)
 from app.services.access_control import DEFAULT_NEONODES, user_can_access_node
 from app.services.permission_rules import DEFAULT_PERMISSION_RULES
 from app.services.password_policy import set_user_password
@@ -15,7 +27,10 @@ from app.services.database_bootstrap import (
     LOCAL_SQLITE_FALLBACK_PASSWORD,
     bootstrap_database,
 )
-from app.services.schema_sync import _mark_existing_approved_users_for_password_policy_update
+from app.services.schema_sync import (
+    _mark_existing_approved_users_for_password_policy_update,
+    _migrate_legacy_second_mix_pull_values,
+)
 
 
 class DatabaseBootstrapTest(unittest.TestCase):
@@ -197,6 +212,93 @@ class DatabaseBootstrapTest(unittest.TestCase):
 
         self.assertTrue(db.session.get(User, approved_user.id).password_policy_update_required)
         self.assertFalse(db.session.get(User, pending_user.id).password_policy_update_required)
+
+    def test_legacy_final_mix_migrates_to_mix_pull_without_using_first_mix(self):
+        db.create_all()
+        db.session.execute(
+            text(
+                "ALTER TABLE master_flight_schedules "
+                "ADD COLUMN first_mix_pull_time_local TIME"
+            )
+        )
+        db.session.execute(
+            text(
+                "ALTER TABLE master_flight_schedules "
+                "ADD COLUMN final_mix_pull_time_local TIME"
+            )
+        )
+        master = MasterFlightSchedule(
+            gateway_code="RFD",
+            sort_name="night",
+            mission_type="departure",
+            flight_number="UPS100",
+            origin="RFD",
+            destination="SDF",
+            active=True,
+            active_days="monday",
+            planned_time_local=time(2, 30),
+            timezone="America/Chicago",
+            pure_pull_time_local=time(1, 20),
+        )
+        db.session.add(master)
+        db.session.flush()
+        master_id = master.id
+        db.session.execute(
+            text(
+                "UPDATE master_flight_schedules "
+                "SET first_mix_pull_time_local = '01:40:00', "
+                "final_mix_pull_time_local = '01:55:00' "
+                "WHERE id = :master_id"
+            ),
+            {"master_id": master_id},
+        )
+        db.session.commit()
+
+        _migrate_legacy_second_mix_pull_values({"master_flight_schedules"})
+        db.session.commit()
+        master = db.session.get(MasterFlightSchedule, master_id)
+
+        self.assertEqual(master.pure_pull_time_local, time(1, 20))
+        self.assertEqual(master.mix_pull_time_local, time(1, 55))
+        self.assertNotIn(
+            "first_mix_pull_time_local",
+            MasterFlightSchedule.__table__.columns.keys(),
+        )
+        self.assertIn(
+            "first_mix_pull_time_local",
+            {column["name"] for column in inspect(db.engine).get_columns("master_flight_schedules")},
+        )
+
+        blank_mix = MasterFlightSchedule(
+            gateway_code="RFD",
+            sort_name="night",
+            mission_type="departure",
+            flight_number="UPS101",
+            origin="RFD",
+            destination="ONT",
+            active=True,
+            active_days="monday",
+            planned_time_local=time(2, 45),
+            timezone="America/Chicago",
+        )
+        db.session.add(blank_mix)
+        db.session.flush()
+        blank_mix_id = blank_mix.id
+        db.session.execute(
+            text(
+                "UPDATE master_flight_schedules "
+                "SET first_mix_pull_time_local = '02:10:00' "
+                "WHERE id = :master_id"
+            ),
+            {"master_id": blank_mix_id},
+        )
+        db.session.commit()
+
+        _migrate_legacy_second_mix_pull_values({"master_flight_schedules"})
+        db.session.commit()
+        blank_mix = db.session.get(MasterFlightSchedule, blank_mix_id)
+
+        self.assertIsNone(blank_mix.mix_pull_time_local)
 
     def test_non_sqlite_bootstrap_requires_password_env(self):
         TestConfig = type(

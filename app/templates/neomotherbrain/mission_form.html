@@ -95,12 +95,8 @@
             {{ military_time_select("pure_pull_time_local", form.pure_pull_time_local) }}
         </label>
         <label data-mission-departure-only>
-            <span>FIRST MIX PULL</span>
-            {{ military_time_select("first_mix_pull_time_local", form.first_mix_pull_time_local) }}
-        </label>
-        <label data-mission-departure-only>
-            <span>FINAL MIX PULL</span>
-            {{ military_time_select("final_mix_pull_time_local", form.final_mix_pull_time_local) }}
+            <span>MIX PULL</span>
+            {{ military_time_select("mix_pull_time_local", form.mix_pull_time_local) }}
         </label>
         {% endif %}
 

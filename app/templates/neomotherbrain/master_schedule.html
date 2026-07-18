@@ -100,11 +100,8 @@
     <td class="master-board-cell master-cell-pure-pull" data-label="Pure Pull">
         {{ military_time_select(prefix ~ "pure_pull_time_local", schedule.pure_pull_time_local.strftime("%H:%M") if schedule and schedule.pure_pull_time_local else "") }}
     </td>
-    <td class="master-board-cell master-cell-first-mix" data-label="1st Mix">
-        {{ military_time_select(prefix ~ "first_mix_pull_time_local", schedule.first_mix_pull_time_local.strftime("%H:%M") if schedule and schedule.first_mix_pull_time_local else "") }}
-    </td>
-    <td class="master-board-cell master-cell-second-mix" data-label="2nd Mix">
-        {{ military_time_select(prefix ~ "final_mix_pull_time_local", schedule.final_mix_pull_time_local.strftime("%H:%M") if schedule and schedule.final_mix_pull_time_local else "") }}
+    <td class="master-board-cell master-cell-mix" data-label="Mix Pull">
+        {{ military_time_select(prefix ~ "mix_pull_time_local", schedule.mix_pull_time_local.strftime("%H:%M") if schedule and schedule.mix_pull_time_local else "") }}
     </td>
     <td data-label="Action" class="table-actions master-cell-actions">
         {% if schedule %}
@@ -141,8 +138,7 @@
                         <th>STD</th>
                         <th>WAVE</th>
                         <th>PURE PULL</th>
-                        <th>1ST MIX</th>
-                        <th>2ND MIX</th>
+                        <th>MIX PULL</th>
                         {% endif %}
                         <th>ACTION</th>
                     </tr>

@@ -4,8 +4,7 @@
 {% macro pull_times_display(destination, pull_times, class_name="neoermac-slot-pull-times") -%}
 <div class="{{ class_name }}" data-lineup-pull-times aria-label="{{ destination or 'Unassigned' }} planned pull times">
     <span>PURE <strong data-pull-time-key="pure">{{ pull_times.get("pure", "--") }}</strong></span>
-    <span>1ST MIX <strong data-pull-time-key="first_mix">{{ pull_times.get("first_mix", "--") }}</strong></span>
-    <span>2ND MIX <strong data-pull-time-key="final_mix">{{ pull_times.get("final_mix", "--") }}</strong></span>
+    <span>MIX <strong data-pull-time-key="mix">{{ pull_times.get("mix", "--") }}</strong></span>
 </div>
 {%- endmacro %}
 

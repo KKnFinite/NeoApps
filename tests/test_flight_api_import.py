@@ -1624,8 +1624,7 @@ class FlightApiImportTest(unittest.TestCase):
             planned_datetime_local=datetime(2026, 6, 1, 3, 0),
             planned_datetime_utc=datetime(2026, 6, 1, 8, 0),
             pure_pull_time_local=time(1, 30),
-            first_mix_pull_time_local=time(1, 45),
-            final_mix_pull_time_local=time(2, 0),
+            mix_pull_time_local=time(2, 0),
             destination="SDF",
             wave="2",
         )
@@ -1657,8 +1656,7 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(mission.planned_datetime_local, datetime(2026, 6, 1, 3, 0))
         self.assertEqual(mission.planned_datetime_utc, datetime(2026, 6, 1, 8, 0))
         self.assertEqual(mission.pure_pull_time_local, time(1, 30))
-        self.assertEqual(mission.first_mix_pull_time_local, time(1, 45))
-        self.assertEqual(mission.final_mix_pull_time_local, time(2, 0))
+        self.assertEqual(mission.mix_pull_time_local, time(2, 0))
         self.assertEqual(mission.destination, "SDF")
         self.assertEqual(mission.wave, "2")
 
