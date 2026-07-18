@@ -37,12 +37,10 @@
     </header>
 
     <main class="tunnel-wrap">
-        <div class="neosektor-refresh-paused" data-neosektor-refresh-paused {% if state.refresh.auto_refresh_enabled %}hidden{% endif %} aria-live="polite">
-            {{ state.refresh.message }}
-            {% if state.refresh.operation_label and state.refresh.window_label %}
-            <span>{{ state.refresh.operation_label }} · {{ state.refresh.window_label }}</span>
-            {% endif %}
-        </div>
+        {% set operation_refresh_status = state.refresh %}
+        {% set operation_refresh_class = "neosektor-refresh-paused" %}
+        {% set operation_refresh_hook = "neosektor-refresh-paused" %}
+        {% include "neonodes/_operation_refresh_banner.html" %}
         <div class="tunnel-desktop-workspace" data-tunnel-desktop-workspace>
             <div class="tunnel-desktop-left" data-tunnel-desktop-left>
         <section class="tunnel-wave-grid" aria-label="Wave summary">

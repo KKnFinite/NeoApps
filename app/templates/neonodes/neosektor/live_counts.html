@@ -31,12 +31,10 @@
     </header>
 
     <main class="counts-wrap neosektor-live-counts-grid" id="neosektor-live-counts-panel">
-        <div class="neosektor-refresh-paused" data-neosektor-refresh-paused {% if refresh_status.auto_refresh_enabled %}hidden{% endif %} aria-live="polite">
-            {{ refresh_status.message }}
-            {% if refresh_status.operation_label and refresh_status.window_label %}
-            <span>{{ refresh_status.operation_label }} · {{ refresh_status.window_label }}</span>
-            {% endif %}
-        </div>
+        {% set operation_refresh_status = refresh_status %}
+        {% set operation_refresh_class = "neosektor-refresh-paused" %}
+        {% set operation_refresh_hook = "neosektor-refresh-paused" %}
+        {% include "neonodes/_operation_refresh_banner.html" %}
         <section class="wave-strip neosektor-live-wave-row" aria-label="Wave summary">
             {% for wave_key, wave in [("first", waves[0]), ("second", waves[1])] %}
             <article class="wave-card">

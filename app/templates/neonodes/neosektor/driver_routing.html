@@ -18,12 +18,10 @@
         <a class="header-link neosektor-driver-back" href="{{ url_for('neosektor.index') }}">Back</a>
     </header>
     <main class="driver-routing neosektor-driver-board" aria-label="Driver routing">
-        <div class="neosektor-refresh-paused" data-neosektor-refresh-paused {% if state.refresh.auto_refresh_enabled %}hidden{% endif %} aria-live="polite">
-            {{ state.refresh.message }}
-            {% if state.refresh.operation_label and state.refresh.window_label %}
-            <span>{{ state.refresh.operation_label }} · {{ state.refresh.window_label }}</span>
-            {% endif %}
-        </div>
+        {% set operation_refresh_status = state.refresh %}
+        {% set operation_refresh_class = "neosektor-refresh-paused" %}
+        {% set operation_refresh_hook = "neosektor-refresh-paused" %}
+        {% include "neonodes/_operation_refresh_banner.html" %}
         {% for wave_key in ["first"] %}
         {% set route = state.routing.routes[wave_key] %}
         <section

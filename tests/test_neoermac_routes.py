@@ -282,6 +282,32 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"data-next-check-seconds", reload_response.data)
         self.assertNotIn(b"() => window.location.reload()", reload_response.data)
 
+    def test_neoermac_live_views_use_the_shared_operation_refresh_banner(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 11, 10, 0)
+        self._add_operation_departure("UPS701", "BOS")
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        for path, hook in (
+            ("/neoermac/door-view?door=D34", b"data-neoermac-refresh-paused"),
+            ("/neoermac/view-outbound", b"data-neoermac-outbound-refresh-paused"),
+            ("/neoermac/upcoming-pulls", b"data-operation-refresh-reload"),
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(
+                    b'class="operation-refresh-banner neoermac-refresh-paused"',
+                    response.data,
+                )
+                self.assertIn(b"data-operation-refresh-banner", response.data)
+                self.assertIn(hook, response.data)
+
+        landing_response = self.client.get("/neoermac/door-view")
+        self.assertNotIn(b"data-operation-refresh-banner", landing_response.data)
+
     def test_neoermac_upcoming_pulls_shows_west_and_east_pull_lists(self):
         self._assign_lineup_destination("runout_4", "east_destination_1", "BOS")
         self._assign_lineup_destination("runout_10", "west_destination_2", "SDF")

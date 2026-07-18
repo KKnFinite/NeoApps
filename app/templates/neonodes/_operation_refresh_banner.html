@@ -1,0 +1,19 @@
+{# Shared operation-window refresh status banner. Keep app-specific hooks/classes for live view scripts. #}
+{% if operation_refresh_status %}
+<div
+    class="operation-refresh-banner {{ operation_refresh_class|default('node-operation-refresh-paused') }}"
+    data-operation-refresh-banner
+    {% if operation_refresh_hook %}data-{{ operation_refresh_hook }}{% endif %}
+    {% if operation_refresh_reload|default(false) %}
+    data-operation-refresh-reload
+    data-refresh-active="{{ 'true' if operation_refresh_status.auto_refresh_enabled else 'false' }}"
+    {% endif %}
+    {% if operation_refresh_status.auto_refresh_enabled %}hidden{% endif %}
+    aria-live="polite"
+>
+    {{ operation_refresh_status.message }}
+    {% if operation_refresh_status.operation_label and operation_refresh_status.window_label %}
+    <span>{{ operation_refresh_status.operation_label }} &middot; {{ operation_refresh_status.window_label }}</span>
+    {% endif %}
+</div>
+{% endif %}

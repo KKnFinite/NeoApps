@@ -39,12 +39,10 @@
     </header>
 
     <main class="counts-wrap neosektor-discharge-wrap">
-        <div class="neosektor-refresh-paused" data-neosektor-refresh-paused {% if refresh_status.auto_refresh_enabled %}hidden{% endif %} aria-live="polite">
-            {{ refresh_status.message }}
-            {% if refresh_status.operation_label and refresh_status.window_label %}
-            <span>{{ refresh_status.operation_label }} &middot; {{ refresh_status.window_label }}</span>
-            {% endif %}
-        </div>
+        {% set operation_refresh_status = refresh_status %}
+        {% set operation_refresh_class = "neosektor-refresh-paused" %}
+        {% set operation_refresh_hook = "neosektor-refresh-paused" %}
+        {% include "neonodes/_operation_refresh_banner.html" %}
 
         {% if selected_request %}
         <section class="neosektor-discharge-detail tunnel-panel{% if selected_request.setup_needed %} is-setup-needed{% endif %}" aria-label="Selected ULD request">

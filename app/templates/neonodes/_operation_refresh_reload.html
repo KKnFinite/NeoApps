@@ -1,16 +1,6 @@
 {% if operation_refresh_status %}
-<div
-    class="{{ operation_refresh_class|default('node-operation-refresh-paused') }}"
-    data-operation-refresh-reload
-    data-refresh-active="{{ 'true' if operation_refresh_status.auto_refresh_enabled else 'false' }}"
-    {% if operation_refresh_status.auto_refresh_enabled %}hidden{% endif %}
-    aria-live="polite"
->
-    {{ operation_refresh_status.message }}
-    {% if operation_refresh_status.operation_label and operation_refresh_status.window_label %}
-    <span>{{ operation_refresh_status.operation_label }} &middot; {{ operation_refresh_status.window_label }}</span>
-    {% endif %}
-</div>
+{% set operation_refresh_reload = true %}
+{% include "neonodes/_operation_refresh_banner.html" %}
 {% if operation_refresh_status.auto_refresh_enabled %}
 <script>
 (() => {

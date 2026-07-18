@@ -2905,6 +2905,36 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn(b"setTimeout(refreshState", response.data)
         self.assertNotIn(b"resumeTimer", response.data)
 
+    def test_neosektor_live_views_use_the_shared_operation_refresh_banner(self):
+        self._login_approved_user(role="simulator")
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 29, 10, 0)
+        self._add_sort_operation(date(2026, 6, 29), "night")
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+
+        for path in (
+            "/neosektor/live-counts",
+            "/neosektor/tunnel-conductor",
+            "/neosektor/ebm",
+            "/neosektor/wbm",
+            "/neosektor/driver-routing",
+            "/neosektor/discharge",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(
+                    b'class="operation-refresh-banner neosektor-refresh-paused"',
+                    response.data,
+                )
+                self.assertIn(b"data-operation-refresh-banner", response.data)
+                self.assertIn(b"data-neosektor-refresh-paused", response.data)
+
+        stylesheet = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        self.assertIn(".operation-refresh-banner {", stylesheet)
+        self.assertIn("border: 1px solid rgba(var(--node-rgb), 0.42);", stylesheet)
+        self.assertNotIn(".blueprint-neosektor .neosektor-refresh-paused {", stylesheet)
+
     def test_neosektor_auto_refresh_is_limited_to_live_operation_pages(self):
         self._login_approved_user(role="simulator")
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 30, 1, 0)

@@ -36,12 +36,10 @@
 
     <main class="counts-wrap{% if not state.refresh.auto_refresh_enabled %} has-refresh-notice{% endif %}">
         <div class="neosektor-inline-edit-error" data-neosektor-edit-error hidden aria-live="polite"></div>
-        <div class="neosektor-refresh-paused" data-neosektor-refresh-paused {% if state.refresh.auto_refresh_enabled %}hidden{% endif %} aria-live="polite">
-            {{ state.refresh.message }}
-            {% if state.refresh.operation_label and state.refresh.window_label %}
-            <span>{{ state.refresh.operation_label }} · {{ state.refresh.window_label }}</span>
-            {% endif %}
-        </div>
+        {% set operation_refresh_status = state.refresh %}
+        {% set operation_refresh_class = "neosektor-refresh-paused" %}
+        {% set operation_refresh_hook = "neosektor-refresh-paused" %}
+        {% include "neonodes/_operation_refresh_banner.html" %}
         <section class="wave-strip" aria-label="Wave summary">
             {% for wave_key, wave in [("first", state.waves[0]), ("second", state.waves[1])] %}
             <article class="wave-card">

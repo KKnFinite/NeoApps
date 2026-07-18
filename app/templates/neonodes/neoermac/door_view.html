@@ -62,12 +62,10 @@
     {% endif %}
 
     {% if selected_door %}
-    <div class="neoermac-refresh-paused" data-neoermac-refresh-paused {% if refresh_status.auto_refresh_enabled %}hidden{% endif %} aria-live="polite">
-        {{ refresh_status.message }}
-        {% if refresh_status.operation_label and refresh_status.window_label %}
-        <span>{{ refresh_status.operation_label }} &middot; {{ refresh_status.window_label }}</span>
-        {% endif %}
-    </div>
+    {% set operation_refresh_status = refresh_status %}
+    {% set operation_refresh_class = "neoermac-refresh-paused" %}
+    {% set operation_refresh_hook = "neoermac-refresh-paused" %}
+    {% include "neonodes/_operation_refresh_banner.html" %}
     {% endif %}
 
     <form class="neoermac-door-selector" method="get" action="{{ url_for('neoermac.door_view') }}">
