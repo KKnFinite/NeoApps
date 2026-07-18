@@ -2543,8 +2543,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "grid-template-columns: 1.25fr 0.88fr 0.55fr 0.45fr 0.9fr 1.65fr 0.72fr 0.45fr;",
             css,
         )
-        self.assertIn(".neoermac-outbound-shell {\n        width: 100%;", css)
-        self.assertIn("background: transparent;", css)
+        self.assertIn("body.mobile-app-chrome .neoermac-shell.neoermac-outbound-shell {", css)
+        self.assertIn("padding: 0;", css)
+        self.assertIn("background: none;", css)
+        self.assertIn("height: 40px;", css)
         self.assertNotIn(".neoermac-outbound-table-wrap {\n        overflow-x: auto;", css)
 
     def test_view_outbound_sorts_by_planned_pull_time_and_handles_missing_data(self):

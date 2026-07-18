@@ -4573,16 +4573,16 @@ a {
 }
 
 @media (max-width: 760px) {
-    .neoermac-outbound-shell {
+    body.mobile-app-chrome .neoermac-shell.neoermac-outbound-shell {
         width: 100%;
         max-width: 100%;
-        gap: 8px;
+        gap: 4px;
         margin: 0;
         overflow-x: hidden;
-        padding: 0 6px;
-        border: 0;
+        padding: 0;
+        border: none;
         border-radius: 0;
-        background: transparent;
+        background: none;
         box-shadow: none;
         justify-items: stretch;
     }
@@ -4630,7 +4630,8 @@ a {
     }
 
     .neoermac-outbound-mobile-row {
-        min-height: 46px;
+        height: 40px;
+        min-height: 40px;
         overflow: hidden;
         border: 1px solid rgba(143, 24, 38, 0.4);
         border-radius: 5px;
