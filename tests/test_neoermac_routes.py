@@ -233,6 +233,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'data-refresh-active="true"', door_response.data)
         self.assertIn(b"window.setInterval(refreshState, 5000)", door_response.data)
         self.assertNotIn(b"window.setInterval(refreshState, 3000)", door_response.data)
+        self.assertNotIn(b"neoermac-door-launcher-grid", door_response.data)
 
         non_refresh_pages = (
             "/neoermac",
@@ -531,6 +532,12 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"DOOR VIEW", response.data)
         self.assertIn(b"SHIFT OUTBOUND", response.data)
         self.assertIn(b"Select a door.", response.data)
+        self.assertIn(b"neoermac-door-launcher", response.data)
+        self.assertIn(b"neoermac-door-launcher-grid", response.data)
+        self.assertEqual(
+            response.data.count(b"neoermac-door-launcher-button"),
+            len(self.REAL_OUTBOUND_DOORS),
+        )
         self.assertIn(b'<option value="D34"', response.data)
         self.assertIn(b'class="neoermac-door-selector"', response.data)
         self.assertIn("no-store", response.headers["Cache-Control"])
@@ -539,6 +546,26 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b'<label for="door-select">DOOR</label>', response.data)
         self.assertNotIn(b"PLACEHOLDER SHELL", response.data)
         self.assertNotIn(b"OPERATIONAL LOGIC WILL BE ADDED IN A LATER PASS.", response.data)
+
+    def test_door_view_landing_has_compact_desktop_launcher_hooks(self):
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view")
+        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"neoermac-door-launcher-grid", response.data)
+        for door in self.REAL_OUTBOUND_DOORS:
+            self.assertIn(
+                b'href="/neoermac/door-view?door=' + door + b'"',
+                response.data,
+            )
+        self.assertIn(
+            ".neoermac-door-shell.neoermac-door-launcher",
+            css,
+        )
+        self.assertIn("grid-template-columns: repeat(7, minmax(0, 1fr));", css)
+        self.assertIn("min-height: 50px;", css)
 
     def test_door_view_dropdown_includes_only_real_outbound_doors(self):
         self._login_approved_user(role="operator")

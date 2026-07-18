@@ -43,7 +43,7 @@
 
 {% block content %}
 <section
-    class="neoermac-shell neoermac-door-shell neoermac-door-mobile-tight"
+    class="neoermac-shell neoermac-door-shell neoermac-door-mobile-tight{% if not selected_door %} neoermac-door-launcher{% endif %}"
     aria-labelledby="neoermac-door-title"
     {% if selected_door %}
     data-door-view
@@ -81,6 +81,14 @@
     </form>
 
     {% if not selected_door %}
+    <nav class="neoermac-door-launcher-grid" aria-label="Open a door">
+        {% for door_option in canonical_door_options %}
+        <a
+            class="neoermac-door-launcher-button"
+            href="{{ url_for('neoermac.door_view', door=door_option) }}"
+        >{{ door_option }}</a>
+        {% endfor %}
+    </nav>
     <p class="neoermac-door-empty">Select a door.</p>
     {% else %}
     <div class="neoermac-door-top-grid">

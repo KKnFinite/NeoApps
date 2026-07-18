@@ -3102,7 +3102,67 @@ a {
     min-width: min(100%, 230px);
 }
 
+.neoermac-door-launcher-grid {
+    display: none;
+}
+
 @media (min-width: 761px) {
+    body.node-desktop-nav-page .neoermac-door-shell.neoermac-door-launcher {
+        align-content: start;
+        justify-items: stretch;
+        width: min(100%, 1040px);
+        max-width: 1040px;
+        gap: 10px;
+        padding: 16px 18px 18px;
+    }
+
+    body.node-desktop-nav-page .neoermac-door-launcher .neoermac-door-selector,
+    body.node-desktop-nav-page .neoermac-door-launcher .neoermac-door-empty {
+        display: none;
+    }
+
+    .neoermac-door-launcher-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 8px;
+        width: 100%;
+    }
+
+    .neoermac-door-launcher-button {
+        display: grid;
+        place-items: center;
+        min-height: 50px;
+        padding: 8px;
+        border: 1px solid rgba(238, 246, 255, 0.3);
+        border-radius: 5px;
+        color: #eef6ff;
+        background:
+            linear-gradient(135deg, rgba(238, 246, 255, 0.12), transparent 32%),
+            linear-gradient(180deg, rgba(var(--node-rgb), 0.62), rgba(88, 8, 16, 0.76)),
+            linear-gradient(180deg, rgba(28, 31, 37, 0.94), rgba(8, 9, 12, 0.94));
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.12),
+            0 0 16px rgba(var(--node-rgb), 0.16);
+        font-size: 0.92rem;
+        font-weight: 950;
+        letter-spacing: 0.06em;
+        line-height: 1;
+        text-align: center;
+        text-decoration: none;
+        text-transform: uppercase;
+    }
+
+    .neoermac-door-launcher-button:hover,
+    .neoermac-door-launcher-button:focus-visible {
+        border-color: rgba(54, 226, 123, 0.72);
+        outline: none;
+        color: #ffffff;
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.2),
+            0 0 20px rgba(var(--node-rgb), 0.28),
+            0 0 14px rgba(54, 226, 123, 0.18);
+    }
+
     .neoermac-lineup-shell {
         width: min(100%, 1320px);
     }
