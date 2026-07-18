@@ -36,7 +36,11 @@ from app.services.gateway_matrix import current_gateway_local_date
 from app.services.gateway_matrix import current_gateway_local_datetime
 from app.services.gateway_matrix import current_operations_for_gateway
 from app.services.night_sorting import night_sort_time_key
-from app.services.parking_plan import parking_plan_context, parking_status_for_rows
+from app.services.parking_plan import (
+    parking_plan_context,
+    parking_status_for_rows,
+    set_tail_hot,
+)
 from app.services.parking_optimizer import (
     _four_eight_slot_score,
     apply_parking_optimizer_plan as service_apply_parking_optimizer_plan,
@@ -5010,7 +5014,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("NEEDS TAIL", html)
         self.assertIn("planning-status-badge is-needs-tail", html)
 
-    def test_tail_swap_hot_duplicate_conflict_cancels_hot_departure(self):
+    def test_tail_swap_hot_duplicate_conflict_keeps_hot_departure_active(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
         selected = self._mission(
             operation=operation,
@@ -5023,6 +5027,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
             mission_type="departure",
             flight_number="UPS0999",
             assigned_tail_number="N222UP",
+            planned_datetime_local=datetime(2026, 6, 24, 3, 45),
+            planned_datetime_utc=datetime(2026, 6, 24, 8, 45),
         )
         db.session.add_all([operation, selected, hot_duplicate])
         db.session.flush()
@@ -5053,24 +5059,72 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         db.session.refresh(selected)
         db.session.refresh(hot_duplicate)
-        active_n222_departures = [
+        active_departures = [
             mission
             for mission in SortDateMission.query.filter_by(
                 sort_date_operation_id=operation.id,
                 mission_type="departure",
-                assigned_tail_number="N222UP",
             ).all()
             if mission.departure_status != "cancelled"
         ]
+        departure_board = self.client.get(
+            f"/motherbrain/operations/{operation.id}/departures"
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(selected.assigned_tail_number, "N222UP")
-        self.assertEqual(hot_duplicate.departure_status, "cancelled")
-        self.assertEqual(active_n222_departures, [selected])
+        self.assertNotEqual(hot_duplicate.departure_status, "cancelled")
+        self.assertIsNone(hot_duplicate.assigned_tail_number)
+        self.assertEqual(
+            hot_duplicate.planned_datetime_local,
+            datetime(2026, 6, 24, 3, 45),
+        )
+        self.assertEqual(
+            {mission.id for mission in active_departures},
+            {selected.id, hot_duplicate.id},
+        )
         self.assertIn(
-            "cancelled HOT chained departure UPS0999",
+            "flagged UPS0999 as needing a replacement tail",
             response.data.decode(),
         )
+        self.assertIn(b"UPS0999", departure_board.data)
+        self.assertIn(b"03:45", departure_board.data)
+
+    def test_hot_departure_status_preserves_std_and_departure_board_row(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        mission = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="UPS0999",
+            assigned_tail_number="N999UP",
+            planned_datetime_local=datetime(2026, 6, 24, 4, 5),
+            planned_datetime_utc=datetime(2026, 6, 24, 9, 5),
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+
+        set_tail_hot(operation, "N999UP", True)
+        db.session.commit()
+        marked_board = self.client.get(
+            f"/motherbrain/operations/{operation.id}/departures"
+        )
+        set_tail_hot(operation, "N999UP", False)
+        db.session.commit()
+        restored_board = self.client.get(
+            f"/motherbrain/operations/{operation.id}/departures"
+        )
+        db.session.refresh(mission)
+
+        self.assertNotEqual(mission.departure_status, "cancelled")
+        self.assertEqual(mission.assigned_tail_number, "N999UP")
+        self.assertEqual(
+            mission.planned_datetime_local,
+            datetime(2026, 6, 24, 4, 5),
+        )
+        self.assertIn(b"UPS0999", marked_board.data)
+        self.assertIn(b"04:05", marked_board.data)
+        self.assertIn(b"UPS0999", restored_board.data)
+        self.assertIn(b"04:05", restored_board.data)
 
     def test_view_only_user_cannot_cancel_mission_by_post(self):
         operation = self._operation(sort_date=date(2026, 6, 24))

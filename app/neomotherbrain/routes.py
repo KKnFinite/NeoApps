@@ -2201,24 +2201,10 @@ def tail_swap_mission(operation_id, mission_id):
         conflict_list = ", ".join(
             _tail_swap_conflict_label(conflict) for conflict in conflicts
         )
-        hot_conflicts = [
-            conflict
-            for conflict in conflicts
-            if _tail_swap_conflict_is_hot(operation, conflict)
-        ]
-        non_hot_conflicts = [
-            conflict
-            for conflict in conflicts
-            if not _tail_swap_conflict_is_hot(operation, conflict)
-        ]
-        action_notes = []
-        if hot_conflicts:
-            action_notes.append("cancel HOT chained departure")
-        if non_hot_conflicts:
-            action_notes.append("flag the source departure as needing a replacement tail")
         flash(
             f"{replacement_tail} is already chained to {conflict_list}. "
-            f"Check CONFIRM to {' and '.join(action_notes)} and finish Tail Swap.",
+            "Check CONFIRM to flag the source departure as needing a replacement "
+            "tail and finish Tail Swap.",
             "error",
         )
         return redirect(_planning_url(operation.id, mission.mission_type))
@@ -2226,13 +2212,8 @@ def tail_swap_mission(operation_id, mission_id):
     old_tail_number = mission.assigned_tail_number
     old_aircraft_type = _aircraft_type_for_tail(operation, old_tail_number)
     now = datetime.utcnow()
-    cancelled_conflicts = []
     replacement_needed_conflicts = []
     for conflict in conflicts:
-        if _tail_swap_conflict_is_hot(operation, conflict):
-            _set_mission_cancelled(conflict)
-            cancelled_conflicts.append(conflict)
-            continue
         conflict_old_tail_number = conflict.assigned_tail_number
         conflict_old_aircraft_type = _aircraft_type_for_tail(
             operation,
@@ -2261,24 +2242,14 @@ def tail_swap_mission(operation_id, mission_id):
     db.session.commit()
 
     if conflicts:
-        result_notes = []
-        if cancelled_conflicts:
-            conflict_list = ", ".join(
-                _tail_swap_conflict_label(conflict)
-                for conflict in cancelled_conflicts
-            )
-            result_notes.append(f"cancelled HOT chained departure {conflict_list}")
-        if replacement_needed_conflicts:
-            conflict_list = ", ".join(
-                _tail_swap_conflict_label(conflict)
-                for conflict in replacement_needed_conflicts
-            )
-            result_notes.append(
-                f"flagged {conflict_list} as needing a replacement tail"
-            )
+        conflict_list = ", ".join(
+            _tail_swap_conflict_label(conflict)
+            for conflict in replacement_needed_conflicts
+        )
         flash(
             f"Tail Swap complete. {mission.flight_number.upper()} now uses "
-            f"{replacement_tail}; {'; '.join(result_notes)}.",
+            f"{replacement_tail}; flagged {conflict_list} as needing a "
+            "replacement tail.",
             "info",
         )
     else:
@@ -4171,18 +4142,10 @@ def _tail_swap_departure_conflicts(operation, mission, replacement_tail):
     return sorted(
         active_conflicts,
         key=lambda conflict: (
-            not _tail_swap_conflict_is_hot(operation, conflict),
             getattr(conflict, "planned_datetime_utc", None) or datetime.max,
             getattr(conflict, "id", 0) or 0,
         ),
     )
-
-
-def _tail_swap_conflict_is_hot(operation, mission):
-    tail_number = (mission.assigned_tail_number or "").strip().upper()
-    if not tail_number:
-        return False
-    return tail_status_is_hot_for_operation(operation, tail_number)
 
 
 def _tail_swap_conflict_label(mission):

@@ -26,6 +26,7 @@ from app.services.neoscorpion import (
     lbs_to_display_thousands,
     lbs_to_gallons,
 )
+from app.services.parking_plan import set_tail_hot
 from app.services.permission_rules import ensure_default_permission_rules
 from app.services.password_policy import set_user_password
 
@@ -218,6 +219,30 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             (b"Parking", b"ETD"),
         ):
             self.assertLess(header.index(earlier), header.index(later))
+
+    def test_fuel_dispatch_includes_hot_departure_and_preserves_std(self):
+        self._login_approved_user(role="simulator")
+        operation, mission = self._add_current_departure(
+            flight_number="UPS901",
+            tail_number="N123UP",
+            destination="ONT",
+        )
+        expected_std = mission.planned_datetime_local
+
+        set_tail_hot(operation, "N123UP", True)
+        db.session.commit()
+        marked = self.client.get("/neoscorpion/fuel-dispatch")
+        set_tail_hot(operation, "N123UP", False)
+        db.session.commit()
+        restored = self.client.get("/neoscorpion/fuel-dispatch")
+        db.session.refresh(mission)
+
+        self.assertEqual(mission.planned_datetime_local, expected_std)
+        self.assertNotEqual(mission.departure_status, "cancelled")
+        self.assertIn(b"UPS901", marked.data)
+        self.assertIn(b"23:30", marked.data)
+        self.assertIn(b"UPS901", restored.data)
+        self.assertIn(b"23:30", restored.data)
 
     def test_fueler_sees_only_assigned_missions_and_a300_center_fuel(self):
         user = self._login_approved_user(role="operator")
