@@ -2812,6 +2812,30 @@ a {
     display: none;
 }
 
+/* Compact NeoSektor live boards can opt into Tunnel Conductor's reference sizing. */
+@media (min-width: 901px) {
+    .operation-refresh-banner--neosektor-tunnel-standard {
+        min-height: 0;
+        padding: 5px 8px;
+    }
+}
+
+@media (max-width: 760px) {
+    .operation-refresh-banner--neosektor-tunnel-standard {
+        min-height: 0;
+        margin: 0;
+        padding: 5px 8px;
+        gap: 2px;
+        font-size: 0.58rem;
+        line-height: 1.15;
+    }
+
+    .operation-refresh-banner--neosektor-tunnel-standard > span {
+        font-size: 0.5rem;
+        line-height: 1.1;
+    }
+}
+
 .neoermac-upcoming-board {
     display: grid;
     gap: 12px;

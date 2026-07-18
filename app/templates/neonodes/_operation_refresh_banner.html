@@ -1,7 +1,7 @@
 {# Shared operation-window refresh status banner. Keep app-specific hooks/classes for live view scripts. #}
 {% if operation_refresh_status %}
 <div
-    class="operation-refresh-banner {{ operation_refresh_class|default('node-operation-refresh-paused') }}"
+    class="operation-refresh-banner {{ operation_refresh_class|default('node-operation-refresh-paused') }}{% if operation_refresh_variant %} {{ operation_refresh_variant }}{% endif %}"
     data-operation-refresh-banner
     {% if operation_refresh_hook %}data-{{ operation_refresh_hook }}{% endif %}
     {% if operation_refresh_reload|default(false) %}

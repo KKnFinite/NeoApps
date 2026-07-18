@@ -34,6 +34,7 @@
         {% set operation_refresh_status = refresh_status %}
         {% set operation_refresh_class = "neosektor-refresh-paused" %}
         {% set operation_refresh_hook = "neosektor-refresh-paused" %}
+        {% set operation_refresh_variant = "operation-refresh-banner--neosektor-tunnel-standard" %}
         {% include "neonodes/_operation_refresh_banner.html" %}
         <section class="wave-strip neosektor-live-wave-row" aria-label="Wave summary">
             {% for wave_key, wave in [("first", waves[0]), ("second", waves[1])] %}

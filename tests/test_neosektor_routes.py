@@ -2923,10 +2923,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 response = self.client.get(path)
 
                 self.assertEqual(response.status_code, 200)
-                self.assertIn(
-                    b'class="operation-refresh-banner neosektor-refresh-paused"',
-                    response.data,
-                )
+                self.assertIn(b"operation-refresh-banner", response.data)
+                self.assertIn(b"neosektor-refresh-paused", response.data)
                 self.assertIn(b"data-operation-refresh-banner", response.data)
                 self.assertIn(b"data-neosektor-refresh-paused", response.data)
 
@@ -2934,6 +2932,37 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(".operation-refresh-banner {", stylesheet)
         self.assertIn("border: 1px solid rgba(var(--node-rgb), 0.42);", stylesheet)
         self.assertNotIn(".blueprint-neosektor .neosektor-refresh-paused {", stylesheet)
+
+    def test_live_counts_and_discharge_use_the_tunnel_refresh_banner_standard(self):
+        self._login_approved_user(role="simulator")
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 29, 10, 0)
+        self._add_sort_operation(date(2026, 6, 29), "night")
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+
+        for path in ("/neosektor/live-counts", "/neosektor/discharge"):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b"data-operation-refresh-banner", response.data)
+                self.assertIn(
+                    b"operation-refresh-banner--neosektor-tunnel-standard",
+                    response.data,
+                )
+                self.assertNotIn(b"<div class=\"neosektor-refresh-paused\"", response.data)
+
+        templates_root = Path("app/templates/neonodes/neosektor")
+        for template_name in ("live_counts.html", "discharge.html"):
+            template = (templates_root / template_name).read_text(encoding="utf-8")
+            self.assertIn('operation_refresh_variant = "operation-refresh-banner--neosektor-tunnel-standard"', template)
+            self.assertIn('include "neonodes/_operation_refresh_banner.html"', template)
+
+        stylesheet = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        self.assertIn(".operation-refresh-banner--neosektor-tunnel-standard {", stylesheet)
+        self.assertIn("padding: 5px 8px;", stylesheet)
+        self.assertIn("font-size: 0.58rem;", stylesheet)
+        self.assertNotIn("neosektor-live-counts-grid > .neosektor-refresh-paused", stylesheet)
+        self.assertNotIn("neosektor-discharge-wrap > .neosektor-refresh-paused", stylesheet)
 
     def test_neosektor_auto_refresh_is_limited_to_live_operation_pages(self):
         self._login_approved_user(role="simulator")
