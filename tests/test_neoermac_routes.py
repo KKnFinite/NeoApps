@@ -2498,16 +2498,43 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"02:20", response.data)
         self.assertIn(b"20 MIN", response.data)
 
-    def test_view_outbound_mobile_rows_use_single_line_table_layout(self):
+    def test_view_outbound_mobile_uses_compact_eight_field_grid_without_horizontal_scroll(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._add_operation_departure("UPS501", "SDF", tail="N501UP", parking="A14")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/view-outbound")
         css = Path("app/static/css/base.css").read_text()
 
-        self.assertIn(".neoermac-outbound-table td {\n        padding: 4px;", css)
-        self.assertIn(".neoermac-outbound-time-stack {\n        display: inline-flex;", css)
-        self.assertIn(".neoermac-outbound-table-wrap {\n        overflow-x: auto;", css)
-        self.assertIn(".neoermac-outbound-table tbody tr {\n        display: table-row;", css)
-        self.assertIn(".neoermac-outbound-table td {\n        display: table-cell;", css)
-        self.assertIn("white-space: nowrap;", css)
-        self.assertIn(".neoermac-outbound-table td::before {\n        content: none;", css)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            b'<span class="mobile-topbar-page-name neo-page-title">OUTBOUND</span>',
+            response.data,
+        )
+        self.assertIn(
+            b'<span class="neo-page-title motherbrain-desktop-top-title-text">VIEW OUTBOUND</span>',
+            response.data,
+        )
+        self.assertIn(b"data-neoermac-outbound-mobile-list", response.data)
+        self.assertIn(b"data-neoermac-outbound-mobile-row", response.data)
+        self.assertIn(b'data-neoermac-outbound-layout="pull-table"', response.data)
+        mobile_fields = (
+            b'data-neoermac-outbound-mobile-field="flight"',
+            b'data-neoermac-outbound-mobile-field="tail"',
+            b'data-neoermac-outbound-mobile-field="destination"',
+            b'data-neoermac-outbound-mobile-field="position"',
+            b'data-neoermac-outbound-mobile-field="doors"',
+            b'data-neoermac-outbound-mobile-field="pull-times"',
+            b'data-neoermac-outbound-mobile-field="etd"',
+            b'data-neoermac-outbound-mobile-field="delay"',
+        )
+        positions = [response.data.index(field) for field in mobile_fields]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn(b">Delay<", response.data)
+        self.assertIn(".neoermac-outbound-table-wrap {\n        display: none;", css)
+        self.assertIn(".neoermac-outbound-mobile-list {\n        display: grid;", css)
+        self.assertNotIn(".neoermac-outbound-table-wrap {\n        overflow-x: auto;", css)
 
     def test_view_outbound_sorts_by_planned_pull_time_and_handles_missing_data(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
