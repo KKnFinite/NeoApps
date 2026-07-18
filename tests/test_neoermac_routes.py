@@ -2549,6 +2549,26 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("height: 40px;", css)
         self.assertNotIn(".neoermac-outbound-table-wrap {\n        overflow-x: auto;", css)
 
+    def test_mobile_topbar_uses_complete_short_labels_without_ellipsis(self):
+        self._login_approved_user(role="simulator")
+
+        expected_labels = {
+            "/neoermac/building-lineup": "LINEUP",
+            "/neoermac/door-view": "DOORS",
+            "/neoermac/view-outbound": "OUTBOUND",
+            "/neoermac/upcoming-pulls": "PULLS",
+            "/neoermac/tug-assignments": "TUGS",
+        }
+
+        for path, label in expected_labels.items():
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(
+                    f'<span class="mobile-topbar-page-name neo-page-title">{label}</span>'.encode(),
+                    response.data,
+                )
+
     def test_view_outbound_sorts_by_planned_pull_time_and_handles_missing_data(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
         self._assign_lineup_destination("runout_10", "east_destination_2", "ONT")

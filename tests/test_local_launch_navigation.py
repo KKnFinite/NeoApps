@@ -753,6 +753,18 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn('<nav class="mobile-bottom-nav', html)
         self.assertIn("data-mobile-bottom-nav", html)
 
+    def test_mobile_topbar_never_uses_ellipsis_for_page_titles(self):
+        css = Path("app/static/css/base.css").read_text()
+        topbar_css = css[
+            css.index("    .mobile-topbar {", css.index("@media (max-width: 760px) {", 20000)):
+            css.index("    .mobile-account-menu {", css.index("@media (max-width: 760px) {", 20000))
+        ]
+
+        self.assertNotIn("text-overflow: ellipsis", topbar_css)
+        self.assertIn(".mobile-topbar-page-name", topbar_css)
+        self.assertIn("text-overflow: clip", topbar_css)
+        self.assertIn(".mobile-topbar-title > span,", topbar_css)
+
     def test_mobile_gateway_landing_uses_topbar_launch_items_without_bottom_nav(self):
         seed_dev_grandmaster(self.app)
         operation = SortDateOperation(

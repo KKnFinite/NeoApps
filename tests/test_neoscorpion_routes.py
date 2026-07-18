@@ -103,6 +103,26 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"Settings", dashboard.data)
         self.assertIn(b"Fuel History", dashboard.data)
 
+    def test_mobile_topbar_uses_complete_short_labels_without_ellipsis(self):
+        self._login_approved_user(role="master")
+
+        expected_labels = {
+            "/neoscorpion/fuel-dispatch": "DISPATCH",
+            "/neoscorpion/fueler": "FUELER",
+            "/neoscorpion/truck-manager": "TRUCKS",
+            "/neoscorpion/settings": "SETTINGS",
+            "/neoscorpion/history": "HISTORY",
+        }
+
+        for path, label in expected_labels.items():
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(
+                    f'<span class="mobile-topbar-page-name neo-page-title">{label}</span>'.encode(),
+                    response.data,
+                )
+
         hub = self.client.get("/rfd")
         self.assertEqual(hub.status_code, 200)
         self.assertIn(b'href="/neoscorpion"', hub.data)

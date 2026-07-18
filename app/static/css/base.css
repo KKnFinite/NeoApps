@@ -20980,6 +20980,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     .mobile-topbar-left {
         gap: 8px;
+        flex: 1 1 auto;
     }
 
     .mobile-topbar-actions {
@@ -21032,6 +21033,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     .mobile-topbar-page-link {
         display: flex;
         align-items: center;
+        flex: 1 1 auto;
         min-width: 0;
         padding: 3px 0;
         color: var(--neo-bright-silver);
@@ -21040,12 +21042,11 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     .mobile-topbar-page-name {
         display: block;
-        overflow: hidden;
-        max-width: min(43vw, 230px);
+        max-width: none;
         color: var(--neo-bright-silver);
-        font-size: 0.98rem;
+        font-size: clamp(0.76rem, 3.3vw, 0.98rem);
         line-height: 1;
-        text-overflow: ellipsis;
+        text-overflow: clip;
         white-space: nowrap;
     }
 
@@ -21062,11 +21063,10 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     .mobile-topbar-page-brand {
-        overflow: hidden;
-        max-width: min(48vw, 230px);
+        max-width: none;
         font-size: 0.9rem;
         line-height: 1;
-        text-overflow: ellipsis;
+        text-overflow: clip;
         white-space: nowrap;
     }
 
@@ -21130,9 +21130,8 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     .mobile-topbar-title > span,
     .mobile-topbar-title strong {
         display: block;
-        overflow: hidden;
-        max-width: min(55vw, 260px);
-        text-overflow: ellipsis;
+        max-width: none;
+        text-overflow: clip;
         white-space: nowrap;
     }
 

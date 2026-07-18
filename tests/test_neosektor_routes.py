@@ -227,6 +227,30 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
         self.assertIn("font-size: clamp(0.76rem, 3.2vw, 0.86rem);", css)
 
+    def test_mobile_topbar_uses_complete_short_labels_without_ellipsis(self):
+        self._login_approved_user(role="simulator")
+
+        expected_labels = {
+            "/neosektor/tunnel-conductor": "TUNNEL",
+            "/neosektor/live-counts": "COUNTS",
+            "/neosektor/ebm": "EBM",
+            "/neosektor/wbm": "WBM",
+            "/neosektor/discharge": "DISCHARGE",
+        }
+
+        for path, label in expected_labels.items():
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(
+                    f'<span class="mobile-topbar-page-name neo-page-title">{label}</span>'.encode(),
+                    response.data,
+                )
+
+        driver_routing = self.client.get("/neosektor/driver-routing")
+        self.assertEqual(driver_routing.status_code, 200)
+        self.assertIn(b'<h1 id="neosektor-driver-title">Driver Routing</h1>', driver_routing.data)
+
     def test_neosektor_page_headers_use_locked_title_branding(self):
         self._login_approved_user(role="simulator")
 
