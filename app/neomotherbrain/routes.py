@@ -813,14 +813,15 @@ def parking_rules():
     can_edit = user_can(PARKING_RULES_EDIT_PERMISSION)
     operation = _parking_rules_operation_context(gateway)
     if request.method == "POST":
+        return_to = request.form.get("return_to")
         if not can_edit:
             db.session.rollback()
             flash("Access denied.", "error")
-            return redirect(_parking_rules_redirect(operation))
+            return redirect(_parking_rules_redirect(operation, anchor=return_to))
         save_parking_rules_from_form(gateway, request.form)
         db.session.commit()
         flash("Parking rules saved.", "info")
-        return redirect(_parking_rules_redirect(operation))
+        return redirect(_parking_rules_redirect(operation, anchor=return_to))
 
     context = parking_rules_context(gateway, operation=operation)
     return render_template(
@@ -1053,10 +1054,17 @@ def _parking_rules_operation_context(gateway):
         abort(404)
 
 
-def _parking_rules_redirect(operation=None):
+def _parking_rules_redirect(operation=None, anchor=None):
     if operation:
-        return url_for("neomotherbrain.parking_rules", operation_id=operation.id)
-    return url_for("neomotherbrain.parking_rules")
+        destination = url_for("neomotherbrain.parking_rules", operation_id=operation.id)
+    else:
+        destination = url_for("neomotherbrain.parking_rules")
+    if anchor and re.fullmatch(
+        r"parking-rule-(?:section|new)-[a-z0-9_]+|parking-rule-\d+|parking-rules-other-rules",
+        anchor,
+    ):
+        return f"{destination}#{anchor}"
+    return destination
 
 
 def _parking_plan_response(success, message, status=200, payload=None, operation_id=None):

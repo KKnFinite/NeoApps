@@ -1646,6 +1646,27 @@ a {
 
     body.motherbrain-desktop-nav-page .parking-rules-page {
         width: min(100%, 1680px);
+        gap: 12px;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-form,
+    body.motherbrain-desktop-nav-page .parking-rules-grid,
+    body.motherbrain-desktop-nav-page .parking-rules-card {
+        gap: 9px;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-card {
+        padding: 10px 12px;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-card-heading h2 {
+        font-size: 0.82rem;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-card-heading .muted {
+        margin: 2px 0 0;
+        font-size: 0.68rem;
+        line-height: 1.25;
     }
 
     body.motherbrain-desktop-nav-page .parking-rules-page .table-wrap {
@@ -1660,9 +1681,24 @@ a {
 
     body.motherbrain-desktop-nav-page .parking-rules-table th,
     body.motherbrain-desktop-nav-page .parking-rules-table td {
-        padding: 9px 8px;
+        padding: 5px 6px;
         overflow-wrap: anywhere;
         vertical-align: middle;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-table th {
+        font-size: 0.62rem;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-table input,
+    body.motherbrain-desktop-nav-page .parking-rules-table select,
+    body.motherbrain-desktop-nav-page .parking-rules-row input,
+    body.motherbrain-desktop-nav-page .parking-rules-row select,
+    body.motherbrain-desktop-nav-page .parking-rules-field input {
+        min-height: 30px;
+        padding: 5px 8px;
+        border-radius: 4px;
+        font-size: 0.76rem;
     }
 
     body.motherbrain-desktop-nav-page .parking-rules-table select,
@@ -1671,6 +1707,60 @@ a {
         border-color: rgba(var(--node-rgb), 0.36);
         background-color: rgba(2, 3, 5, 0.92);
         color: var(--text);
+        background-position:
+            calc(100% - 16px) 12px,
+            calc(100% - 10px) 12px,
+            0 0;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-row-list {
+        gap: 4px;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-plan-row {
+        padding: 6px 8px;
+        border-radius: 4px;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-row-header {
+        padding: 0 8px;
+        font-size: 0.6rem;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-row-field {
+        gap: 3px;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-row-label {
+        font-size: 0.6rem;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-check,
+    body.motherbrain-desktop-nav-page .parking-rules-field {
+        gap: 4px;
+        font-size: 0.64rem;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-row-check,
+    body.motherbrain-desktop-nav-page .parking-rules-row-new-status {
+        min-height: 30px;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rules-row-actions {
+        flex-wrap: nowrap;
+        gap: 5px;
+    }
+
+    body.motherbrain-desktop-nav-page .parking-rule-row-save {
+        min-height: 30px;
+        padding: 0 10px;
+        font-size: 0.64rem;
+    }
+
+    body.motherbrain-desktop-nav-page [data-parking-rule-anchor],
+    body.motherbrain-desktop-nav-page [id^="parking-rule-section-"],
+    body.motherbrain-desktop-nav-page #parking-rules-other-rules {
+        scroll-margin-top: 104px;
     }
 
     body.motherbrain-parking-plan-page .parking-plan-page {

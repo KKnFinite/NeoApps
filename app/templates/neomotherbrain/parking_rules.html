@@ -61,7 +61,7 @@
 {% endmacro %}
 
 {% macro plan_rule_table(title, rules, category, options, helper_text) %}
-<section class="parking-rules-card" aria-label="{{ title }}">
+<section id="parking-rule-section-{{ category }}" class="parking-rules-card" aria-label="{{ title }}">
     <div class="section-heading parking-rules-card-heading">
         <h2>{{ title|upper }}</h2>
         <p class="muted">{{ helper_text }}</p>
@@ -75,9 +75,10 @@
             {% if can_edit_parking_rules %}<span>ACTION</span>{% endif %}
         </div>
         {% for rule in rules %}
-        <form class="parking-rules-row parking-rules-plan-row" method="post" data-parking-rule-row="{{ category }}">
+        <form id="parking-rule-{{ rule.id }}" class="parking-rules-row parking-rules-plan-row" method="post" data-parking-rule-anchor data-parking-rule-ramp="{{ rule.ramp_code|lower }}" data-parking-rule-row="{{ category }}" data-parking-rules-form>
             {% if operation %}<input type="hidden" name="operation_id" value="{{ operation.id }}">{% endif %}
             <input type="hidden" name="rule_ids" value="{{ rule.id }}">
+            <input type="hidden" name="return_to" value="">
             <label class="parking-rules-row-field">
                 <span class="parking-rules-row-label">MASTER PLAN ROW</span>
                 {{ plan_subject_select("subject_value_" ~ rule.id, rule.subject_value, options, not can_edit_parking_rules) }}
@@ -108,8 +109,9 @@
         <div class="parking-rules-row-empty">NO RULES CONFIGURED.</div>
         {% endfor %}
         {% if can_edit_parking_rules %}
-        <form class="parking-rules-row parking-rules-plan-row parking-rules-new-row" method="post" data-parking-rule-row="{{ category }}">
+        <form id="parking-rule-new-{{ category }}" class="parking-rules-row parking-rules-plan-row parking-rules-new-row" method="post" data-parking-rule-anchor data-parking-rule-row="{{ category }}" data-parking-rules-form>
             {% if operation %}<input type="hidden" name="operation_id" value="{{ operation.id }}">{% endif %}
+            <input type="hidden" name="return_to" value="">
             <label class="parking-rules-row-field">
                 <span class="parking-rules-row-label">MASTER PLAN ROW</span>
                 {{ plan_subject_select("new_" ~ category ~ "_subject", "", options, not options) }}
@@ -134,7 +136,7 @@
 {% endmacro %}
 
 {% macro rule_table(title, rules, subject_label, category, placeholder, helper_text='', subject_kind='text') %}
-<section class="parking-rules-card" aria-label="{{ title }}">
+<section id="parking-rule-section-{{ category }}" class="parking-rules-card" aria-label="{{ title }}">
     <div class="section-heading parking-rules-card-heading">
         <h2>{{ title|upper }}</h2>
         {% if helper_text %}<p class="muted">{{ helper_text }}</p>{% endif %}
@@ -152,7 +154,7 @@
             </thead>
             <tbody>
                 {% for rule in rules %}
-                <tr>
+                <tr id="parking-rule-{{ rule.id }}" data-parking-rule-anchor data-parking-rule-ramp="{{ rule.ramp_code|lower }}">
                     <td data-label="{{ subject_label }}">
                         <input type="hidden" name="rule_ids" value="{{ rule.id }}">
                         {% if subject_kind == 'aircraft_type' %}
@@ -186,7 +188,7 @@
                 </tr>
                 {% endfor %}
                 {% if can_edit_parking_rules %}
-                <tr class="parking-rules-new-row">
+                <tr id="parking-rule-new-{{ category }}" class="parking-rules-new-row" data-parking-rule-anchor>
                     <td data-label="{{ subject_label }}">
                         {% if subject_kind == 'aircraft_type' %}
                         {{ aircraft_type_select("new_" ~ category ~ "_subject", "") }}
@@ -209,7 +211,7 @@
 {% endmacro %}
 
 {% macro blocked_position_table(rules, category) %}
-<section class="parking-rules-card" aria-label="Blocked Parking Positions">
+<section id="parking-rule-section-{{ category }}" class="parking-rules-card" aria-label="Blocked Parking Positions">
     <div class="section-heading parking-rules-card-heading">
         <h2>BLOCKED PARKING POSITIONS</h2>
         <p class="muted">Blocked positions are hard rules. The optimizer will never suggest these positions, and saved manual assignments there will show conflict alerts.</p>
@@ -226,7 +228,7 @@
             </thead>
             <tbody>
                 {% for rule in rules %}
-                <tr>
+                <tr id="parking-rule-{{ rule.id }}" data-parking-rule-anchor data-parking-rule-ramp="{{ rule.ramp_code|lower }}">
                     <td data-label="Position">
                         <input type="hidden" name="rule_ids" value="{{ rule.id }}">
                         {{ parking_position_select("subject_value_" ~ rule.id, rule.subject_value, not can_edit_parking_rules) }}
@@ -255,7 +257,7 @@
                 </tr>
                 {% endfor %}
                 {% if can_edit_parking_rules %}
-                <tr class="parking-rules-new-row">
+                <tr id="parking-rule-new-{{ category }}" class="parking-rules-new-row" data-parking-rule-anchor>
                     <td data-label="Position">
                         {{ parking_position_select("new_" ~ category ~ "_subject", "") }}
                     </td>
@@ -297,8 +299,9 @@
         {{ plan_rule_table("Departure Preferred Parking", rules_by_category[categories.departure_preferred], categories.departure_preferred, departure_rule_options, "Preferred parking is a SOFT rule. The optimizer will try to place this departure flight/destination on the selected ramp or position when valid alternatives exist.") }}
         {{ plan_rule_table("Departure Required Parking", rules_by_category[categories.departure_required], categories.departure_required, departure_rule_options, "Required parking is a HARD rule. This departure flight/destination must be parked on the selected ramp or position, or it will remain unresolved with a rule conflict.") }}
 
-        <form class="operation-form parking-rules-form" method="post">
+        <form id="parking-rules-other-rules" class="operation-form parking-rules-form" method="post" data-parking-rules-form>
             {% if operation %}<input type="hidden" name="operation_id" value="{{ operation.id }}">{% endif %}
+            <input type="hidden" name="return_to" value="">
             {{ rule_table("Aircraft Type Restrictions", rules_by_category[categories.aircraft_restrictions], "AIRCRAFT TYPE", categories.aircraft_restrictions, "767", "Aircraft Type Restrictions are HARD / NOT ALLOWED rules. The optimizer will never park the selected aircraft type on that ramp. A restriction row means not allowed on this ramp.", "aircraft_type") }}
             {{ rule_table("Aircraft Type Preferences", rules_by_category[categories.aircraft_preferences], "AIRCRAFT TYPE", categories.aircraft_preferences, "757", "Aircraft Type Preferences are SOFT optimizer guidance. The optimizer will try to place these aircraft types on these ramps when possible, but hard rules still win and preferences are not required.", "aircraft_type") }}
             {{ blocked_position_table(rules_by_category[categories.blocked_positions], categories.blocked_positions) }}
@@ -431,4 +434,60 @@
         </form>
     </div>
 </section>
+<script>
+(() => {
+    if (!window.matchMedia("(min-width: 761px)").matches) {
+        return;
+    }
+
+    const anchorSelector = "[data-parking-rule-anchor]";
+    let lastRuleTarget = null;
+    const setReturnTarget = (form, target) => {
+        const field = form.querySelector('input[name="return_to"]');
+        if (field && target?.id) {
+            field.value = target.id;
+        }
+    };
+    const nearestRuleTarget = (row) => {
+        if (!row) {
+            return null;
+        }
+        const ramp = row.dataset.parkingRuleRamp;
+        const rows = [...row.parentElement.children].filter((candidate) =>
+            candidate.matches(anchorSelector) && candidate.id
+        );
+        const rowIndex = rows.indexOf(row);
+        const candidates = [
+            ...rows.slice(rowIndex + 1),
+            ...rows.slice(0, rowIndex).reverse(),
+        ];
+        return candidates.find((candidate) => ramp && candidate.dataset.parkingRuleRamp === ramp)
+            || candidates[0]
+            || row.closest("[id^='parking-rule-section-']");
+    };
+
+    const rememberRuleTarget = (event) => {
+        const target = event.target.closest?.(anchorSelector);
+        if (target?.id) {
+            lastRuleTarget = target;
+        }
+    };
+    document.addEventListener("focusin", rememberRuleTarget);
+    document.addEventListener("change", rememberRuleTarget);
+
+    document.addEventListener("submit", (event) => {
+        const form = event.target.closest("[data-parking-rules-form]");
+        if (!form) {
+            return;
+        }
+        const deleted = form.querySelector('input[name^="delete_rule_"]:checked');
+        if (deleted) {
+            setReturnTarget(form, nearestRuleTarget(deleted.closest(anchorSelector)));
+            return;
+        }
+        const activeRow = document.activeElement?.closest?.(anchorSelector);
+        setReturnTarget(form, activeRow || lastRuleTarget || form.closest(anchorSelector) || form);
+    });
+})();
+</script>
 {% endblock %}

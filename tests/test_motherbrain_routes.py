@@ -60,6 +60,7 @@ from app.services.parking_rules import (
     DEPARTURE_PARKING_REQUIREMENT,
     ORIGIN_RAMP_RESTRICTION,
     ORIGIN_RAMP_PREFERENCE,
+    parking_rules_context,
     parking_schedule_rule_key,
 )
 from app.services.permission_rules import ensure_default_permission_rules
@@ -7197,6 +7198,89 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-page", css)
         self.assertIn("body.mobile-app-chrome.motherbrain-parking-rules-page .parking-rules-table td", css)
         self.assertIn("grid-template-columns: minmax(76px, 0.42fr) minmax(0, 1fr);", css)
+
+    def test_parking_rules_sort_by_ramp_and_restore_rule_context_after_actions(self):
+        operation = self._parking_operation()
+        first_rule = self._parking_rule(
+            AIRCRAFT_TYPE_RAMP_RESTRICTION,
+            "aircraft_type",
+            "767",
+            "B",
+        )
+        second_rule = self._parking_rule(
+            AIRCRAFT_TYPE_RAMP_RESTRICTION,
+            "aircraft_type",
+            "747",
+            "A",
+        )
+        third_rule = self._parking_rule(
+            AIRCRAFT_TYPE_RAMP_RESTRICTION,
+            "aircraft_type",
+            "757",
+            "A",
+        )
+        db.session.commit()
+
+        context = parking_rules_context(self.rfd_gateway, operation=operation)
+        ordered_rules = context["rules_by_category"][AIRCRAFT_TYPE_RAMP_RESTRICTION]
+        self.assertEqual(
+            [rule.id for rule in ordered_rules],
+            [second_rule.id, third_rule.id, first_rule.id],
+        )
+
+        response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
+        self.assertIn(f'id="parking-rule-{second_rule.id}"'.encode(), response.data)
+        self.assertIn(b'data-parking-rules-form', response.data)
+        self.assertIn(b'data-parking-rule-anchor', response.data)
+        self.assertIn(b'data-parking-rule-ramp', response.data)
+
+        save_response = self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data={
+                "operation_id": str(operation.id),
+                "rule_ids": str(third_rule.id),
+                f"subject_value_{third_rule.id}": third_rule.subject_value,
+                f"ramp_code_{third_rule.id}": third_rule.ramp_code,
+                f"active_{third_rule.id}": "1",
+                f"note_{third_rule.id}": "Saved in place",
+                "return_to": f"parking-rule-{third_rule.id}",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(save_response.status_code, 302)
+        self.assertEqual(
+            save_response.headers["Location"],
+            f"/motherbrain/parking-rules?operation_id={operation.id}#parking-rule-{third_rule.id}",
+        )
+
+        delete_response = self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data={
+                "operation_id": str(operation.id),
+                "rule_ids": str(second_rule.id),
+                f"delete_rule_{second_rule.id}": "1",
+                "return_to": f"parking-rule-{third_rule.id}",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(delete_response.status_code, 302)
+        self.assertEqual(
+            delete_response.headers["Location"],
+            f"/motherbrain/parking-rules?operation_id={operation.id}#parking-rule-{third_rule.id}",
+        )
+        self.assertIsNone(db.session.get(MotherBrainParkingRule, second_rule.id))
+
+    def test_parking_rules_desktop_rows_use_compact_structure(self):
+        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+
+        self.assertIn(
+            "body.motherbrain-desktop-nav-page .parking-rules-card {",
+            css,
+        )
+        self.assertIn("min-height: 30px;", css)
+        self.assertIn("padding: 5px 6px;", css)
+        self.assertIn("scroll-margin-top: 104px;", css)
+        self.assertIn("flex-wrap: nowrap;", css)
 
     def test_mobile_parking_rules_page_has_no_horizontal_table_layout_hooks(self):
         operation = self._parking_operation()

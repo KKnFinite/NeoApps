@@ -111,9 +111,9 @@ def parking_rules_context(gateway, operation=None):
     rules = (
         MotherBrainParkingRule.query.filter_by(gateway_id=gateway.id)
         .order_by(
+            MotherBrainParkingRule.ramp_code.asc(),
             MotherBrainParkingRule.rule_category.asc(),
             MotherBrainParkingRule.subject_value.asc(),
-            MotherBrainParkingRule.ramp_code.asc(),
             MotherBrainParkingRule.id.asc(),
         )
         .all()
