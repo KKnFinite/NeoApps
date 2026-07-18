@@ -22193,6 +22193,93 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 }
 
 @media (min-width: 901px) {
+    /* Shared NeoGateway desktop shell: compact, single-line top-right utilities. */
+    body.motherbrain-desktop-nav-page.motherbrain-fixed-header .topbar,
+    body.node-desktop-nav-page.node-fixed-header .topbar,
+    body.rfd-hub-page .topbar {
+        min-height: 56px;
+        padding-block: 8px;
+    }
+
+    body.motherbrain-desktop-nav-page.motherbrain-fixed-header .topbar-actions,
+    body.node-desktop-nav-page.node-fixed-header .topbar-actions {
+        flex-wrap: nowrap;
+        gap: 8px;
+    }
+
+    body.motherbrain-desktop-nav-page .motherbrain-desktop-utility,
+    body.node-desktop-nav-page .motherbrain-desktop-utility {
+        flex-wrap: nowrap;
+        gap: 8px;
+    }
+
+    body.motherbrain-desktop-nav-page .node-desktop-portal-link,
+    body.node-desktop-nav-page .node-desktop-portal-link,
+    body.motherbrain-desktop-nav-page .character-switcher-trigger,
+    body.node-desktop-nav-page .character-switcher-trigger,
+    body.motherbrain-desktop-nav-page .motherbrain-alert-button,
+    body.node-desktop-nav-page .motherbrain-alert-button,
+    body.motherbrain-desktop-nav-page .logout-link,
+    body.node-desktop-nav-page .logout-link,
+    body.rfd-hub-page .logout-link {
+        height: 34px;
+        min-height: 34px;
+        padding: 0 10px;
+        border-radius: 4px;
+        font-family: "NeoFont", Arial, sans-serif;
+        font-size: 0.62rem;
+        letter-spacing: 0.08em;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    body.motherbrain-desktop-nav-page .desktop-shell-user-chip,
+    body.node-desktop-nav-page .desktop-shell-user-chip,
+    body.rfd-hub-page .desktop-shell-user-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        width: auto;
+        min-width: 0;
+        height: 34px;
+        min-height: 34px;
+        padding: 0 10px;
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1;
+        text-align: left;
+        white-space: nowrap;
+    }
+
+    body.motherbrain-desktop-nav-page .desktop-shell-user-chip span,
+    body.motherbrain-desktop-nav-page .desktop-shell-user-chip strong,
+    body.node-desktop-nav-page .desktop-shell-user-chip span,
+    body.node-desktop-nav-page .desktop-shell-user-chip strong,
+    body.rfd-hub-page .desktop-shell-user-chip span,
+    body.rfd-hub-page .desktop-shell-user-chip strong {
+        display: inline;
+        overflow: visible;
+        text-overflow: clip;
+        white-space: nowrap;
+    }
+
+    body.motherbrain-desktop-nav-page .desktop-shell-user-chip span,
+    body.node-desktop-nav-page .desktop-shell-user-chip span,
+    body.rfd-hub-page .desktop-shell-user-chip span {
+        color: var(--muted);
+        font-size: 0.58rem;
+        letter-spacing: 0.08em;
+    }
+
+    body.motherbrain-desktop-nav-page .desktop-shell-user-chip strong,
+    body.node-desktop-nav-page .desktop-shell-user-chip strong,
+    body.rfd-hub-page .desktop-shell-user-chip strong {
+        color: var(--text);
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
     .node-desktop-portal-link {
         display: inline-flex;
         align-items: center;

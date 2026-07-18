@@ -251,17 +251,18 @@
                 {% if uses_node_header %}
                 <a class="node-desktop-portal-link neo-menu-text" href="{{ url_for('auth.portal_dashboard') }}">Back to NeoPortal</a>
                 {% set character_switcher_modifier = "character-switcher-header" %}
+                {% set character_switcher_use_neofont = true %}
                 {% include "_change_characters.html" %}
                 <div class="topbar-user-row motherbrain-desktop-utility">
                     {% if motherbrain_alert_tray %}
                     {% include "neomotherbrain/_alert_tray.html" %}
                     {% endif %}
-                    <div class="user-chip" aria-label="Logged in user">
-                        <span>Logged in</span>
-                        <strong>{{ current_user.header_display_name }}</strong>
+                    <div class="user-chip desktop-shell-user-chip" aria-label="Logged in user">
+                        <span>Logged In</span>
+                        <strong>{{ current_user.header_display_name|upper }}</strong>
                     </div>
                     <form class="logout-form mobile-banner-logout" method="post" action="{{ url_for('auth.logout') }}">
-                        <button class="logout-link" type="submit">Logout</button>
+                        <button class="logout-link neo-menu-text" type="submit">Logout</button>
                     </form>
                 </div>
                 {% if not uses_node_desktop_shell %}
@@ -334,13 +335,13 @@
                 {% set character_switcher_use_neofont = is_portal_page %}
                 {% include "_change_characters.html" %}
                 {% endif %}
-                <div class="user-chip" aria-label="Logged in user">
-                    <span>Logged in</span>
-                    <strong>{{ current_user.header_display_name }}</strong>
+                <div class="user-chip{% if is_rfd_hub_page %} desktop-shell-user-chip{% endif %}" aria-label="Logged in user">
+                    <span>{% if is_rfd_hub_page %}Logged In{% else %}Logged in{% endif %}</span>
+                    <strong>{% if is_rfd_hub_page %}{{ current_user.header_display_name|upper }}{% else %}{{ current_user.header_display_name }}{% endif %}</strong>
                 </div>
                 <nav class="nav" aria-label="Primary">
                     <form class="logout-form mobile-banner-logout" method="post" action="{{ url_for('auth.logout') }}">
-                        <button class="logout-link" type="submit">Logout</button>
+                        <button class="logout-link{% if is_rfd_hub_page %} neo-menu-text{% endif %}" type="submit">Logout</button>
                     </form>
                 </nav>
                 {% endif %}

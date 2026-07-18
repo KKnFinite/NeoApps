@@ -615,6 +615,53 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("<strong>Fallback Display</strong>", user_chip)
 
+    def test_shared_desktop_shell_uses_compact_neofont_utility_controls(self):
+        seed_dev_grandmaster(self.app)
+        user = User.query.filter_by(username="Kessler").first()
+        user.last_name = "Kessler"
+        db.session.commit()
+
+        self.client.post(
+            "/login",
+            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
+        )
+
+        for path in (
+            "/motherbrain",
+            "/neoermac",
+            "/neosektor",
+            "/neoscorpion",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                topbar = response.data.decode().split('<header class="topbar">', 1)[1]
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn('class="node-desktop-portal-link neo-menu-text"', topbar)
+                self.assertIn("data-character-switcher", topbar)
+                self.assertIn('class="user-chip desktop-shell-user-chip"', topbar)
+                self.assertIn("<span>Logged In</span>", topbar)
+                self.assertIn("<strong>KESSLER</strong>", topbar)
+                self.assertIn('class="logout-link neo-menu-text"', topbar)
+                self.assertLess(topbar.index("node-desktop-portal-link"), topbar.index("data-character-switcher"))
+                self.assertLess(topbar.index("data-character-switcher"), topbar.index("desktop-shell-user-chip"))
+                self.assertLess(topbar.index("desktop-shell-user-chip"), topbar.index("logout-link neo-menu-text"))
+
+        rfd_response = self.client.get("/rfd")
+        rfd_topbar = rfd_response.data.decode().split('<header class="topbar">', 1)[1]
+        self.assertEqual(rfd_response.status_code, 200)
+        self.assertIn('class="user-chip desktop-shell-user-chip"', rfd_topbar)
+        self.assertIn("<span>Logged In</span>", rfd_topbar)
+        self.assertIn("<strong>KESSLER</strong>", rfd_topbar)
+        self.assertIn('class="logout-link neo-menu-text"', rfd_topbar)
+
+        css = Path("app/static/css/base.css").read_text()
+        self.assertIn("Shared NeoGateway desktop shell: compact, single-line top-right utilities.", css)
+        self.assertIn("flex-wrap: nowrap;", css)
+        self.assertIn('font-family: "NeoFont", Arial, sans-serif;', css)
+        self.assertIn(".desktop-shell-user-chip", css)
+        self.assertIn("@media (min-width: 901px)", css)
+
     def test_mobile_shell_renders_motherbrain_topbar_alerts_and_bottom_nav(self):
         seed_dev_grandmaster(self.app)
         self.client.post(
