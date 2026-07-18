@@ -2534,12 +2534,17 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b">Delay<", response.data)
         self.assertIn(b"data-neoermac-outbound-mobile-header", response.data)
         self.assertNotIn(b"neoermac-outbound-mobile-fields", response.data)
+        self.assertIn(b'<b>P</b>', response.data)
+        self.assertIn(b'<b>M</b>', response.data)
+        self.assertNotIn(b'<b>1</b>', response.data)
         self.assertIn(".neoermac-outbound-table-wrap {\n        display: none;", css)
         self.assertIn(".neoermac-outbound-mobile-row {\n        display: grid;", css)
         self.assertIn(
             "grid-template-columns: 1.25fr 0.88fr 0.55fr 0.45fr 0.9fr 1.65fr 0.72fr 0.45fr;",
             css,
         )
+        self.assertIn(".neoermac-outbound-shell {\n        width: 100%;", css)
+        self.assertIn("background: transparent;", css)
         self.assertNotIn(".neoermac-outbound-table-wrap {\n        overflow-x: auto;", css)
 
     def test_view_outbound_sorts_by_planned_pull_time_and_handles_missing_data(self):

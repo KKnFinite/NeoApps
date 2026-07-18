@@ -4576,9 +4576,15 @@ a {
     .neoermac-outbound-shell {
         width: 100%;
         max-width: 100%;
+        gap: 8px;
+        margin: 0;
         overflow-x: hidden;
+        padding: 0 6px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
         justify-items: stretch;
-        padding-inline: 10px;
     }
 
     .neoermac-outbound-summary {
@@ -4624,7 +4630,7 @@ a {
     }
 
     .neoermac-outbound-mobile-row {
-        min-height: 52px;
+        min-height: 46px;
         overflow: hidden;
         border: 1px solid rgba(143, 24, 38, 0.4);
         border-radius: 5px;
