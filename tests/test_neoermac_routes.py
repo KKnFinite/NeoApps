@@ -2498,7 +2498,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"02:20", response.data)
         self.assertIn(b"20 MIN", response.data)
 
-    def test_view_outbound_mobile_uses_compact_eight_field_grid_without_horizontal_scroll(self):
+    def test_view_outbound_mobile_uses_single_scan_row_per_mission_without_horizontal_scroll(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
         self._add_operation_departure("UPS501", "SDF", tail="N501UP", parking="A14")
         db.session.commit()
@@ -2532,8 +2532,14 @@ class NeoErmacRoutesTest(unittest.TestCase):
         positions = [response.data.index(field) for field in mobile_fields]
         self.assertEqual(positions, sorted(positions))
         self.assertIn(b">Delay<", response.data)
+        self.assertIn(b"data-neoermac-outbound-mobile-header", response.data)
+        self.assertNotIn(b"neoermac-outbound-mobile-fields", response.data)
         self.assertIn(".neoermac-outbound-table-wrap {\n        display: none;", css)
-        self.assertIn(".neoermac-outbound-mobile-list {\n        display: grid;", css)
+        self.assertIn(".neoermac-outbound-mobile-row {\n        display: grid;", css)
+        self.assertIn(
+            "grid-template-columns: 1.25fr 0.88fr 0.55fr 0.45fr 0.9fr 1.65fr 0.72fr 0.45fr;",
+            css,
+        )
         self.assertNotIn(".neoermac-outbound-table-wrap {\n        overflow-x: auto;", css)
 
     def test_view_outbound_sorts_by_planned_pull_time_and_handles_missing_data(self):

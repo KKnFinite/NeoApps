@@ -4577,6 +4577,7 @@ a {
         width: 100%;
         max-width: 100%;
         overflow-x: hidden;
+        justify-items: stretch;
         padding-inline: 10px;
     }
 
@@ -4590,16 +4591,43 @@ a {
 
     .neoermac-outbound-mobile-list {
         display: grid;
-        gap: 8px;
+        gap: 4px;
         width: 100%;
         min-width: 0;
     }
 
+    .neoermac-outbound-mobile-header,
     .neoermac-outbound-mobile-row {
+        display: grid;
+        grid-template-columns: 1.25fr 0.88fr 0.55fr 0.45fr 0.9fr 1.65fr 0.72fr 0.45fr;
+        align-items: stretch;
+        width: 100%;
         min-width: 0;
+    }
+
+    .neoermac-outbound-mobile-header {
+        padding: 0 2px;
+        color: var(--muted);
+        font-size: clamp(0.38rem, 1.7vw, 0.48rem);
+        font-weight: 950;
+        letter-spacing: 0.04em;
+        line-height: 1.05;
+        text-align: center;
+        text-transform: uppercase;
+    }
+
+    .neoermac-outbound-mobile-header span {
+        display: grid;
+        place-items: center;
+        min-width: 0;
+        padding: 2px 1px;
+    }
+
+    .neoermac-outbound-mobile-row {
+        min-height: 52px;
         overflow: hidden;
         border: 1px solid rgba(143, 24, 38, 0.4);
-        border-radius: 7px;
+        border-radius: 5px;
         background:
             radial-gradient(circle at 8% 0%, rgba(var(--node-rgb), 0.14), transparent 13rem),
             linear-gradient(180deg, rgba(17, 19, 23, 0.96), rgba(5, 6, 9, 0.96));
@@ -4610,57 +4638,41 @@ a {
         background: linear-gradient(180deg, rgba(25, 27, 31, 0.94), rgba(7, 8, 10, 0.94));
     }
 
-    .neoermac-outbound-mobile-fields {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 1px;
-        margin: 0;
-        background: rgba(143, 24, 38, 0.28);
-    }
-
     .neoermac-outbound-mobile-field {
         display: grid;
-        align-content: center;
-        gap: 3px;
+        place-items: center;
         min-width: 0;
-        min-height: 45px;
-        padding: 6px 7px;
-        background: rgba(2, 3, 5, 0.84);
+        padding: 3px 2px;
+        border-right: 1px solid rgba(143, 24, 38, 0.24);
+        background: rgba(2, 3, 5, 0.52);
         text-align: center;
-    }
-
-    .neoermac-outbound-mobile-field dt {
-        color: var(--muted);
-        font-size: 0.52rem;
-        font-weight: 950;
-        letter-spacing: 0.06em;
-        line-height: 1;
-        text-transform: uppercase;
-    }
-
-    .neoermac-outbound-mobile-field dd {
-        min-width: 0;
-        margin: 0;
         overflow-wrap: anywhere;
         color: #ffffff;
-        font-size: 0.72rem;
+        font-size: clamp(0.52rem, 2.25vw, 0.66rem);
         font-weight: 950;
-        line-height: 1.12;
+        line-height: 1.05;
     }
 
-    .neoermac-outbound-mobile-field[data-neoermac-outbound-mobile-field="destination"] dd {
+    .neoermac-outbound-mobile-field:last-child {
+        border-right: 0;
+    }
+
+    .neoermac-outbound-mobile-destination {
         color: var(--node-ermac-secondary);
     }
 
-    .neoermac-outbound-mobile-pulls dd {
+    .neoermac-outbound-mobile-pulls {
         display: grid;
         gap: 2px;
-        font-size: 0.56rem;
+        padding-inline: 1px;
+        font-size: clamp(0.42rem, 1.72vw, 0.51rem);
         line-height: 1.08;
     }
 
     .neoermac-outbound-mobile-pulls span {
         display: block;
+        min-width: 0;
+        white-space: nowrap;
     }
 
     .neoermac-outbound-mobile-pulls b {
