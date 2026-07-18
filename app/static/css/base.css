@@ -12008,6 +12008,20 @@ select::-ms-expand {
     color: var(--node-motherbrain-highlight);
 }
 
+@media (min-width: 901px) {
+    /* Keep the selected sort as context instead of the dominant page element. */
+    body.motherbrain-desktop-nav-page .manage-sort-operation-page .manage-sort-operation-title {
+        font-size: clamp(1.35rem, 2vw, 1.8rem);
+        letter-spacing: 0.055em;
+        line-height: 1.15;
+        white-space: nowrap;
+    }
+
+    body.motherbrain-desktop-nav-page .manage-sort-operation-page .manage-sort-main > .section-heading:first-child {
+        margin-bottom: 14px;
+    }
+}
+
 .manage-sort-window-form {
     align-items: end;
 }

@@ -6158,6 +6158,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn("<th>FLIGHT</th>", html)
         self.assertNotIn("UPS1234", html)
 
+        css = Path("app/static/css/base.css").read_text()
+        self.assertIn(
+            "body.motherbrain-desktop-nav-page .manage-sort-operation-page .manage-sort-operation-title",
+            css,
+        )
+        self.assertIn("font-size: clamp(1.35rem, 2vw, 1.8rem);", css)
+        self.assertIn("white-space: nowrap;", css)
+
     def test_mobile_manage_sort_detail_has_compact_locked_layout_hooks(self):
         operation = self._operation(sort_date=date(2026, 7, 1), window_minutes=18)
         db.session.add(operation)
