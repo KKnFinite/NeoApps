@@ -10,6 +10,7 @@ from app.services.access_control import (
 from app.services.permission_rules import ensure_default_permission_rules
 from app.services.password_policy import set_user_password
 from app.services.schema_sync import sync_database_schema
+from app.services.database_startup_retry import run_startup_database_action
 
 
 BOOTSTRAP_USERNAME_ENV = "BOOTSTRAP_ADMIN_USERNAME"
@@ -29,58 +30,71 @@ def bootstrap_database(app=None):
 
     with app.app_context():
         username, email, password, used_fallback = _resolve_bootstrap_credentials(app)
+        return run_startup_database_action(
+            app,
+            lambda: _bootstrap_database_once(
+                app,
+                username,
+                email,
+                password,
+                used_fallback,
+            ),
+            action_name="database bootstrap and schema synchronization",
+        )
 
-        db.create_all()
-        sync_database_schema(app)
-        ensure_default_gateway_and_nodes()
-        ensure_default_permission_rules()
 
-        user, created_user = _find_or_create_bootstrap_user(username, email)
-        user.username = username
-        user.email = email
-        user.first_name = user.first_name or username
-        user.last_name = user.last_name or ""
-        user.full_name = user.full_name or username
-        user.employee_id = user.employee_id or "BOOTSTRAP"
-        user.supervisor_name = user.supervisor_name or "System Bootstrap"
-        user.work_area = user.work_area or "NeoGateway"
-        user.access_reason = user.access_reason or "Initial NeoGateway Grandmaster bootstrap."
-        user.role = "grandmaster"
-        user.is_active = True
-        user.email_verified_at = user.email_verified_at or datetime.utcnow()
-        user.password_reset_required = False
-        user.temporary_password_expires_at = None
-        user.password_changed_at = user.password_changed_at or datetime.utcnow()
-        user.mfa_required = False
-        user.mfa_enabled = False
-        user.mfa_secret = None
-        user.mfa_verified_at = None
+def _bootstrap_database_once(app, username, email, password, used_fallback):
+    db.create_all()
+    sync_database_schema(app)
+    ensure_default_gateway_and_nodes()
+    ensure_default_permission_rules()
 
-        password_applied = created_user or not user.password_hash
-        if password_applied:
-            set_user_password(user, password)
+    user, created_user = _find_or_create_bootstrap_user(username, email)
+    user.username = username
+    user.email = email
+    user.first_name = user.first_name or username
+    user.last_name = user.last_name or ""
+    user.full_name = user.full_name or username
+    user.employee_id = user.employee_id or "BOOTSTRAP"
+    user.supervisor_name = user.supervisor_name or "System Bootstrap"
+    user.work_area = user.work_area or "NeoGateway"
+    user.access_reason = user.access_reason or "Initial NeoGateway Grandmaster bootstrap."
+    user.role = "grandmaster"
+    user.is_active = True
+    user.email_verified_at = user.email_verified_at or datetime.utcnow()
+    user.password_reset_required = False
+    user.temporary_password_expires_at = None
+    user.password_changed_at = user.password_changed_at or datetime.utcnow()
+    user.mfa_required = False
+    user.mfa_enabled = False
+    user.mfa_secret = None
+    user.mfa_verified_at = None
 
-        db.session.flush()
+    password_applied = created_user or not user.password_hash
+    if password_applied:
+        set_user_password(user, password)
 
-        membership = backfill_default_gateway_node_roles(user, role="grandmaster")
+    db.session.flush()
 
-        db.session.commit()
+    membership = backfill_default_gateway_node_roles(user, role="grandmaster")
 
-        return {
-            "username": user.username,
-            "email": user.email,
-            "gateway_code": membership.gateway.code,
-            "created_user": created_user,
-            "password_applied": password_applied,
-            "used_fallback_password": used_fallback,
-            "node_count": NeoNode.query.filter_by(is_active=True).count(),
-            "membership_count": GatewayMembership.query.filter_by(user_id=user.id).count(),
-            "grandmaster_role_count": GatewayNodeRole.query.filter_by(
-                gateway_membership_id=membership.id,
-                role="grandmaster",
-                is_active=True,
-            ).count(),
-        }
+    db.session.commit()
+
+    return {
+        "username": user.username,
+        "email": user.email,
+        "gateway_code": membership.gateway.code,
+        "created_user": created_user,
+        "password_applied": password_applied,
+        "used_fallback_password": used_fallback,
+        "node_count": NeoNode.query.filter_by(is_active=True).count(),
+        "membership_count": GatewayMembership.query.filter_by(user_id=user.id).count(),
+        "grandmaster_role_count": GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            role="grandmaster",
+            is_active=True,
+        ).count(),
+    }
 
 
 def _resolve_bootstrap_credentials(app):

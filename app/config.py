@@ -119,6 +119,20 @@ class Config:
     )
     SQLALCHEMY_DATABASE_URI = resolve_database_uri()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # Production startup retries transient connection loss during schema/bootstrap
+    # work. Tests default to one attempt unless a focused test opts into retries.
+    DATABASE_STARTUP_RETRY_ATTEMPTS = int(
+        os.getenv("DATABASE_STARTUP_RETRY_ATTEMPTS", "5")
+    )
+    DATABASE_STARTUP_RETRY_ATTEMPTS_TESTING = int(
+        os.getenv("DATABASE_STARTUP_RETRY_ATTEMPTS_TESTING", "1")
+    )
+    DATABASE_STARTUP_RETRY_INITIAL_DELAY_SECONDS = float(
+        os.getenv("DATABASE_STARTUP_RETRY_INITIAL_DELAY_SECONDS", "1")
+    )
+    DATABASE_STARTUP_RETRY_MAX_DELAY_SECONDS = float(
+        os.getenv("DATABASE_STARTUP_RETRY_MAX_DELAY_SECONDS", "8")
+    )
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = env_flag("SESSION_COOKIE_SECURE", bool(os.getenv("DATABASE_URL")))

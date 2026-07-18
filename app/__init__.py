@@ -73,10 +73,18 @@ def sync_existing_local_schema(app):
         return False
 
     from app.services.schema_sync import sync_local_sqlite_schema
+    from app.services.database_startup_retry import run_startup_database_action
 
     with app.app_context():
-        sync_local_sqlite_schema(app)
-        db.session.commit()
+        def sync_schema():
+            sync_local_sqlite_schema(app)
+            db.session.commit()
+
+        run_startup_database_action(
+            app,
+            sync_schema,
+            action_name="local schema synchronization",
+        )
     return True
 
 
