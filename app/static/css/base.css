@@ -22330,21 +22330,39 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     .character-switcher-panel {
         top: calc(100% + 6px);
         gap: 4px;
-        width: min(216px, calc(100vw - 32px));
+        width: min(238px, calc(100vw - 32px));
         padding: 6px;
     }
 
     .character-switcher-link {
+        display: grid;
+        grid-template-columns: 20px minmax(0, 1fr) auto;
+        align-items: center;
         gap: 7px;
-        min-height: 28px;
+        min-height: 30px;
         padding: 5px 7px;
-        font-size: 0.64rem;
+        font-size: 0.54rem;
     }
 
     .character-switcher-icon {
+        align-self: center;
         width: 20px;
         height: 20px;
         border-radius: 5px;
+    }
+
+    .character-switcher-label {
+        min-width: 0;
+        color: inherit;
+        font-family: "NeoFont", Arial, sans-serif;
+        font-size: 0.54rem;
+        letter-spacing: 0.04em;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    .character-switcher-label .neo-brand {
+        font-size: inherit;
     }
 
     .character-switcher-suffix {

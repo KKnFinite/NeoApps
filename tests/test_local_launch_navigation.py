@@ -662,6 +662,28 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(".desktop-shell-user-chip", css)
         self.assertIn("@media (min-width: 901px)", css)
 
+    def test_shared_desktop_character_menu_uses_compact_neofont_labels(self):
+        seed_dev_grandmaster(self.app)
+        self.client.post(
+            "/login",
+            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
+        )
+
+        response = self.client.get("/neoermac")
+        menu = response.data.decode().split('aria-label="Accessible NeoNodes"', 1)[1]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('class="character-switcher-label neo-menu-text"', menu)
+        self.assertIn("MotherBrain", menu)
+        self.assertIn("Scorpion", menu)
+
+        css = Path("app/static/css/base.css").read_text()
+        self.assertIn("width: min(238px, calc(100vw - 32px));", css)
+        self.assertIn("grid-template-columns: 20px minmax(0, 1fr) auto;", css)
+        self.assertIn('.character-switcher-label {\n        min-width: 0;', css)
+        self.assertIn('font-family: "NeoFont", Arial, sans-serif;', css)
+        self.assertIn("font-size: 0.54rem;", css)
+
     def test_mobile_shell_renders_motherbrain_topbar_alerts_and_bottom_nav(self):
         seed_dev_grandmaster(self.app)
         self.client.post(
