@@ -318,6 +318,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("body.motherbrain-desktop-nav-page .motherbrain-header-nav {\n        display: none;", css)
         self.assertIn("--motherbrain-side-nav-width: 292px;", css)
         self.assertIn(".motherbrain-desktop-side-nav", css)
+        self.assertIn(
+            ".motherbrain-desktop-side-brand img {\n"
+            "        width: 88px;\n"
+            "        height: 88px;\n"
+            "        object-fit: contain;\n"
+            "        border-radius: 22px;",
+            css,
+        )
         self.assertIn("overflow-x: hidden;", css)
         self.assertIn(".motherbrain-desktop-side-link", css)
         self.assertIn("white-space: nowrap;", css)

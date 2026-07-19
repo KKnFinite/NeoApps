@@ -1532,17 +1532,18 @@ a {
     .motherbrain-desktop-side-brand {
         display: grid;
         justify-items: center;
-        gap: 7px;
-        padding-bottom: 10px;
+        gap: 9px;
+        padding-bottom: 12px;
         border-bottom: 1px solid rgba(235, 241, 246, 0.12);
         text-align: center;
         text-decoration: none;
     }
 
     .motherbrain-desktop-side-brand img {
-        width: 62px;
-        height: 62px;
+        width: 88px;
+        height: 88px;
         object-fit: contain;
+        border-radius: 22px;
         filter: drop-shadow(0 0 15px rgba(var(--node-rgb), 0.3));
     }
 
