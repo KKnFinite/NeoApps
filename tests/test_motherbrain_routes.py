@@ -2048,6 +2048,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertNotIn(b"motherbrain-home-page", response.data)
                 self.assertNotIn(b"motherbrain-screen-logo", response.data)
                 self.assertIn(b'data-motherbrain-desktop-side-nav', response.data)
+                desktop_sidebar = response.data.split(b"data-motherbrain-desktop-side-nav", 1)[1].split(b"</aside>", 1)[0]
+                self.assertIn(b'neomotherbrain-inapp-256.png', desktop_sidebar)
+                self.assertNotIn(b'neomotherbrain-inapp-128.png', desktop_sidebar)
                 self.assertIn(b"neo-brand--motherbrain", response.data)
                 self.assertIn(b"motherbrain-desktop-side-menu", response.data)
                 self.assertNotIn(b"motherbrain-main-menu-return", response.data)

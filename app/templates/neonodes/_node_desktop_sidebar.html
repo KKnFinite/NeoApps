@@ -1,7 +1,7 @@
 {% from "_neo_brand.html" import neo_brand %}
 <aside class="motherbrain-desktop-side-nav node-desktop-side-nav node-{{ node_header_key }}" aria-label="{{ node_header_name }} desktop navigation" data-node-desktop-side-nav data-node-desktop-shell="{{ node_header_key }}">
     <a class="motherbrain-desktop-side-brand node-desktop-side-brand" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} dashboard">
-        <img src="{{ url_for('static', filename=node_header_logo) }}" alt="{{ node_header_alt }}" width="128" height="128" decoding="async">
+        <img src="{{ url_for('static', filename=node_desktop_sidebar_logo) }}" alt="{{ node_header_alt }}" width="256" height="256" decoding="async">
         {% if is_neoermac_page %}
         {% with neoermac_brand_class="motherbrain-sidebar-brand-title" %}
         {% include "neonodes/neoermac/_brand_title.html" %}

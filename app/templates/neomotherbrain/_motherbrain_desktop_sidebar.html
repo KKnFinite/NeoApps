@@ -2,7 +2,7 @@
 {% set sidebar_operation = motherbrain_shell_operation if motherbrain_shell_operation is defined else none %}
 <aside class="motherbrain-desktop-side-nav" aria-label="MotherBrain desktop navigation" data-motherbrain-desktop-side-nav>
     <a class="motherbrain-desktop-side-brand" href="{{ url_for('neomotherbrain.operation_detail', operation_id=sidebar_operation.id) if sidebar_operation else url_for('neomotherbrain.manage_sort') }}" aria-label="NeoMotherBrain manage sort">
-        <img src="{{ url_for('static', filename='images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png') }}" alt="NeoMotherBrain icon" width="128" height="128" decoding="async">
+        <img src="{{ url_for('static', filename=motherbrain_desktop_sidebar_icon) }}" alt="NeoMotherBrain icon" width="256" height="256" decoding="async">
         <span class="motherbrain-sidebar-brand-title neo-brand-title neo-brand neo-brand--motherbrain neo-node-name neo-node-motherbrain brand-inline-name node-motherbrain" aria-label="NeoMotherBrain">
             <span class="neo-brand__neo neo-word neo-brand-title__neo">NEO</span><span class="neo-brand__node node-word neo-brand-title__node neo-brand-title__node--motherbrain">MOTHERBRAIN</span>
         </span>

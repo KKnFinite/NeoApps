@@ -138,7 +138,12 @@
 {% set neosektor_locked_icon = "images/icons/neosektor/inapp/neosektor-icon-128x128.png" %}
 {% set neoscorpion_locked_icon = "images/icons/neoscorpion/inapp/neoscorpion-128x128.png" %}
 {% set neostaffing_locked_icon = "images/icons/neostaffing/inapp/neostaffing-inapp-128.png" %}
+{% set motherbrain_desktop_sidebar_icon = "images/icons/neomotherbrain/inapp/neomotherbrain-inapp-256.png" %}
+{% set neoermac_desktop_sidebar_icon = "images/icons/neoermac/inapp/neoermac-inapp-256.png" %}
+{% set neosektor_desktop_sidebar_icon = "images/icons/neosektor/inapp/neosektor-icon-256x256.png" %}
+{% set neoscorpion_desktop_sidebar_icon = "images/icons/neoscorpion/inapp/neoscorpion-256x256.png" %}
 {% set node_header_logo = neosektor_locked_icon if is_neosektor_page else (neoermac_locked_icon if is_neoermac_page else (neoscorpion_locked_icon if is_neoscorpion_page else (motherbrain_locked_icon if uses_motherbrain_header else "images/motherbrain_logo1.png"))) %}
+{% set node_desktop_sidebar_logo = neosektor_desktop_sidebar_icon if is_neosektor_page else (neoermac_desktop_sidebar_icon if is_neoermac_page else (neoscorpion_desktop_sidebar_icon if is_neoscorpion_page else (motherbrain_desktop_sidebar_icon if uses_motherbrain_header else node_header_logo))) %}
 {% set node_header_alt = "NeoSektor icon" if is_neosektor_page else ("NeoErmac icon" if is_neoermac_page else ("NeoScorpion icon" if is_neoscorpion_page else ("NeoMotherBrain icon" if uses_motherbrain_header else "MotherBrain logo"))) %}
 {% set node_header_key = "sektor" if is_neosektor_page else ("ermac" if is_neoermac_page else ("scorpion" if is_neoscorpion_page else ("reptile" if is_neoreptile_page else ("subzero" if is_neosubzero_page else ("rain" if is_neorain_page else "motherbrain"))))) %}
 {% set node_header_word = "Sektor" if is_neosektor_page else ("Ermac" if is_neoermac_page else ("Scorpion" if is_neoscorpion_page else ("Reptile" if is_neoreptile_page else ("Sub-Zero" if is_neosubzero_page else ("Rain" if is_neorain_page else "MotherBrain"))))) %}
