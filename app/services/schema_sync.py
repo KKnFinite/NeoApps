@@ -76,8 +76,13 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "mix_pull_time_local": "TIME",
     },
     "neoermac_door_pulls": {
+        "sort_date_operation_id": "INTEGER",
+        "actual_pure_pull_time_local": "TIME",
+        "no_pure_pull": "BOOLEAN NOT NULL DEFAULT 0",
         "actual_mix_pull_time_local": "TIME",
-        "no_mix_pull": "BOOLEAN",
+        "no_mix_pull": "BOOLEAN NOT NULL DEFAULT 0",
+        "created_at": "DATETIME",
+        "updated_at": "DATETIME",
     },
     "sort_timeline_settings": {
         "units_per_poll": "INTEGER DEFAULT 2",
@@ -163,8 +168,13 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "mix_pull_time_local": "TIME",
     },
     "neoermac_door_pulls": {
+        "sort_date_operation_id": "INTEGER",
+        "actual_pure_pull_time_local": "TIME",
+        "no_pure_pull": "BOOLEAN NOT NULL DEFAULT FALSE",
         "actual_mix_pull_time_local": "TIME",
-        "no_mix_pull": "BOOLEAN",
+        "no_mix_pull": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "created_at": "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
+        "updated_at": "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
     },
     "sort_timeline_settings": {
         "units_per_poll": "INTEGER DEFAULT 2",
@@ -220,21 +230,27 @@ def sync_local_sqlite_schema(app):
         table_names,
     )
 
+    table_columns = {
+        table_name: {column["name"] for column in inspector.get_columns(table_name)}
+        for table_name in table_names
+    }
+
     for table_name, column_name in LOCAL_SQLITE_GATEWAY_COLUMNS.items():
         if table_name not in table_names:
             continue
 
-        existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+        existing_columns = table_columns[table_name]
         if column_name in existing_columns:
             continue
 
         db.session.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} INTEGER"))
+        existing_columns.add(column_name)
 
     for table_name, columns in LOCAL_SQLITE_OPTIONAL_COLUMNS.items():
         if table_name not in table_names:
             continue
 
-        existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+        existing_columns = table_columns[table_name]
         for column_name, column_type in columns.items():
             if column_name in existing_columns:
                 continue
@@ -242,13 +258,16 @@ def sync_local_sqlite_schema(app):
             db.session.execute(
                 text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
             )
+            existing_columns.add(column_name)
 
-    _migrate_legacy_second_mix_pull_values(table_names)
     _sync_staffing_people_employee_status_sqlite(table_names)
     _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names)
     _sync_uld_request_unique_constraint_sqlite(inspector, table_names)
     if migrate_existing_approved_users:
         _mark_existing_approved_users_for_password_policy_update(table_names)
+    _validate_neoermac_door_pull_schema(table_names, table_columns)
+    _backfill_neoermac_door_pull_timestamps(table_names, table_columns)
+    _migrate_legacy_second_mix_pull_values(table_names, table_columns)
     db.session.flush()
 
 
@@ -268,11 +287,16 @@ def sync_database_schema(app):
         table_names,
     )
 
+    table_columns = {
+        table_name: {column["name"] for column in inspector.get_columns(table_name)}
+        for table_name in table_names
+    }
+
     for table_name, columns in POSTGRES_OPTIONAL_COLUMNS.items():
         if table_name not in table_names:
             continue
 
-        existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+        existing_columns = table_columns[table_name]
         for column_name, column_type in columns.items():
             if column_name in existing_columns:
                 continue
@@ -283,19 +307,57 @@ def sync_database_schema(app):
                     f"ADD COLUMN IF NOT EXISTS {column_name} {column_type}"
                 )
             )
+            existing_columns.add(column_name)
 
-    _migrate_legacy_second_mix_pull_values(table_names)
     _sync_staffing_people_employee_status_postgres(table_names)
     _sync_sort_date_mission_status_constraints_postgres(table_names)
     _sync_uld_request_unique_constraint_postgres(table_names)
     if migrate_existing_approved_users:
         _mark_existing_approved_users_for_password_policy_update(table_names)
+    _validate_neoermac_door_pull_schema(table_names, table_columns)
+    _backfill_neoermac_door_pull_timestamps(table_names, table_columns)
+    _migrate_legacy_second_mix_pull_values(table_names, table_columns)
     db.session.flush()
 
 
-def _migrate_legacy_second_mix_pull_values(table_names):
+def _validate_neoermac_door_pull_schema(table_names, table_columns):
+    table_name = "neoermac_door_pulls"
+    if table_name not in table_names:
+        return
+
+    from app.models import NeoErmacDoorPull
+
+    expected_columns = {column.name for column in NeoErmacDoorPull.__table__.columns}
+    missing_columns = expected_columns - table_columns.get(table_name, set())
+    if missing_columns:
+        missing_list = ", ".join(sorted(missing_columns))
+        raise RuntimeError(
+            "NeoErmac Door Pull schema is missing required foundational columns: "
+            f"{missing_list}. Manual database repair is required before bootstrap."
+        )
+
+
+def _backfill_neoermac_door_pull_timestamps(table_names, table_columns):
+    table_name = "neoermac_door_pulls"
+    if table_name not in table_names:
+        return
+
+    existing_columns = table_columns.get(table_name, set())
+    for column_name in ("created_at", "updated_at"):
+        if column_name not in existing_columns:
+            continue
+        db.session.execute(
+            text(
+                f"UPDATE {table_name} "
+                f"SET {column_name} = CURRENT_TIMESTAMP "
+                f"WHERE {column_name} IS NULL"
+            )
+        )
+
+
+def _migrate_legacy_second_mix_pull_values(table_names, table_columns=None):
     """Copy the retired 2nd Mix values into the new Mix Pull columns once."""
-    migrations = (
+    time_migrations = (
         (
             "master_flight_schedules",
             "mix_pull_time_local",
@@ -316,25 +378,48 @@ def _migrate_legacy_second_mix_pull_values(table_names):
             "actual_mix_pull_time_local",
             "actual_second_mix_pull_time_local",
         ),
+    )
+    boolean_migrations = (
         (
             "neoermac_door_pulls",
             "no_mix_pull",
             "no_second_mix_pull",
         ),
     )
-    inspector = inspect(db.engine)
-    for table_name, target_column, legacy_column in migrations:
+
+    if table_columns is None:
+        inspector = inspect(db.engine)
+        table_columns = {
+            table_name: {
+                column["name"] for column in inspector.get_columns(table_name)
+            }
+            for table_name in table_names
+        }
+
+    for table_name, target_column, legacy_column in time_migrations:
         if table_name not in table_names:
             continue
-        existing_columns = {
-            column["name"] for column in inspector.get_columns(table_name)
-        }
+        existing_columns = table_columns.get(table_name, set())
         if {target_column, legacy_column}.issubset(existing_columns):
             db.session.execute(
                 text(
                     f"UPDATE {table_name} "
                     f"SET {target_column} = {legacy_column} "
                     f"WHERE {target_column} IS NULL AND {legacy_column} IS NOT NULL"
+                )
+            )
+
+    for table_name, target_column, legacy_column in boolean_migrations:
+        if table_name not in table_names:
+            continue
+        existing_columns = table_columns.get(table_name, set())
+        if {target_column, legacy_column}.issubset(existing_columns):
+            db.session.execute(
+                text(
+                    f"UPDATE {table_name} "
+                    f"SET {target_column} = TRUE "
+                    f"WHERE {legacy_column} IS TRUE "
+                    f"AND COALESCE({target_column}, FALSE) IS FALSE"
                 )
             )
 

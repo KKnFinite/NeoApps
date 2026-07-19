@@ -90,11 +90,11 @@ custom down-timer value, so the bridge does not alter that sheet layout.
 
 ## Production Bootstrap
 
-Database bootstrap is an idempotent deployment step, not a web-worker startup
-step. Configure Render to run `python scripts/bootstrap_database.py` before
-starting Gunicorn. The exact paid-service and Free-plan commands are in
+Database bootstrap is an idempotent manual/deployment step, not a web-worker or
+Render Free Build Command step. Paid Render services can use the Pre-Deploy
+Command; Render Free schema changes require the one-time command documented in
 [`docs/deployment/render.md`](docs/deployment/render.md). Set these environment
-variables in Render:
+variables for the bootstrap command:
 
 ```text
 BOOTSTRAP_ADMIN_USERNAME

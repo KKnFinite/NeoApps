@@ -63,13 +63,72 @@ class RenderStartupTest(unittest.TestCase):
             "used_fallback_password": False,
             "password_applied": False,
         }
+        app = Flask("deployment-bootstrap")
         with (
+            patch.object(
+                bootstrap_script,
+                "create_deployment_bootstrap_app",
+                return_value=app,
+            ) as create_app,
             patch.object(bootstrap_script, "bootstrap_database", return_value=result) as bootstrap,
-            patch("sys.stdout", new_callable=io.StringIO),
+            patch.object(bootstrap_script, "_dispose_bootstrap_engine") as dispose,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
         ):
             bootstrap_script.main()
 
-        bootstrap.assert_called_once_with()
+        create_app.assert_called_once_with()
+        bootstrap.assert_called_once_with(app)
+        dispose.assert_called_once_with(app)
+        self.assertIn("phase 1/3", stdout.getvalue())
+        self.assertIn("phase 3/3", stdout.getvalue())
+
+    def test_manual_bootstrap_uses_bounded_postgres_timeouts(self):
+        from scripts import bootstrap_database as bootstrap_script
+
+        with patch.dict(
+            "os.environ",
+            {
+                "DATABASE_URL": "postgresql://neo_user:password@example.test/neoapps",
+                "DATABASE_BOOTSTRAP_CONNECT_TIMEOUT_SECONDS": "6",
+                "DATABASE_BOOTSTRAP_LOCK_TIMEOUT_MILLISECONDS": "4000",
+                "DATABASE_BOOTSTRAP_STATEMENT_TIMEOUT_MILLISECONDS": "12000",
+                "DATABASE_BOOTSTRAP_RETRY_ATTEMPTS": "4",
+            },
+            clear=False,
+        ):
+            config = bootstrap_script.deployment_bootstrap_config()
+
+        options = config.SQLALCHEMY_ENGINE_OPTIONS
+        self.assertTrue(options["pool_pre_ping"])
+        self.assertEqual(options["pool_timeout"], 6)
+        self.assertEqual(options["connect_args"]["connect_timeout"], 6)
+        self.assertIn("lock_timeout=4000ms", options["connect_args"]["options"])
+        self.assertIn("statement_timeout=12000ms", options["connect_args"]["options"])
+        self.assertEqual(config.DATABASE_STARTUP_RETRY_ATTEMPTS, 4)
+
+    def test_manual_bootstrap_reports_and_propagates_schema_failure(self):
+        from scripts import bootstrap_database as bootstrap_script
+
+        app = Flask("deployment-bootstrap-failure")
+        with (
+            patch.object(
+                bootstrap_script,
+                "create_deployment_bootstrap_app",
+                return_value=app,
+            ),
+            patch.object(
+                bootstrap_script,
+                "bootstrap_database",
+                side_effect=RuntimeError("invalid schema"),
+            ),
+            patch.object(bootstrap_script, "_dispose_bootstrap_engine") as dispose,
+            patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "invalid schema"):
+                bootstrap_script.main()
+
+        dispose.assert_called_once_with(app)
+        self.assertIn("bootstrap failed during schema synchronization", stderr.getvalue())
 
     def test_deploy_bootstrap_retries_transient_database_failure(self):
         app = create_app(self.config)
@@ -123,6 +182,10 @@ class RenderStartupTest(unittest.TestCase):
         self.assertIn("pip install -r requirements.txt", deployment_doc)
         self.assertIn("python scripts/bootstrap_database.py", deployment_doc)
         self.assertIn("gunicorn run:app --bind 0.0.0.0:$PORT", deployment_doc)
+        self.assertNotIn(
+            "pip install -r requirements.txt && python scripts/bootstrap_database.py",
+            deployment_doc,
+        )
         self.assertEqual(procfile.strip(), "web: gunicorn run:app --bind 0.0.0.0:$PORT")
 
 
