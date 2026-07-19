@@ -1531,25 +1531,36 @@ a {
 
     .motherbrain-desktop-side-brand {
         display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: 136px auto;
+        align-items: center;
         justify-items: center;
-        gap: 9px;
-        padding-bottom: 12px;
+        gap: 8px;
+        min-height: 176px;
+        padding: 2px 0 14px;
         border-bottom: 1px solid rgba(235, 241, 246, 0.12);
         text-align: center;
         text-decoration: none;
     }
 
     .motherbrain-desktop-side-brand img {
-        width: 88px;
-        height: 88px;
+        display: block;
+        width: 136px;
+        height: 136px;
+        min-width: 136px;
+        min-height: 136px;
+        max-width: none;
+        max-height: none;
         object-fit: contain;
-        border-radius: 22px;
+        border-radius: 32px;
         filter: drop-shadow(0 0 15px rgba(var(--node-rgb), 0.3));
     }
 
     .motherbrain-sidebar-brand-title {
-        font-size: 0.88rem;
-        line-height: 0.95;
+        display: block;
+        width: 100%;
+        font-size: 0.94rem;
+        line-height: 1;
     }
 
     .motherbrain-desktop-side-context {
