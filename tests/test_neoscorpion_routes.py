@@ -87,6 +87,9 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"node-desktop-nav-page", dashboard.data)
         self.assertIn(b"data-node-desktop-side-nav", dashboard.data)
         self.assertIn(b'data-node-desktop-shell="scorpion"', dashboard.data)
+        desktop_sidebar = dashboard.data.split(b"data-node-desktop-side-nav", 1)[1].split(b"</aside>", 1)[0]
+        self.assertIn(b"neoscorpion-256x256.png", desktop_sidebar)
+        self.assertNotIn(b"neoscorpion-128x128.png", desktop_sidebar)
         self.assertIn(b'<span class="neo-page-title motherbrain-desktop-top-title-text">DASHBOARD</span>', dashboard.data)
         self.assertIn(b"neo-brand-title__node--scorpion", dashboard.data)
         self.assertIn(b'src="/static/images/icons/neoscorpion/inapp/neoscorpion-256x256.png"', dashboard.data)

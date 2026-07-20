@@ -1533,6 +1533,7 @@ a {
         display: grid;
         grid-template-columns: minmax(0, 1fr);
         grid-template-rows: 220px auto;
+        container-type: inline-size;
         align-items: center;
         justify-items: center;
         gap: 0;
@@ -1562,10 +1563,26 @@ a {
     }
 
     .motherbrain-sidebar-brand-title {
-        display: block;
-        width: 100%;
-        font-size: 1.62rem;
+        display: flex;
+        width: calc(100% - 12px);
+        max-width: 100%;
+        min-width: 0;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: center;
+        column-gap: 0;
+        row-gap: 0;
+        font-size: clamp(1.05rem, 7.5cqi, 1.45rem);
         line-height: 0.94;
+        white-space: normal;
+        overflow: visible;
+    }
+
+    .motherbrain-sidebar-brand-title .neo-brand__neo,
+    .motherbrain-sidebar-brand-title .neo-brand__node {
+        flex: 0 0 auto;
+        min-width: 0;
+        white-space: nowrap;
     }
 
     .motherbrain-desktop-side-context {

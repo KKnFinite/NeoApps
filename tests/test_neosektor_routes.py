@@ -85,6 +85,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"node-desktop-nav-page", response.data)
         self.assertIn(b"data-node-desktop-side-nav", response.data)
         self.assertIn(b'data-node-desktop-shell="sektor"', response.data)
+        desktop_sidebar = response.data.split(b"data-node-desktop-side-nav", 1)[1].split(b"</aside>", 1)[0]
+        self.assertIn(b"neosektor-icon-256x256.png", desktop_sidebar)
+        self.assertNotIn(b"neosektor-icon-128x128.png", desktop_sidebar)
         self.assertIn(b'<span class="neo-page-title motherbrain-desktop-top-title-text">DASHBOARD</span>', response.data)
         self.assertIn(b"neo-brand--sektor", response.data)
         self.assertIn(b"neo-brand__neo neo-word", response.data)
