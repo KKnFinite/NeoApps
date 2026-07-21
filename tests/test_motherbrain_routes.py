@@ -332,22 +332,26 @@ class MotherBrainRoutesTest(unittest.TestCase):
             ".motherbrain-desktop-side-brand {\n"
             "        display: grid;\n"
             "        grid-template-columns: minmax(0, 1fr);\n"
-            "        grid-template-rows: 136px auto;\n"
+            "        grid-template-rows: 220px auto;\n"
+            "        container-type: inline-size;\n"
             "        align-items: center;",
             css,
         )
-        self.assertIn("min-height: 176px;", css)
+        self.assertIn("min-height: 256px;", css)
         self.assertIn(
             ".motherbrain-desktop-side-brand img {\n"
             "        display: block;\n"
-            "        width: 136px;\n"
-            "        height: 136px;\n"
-            "        min-width: 136px;\n"
-            "        min-height: 136px;\n"
+            "        width: 220px;\n"
+            "        height: 220px;\n"
+            "        min-width: 220px;\n"
+            "        min-height: 220px;\n"
             "        max-width: none;\n"
             "        max-height: none;\n"
             "        object-fit: contain;\n"
-            "        border-radius: 32px;",
+            "        padding: 0;\n"
+            "        border: 0;\n"
+            "        border-radius: 0;\n"
+            "        background: transparent;",
             css,
         )
         self.assertIn("overflow-x: hidden;", css)

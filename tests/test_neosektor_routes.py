@@ -155,18 +155,22 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("Back to NeoPortal", html)
         self.assertLess(html.index("node-desktop-portal-link"), html.index("data-character-switcher"))
         self.assertIn(".node-desktop-portal-link {\n    display: none;", css)
-        self.assertIn("@media (min-width: 901px) {\n    .node-desktop-portal-link {", css)
-        self.assertIn("font-size: 0.58rem;", css)
+        desktop_portal_link = css.rsplit(".node-desktop-portal-link {", 1)[1].split("}", 1)[0]
+        self.assertIn("display: inline-flex;", desktop_portal_link)
+        self.assertIn("font-size: 0.58rem;", desktop_portal_link)
 
     def test_desktop_ballmat_and_character_switcher_compaction_rules_are_present(self):
         css = Path("app/static/css/base.css").read_text()
+        desktop_switcher_panel = css.rsplit(".character-switcher-panel {", 1)[1].split("}", 1)[0]
+        desktop_switcher_link = css.rsplit(".character-switcher-link {", 1)[1].split("}", 1)[0]
+        desktop_switcher_icon = css.rsplit(".character-switcher-icon {", 1)[1].split("}", 1)[0]
 
         self.assertIn('body.blueprint-neosektor.node-desktop-nav-page.neosektor-ballmat-operator-page', css)
         self.assertIn('font-size: clamp(1.32rem, 1.9vw, 1.7rem);', css)
-        self.assertIn('width: min(216px, calc(100vw - 32px));', css)
-        self.assertIn('min-height: 28px;', css)
-        self.assertIn('width: 20px;', css)
-        self.assertIn('@media (min-width: 901px)', css)
+        self.assertIn('width: min(238px, calc(100vw - 32px));', desktop_switcher_panel)
+        self.assertIn('min-height: 30px;', desktop_switcher_link)
+        self.assertIn('width: 20px;', desktop_switcher_icon)
+        self.assertIn('height: 20px;', desktop_switcher_icon)
 
     def test_tunnel_conductor_marks_duplicate_title_for_mobile_shell(self):
         self._login_approved_user(role="simulator")
@@ -1020,7 +1024,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
         response = self.client.get("/neosektor/driver-routing")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"DRIVER ROUTING", response.data)
+        self.assertIn(
+            b'<h1 id="neosektor-driver-title">Driver Routing</h1>',
+            response.data,
+        )
+        self.assertIn(b"<title>Driver Routing | NeoSektor</title>", response.data)
         self.assertIn(b"driver-wave", response.data)
         self.assertIn(b"driver-bay-priority", response.data)
         self.assertIn(b"data-driver-routing", response.data)
@@ -3405,7 +3413,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
         self.assertIn("grid-template-columns: 30px minmax(0, 1fr) 30px;", css)
         self.assertIn("minmax(0, 0.9fr)", css)
-        self.assertIn("minmax(0, 1.5fr)", css)
+        self.assertIn("minmax(0, 1.42fr)", css)
         self.assertIn("grid-template-rows: auto minmax(0, 1fr) minmax(0, 0.68fr);", css)
         self.assertIn("min-height: 32px;", css)
         self.assertIn("height: 30px;", css)
