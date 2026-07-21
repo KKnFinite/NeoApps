@@ -7148,6 +7148,17 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn('name="building_lineup_belt_preference_pair"', section_html)
         self.assertNotIn("parking-belt-preference-save\" name=\"building_lineup_belt_preference_pair", section_html)
         self.assertEqual(section_html.count("SAVE BUILDING LINEUP PREFERENCES"), 1)
+        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        preferences_row_rule = re.search(
+            r"\.parking-belt-preferences-row\s*\{(?P<body>.*?)\n\}",
+            css,
+            re.DOTALL,
+        ).group("body")
+        self.assertIn(
+            "grid-template-columns: minmax(74px, 0.72fr) repeat(6, minmax(76px, 1fr));",
+            preferences_row_rule,
+        )
+        self.assertNotIn("minmax(82px, 0.72fr)", preferences_row_rule)
 
         save_response = self.client.post(
             f"/motherbrain/parking-rules?operation_id={operation.id}",

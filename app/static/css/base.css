@@ -6418,7 +6418,7 @@ h2 {
 
 .parking-belt-preferences-row {
     display: grid;
-    grid-template-columns: minmax(74px, 0.72fr) repeat(6, minmax(76px, 1fr)) minmax(82px, 0.72fr);
+    grid-template-columns: minmax(74px, 0.72fr) repeat(6, minmax(76px, 1fr));
     gap: 7px;
     align-items: center;
     min-width: 0;
