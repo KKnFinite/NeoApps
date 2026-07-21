@@ -7138,24 +7138,32 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         for pair in BUILDING_LINEUP_PARKING_BELT_PAIRS:
             self.assertIn(f'data-belt-pair="{pair["pair_key"]}"'.encode(), response.data)
-            self.assertIn(
-                f'name="building_lineup_belt_preference_pair" value="{pair["pair_key"]}"'.encode(),
-                response.data,
-            )
         self.assertNotIn(b'data-belt-pair="34/37"', response.data)
         self.assertIn(b"Remote only applies when Remote parking is enabled.", response.data)
+        section_html = self._html_section(
+            response.data.decode("utf-8"),
+            "parking-rule-section-building-lineup-belt-preferences",
+        )
+        self.assertNotIn(">ACTION<", section_html)
+        self.assertNotIn('name="building_lineup_belt_preference_pair"', section_html)
+        self.assertNotIn("parking-belt-preference-save\" name=\"building_lineup_belt_preference_pair", section_html)
+        self.assertEqual(section_html.count("SAVE BUILDING LINEUP PREFERENCES"), 1)
 
         save_response = self.client.post(
             f"/motherbrain/parking-rules?operation_id={operation.id}",
-            data={
-                "operation_id": str(operation.id),
-                "building_lineup_belt_preferences_present": "1",
-                "building_lineup_belt_preference_4_6": ["A", "B"],
-                "building_lineup_belt_preference_17_21": ["C", "D"],
-            },
+            data=self._belt_preferences_bulk_post_data(
+                operation,
+                {
+                    "4/6": ["A", "B"],
+                    "17/21": ["C", "D"],
+                },
+            ),
         )
 
         self.assertEqual(save_response.status_code, 302)
+        self.assertTrue(
+            save_response.location.endswith("#parking-rule-section-building-lineup-belt-preferences")
+        )
         preferences = active_belt_pair_preference_map(self.rfd_gateway)
         self.assertEqual(preferences["4/6"], ("A", "B"))
         self.assertEqual(preferences["17/21"], ("C", "D"))
@@ -7174,20 +7182,22 @@ class MotherBrainRoutesTest(unittest.TestCase):
         reload_response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
         self.assertIn(b'name="building_lineup_belt_preference_4_6" value="A" checked', reload_response.data)
         self.assertIn(b'name="building_lineup_belt_preference_4_6" value="B" checked', reload_response.data)
+        self.assertIn(b'name="building_lineup_belt_preference_17_21" value="C" checked', reload_response.data)
+        self.assertIn(b'name="building_lineup_belt_preference_17_21" value="D" checked', reload_response.data)
 
-    def test_parking_rules_belt_preference_row_save_reload_update_and_clear(self):
+    def test_parking_rules_belt_preference_bulk_save_reload_update_and_clear(self):
         operation = self._parking_operation()
         db.session.commit()
 
         first_save = self.client.post(
             f"/motherbrain/parking-rules?operation_id={operation.id}",
-            data=self._belt_preference_post_data(operation, "4/6", ["A"]),
+            data=self._belt_preferences_bulk_post_data(operation, {"4/6": ["A"]}),
         )
 
         self.assertEqual(first_save.status_code, 302)
         self.assertTrue(
             first_save.location.endswith(
-                "#parking-rule-section-building-lineup-belt-preferences-4-6"
+                "#parking-rule-section-building-lineup-belt-preferences"
             )
         )
         first_reload = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
@@ -7196,7 +7206,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         second_save = self.client.post(
             f"/motherbrain/parking-rules?operation_id={operation.id}",
-            data=self._belt_preference_post_data(operation, "4/6", ["A", "B"]),
+            data=self._belt_preferences_bulk_post_data(operation, {"4/6": ["A", "B"]}),
         )
 
         self.assertEqual(second_save.status_code, 302)
@@ -7206,7 +7216,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         update_save = self.client.post(
             f"/motherbrain/parking-rules?operation_id={operation.id}",
-            data=self._belt_preference_post_data(operation, "4/6", ["C"]),
+            data=self._belt_preferences_bulk_post_data(operation, {"4/6": ["C"]}),
         )
 
         self.assertEqual(update_save.status_code, 302)
@@ -7218,7 +7228,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         clear_save = self.client.post(
             f"/motherbrain/parking-rules?operation_id={operation.id}",
-            data=self._belt_preference_post_data(operation, "4/6", []),
+            data=self._belt_preferences_bulk_post_data(operation, {}),
         )
 
         self.assertEqual(clear_save.status_code, 302)
@@ -7226,20 +7236,111 @@ class MotherBrainRoutesTest(unittest.TestCase):
         clear_reload = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
         self.assertNotIn(b'name="building_lineup_belt_preference_4_6" value="C" checked', clear_reload.data)
 
-    def test_parking_rules_belt_preference_row_save_preserves_other_belt_pairs(self):
+    def test_parking_rules_belt_preference_bulk_save_clears_complete_grid(self):
+        operation = self._parking_operation()
+        self._belt_preference("4/6", "A")
+        self._belt_preference("6/9", "B")
+        self._belt_preference("17/21", "C")
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data=self._belt_preferences_bulk_post_data(operation, {}),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            MotherBrainParkingRule.query.filter_by(
+                gateway_id=self.rfd_gateway.id,
+                rule_category=BUILDING_LINEUP_BELT_PARKING_PREFERENCE,
+            ).count(),
+            0,
+        )
+        preferences = active_belt_pair_preference_map(self.rfd_gateway)
+        for pair in BUILDING_LINEUP_PARKING_BELT_PAIRS:
+            self.assertEqual(preferences[pair["pair_key"]], ())
+
+    def test_parking_rules_belt_preference_bulk_save_preserves_other_belt_pairs(self):
         operation = self._parking_operation()
         self._belt_preference("6/9", "D")
         db.session.commit()
 
         response = self.client.post(
             f"/motherbrain/parking-rules?operation_id={operation.id}",
-            data=self._belt_preference_post_data(operation, "4/6", ["A", "B"]),
+            data=self._belt_preferences_bulk_post_data(
+                operation,
+                {
+                    "4/6": ["A", "B"],
+                    "6/9": ["D"],
+                },
+            ),
         )
 
         self.assertEqual(response.status_code, 302)
         preferences = active_belt_pair_preference_map(self.rfd_gateway)
         self.assertEqual(preferences["4/6"], ("A", "B"))
         self.assertEqual(preferences["6/9"], ("D",))
+
+    def test_parking_rules_belt_preference_bulk_save_isolates_other_parking_rules(self):
+        operation = self._parking_operation()
+        settings = MotherBrainParkingSettings(
+            gateway_id=self.rfd_gateway.id,
+            gateway_code=self.rfd_gateway.code,
+            include_remote_default=False,
+            include_throat_default=False,
+            deice_spacing_threshold_minutes=15,
+            inbound_same_ramp_spacing_minutes=5,
+            preferred_max_per_ramp=None,
+        )
+        existing_rule = self._parking_rule(
+            BLOCKED_PARKING_POSITION,
+            "position",
+            "D01",
+            "D",
+            behavior="forbidden",
+        )
+        db.session.add(settings)
+        db.session.commit()
+
+        data = self._belt_preferences_bulk_post_data(operation, {"4/6": ["A", "B"]})
+        data.update(
+            {
+                "include_remote_default": "1",
+                "include_throat_default": "1",
+                "deice_spacing_threshold_minutes": "99",
+                "inbound_same_ramp_spacing_minutes": "88",
+                "preferred_max_per_ramp": "77",
+                "rule_ids": [str(existing_rule.id)],
+                f"delete_rule_{existing_rule.id}": "1",
+                "new_aircraft_type_ramp_restriction_subject": "767",
+                "new_aircraft_type_ramp_restriction_ramp": "R",
+            }
+        )
+        response = self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data=data,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(active_belt_pair_preference_map(self.rfd_gateway)["4/6"], ("A", "B"))
+        reloaded_settings = MotherBrainParkingSettings.query.filter_by(
+            gateway_id=self.rfd_gateway.id,
+        ).one()
+        self.assertFalse(reloaded_settings.include_remote_default)
+        self.assertFalse(reloaded_settings.include_throat_default)
+        self.assertEqual(reloaded_settings.deice_spacing_threshold_minutes, 15)
+        self.assertEqual(reloaded_settings.inbound_same_ramp_spacing_minutes, 5)
+        self.assertIsNone(reloaded_settings.preferred_max_per_ramp)
+        self.assertIsNotNone(db.session.get(MotherBrainParkingRule, existing_rule.id))
+        self.assertEqual(
+            MotherBrainParkingRule.query.filter_by(
+                gateway_id=self.rfd_gateway.id,
+                rule_category=AIRCRAFT_TYPE_RAMP_RESTRICTION,
+                subject_value="767",
+                ramp_code="R",
+            ).count(),
+            0,
+        )
 
     def test_parking_rules_belt_preferences_are_gateway_scoped_and_idempotent(self):
         operation = self._parking_operation()
@@ -7252,7 +7353,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         for _index in range(2):
             response = self.client.post(
                 f"/motherbrain/parking-rules?operation_id={operation.id}",
-                data=self._belt_preference_post_data(operation, "4/6", ["A", "B"]),
+                data=self._belt_preferences_bulk_post_data(operation, {"4/6": ["A", "B"]}),
             )
             self.assertEqual(response.status_code, 302)
 
@@ -7272,18 +7373,18 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self._belt_preference("6/9", "D")
         db.session.commit()
 
+        invalid_pair_data = self._belt_preferences_bulk_post_data(operation, {"6/9": ["D"]})
+        invalid_pair_data["building_lineup_belt_preference_2_5"] = ["A"]
         invalid_pair_response = self.client.post(
             f"/motherbrain/parking-rules?operation_id={operation.id}",
-            data={
-                "operation_id": str(operation.id),
-                "return_to": "parking-rule-section-building-lineup-belt-preferences-4-6",
-                "building_lineup_belt_preference_pair": "2/5",
-                "building_lineup_belt_preference_2_5": "A",
-            },
+            data=invalid_pair_data,
         )
         invalid_ramp_response = self.client.post(
             f"/motherbrain/parking-rules?operation_id={operation.id}",
-            data=self._belt_preference_post_data(operation, "4/6", ["Z"]),
+            data={
+                **self._belt_preferences_bulk_post_data(operation, {"6/9": ["D"]}),
+                "building_lineup_belt_preference_4_6": ["Z"],
+            },
         )
 
         self.assertEqual(invalid_pair_response.status_code, 302)
@@ -7305,7 +7406,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         page = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
         token = self._csrf_token(page)
-        data = self._belt_preference_post_data(operation, "4/6", ["A", "B"])
+        data = self._belt_preferences_bulk_post_data(operation, {"4/6": ["A", "B"]})
         data["csrf_token"] = token
         response = self.client.post(
             f"/motherbrain/parking-rules?operation_id={operation.id}",
@@ -7325,7 +7426,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             f"/motherbrain/parking-rules?operation_id={operation.id}",
-            data=self._belt_preference_post_data(operation, "4/6", ["A", "B"]),
+            data=self._belt_preferences_bulk_post_data(operation, {"4/6": ["A", "B"]}),
         )
         db.session.expire_all()
         preview = self._parking_optimizer_preview(operation)
@@ -7344,8 +7445,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.client.post(
             f"/motherbrain/parking-rules?operation_id={operation.id}",
             data={
-                "operation_id": str(operation.id),
-                "building_lineup_belt_preferences_present": "1",
+                **self._belt_preferences_bulk_post_data(operation),
                 "building_lineup_belt_preference_4_6": ["Z"],
                 "building_lineup_belt_preference_2_5": ["A"],
             },
@@ -7718,6 +7818,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"VIEW ONLY", get_response.data)
         self.assertNotIn(b"SAVE PARKING RULES", get_response.data)
         self.assertNotIn(b"parking-rule-row-save", get_response.data)
+        self.assertNotIn(b"SAVE BUILDING LINEUP PREFERENCES", get_response.data)
 
         post_response = self.client.post(
             "/motherbrain/parking-rules",
@@ -7729,6 +7830,18 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
 
         self.assertEqual(post_response.status_code, 302)
+        self.assertEqual(MotherBrainParkingRule.query.count(), 0)
+
+        bulk_post_response = self.client.post(
+            "/motherbrain/parking-rules",
+            data={
+                "building_lineup_belt_preferences_present": "1",
+                "save_building_lineup_belt_preferences": "1",
+                "building_lineup_belt_preference_4_6": ["A", "B"],
+            },
+        )
+
+        self.assertEqual(bulk_post_response.status_code, 302)
         self.assertEqual(MotherBrainParkingRule.query.count(), 0)
 
     def test_parking_rules_edit_permission_defaults_to_simulator(self):
@@ -12238,16 +12351,27 @@ class MotherBrainRoutesTest(unittest.TestCase):
             gateway=gateway,
         )
 
-    def _belt_preference_post_data(self, operation, pair_key, ramps):
-        field_name = parking_belt_preference_form_field(pair_key)
-        anchor = f"parking-rule-section-building-lineup-belt-preferences-{pair_key.replace('/', '-')}"
-        return {
+    def _belt_preferences_bulk_post_data(self, operation, preferences=None):
+        data = {
             "operation_id": str(operation.id),
-            "return_to": anchor,
+            "return_to": "parking-rule-section-building-lineup-belt-preferences",
             "building_lineup_belt_preferences_present": "1",
-            "building_lineup_belt_preference_pair": pair_key,
-            field_name: list(ramps),
+            "save_building_lineup_belt_preferences": "1",
         }
+        for pair_key, ramps in (preferences or {}).items():
+            if ramps:
+                data[parking_belt_preference_form_field(pair_key)] = list(ramps)
+        return data
+
+    def _html_section(self, html, section_id):
+        marker = f'id="{section_id}"'
+        self.assertIn(marker, html)
+        marker_index = html.index(marker)
+        start_index = html.rfind("<section", 0, marker_index)
+        end_index = html.find("</section>", marker_index)
+        self.assertNotEqual(start_index, -1)
+        self.assertNotEqual(end_index, -1)
+        return html[start_index : end_index + len("</section>")]
 
     def _csrf_token(self, response):
         match = re.search(rb'name="csrf_token" value="([^"]+)"', response.data)

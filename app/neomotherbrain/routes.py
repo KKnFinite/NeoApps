@@ -106,6 +106,9 @@ from app.services.parking_optimizer import (
     parking_optimizer_default_options,
     parking_optimizer_preview,
 )
+from app.services.building_lineup_parking_preferences import (
+    save_belt_pair_preferences_from_form,
+)
 from app.services.parking_rules import (
     AIRCRAFT_TYPE_RAMP_PREFERENCE,
     AIRCRAFT_TYPE_RAMP_RESTRICTION,
@@ -818,6 +821,16 @@ def parking_rules():
             db.session.rollback()
             flash("Access denied.", "error")
             return redirect(_parking_rules_redirect(operation, anchor=return_to))
+        if "save_building_lineup_belt_preferences" in request.form:
+            save_belt_pair_preferences_from_form(gateway, request.form)
+            db.session.commit()
+            flash("Building Lineup belt parking preferences saved.", "info")
+            return redirect(
+                _parking_rules_redirect(
+                    operation,
+                    anchor="parking-rule-section-building-lineup-belt-preferences",
+                )
+            )
         save_parking_rules_from_form(gateway, request.form)
         db.session.commit()
         flash("Parking rules saved.", "info")
