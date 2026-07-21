@@ -6287,6 +6287,117 @@ h2 {
     gap: 12px;
 }
 
+.neosektor-settings-wrap {
+    width: min(760px, calc(100vw - 32px));
+    margin: 0 auto;
+    padding: 22px 0 36px;
+}
+
+.neosektor-settings-panel {
+    border: 1px solid rgba(var(--node-sektor-primary-rgb), 0.5);
+    border-radius: 16px;
+    background:
+        linear-gradient(145deg, rgba(32, 35, 41, 0.96), rgba(6, 8, 12, 0.98)),
+        radial-gradient(circle at 50% 0%, rgba(var(--node-sektor-primary-rgb), 0.22), transparent 58%);
+    box-shadow:
+        0 0 24px rgba(var(--node-sektor-primary-rgb), 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    padding: clamp(18px, 3vw, 30px);
+    text-align: center;
+}
+
+.neosektor-settings-panel-head {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+    color: var(--neo-silver);
+    font-size: clamp(1.15rem, 2.2vw, 1.65rem);
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.neosektor-settings-state {
+    min-width: 82px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    padding: 8px 16px;
+    font-size: 0.92rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.neosektor-settings-state.is-on {
+    color: #fff;
+    background: linear-gradient(180deg, var(--node-sektor-highlight), var(--node-sektor-primary));
+    text-shadow: 0 0 10px rgba(var(--node-sektor-highlight-rgb), 0.7);
+}
+
+.neosektor-settings-state.is-off {
+    color: rgba(216, 221, 229, 0.72);
+    background: linear-gradient(180deg, #202329, #111318);
+}
+
+.neosektor-settings-copy {
+    display: grid;
+    gap: 10px;
+    max-width: 620px;
+    margin: 0 auto 20px;
+    color: rgba(235, 239, 246, 0.86);
+    font-size: 0.96rem;
+    line-height: 1.5;
+}
+
+.neosektor-settings-copy p {
+    margin: 0;
+}
+
+.neosektor-settings-warning {
+    color: #ffd0d4;
+    font-weight: 800;
+}
+
+.neosektor-settings-status {
+    display: flex;
+    justify-content: center;
+    margin: 0 0 22px;
+}
+
+.neosektor-settings-status div {
+    min-width: 180px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 12px;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.35);
+}
+
+.neosektor-settings-status dt {
+    color: rgba(216, 221, 229, 0.72);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.neosektor-settings-status dd {
+    margin: 4px 0 0;
+    color: #fff;
+    font-size: 1.05rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+}
+
+.neosektor-settings-form {
+    display: flex;
+    justify-content: center;
+}
+
+.neosektor-settings-toggle {
+    width: min(360px, 100%);
+}
+
 .parking-rules-toggle {
     grid-template-columns: minmax(0, 1fr) auto;
     padding: 12px;

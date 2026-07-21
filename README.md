@@ -71,9 +71,16 @@ Do not enable forwarded-header trust without the known production proxy list.
 
 ## NeoSektor Google Sheets Compatibility
 
-During the NeoSektor transition, NeoGateway remains database-first and mirrors
-user-initiated updates to the existing standalone NeoSektor sheet when its
-existing environment configuration is present:
+During the NeoSektor transition, NeoGateway remains database-first. Google
+Sheets mirroring is controlled by the in-app NeoSektor Settings page and is
+stored in the NeoGateway database per gateway. The default state is OFF.
+
+Credentials alone never enable writes, and `NEOSEKTOR_SHEETS_COMPAT_ENABLED`
+is not used for runtime enablement. A Master or Grandmaster must explicitly
+turn Google Sheets Compatibility ON in the app before NeoGateway-integrated
+NeoSektor writes to the configured sheet.
+
+When the setting is ON, the bridge uses:
 
 ```text
 GOOGLE_SHEETS_ID
@@ -81,12 +88,13 @@ GOOGLE_SHEETS_TAB
 GOOGLE_SERVICE_ACCOUNT_JSON
 ```
 
-`NEOSEKTOR_SHEETS_COMPAT_ENABLED` defaults to `true` and may be set to `false`
-to disable the temporary bridge. The bridge only writes the established
-standalone Live Counts cells after a successful NeoGateway database commit; it
-does not read from Sheets or write during page loads, polling, or refreshes.
-The standalone sheet has no cell for NeoGateway-only Discharge events or the
-custom down-timer value, so the bridge does not alter that sheet layout.
+When the setting is OFF, NeoGateway database updates continue normally and the
+bridge does not construct a Google Sheets client or call Google APIs. The bridge
+only writes the established standalone Live Counts cells after a successful
+NeoGateway database commit; it does not read from Sheets or write during page
+loads, polling, or refreshes. The standalone sheet has no cell for
+NeoGateway-only Discharge events or the custom down-timer value, so the bridge
+does not alter that sheet layout.
 
 ## Production Bootstrap
 

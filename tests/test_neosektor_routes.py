@@ -1,3 +1,5 @@
+import os
+import re
 import unittest
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -41,6 +43,13 @@ class _FakeNeoSektorWorksheet:
 
     def update_acell(self, cell, value):
         self.updates.append((cell, value))
+
+
+FAKE_SHEETS_ENV = {
+    "GOOGLE_SHEETS_ID": "test-sheet-id",
+    "GOOGLE_SHEETS_TAB": "Live Counts",
+    "GOOGLE_SERVICE_ACCOUNT_JSON": "{}",
+}
 
 
 class NeoSektorRoutesTest(unittest.TestCase):
@@ -1964,13 +1973,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_neogateway_update_commits_database_and_mirrors_standalone_sheet_cells(self):
         self._login_approved_user(role="simulator")
+        self._set_sheets_compat_enabled(True)
         worksheet = _FakeNeoSektorWorksheet()
 
         with (
-            patch(
-                "app.services.neosektor_sheets_compat.sheets_compatibility_enabled",
-                return_value=True,
-            ),
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
             patch(
                 "app.services.neosektor_sheets_compat._get_worksheet",
                 return_value=worksheet,
@@ -1996,13 +2003,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_neogateway_tunnel_update_mirrors_the_standalone_left_to_arrive_cell(self):
         self._login_approved_user(role="simulator")
+        self._set_sheets_compat_enabled(True)
         worksheet = _FakeNeoSektorWorksheet()
 
         with (
-            patch(
-                "app.services.neosektor_sheets_compat.sheets_compatibility_enabled",
-                return_value=True,
-            ),
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
             patch(
                 "app.services.neosektor_sheets_compat._get_worksheet",
                 return_value=worksheet,
@@ -2022,13 +2027,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_neogateway_settings_mirror_existing_standalone_modifier_cells(self):
         self._login_approved_user(role="simulator")
+        self._set_sheets_compat_enabled(True)
         worksheet = _FakeNeoSektorWorksheet()
 
         with (
-            patch(
-                "app.services.neosektor_sheets_compat.sheets_compatibility_enabled",
-                return_value=True,
-            ),
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
             patch(
                 "app.services.neosektor_sheets_compat._get_worksheet",
                 return_value=worksheet,
@@ -2066,8 +2069,192 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         mirror_update.assert_not_called()
 
+    def test_neosektor_sheets_compatibility_defaults_off_even_with_credentials(self):
+        from app.services.neosektor_sheets_compat import (
+            sheets_compatibility_enabled,
+            sheets_compatibility_status,
+        )
+
+        with patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False):
+            status = sheets_compatibility_status(self.gateway)
+
+        self.assertFalse(sheets_compatibility_enabled(self.gateway))
+        self.assertFalse(status["enabled"])
+        self.assertTrue(status["credentials_configured"])
+        self.assertEqual(NeoSektorOperationalSetting.query.count(), 0)
+
+    def test_neosektor_sheets_env_flag_does_not_auto_enable_compatibility(self):
+        from app.services.neosektor_sheets_compat import sheets_compatibility_enabled
+
+        env = {
+            **FAKE_SHEETS_ENV,
+            "NEOSEKTOR_SHEETS_COMPAT_ENABLED": "true",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            self.assertFalse(sheets_compatibility_enabled(self.gateway))
+
+    def test_neosektor_sheets_compat_off_prevents_google_client_but_allows_db_update(self):
+        self._login_approved_user(role="simulator")
+
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch("app.services.neosektor_sheets_compat._get_worksheet") as worksheet,
+        ):
+            response = self.client.post(
+                "/neosektor/ballmat/update?side=east",
+                json={
+                    "side": "east",
+                    "waves": {"first": {"count": 5, "status": "Light"}},
+                    "open_bays": 3,
+                    "bay_statuses": {"Bay 1": "Light"},
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        worksheet.assert_not_called()
+        first_wave = NeoSektorBallmatWaveCount.query.filter_by(
+            side="EAST",
+            wave_name="1ST WAVE",
+        ).one()
+        self.assertEqual(first_wave.count, 5)
+
+    def test_neosektor_master_can_enable_and_disable_sheets_compatibility(self):
+        self._login_approved_user(role="master")
+
+        page = self.client.get("/neosektor/settings")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"Google Sheets Compatibility", page.data)
+        self.assertIn(b"OFF", page.data)
+
+        enabled = self.client.post(
+            "/neosektor/settings",
+            data={"action": "enable"},
+            follow_redirects=True,
+        )
+        self.assertEqual(enabled.status_code, 200)
+        self.assertIn(b"ON", enabled.data)
+        self.assertTrue(
+            NeoSektorOperationalSetting.query.filter_by(
+                gateway_id=self.gateway.id
+            ).one().google_sheets_compat_enabled
+        )
+
+        disabled = self.client.post(
+            "/neosektor/settings",
+            data={"action": "disable"},
+            follow_redirects=True,
+        )
+        self.assertEqual(disabled.status_code, 200)
+        self.assertIn(b"OFF", disabled.data)
+        self.assertFalse(
+            NeoSektorOperationalSetting.query.filter_by(
+                gateway_id=self.gateway.id
+            ).one().google_sheets_compat_enabled
+        )
+
+    def test_neosektor_unauthorized_user_cannot_toggle_sheets_compatibility(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.post(
+            "/neosektor/settings",
+            data={"action": "enable"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 403)
+        settings = NeoSektorOperationalSetting.query.filter_by(
+            gateway_id=self.gateway.id
+        ).first()
+        self.assertFalse(settings and settings.google_sheets_compat_enabled)
+
+    def test_neosektor_sheets_compatibility_csrf_protected_post_accepts_token(self):
+        self._login_approved_user(role="master")
+        self.app.config["CSRF_PROTECT_TESTING"] = True
+        page = self.client.get("/neosektor/settings")
+        token = self._csrf_token(page)
+
+        without_token = self.client.post(
+            "/neosektor/settings",
+            data={"action": "enable"},
+            follow_redirects=False,
+        )
+        with_token = self.client.post(
+            "/neosektor/settings",
+            data={"action": "enable", "csrf_token": token},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(without_token.status_code, 400)
+        self.assertEqual(with_token.status_code, 302)
+        self.assertTrue(
+            NeoSektorOperationalSetting.query.filter_by(
+                gateway_id=self.gateway.id
+            ).one().google_sheets_compat_enabled
+        )
+
+    def test_neosektor_sheets_missing_credentials_when_on_do_not_rollback_database_update(self):
+        self._login_approved_user(role="simulator")
+        self._set_sheets_compat_enabled(True)
+
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("app.services.neosektor_sheets_compat._get_worksheet") as worksheet,
+            self.assertLogs("app.services.neosektor_sheets_compat", level="WARNING") as logs,
+        ):
+            response = self.client.post(
+                "/neosektor/tunnel-conductor/offset",
+                json={"west_offset": 3},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["state"]["routing"]["west_offset"], 3)
+        worksheet.assert_not_called()
+        self.assertTrue(any("configuration" in line for line in logs.output))
+
+    def test_neosektor_disabling_sheets_compatibility_stops_future_writes(self):
+        self._login_approved_user(role="simulator")
+        worksheet = _FakeNeoSektorWorksheet()
+
+        self._set_sheets_compat_enabled(True)
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            self.assertEqual(
+                self.client.post(
+                    "/neosektor/tunnel-conductor/wave",
+                    json={"wave": "first", "value": 21},
+                ).status_code,
+                200,
+            )
+
+        self.assertEqual(worksheet.updates, [("D2", 21)])
+        worksheet.updates.clear()
+        self._set_sheets_compat_enabled(False)
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch("app.services.neosektor_sheets_compat._get_worksheet") as get_worksheet,
+        ):
+            self.assertEqual(
+                self.client.post(
+                    "/neosektor/tunnel-conductor/wave",
+                    json={"wave": "first", "value": 22},
+                ).status_code,
+                200,
+            )
+
+        get_worksheet.assert_not_called()
+        self.assertEqual(
+            NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one().planned_count,
+            22,
+        )
+
     def test_neogateway_sheet_bridge_does_not_repeat_unchanged_updates(self):
         self._login_approved_user(role="simulator")
+        self._set_sheets_compat_enabled(True)
         worksheet = _FakeNeoSektorWorksheet()
         payload = {
             "side": "east",
@@ -2077,10 +2264,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         }
 
         with (
-            patch(
-                "app.services.neosektor_sheets_compat.sheets_compatibility_enabled",
-                return_value=True,
-            ),
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
             patch(
                 "app.services.neosektor_sheets_compat._get_worksheet",
                 return_value=worksheet,
@@ -2100,12 +2284,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_neogateway_sheet_failure_does_not_rollback_database_update(self):
         self._login_approved_user(role="simulator")
+        self._set_sheets_compat_enabled(True)
 
         with (
-            patch(
-                "app.services.neosektor_sheets_compat.sheets_compatibility_enabled",
-                return_value=True,
-            ),
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
             patch(
                 "app.services.neosektor_sheets_compat._get_worksheet",
                 side_effect=RuntimeError("sheet unavailable"),
@@ -3482,6 +3664,18 @@ class NeoSektorRoutesTest(unittest.TestCase):
         sort_setting.sort_window_start_local = start_time
         sort_setting.sort_window_end_local = end_time
         db.session.commit()
+
+    def _set_sheets_compat_enabled(self, enabled):
+        from app.services.neosektor_sheets_compat import set_sheets_compatibility_enabled
+
+        set_sheets_compatibility_enabled(self.gateway, enabled)
+        db.session.commit()
+
+    def _csrf_token(self, response):
+        match = re.search(rb'name="csrf_token" value="([^"]+)"', response.data)
+        if not match:
+            self.fail("CSRF token not found in response.")
+        return match.group(1).decode()
 
     def _login_approved_user(self, role):
         user = User(

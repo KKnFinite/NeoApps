@@ -11,6 +11,7 @@ from app.services.permission_rules import ensure_default_permission_rules
 from app.services.password_policy import set_user_password
 from app.services.schema_sync import sync_database_schema
 from app.services.database_startup_retry import run_startup_database_action
+from app.services.neosektor_sheets_compat import ensure_sheets_compatibility_setting
 
 
 BOOTSTRAP_USERNAME_ENV = "BOOTSTRAP_ADMIN_USERNAME"
@@ -46,8 +47,9 @@ def bootstrap_database(app=None):
 def _bootstrap_database_once(app, username, email, password, used_fallback):
     db.create_all()
     sync_database_schema(app)
-    ensure_default_gateway_and_nodes()
+    gateway = ensure_default_gateway_and_nodes()
     ensure_default_permission_rules()
+    ensure_sheets_compatibility_setting(gateway)
 
     user, created_user = _find_or_create_bootstrap_user(username, email)
     user.username = username

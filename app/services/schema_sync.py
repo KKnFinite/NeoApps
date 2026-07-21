@@ -70,6 +70,9 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "neosektor_wave_states": {
         "all_up_started_at": "DATETIME",
     },
+    "neosektor_operational_settings": {
+        "google_sheets_compat_enabled": "BOOLEAN NOT NULL DEFAULT 0",
+    },
     "master_flight_schedules": {
         "aircraft_type": "VARCHAR(16)",
         "wave": "VARCHAR(16)",
@@ -161,6 +164,9 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "neosektor_wave_states": {
         "all_up_started_at": "TIMESTAMP",
+    },
+    "neosektor_operational_settings": {
+        "google_sheets_compat_enabled": "BOOLEAN NOT NULL DEFAULT FALSE",
     },
     "master_flight_schedules": {
         "aircraft_type": "VARCHAR(16)",

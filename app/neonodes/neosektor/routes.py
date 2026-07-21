@@ -1,9 +1,10 @@
 from flask import flash, jsonify, redirect, render_template, request, session, url_for
+from flask_login import current_user
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
 from app.neonodes.neosektor import bp
-from app.services.access_control import get_current_gateway
+from app.services.access_control import get_current_gateway, user_can_access_node
 from app.services.neosektor_live_counts import (
     TUNNEL_CONDUCTOR_EDIT_PERMISSION,
     TUNNEL_CONDUCTOR_VIEW_PERMISSION,
@@ -20,7 +21,12 @@ from app.services.neosektor_live_counts import (
     update_tunnel_driver_offset,
     update_ballmat_side,
 )
-from app.services.neosektor_sheets_compat import mirror_neosektor_sheet_update
+from app.services.neosektor_sheets_compat import (
+    ensure_sheets_compatibility_setting,
+    mirror_neosektor_sheet_update,
+    set_sheets_compatibility_enabled,
+    sheets_compatibility_status,
+)
 from app.services.permission_rules import user_can
 from app.services.uld_requests import (
     discharge_context,
@@ -36,6 +42,8 @@ WBM_VIEW_PERMISSION = "neosektor.wbm.view"
 WBM_EDIT_PERMISSION = "neosektor.wbm.edit"
 LIVE_COUNTS_VIEW_PERMISSION = "neosektor.live_counts.view"
 NEOSEKTOR_DASHBOARD_VIEW_PERMISSION = "neosektor.dashboard.view"
+NEOSEKTOR_SETTINGS_VIEW_PERMISSION = "neosektor.settings.view"
+NEOSEKTOR_SETTINGS_EDIT_PERMISSION = "neosektor.settings.edit"
 
 NEOSEKTOR_PAGES = (
     (
@@ -44,6 +52,13 @@ NEOSEKTOR_PAGES = (
         TUNNEL_CONDUCTOR_VIEW_PERMISSION,
         TUNNEL_CONDUCTOR_EDIT_PERMISSION,
         "Tunnel Conductor live count controls.",
+    ),
+    (
+        "SETTINGS",
+        "neosektor.settings",
+        NEOSEKTOR_SETTINGS_VIEW_PERMISSION,
+        NEOSEKTOR_SETTINGS_EDIT_PERMISSION,
+        "NeoSektor Google Sheets compatibility controls.",
     ),
     (
         "EBM",
@@ -77,6 +92,7 @@ NEOSEKTOR_PAGES = (
 
 NEOSEKTOR_INTERNAL_MENU = (
     ("Live Counts", "neosektor.live_counts", LIVE_COUNTS_VIEW_PERMISSION),
+    ("Settings", "neosektor.settings", NEOSEKTOR_SETTINGS_VIEW_PERMISSION),
     ("Tunnel Conductor", "neosektor.tunnel_conductor", TUNNEL_CONDUCTOR_VIEW_PERMISSION),
     ("East Ballmat", "neosektor.ebm", EBM_VIEW_PERMISSION),
     ("West Ballmat", "neosektor.wbm", WBM_VIEW_PERMISSION),
@@ -99,6 +115,13 @@ NEOSEKTOR_MOBILE_DASHBOARD = (
         TUNNEL_CONDUCTOR_VIEW_PERMISSION,
         "tunnel",
         "Tunnel counts and down timer.",
+    ),
+    (
+        "Settings",
+        "neosektor.settings",
+        NEOSEKTOR_SETTINGS_VIEW_PERMISSION,
+        "settings",
+        "Google Sheets compatibility.",
     ),
     (
         "EBM",
@@ -503,6 +526,52 @@ def live_counts_state():
     return jsonify({"ok": True, "state": state})
 
 
+@bp.route("/settings", methods=["GET", "POST"])
+@gateway_node_required("sektor")
+def settings():
+    gateway = get_current_gateway()
+    access = _neosektor_access(
+        NEOSEKTOR_SETTINGS_VIEW_PERMISSION,
+        NEOSEKTOR_SETTINGS_EDIT_PERMISSION,
+    )
+    can_manage_sheets_compat = user_can_access_node(
+        current_user,
+        gateway.code,
+        "sektor",
+        minimum_role="master",
+    )
+    access = {
+        "can_view": access["can_view"],
+        "can_edit": access["can_edit"] and can_manage_sheets_compat,
+    }
+    if request.method == "POST":
+        if not access["can_edit"]:
+            db.session.rollback()
+            flash("Access denied.", "error")
+            return _settings_response(gateway, access, status_code=403)
+
+        action = str(request.form.get("action") or "").strip().lower()
+        enabled = action == "enable"
+        if action not in {"enable", "disable"}:
+            enabled = request.form.get("google_sheets_compat_enabled") == "1"
+
+        set_sheets_compatibility_enabled(gateway, enabled)
+        db.session.commit()
+        flash(
+            "GOOGLE SHEETS COMPATIBILITY ENABLED."
+            if enabled
+            else "GOOGLE SHEETS COMPATIBILITY DISABLED.",
+            "success",
+        )
+        return redirect(url_for("neosektor.settings"))
+
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neosektor.index"))
+
+    return _settings_response(gateway, access)
+
+
 @bp.route("/driver-routing")
 @gateway_node_required("sektor")
 def driver_routing():
@@ -630,6 +699,19 @@ def _ballmat_route_for_side(side):
     selected_side = normalize_ballmat_side(side)
     endpoint = "neosektor.wbm" if selected_side == "west" else "neosektor.ebm"
     return url_for(endpoint)
+
+
+def _settings_response(gateway, access, status_code=200):
+    ensure_sheets_compatibility_setting(gateway)
+    db.session.flush()
+    response = render_template(
+        "neonodes/neosektor/settings.html",
+        gateway=gateway,
+        can_view=access["can_view"],
+        can_edit=access["can_edit"],
+        sheets_status=sheets_compatibility_status(gateway),
+    )
+    return response, status_code
 
 
 def _commit_neosektor_update_and_mirror(before_state, after_state):

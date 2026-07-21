@@ -18,6 +18,11 @@ class NeoSektorOperationalSetting(db.Model):
     first_wave_unload_modifier = db.Column(db.Integer, nullable=False, default=45)
     second_wave_unload_modifier = db.Column(db.Integer, nullable=False, default=37)
     all_up_to_down_minutes = db.Column(db.Integer, nullable=False, default=15)
+    google_sheets_compat_enabled = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False,
+    )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

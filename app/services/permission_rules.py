@@ -256,6 +256,16 @@ DEFAULT_PERMISSION_RULES = (
         "View the NeoSektor dashboard.",
     ),
     (
+        "neosektor.settings.view",
+        "master",
+        "View NeoSektor Google Sheets compatibility settings.",
+    ),
+    (
+        "neosektor.settings.edit",
+        "master",
+        "Enable or disable NeoSektor Google Sheets compatibility writes.",
+    ),
+    (
         "neosektor.live_counts.view",
         "watcher",
         "View NeoSektor Live Counts screens.",
@@ -779,6 +789,16 @@ PERMISSION_RULE_ITEMS = (
         "NeoSektor Live Counts screen.",
         {
             "view": "neosektor.live_counts.view",
+        },
+    ),
+    (
+        "sektor",
+        "neosektor.settings",
+        "Settings",
+        "NeoSektor Google Sheets compatibility control.",
+        {
+            "view": "neosektor.settings.view",
+            "edit": "neosektor.settings.edit",
         },
     ),
     (

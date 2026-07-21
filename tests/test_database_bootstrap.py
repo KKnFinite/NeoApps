@@ -17,6 +17,7 @@ from app.models import (
     GatewayNodeRole,
     MasterFlightSchedule,
     NeoNode,
+    NeoSektorOperationalSetting,
     PermissionRule,
     User,
 )
@@ -90,6 +91,10 @@ class DatabaseBootstrapTest(unittest.TestCase):
         self.assertTrue(user.is_active)
         self.assertTrue(user.email_verified_at)
         self.assertFalse(user.password_reset_required)
+        neosektor_settings = NeoSektorOperationalSetting.query.filter_by(
+            gateway_id=gateway.id
+        ).one()
+        self.assertFalse(neosektor_settings.google_sheets_compat_enabled)
         self.assertTrue(user.check_password(LOCAL_SQLITE_FALLBACK_PASSWORD))
         self.assertTrue(result["created_user"])
         self.assertTrue(result["password_applied"])

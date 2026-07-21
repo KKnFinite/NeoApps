@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}SETTINGS | NeoSektor{% endblock %}
+
+{% block content %}
+<section class="neosektor-standalone-page neosektor-settings-shell mode-view" aria-labelledby="neosektor-settings-title">
+    <header class="app-header neosektor-standalone-header mobile-shell-duplicate-title">
+        <div class="header-title">
+            <p>{% include "neonodes/neosektor/_brand_title.html" %}</p>
+            <h1 id="neosektor-settings-title">Settings</h1>
+        </div>
+        <span class="header-link header-link-static">{{ gateway.code }}</span>
+        {% set neosektor_internal_menu_modifier = "neosektor-internal-menu-standalone" %}
+        {% include "neonodes/neosektor/_internal_menu.html" %}
+    </header>
+
+    <main class="neosektor-settings-wrap">
+        <section class="neosektor-settings-panel" aria-labelledby="sheets-compat-title">
+            <div class="neosektor-settings-panel-head">
+                <span>Google Sheets Compatibility</span>
+                <strong class="neosektor-settings-state {{ 'is-on' if sheets_status.enabled else 'is-off' }}">
+                    {{ "ON" if sheets_status.enabled else "OFF" }}
+                </strong>
+            </div>
+
+            <div class="neosektor-settings-copy">
+                <p><strong>ON:</strong> NeoGateway NeoSektor writes updates to the configured Google Sheet.</p>
+                <p><strong>OFF:</strong> NeoGateway continues database updates but sends nothing to Google Sheets.</p>
+                <p class="neosektor-settings-warning">Standalone NeoSektor may still be using the same sheet.</p>
+            </div>
+
+            <dl class="neosektor-settings-status" aria-label="Google Sheets credential status">
+                <div>
+                    <dt>Credentials</dt>
+                    <dd>{{ "CONFIGURED" if sheets_status.credentials_configured else "MISSING" }}</dd>
+                </div>
+            </dl>
+
+            {% if can_edit %}
+            <form class="neosektor-settings-form" method="post" action="{{ url_for('neosektor.settings') }}">
+                {% if sheets_status.enabled %}
+                <button class="action-button neosektor-settings-toggle" type="submit" name="action" value="disable">
+                    Disable Google Sheets Compatibility
+                </button>
+                {% else %}
+                <button class="action-button neosektor-settings-toggle" type="submit" name="action" value="enable">
+                    Enable Google Sheets Compatibility
+                </button>
+                {% endif %}
+            </form>
+            {% else %}
+            <p class="view-only-pill">View Only</p>
+            {% endif %}
+        </section>
+    </main>
+</section>
+{% endblock %}

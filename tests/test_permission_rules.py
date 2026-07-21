@@ -64,6 +64,8 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertEqual(rules["neobid.placeholder.view"], "watcher")
         self.assertEqual(rules["neoermac.dashboard.view"], "watcher")
         self.assertEqual(rules["neosektor.dashboard.view"], "watcher")
+        self.assertEqual(rules["neosektor.settings.view"], "master")
+        self.assertEqual(rules["neosektor.settings.edit"], "master")
         self.assertEqual(rules["neoscorpion.dashboard.view"], "watcher")
 
     def test_role_order_is_watcher_to_grandmaster(self):
@@ -107,6 +109,7 @@ class PermissionRulesTest(unittest.TestCase):
             },
             "NeoSektor": {
                 "neosektor.dashboard.view",
+                "neosektor.settings.view",
                 "neosektor.live_counts.view",
                 "neosektor.conductor.view",
                 "neosektor.ebm.view",

@@ -13,12 +13,17 @@ import json
 import logging
 import os
 
-from flask import current_app, has_app_context
+from flask import has_app_context
 
 try:
     import gspread
 except ImportError:  # Optional locally; production installs the dependency.
     gspread = None
+
+
+from app.extensions import db
+from app.models import NeoSektorOperationalSetting
+from app.services.access_control import get_current_gateway
 
 
 logger = logging.getLogger(__name__)
@@ -45,14 +50,14 @@ SHEET_CELL_ORDER = (
 )
 
 
-def mirror_neosektor_sheet_update(before_state, after_state):
+def mirror_neosektor_sheet_update(before_state, after_state, gateway=None):
     """Mirror changed standalone-compatible values without affecting DB success.
 
     Routes call this only after the database transaction commits. Read, poll,
     refresh, and page-render paths never call the bridge. Values that do not
     have an established standalone sheet cell are intentionally not invented.
     """
-    if not sheets_compatibility_enabled():
+    if not sheets_compatibility_enabled(gateway):
         return False
 
     try:
@@ -70,6 +75,10 @@ def mirror_neosektor_sheet_update(before_state, after_state):
     if not updates:
         return False
 
+    if not sheets_credentials_configured():
+        _log_safe_warning("configuration", RuntimeError("missing Google Sheets credentials"))
+        return False
+
     try:
         worksheet = _get_worksheet()
         for cell, value in updates:
@@ -82,23 +91,65 @@ def mirror_neosektor_sheet_update(before_state, after_state):
     return True
 
 
-def sheets_compatibility_enabled():
-    """Return whether the existing standalone sheet is configured for mirroring."""
-    if has_app_context() and not current_app.config.get(
-        "NEOSEKTOR_SHEETS_COMPAT_ENABLED",
-        True,
-    ):
-        return False
-    if has_app_context() and current_app.config.get("TESTING"):
-        return bool(
-            current_app.config.get("NEOSEKTOR_SHEETS_COMPAT_ALLOW_TESTING", False)
-        )
+def sheets_compatibility_enabled(gateway=None):
+    """Return whether gateway-scoped Google Sheets mirroring is explicitly ON."""
+    settings = _existing_operational_settings(gateway)
+    return bool(settings and settings.google_sheets_compat_enabled)
 
+
+def sheets_credentials_configured():
     return bool(
         os.environ.get("GOOGLE_SHEETS_ID")
         and os.environ.get("GOOGLE_SHEETS_TAB")
         and os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
     )
+
+
+def sheets_compatibility_status(gateway=None):
+    settings = _existing_operational_settings(gateway)
+    enabled = bool(settings and settings.google_sheets_compat_enabled)
+    return {
+        "enabled": enabled,
+        "credentials_configured": sheets_credentials_configured(),
+        "sheet_id_configured": bool(os.environ.get("GOOGLE_SHEETS_ID")),
+        "sheet_tab_configured": bool(os.environ.get("GOOGLE_SHEETS_TAB")),
+        "service_account_configured": bool(os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")),
+    }
+
+
+def set_sheets_compatibility_enabled(gateway, enabled):
+    settings = NeoSektorOperationalSetting.query.filter_by(gateway_id=gateway.id).first()
+    if not settings:
+        settings = NeoSektorOperationalSetting(
+            gateway_id=gateway.id,
+            gateway_code=gateway.code,
+            google_sheets_compat_enabled=False,
+        )
+        db.session.add(settings)
+
+    settings.gateway_code = gateway.code
+    settings.google_sheets_compat_enabled = bool(enabled)
+    db.session.flush()
+    return settings
+
+
+def ensure_sheets_compatibility_setting(gateway):
+    settings = NeoSektorOperationalSetting.query.filter_by(gateway_id=gateway.id).first()
+    if settings:
+        settings.gateway_code = gateway.code
+        if settings.google_sheets_compat_enabled is None:
+            settings.google_sheets_compat_enabled = False
+        db.session.flush()
+        return settings
+
+    settings = NeoSektorOperationalSetting(
+        gateway_id=gateway.id,
+        gateway_code=gateway.code,
+        google_sheets_compat_enabled=False,
+    )
+    db.session.add(settings)
+    db.session.flush()
+    return settings
 
 
 def _get_worksheet():
@@ -113,6 +164,27 @@ def _get_worksheet():
     client = gspread.service_account_from_dict(credentials)
     spreadsheet = client.open_by_key(os.environ["GOOGLE_SHEETS_ID"])
     return spreadsheet.worksheet(os.environ["GOOGLE_SHEETS_TAB"])
+
+
+def _existing_operational_settings(gateway=None):
+    if not has_app_context():
+        return None
+
+    gateway = _resolve_gateway(gateway)
+    if not gateway:
+        return None
+
+    return NeoSektorOperationalSetting.query.filter_by(gateway_id=gateway.id).first()
+
+
+def _resolve_gateway(gateway=None):
+    if gateway is not None:
+        return gateway
+
+    try:
+        return get_current_gateway()
+    except Exception:
+        return None
 
 
 def _sheet_values_from_state(state):
