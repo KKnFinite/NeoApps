@@ -2152,6 +2152,21 @@ class NeoSektorRoutesTest(unittest.TestCase):
             ).one().google_sheets_compat_enabled
         )
 
+    def test_neosektor_settings_desktop_page_label_is_settings(self):
+        self._login_approved_user(role="master")
+
+        response = self.client.get("/neosektor/settings")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            b'<span class="neo-page-title motherbrain-desktop-top-title-text">SETTINGS</span>',
+            response.data,
+        )
+        self.assertNotIn(
+            b'<span class="neo-page-title motherbrain-desktop-top-title-text">DASHBOARD</span>',
+            response.data,
+        )
+
     def test_neosektor_unauthorized_user_cannot_toggle_sheets_compatibility(self):
         self._login_approved_user(role="simulator")
 
