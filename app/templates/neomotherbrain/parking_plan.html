@@ -348,7 +348,13 @@
                 <h3>SUGGESTED ASSIGNMENTS</h3>
                 <ul>
                     {% for assignment in optimizer_preview.suggested_assignments %}
-                    <li><strong>{{ assignment.tail }}</strong> {{ assignment.label }} / {{ assignment.origin }} / {{ assignment.aircraft_type }} / {{ assignment.parking_window }} <span>{{ assignment.reason }}</span></li>
+                    <li>
+                        <strong>{{ assignment.tail }}</strong> {{ assignment.label }} / {{ assignment.origin }} / {{ assignment.aircraft_type }} / {{ assignment.parking_window }}
+                        <span>{{ assignment.reason }}</span>
+                        {% if assignment.building_lineup_belt_pair %}
+                        <small>Building Lineup {{ assignment.building_lineup_belt_pair }} / preferred ramps {{ assignment.building_lineup_preferred_ramps|join(", ") or "NONE" }} / score {{ "YES" if assignment.building_lineup_belt_preference_applied else "NO" }}</small>
+                        {% endif %}
+                    </li>
                     {% endfor %}
                 </ul>
             </div>
@@ -383,6 +389,9 @@
                                 / available {{ row.candidate_positions_after_sample }}
                             {% elif row.top_rejection_reason %}
                                 / {{ row.top_rejection_reason }}
+                            {% endif %}
+                            {% if row.building_lineup_belt_pair %}
+                                / Building Lineup {{ row.building_lineup_belt_pair }} prefers {{ row.building_lineup_preferred_ramps|join(", ") or "NONE" }}
                             {% endif %}
                         </small>
                     </li>

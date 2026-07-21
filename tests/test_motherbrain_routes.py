@@ -15,6 +15,7 @@ from app.models import (
     FlightApiReviewItem,
     MasterFlightSchedule,
     MotherBrainAlert,
+    NeoErmacBuildingLineup,
     MotherBrainParkingRule,
     MotherBrainParkingSettings,
     PermissionRule,
@@ -63,8 +64,16 @@ from app.services.parking_rules import (
     parking_rules_context,
     parking_schedule_rule_key,
 )
+from app.services.building_lineup_parking_preferences import (
+    BELT_PAIR_PREFERENCE_BEHAVIOR,
+    BELT_PAIR_SUBJECT_TYPE,
+    BUILDING_LINEUP_BELT_PARKING_PREFERENCE,
+    BUILDING_LINEUP_PARKING_BELT_PAIRS,
+    active_belt_pair_preference_map,
+)
 from app.services.permission_rules import ensure_default_permission_rules
 from app.services.password_policy import set_user_password
+from app.services.schema_sync import sync_local_sqlite_schema
 from app.services.sort_timeline import (
     ensure_sort_timeline_settings,
     record_sort_timeline_api_attempt,
@@ -7102,6 +7111,106 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"value=\"6\"", reload_response.data)
         self.assertIn(b"Preferred Max Per Ramp", reload_response.data)
 
+    def test_parking_rules_page_renders_and_persists_building_lineup_belt_preferences(self):
+        operation = self._parking_operation()
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"BUILDING LINEUP BELT PARKING PREFERENCES", response.data)
+        self.assertEqual(
+            [pair["pair_key"] for pair in BUILDING_LINEUP_PARKING_BELT_PAIRS],
+            [
+                "1/4",
+                "4/6",
+                "6/9",
+                "9/13",
+                "13/17",
+                "17/21",
+                "21/24",
+                "24/26",
+                "26/29",
+                "29/32",
+                "32/34",
+            ],
+        )
+        for pair in BUILDING_LINEUP_PARKING_BELT_PAIRS:
+            self.assertIn(f'data-belt-pair="{pair["pair_key"]}"'.encode(), response.data)
+        self.assertNotIn(b'data-belt-pair="34/37"', response.data)
+        self.assertIn(b"Remote only applies when Remote parking is enabled.", response.data)
+
+        save_response = self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data={
+                "operation_id": str(operation.id),
+                "building_lineup_belt_preferences_present": "1",
+                "building_lineup_belt_preference_4_6": ["A", "B"],
+                "building_lineup_belt_preference_17_21": ["C", "D"],
+            },
+        )
+
+        self.assertEqual(save_response.status_code, 302)
+        preferences = active_belt_pair_preference_map(self.rfd_gateway)
+        self.assertEqual(preferences["4/6"], ("A", "B"))
+        self.assertEqual(preferences["17/21"], ("C", "D"))
+        saved_rows = {
+            (rule.subject_value, rule.ramp_code, rule.rule_behavior)
+            for rule in MotherBrainParkingRule.query.filter_by(
+                gateway_id=self.rfd_gateway.id,
+                rule_category=BUILDING_LINEUP_BELT_PARKING_PREFERENCE,
+            ).all()
+        }
+        self.assertIn(("4/6", "A", BELT_PAIR_PREFERENCE_BEHAVIOR), saved_rows)
+        self.assertIn(("4/6", "B", BELT_PAIR_PREFERENCE_BEHAVIOR), saved_rows)
+        self.assertIn(("17/21", "C", BELT_PAIR_PREFERENCE_BEHAVIOR), saved_rows)
+        self.assertIn(("17/21", "D", BELT_PAIR_PREFERENCE_BEHAVIOR), saved_rows)
+
+        reload_response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
+        self.assertIn(b'name="building_lineup_belt_preference_4_6" value="A" checked', reload_response.data)
+        self.assertIn(b'name="building_lineup_belt_preference_4_6" value="B" checked', reload_response.data)
+
+    def test_parking_rules_belt_preference_empty_and_invalid_values_do_not_save(self):
+        operation = self._parking_operation()
+        self._belt_preference("4/6", "A")
+        db.session.commit()
+
+        self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data={
+                "operation_id": str(operation.id),
+                "building_lineup_belt_preferences_present": "1",
+                "building_lineup_belt_preference_4_6": ["Z"],
+                "building_lineup_belt_preference_2_5": ["A"],
+            },
+        )
+
+        self.assertEqual(
+            MotherBrainParkingRule.query.filter_by(
+                gateway_id=self.rfd_gateway.id,
+                rule_category=BUILDING_LINEUP_BELT_PARKING_PREFERENCE,
+            ).count(),
+            0,
+        )
+        self.assertEqual(active_belt_pair_preference_map(self.rfd_gateway)["4/6"], ())
+
+    def test_parking_rules_belt_preference_schema_sync_is_idempotent(self):
+        self._belt_preference("4/6", "A")
+        db.session.commit()
+
+        sync_local_sqlite_schema(self.app)
+        sync_local_sqlite_schema(self.app)
+        db.session.commit()
+
+        saved = MotherBrainParkingRule.query.filter_by(
+            gateway_id=self.rfd_gateway.id,
+            rule_category=BUILDING_LINEUP_BELT_PARKING_PREFERENCE,
+            subject_type=BELT_PAIR_SUBJECT_TYPE,
+            subject_value="4/6",
+            ramp_code="A",
+        ).all()
+        self.assertEqual(len(saved), 1)
+
     def test_parking_rules_row_save_persists_rule_without_resetting_defaults(self):
         operation = self._parking_operation()
         arrival_key = parking_schedule_rule_key("arrival", "UPS0948", "SDF")
@@ -10142,6 +10251,137 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotEqual(suggestion["position"][:1], "A")
         self.assertIn("Aircraft 757 avoids ramp A.", suggestion["reason"])
 
+    def test_parking_optimizer_scores_building_lineup_belt_preference_for_departure_destination(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX", aircraft_type="757")
+        self._lineup_destination("runout_1", east_destination_1="LAX")
+        self._belt_preference("4/6", "A")
+        self._belt_preference("4/6", "B")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = preview["suggested_assignments"][0]
+
+        self.assertEqual(suggestion["position"], "A01")
+        self.assertEqual(suggestion["building_lineup_belt_pair"], "4/6")
+        self.assertEqual(suggestion["building_lineup_preferred_ramps"], ("A", "B"))
+        self.assertTrue(suggestion["building_lineup_belt_preference_applied"])
+        self.assertIn("Building Lineup 4/6 belt preference for LAX", suggestion["reason"])
+
+    def test_parking_optimizer_scores_middle_building_lineup_belt_pair(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="EWR", aircraft_type="757")
+        self._lineup_destination("runout_5", west_destination_2="EWR")
+        self._belt_preference("17/21", "C")
+        self._belt_preference("17/21", "D")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = preview["suggested_assignments"][0]
+
+        self.assertEqual(suggestion["position"], "C01")
+        self.assertEqual(suggestion["building_lineup_belt_pair"], "17/21")
+        self.assertEqual(suggestion["building_lineup_preferred_ramps"], ("C", "D"))
+        self.assertIn("selected ramp Charlie received soft score", suggestion["reason"])
+
+    def test_parking_optimizer_remote_belt_preference_requires_remote_enabled(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX", aircraft_type="757")
+        self._lineup_destination("runout_1", east_destination_1="LAX")
+        self._belt_preference("4/6", "R")
+        db.session.commit()
+
+        off_preview = self._parking_optimizer_preview(operation, include_remote=False)
+        on_preview = self._parking_optimizer_preview(operation, include_remote=True)
+
+        self.assertNotEqual(off_preview["suggested_assignments"][0]["position"][:1], "R")
+        self.assertEqual(off_preview["suggested_assignments"][0]["building_lineup_belt_pair"], "4/6")
+        self.assertFalse(off_preview["suggested_assignments"][0]["building_lineup_belt_preference_applied"])
+        self.assertEqual(on_preview["suggested_assignments"][0]["position"], "R01")
+        self.assertTrue(on_preview["suggested_assignments"][0]["building_lineup_belt_preference_applied"])
+
+    def test_parking_optimizer_conflicting_building_lineup_destination_is_neutral(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX", aircraft_type="757")
+        self._lineup_destination("runout_1", east_destination_1="LAX")
+        self._lineup_destination("runout_5", east_destination_1="LAX")
+        self._belt_preference("4/6", "B")
+        self._belt_preference("17/21", "C")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = preview["suggested_assignments"][0]
+
+        self.assertEqual(suggestion["position"], "A01")
+        self.assertEqual(suggestion["building_lineup_belt_pair"], "")
+        self.assertFalse(suggestion["building_lineup_belt_preference_applied"])
+        self.assertNotIn("Building Lineup", suggestion["reason"])
+
+    def test_parking_optimizer_explicit_departure_preference_beats_belt_preference(self):
+        operation = self._parking_operation()
+        _arrival, departure = self._parking_pair(
+            operation,
+            "N457UP",
+            destination="EWR",
+            aircraft_type="757",
+        )
+        self._lineup_destination("runout_5", west_destination_2="EWR")
+        self._belt_preference("17/21", "C")
+        self._parking_rule(
+            DEPARTURE_PARKING_PREFERENCE,
+            "departure_plan",
+            parking_schedule_rule_key("departure", departure.flight_number, "EWR"),
+            "E",
+            behavior="preferred",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = preview["suggested_assignments"][0]
+
+        self.assertEqual(suggestion["position"], "E01")
+        self.assertIn("Departure", suggestion["reason"])
+        self.assertIn("prefers ramp E", suggestion["reason"])
+        self.assertFalse(suggestion["building_lineup_belt_preference_applied"])
+
+    def test_parking_optimizer_belt_preference_falls_back_to_valid_ramp_when_unavailable(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="EWR", aircraft_type="757")
+        self._lineup_destination("runout_5", west_destination_2="EWR")
+        self._belt_preference("17/21", "C")
+        self._parking_rule(
+            AIRCRAFT_TYPE_RAMP_RESTRICTION,
+            "aircraft_type",
+            "757",
+            "C",
+            behavior="forbidden",
+        )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = preview["suggested_assignments"][0]
+
+        self.assertNotEqual(suggestion["position"][:1], "C")
+        self.assertEqual(suggestion["building_lineup_belt_pair"], "17/21")
+        self.assertFalse(suggestion["building_lineup_belt_preference_applied"])
+
+    def test_parking_optimizer_belt_preference_does_not_move_locked_hot_tail(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="EWR", aircraft_type="757")
+        self._lineup_destination("runout_5", west_destination_2="EWR")
+        self._belt_preference("17/21", "C")
+        db.session.flush()
+        SortDateTailState.query.filter_by(tail_number="N457UP").one().operational_status = "hot"
+        self._parking_assignment(operation, "N457UP", "A01")
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        locked = {row["tail"]: row for row in preview["locked_assignments"]}
+
+        self.assertEqual(preview["suggested_assignments"], [])
+        self.assertEqual(locked["N457UP"]["label"], "A01 Slot 1")
+        self.assertEqual(locked["N457UP"]["reason"], "HOT parked tail fixed.")
+
     def test_parking_optimizer_hard_restriction_overrides_soft_preference(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", origin="SDF", aircraft_type="757")
@@ -11819,6 +12059,25 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         db.session.add(rule)
         return rule
+
+    def _belt_preference(self, pair_key, ramp_code):
+        return self._parking_rule(
+            BUILDING_LINEUP_BELT_PARKING_PREFERENCE,
+            BELT_PAIR_SUBJECT_TYPE,
+            pair_key,
+            ramp_code,
+            behavior=BELT_PAIR_PREFERENCE_BEHAVIOR,
+        )
+
+    def _lineup_destination(self, runout_key, **destinations):
+        row = NeoErmacBuildingLineup(
+            gateway_id=self.rfd_gateway.id,
+            runout_key=runout_key,
+            runout_name=f"{runout_key} belts",
+            **destinations,
+        )
+        db.session.add(row)
+        return row
 
     def _parking_optimizer_preview(
         self,

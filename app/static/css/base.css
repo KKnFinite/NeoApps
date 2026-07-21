@@ -6295,6 +6295,72 @@ h2 {
     background: rgba(3, 4, 6, 0.44);
 }
 
+.parking-belt-preferences-card {
+    overflow-x: hidden;
+}
+
+.parking-belt-preferences-grid {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+}
+
+.parking-belt-preferences-row {
+    display: grid;
+    grid-template-columns: minmax(74px, 0.72fr) repeat(6, minmax(86px, 1fr));
+    gap: 7px;
+    align-items: center;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid rgba(var(--node-rgb), 0.16);
+    border-radius: 6px;
+    background: rgba(3, 4, 6, 0.34);
+}
+
+.parking-belt-preferences-header {
+    padding-block: 0;
+    border-color: transparent;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.62rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.parking-belt-preferences-row strong {
+    color: var(--node-highlight);
+    font-size: 0.84rem;
+    letter-spacing: 0.08em;
+    text-align: center;
+}
+
+.parking-belt-preference-check {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    color: var(--steel);
+    font-size: 0.66rem;
+    font-weight: 900;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.parking-belt-preference-check input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--node-highlight);
+}
+
+.parking-belt-preference-check span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .parking-rules-readonly-note {
     display: flex;
     flex-wrap: wrap;
@@ -6376,6 +6442,20 @@ h2 {
 
     .parking-rule-row-save {
         width: 100%;
+    }
+
+    .parking-belt-preferences-row,
+    .parking-belt-preferences-header {
+        grid-template-columns: 1fr;
+    }
+
+    .parking-belt-preferences-header {
+        display: none;
+    }
+
+    .parking-belt-preference-check {
+        grid-template-columns: auto minmax(0, 1fr);
+        justify-content: start;
     }
 }
 

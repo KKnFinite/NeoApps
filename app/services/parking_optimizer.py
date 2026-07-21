@@ -39,6 +39,13 @@ from app.services.parking_rules import (
     parking_schedule_rule_key,
     parking_schedule_rule_label,
 )
+from app.services.building_lineup_parking_preferences import (
+    active_belt_pair_preference_map,
+    belt_pair_ramp_label,
+    building_lineup_destination_belt_pair_map,
+    building_lineup_destination_conflicts,
+    normalize_destination,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -69,6 +76,7 @@ PREFERRED_MAX_PER_RAMP_PENALTY = 1200
 FOUR_EIGHT_AVOID_PENALTY = 280
 FOUR_EIGHT_757_PREFERENCE_SCORE = 420
 FOUR_EIGHT_BLOCKED_POSITION_RELIEF = 110
+BELT_PAIR_PREFERENCE_SCORE = 300
 
 
 @dataclass(frozen=True)
@@ -83,6 +91,9 @@ class ParkingPlacement:
     departure: datetime | None = None
     soft_score: int = 0
     preference_reasons: tuple[str, ...] = ()
+    belt_pair: str = ""
+    belt_preferred_ramps: tuple[str, ...] = ()
+    belt_preference_applied: bool = False
 
     @property
     def label(self):
@@ -133,6 +144,7 @@ def parking_optimizer_preview(
     preferred_max_per_ramp = _safe_optional_int(defaults.get("preferred_max_per_ramp"))
     tail_rows = tail_rows if tail_rows is not None else tail_rows_for_operation(gateway, operation)
     rules = _active_rule_sets(gateway)
+    belt_preference_context = _belt_preference_context(gateway)
     assignments = _active_assignments(operation)
     timezone_name = gateway_timezone(gateway)
 
@@ -247,6 +259,7 @@ def parking_optimizer_preview(
         locked_blocked_positions,
         rules["hard"],
         rules["soft"],
+        belt_preference_context,
         timezone_name,
         allowed_lanes=(1,),
     )
@@ -338,6 +351,7 @@ def parking_optimizer_preview(
                 stage_blocked_positions,
                 rules["hard"],
                 rules["soft"],
+                belt_preference_context,
                 timezone_name,
                 allowed_lanes=(2,),
                 slot_1_timing_by_position=slot_1_timing,
@@ -827,6 +841,7 @@ def _build_candidate_placements(
     locked_blocked_positions,
     hard_rules,
     soft_rules,
+    belt_preference_context,
     timezone_name,
     allowed_lanes=(1, 2),
     slot_1_timing_by_position=None,
@@ -888,6 +903,11 @@ def _build_candidate_placements(
                 ramp,
                 soft_rules,
             )
+            belt_score, belt_reasons, belt_metadata = _belt_pair_preference_score(
+                row,
+                ramp,
+                belt_preference_context,
+            )
             for lane in allowed_lanes:
                 if (position, lane) in locked_lane_keys:
                     continue
@@ -916,8 +936,18 @@ def _build_candidate_placements(
                         aircraft_type=aircraft_type,
                         eta=row.get("arrival_block_in_local"),
                         departure=_departure_time_for_deice(row, timezone_name),
-                        soft_score=soft_score + slot_policy_score + parking_window_priority,
-                        preference_reasons=tuple(preference_reasons + slot_policy_reasons),
+                        soft_score=(
+                            soft_score
+                            + belt_score
+                            + slot_policy_score
+                            + parking_window_priority
+                        ),
+                        preference_reasons=tuple(
+                            preference_reasons + belt_reasons + slot_policy_reasons
+                        ),
+                        belt_pair=belt_metadata.get("belt_pair", ""),
+                        belt_preferred_ramps=tuple(belt_metadata.get("preferred_ramps", ())),
+                        belt_preference_applied=bool(belt_metadata.get("applied")),
                     )
                 )
         diagnostics[tail] = {
@@ -926,6 +956,14 @@ def _build_candidate_placements(
             "candidate_positions_before_sample": _position_sample(before_positions),
             "candidate_positions_after_sample": _position_sample(after_positions),
             "top_rejection_reason": _top_rejection_reason(rejection_counts),
+            "building_lineup_belt_pair": _belt_pair_for_row(
+                row,
+                belt_preference_context,
+            ),
+            "building_lineup_preferred_ramps": _belt_preferred_ramps_for_row(
+                row,
+                belt_preference_context,
+            ),
         }
     return placements, diagnostics
 
@@ -1463,6 +1501,14 @@ def _unassigned_rows(
                     "",
                 ),
                 "top_rejection_reason": diagnostics.get("top_rejection_reason", ""),
+                "building_lineup_belt_pair": diagnostics.get(
+                    "building_lineup_belt_pair",
+                    "",
+                ),
+                "building_lineup_preferred_ramps": diagnostics.get(
+                    "building_lineup_preferred_ramps",
+                    (),
+                ),
                 "reason": _unresolved_reason(
                     row,
                     aircraft_type,
@@ -1524,6 +1570,9 @@ def _suggestion_row(
         "aircraft_type": placement.aircraft_type,
         "parking_window": _parking_window_label(row),
         "reason": " ".join(reasons),
+        "building_lineup_belt_pair": placement.belt_pair,
+        "building_lineup_preferred_ramps": placement.belt_preferred_ramps,
+        "building_lineup_belt_preference_applied": placement.belt_preference_applied,
     }
 
 
@@ -1589,6 +1638,60 @@ def _soft_rule_score(row, aircraft_type, position, ramp, soft_rules):
             continue
         score -= AVOID_RAMP_PENALTY
     return score, reasons
+
+
+def _belt_preference_context(gateway):
+    return {
+        "destination_map": building_lineup_destination_belt_pair_map(gateway),
+        "destination_conflicts": building_lineup_destination_conflicts(gateway),
+        "preferences": active_belt_pair_preference_map(gateway),
+    }
+
+
+def _belt_pair_preference_score(row, ramp, context):
+    belt_pair = _belt_pair_for_row(row, context)
+    preferred_ramps = _belt_preferred_ramps_for_row(row, context)
+    if not belt_pair or not preferred_ramps:
+        return 0, [], {"belt_pair": belt_pair, "preferred_ramps": preferred_ramps}
+
+    metadata = {
+        "belt_pair": belt_pair,
+        "preferred_ramps": preferred_ramps,
+        "applied": ramp in preferred_ramps,
+    }
+    if ramp not in preferred_ramps:
+        return 0, [], metadata
+
+    destination = _departure_destination_for_row(row)
+    ramp_labels = ", ".join(belt_pair_ramp_label(item) for item in preferred_ramps)
+    reason = (
+        f"Building Lineup {belt_pair} belt preference for {destination} "
+        f"prefers {ramp_labels}; selected ramp {belt_pair_ramp_label(ramp)} received soft score."
+    )
+    return BELT_PAIR_PREFERENCE_SCORE, [reason], metadata
+
+
+def _belt_pair_for_row(row, context):
+    destination = _departure_destination_for_row(row)
+    if not destination:
+        return ""
+    if destination in (context or {}).get("destination_conflicts", {}):
+        return ""
+    return (context or {}).get("destination_map", {}).get(destination, "")
+
+
+def _belt_preferred_ramps_for_row(row, context):
+    belt_pair = _belt_pair_for_row(row, context)
+    if not belt_pair:
+        return ()
+    return tuple((context or {}).get("preferences", {}).get(belt_pair, ()))
+
+
+def _departure_destination_for_row(row):
+    destination = row.get("departure_destination")
+    if not destination and row.get("departure"):
+        destination = getattr(row["departure"], "destination", "")
+    return normalize_destination(destination)
 
 
 def _required_rules_allow(required_rules, position, ramp):

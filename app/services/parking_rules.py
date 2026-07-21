@@ -4,6 +4,17 @@ from app.services.parking_aircraft import (
     PARKING_AIRCRAFT_TYPE_OPTIONS,
     normalize_parking_aircraft_type,
 )
+from app.services.building_lineup_parking_preferences import (
+    BELT_PAIR_SUBJECT_TYPE,
+    BUILDING_LINEUP_BELT_PARKING_PREFERENCE,
+    BELT_PAIR_PREFERENCE_BEHAVIOR,
+    BELT_PAIR_RAMP_OPTIONS,
+    active_belt_pair_preference_map,
+    belt_pair_preferences_for_context,
+    belt_pair_ramp_label,
+    normalize_belt_pair_key,
+    save_belt_pair_preferences_from_form,
+)
 
 
 ORIGIN_RAMP_RESTRICTION = "origin_ramp_restriction"
@@ -27,6 +38,7 @@ PARKING_RULE_CATEGORIES = (
     AIRCRAFT_TYPE_RAMP_RESTRICTION,
     AIRCRAFT_TYPE_RAMP_PREFERENCE,
     BLOCKED_PARKING_POSITION,
+    BUILDING_LINEUP_BELT_PARKING_PREFERENCE,
 )
 
 PARKING_RULE_EDITABLE_CATEGORIES = (
@@ -129,6 +141,8 @@ def parking_rules_context(gateway, operation=None):
         "ramp_options": RAMP_OPTIONS,
         "parking_target_options": PARKING_TARGET_OPTIONS,
         "parking_position_options": PARKING_POSITION_OPTIONS,
+        "belt_pair_ramp_options": BELT_PAIR_RAMP_OPTIONS,
+        "building_lineup_belt_preferences": belt_pair_preferences_for_context(gateway),
         "arrival_rule_options": _master_plan_rule_options(gateway, operation, "arrival"),
         "departure_rule_options": _master_plan_rule_options(gateway, operation, "departure"),
         "aircraft_type_options": PARKING_AIRCRAFT_TYPE_OPTIONS,
@@ -160,6 +174,7 @@ def save_parking_rules_from_form(gateway, form):
     )
     for category in PARKING_RULE_EDITABLE_CATEGORIES:
         _add_new_rule(gateway, category, form)
+    save_belt_pair_preferences_from_form(gateway, form)
 
     db.session.flush()
     return settings
@@ -285,6 +300,8 @@ def _subject_type_for_category(category):
         return "departure_plan"
     if category == BLOCKED_PARKING_POSITION:
         return "position"
+    if category == BUILDING_LINEUP_BELT_PARKING_PREFERENCE:
+        return BELT_PAIR_SUBJECT_TYPE
     return "aircraft_type"
 
 
@@ -297,6 +314,8 @@ def _behavior_for_category(category):
         BLOCKED_PARKING_POSITION,
     ):
         return "forbidden"
+    if category == BUILDING_LINEUP_BELT_PARKING_PREFERENCE:
+        return BELT_PAIR_PREFERENCE_BEHAVIOR
     return "preferred"
 
 
@@ -310,6 +329,8 @@ def _normalize_subject(subject_type, value, existing_value=None):
         return normalize_parking_position_code(text)
     if subject_type in {"arrival_plan", "departure_plan"}:
         return _normalize_schedule_rule_key(text)
+    if subject_type == BELT_PAIR_SUBJECT_TYPE:
+        return normalize_belt_pair_key(text)
     normalized = normalize_parking_aircraft_type(text, allow_unknown=False)
     if normalized:
         return normalized
@@ -437,6 +458,9 @@ def _parking_rule_report(settings, grouped):
     active_aircraft_preferences = _active_rule_summaries(
         grouped.get(AIRCRAFT_TYPE_RAMP_PREFERENCE, [])
     )
+    active_belt_preferences = _belt_preference_summaries(
+        active_belt_pair_preference_map(settings.gateway)
+    )
     return {
         "hard_rules": (
             "Physical fill order",
@@ -461,6 +485,7 @@ def _parking_rule_report(settings, grouped):
             "757 preferred on 04/08 positions: active soft rule",
             "Avoid 04/08 when valid alternatives exist: active soft rule",
             "Blocked-position relief for 04/08: active soft rule",
+            "Building Lineup Belt Parking Preferences: active soft rule when a departure destination maps to one configured belt pair",
             "Deice spacing: active soft rule when threshold is above 0; disabled at 0 and skipped automatically when needed to keep suggestions responsive",
         ),
         "current_settings": {
@@ -482,8 +507,19 @@ def _parking_rule_report(settings, grouped):
             "active_departure_preferred": active_departure_preferred or ("NONE",),
             "active_aircraft_restrictions": active_aircraft_restrictions or ("NONE",),
             "active_aircraft_preferences": active_aircraft_preferences or ("NONE",),
+            "active_building_lineup_belt_preferences": active_belt_preferences or ("NONE",),
         },
     }
+
+
+def _belt_preference_summaries(preferences):
+    summaries = []
+    for pair_key, ramps in sorted((preferences or {}).items()):
+        if not ramps:
+            continue
+        labels = ", ".join(belt_pair_ramp_label(ramp) for ramp in ramps)
+        summaries.append(f"{pair_key} prefers {labels}")
+    return tuple(summaries)
 
 
 def _active_rule_summaries(rules):

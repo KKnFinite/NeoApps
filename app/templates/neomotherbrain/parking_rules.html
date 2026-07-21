@@ -274,6 +274,35 @@
 </section>
 {% endmacro %}
 
+{% macro building_lineup_belt_preferences_table(preferences) %}
+<section id="parking-rule-section-building-lineup-belt-preferences" class="parking-rules-card parking-belt-preferences-card" aria-label="Building Lineup Belt Parking Preferences">
+    <div class="section-heading parking-rules-card-heading">
+        <h2>BUILDING LINEUP BELT PARKING PREFERENCES</h2>
+        <p class="muted">Soft optimizer guidance from NeoErmac Building Lineup destinations. Blank rows mean no parking preference. Remote only applies when Remote parking is enabled.</p>
+    </div>
+    <input type="hidden" name="building_lineup_belt_preferences_present" value="1">
+    <div class="parking-belt-preferences-grid" role="table" aria-label="Building Lineup belt parking preferences">
+        <div class="parking-belt-preferences-row parking-belt-preferences-header" role="row">
+            <span role="columnheader">BELT PAIR</span>
+            {% for ramp_code, ramp_label in belt_pair_ramp_options %}
+            <span role="columnheader">{{ ramp_label|upper }}</span>
+            {% endfor %}
+        </div>
+        {% for pair in preferences %}
+        <div class="parking-belt-preferences-row" role="row" data-belt-pair="{{ pair.pair_key }}">
+            <strong role="rowheader">{{ pair.label }}</strong>
+            {% for ramp_code, ramp_label in belt_pair_ramp_options %}
+            <label class="parking-belt-preference-check">
+                <input type="checkbox" name="{{ pair.field_name }}" value="{{ ramp_code }}" {% if ramp_code in pair.selected_ramps %}checked{% endif %} {% if not can_edit_parking_rules %}disabled{% endif %}>
+                <span>{{ ramp_label }}</span>
+            </label>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endmacro %}
+
 {% block content %}
 <section class="parking-rules-page">
     <div class="section-heading">
@@ -335,6 +364,8 @@
                     </label>
                 </div>
             </section>
+
+            {{ building_lineup_belt_preferences_table(building_lineup_belt_preferences) }}
 
             <section class="parking-rules-card" aria-label="Physical Parking Rules">
                 <div class="section-heading parking-rules-card-heading">
@@ -420,6 +451,10 @@
                             <div>
                                 <dt>Active Aircraft Preferences</dt>
                                 <dd>{{ rule_report.current_settings.active_aircraft_preferences|join(", ") }}</dd>
+                            </div>
+                            <div>
+                                <dt>Active Building Lineup Belt Preferences</dt>
+                                <dd>{{ rule_report.current_settings.active_building_lineup_belt_preferences|join(", ") }}</dd>
                             </div>
                         </dl>
                     </div>
