@@ -35,6 +35,7 @@ from app.services.csrf import (
     validate_csrf_request,
 )
 from app.services.password_policy import user_requires_password_change
+from app.services.shell_metadata import resolve_shell_metadata
 from app.services.time_display import format_local_hhmm
 
 
@@ -310,6 +311,13 @@ def register_template_helpers(app):
 
     @app.context_processor
     def permission_helpers():
+        shell_metadata = resolve_shell_metadata(
+            request,
+            is_authenticated=current_user.is_authenticated,
+            user_last_name=getattr(current_user, "last_name", None),
+            user_display_name=getattr(current_user, "display_name", None),
+            default_gateway_code=app.config["DEFAULT_GATEWAY_CODE"],
+        )
         return {
             "can_enter_data": can_enter_data,
             "can_make_decisions": can_make_decisions,
@@ -322,6 +330,7 @@ def register_template_helpers(app):
             "change_character_targets": change_character_targets,
             "current_pwa_manifest_key": current_pwa_manifest_key,
             "browser_tab_title": browser_tab_title(request),
+            **shell_metadata,
         }
 
     @app.context_processor
