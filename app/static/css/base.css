@@ -6307,7 +6307,7 @@ h2 {
 
 .parking-belt-preferences-row {
     display: grid;
-    grid-template-columns: minmax(74px, 0.72fr) repeat(6, minmax(86px, 1fr));
+    grid-template-columns: minmax(74px, 0.72fr) repeat(6, minmax(76px, 1fr)) minmax(82px, 0.72fr);
     gap: 7px;
     align-items: center;
     min-width: 0;
@@ -6359,6 +6359,12 @@ h2 {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.parking-belt-preference-save {
+    min-height: 34px;
+    padding: 8px 12px;
+    font-size: 0.68rem;
 }
 
 .parking-rules-readonly-note {

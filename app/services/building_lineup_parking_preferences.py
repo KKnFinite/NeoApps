@@ -89,6 +89,16 @@ def belt_pair_preferences_for_context(gateway):
 
 
 def save_belt_pair_preferences_from_form(gateway, form):
+    single_pair_key = normalize_belt_pair_key(
+        form.get("building_lineup_belt_preference_pair")
+    )
+    if single_pair_key:
+        return _save_single_belt_pair_preference_from_form(
+            gateway,
+            form,
+            single_pair_key,
+        )
+
     if "building_lineup_belt_preferences_present" not in form:
         return active_belt_pair_preference_map(gateway)
 
@@ -103,29 +113,68 @@ def save_belt_pair_preferences_from_form(gateway, form):
                 ramps.append(ramp)
         selected[pair_key] = tuple(ramps)
 
-    MotherBrainParkingRule.query.filter_by(
+    for pair_key, ramps in selected.items():
+        _sync_belt_pair_rules(gateway, pair_key, ramps)
+    db.session.flush()
+    return selected
+
+
+def _save_single_belt_pair_preference_from_form(gateway, form, pair_key):
+    field_name = parking_belt_preference_form_field(pair_key)
+    ramps = []
+    for raw_ramp in form.getlist(field_name):
+        ramp = normalize_belt_pair_ramp(raw_ramp)
+        if ramp and ramp not in ramps:
+            ramps.append(ramp)
+
+    _sync_belt_pair_rules(gateway, pair_key, ramps)
+    db.session.flush()
+    preferences = active_belt_pair_preference_map(gateway)
+    preferences[pair_key] = tuple(ramps)
+    return preferences
+
+
+def _sync_belt_pair_rules(gateway, pair_key, selected_ramps):
+    normalized_ramps = []
+    for ramp in selected_ramps:
+        normalized = normalize_belt_pair_ramp(ramp)
+        if normalized and normalized not in normalized_ramps:
+            normalized_ramps.append(normalized)
+    selected_ramps = tuple(normalized_ramps)
+    remaining_ramps = list(selected_ramps)
+    existing_rules = MotherBrainParkingRule.query.filter_by(
         gateway_id=gateway.id,
         rule_category=BUILDING_LINEUP_BELT_PARKING_PREFERENCE,
         subject_type=BELT_PAIR_SUBJECT_TYPE,
-    ).delete(synchronize_session=False)
+        subject_value=pair_key,
+    ).all()
 
-    for pair_key, ramps in selected.items():
-        for ramp in ramps:
-            db.session.add(
-                MotherBrainParkingRule(
-                    gateway_id=gateway.id,
-                    gateway_code=gateway.code,
-                    rule_category=BUILDING_LINEUP_BELT_PARKING_PREFERENCE,
-                    subject_type=BELT_PAIR_SUBJECT_TYPE,
-                    subject_value=pair_key,
-                    ramp_code=ramp,
-                    rule_behavior=BELT_PAIR_PREFERENCE_BEHAVIOR,
-                    active=True,
-                    note="",
-                )
+    for rule in existing_rules:
+        ramp = normalize_belt_pair_ramp(rule.ramp_code)
+        if ramp in remaining_ramps:
+            rule.gateway_code = gateway.code
+            rule.ramp_code = ramp
+            rule.rule_behavior = BELT_PAIR_PREFERENCE_BEHAVIOR
+            rule.active = True
+            rule.note = ""
+            remaining_ramps.remove(ramp)
+        else:
+            db.session.delete(rule)
+
+    for ramp in remaining_ramps:
+        db.session.add(
+            MotherBrainParkingRule(
+                gateway_id=gateway.id,
+                gateway_code=gateway.code,
+                rule_category=BUILDING_LINEUP_BELT_PARKING_PREFERENCE,
+                subject_type=BELT_PAIR_SUBJECT_TYPE,
+                subject_value=pair_key,
+                ramp_code=ramp,
+                rule_behavior=BELT_PAIR_PREFERENCE_BEHAVIOR,
+                active=True,
+                note="",
             )
-    db.session.flush()
-    return selected
+        )
 
 
 def building_lineup_destination_belt_pair_map(gateway):

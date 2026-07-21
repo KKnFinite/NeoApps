@@ -1060,7 +1060,7 @@ def _parking_rules_redirect(operation=None, anchor=None):
     else:
         destination = url_for("neomotherbrain.parking_rules")
     if anchor and re.fullmatch(
-        r"parking-rule-(?:section|new)-[a-z0-9_]+|parking-rule-\d+|parking-rules-other-rules",
+        r"parking-rule-(?:section|new)-[a-z0-9_-]+|parking-rule-\d+|parking-rules-other-rules",
         anchor,
     ):
         return f"{destination}#{anchor}"

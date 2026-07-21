@@ -287,9 +287,10 @@
             {% for ramp_code, ramp_label in belt_pair_ramp_options %}
             <span role="columnheader">{{ ramp_label|upper }}</span>
             {% endfor %}
+            {% if can_edit_parking_rules %}<span role="columnheader">ACTION</span>{% endif %}
         </div>
         {% for pair in preferences %}
-        <div class="parking-belt-preferences-row" role="row" data-belt-pair="{{ pair.pair_key }}">
+        <div id="parking-rule-section-building-lineup-belt-preferences-{{ pair.pair_key|replace('/', '-') }}" class="parking-belt-preferences-row" role="row" data-belt-pair="{{ pair.pair_key }}" data-parking-rule-anchor>
             <strong role="rowheader">{{ pair.label }}</strong>
             {% for ramp_code, ramp_label in belt_pair_ramp_options %}
             <label class="parking-belt-preference-check">
@@ -297,6 +298,9 @@
                 <span>{{ ramp_label }}</span>
             </label>
             {% endfor %}
+            {% if can_edit_parking_rules %}
+            <button class="action-button action-button-secondary parking-belt-preference-save" name="building_lineup_belt_preference_pair" value="{{ pair.pair_key }}" type="submit">SAVE</button>
+            {% endif %}
         </div>
         {% endfor %}
     </div>

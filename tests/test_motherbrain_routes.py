@@ -70,6 +70,7 @@ from app.services.building_lineup_parking_preferences import (
     BUILDING_LINEUP_BELT_PARKING_PREFERENCE,
     BUILDING_LINEUP_PARKING_BELT_PAIRS,
     active_belt_pair_preference_map,
+    parking_belt_preference_form_field,
 )
 from app.services.permission_rules import ensure_default_permission_rules
 from app.services.password_policy import set_user_password
@@ -7137,6 +7138,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         for pair in BUILDING_LINEUP_PARKING_BELT_PAIRS:
             self.assertIn(f'data-belt-pair="{pair["pair_key"]}"'.encode(), response.data)
+            self.assertIn(
+                f'name="building_lineup_belt_preference_pair" value="{pair["pair_key"]}"'.encode(),
+                response.data,
+            )
         self.assertNotIn(b'data-belt-pair="34/37"', response.data)
         self.assertIn(b"Remote only applies when Remote parking is enabled.", response.data)
 
@@ -7169,6 +7174,167 @@ class MotherBrainRoutesTest(unittest.TestCase):
         reload_response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
         self.assertIn(b'name="building_lineup_belt_preference_4_6" value="A" checked', reload_response.data)
         self.assertIn(b'name="building_lineup_belt_preference_4_6" value="B" checked', reload_response.data)
+
+    def test_parking_rules_belt_preference_row_save_reload_update_and_clear(self):
+        operation = self._parking_operation()
+        db.session.commit()
+
+        first_save = self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data=self._belt_preference_post_data(operation, "4/6", ["A"]),
+        )
+
+        self.assertEqual(first_save.status_code, 302)
+        self.assertTrue(
+            first_save.location.endswith(
+                "#parking-rule-section-building-lineup-belt-preferences-4-6"
+            )
+        )
+        first_reload = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
+        self.assertIn(b'name="building_lineup_belt_preference_4_6" value="A" checked', first_reload.data)
+        self.assertNotIn(b'name="building_lineup_belt_preference_4_6" value="B" checked', first_reload.data)
+
+        second_save = self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data=self._belt_preference_post_data(operation, "4/6", ["A", "B"]),
+        )
+
+        self.assertEqual(second_save.status_code, 302)
+        second_reload = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
+        self.assertIn(b'name="building_lineup_belt_preference_4_6" value="A" checked', second_reload.data)
+        self.assertIn(b'name="building_lineup_belt_preference_4_6" value="B" checked', second_reload.data)
+
+        update_save = self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data=self._belt_preference_post_data(operation, "4/6", ["C"]),
+        )
+
+        self.assertEqual(update_save.status_code, 302)
+        self.assertEqual(active_belt_pair_preference_map(self.rfd_gateway)["4/6"], ("C",))
+        update_reload = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
+        self.assertNotIn(b'name="building_lineup_belt_preference_4_6" value="A" checked', update_reload.data)
+        self.assertNotIn(b'name="building_lineup_belt_preference_4_6" value="B" checked', update_reload.data)
+        self.assertIn(b'name="building_lineup_belt_preference_4_6" value="C" checked', update_reload.data)
+
+        clear_save = self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data=self._belt_preference_post_data(operation, "4/6", []),
+        )
+
+        self.assertEqual(clear_save.status_code, 302)
+        self.assertEqual(active_belt_pair_preference_map(self.rfd_gateway)["4/6"], ())
+        clear_reload = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
+        self.assertNotIn(b'name="building_lineup_belt_preference_4_6" value="C" checked', clear_reload.data)
+
+    def test_parking_rules_belt_preference_row_save_preserves_other_belt_pairs(self):
+        operation = self._parking_operation()
+        self._belt_preference("6/9", "D")
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data=self._belt_preference_post_data(operation, "4/6", ["A", "B"]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        preferences = active_belt_pair_preference_map(self.rfd_gateway)
+        self.assertEqual(preferences["4/6"], ("A", "B"))
+        self.assertEqual(preferences["6/9"], ("D",))
+
+    def test_parking_rules_belt_preferences_are_gateway_scoped_and_idempotent(self):
+        operation = self._parking_operation()
+        dfw_gateway = Gateway(code="DFW", name="NeoDFW", is_active=True)
+        db.session.add(dfw_gateway)
+        db.session.flush()
+        self._belt_preference("4/6", "E", gateway=dfw_gateway)
+        db.session.commit()
+
+        for _index in range(2):
+            response = self.client.post(
+                f"/motherbrain/parking-rules?operation_id={operation.id}",
+                data=self._belt_preference_post_data(operation, "4/6", ["A", "B"]),
+            )
+            self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(active_belt_pair_preference_map(self.rfd_gateway)["4/6"], ("A", "B"))
+        self.assertEqual(active_belt_pair_preference_map(dfw_gateway)["4/6"], ("E",))
+        saved = MotherBrainParkingRule.query.filter_by(
+            gateway_id=self.rfd_gateway.id,
+            rule_category=BUILDING_LINEUP_BELT_PARKING_PREFERENCE,
+            subject_type=BELT_PAIR_SUBJECT_TYPE,
+            subject_value="4/6",
+        ).all()
+        self.assertEqual(len(saved), 2)
+        self.assertEqual({row.ramp_code for row in saved}, {"A", "B"})
+
+    def test_parking_rules_belt_preference_rejects_invalid_pair_and_ignores_invalid_ramps(self):
+        operation = self._parking_operation()
+        self._belt_preference("6/9", "D")
+        db.session.commit()
+
+        invalid_pair_response = self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data={
+                "operation_id": str(operation.id),
+                "return_to": "parking-rule-section-building-lineup-belt-preferences-4-6",
+                "building_lineup_belt_preference_pair": "2/5",
+                "building_lineup_belt_preference_2_5": "A",
+            },
+        )
+        invalid_ramp_response = self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data=self._belt_preference_post_data(operation, "4/6", ["Z"]),
+        )
+
+        self.assertEqual(invalid_pair_response.status_code, 302)
+        self.assertEqual(invalid_ramp_response.status_code, 302)
+        preferences = active_belt_pair_preference_map(self.rfd_gateway)
+        self.assertEqual(preferences["4/6"], ())
+        self.assertEqual(preferences["6/9"], ("D",))
+        invalid_rows = MotherBrainParkingRule.query.filter(
+            MotherBrainParkingRule.gateway_id == self.rfd_gateway.id,
+            MotherBrainParkingRule.rule_category == BUILDING_LINEUP_BELT_PARKING_PREFERENCE,
+            MotherBrainParkingRule.subject_value.in_(["2/5", "4/6"]),
+        ).all()
+        self.assertEqual(invalid_rows, [])
+
+    def test_parking_rules_belt_preference_csrf_protected_post_persists(self):
+        operation = self._parking_operation()
+        db.session.commit()
+        self.app.config["CSRF_PROTECT_TESTING"] = True
+
+        page = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
+        token = self._csrf_token(page)
+        data = self._belt_preference_post_data(operation, "4/6", ["A", "B"])
+        data["csrf_token"] = token
+        response = self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data=data,
+        )
+        reload_response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(b'name="building_lineup_belt_preference_4_6" value="A" checked', reload_response.data)
+        self.assertIn(b'name="building_lineup_belt_preference_4_6" value="B" checked', reload_response.data)
+
+    def test_parking_optimizer_uses_belt_preferences_saved_through_route_after_fresh_load(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX", aircraft_type="757")
+        self._lineup_destination("runout_1", east_destination_1="LAX")
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data=self._belt_preference_post_data(operation, "4/6", ["A", "B"]),
+        )
+        db.session.expire_all()
+        preview = self._parking_optimizer_preview(operation)
+        suggestion = preview["suggested_assignments"][0]
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(suggestion["building_lineup_belt_pair"], "4/6")
+        self.assertEqual(suggestion["building_lineup_preferred_ramps"], ("A", "B"))
+        self.assertTrue(suggestion["building_lineup_belt_preference_applied"])
 
     def test_parking_rules_belt_preference_empty_and_invalid_values_do_not_save(self):
         operation = self._parking_operation()
@@ -12046,10 +12212,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
         subject_value,
         ramp_code,
         behavior="forbidden",
+        gateway=None,
     ):
+        gateway = gateway or self.rfd_gateway
         rule = MotherBrainParkingRule(
-            gateway_id=self.rfd_gateway.id,
-            gateway_code=self.rfd_gateway.code,
+            gateway_id=gateway.id,
+            gateway_code=gateway.code,
             rule_category=category,
             subject_type=subject_type,
             subject_value=subject_value,
@@ -12060,14 +12228,31 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.session.add(rule)
         return rule
 
-    def _belt_preference(self, pair_key, ramp_code):
+    def _belt_preference(self, pair_key, ramp_code, gateway=None):
         return self._parking_rule(
             BUILDING_LINEUP_BELT_PARKING_PREFERENCE,
             BELT_PAIR_SUBJECT_TYPE,
             pair_key,
             ramp_code,
             behavior=BELT_PAIR_PREFERENCE_BEHAVIOR,
+            gateway=gateway,
         )
+
+    def _belt_preference_post_data(self, operation, pair_key, ramps):
+        field_name = parking_belt_preference_form_field(pair_key)
+        anchor = f"parking-rule-section-building-lineup-belt-preferences-{pair_key.replace('/', '-')}"
+        return {
+            "operation_id": str(operation.id),
+            "return_to": anchor,
+            "building_lineup_belt_preferences_present": "1",
+            "building_lineup_belt_preference_pair": pair_key,
+            field_name: list(ramps),
+        }
+
+    def _csrf_token(self, response):
+        match = re.search(rb'name="csrf_token" value="([^"]+)"', response.data)
+        self.assertIsNotNone(match)
+        return match.group(1).decode("utf-8")
 
     def _lineup_destination(self, runout_key, **destinations):
         row = NeoErmacBuildingLineup(
