@@ -78,9 +78,19 @@ def revoke_unused_password_reset_tokens(user):
     db.session.flush()
 
 
+def revoke_unused_email_verification_tokens(user):
+    """Invalidate unused verification links before issuing a replacement."""
+    UserToken.query.filter(
+        UserToken.user_id == user.id,
+        UserToken.token_type == EMAIL_VERIFICATION,
+        UserToken.used_at.is_(None),
+    ).update({UserToken.used_at: datetime.utcnow()}, synchronize_session=False)
+    db.session.flush()
+
+
 def _expiration_hours(token_type, explicit_hours=None):
     if explicit_hours is not None:
         return int(explicit_hours)
     if token_type == EMAIL_VERIFICATION:
-        return int(current_app.config.get("EMAIL_VERIFICATION_TOKEN_HOURS", 24))
+        return int(current_app.config.get("EMAIL_VERIFICATION_TOKEN_HOURS", 168))
     return int(current_app.config.get("PASSWORD_RESET_TOKEN_HOURS", 1))

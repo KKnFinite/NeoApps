@@ -94,6 +94,11 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(send_verification.call_count, 1)
         self.assertNotEqual(token.token_hash, raw_token)
         self.assertNotIn(raw_token, token.token_hash)
+        self.assertAlmostEqual(
+            (token.expires_at - token.created_at).total_seconds(),
+            168 * 60 * 60,
+            delta=2,
+        )
         self.assertFalse(user.password_policy_update_required)
 
     def test_login_verification_does_not_revalidate_or_check_hibp(self):

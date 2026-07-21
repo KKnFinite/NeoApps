@@ -41,6 +41,11 @@ DEFAULT_PERMISSION_RULES = (
         "Create users, update gateway access, set node roles, and reset emergency credentials.",
     ),
     (
+        "neoapps.email_verification.resend",
+        "grandmaster",
+        "Resend an email verification link for an unverified NeoApps user.",
+    ),
+    (
         "neoapps.access_requests.view",
         "grandmaster",
         "View pending NeoGateway access requests.",
@@ -595,6 +600,15 @@ PERMISSION_RULE_ITEMS = (
         {
             "view": "neoapps.user_management.view",
             "edit": "neoapps.user_management.edit",
+        },
+    ),
+    (
+        "system",
+        "neoapps.email_verification",
+        "Resend Verification Email",
+        "Issue a replacement verification link for an unverified NeoApps user.",
+        {
+            "trigger": "neoapps.email_verification.resend",
         },
     ),
     (

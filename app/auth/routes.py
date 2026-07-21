@@ -53,6 +53,7 @@ from app.services.user_tokens import (
     get_token_record,
     get_valid_token_record,
     mark_token_used,
+    revoke_unused_email_verification_tokens,
     revoke_unused_password_reset_tokens,
 )
 
@@ -76,6 +77,7 @@ PORTAL_MANAGEMENT_VIEW_PERMISSION = "neoapps.portal_management.view"
 PORTAL_MANAGEMENT_EDIT_PERMISSION = "neoapps.portal_management.edit"
 USER_MANAGEMENT_VIEW_PERMISSION = "neoapps.user_management.view"
 USER_MANAGEMENT_EDIT_PERMISSION = "neoapps.user_management.edit"
+EMAIL_VERIFICATION_RESEND_PERMISSION = "neoapps.email_verification.resend"
 ACCESS_REQUESTS_VIEW_PERMISSION = "neoapps.access_requests.view"
 ACCESS_REQUESTS_EDIT_PERMISSION = "neoapps.access_requests.edit"
 PERMISSION_RULES_VIEW_PERMISSION = "neomotherbrain.permission_rules.view"
@@ -599,7 +601,57 @@ def user_detail(user_id):
         node_rows=node_rows,
         role_choices=ROLE_CHOICES,
         target_user=target_user,
+        can_resend_email_verification=(
+            bool(target_user.email)
+            and not bool(target_user.email_verified_at)
+            and user_can(EMAIL_VERIFICATION_RESEND_PERMISSION)
+        ),
     )
+
+
+@bp.route("/admin/users/<int:user_id>/resend-verification", methods=["POST"])
+@bp.route("/portal/manage/users/<int:user_id>/resend-verification", methods=["POST"])
+@portal_permission_required(
+    EMAIL_VERIFICATION_RESEND_PERMISSION,
+    "Resend verification email access denied.",
+)
+def resend_user_verification_email(user_id):
+    target_user = User.query.get_or_404(user_id)
+
+    if target_user.email_verified_at:
+        flash("Email is already verified; no verification email was sent.", "info")
+        return redirect(url_for("auth.user_detail", user_id=target_user.id))
+    if not target_user.email:
+        flash("This user has no email address; no verification email was sent.", "error")
+        return redirect(url_for("auth.user_detail", user_id=target_user.id))
+
+    try:
+        revoke_unused_email_verification_tokens(target_user)
+        raw_token, _token_record = create_user_token(target_user, EMAIL_VERIFICATION)
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.warning(
+            "Verification resend token creation failed for user id=%s.",
+            target_user.id,
+        )
+        flash("Verification email could not be prepared. Please try again.", "error")
+        return redirect(url_for("auth.user_detail", user_id=target_user.id))
+
+    try:
+        delivery = email_service.send_email_verification(target_user, raw_token)
+    except Exception:  # Keep unexpected delivery failures from exposing token details.
+        current_app.logger.warning(
+            "Verification resend delivery failed for user id=%s.",
+            target_user.id,
+        )
+        delivery = {"sent": False}
+
+    if delivery.get("sent"):
+        flash("Verification email sent.", "info")
+    else:
+        flash("Verification email could not be delivered. No email was sent.", "error")
+    return redirect(url_for("auth.user_detail", user_id=target_user.id))
 
 
 @bp.route("/admin/users/<int:user_id>/edit", methods=["GET", "POST"])

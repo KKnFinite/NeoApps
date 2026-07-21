@@ -68,6 +68,32 @@ class EmailServiceTest(unittest.TestCase):
         self.assertIn("https://neoapps.example/login", payload["htmlContent"])
         self.assertIn("Open NeoApps Portal: https://neoapps.example/login", payload["textContent"])
 
+    def test_email_verification_copy_uses_the_default_seven_day_expiration(self):
+        captured = {}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return b'{"messageId":"test"}'
+
+        def fake_urlopen(request, timeout):
+            captured["request"] = request
+            return FakeResponse()
+
+        user = SimpleNamespace(email="verify@example.com", display_name="Verify User")
+        with patch("app.services.email_service.urlopen", side_effect=fake_urlopen):
+            result = email_service.send_email_verification(user, "verification-token")
+
+        payload = json.loads(captured["request"].data.decode("utf-8"))
+        self.assertTrue(result["sent"])
+        self.assertIn("expires in 7 days", payload["htmlContent"])
+        self.assertIn("expires in 7 days", payload["textContent"])
+
 
 if __name__ == "__main__":
     unittest.main()

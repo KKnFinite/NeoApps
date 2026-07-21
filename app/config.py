@@ -48,7 +48,7 @@ class Config:
     )
     APP_BASE_URL = os.getenv("APP_BASE_URL", "http://127.0.0.1:5000")
     EMAIL_VERIFICATION_TOKEN_HOURS = int(
-        os.getenv("EMAIL_VERIFICATION_TOKEN_HOURS", "24")
+        os.getenv("EMAIL_VERIFICATION_TOKEN_HOURS", "168")
     )
     PASSWORD_RESET_TOKEN_HOURS = int(os.getenv("PASSWORD_RESET_TOKEN_HOURS", "1"))
     EMERGENCY_PASSWORD_EXPIRATION_HOURS = int(

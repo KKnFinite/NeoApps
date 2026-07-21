@@ -13,6 +13,7 @@ BREVO_SMTP_EMAIL_HOST = "api.brevo.com"
 
 def send_email_verification(user, token):
     verification_url = _absolute_url(f"/verify-email/{token}")
+    expiration = _email_verification_expiration_copy()
     return _send_transactional_email(
         to_email=user.email,
         to_name=user.display_name,
@@ -20,12 +21,12 @@ def send_email_verification(user, token):
         html_content=(
             "<p>Welcome to NeoApps Portal.</p>"
             f'<p><a href="{verification_url}">Verify your email address</a></p>'
-            "<p>This verification link will expire.</p>"
+            f"<p>This verification link expires in {expiration}.</p>"
         ),
         text_content=(
             "Welcome to NeoApps Portal.\n\n"
             f"Verify your email address: {verification_url}\n\n"
-            "This verification link will expire."
+            f"This verification link expires in {expiration}."
         ),
     )
 
@@ -129,3 +130,11 @@ def _validated_brevo_email_url():
 def _absolute_url(path):
     base_url = str(current_app.config.get("APP_BASE_URL", "")).rstrip("/")
     return f"{base_url}{path}"
+
+
+def _email_verification_expiration_copy():
+    hours = int(current_app.config.get("EMAIL_VERIFICATION_TOKEN_HOURS", 168))
+    if hours and hours % 24 == 0:
+        days = hours // 24
+        return f"{days} day{'s' if days != 1 else ''}"
+    return f"{hours} hour{'s' if hours != 1 else ''}"

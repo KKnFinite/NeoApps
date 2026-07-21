@@ -135,6 +135,31 @@ class CsrfProtectionTest(unittest.TestCase):
         self.assertEqual(with_token.status_code, 302)
         self.assertEqual(db.session.get(PortalAppAccess, access.id).status, "approved")
 
+    def test_verification_resend_requires_csrf_and_accepts_valid_token(self):
+        administrator = self._user("csrf_verification_admin", role="grandmaster")
+        target = self._user("csrf_verification_target")
+        target.email_verified_at = None
+        db.session.commit()
+        self._login(administrator)
+
+        without_token = self.client.post(
+            f"/admin/users/{target.id}/resend-verification",
+        )
+        token = self._csrf_token(self.client.get(f"/admin/users/{target.id}"))
+        with patch(
+            "app.auth.routes.email_service.send_email_verification",
+            return_value={"sent": True},
+        ) as send_verification:
+            with_token = self.client.post(
+                f"/admin/users/{target.id}/resend-verification",
+                data={"csrf_token": token},
+                follow_redirects=False,
+            )
+
+        self.assertEqual(without_token.status_code, 400)
+        self.assertEqual(with_token.status_code, 302)
+        self.assertEqual(send_verification.call_count, 1)
+
     def test_neosektor_fetch_mutation_requires_and_accepts_csrf_header(self):
         user = self._user("csrf_sektor")
         self._grant_gateway_node_access(user, "sektor", "simulator")
