@@ -1849,7 +1849,11 @@ def add_alp_planning_row(operation_id, mission_type):
         return redirect(_planning_url(operation.id, mission_type))
 
     try:
-        row = _alp_planning_row_from_form(operation, mission_type, require_wave=True)
+        row = _alp_planning_row_from_form(
+            operation,
+            mission_type,
+            require_wave=mission_type == "departure",
+        )
         mission = _create_or_update_mission_from_alp_planning_row(operation, row)
         _record_alp_planning_marker(operation, row, "accepted", mission)
         db.session.commit()
@@ -1930,7 +1934,7 @@ def add_api_planning_row(operation_id, review_item_id):
 
     mission_type = review_item.mission_type
     try:
-        wave = _planning_wave_from_form(required=True)
+        wave = _planning_wave_from_form(required=mission_type == "departure")
         mission = accept_review_item(review_item)
         mission.wave = wave
         db.session.commit()
@@ -2685,10 +2689,14 @@ def _planning_inferred_wave(operation, mission_type, flight_number):
 
 
 def _planning_wave_from_form(required=False):
-    wave = normalize_wave(request.form.get("wave"))
-    if required and wave not in WAVES:
-        raise ValueError("Wave is required. Select 1 or 2.")
-    return wave
+    submitted_wave = str(request.form.get("wave") or "").strip()
+    if not submitted_wave:
+        if required:
+            raise ValueError("Wave is required. Select 1 or 2.")
+        return None
+    if submitted_wave not in WAVES:
+        raise ValueError("Wave must be 1 or 2.")
+    return submitted_wave
 
 
 def _alp_planning_row_from_form(operation, mission_type, require_wave=False):
@@ -2757,7 +2765,11 @@ def _create_mission_from_alp_planning_row(operation, row):
         sort_name=operation.sort_name,
         mission_type=mission_type,
         mission_source="manual",
-        wave=row.get("wave") or "1",
+        wave=(
+            row.get("wave")
+            if mission_type == "arrival"
+            else row.get("wave") or "1"
+        ),
         master_flight_schedule_id=None,
         flight_number=row["normalized_flight_number"],
         origin=airport if mission_type == "arrival" else operation.gateway_code,

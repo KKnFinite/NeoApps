@@ -5881,7 +5881,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(mission.tail_source, "alp")
         self.assertEqual(mission.wave, "2")
 
-    def test_add_alp_arrival_planning_row_requires_wave(self):
+    def test_add_alp_arrival_planning_row_allows_blank_wave_and_stores_null(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
         db.session.add(operation)
         db.session.commit()
@@ -5895,13 +5895,117 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 "tail_number": "N999UP",
                 "utc_datetime": "2026-06-24T07:24:00",
                 "reason": "No current operation mission match.",
+                "wave": "",
+            },
+            follow_redirects=False,
+        )
+
+        mission = SortDateMission.query.filter_by(flight_number="UPS0999").one()
+        self.assertEqual(response.status_code, 302)
+        self.assertIsNone(mission.wave)
+
+    def test_add_alp_arrival_planning_row_persists_selected_wave(self):
+        for index, wave in enumerate(("1", "2"), start=1):
+            operation = self._operation(sort_date=date(2026, 6, 24 + index))
+            db.session.add(operation)
+            db.session.commit()
+
+            response = self.client.post(
+                f"/motherbrain/operations/{operation.id}/planning/arrival/alp/add",
+                data={
+                    "line_number": str(index),
+                    "flight_number": f"UPS99{index:02d}",
+                    "airport": "SDF",
+                    "tail_number": f"N99{index}UP",
+                    "utc_datetime": "2026-06-24T07:24:00",
+                    "reason": "No current operation mission match.",
+                    "wave": wave,
+                },
+                follow_redirects=False,
+            )
+
+            mission = SortDateMission.query.filter_by(
+                sort_date_operation_id=operation.id,
+                flight_number=f"UPS99{index:02d}",
+            ).one()
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(mission.wave, wave)
+
+    def test_add_alp_arrival_planning_row_rejects_invalid_wave(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        db.session.add(operation)
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/planning/arrival/alp/add",
+            data={
+                "line_number": "1",
+                "flight_number": "UPS999",
+                "airport": "SDF",
+                "tail_number": "N999UP",
+                "utc_datetime": "2026-06-24T07:24:00",
+                "reason": "No current operation mission match.",
+                "wave": "3",
             },
             follow_redirects=True,
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Wave is required. Select 1 or 2.", response.data)
+        self.assertIn(b"Wave must be 1 or 2.", response.data)
         self.assertEqual(SortDateMission.query.count(), 0)
+
+    def test_add_api_arrival_planning_row_allows_blank_wave_and_stores_null(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        db.session.add(operation)
+        db.session.flush()
+        item = self._api_review_item(
+            operation,
+            mission_type="arrival",
+            flight_number="UPS0856",
+            origin="SDF",
+            tail_number="N856UP",
+        )
+        db.session.add(item)
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/planning/api/{item.id}/add",
+            data={"mission_type": "arrival", "wave": ""},
+            follow_redirects=False,
+        )
+
+        db.session.refresh(item)
+        mission = item.accepted_mission
+        self.assertEqual(response.status_code, 302)
+        self.assertIsNotNone(mission)
+        self.assertIsNone(mission.wave)
+
+    def test_arrival_planning_review_wave_field_is_not_required(self):
+        operation = self._operation(sort_date=date(2026, 6, 24))
+        db.session.add(operation)
+        db.session.flush()
+        item = self._api_review_item(
+            operation,
+            mission_type="arrival",
+            flight_number="UPS0856",
+            origin="SDF",
+            tail_number="N856UP",
+        )
+        db.session.add(item)
+        db.session.commit()
+
+        response = self.client.get(
+            f"/motherbrain/operations/{operation.id}/alp/arrival"
+        )
+        html = response.data.decode()
+        add_form = html.split(
+            f'action="/motherbrain/operations/{operation.id}/planning/api/{item.id}/add"',
+            1,
+        )[1].split("</form>", 1)[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('<select name="wave" aria-label="Wave">', add_form)
+        self.assertNotIn('<select name="wave" required', add_form)
 
     def test_add_api_departure_planning_row_requires_wave(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
@@ -5957,6 +6061,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )[1].split("</form>", 1)[0]
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn('<select name="wave" required aria-label="Wave">', add_form)
         self.assertIn('<option value="2" selected>', add_form)
         self.assertNotIn('<option value="" selected>', add_form)
 
