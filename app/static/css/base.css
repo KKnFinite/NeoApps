@@ -5268,48 +5268,6 @@ a {
     min-width: 0;
 }
 
-.rfd-gateway-brand-strip {
-    display: grid;
-    place-items: center;
-    width: 100%;
-}
-
-.rfd-gateway-brand {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 14px;
-    max-width: 100%;
-    padding: 12px 18px;
-    border: 1px solid rgba(var(--node-gateway-highlight-rgb), 0.44);
-    border-radius: 12px;
-    background:
-        linear-gradient(135deg, rgba(var(--node-gateway-primary-rgb), 0.2), transparent 46%),
-        linear-gradient(180deg, rgba(18, 22, 30, 0.92), rgba(3, 5, 9, 0.9));
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.12),
-        0 14px 30px rgba(0, 0, 0, 0.34),
-        0 0 24px rgba(var(--node-gateway-primary-rgb), 0.18);
-}
-
-.rfd-gateway-brand-icon {
-    display: block;
-    width: 64px;
-    height: 64px;
-    border-radius: 14px;
-    object-fit: contain;
-    filter: drop-shadow(0 0 14px rgba(var(--node-gateway-primary-rgb), 0.28));
-}
-
-.rfd-gateway-brand-title {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 0.12em;
-    font-size: clamp(1.42rem, 2.6vw, 2.35rem);
-    line-height: 1;
-    white-space: nowrap;
-}
-
 .rfd-hub-sort-status {
     max-width: min(100%, 760px);
     margin: 0;
@@ -5536,26 +5494,6 @@ a {
         --rfd-node-tile-width: clamp(300px, 20vw, 420px);
         --rfd-hub-gap: clamp(26px, 4vw, 80px);
         gap: clamp(26px, 3.8vw, 64px);
-    }
-
-    .rfd-gateway-brand {
-        gap: 20px;
-        padding: 2px 6px;
-        border: 0;
-        border-radius: 0;
-        background: transparent;
-        box-shadow: none;
-    }
-
-    .rfd-gateway-brand-icon {
-        width: clamp(86px, 7vw, 118px);
-        height: clamp(86px, 7vw, 118px);
-        border-radius: 22px;
-        filter: drop-shadow(0 0 22px rgba(var(--node-gateway-primary-rgb), 0.42));
-    }
-
-    .rfd-gateway-brand-title {
-        font-size: clamp(2.34rem, 4.2vw, 4.2rem);
     }
 
     .rfd-node-grid {
@@ -5889,16 +5827,6 @@ a {
             0 0 16px rgba(var(--node-rgb), 0.16);
         transform: translateY(-1px);
     }
-}
-
-.rfd-node-logo {
-    display: block;
-    width: min(100%, 280px);
-    max-height: 82px;
-    object-fit: contain;
-    filter:
-        drop-shadow(0 12px 22px rgba(0, 0, 0, 0.72))
-        drop-shadow(0 0 18px rgba(255, 47, 47, 0.3));
 }
 
 h1,
@@ -15110,28 +15038,6 @@ select::-ms-expand {
         gap: 14px;
     }
 
-    .rfd-gateway-brand-strip {
-        order: 1;
-        display: grid;
-        place-items: center;
-        width: 100%;
-    }
-
-    .rfd-gateway-brand {
-        width: min(100%, 420px);
-        padding: 10px 14px;
-    }
-
-    .rfd-gateway-brand-icon {
-        width: 48px;
-        height: 48px;
-        border-radius: 12px;
-    }
-
-    .rfd-gateway-brand-title {
-        font-size: clamp(1.1rem, 6vw, 1.7rem);
-    }
-
     .rfd-motherbrain-launch {
         order: 2;
         width: 100%;
@@ -15186,10 +15092,6 @@ select::-ms-expand {
         align-content: start;
         gap: 4px;
         width: min(100%, 430px);
-    }
-
-    body.rfd-hub-page.mobile-app-chrome .rfd-gateway-brand-strip {
-        display: none;
     }
 
     body.rfd-hub-page.mobile-app-chrome .rfd-hub-sort-status {

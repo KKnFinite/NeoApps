@@ -84,9 +84,6 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertNotIn("../images/neobutton1_medium.png", css)
         self.assertIn(".rfd-node-prefix", css)
         self.assertIn(".rfd-node-suffix", css)
-        self.assertIn(".rfd-gateway-brand-strip", css)
-        self.assertIn(".rfd-gateway-brand-icon", css)
-        self.assertIn(".rfd-gateway-brand-title", css)
         self.assertIn("width: min(100% - 20px, 1440px);", css)
         self.assertIn(".rfd-motherbrain-launch {\n        order: 2;", css)
         self.assertIn(".rfd-node-sektor {\n        order: 3;", css)
@@ -895,11 +892,6 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn('href="/neoermac', ermac_tile)
         self.assertIn("neoermac-inapp-128.png", ermac_tile)
         self.assertIn("rfd-node-name neo-brand-title", ermac_tile)
-        self.assertIn(
-            "body.rfd-hub-page.mobile-app-chrome .rfd-gateway-brand-strip {\n"
-            "        display: none;",
-            css,
-        )
         self.assertIn(
             "body.rfd-hub-page.mobile-app-chrome .rfd-node-tile {\n"
             "        width: 100%;",
