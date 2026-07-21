@@ -992,6 +992,33 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             css,
         )
 
+    def test_gateway_temporary_nodes_use_shared_icon_and_card_hooks(self):
+        seed_dev_grandmaster(self.app)
+        self.client.post(
+            "/login",
+            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
+        )
+
+        response = self.client.get("/rfd")
+        html = response.data.decode()
+        generic_node_icon = 'src="/static/images/icons/neogateway/inapp/neogateway-inapp-128.png"'
+
+        self.assertEqual(response.status_code, 200)
+        for node in ("reptile", "rain", "subzero"):
+            with self.subTest(node=node):
+                card_start = html.index(f'class="rfd-node-tile rfd-node-placeholder rfd-node-{node}"')
+                card_end = html.index("</article>", card_start)
+                card = html[card_start:card_end]
+                self.assertIn('class="rfd-node-card-icon-wrap"', card)
+                self.assertIn('class="rfd-node-card-icon"', card)
+                self.assertIn('class="rfd-node-card-copy"', card)
+                self.assertIn(generic_node_icon, card)
+                self.assertIn('class="rfd-node-availability">Coming Soon</span>', card)
+
+        self.assertNotIn("images/icons/reptile/icon_192.png", html)
+        self.assertNotIn("images/icons/rain/icon_192.png", html)
+        self.assertNotIn("images/icons/subzero/icon_192.png", html)
+
     def test_mobile_portal_header_uses_neofont_neoapps_brand(self):
         seed_dev_grandmaster(self.app)
         self.client.post(
