@@ -66,6 +66,33 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertEqual(logo_path.name, "neogateway-inapp-128.png")
         self.assertGreater(logo_path.stat().st_size, 0)
 
+    def test_rfd_launcher_icons_use_explicit_or_safe_fallback_paths(self):
+        template = Path("app/templates/neomotherbrain/rfd_hub.html").read_text()
+        generic_icon = "images/icons/neogateway/inapp/neogateway-inapp-128.png"
+        expected_icons = {
+            "motherbrain": "images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png",
+            "sektor": "images/icons/neosektor/inapp/neosektor-icon-128x128.png",
+            "ermac": "images/icons/neoermac/inapp/neoermac-inapp-128.png",
+            "scorpion": "images/icons/neoscorpion/inapp/neoscorpion-128x128.png",
+            "reptile": generic_icon,
+            "rain": generic_icon,
+            "subzero": generic_icon,
+        }
+
+        self.assertIn('{% set generic_node_icon = "' + generic_icon + '" %}', template)
+        self.assertIn("locked_node_icons.get(slug, generic_node_icon)", template)
+        self.assertNotIn("'images/icons/' ~ icon_folder ~ '/icon_192.png'", template)
+        self.assertNotIn("icon_folder", template)
+
+        unknown_node_icon = expected_icons.get("test-node", generic_icon)
+        self.assertEqual(unknown_node_icon, generic_icon)
+        self.assertTrue(Path("app/static", unknown_node_icon).is_file())
+
+        for slug, icon_path in expected_icons.items():
+            with self.subTest(slug=slug):
+                self.assertIn('"' + slug + '": "' + icon_path + '"', template)
+                self.assertTrue(Path("app/static", icon_path).is_file())
+
     def test_base_css_uses_cyber_topbar_without_vertical_grid_background(self):
         css = Path("app/static/css/base.css").read_text()
 

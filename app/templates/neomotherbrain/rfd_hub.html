@@ -15,10 +15,11 @@
     "rain": "images/icons/neogateway/inapp/neogateway-inapp-128.png",
     "subzero": "images/icons/neogateway/inapp/neogateway-inapp-128.png"
 } %}
+{% set generic_node_icon = "images/icons/neogateway/inapp/neogateway-inapp-128.png" %}
 
-{% macro node_card(slug, name, icon_folder, coming_soon=false) -%}
+{% macro node_card(slug, name, coming_soon=false) -%}
 <span class="rfd-node-card-icon-wrap" aria-hidden="true">
-    <img class="rfd-node-card-icon" src="{{ url_for('static', filename=locked_node_icons.get(slug, 'images/icons/' ~ icon_folder ~ '/icon_192.png')) }}" alt="" loading="lazy" width="72" height="72">
+    <img class="rfd-node-card-icon" src="{{ url_for('static', filename=locked_node_icons.get(slug, generic_node_icon)) }}" alt="" loading="lazy" width="72" height="72">
 </span>
 <span class="rfd-node-card-copy">
     {{ node_label(slug, name) }}
@@ -40,14 +41,14 @@
 
         {% if can_enter_motherbrain %}
         <a class="rfd-node-tile rfd-node-motherbrain rfd-motherbrain-launch rfd-motherbrain-launch-desktop" href="{{ url_for('neomotherbrain.motherbrain', operation_id=selected_operation_id) if selected_operation_id else url_for('neomotherbrain.motherbrain') }}" aria-label="NeoMotherBrain">
-            {{ node_card("motherbrain", "MotherBrain", "motherbrain") }}
+            {{ node_card("motherbrain", "MotherBrain") }}
         </a>
         <a class="rfd-node-tile rfd-node-motherbrain rfd-motherbrain-launch rfd-motherbrain-launch-mobile" href="{{ url_for('neomotherbrain.manage_sort', operation_id=selected_operation_id) if selected_operation_id else url_for('neomotherbrain.manage_sort') }}" aria-label="NeoMotherBrain mobile menu">
-            {{ node_card("motherbrain", "MotherBrain", "motherbrain") }}
+            {{ node_card("motherbrain", "MotherBrain") }}
         </a>
         {% else %}
         <article class="rfd-node-tile rfd-node-disabled rfd-node-motherbrain rfd-motherbrain-launch" aria-disabled="true" aria-label="NeoMotherBrain">
-            {{ node_card("motherbrain", "MotherBrain", "motherbrain") }}
+            {{ node_card("motherbrain", "MotherBrain") }}
         </article>
         {% endif %}
 
@@ -55,41 +56,41 @@
             <div class="rfd-node-column rfd-node-column-left" aria-label="{{ gateway.code }} left NeoNodes">
                 {% if can_launch_sektor %}
                 <a class="rfd-node-tile rfd-node-sektor" href="{{ url_for('neosektor.index', operation_id=selected_operation_id) if selected_operation_id else url_for('neosektor.index') }}" aria-label="NeoSektor">
-                    {{ node_card("sektor", "Sektor", "sektor") }}
+                    {{ node_card("sektor", "Sektor") }}
                 </a>
                 {% else %}
                 <article class="rfd-node-tile rfd-node-disabled rfd-node-sektor" aria-disabled="true" aria-label="NeoSektor">
-                    {{ node_card("sektor", "Sektor", "sektor") }}
+                    {{ node_card("sektor", "Sektor") }}
                 </article>
                 {% endif %}
                 <article class="rfd-node-tile rfd-node-placeholder rfd-node-reptile" aria-disabled="true" aria-label="NeoReptile">
-                    {{ node_card("reptile", "Reptile", "reptile", coming_soon=true) }}
+                    {{ node_card("reptile", "Reptile", coming_soon=true) }}
                 </article>
                 <article class="rfd-node-tile rfd-node-placeholder rfd-node-rain" aria-disabled="true" aria-label="NeoRain">
-                    {{ node_card("rain", "Rain", "rain", coming_soon=true) }}
+                    {{ node_card("rain", "Rain", coming_soon=true) }}
                 </article>
             </div>
 
             <div class="rfd-node-column rfd-node-column-right" aria-label="{{ gateway.code }} right NeoNodes">
                 {% if can_launch_ermac %}
                 <a class="rfd-node-tile rfd-node-ermac" href="{{ url_for('neoermac.index', operation_id=selected_operation_id) if selected_operation_id else url_for('neoermac.index') }}" aria-label="NeoErmac">
-                    {{ node_card("ermac", "Ermac", "ermac") }}
+                    {{ node_card("ermac", "Ermac") }}
                 </a>
                 {% else %}
                 <article class="rfd-node-tile rfd-node-disabled rfd-node-ermac" aria-disabled="true" aria-label="NeoErmac">
-                    {{ node_card("ermac", "Ermac", "ermac") }}
+                    {{ node_card("ermac", "Ermac") }}
                 </article>
                 {% endif %}
                 <article class="rfd-node-tile rfd-node-placeholder rfd-node-subzero" aria-disabled="true" aria-label="NeoSub-Zero">
-                    {{ node_card("subzero", "Sub-Zero", "subzero", coming_soon=true) }}
+                    {{ node_card("subzero", "Sub-Zero", coming_soon=true) }}
                 </article>
                 {% if can_launch_scorpion %}
                 <a class="rfd-node-tile rfd-node-scorpion" href="{{ url_for('neoscorpion.index', operation_id=selected_operation_id) if selected_operation_id else url_for('neoscorpion.index') }}" aria-label="NeoScorpion">
-                    {{ node_card("scorpion", "Scorpion", "scorpion") }}
+                    {{ node_card("scorpion", "Scorpion") }}
                 </a>
                 {% else %}
                 <article class="rfd-node-tile rfd-node-disabled rfd-node-scorpion" aria-disabled="true" aria-label="NeoScorpion">
-                    {{ node_card("scorpion", "Scorpion", "scorpion") }}
+                    {{ node_card("scorpion", "Scorpion") }}
                 </article>
                 {% endif %}
             </div>
