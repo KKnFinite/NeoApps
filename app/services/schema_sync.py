@@ -116,6 +116,9 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "motherbrain_parking_settings": {
         "preferred_max_per_ramp": "INTEGER",
         "inbound_same_ramp_spacing_minutes": "INTEGER DEFAULT 5",
+        "prevent_767_adjacent_to_a300": "BOOLEAN NOT NULL DEFAULT 1",
+        "force_767_to_position_4_8": "BOOLEAN NOT NULL DEFAULT 1",
+        "prevent_a300_in_position_5": "BOOLEAN NOT NULL DEFAULT 1",
     },
     "neoermac_uld_requests": {
         "sort_date_operation_id": "INTEGER",
@@ -211,6 +214,9 @@ POSTGRES_OPTIONAL_COLUMNS = {
     "motherbrain_parking_settings": {
         "preferred_max_per_ramp": "INTEGER",
         "inbound_same_ramp_spacing_minutes": "INTEGER DEFAULT 5",
+        "prevent_767_adjacent_to_a300": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "force_767_to_position_4_8": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "prevent_a300_in_position_5": "BOOLEAN NOT NULL DEFAULT TRUE",
     },
     "neoermac_uld_requests": {
         "sort_date_operation_id": "INTEGER",
@@ -269,6 +275,7 @@ def sync_local_sqlite_schema(app):
     _sync_staffing_people_employee_status_sqlite(table_names)
     _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names)
     _sync_uld_request_unique_constraint_sqlite(inspector, table_names)
+    _backfill_motherbrain_parking_rule_defaults(table_names, table_columns)
     if migrate_existing_approved_users:
         _mark_existing_approved_users_for_password_policy_update(table_names)
     _validate_neoermac_door_pull_schema(table_names, table_columns)
@@ -318,12 +325,34 @@ def sync_database_schema(app):
     _sync_staffing_people_employee_status_postgres(table_names)
     _sync_sort_date_mission_status_constraints_postgres(table_names)
     _sync_uld_request_unique_constraint_postgres(table_names)
+    _backfill_motherbrain_parking_rule_defaults(table_names, table_columns)
     if migrate_existing_approved_users:
         _mark_existing_approved_users_for_password_policy_update(table_names)
     _validate_neoermac_door_pull_schema(table_names, table_columns)
     _backfill_neoermac_door_pull_timestamps(table_names, table_columns)
     _migrate_legacy_second_mix_pull_values(table_names, table_columns)
     db.session.flush()
+
+
+def _backfill_motherbrain_parking_rule_defaults(table_names, table_columns):
+    table_name = "motherbrain_parking_settings"
+    if table_name not in table_names:
+        return
+
+    existing_columns = table_columns.get(table_name, set())
+    for column_name in (
+        "prevent_767_adjacent_to_a300",
+        "force_767_to_position_4_8",
+        "prevent_a300_in_position_5",
+    ):
+        if column_name not in existing_columns:
+            continue
+        db.session.execute(
+            text(
+                f"UPDATE {table_name} SET {column_name} = TRUE "
+                f"WHERE {column_name} IS NULL"
+            )
+        )
 
 
 def _validate_neoermac_door_pull_schema(table_names, table_columns):

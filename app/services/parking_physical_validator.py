@@ -1,7 +1,13 @@
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 from app.extensions import db
-from app.models import MotherBrainAlert, MotherBrainParkingRule, SortDateParkingAssignment
+from app.models import (
+    MotherBrainAlert,
+    MotherBrainParkingRule,
+    MotherBrainParkingSettings,
+    SortDateParkingAssignment,
+)
 from app.services.motherbrain_alerts import (
     MOTHERBRAIN_ALERT_SCOPE,
     PARKING_CONFLICT_ALERT_PERMISSION,
@@ -52,19 +58,98 @@ def validate_parking_physical_rules(operation, tail_rows=None, include_order_con
     assignments = _active_assignments(operation)
     aircraft_type_by_tail = _aircraft_type_by_tail(tail_rows)
     occupancy = _occupancy_by_position(assignments)
-    blocked = _blocked_positions(assignments, aircraft_type_by_tail)
+    rule_flags = parking_configurable_rule_flags(getattr(operation, "gateway_id", None))
+    blocked = _blocked_positions(assignments, aircraft_type_by_tail, occupancy, rule_flags)
     conflicts = []
 
     conflicts.extend(_parking_rule_blocked_position_conflicts(assignments, operation))
     if include_order_conflicts:
         conflicts.extend(_normal_fill_order_conflicts(occupancy, blocked))
         conflicts.extend(_remote_fill_order_conflicts(occupancy, blocked))
-    conflicts.extend(_normal_767_conflicts(assignments, aircraft_type_by_tail, occupancy))
+    conflicts.extend(
+        _normal_767_conflicts(assignments, aircraft_type_by_tail, occupancy, rule_flags)
+    )
+    conflicts.extend(
+        _configurable_parking_rule_conflicts(
+            assignments,
+            aircraft_type_by_tail,
+            occupancy,
+            rule_flags,
+        )
+    )
     conflicts.extend(_throat_conflicts(occupancy, blocked))
     conflicts.extend(_slot_2_overflow_conflicts(assignments, tail_rows))
     if include_order_conflicts:
-        conflicts.extend(_eta_order_conflicts(assignments, aircraft_type_by_tail, tail_rows))
+        conflicts.extend(
+            _eta_order_conflicts(
+                assignments,
+                aircraft_type_by_tail,
+                tail_rows,
+                occupancy,
+                rule_flags,
+            )
+        )
     return _dedupe_conflicts(conflicts)
+
+
+def parking_configurable_rule_flags(gateway_id):
+    settings = None
+    if gateway_id:
+        settings = MotherBrainParkingSettings.query.filter_by(gateway_id=gateway_id).first()
+    return {
+        "prevent_767_adjacent_to_a300": _setting_enabled(
+            settings,
+            "prevent_767_adjacent_to_a300",
+        ),
+        "force_767_to_position_4_8": _setting_enabled(
+            settings,
+            "force_767_to_position_4_8",
+        ),
+        "prevent_a300_in_position_5": _setting_enabled(
+            settings,
+            "prevent_a300_in_position_5",
+        ),
+    }
+
+
+def validate_configurable_parking_placement(
+    operation,
+    tail_number,
+    ramp_code,
+    position_code,
+    lane_number=1,
+    tail_rows=None,
+    excluded_tail_numbers=None,
+):
+    """Return the first enabled configurable-rule conflict for a proposed manual placement."""
+    tail = _normalize_tail(tail_number)
+    position = _normalize_position(position_code)
+    excluded_tails = {_normalize_tail(item) for item in (excluded_tail_numbers or ())}
+    excluded_tails.add(tail)
+    assignments = [
+        assignment
+        for assignment in _active_assignments(operation)
+        if _normalize_tail(getattr(assignment, "tail_number", "")) not in excluded_tails
+    ]
+    assignments.append(
+        SimpleNamespace(
+            tail_number=tail,
+            ramp_code=_normalize_ramp(ramp_code),
+            position_code=position,
+            lane_number=lane_number,
+        )
+    )
+    aircraft_type_by_tail = _aircraft_type_by_tail(tail_rows)
+    occupancy = _occupancy_by_position(assignments)
+    flags = parking_configurable_rule_flags(getattr(operation, "gateway_id", None))
+    conflicts = _configurable_parking_rule_conflicts(
+        assignments,
+        aircraft_type_by_tail,
+        occupancy,
+        flags,
+        proposed_tail=tail,
+    )
+    return next((conflict for conflict in conflicts if conflict.tail == tail), None)
 
 
 def _parking_rule_blocked_position_conflicts(assignments, operation):
@@ -198,22 +283,170 @@ def _occupancy_by_position(assignments):
     return occupancy
 
 
-def _blocked_positions(assignments, aircraft_type_by_tail):
+def _blocked_positions(assignments, aircraft_type_by_tail, occupancy, rule_flags):
     blocked = {}
     for assignment in assignments:
         position = _normalize_position(getattr(assignment, "position_code", ""))
-        ramp = _normalize_ramp(getattr(assignment, "ramp_code", ""))
-        number = _position_number(position)
         tail = _normalize_tail(getattr(assignment, "tail_number", ""))
-        if ramp not in NORMAL_767_FOOTPRINT_RAMP_CODES or number is None:
-            continue
         if aircraft_type_by_tail.get(tail) != "767":
             continue
-        blocked_number = VALID_767_NORMAL_ANCHORS.get(number)
-        if not blocked_number:
+        footprint = parking_767_footprint_positions(position, occupancy, rule_flags)
+        if len(footprint) != 2:
             continue
-        blocked.setdefault(f"{ramp}{blocked_number:02d}", []).append(assignment)
+        blocked_position = next(item for item in footprint if item != position)
+        blocked.setdefault(blocked_position, []).append(assignment)
     return blocked
+
+
+def parking_767_footprint_positions(position, occupancy=None, rule_flags=None):
+    """Return every parking position occupied by a 767 anchor.
+
+    The existing normal-bank footprint remains anchor plus the next position. The
+    configurable 04/08 rule adds the established reverse-footprint exception
+    only when the preceding two positions are already occupied.
+    """
+    position = _normalize_position(position)
+    ramp = _normalize_ramp(position[:1])
+    number = _position_number(position)
+    if ramp not in NORMAL_767_FOOTPRINT_RAMP_CODES or number is None:
+        return (position,) if position else ()
+
+    blocked_number = VALID_767_NORMAL_ANCHORS.get(number)
+    if blocked_number:
+        return (position, f"{ramp}{blocked_number:02d}")
+
+    if not _rule_enabled(rule_flags, "force_767_to_position_4_8"):
+        return ()
+    if number == 4 and _positions_are_occupied(occupancy, ramp, (1, 2)):
+        return (f"{ramp}03", position)
+    if number == 8 and _positions_are_occupied(occupancy, ramp, (5, 6)):
+        return (f"{ramp}07", position)
+    return ()
+
+
+def _configurable_parking_rule_conflicts(
+    assignments,
+    aircraft_type_by_tail,
+    occupancy,
+    rule_flags,
+    proposed_tail="",
+):
+    conflicts = []
+    proposed_tail = _normalize_tail(proposed_tail)
+    typed_assignments = [
+        (
+            assignment,
+            _normalize_tail(getattr(assignment, "tail_number", "")),
+            _normalize_position(getattr(assignment, "position_code", "")),
+        )
+        for assignment in assignments
+    ]
+
+    if _rule_enabled(rule_flags, "prevent_a300_in_position_5"):
+        for assignment, tail, position in typed_assignments:
+            if aircraft_type_by_tail.get(tail) != "A300" or _position_number(position) != 5:
+                continue
+            conflicts.append(
+                _conflict(
+                    "critical",
+                    "A300 Position 5 conflict",
+                    position,
+                    tail,
+                    f"A300 cannot be parked at {position} while the Position 5 restriction is enabled.",
+                    "a300_position_5_restriction",
+                )
+            )
+
+    if _rule_enabled(rule_flags, "force_767_to_position_4_8"):
+        for assignment, tail, position in typed_assignments:
+            if aircraft_type_by_tail.get(tail) != "767":
+                continue
+            ramp = _normalize_ramp(position[:1])
+            number = _position_number(position)
+            if ramp not in NORMAL_767_FOOTPRINT_RAMP_CODES:
+                continue
+            required_pair = (1, 2) if number == 3 else (5, 6) if number == 7 else ()
+            if not required_pair or not _positions_are_occupied(occupancy, ramp, required_pair):
+                continue
+            required_positions = ", ".join(f"{ramp}{item:02d}" for item in required_pair)
+            required_anchor = f"{ramp}{4 if number == 3 else 8:02d}"
+            conflicts.append(
+                _conflict(
+                    "critical",
+                    "767 forced anchor conflict",
+                    position,
+                    tail,
+                    (
+                        f"767 cannot be parked at {position} while {required_positions} are occupied. "
+                        f"Use {required_anchor}."
+                    ),
+                    "force_767_to_position_4_8",
+                )
+            )
+
+    if _rule_enabled(rule_flags, "prevent_767_adjacent_to_a300"):
+        a300_positions = [
+            (tail, position)
+            for _assignment, tail, position in typed_assignments
+            if aircraft_type_by_tail.get(tail) == "A300"
+        ]
+        for _assignment, tail, position in typed_assignments:
+            if aircraft_type_by_tail.get(tail) != "767":
+                continue
+            for a300_tail, a300_position in a300_positions:
+                if not _positions_are_directly_adjacent(position, a300_position):
+                    continue
+                if proposed_tail == a300_tail:
+                    message = (
+                        f"A300 cannot be parked at {a300_position} because {position} "
+                        "is occupied by a 767 footprint."
+                    )
+                    conflict_tail = a300_tail
+                    conflict_position = a300_position
+                else:
+                    message = (
+                        f"767 cannot be parked at {position} because {a300_position} contains an A300."
+                    )
+                    conflict_tail = tail
+                    conflict_position = position
+                conflicts.append(
+                    _conflict(
+                        "critical",
+                        "767 / A300 separation conflict",
+                        conflict_position,
+                        conflict_tail,
+                        message,
+                        "prevent_767_adjacent_to_a300",
+                    )
+                )
+    return _dedupe_conflicts(conflicts)
+
+
+def _positions_are_directly_adjacent(first_position, second_position):
+    first_position = _normalize_position(first_position)
+    second_position = _normalize_position(second_position)
+    first_number = _position_number(first_position)
+    second_number = _position_number(second_position)
+    if first_number is None or second_number is None:
+        return False
+    return (
+        _normalize_ramp(first_position[:1]) == _normalize_ramp(second_position[:1])
+        and abs(first_number - second_number) == 1
+    )
+
+
+def _positions_are_occupied(occupancy, ramp, numbers):
+    return all((occupancy or {}).get(f"{ramp}{number:02d}") for number in numbers)
+
+
+def _setting_enabled(settings, field_name):
+    value = getattr(settings, field_name, None) if settings is not None else None
+    return True if value is None else bool(value)
+
+
+def _rule_enabled(rule_flags, field_name):
+    value = (rule_flags or {}).get(field_name)
+    return True if value is None else bool(value)
 
 
 def _normal_fill_order_conflicts(occupancy, blocked):
@@ -270,7 +503,7 @@ def _remote_fill_order_conflicts(occupancy, blocked):
     return conflicts
 
 
-def _normal_767_conflicts(assignments, aircraft_type_by_tail, occupancy):
+def _normal_767_conflicts(assignments, aircraft_type_by_tail, occupancy, rule_flags):
     conflicts = []
     for assignment in assignments:
         position = _normalize_position(getattr(assignment, "position_code", ""))
@@ -284,8 +517,8 @@ def _normal_767_conflicts(assignments, aircraft_type_by_tail, occupancy):
         if number not in {1, 2, 3, 4, 5, 6, 7, 8}:
             continue
 
-        blocked_number = VALID_767_NORMAL_ANCHORS.get(number)
-        if not blocked_number:
+        footprint = parking_767_footprint_positions(position, occupancy, rule_flags)
+        if len(footprint) != 2:
             conflicts.append(
                 _conflict(
                     "critical",
@@ -298,7 +531,7 @@ def _normal_767_conflicts(assignments, aircraft_type_by_tail, occupancy):
             )
             continue
 
-        blocked_position = f"{ramp}{blocked_number:02d}"
+        blocked_position = next(item for item in footprint if item != position)
         blocked_occupants = [
             occupant
             for occupant in occupancy.get(blocked_position, [])
@@ -365,8 +598,14 @@ def _throat_conflicts(occupancy, blocked):
     return conflicts
 
 
-def _eta_order_conflicts(assignments, aircraft_type_by_tail, tail_rows):
-    fill_items = _eta_fill_items_by_position(assignments, aircraft_type_by_tail, tail_rows)
+def _eta_order_conflicts(assignments, aircraft_type_by_tail, tail_rows, occupancy, rule_flags):
+    fill_items = _eta_fill_items_by_position(
+        assignments,
+        aircraft_type_by_tail,
+        tail_rows,
+        occupancy,
+        rule_flags,
+    )
     conflicts = []
     for ramp in NORMAL_RAMP_CODES:
         for bank in NORMAL_BANKS:
@@ -494,14 +733,18 @@ def _slot_2_conflict(
     )
 
 
-def _eta_fill_items_by_position(assignments, aircraft_type_by_tail, tail_rows):
+def _eta_fill_items_by_position(
+    assignments,
+    aircraft_type_by_tail,
+    tail_rows,
+    occupancy,
+    rule_flags,
+):
     timing_by_tail = _eta_timing_by_tail(tail_rows)
     fill_items = {}
     for assignment in assignments:
         tail = _normalize_tail(getattr(assignment, "tail_number", ""))
         position = _normalize_position(getattr(assignment, "position_code", ""))
-        ramp = _normalize_ramp(getattr(assignment, "ramp_code", ""))
-        number = _position_number(position)
         timing = timing_by_tail.get(tail)
         if not tail or not position or not timing:
             continue
@@ -515,12 +758,12 @@ def _eta_fill_items_by_position(assignments, aircraft_type_by_tail, tail_rows):
         }
         fill_items.setdefault(position, []).append(item)
 
-        if ramp not in NORMAL_767_FOOTPRINT_RAMP_CODES or aircraft_type_by_tail.get(tail) != "767":
+        if aircraft_type_by_tail.get(tail) != "767":
             continue
-        blocked_number = VALID_767_NORMAL_ANCHORS.get(number)
-        if not blocked_number:
+        footprint = parking_767_footprint_positions(position, occupancy, rule_flags)
+        if len(footprint) != 2:
             continue
-        blocked_position = f"{ramp}{blocked_number:02d}"
+        blocked_position = next(item for item in footprint if item != position)
         fill_items.setdefault(blocked_position, []).append(
             {
                 **item,

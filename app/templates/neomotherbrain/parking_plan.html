@@ -856,16 +856,29 @@
         formData.set("lane_number", lane.dataset.laneNumber);
         formData.set("replace_occupied", replaceOccupied);
 
-        const response = await fetch(page.dataset.assignUrl, {
-            method: "POST",
-            credentials: "same-origin",
-            headers: {
-                "Accept": "application/json",
-                "X-Requested-With": "XMLHttpRequest",
-            },
-            body: formData,
-        });
-        const payload = await response.json();
+        const sendAssignment = async () => {
+            const response = await fetch(page.dataset.assignUrl, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    "Accept": "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                body: formData,
+            });
+            const payload = await response.json();
+            return { response, payload };
+        };
+        let { response, payload } = await sendAssignment();
+        if (payload.requires_confirmation) {
+            const confirmed = window.confirm(`${payload.message}\n\nOverride this Parking Rule?`);
+            if (!confirmed) {
+                reportError("Parking assignment cancelled.");
+                return false;
+            }
+            formData.set("confirm_rule_override", "1");
+            ({ response, payload } = await sendAssignment());
+        }
         if (!response.ok || !payload.ok) {
             reportError(payload.message || "Parking assignment failed.");
             return false;
@@ -873,6 +886,20 @@
         window.location.reload();
         return true;
     };
+    page.querySelectorAll("[data-mobile-slot-tail-picker]").forEach((form) => {
+        form.addEventListener("submit", async (event) => {
+            if (!window.matchMedia("(max-width: 720px)").matches) {
+                return;
+            }
+            event.preventDefault();
+            const lane = form.closest("[data-parking-lane]");
+            const tail = form.querySelector('select[name="tail_number"]')?.value || "";
+            if (!lane || !tail) {
+                return;
+            }
+            await assignTailToLane(lane, tail);
+        });
+    });
     const closeDirectSlotSelectors = (exceptLane = null) => {
         page.querySelectorAll(".parking-lane.is-direct-selecting").forEach((lane) => {
             if (exceptLane && lane === exceptLane) {

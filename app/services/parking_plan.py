@@ -20,6 +20,7 @@ from app.services.gateway_matrix import (
 from app.services.parking_physical_validator import (
     parking_physical_validation_context,
     sync_parking_physical_alerts,
+    validate_configurable_parking_placement,
 )
 
 
@@ -66,6 +67,10 @@ class ParkingLaneOccupied(ParkingPlanError):
     def __init__(self, occupied_tail):
         self.occupied_tail = occupied_tail
         super().__init__(f"{occupied_tail} is already assigned to that slot.")
+
+
+class ParkingRuleConflict(ParkingPlanError):
+    pass
 
 
 def parking_plan_landing_context(gateway):
@@ -354,6 +359,7 @@ def assign_tail_to_lane(
     replace_occupied=False,
     is_hot=None,
     note=None,
+    confirm_rule_override=False,
 ):
     tail_number = _normalize_tail(tail_number)
     ramp_code = _normalize_ramp_code(ramp_code)
@@ -376,6 +382,22 @@ def assign_tail_to_lane(
         occupied.lane_number = None
         occupied.assigned_by_user_id = getattr(user, "id", None)
         occupied.assigned_at = _utc_now()
+
+    conflict = validate_configurable_parking_placement(
+        operation,
+        tail_number,
+        ramp_code,
+        position_code,
+        lane_number=lane_number,
+        tail_rows=tail_rows_for_operation(operation.gateway, operation),
+        excluded_tail_numbers=(
+            _normalize_tail(occupied.tail_number)
+            if occupied and occupied.tail_number != tail_number and replace_occupied
+            else "",
+        ),
+    )
+    if conflict and not confirm_rule_override:
+        raise ParkingRuleConflict(conflict.message)
 
     assignment.ramp_code = ramp_code
     assignment.position_code = position_code

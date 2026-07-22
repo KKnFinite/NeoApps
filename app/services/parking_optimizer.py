@@ -14,6 +14,8 @@ from app.services.parking_physical_validator import (
     NORMAL_RAMP_CODES,
     REMOTE_ORDER,
     VALID_767_NORMAL_ANCHORS,
+    parking_767_footprint_positions,
+    parking_configurable_rule_flags,
     validate_parking_physical_rules,
 )
 from app.services.parking_aircraft import (
@@ -94,6 +96,7 @@ class ParkingPlacement:
     belt_pair: str = ""
     belt_preferred_ramps: tuple[str, ...] = ()
     belt_preference_applied: bool = False
+    footprint_positions: tuple[str, ...] = ()
 
     @property
     def label(self):
@@ -144,6 +147,7 @@ def parking_optimizer_preview(
     preferred_max_per_ramp = _safe_optional_int(defaults.get("preferred_max_per_ramp"))
     tail_rows = tail_rows if tail_rows is not None else tail_rows_for_operation(gateway, operation)
     rules = _active_rule_sets(gateway)
+    configurable_rule_flags = parking_configurable_rule_flags(gateway.id)
     belt_preference_context = _belt_preference_context(gateway)
     assignments = _active_assignments(operation)
     timezone_name = gateway_timezone(gateway)
@@ -248,9 +252,22 @@ def parking_optimizer_preview(
         for assignment in assignments
         if _normalize_position(assignment.position_code)
     }
-    locked_blocked_positions = _locked_blocked_positions(assignments, tail_rows)
+    locked_blocked_positions = _locked_blocked_positions(
+        assignments,
+        tail_rows,
+        configurable_rule_flags,
+    )
+    locked_a300_positions, locked_767_positions = _locked_configurable_positions(
+        assignments,
+        tail_rows,
+        configurable_rule_flags,
+    )
     rule_blocked_positions = active_blocked_parking_positions(gateway)
-    locked_eta_by_position = _locked_eta_by_position(assignments, tail_rows)
+    locked_eta_by_position = _locked_eta_by_position(
+        assignments,
+        tail_rows,
+        configurable_rule_flags,
+    )
     slot_1_placements, slot_1_diagnostics = _build_candidate_placements(
         candidate_rows,
         candidate_positions,
@@ -262,6 +279,9 @@ def parking_optimizer_preview(
         belt_preference_context,
         timezone_name,
         allowed_lanes=(1,),
+        configurable_rule_flags=configurable_rule_flags,
+        locked_a300_positions=locked_a300_positions,
+        locked_767_positions=locked_767_positions,
     )
 
     slot_1_result = (
@@ -278,6 +298,7 @@ def parking_optimizer_preview(
             locked_eta_by_position,
             locked_normal_ramp_counts,
             locked_normal_side_counts,
+            configurable_rule_flags=configurable_rule_flags,
             stage_name="slot_1",
         )
         if slot_1_placements
@@ -324,6 +345,12 @@ def parking_optimizer_preview(
             stage_blocked_positions = locked_blocked_positions | _blocked_positions_for_selected(
                 selected_by_tail.values()
             )
+            stage_locked_a300_positions = locked_a300_positions | _a300_positions_for_selected(
+                selected_by_tail.values()
+            )
+            stage_locked_767_positions = locked_767_positions | _767_positions_for_selected(
+                selected_by_tail.values()
+            )
             stage_eta_by_position = _merge_eta_by_position(
                 locked_eta_by_position,
                 _eta_by_position_for_placements(selected_by_tail.values()),
@@ -355,6 +382,9 @@ def parking_optimizer_preview(
                 timezone_name,
                 allowed_lanes=(2,),
                 slot_1_timing_by_position=slot_1_timing,
+                configurable_rule_flags=configurable_rule_flags,
+                locked_a300_positions=stage_locked_a300_positions,
+                locked_767_positions=stage_locked_767_positions,
             )
             reason_placements = slot_2_placements
             candidate_diagnostics.update(slot_2_diagnostics)
@@ -372,6 +402,7 @@ def parking_optimizer_preview(
                     stage_eta_by_position,
                     stage_normal_ramp_counts,
                     stage_normal_side_counts,
+                    configurable_rule_flags=configurable_rule_flags,
                     stage_name="slot_2",
                 )
                 wall_time += slot_2_result["wall_time"]
@@ -845,6 +876,9 @@ def _build_candidate_placements(
     timezone_name,
     allowed_lanes=(1, 2),
     slot_1_timing_by_position=None,
+    configurable_rule_flags=None,
+    locked_a300_positions=None,
+    locked_767_positions=None,
 ):
     placements = []
     diagnostics = {}
@@ -862,11 +896,39 @@ def _build_candidate_placements(
         rejection_counts = {}
         for order, (position, ramp) in enumerate(candidate_positions):
             rejection_reason = ""
+            footprint_positions = _candidate_footprint_positions(
+                aircraft_type,
+                position,
+                configurable_rule_flags,
+            )
             if position in locked_blocked_positions:
                 rejection_reason = "Blocked by locked/manual assignments."
             elif _rule_blocks_row(row, aircraft_type, position, ramp, hard_rules):
                 rejection_reason = _rule_block_reason(row, aircraft_type, position, ramp, hard_rules)
-            elif not _placement_allows_aircraft(aircraft_type, position, locked_filled_positions):
+            elif _configurable_rule_blocks_candidate(
+                aircraft_type,
+                position,
+                footprint_positions,
+                locked_filled_positions,
+                locked_a300_positions,
+                locked_767_positions,
+                configurable_rule_flags,
+            ):
+                rejection_reason = _configurable_rule_block_reason(
+                    aircraft_type,
+                    position,
+                    footprint_positions,
+                    locked_filled_positions,
+                    locked_a300_positions,
+                    locked_767_positions,
+                    configurable_rule_flags,
+                )
+            elif not _placement_allows_aircraft(
+                aircraft_type,
+                position,
+                locked_filled_positions,
+                configurable_rule_flags,
+            ):
                 rejection_reason = (
                     "767 footprint cannot fit in available slots."
                     if aircraft_type == "767"
@@ -948,6 +1010,7 @@ def _build_candidate_placements(
                         belt_pair=belt_metadata.get("belt_pair", ""),
                         belt_preferred_ramps=tuple(belt_metadata.get("preferred_ramps", ())),
                         belt_preference_applied=bool(belt_metadata.get("applied")),
+                        footprint_positions=tuple(footprint_positions),
                     )
                 )
         diagnostics[tail] = {
@@ -1084,6 +1147,7 @@ def _solve_optimizer_stage(
     eta_by_position,
     locked_normal_ramp_counts=None,
     locked_normal_side_counts=None,
+    configurable_rule_flags=None,
     stage_name="stage",
 ):
     if not placements:
@@ -1177,6 +1241,12 @@ def _solve_optimizer_stage(
         )
         _add_throat_constraints(model, variables, fill_exprs)
         _add_767_block_constraints(model, variables, fill_exprs)
+        _add_configurable_parking_rule_constraints(
+            model,
+            variables,
+            fill_exprs,
+            configurable_rule_flags,
+        )
         _add_eta_order_constraints(model, variables, eta_by_position)
 
         objective_terms = [
@@ -1423,6 +1493,88 @@ def _add_767_block_constraints(model, variables, fill_exprs):
             if blocked_placement.tail == placement.tail:
                 continue
             model.Add(variable + blocked_variable <= 1)
+
+
+def _add_configurable_parking_rule_constraints(
+    model,
+    variables,
+    fill_exprs,
+    configurable_rule_flags,
+):
+    if _configurable_rule_enabled(configurable_rule_flags, "force_767_to_position_4_8"):
+        for placement, variable in variables.items():
+            if placement.aircraft_type != "767":
+                continue
+            number = _position_number(placement.position)
+            if placement.ramp not in NORMAL_767_FOOTPRINT_RAMP_CODES:
+                continue
+            if number in (3, 7):
+                lower_pair = (1, 2) if number == 3 else (5, 6)
+                _add_767_anchor_block_when_pair_filled(
+                    model,
+                    variable,
+                    placement.ramp,
+                    lower_pair,
+                    fill_exprs,
+                )
+            elif number in (4, 8):
+                lower_pair = (1, 2) if number == 4 else (5, 6)
+                for lower_number in lower_pair:
+                    model.Add(
+                        variable
+                        <= _fill_expr(
+                            fill_exprs,
+                            f"{placement.ramp}{lower_number:02d}",
+                        )
+                    )
+
+    if not _configurable_rule_enabled(
+        configurable_rule_flags,
+        "prevent_767_adjacent_to_a300",
+    ):
+        return
+
+    a300_placements = [
+        (placement, variable)
+        for placement, variable in variables.items()
+        if placement.aircraft_type == "A300"
+    ]
+    for placement, variable in variables.items():
+        if placement.aircraft_type != "767":
+            continue
+        for a300_placement, a300_variable in a300_placements:
+            if placement.ramp != a300_placement.ramp:
+                continue
+            if not _positions_are_directly_adjacent(placement.position, a300_placement.position):
+                continue
+            model.Add(variable + a300_variable <= 1)
+
+
+def _add_767_anchor_block_when_pair_filled(
+    model,
+    variable,
+    ramp,
+    lower_pair,
+    fill_exprs,
+):
+    first = _fill_expr(fill_exprs, f"{ramp}{lower_pair[0]:02d}")
+    second = _fill_expr(fill_exprs, f"{ramp}{lower_pair[1]:02d}")
+    if _is_constant_zero(first) or _is_constant_zero(second):
+        return
+    if _is_constant_one(first) and _is_constant_one(second):
+        model.Add(variable == 0)
+        return
+    if _is_constant_one(first):
+        model.Add(variable + second <= 1)
+        return
+    if _is_constant_one(second):
+        model.Add(variable + first <= 1)
+        return
+
+    both_filled = model.NewBoolVar(f"filled_pair_{ramp}_{lower_pair[0]}_{lower_pair[1]}_{variable.Name()}")
+    model.AddBoolAnd([first, second]).OnlyEnforceIf(both_filled)
+    model.AddBoolOr([first.Not(), second.Not(), both_filled])
+    model.Add(variable + both_filled <= 1)
 
 
 def _add_eta_order_constraints(model, variables, locked_eta_by_position):
@@ -2501,47 +2653,219 @@ def _rule_matches_position(rule, position, ramp):
     return rule_ramp == ramp
 
 
-def _placement_allows_aircraft(aircraft_type, position, locked_filled_positions):
+def _candidate_footprint_positions(aircraft_type, position, configurable_rule_flags=None):
+    position = _normalize_position(position)
+    if aircraft_type != "767":
+        return (position,)
+    ramp = _ramp_from_position(position)
+    number = _position_number(position)
+    if ramp not in NORMAL_767_FOOTPRINT_RAMP_CODES or number is None:
+        return (position,)
+    blocked_number = VALID_767_NORMAL_ANCHORS.get(number)
+    if blocked_number:
+        return (position, f"{ramp}{blocked_number:02d}")
+    if _configurable_rule_enabled(configurable_rule_flags, "force_767_to_position_4_8"):
+        if number == 4:
+            return (f"{ramp}03", position)
+        if number == 8:
+            return (f"{ramp}07", position)
+    return ()
+
+
+def _placement_allows_aircraft(
+    aircraft_type,
+    position,
+    locked_filled_positions,
+    configurable_rule_flags=None,
+):
     number = _position_number(position)
     ramp = _ramp_from_position(position)
     if aircraft_type != "767":
         return True
     if ramp not in NORMAL_767_FOOTPRINT_RAMP_CODES or number in (9, 10):
         return True
-    blocked_number = VALID_767_NORMAL_ANCHORS.get(number)
-    if not blocked_number:
+    footprint = _candidate_footprint_positions(
+        aircraft_type,
+        position,
+        configurable_rule_flags,
+    )
+    if len(footprint) != 2:
         return False
-    return f"{ramp}{blocked_number:02d}" not in locked_filled_positions
+    return all(item == _normalize_position(position) or item not in locked_filled_positions for item in footprint)
 
 
-def _locked_blocked_positions(assignments, tail_rows):
+def _configurable_rule_blocks_candidate(
+    aircraft_type,
+    position,
+    footprint_positions,
+    locked_filled_positions,
+    locked_a300_positions,
+    locked_767_positions,
+    configurable_rule_flags,
+):
+    if (
+        aircraft_type == "A300"
+        and _configurable_rule_enabled(configurable_rule_flags, "prevent_a300_in_position_5")
+        and _position_number(position) == 5
+    ):
+        return True
+    if aircraft_type == "767":
+        if not footprint_positions:
+            return True
+        if _configurable_rule_enabled(configurable_rule_flags, "force_767_to_position_4_8"):
+            ramp = _ramp_from_position(position)
+            number = _position_number(position)
+            lower_pair = (1, 2) if number == 3 else (5, 6) if number == 7 else ()
+            if lower_pair and all(
+                f"{ramp}{item:02d}" in (locked_filled_positions or set())
+                for item in lower_pair
+            ):
+                return True
+        if _configurable_rule_enabled(configurable_rule_flags, "prevent_767_adjacent_to_a300"):
+            return any(
+                _positions_are_directly_adjacent(position, a300_position)
+                for a300_position in (locked_a300_positions or set())
+            )
+    elif (
+        aircraft_type == "A300"
+        and _configurable_rule_enabled(configurable_rule_flags, "prevent_767_adjacent_to_a300")
+    ):
+        return any(
+            _positions_are_directly_adjacent(locked_767_position, position)
+            for locked_767_position in (locked_767_positions or ())
+        )
+    return False
+
+
+def _configurable_rule_block_reason(
+    aircraft_type,
+    position,
+    footprint_positions,
+    locked_filled_positions,
+    locked_a300_positions,
+    locked_767_positions,
+    configurable_rule_flags,
+):
+    if aircraft_type == "A300" and _position_number(position) == 5:
+        return f"A300 cannot use {position} while the Position 5 restriction is enabled."
+    if aircraft_type == "767":
+        ramp = _ramp_from_position(position)
+        number = _position_number(position)
+        lower_pair = (1, 2) if number == 3 else (5, 6) if number == 7 else ()
+        if lower_pair and all(
+            f"{ramp}{item:02d}" in (locked_filled_positions or set())
+            for item in lower_pair
+        ):
+            return (
+                f"767 cannot use {position} while {ramp}{lower_pair[0]:02d} and "
+                f"{ramp}{lower_pair[1]:02d} are occupied."
+            )
+        for a300_position in locked_a300_positions or ():
+            if _positions_are_directly_adjacent(position, a300_position):
+                return f"767 cannot be adjacent to A300 at {a300_position}."
+    else:
+        for locked_767_position in locked_767_positions or ():
+            if _positions_are_directly_adjacent(locked_767_position, position):
+                return f"A300 cannot be adjacent to an existing 767 at {locked_767_position}."
+    return "Blocked by configurable hard parking rules."
+
+
+def _positions_are_directly_adjacent(first_position, second_position):
+    first_position = _normalize_position(first_position)
+    second_position = _normalize_position(second_position)
+    first_number = _position_number(first_position)
+    second_number = _position_number(second_position)
+    return (
+        first_number is not None
+        and second_number is not None
+        and _ramp_from_position(first_position) == _ramp_from_position(second_position)
+        and abs(first_number - second_number) == 1
+    )
+
+
+def _configurable_rule_enabled(configurable_rule_flags, key):
+    value = (configurable_rule_flags or {}).get(key)
+    return True if value is None else bool(value)
+
+
+def _locked_blocked_positions(assignments, tail_rows, configurable_rule_flags=None):
     aircraft_type_by_tail = {
-        _normalize_tail(row.get("tail")): resolve_parking_aircraft_type_from_tail(row.get("tail"))
+        _normalize_tail(row.get("tail")): _parking_aircraft_type_for_row(row)
         for row in tail_rows
+    }
+    occupancy = {
+        _normalize_position(assignment.position_code): assignment
+        for assignment in assignments
+        if _normalize_position(assignment.position_code)
     }
     blocked = set()
     for assignment in assignments:
         tail = _normalize_tail(assignment.tail_number)
         position = _normalize_position(assignment.position_code)
-        ramp = _ramp_from_position(position)
-        number = _position_number(position)
         if aircraft_type_by_tail.get(tail) != "767":
             continue
-        if ramp not in NORMAL_767_FOOTPRINT_RAMP_CODES:
-            continue
-        blocked_number = VALID_767_NORMAL_ANCHORS.get(number)
-        if blocked_number:
-            blocked.add(f"{ramp}{blocked_number:02d}")
+        footprint = parking_767_footprint_positions(
+            position,
+            occupancy,
+            configurable_rule_flags,
+        )
+        blocked.update(item for item in footprint if item != position)
     return blocked
 
 
-def _locked_eta_by_position(assignments, tail_rows):
+def _locked_configurable_positions(assignments, tail_rows, configurable_rule_flags):
+    rows_by_tail = {
+        _normalize_tail(row.get("tail")): row
+        for row in tail_rows
+        if _normalize_tail(row.get("tail"))
+    }
+    occupancy = {
+        _normalize_position(assignment.position_code): assignment
+        for assignment in assignments
+        if _normalize_position(assignment.position_code)
+    }
+    a300_positions = set()
+    positions = set()
+    for assignment in assignments:
+        tail = _normalize_tail(assignment.tail_number)
+        position = _normalize_position(assignment.position_code)
+        aircraft_type = _parking_aircraft_type_for_row(rows_by_tail.get(tail, {}))
+        if aircraft_type == "A300":
+            a300_positions.add(position)
+        elif aircraft_type == "767":
+            if parking_767_footprint_positions(position, occupancy, configurable_rule_flags):
+                positions.add(position)
+    return a300_positions, positions
+
+
+def _a300_positions_for_selected(placements):
+    return {
+        placement.position
+        for placement in placements
+        if placement.aircraft_type == "A300"
+    }
+
+
+def _767_positions_for_selected(placements):
+    return {
+        placement.position
+        for placement in placements
+        if placement.aircraft_type == "767"
+    }
+
+
+def _locked_eta_by_position(assignments, tail_rows, configurable_rule_flags=None):
     rows_by_tail = {
         _normalize_tail(row.get("tail")): row
         for row in tail_rows
         if _normalize_tail(row.get("tail"))
     }
     locked_eta = {}
+    occupancy = {
+        _normalize_position(assignment.position_code): assignment
+        for assignment in assignments
+        if _normalize_position(assignment.position_code)
+    }
     for assignment in assignments:
         tail = _normalize_tail(assignment.tail_number)
         row = rows_by_tail.get(tail, {})
@@ -2556,9 +2880,14 @@ def _locked_eta_by_position(assignments, tail_rows):
         aircraft_type = _parking_aircraft_type_for_row(row)
         if aircraft_type != "767":
             continue
-        blocked_position = _blocked_position_for_values(aircraft_type, position)
-        if blocked_position:
-            locked_eta.setdefault(blocked_position, []).append(eta)
+        footprint = parking_767_footprint_positions(
+            position,
+            occupancy,
+            configurable_rule_flags,
+        )
+        for footprint_position in footprint:
+            if footprint_position != position:
+                locked_eta.setdefault(footprint_position, []).append(eta)
     return locked_eta
 
 
@@ -2721,6 +3050,12 @@ def _slot_2_timing_allows(row, position, slot_1_timing_by_position):
 
 
 def _blocked_position_for_placement(placement):
+    if len(placement.footprint_positions) == 2:
+        return next(
+            item
+            for item in placement.footprint_positions
+            if item != placement.position
+        )
     return _blocked_position_for_values(placement.aircraft_type, placement.position)
 
 
@@ -2736,6 +3071,8 @@ def _blocked_position_for_values(aircraft_type, position):
 
 
 def _filled_positions_for_placement(placement):
+    if placement.footprint_positions:
+        return list(placement.footprint_positions)
     positions = [placement.position]
     blocked = _blocked_position_for_placement(placement)
     if blocked:
@@ -2779,6 +3116,10 @@ def _fill_order_expr(fill_exprs, position, fill_order_satisfied_positions):
 
 def _is_constant_one(value):
     return isinstance(value, int) and value == 1
+
+
+def _is_constant_zero(value):
+    return isinstance(value, int) and value == 0
 
 
 def _parking_window_label(row):

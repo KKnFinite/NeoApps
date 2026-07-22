@@ -92,6 +92,9 @@ PHYSICAL_PARKING_RULES = (
 
 DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES = 15
 DEFAULT_INBOUND_SAME_RAMP_SPACING_MINUTES = 5
+DEFAULT_PREVENT_767_ADJACENT_TO_A300 = True
+DEFAULT_FORCE_767_TO_POSITION_4_8 = True
+DEFAULT_PREVENT_A300_IN_POSITION_5 = True
 
 
 def ensure_parking_settings(gateway):
@@ -105,6 +108,9 @@ def ensure_parking_settings(gateway):
             deice_spacing_threshold_minutes=DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES,
             preferred_max_per_ramp=None,
             inbound_same_ramp_spacing_minutes=DEFAULT_INBOUND_SAME_RAMP_SPACING_MINUTES,
+            prevent_767_adjacent_to_a300=DEFAULT_PREVENT_767_ADJACENT_TO_A300,
+            force_767_to_position_4_8=DEFAULT_FORCE_767_TO_POSITION_4_8,
+            prevent_a300_in_position_5=DEFAULT_PREVENT_A300_IN_POSITION_5,
         )
         db.session.add(settings)
         db.session.flush()
@@ -115,6 +121,12 @@ def ensure_parking_settings(gateway):
         settings.deice_spacing_threshold_minutes = DEFAULT_DEICE_SPACING_THRESHOLD_MINUTES
     if settings.inbound_same_ramp_spacing_minutes is None:
         settings.inbound_same_ramp_spacing_minutes = DEFAULT_INBOUND_SAME_RAMP_SPACING_MINUTES
+    if settings.prevent_767_adjacent_to_a300 is None:
+        settings.prevent_767_adjacent_to_a300 = DEFAULT_PREVENT_767_ADJACENT_TO_A300
+    if settings.force_767_to_position_4_8 is None:
+        settings.force_767_to_position_4_8 = DEFAULT_FORCE_767_TO_POSITION_4_8
+    if settings.prevent_a300_in_position_5 is None:
+        settings.prevent_a300_in_position_5 = DEFAULT_PREVENT_A300_IN_POSITION_5
     return settings
 
 
@@ -166,6 +178,13 @@ def save_parking_rules_from_form(gateway, form):
             form.get("inbound_same_ramp_spacing_minutes"),
             default=DEFAULT_INBOUND_SAME_RAMP_SPACING_MINUTES,
         )
+        for field_name in (
+            "prevent_767_adjacent_to_a300",
+            "force_767_to_position_4_8",
+            "prevent_a300_in_position_5",
+        ):
+            if field_name in form or "parking_rule_settings_present" in form:
+                setattr(settings, field_name, form.get(field_name) == "1")
 
     _update_existing_rules(
         gateway,
@@ -187,6 +206,10 @@ def _form_updates_parking_settings(form):
         "deice_spacing_threshold_minutes",
         "preferred_max_per_ramp",
         "inbound_same_ramp_spacing_minutes",
+        "prevent_767_adjacent_to_a300",
+        "force_767_to_position_4_8",
+        "prevent_a300_in_position_5",
+        "parking_rule_settings_present",
     }
     return any(key in form for key in setting_keys)
 
@@ -466,6 +489,9 @@ def _parking_rule_report(settings, grouped):
             "Physical fill order",
             "ETA order",
             "767 footprint",
+            "767 / A300 separation when enabled",
+            "767 04/08 forced placement when enabled",
+            "A300 Position 5 restriction when enabled",
             "Slot 2 overflow rules",
             "Remote toggle behavior",
             "9/10 toggle behavior",
@@ -499,6 +525,15 @@ def _parking_rule_report(settings, grouped):
                 str(settings.preferred_max_per_ramp)
                 if settings.preferred_max_per_ramp is not None
                 else "NONE"
+            ),
+            "prevent_767_adjacent_to_a300": (
+                "ON" if settings.prevent_767_adjacent_to_a300 else "OFF"
+            ),
+            "force_767_to_position_4_8": (
+                "ON" if settings.force_767_to_position_4_8 else "OFF"
+            ),
+            "prevent_a300_in_position_5": (
+                "ON" if settings.prevent_a300_in_position_5 else "OFF"
             ),
             "active_blocked_positions": active_blocked or ("NONE",),
             "active_arrival_required": active_arrival_required or ("NONE",),

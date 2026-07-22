@@ -88,6 +88,7 @@ from app.services.permission_rules import permission_access, user_can
 from app.services.parking_plan import (
     ParkingLaneOccupied,
     ParkingPlanError,
+    ParkingRuleConflict,
     assign_tail_to_lane,
     clear_parking_assignments,
     current_active_sort_operation,
@@ -884,6 +885,7 @@ def assign_parking_plan_tail(operation_id=None):
             if "is_hot" in request.form
             else None,
             note=request.form.get("note") if "note" in request.form else None,
+            confirm_rule_override=request.form.get("confirm_rule_override") == "1",
         )
         db.session.commit()
     except ParkingLaneOccupied as error:
@@ -893,6 +895,14 @@ def assign_parking_plan_tail(operation_id=None):
             str(error),
             status=409,
             payload={"occupied_tail": error.occupied_tail},
+        )
+    except ParkingRuleConflict as error:
+        db.session.rollback()
+        return _parking_plan_response(
+            False,
+            str(error),
+            status=409,
+            payload={"requires_confirmation": True, "rule_conflict": True},
         )
     except ParkingPlanError as error:
         db.session.rollback()

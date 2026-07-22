@@ -336,6 +336,7 @@
         <form id="parking-rules-other-rules" class="operation-form parking-rules-form" method="post" data-parking-rules-form>
             {% if operation %}<input type="hidden" name="operation_id" value="{{ operation.id }}">{% endif %}
             <input type="hidden" name="return_to" value="">
+            <input type="hidden" name="parking_rule_settings_present" value="1">
             {{ rule_table("Aircraft Type Restrictions", rules_by_category[categories.aircraft_restrictions], "AIRCRAFT TYPE", categories.aircraft_restrictions, "767", "Aircraft Type Restrictions are HARD / NOT ALLOWED rules. The optimizer will never park the selected aircraft type on that ramp. A restriction row means not allowed on this ramp.", "aircraft_type") }}
             {{ rule_table("Aircraft Type Preferences", rules_by_category[categories.aircraft_preferences], "AIRCRAFT TYPE", categories.aircraft_preferences, "757", "Aircraft Type Preferences are SOFT optimizer guidance. The optimizer will try to place these aircraft types on these ramps when possible, but hard rules still win and preferences are not required.", "aircraft_type") }}
             {{ blocked_position_table(rules_by_category[categories.blocked_positions], categories.blocked_positions) }}
@@ -352,6 +353,21 @@
                     <label class="parking-rules-toggle">
                         <span>INCLUDE 9/10 THROAT PARKING</span>
                         <input type="checkbox" name="include_throat_default" value="1" {% if settings.include_throat_default %}checked{% endif %} {% if not can_edit_parking_rules %}disabled{% endif %}>
+                    </label>
+                    <label class="parking-rules-toggle">
+                        <span>PREVENT 767 ADJACENT TO A300</span>
+                        <small class="muted">Hard rule. A 767 cannot park directly beside an A300 in the same row.</small>
+                        <input type="checkbox" name="prevent_767_adjacent_to_a300" value="1" {% if settings.prevent_767_adjacent_to_a300 %}checked{% endif %} {% if not can_edit_parking_rules %}disabled{% endif %}>
+                    </label>
+                    <label class="parking-rules-toggle">
+                        <span>FORCE 767 TO POSITION 4/8</span>
+                        <small class="muted">Hard rule. When 01/02 or 05/06 are occupied, use 04 or 08 for a 767.</small>
+                        <input type="checkbox" name="force_767_to_position_4_8" value="1" {% if settings.force_767_to_position_4_8 %}checked{% endif %} {% if not can_edit_parking_rules %}disabled{% endif %}>
+                    </label>
+                    <label class="parking-rules-toggle">
+                        <span>PREVENT A300 IN POSITION 5</span>
+                        <small class="muted">Hard rule. Position 5 remains available for other aircraft types.</small>
+                        <input type="checkbox" name="prevent_a300_in_position_5" value="1" {% if settings.prevent_a300_in_position_5 %}checked{% endif %} {% if not can_edit_parking_rules %}disabled{% endif %}>
                     </label>
                     <label class="parking-rules-field">
                         <span>DEICE SPACING THRESHOLD MINUTES</span>
@@ -428,6 +444,18 @@
                             <div>
                                 <dt>Preferred Max Per Ramp</dt>
                                 <dd>{{ rule_report.current_settings.preferred_max_per_ramp }}</dd>
+                            </div>
+                            <div>
+                                <dt>Prevent 767 Adjacent to A300</dt>
+                                <dd>{{ rule_report.current_settings.prevent_767_adjacent_to_a300 }}</dd>
+                            </div>
+                            <div>
+                                <dt>Force 767 to Position 4/8</dt>
+                                <dd>{{ rule_report.current_settings.force_767_to_position_4_8 }}</dd>
+                            </div>
+                            <div>
+                                <dt>Prevent A300 in Position 5</dt>
+                                <dd>{{ rule_report.current_settings.prevent_a300_in_position_5 }}</dd>
                             </div>
                             <div>
                                 <dt>Active Blocked Positions</dt>

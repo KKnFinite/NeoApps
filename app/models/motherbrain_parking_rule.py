@@ -64,6 +64,9 @@ class MotherBrainParkingSettings(db.Model):
     deice_spacing_threshold_minutes = db.Column(db.Integer, nullable=False, default=15)
     preferred_max_per_ramp = db.Column(db.Integer, nullable=True)
     inbound_same_ramp_spacing_minutes = db.Column(db.Integer, nullable=False, default=5)
+    prevent_767_adjacent_to_a300 = db.Column(db.Boolean, nullable=False, default=True)
+    force_767_to_position_4_8 = db.Column(db.Boolean, nullable=False, default=True)
+    prevent_a300_in_position_5 = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

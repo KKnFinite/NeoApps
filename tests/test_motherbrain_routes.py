@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from flask import g
+from sqlalchemy import text
 
 from app import create_app
 from app.extensions import db
@@ -8460,6 +8461,89 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn("D06 cannot be used until D05 are filled.", messages)
         self.assertFalse(any(conflict.reason == "normal_bank_fill_order" for conflict in conflicts))
 
+    def test_configurable_parking_rules_default_on_render_and_persist_independently(self):
+        operation = self._parking_operation()
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
+        settings = MotherBrainParkingSettings.query.filter_by(
+            gateway_id=self.rfd_gateway.id
+        ).one()
+
+        self.assertTrue(settings.prevent_767_adjacent_to_a300)
+        self.assertTrue(settings.force_767_to_position_4_8)
+        self.assertTrue(settings.prevent_a300_in_position_5)
+        self.assertIn(b"PREVENT 767 ADJACENT TO A300", response.data)
+        self.assertIn(b"FORCE 767 TO POSITION 4/8", response.data)
+        self.assertIn(b"PREVENT A300 IN POSITION 5", response.data)
+
+        self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data={
+                "operation_id": str(operation.id),
+                "parking_rule_settings_present": "1",
+                "force_767_to_position_4_8": "1",
+                "prevent_a300_in_position_5": "1",
+            },
+        )
+        db.session.refresh(settings)
+        self.assertFalse(settings.prevent_767_adjacent_to_a300)
+        self.assertTrue(settings.force_767_to_position_4_8)
+        self.assertTrue(settings.prevent_a300_in_position_5)
+
+        self.client.post(
+            f"/motherbrain/parking-rules?operation_id={operation.id}",
+            data={
+                "operation_id": str(operation.id),
+                "parking_rule_settings_present": "1",
+                "prevent_767_adjacent_to_a300": "1",
+                "force_767_to_position_4_8": "1",
+                "prevent_a300_in_position_5": "1",
+            },
+        )
+        db.session.refresh(settings)
+        self.assertTrue(settings.prevent_767_adjacent_to_a300)
+        self.assertTrue(settings.force_767_to_position_4_8)
+        self.assertTrue(settings.prevent_a300_in_position_5)
+
+    def test_parking_rule_schema_sync_backfills_existing_settings_to_on(self):
+        db.session.execute(text("DROP TABLE motherbrain_parking_settings"))
+        db.session.execute(
+            text(
+                "CREATE TABLE motherbrain_parking_settings ("
+                "id INTEGER PRIMARY KEY, "
+                "gateway_id INTEGER NOT NULL, "
+                "gateway_code VARCHAR(8) NOT NULL, "
+                "include_remote_default BOOLEAN NOT NULL DEFAULT 0, "
+                "include_throat_default BOOLEAN NOT NULL DEFAULT 0, "
+                "deice_spacing_threshold_minutes INTEGER NOT NULL DEFAULT 15, "
+                "preferred_max_per_ramp INTEGER, "
+                "inbound_same_ramp_spacing_minutes INTEGER NOT NULL DEFAULT 5, "
+                "created_at DATETIME, "
+                "updated_at DATETIME"
+                ")"
+            )
+        )
+        db.session.execute(
+            text(
+                "INSERT INTO motherbrain_parking_settings "
+                "(id, gateway_id, gateway_code) VALUES (1, :gateway_id, :gateway_code)"
+            ),
+            {"gateway_id": self.rfd_gateway.id, "gateway_code": self.rfd_gateway.code},
+        )
+        db.session.commit()
+
+        sync_local_sqlite_schema(self.app)
+        db.session.commit()
+        values = db.session.execute(
+            text(
+                "SELECT prevent_767_adjacent_to_a300, force_767_to_position_4_8, "
+                "prevent_a300_in_position_5 FROM motherbrain_parking_settings WHERE id = 1"
+            )
+        ).one()
+
+        self.assertEqual(values, (1, 1, 1))
+
     def test_parking_validator_detects_parking_rules_blocked_position(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", aircraft_type="757")
@@ -8505,6 +8589,13 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_parking_validator_detects_767_invalid_normal_anchor(self):
         operation = self._parking_operation()
+        db.session.add(
+            MotherBrainParkingSettings(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                force_767_to_position_4_8=False,
+            )
+        )
         for tail, position, aircraft_type in (
             ("N451UP", "A01", "757"),
             ("N452UP", "A02", "757"),
@@ -8523,6 +8614,292 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(
             "767 at A04 is invalid because 767 aircraft cannot anchor at 04.",
             messages,
+        )
+
+    def test_parking_validator_enforces_767_a300_separation_in_both_assignment_orders(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N123UP", aircraft_type="757")
+        self._parking_pair(operation, "N967UP", aircraft_type="757", destination="SDF")
+        db.session.flush()
+        self._parking_assignment(operation, "N967UP", "A03")
+        db.session.commit()
+
+        reverse_response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N123UP",
+                "ramp_code": "A",
+                "position_code": "A02",
+                "lane_number": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+        self.assertEqual(reverse_response.status_code, 409)
+        self.assertIn(
+            "A300 cannot be parked at A02 because A03 is occupied by a 767 footprint.",
+            reverse_response.get_json()["message"],
+        )
+
+        confirmed = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N123UP",
+                "ramp_code": "A",
+                "position_code": "A02",
+                "lane_number": "1",
+                "confirm_rule_override": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+        self.assertEqual(confirmed.status_code, 200)
+
+        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
+        conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
+        messages = [conflict.message for conflict in conflicts]
+
+        self.assertIn("767 cannot be parked at A03 because A02 contains an A300.", messages)
+
+    def test_parking_rules_allow_767_footprint_separation_and_special_04_anchor(self):
+        operation = self._parking_operation()
+        settings = MotherBrainParkingSettings(
+            gateway_id=self.rfd_gateway.id,
+            gateway_code=self.rfd_gateway.code,
+            prevent_a300_in_position_5=False,
+        )
+        db.session.add(settings)
+        for tail, position in (
+            ("N451UP", "A01"),
+            ("N123UP", "A02"),
+            ("N967UP", "A04"),
+            ("N124UP", "B01"),
+            ("N968UP", "B03"),
+            ("N125UP", "C05"),
+            ("N969UP", "C07"),
+            ("N452UP", "D05"),
+            ("N126UP", "D06"),
+            ("N970UP", "D08"),
+            ("N171UP", "E02"),
+            ("N971UP", "D03"),
+        ):
+            self._parking_pair(operation, tail, aircraft_type="757", destination=position)
+            db.session.flush()
+            self._parking_assignment(operation, tail, position)
+        db.session.commit()
+
+        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
+        messages = [
+            conflict.message
+            for conflict in validate_parking_physical_rules(operation, tail_rows=tail_rows)
+        ]
+
+        self.assertNotIn("767 at A04 is invalid because 767 aircraft cannot anchor at 04.", messages)
+        self.assertNotIn("767 at D08 is invalid because 767 aircraft cannot anchor at 08.", messages)
+        self.assertFalse(
+            any("767 / A300 separation" in conflict.title for conflict in validate_parking_physical_rules(operation, tail_rows=tail_rows))
+        )
+
+    def test_parking_rules_block_forced_767_anchor_and_a300_position_five(self):
+        operation = self._parking_operation()
+        for tail, position in (("N451UP", "A01"), ("N452UP", "A02"), ("N967UP", "A03"), ("N123UP", "B05")):
+            self._parking_pair(operation, tail, aircraft_type="757", destination=position)
+            db.session.flush()
+            self._parking_assignment(operation, tail, position)
+        db.session.commit()
+
+        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
+        messages = [
+            conflict.message
+            for conflict in validate_parking_physical_rules(operation, tail_rows=tail_rows)
+        ]
+
+        self.assertIn(
+            "767 cannot be parked at A03 while A01, A02 are occupied. Use A04.",
+            messages,
+        )
+        self.assertIn(
+            "A300 cannot be parked at B05 while the Position 5 restriction is enabled.",
+            messages,
+        )
+
+    def test_parking_rules_force_767_to_special_04_and_08_anchors(self):
+        operation = self._parking_operation()
+        for tail, position in (
+            ("N451UP", "A01"),
+            ("N452UP", "A02"),
+            ("N453UP", "B05"),
+            ("N454UP", "B06"),
+        ):
+            self._parking_pair(operation, tail, aircraft_type="757", destination=position)
+            db.session.flush()
+            self._parking_assignment(operation, tail, position)
+        self._parking_pair(operation, "N967UP", aircraft_type="757")
+        self._parking_pair(operation, "N968UP", aircraft_type="757")
+        db.session.commit()
+
+        first_blocked = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N967UP",
+                "ramp_code": "A",
+                "position_code": "A03",
+                "lane_number": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+        first_allowed = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N967UP",
+                "ramp_code": "A",
+                "position_code": "A04",
+                "lane_number": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+        second_blocked = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N968UP",
+                "ramp_code": "B",
+                "position_code": "B07",
+                "lane_number": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+        second_allowed = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N968UP",
+                "ramp_code": "B",
+                "position_code": "B08",
+                "lane_number": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(first_blocked.status_code, 409)
+        self.assertIn("Use A04.", first_blocked.get_json()["message"])
+        self.assertEqual(first_allowed.status_code, 200)
+        self.assertEqual(second_blocked.status_code, 409)
+        self.assertIn("Use B08.", second_blocked.get_json()["message"])
+        self.assertEqual(second_allowed.status_code, 200)
+
+    def test_parking_rules_block_manual_a300_position_five(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N123UP", aircraft_type="757")
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N123UP",
+                "ramp_code": "C",
+                "position_code": "C05",
+                "lane_number": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.get_json()["message"],
+            "A300 cannot be parked at C05 while the Position 5 restriction is enabled.",
+        )
+
+    def test_parking_rule_toggles_disable_only_their_own_conflicts(self):
+        operation = self._parking_operation()
+        settings = MotherBrainParkingSettings(
+            gateway_id=self.rfd_gateway.id,
+            gateway_code=self.rfd_gateway.code,
+        )
+        db.session.add(settings)
+        for tail, position in (
+            ("N123UP", "A02"),
+            ("N967UP", "A03"),
+            ("N451UP", "B01"),
+            ("N452UP", "B02"),
+            ("N968UP", "B03"),
+            ("N124UP", "C05"),
+        ):
+            self._parking_pair(operation, tail, aircraft_type="757", destination=position)
+            db.session.flush()
+            self._parking_assignment(operation, tail, position)
+        db.session.commit()
+
+        tail_rows = parking_plan_context(self.rfd_gateway, operation=operation)["tail_rows"]
+        def active_reasons():
+            return {
+                conflict.reason
+                for conflict in validate_parking_physical_rules(operation, tail_rows=tail_rows)
+            }
+
+        settings.prevent_767_adjacent_to_a300 = False
+        db.session.commit()
+        reasons = active_reasons()
+        self.assertNotIn("prevent_767_adjacent_to_a300", reasons)
+        self.assertIn("force_767_to_position_4_8", reasons)
+        self.assertIn("a300_position_5_restriction", reasons)
+
+        settings.prevent_767_adjacent_to_a300 = True
+        settings.force_767_to_position_4_8 = False
+        db.session.commit()
+        reasons = active_reasons()
+        self.assertIn("prevent_767_adjacent_to_a300", reasons)
+        self.assertNotIn("force_767_to_position_4_8", reasons)
+        self.assertIn("a300_position_5_restriction", reasons)
+
+        settings.force_767_to_position_4_8 = True
+        settings.prevent_a300_in_position_5 = False
+        db.session.commit()
+        reasons = active_reasons()
+        self.assertIn("prevent_767_adjacent_to_a300", reasons)
+        self.assertIn("force_767_to_position_4_8", reasons)
+        self.assertNotIn("a300_position_5_restriction", reasons)
+
+    def test_parking_rule_conflict_requires_confirmation_before_manual_override(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N123UP", aircraft_type="757")
+        self._parking_pair(operation, "N967UP", aircraft_type="757", destination="SDF")
+        db.session.commit()
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N123UP",
+                "ramp_code": "A",
+                "position_code": "A02",
+                "lane_number": "1",
+            },
+        )
+
+        conflict = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N967UP",
+                "ramp_code": "A",
+                "position_code": "A03",
+                "lane_number": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+        confirmed = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N967UP",
+                "ramp_code": "A",
+                "position_code": "A03",
+                "lane_number": "1",
+                "confirm_rule_override": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(conflict.status_code, 409)
+        self.assertTrue(conflict.get_json()["requires_confirmation"])
+        self.assertIn("A02 contains an A300", conflict.get_json()["message"])
+        self.assertEqual(confirmed.status_code, 200)
+        self.assertEqual(
+            self._parking_assignment_for_tail(operation, "N967UP").position_code,
+            "A03",
         )
 
     def test_parking_validator_echo_767_positions_do_not_use_two_slot_footprint(self):
@@ -10422,6 +10799,74 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("R02", positions)
         if "R03" in positions:
             self.assertTrue({"R01", "R02"}.issubset(set(positions)))
+
+    def test_parking_optimizer_respects_configurable_767_a300_and_04_anchor_rules(self):
+        operation = self._parking_operation()
+        for tail, position in (("N451UP", "A01"), ("N452UP", "A02"), ("N967UP", "A03")):
+            self._parking_pair(operation, tail, aircraft_type="757", destination=position)
+        db.session.flush()
+        self._parking_assignment(operation, "N451UP", "A01")
+        self._parking_assignment(operation, "N452UP", "A02")
+        for number in range(5, 11):
+            self._parking_rule(
+                BLOCKED_PARKING_POSITION,
+                "position",
+                f"A{number:02d}",
+                "A",
+                behavior="forbidden",
+            )
+        for ramp in ("B", "C", "D", "E", "R"):
+            self._parking_rule(
+                AIRCRAFT_TYPE_RAMP_RESTRICTION,
+                "aircraft_type",
+                "767",
+                ramp,
+                behavior="forbidden",
+            )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
+
+        self.assertEqual(suggestions["N967UP"]["position"], "A04")
+
+        self._parking_pair(operation, "N123UP", aircraft_type="757", destination="A02")
+        db.session.flush()
+        self._parking_assignment(operation, "N123UP", "A02", lane_number=2)
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
+        self.assertEqual(suggestions["N967UP"]["position"], "A04")
+
+    def test_parking_optimizer_rejects_767_directly_adjacent_to_locked_a300(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N123UP", aircraft_type="757", destination="A01")
+        self._parking_pair(operation, "N967UP", aircraft_type="757", destination="A02")
+        db.session.flush()
+        self._parking_assignment(operation, "N123UP", "A01")
+        for number in range(3, 11):
+            self._parking_rule(
+                BLOCKED_PARKING_POSITION,
+                "position",
+                f"A{number:02d}",
+                "A",
+                behavior="forbidden",
+            )
+        for ramp in ("B", "C", "D", "E", "R"):
+            self._parking_rule(
+                AIRCRAFT_TYPE_RAMP_RESTRICTION,
+                "aircraft_type",
+                "767",
+                ramp,
+                behavior="forbidden",
+            )
+        db.session.commit()
+
+        preview = self._parking_optimizer_preview(operation)
+        suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
+
+        self.assertNotIn("N967UP", suggestions)
 
     def test_parking_optimizer_767_at_normal_01_blocks_02(self):
         operation = self._parking_operation()
