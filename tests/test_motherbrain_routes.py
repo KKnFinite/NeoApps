@@ -6,6 +6,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from flask import g
+
 from app import create_app
 from app.extensions import db
 from app.models import (
@@ -2121,6 +2123,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.session.commit()
 
         client = self.app.test_client()
+        # This class intentionally keeps an app context for database setup. Clear
+        # Flask-Login's app-context cache before modeling a separate browser.
+        g.pop("_login_user", None)
         client.post(
             "/login",
             data={"username": "dfw_only", "password": "TestPassword123!"},

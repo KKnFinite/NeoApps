@@ -227,7 +227,7 @@ class PermissionRulesTest(unittest.TestCase):
 
     def test_neostaffing_route_uses_saved_view_permission(self):
         view_rule = PermissionRule.query.filter_by(
-            permission_key="neostaffing.app_management.view"
+            permission_key="neostaffing.people.view"
         ).one()
         view_rule.minimum_role = "grandmaster"
         staffing_user, _access = self._user_with_app_access(

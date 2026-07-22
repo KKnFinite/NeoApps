@@ -1,6 +1,8 @@
 from datetime import date, datetime
 import unittest
 
+from flask import g
+
 from app import create_app
 from app.extensions import db
 from app.models import (
@@ -618,11 +620,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 user = self._user(f"staffing_{role}")
                 self._grant_app_access(user, "neostaffing", role)
                 db.session.commit()
-                client.post(
-                    "/login",
-                    data={"username": user.username, "password": "TestPassword123!"},
-                    follow_redirects=False,
-                )
+                self._login(user.username, client=client)
 
                 response = client.get("/neostaffing/app-management")
 
@@ -1775,8 +1773,12 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         db.session.flush()
         return access
 
-    def _login(self, username):
-        return self.client.post(
+    def _login(self, username, client=None):
+        client = client or self.client
+        # The class holds one app context while some tests model multiple browser
+        # clients. Flask-Login caches the last request user on that app context.
+        g.pop("_login_user", None)
+        return client.post(
             "/login",
             data={"username": username, "password": "TestPassword123!"},
             follow_redirects=False,
@@ -1784,11 +1786,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
     def _logged_in_client(self, username):
         client = self.app.test_client()
-        client.post(
-            "/login",
-            data={"username": username, "password": "TestPassword123!"},
-            follow_redirects=False,
-        )
+        self._login(username, client=client)
         return client
 
     def _link_user_for_person(self, person, username=None):
