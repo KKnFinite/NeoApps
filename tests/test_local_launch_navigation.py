@@ -108,6 +108,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(".topbar::after", css)
         self.assertIn(".rfd-node-card-icon-wrap", css)
         self.assertIn(".rfd-node-card-icon", css)
+        self.assertIn(".rfd-node-card-main", css)
         self.assertNotIn("../images/neobutton1_medium.png", css)
         self.assertIn(".rfd-node-prefix", css)
         self.assertIn(".rfd-node-suffix", css)
@@ -930,6 +931,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             css,
         )
         self.assertIn(".rfd-motherbrain-launch-mobile {\n    display: none;", css)
+        self.assertIn(".rfd-node-card-main {\n    display: contents;", css)
         self.assertIn(
             "body.rfd-hub-page.mobile-app-chrome .rfd-motherbrain-launch-desktop {\n"
             "        display: none;",
@@ -1011,8 +1013,37 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             "        display: contents;",
             css,
         )
-        self.assertIn("grid-template-columns: 40px minmax(0, 1fr);", css)
-        self.assertIn("gap: 8px;", css)
+        self.assertEqual(
+            html.count('class="rfd-node-card-main"'),
+            html.count('class="rfd-node-tile'),
+        )
+        self.assertIn("display: flex;\n        flex-direction: column;", css)
+        self.assertIn("align-items: center;\n        justify-content: center;", css)
+        self.assertIn(
+            "body.rfd-hub-page .rfd-node-card-main {\n"
+            "        display: flex;\n"
+            "        align-items: center;\n"
+            "        justify-content: center;\n"
+            "        gap: 8px;",
+            css,
+        )
+        self.assertIn(
+            "body.rfd-hub-page .rfd-node-card-copy {\n"
+            "        display: flex;\n"
+            "        align-items: center;\n"
+            "        justify-content: center;",
+            css,
+        )
+        self.assertIn(
+            "body.rfd-hub-page .rfd-motherbrain-launch-mobile {\n"
+            "        display: none;",
+            css,
+        )
+        self.assertIn(
+            "body.rfd-hub-page .rfd-motherbrain-launch-desktop {\n"
+            "        display: flex;",
+            css,
+        )
         self.assertIn("padding: 11px 8px;", css)
         self.assertIn("font-size: clamp(0.86rem, 1.08vw, 1.08rem);", css)
         self.assertIn("white-space: nowrap;", css)
@@ -1034,6 +1065,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
                 card_start = html.index(f'class="rfd-node-tile rfd-node-placeholder rfd-node-{node}"')
                 card_end = html.index("</article>", card_start)
                 card = html[card_start:card_end]
+                self.assertIn('class="rfd-node-card-main"', card)
                 self.assertIn('class="rfd-node-card-icon-wrap"', card)
                 self.assertIn('class="rfd-node-card-icon"', card)
                 self.assertIn('class="rfd-node-card-copy"', card)

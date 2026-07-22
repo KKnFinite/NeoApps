@@ -5369,6 +5369,10 @@ a {
     transition: opacity 120ms ease;
 }
 
+.rfd-node-card-main {
+    display: contents;
+}
+
 .rfd-node-card-icon-wrap {
     position: relative;
     z-index: 1;
@@ -5718,9 +5722,11 @@ a {
 
     body.rfd-hub-page .rfd-node-tile {
         grid-column: span 2;
-        display: grid;
-        grid-template-columns: 40px minmax(0, 1fr);
-        gap: 8px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
         width: 100%;
         min-height: 0;
         height: 100%;
@@ -5735,6 +5741,23 @@ a {
             inset 0 1px 0 rgba(255, 255, 255, 0.1),
             0 8px 18px rgba(0, 0, 0, 0.26);
         overflow: hidden;
+    }
+
+    body.rfd-hub-page .rfd-node-card-main {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        min-width: 0;
+    }
+
+    body.rfd-hub-page .rfd-motherbrain-launch-mobile {
+        display: none;
+    }
+
+    body.rfd-hub-page .rfd-motherbrain-launch-desktop {
+        display: flex;
     }
 
     body.rfd-hub-page .rfd-node-motherbrain {
@@ -5789,9 +5812,11 @@ a {
     }
 
     body.rfd-hub-page .rfd-node-card-copy {
-        display: grid;
-        align-content: center;
-        gap: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 0;
+        text-align: center;
     }
 
     body.rfd-hub-page .rfd-node-name {

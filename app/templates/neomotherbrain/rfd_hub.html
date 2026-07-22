@@ -18,15 +18,17 @@
 {% set generic_node_icon = "images/icons/neogateway/inapp/neogateway-inapp-128.png" %}
 
 {% macro node_card(slug, name, coming_soon=false) -%}
-<span class="rfd-node-card-icon-wrap" aria-hidden="true">
-    <img class="rfd-node-card-icon" src="{{ url_for('static', filename=locked_node_icons.get(slug, generic_node_icon)) }}" alt="" loading="lazy" width="72" height="72">
+<span class="rfd-node-card-main">
+    <span class="rfd-node-card-icon-wrap" aria-hidden="true">
+        <img class="rfd-node-card-icon" src="{{ url_for('static', filename=locked_node_icons.get(slug, generic_node_icon)) }}" alt="" loading="lazy" width="72" height="72">
+    </span>
+    <span class="rfd-node-card-copy">
+        {{ node_label(slug, name) }}
+    </span>
 </span>
-<span class="rfd-node-card-copy">
-    {{ node_label(slug, name) }}
-    {% if coming_soon %}
-    <span class="rfd-node-availability">Coming Soon</span>
-    {% endif %}
-</span>
+{% if coming_soon %}
+<span class="rfd-node-availability">Coming Soon</span>
+{% endif %}
 {%- endmacro %}
 
 {% block title %}{{ gateway.code }} Hub | NeoGateway{% endblock %}
