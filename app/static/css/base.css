@@ -5694,7 +5694,7 @@ a {
         align-content: center;
         justify-items: stretch;
         gap: 14px 16px;
-        width: min(100%, 1260px);
+        width: min(100%, 1480px);
     }
 
     body.rfd-hub-page .rfd-node-menu.has-rfd-sort-status {
@@ -5719,13 +5719,13 @@ a {
     body.rfd-hub-page .rfd-node-tile {
         grid-column: span 2;
         display: grid;
-        grid-template-columns: 44px minmax(0, 1fr);
-        gap: 10px;
+        grid-template-columns: 40px minmax(0, 1fr);
+        gap: 8px;
         width: 100%;
         min-height: 0;
         height: 100%;
         margin: 0;
-        padding: 11px 12px;
+        padding: 11px 8px;
         border: 1px solid rgba(var(--node-rgb), 0.42);
         border-radius: 8px;
         background:
@@ -5773,8 +5773,8 @@ a {
     }
 
     body.rfd-hub-page .rfd-node-card-icon-wrap {
-        width: 44px;
-        height: 44px;
+        width: 40px;
+        height: 40px;
         border: 0;
         border-radius: 8px;
         background: transparent;
@@ -5782,8 +5782,8 @@ a {
     }
 
     body.rfd-hub-page .rfd-node-card-icon {
-        width: 38px;
-        height: 38px;
+        width: 36px;
+        height: 36px;
         border-radius: 8px;
         filter: drop-shadow(0 0 10px rgba(var(--node-rgb), 0.28));
     }
@@ -5795,8 +5795,9 @@ a {
     }
 
     body.rfd-hub-page .rfd-node-name {
-        font-size: clamp(0.88rem, 1.15vw, 1.08rem);
+        font-size: clamp(0.86rem, 1.08vw, 1.08rem);
         line-height: 1;
+        white-space: nowrap;
     }
 
     body.rfd-hub-page .rfd-node-availability {

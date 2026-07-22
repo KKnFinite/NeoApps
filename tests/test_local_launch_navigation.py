@@ -998,6 +998,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertEqual(html.count('class="rfd-node-availability">Coming Soon</span>'), 3)
         self.assertIn("Compact desktop RFD application launcher", css)
         self.assertIn("grid-template-columns: repeat(8, minmax(0, 1fr));", css)
+        self.assertIn("width: min(100%, 1480px);", css)
         self.assertIn("--rfd-launch-first-row: 1;", css)
         self.assertIn("--rfd-launch-second-row: 2;", css)
         self.assertIn("grid-template-rows: auto repeat(2, minmax(94px, 108px));", css)
@@ -1010,6 +1011,11 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             "        display: contents;",
             css,
         )
+        self.assertIn("grid-template-columns: 40px minmax(0, 1fr);", css)
+        self.assertIn("gap: 8px;", css)
+        self.assertIn("padding: 11px 8px;", css)
+        self.assertIn("font-size: clamp(0.86rem, 1.08vw, 1.08rem);", css)
+        self.assertIn("white-space: nowrap;", css)
 
     def test_gateway_temporary_nodes_use_shared_icon_and_card_hooks(self):
         seed_dev_grandmaster(self.app)
