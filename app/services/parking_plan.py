@@ -2,6 +2,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from sqlalchemy import func
+
 from app.extensions import db
 from app.models import (
     SortDateMission,
@@ -239,6 +241,16 @@ def tail_rows_for_operation(gateway, operation):
         if tail and assignment.position_code:
             grouped.setdefault(tail, {"arrivals": [], "departures": []})
 
+    for tail, tail_state in tail_states.items():
+        if (
+            tail
+            and normalize_tail_operational_status(
+                getattr(tail_state, "operational_status", None)
+            )
+            == TAIL_STATUS_SPARE
+        ):
+            grouped.setdefault(tail, {"arrivals": [], "departures": []})
+
     rows = []
     taxi_minutes = _taxi_to_ramp_minutes(gateway)
     timezone_name = gateway_timezone(gateway)
@@ -267,6 +279,8 @@ def tail_rows_for_operation(gateway, operation):
             assignment=assignment,
             quick_turn=quick_turn,
         )
+        if operational_status == TAIL_STATUS_SPARE and departure is not None:
+            operational_status = TAIL_STATUS_NORMAL
         hot_origin_rfd = _hot_status_has_rfd_origin(
             operational_status,
             arrival,
@@ -299,6 +313,7 @@ def tail_rows_for_operation(gateway, operation):
                 "tail": tail,
                 "arrival": arrival,
                 "departure": departure,
+                "spare_type": _spare_type_label(operational_status, arrival, departure),
                 "arrival_origin": "" if suppress_arrival_movement else _mission_origin(arrival),
                 "arrival_time": "" if suppress_arrival_movement else _format_local_time(block_in_local),
                 "arrival_source": arrival_source,
@@ -334,6 +349,9 @@ def tail_rows_for_operation(gateway, operation):
                 "mission_attachment_label": _mission_attachment_label(
                     tail_missions,
                     active_missions,
+                    operational_status=operational_status,
+                    has_arrival=bool(arrival),
+                    has_departure=bool(departure),
                 ),
                 "assignment": assignment,
                 "assigned_position": assigned_position,
@@ -369,7 +387,7 @@ def assign_tail_to_lane(
         raise ParkingPlanError("Select a tail before assigning parking.")
     _validate_position(ramp_code, position_code)
 
-    if tail_number not in _current_operation_tails(operation):
+    if tail_number not in _current_operation_tail_assets(operation):
         raise ParkingPlanError(f"{tail_number or 'Tail'} is not in the current sort.")
 
     assignment = _assignment_for_tail(operation, tail_number, create=True)
@@ -490,8 +508,15 @@ def set_tail_operational_status(operation, tail_number, operational_status, user
     if tail_number not in _current_operation_tail_assets(operation):
         raise ParkingPlanError(f"{tail_number or 'Tail'} is not in the current sort.")
 
+    normalized_status = normalize_tail_operational_status(operational_status)
+    if normalized_status == TAIL_STATUS_SPARE and _active_departure_for_tail(
+        operation,
+        tail_number,
+    ):
+        raise ParkingPlanError("A tail with a departure mission cannot be marked SPARE.")
+
     tail_state = _tail_state_for_operation(operation, tail_number, create=True)
-    tail_state.operational_status = normalize_tail_operational_status(operational_status)
+    tail_state.operational_status = normalized_status
     tail_state.is_out_of_service = tail_state.operational_status == TAIL_STATUS_OOS
     assignment = _assignment_for_tail(operation, tail_number)
     if assignment:
@@ -500,6 +525,123 @@ def set_tail_operational_status(operation, tail_number, operational_status, user
         assignment.assigned_at = _utc_now()
     db.session.flush()
     return tail_state
+
+
+def mark_arrival_tail_spare(operation, tail_number, user=None):
+    tail_number = _normalize_tail(tail_number)
+    if not tail_number:
+        raise ParkingPlanError("Tail is required to mark a Spare.")
+    arrival = _active_arrival_for_tail(operation, tail_number)
+    if not arrival:
+        raise ParkingPlanError("Only a real arrival without a departure can be marked SPARE.")
+    if _active_departure_for_tail(operation, tail_number):
+        raise ParkingPlanError("A tail with a departure mission cannot be marked SPARE.")
+    return set_tail_operational_status(
+        operation,
+        tail_number,
+        TAIL_STATUS_SPARE,
+        user=user,
+    )
+
+
+def create_standalone_spare(
+    operation,
+    tail_number,
+    aircraft_type,
+    ramp_code=None,
+    position_code=None,
+    lane_number=None,
+    user=None,
+):
+    tail_number = _normalize_tail(tail_number)
+    aircraft_type = _normalize_aircraft_type(aircraft_type)
+    if not tail_number:
+        raise ParkingPlanError("Tail is required to create a standalone Spare.")
+    if not aircraft_type:
+        raise ParkingPlanError("Aircraft type is required to create a standalone Spare.")
+
+    if _mission_count_for_tail(operation, tail_number, "arrival"):
+        raise ParkingPlanError("This tail already has an arrival. Use MARK SPARE instead.")
+    if _mission_count_for_tail(operation, tail_number, "departure"):
+        raise ParkingPlanError("A tail with a departure mission cannot be marked SPARE.")
+
+    tail_state = _tail_state_for_operation(operation, tail_number, create=True)
+    tail_state.aircraft_type = aircraft_type
+    tail_state.aircraft_type_source = "manual"
+    tail_state.operational_status = TAIL_STATUS_SPARE
+    tail_state.is_out_of_service = False
+    db.session.flush()
+
+    if _normalize_position_code(position_code):
+        assign_tail_to_lane(
+            operation,
+            tail_number,
+            ramp_code or str(position_code)[0],
+            position_code,
+            lane_number or 1,
+            user=user,
+        )
+
+    db.session.flush()
+    return tail_state
+
+
+def clear_tail_spare(operation, tail_number, user=None):
+    tail_number = _normalize_tail(tail_number)
+    tail_state = _tail_state_for_operation(operation, tail_number)
+    if not tail_state or normalize_tail_operational_status(
+        getattr(tail_state, "operational_status", None)
+    ) != TAIL_STATUS_SPARE:
+        raise ParkingPlanError(f"{tail_number or 'Tail'} is not marked SPARE.")
+    tail_state.operational_status = TAIL_STATUS_NORMAL
+    tail_state.is_out_of_service = False
+    assignment = _assignment_for_tail(operation, tail_number)
+    if assignment:
+        assignment.is_hot = False
+        assignment.assigned_by_user_id = getattr(user, "id", None)
+        assignment.assigned_at = _utc_now()
+    db.session.flush()
+    return tail_state
+
+
+def clear_spare_for_departure(operation, tail_number, user=None):
+    tail_number = _normalize_tail(tail_number)
+    tail_state = _tail_state_for_operation(operation, tail_number)
+    if not tail_state or normalize_tail_operational_status(
+        getattr(tail_state, "operational_status", None)
+    ) != TAIL_STATUS_SPARE:
+        return tail_state
+    tail_state.operational_status = TAIL_STATUS_NORMAL
+    tail_state.is_out_of_service = False
+    assignment = _assignment_for_tail(operation, tail_number)
+    if assignment:
+        assignment.is_hot = False
+        assignment.assigned_by_user_id = getattr(user, "id", None)
+        assignment.assigned_at = _utc_now()
+    db.session.flush()
+    return tail_state
+
+
+def remove_standalone_spare(operation, tail_number):
+    tail_number = _normalize_tail(tail_number)
+    tail_state = _tail_state_for_operation(operation, tail_number)
+    if not tail_state or normalize_tail_operational_status(
+        getattr(tail_state, "operational_status", None)
+    ) != TAIL_STATUS_SPARE:
+        raise ParkingPlanError(f"{tail_number or 'Tail'} is not marked SPARE.")
+    if _mission_count_for_tail(operation, tail_number):
+        raise ParkingPlanError("Only standalone Spares can be removed.")
+
+    assignment = _assignment_for_tail(operation, tail_number)
+    if assignment:
+        db.session.delete(assignment)
+    db.session.delete(tail_state)
+    db.session.flush()
+    return tail_number
+
+
+def spare_rows_for_operation(gateway, operation):
+    return [row for row in tail_rows_for_operation(gateway, operation) if row["is_spare"]]
 
 
 def normalize_tail_operational_status(value):
@@ -650,6 +792,7 @@ def _apply_departure_order(tail_rows):
 def _summary_for_rows(rows):
     assigned = [row for row in rows if row["assigned_position"]]
     hot = [row for row in rows if row["is_hot"]]
+    spare = [row for row in rows if row["is_spare"]]
     quick_turn = [row for row in rows if row["operational_status"] == TAIL_STATUS_QT]
     conflicts = [row for row in rows if row["status"] == "conflict"]
     return {
@@ -657,6 +800,7 @@ def _summary_for_rows(rows):
         "assigned_tails": len(assigned),
         "unassigned_tails": len(rows) - len(assigned),
         "hot_count": len(hot),
+        "spare_count": len(spare),
         "quick_turn_count": len(quick_turn),
         "conflict_count": len(conflicts),
     }
@@ -668,6 +812,7 @@ def _empty_summary():
         "assigned_tails": 0,
         "unassigned_tails": 0,
         "hot_count": 0,
+        "spare_count": 0,
         "quick_turn_count": 0,
         "conflict_count": 0,
     }
@@ -730,6 +875,8 @@ def _duplicate_slot_conflicts(assignments):
 def _parked_unlinked_tail_warnings(tail_rows):
     warnings = []
     for row in tail_rows:
+        if row.get("is_spare"):
+            continue
         if not row.get("assigned_position") or row.get("has_active_mission"):
             continue
         tail = _normalize_tail(row.get("tail"))
@@ -833,7 +980,61 @@ def _current_operation_tail_assets(operation):
         .all()
         if _normalize_tail(tail)
     }
-    return tails | assigned_tails
+    return tails | assigned_tails | _spare_tail_state_numbers(operation)
+
+
+def _mission_count_for_tail(operation, tail_number, mission_type=None):
+    tail_number = _normalize_tail(tail_number)
+    if not operation or not tail_number:
+        return 0
+    query = SortDateMission.query.filter(
+        SortDateMission.sort_date_operation_id == operation.id,
+        func.upper(SortDateMission.assigned_tail_number) == tail_number,
+    )
+    if mission_type:
+        query = query.filter(SortDateMission.mission_type == mission_type)
+    return query.count()
+
+
+def _active_arrival_for_tail(operation, tail_number):
+    return _active_mission_for_tail(operation, tail_number, "arrival")
+
+
+def _active_departure_for_tail(operation, tail_number):
+    return _active_mission_for_tail(operation, tail_number, "departure")
+
+
+def _active_mission_for_tail(operation, tail_number, mission_type):
+    tail_number = _normalize_tail(tail_number)
+    if not operation or not tail_number:
+        return None
+    missions = (
+        SortDateMission.query.filter(
+            SortDateMission.sort_date_operation_id == operation.id,
+            SortDateMission.mission_type == mission_type,
+            func.upper(SortDateMission.assigned_tail_number) == tail_number,
+        )
+        .order_by(SortDateMission.planned_datetime_utc.asc(), SortDateMission.id.asc())
+        .all()
+    )
+    return next((mission for mission in missions if not _mission_is_cancelled(mission)), None)
+
+
+def _spare_tail_state_numbers(operation):
+    if not operation:
+        return set()
+    return {
+        _normalize_tail(tail)
+        for tail, in db.session.query(SortDateTailState.tail_number)
+        .filter_by(
+            sort_date=operation.sort_date,
+            gateway_code=operation.gateway_code,
+            sort_name=operation.sort_name,
+            operational_status=TAIL_STATUS_SPARE,
+        )
+        .all()
+        if _normalize_tail(tail)
+    }
 
 
 def _tail_state_for_operation(operation, tail_number, create=False):
@@ -994,7 +1195,15 @@ def _mission_display_line(mission):
     )
 
 
-def _mission_attachment_label(tail_missions, active_missions):
+def _mission_attachment_label(
+    tail_missions,
+    active_missions,
+    operational_status=TAIL_STATUS_NORMAL,
+    has_arrival=False,
+    has_departure=False,
+):
+    if operational_status == TAIL_STATUS_SPARE:
+        return "ARRIVAL SPARE" if has_arrival and not has_departure else "STANDALONE SPARE"
     if active_missions:
         return ""
     if any(_mission_is_cancelled(mission) for mission in tail_missions):
@@ -1002,6 +1211,14 @@ def _mission_attachment_label(tail_missions, active_missions):
     if tail_missions:
         return "NO ACTIVE MISSION"
     return "UNATTACHED TAIL"
+
+
+def _spare_type_label(operational_status, arrival, departure):
+    if operational_status != TAIL_STATUS_SPARE:
+        return ""
+    if arrival and not departure:
+        return "ARRIVAL SPARE"
+    return "STANDALONE SPARE"
 
 
 def _operational_block_in_local(mission, timezone_name, taxi_minutes):

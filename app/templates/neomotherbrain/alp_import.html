@@ -331,6 +331,140 @@
         </div>
     </section>
 
+    {% if mission_type == "departure" %}
+    <section class="planning-spares-section" aria-labelledby="planning-spares-title">
+        <h2 id="planning-spares-title">SPARES</h2>
+        <p class="muted">Current-sort ramp tails intentionally held without a departure mission.</p>
+
+        {% if can_edit %}
+        <form class="operation-form planning-spare-create-form" method="post" action="{{ url_for('neomotherbrain.create_operation_spare', operation_id=operation.id) }}">
+            <h3>CREATE STANDALONE SPARE</h3>
+            <div class="inline-form-grid">
+                <label>
+                    <span>TAIL</span>
+                    <input type="text" name="tail_number" maxlength="32" autocomplete="off" autocapitalize="characters" required>
+                </label>
+                <label>
+                    <span>AC TYPE</span>
+                    <input type="text" name="aircraft_type" maxlength="32" autocomplete="off" autocapitalize="characters" required>
+                </label>
+                <label>
+                    <span>PARKING</span>
+                    <select name="position_code">
+                        <option value="">UNPARKED</option>
+                        {% for ramp_name, ramp_code, ramp_positions in parking_positions %}
+                            {% for position in ramp_positions %}
+                            <option value="{{ position }}">{{ position }}</option>
+                            {% endfor %}
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    <span>SLOT</span>
+                    <select name="lane_number">
+                        <option value="1">SLOT 1</option>
+                        <option value="2">SLOT 2</option>
+                    </select>
+                </label>
+                <button class="action-button" type="submit">CREATE SPARE</button>
+            </div>
+        </form>
+        {% endif %}
+
+        <div class="table-wrap">
+            <table class="data-table planning-spares-table">
+                <thead>
+                    <tr>
+                        <th>TAIL</th>
+                        <th>AC TYPE</th>
+                        <th>TYPE</th>
+                        <th>ARRIVAL / ETA</th>
+                        <th>PARKING</th>
+                        <th>STATUS</th>
+                        <th>ACTIONS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in spare_rows %}
+                    {% set arrival = row.arrival %}
+                    <tr>
+                        <td>{{ row.tail }}</td>
+                        <td>{{ row.aircraft_type or "-" }}</td>
+                        <td>{{ row.spare_type }}</td>
+                        <td>
+                            {% if arrival %}
+                            {{ arrival.flight_number|upper }} / {{ row.arrival_time or "-" }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td>{{ row.assigned_position or "UNPARKED" }}</td>
+                        <td><span class="planning-status-badge is-spare">SPARE</span></td>
+                        <td class="table-actions planning-mission-actions">
+                            {% if can_edit and row.spare_type == "ARRIVAL SPARE" %}
+                            <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.clear_operation_spare', operation_id=operation.id) }}">
+                                <input type="hidden" name="tail_number" value="{{ row.tail }}">
+                                <button class="table-row-button" type="submit">CLEAR SPARE</button>
+                            </form>
+                            {% elif can_edit %}
+                            <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.remove_operation_spare', operation_id=operation.id) }}">
+                                <input type="hidden" name="tail_number" value="{{ row.tail }}">
+                                <button class="table-row-button table-row-delete-button" type="submit">REMOVE SPARE</button>
+                            </form>
+                            {% else %}
+                            <span class="muted">VIEW ONLY</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7">NO SPARES FOR THIS SORT.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <h3>ARRIVALS WITHOUT DEPARTURE</h3>
+        <div class="table-wrap">
+            <table class="data-table planning-spare-candidates-table">
+                <thead>
+                    <tr>
+                        <th>TAIL</th>
+                        <th>AC TYPE</th>
+                        <th>ARRIVAL</th>
+                        <th>ETA</th>
+                        <th>PARKING</th>
+                        <th>ACTIONS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in arrival_spare_candidates %}
+                    {% set mission = row.mission %}
+                    <tr>
+                        <td>{{ mission.assigned_tail_number|upper }}</td>
+                        <td>{{ row.aircraft_type or "-" }}</td>
+                        <td>{{ mission.flight_number|upper }}</td>
+                        <td>{{ row.eta_time.strftime("%H:%M") if row.eta_time else "-" }}</td>
+                        <td>{{ planning_parking_cell(row, operation) }}</td>
+                        <td class="table-actions planning-mission-actions">
+                            {% if can_edit %}
+                            <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.mark_operation_spare', operation_id=operation.id) }}">
+                                <input type="hidden" name="tail_number" value="{{ mission.assigned_tail_number|upper }}">
+                                <button class="table-row-button" type="submit">MARK SPARE</button>
+                            </form>
+                            {% else %}
+                            <span class="muted">VIEW ONLY</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6">NO ARRIVAL TAILS WAITING FOR OUTBOUND DECISION.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% endif %}
+
     <section
         class="planning-mobile-current-list planning-mobile-current-{{ mission_type }}s"
         aria-label="Mobile current {{ label|lower }} list"

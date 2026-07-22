@@ -86,17 +86,24 @@ from app.services.night_sorting import (
 )
 from app.services.permission_rules import permission_access, user_can
 from app.services.parking_plan import (
+    PARKING_RAMP_GROUPS,
     ParkingLaneOccupied,
     ParkingPlanError,
     ParkingRuleConflict,
     assign_tail_to_lane,
     clear_parking_assignments,
+    clear_spare_for_departure,
+    clear_tail_spare,
     current_active_sort_operation,
+    create_standalone_spare,
+    mark_arrival_tail_spare,
     parking_plan_context,
     parking_plan_landing_context,
+    remove_standalone_spare,
     set_tail_out_of_service,
     set_tail_hot,
     set_tail_operational_status,
+    spare_rows_for_operation,
     tail_status_is_hot_for_operation,
     tail_operational_status_label,
     unassign_tail,
@@ -1826,6 +1833,15 @@ def alp_import(operation_id, mission_type):
         preview=preview,
         settings=settings,
     )
+    spare_rows = []
+    arrival_spare_candidates = []
+    if mission_type == "departure":
+        spare_rows = spare_rows_for_operation(gateway, operation)
+        arrival_spare_candidates = _arrival_spare_candidate_rows(
+            operation,
+            parking_assignments=parking_assignments,
+            tail_states=tail_states,
+        )
     return render_template(
         "neomotherbrain/alp_import.html",
         operation=operation,
@@ -1842,6 +1858,9 @@ def alp_import(operation_id, mission_type):
         flight_api_operational_time=flight_api_operational_time_utc,
         format_flight_api_time=format_flight_api_local_time,
         wave_options=WAVE_OPTIONS,
+        spare_rows=spare_rows,
+        arrival_spare_candidates=arrival_spare_candidates,
+        parking_positions=PARKING_RAMP_GROUPS,
     )
 
 
@@ -1947,6 +1966,12 @@ def add_api_planning_row(operation_id, review_item_id):
         wave = _planning_wave_from_form(required=mission_type == "departure")
         mission = accept_review_item(review_item)
         mission.wave = wave
+        if mission.mission_type == "departure" and mission.assigned_tail_number:
+            clear_spare_for_departure(
+                operation,
+                mission.assigned_tail_number,
+                user=current_user,
+            )
         db.session.commit()
         flash("API flight added to current sort operation.", "info")
     except ValueError as error:
@@ -2009,6 +2034,109 @@ def ignore_api_planning_row(operation_id, review_item_id):
     db.session.commit()
     flash("Planning row ignored for this sort operation.", "info")
     return redirect(_planning_url(operation.id, mission_type))
+
+
+@bp.route(
+    "/motherbrain/operations/<int:operation_id>/spares/mark",
+    methods=["POST"],
+)
+@gateway_node_required("motherbrain", minimum_role="operator")
+def mark_operation_spare(operation_id):
+    operation = _operation_or_404(operation_id)
+    if not _planning_can_edit("departure"):
+        flash("Access denied.", "error")
+        return redirect(_planning_url(operation.id, "departure"))
+
+    try:
+        tail_state = mark_arrival_tail_spare(
+            operation,
+            request.form.get("tail_number"),
+            user=current_user,
+        )
+        db.session.commit()
+        flash(f"{tail_state.tail_number} marked SPARE.", "info")
+    except ParkingPlanError as error:
+        db.session.rollback()
+        flash(str(error), "error")
+    return redirect(_planning_url(operation.id, "departure"))
+
+
+@bp.route(
+    "/motherbrain/operations/<int:operation_id>/spares/clear",
+    methods=["POST"],
+)
+@gateway_node_required("motherbrain", minimum_role="operator")
+def clear_operation_spare(operation_id):
+    operation = _operation_or_404(operation_id)
+    if not _planning_can_edit("departure"):
+        flash("Access denied.", "error")
+        return redirect(_planning_url(operation.id, "departure"))
+
+    try:
+        tail_state = clear_tail_spare(
+            operation,
+            request.form.get("tail_number"),
+            user=current_user,
+        )
+        db.session.commit()
+        flash(f"{tail_state.tail_number} cleared from SPARE.", "info")
+    except ParkingPlanError as error:
+        db.session.rollback()
+        flash(str(error), "error")
+    return redirect(_planning_url(operation.id, "departure"))
+
+
+@bp.route(
+    "/motherbrain/operations/<int:operation_id>/spares/create",
+    methods=["POST"],
+)
+@gateway_node_required("motherbrain", minimum_role="operator")
+def create_operation_spare(operation_id):
+    operation = _operation_or_404(operation_id)
+    if not _planning_can_edit("departure"):
+        flash("Access denied.", "error")
+        return redirect(_planning_url(operation.id, "departure"))
+
+    try:
+        tail_state = create_standalone_spare(
+            operation,
+            request.form.get("tail_number"),
+            request.form.get("aircraft_type"),
+            ramp_code=request.form.get("ramp_code"),
+            position_code=request.form.get("position_code"),
+            lane_number=request.form.get("lane_number") or 1,
+            user=current_user,
+        )
+        db.session.commit()
+        flash(f"{tail_state.tail_number} standalone SPARE created.", "info")
+    except ParkingPlanError as error:
+        db.session.rollback()
+        flash(str(error), "error")
+    return redirect(_planning_url(operation.id, "departure"))
+
+
+@bp.route(
+    "/motherbrain/operations/<int:operation_id>/spares/remove",
+    methods=["POST"],
+)
+@gateway_node_required("motherbrain", minimum_role="operator")
+def remove_operation_spare(operation_id):
+    operation = _operation_or_404(operation_id)
+    if not _planning_can_edit("departure"):
+        flash("Access denied.", "error")
+        return redirect(_planning_url(operation.id, "departure"))
+
+    try:
+        tail_number = remove_standalone_spare(
+            operation,
+            request.form.get("tail_number"),
+        )
+        db.session.commit()
+        flash(f"{tail_number} standalone SPARE removed.", "info")
+    except ParkingPlanError as error:
+        db.session.rollback()
+        flash(str(error), "error")
+    return redirect(_planning_url(operation.id, "departure"))
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>/window", methods=["POST"])
@@ -3720,6 +3848,12 @@ def _sync_tail_state_and_crew_slots(
     old_aircraft_type="unknown",
 ):
     tail_state = ensure_tail_state_for_mission(mission)
+    if mission.mission_type == "departure" and mission.assigned_tail_number:
+        tail_state = clear_spare_for_departure(
+            mission.sort_date_operation,
+            mission.assigned_tail_number,
+            user=current_user if current_user and not current_user.is_anonymous else None,
+        ) or tail_state
     new_aircraft_type = _aircraft_type_from_tail_state_or_number(
         tail_state,
         mission.assigned_tail_number,
@@ -4283,6 +4417,65 @@ def _tail_states_for_operation(operation):
             sort_name=operation.sort_name,
         ).all()
         if state.tail_number
+    }
+
+
+def _arrival_spare_candidate_rows(
+    operation,
+    parking_assignments=None,
+    tail_states=None,
+):
+    if not operation:
+        return []
+
+    active_departure_tails = _active_departure_tails_for_operation(operation)
+    spare_tails = {
+        tail_number
+        for tail_number, tail_state in (tail_states or _tail_states_for_operation(operation)).items()
+        if str(getattr(tail_state, "operational_status", "") or "").strip().lower()
+        == "spare"
+    }
+    arrivals = (
+        SortDateMission.query.filter(
+            SortDateMission.sort_date_operation_id == operation.id,
+            SortDateMission.mission_type == "arrival",
+            SortDateMission.assigned_tail_number.isnot(None),
+        )
+        .order_by(SortDateMission.planned_datetime_utc.asc(), SortDateMission.id.asc())
+        .all()
+    )
+    rows = []
+    for mission in arrivals:
+        if _is_cancelled_mission(mission):
+            continue
+        tail_number = (mission.assigned_tail_number or "").strip().upper()
+        if not tail_number or tail_number in active_departure_tails or tail_number in spare_tails:
+            continue
+        row = _arrival_row(
+            mission,
+            operation,
+            parking_assignments=parking_assignments,
+            include_parking_context=True,
+            tail_states=tail_states,
+        )
+        row["aircraft_type"] = _aircraft_type_for_tail(operation, tail_number)
+        rows.append(row)
+    return rows
+
+
+def _active_departure_tails_for_operation(operation):
+    missions = (
+        SortDateMission.query.filter(
+            SortDateMission.sort_date_operation_id == operation.id,
+            SortDateMission.mission_type == "departure",
+            SortDateMission.assigned_tail_number.isnot(None),
+        )
+        .all()
+    )
+    return {
+        (mission.assigned_tail_number or "").strip().upper()
+        for mission in missions
+        if mission.assigned_tail_number and not _is_cancelled_mission(mission)
     }
 
 

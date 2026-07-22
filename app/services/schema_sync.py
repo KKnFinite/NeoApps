@@ -274,6 +274,14 @@ def sync_local_sqlite_schema(app):
 
     _sync_staffing_people_employee_status_sqlite(table_names)
     _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names)
+    if _sync_sort_date_tail_state_status_constraints_sqlite(inspector, table_names):
+        db.session.commit()
+        inspector = inspect(db.engine)
+        table_names = set(inspector.get_table_names())
+        table_columns = {
+            table_name: {column["name"] for column in inspector.get_columns(table_name)}
+            for table_name in table_names
+        }
     _sync_uld_request_unique_constraint_sqlite(inspector, table_names)
     _backfill_motherbrain_parking_rule_defaults(table_names, table_columns)
     if migrate_existing_approved_users:
@@ -324,6 +332,7 @@ def sync_database_schema(app):
 
     _sync_staffing_people_employee_status_postgres(table_names)
     _sync_sort_date_mission_status_constraints_postgres(table_names)
+    _sync_sort_date_tail_state_status_constraints_postgres(table_names)
     _sync_uld_request_unique_constraint_postgres(table_names)
     _backfill_motherbrain_parking_rule_defaults(table_names, table_columns)
     if migrate_existing_approved_users:
@@ -589,7 +598,7 @@ def _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names):
     db.session.execute(text("PRAGMA legacy_alter_table=ON"))
     db.session.execute(text(f"ALTER TABLE {table_name} RENAME TO {legacy_table}"))
     _drop_sqlite_indexes_for_table(legacy_table)
-    SortDateMission.__table__.create(bind=db.engine, checkfirst=True)
+    SortDateMission.__table__.create(bind=db.session.connection(), checkfirst=False)
 
     legacy_columns = {
         row[1]
@@ -657,6 +666,108 @@ def _sync_sort_date_mission_status_constraints_postgres(table_names):
                     'crew_load_complete',
                     'blocked_out',
                     'cancelled'
+                )
+            )
+            """
+        )
+    )
+
+
+def _sync_sort_date_tail_state_status_constraints_sqlite(inspector, table_names):
+    table_name = "sort_date_tail_states"
+    legacy_table = "sort_date_tail_states_status_legacy"
+    all_tables = set(inspector.get_table_names())
+    if table_name not in table_names:
+        return False
+
+    create_sql = db.session.execute(
+        text(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'sort_date_tail_states'"
+        )
+    ).scalar() or ""
+    if "'spare'" in create_sql and "'qt'" in create_sql and "'oos'" in create_sql:
+        return False
+
+    if legacy_table in all_tables:
+        db.session.execute(text(f"DROP TABLE {legacy_table}"))
+
+    from app.models import SortDateTailState
+
+    db.session.execute(text("PRAGMA legacy_alter_table=ON"))
+    db.session.execute(text(f"ALTER TABLE {table_name} RENAME TO {legacy_table}"))
+    _drop_sqlite_indexes_for_table(legacy_table)
+    SortDateTailState.__table__.create(bind=db.session.connection(), checkfirst=False)
+
+    legacy_columns = {
+        row[1]
+        for row in db.session.execute(text(f"PRAGMA table_info({legacy_table})")).all()
+    }
+    target_columns = []
+    select_expressions = []
+    fallback_expressions = {
+        "aircraft_type_source": "'unknown'",
+        "mechanical_status": "0",
+        "operational_status": "'normal'",
+        "is_out_of_service": "0",
+        "pushback_status": "0",
+        "deice_status": "'unknown'",
+        "pretreat_status": "0",
+        "created_at": "CURRENT_TIMESTAMP",
+        "updated_at": "CURRENT_TIMESTAMP",
+    }
+    for column in SortDateTailState.__table__.columns:
+        column_name = column.name
+        fallback = fallback_expressions.get(column_name)
+        if column_name in legacy_columns:
+            quoted_column = _quote_sqlite_identifier(column_name)
+            expression = quoted_column
+            if fallback:
+                expression = f"COALESCE({quoted_column}, {fallback})"
+        elif fallback:
+            expression = fallback
+        elif column.nullable:
+            expression = "NULL"
+        else:
+            continue
+        target_columns.append(column_name)
+        select_expressions.append(expression)
+
+    quoted_columns = ", ".join(_quote_sqlite_identifier(column) for column in target_columns)
+    select_columns = ", ".join(select_expressions)
+    db.session.execute(
+        text(
+            f"INSERT INTO {table_name} ({quoted_columns}) "
+            f"SELECT {select_columns} FROM {legacy_table}"
+        )
+    )
+    db.session.execute(text(f"DROP TABLE {legacy_table}"))
+    db.session.execute(text("PRAGMA legacy_alter_table=OFF"))
+    return True
+
+
+def _sync_sort_date_tail_state_status_constraints_postgres(table_names):
+    if "sort_date_tail_states" not in table_names:
+        return
+
+    db.session.execute(
+        text(
+            "ALTER TABLE sort_date_tail_states "
+            "DROP CONSTRAINT IF EXISTS ck_sort_date_tail_states_operational_status"
+        )
+    )
+    db.session.execute(
+        text(
+            """
+            ALTER TABLE sort_date_tail_states
+            ADD CONSTRAINT ck_sort_date_tail_states_operational_status
+            CHECK (
+                operational_status IN (
+                    'normal',
+                    'hot',
+                    'spare',
+                    'qt',
+                    'oos'
                 )
             )
             """

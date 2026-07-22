@@ -12868,6 +12868,37 @@ select::-ms-expand {
     margin-top: 22px;
 }
 
+.planning-spares-section {
+    margin-top: 22px;
+}
+
+.planning-spare-create-form {
+    margin: 12px 0 16px;
+}
+
+.planning-spare-create-form h3 {
+    margin: 0;
+    color: var(--steel);
+    font-size: 0.86rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.planning-spare-create-form .inline-form-grid {
+    display: grid;
+    grid-template-columns: minmax(110px, 0.9fr) minmax(110px, 0.8fr) minmax(130px, 0.9fr) minmax(90px, 0.6fr) auto;
+    align-items: end;
+    gap: 9px;
+}
+
+.planning-spares-section h3 {
+    margin: 18px 0 8px;
+    color: var(--muted);
+    font-size: 0.78rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
 .planning-mobile-current-list,
 .parking-mobile-slot-change {
     display: none;
@@ -12986,6 +13017,23 @@ select::-ms-expand {
     letter-spacing: 0.04em;
     line-height: 1;
     white-space: nowrap;
+}
+
+.planning-status-badge.is-spare {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    border: 1px solid rgba(255, 208, 88, 0.72);
+    border-radius: 4px;
+    padding: 3px 7px;
+    background: rgba(142, 93, 16, 0.72);
+    color: #fff5cf;
+    font-size: 0.64rem;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    white-space: nowrap;
+    box-shadow: 0 0 12px rgba(255, 208, 88, 0.16);
 }
 
 .planning-parking-context .planning-parking-link {
@@ -14327,10 +14375,16 @@ select::-ms-expand {
     body.mobile-app-chrome .planning-page .planning-local-actions,
     body.mobile-app-chrome .planning-page .alp-mobile-only,
     body.mobile-app-chrome .planning-page .planning-review-section,
+    body.mobile-app-chrome .planning-page .planning-spares-section > h2,
+    body.mobile-app-chrome .planning-page .planning-spares-section > p,
     body.mobile-app-chrome .planning-page .planning-mission-section > h2,
     body.mobile-app-chrome .planning-page .planning-mission-section > p,
     body.mobile-app-chrome .planning-page .planning-mission-section > .table-wrap {
         display: none !important;
+    }
+
+    body.mobile-app-chrome .planning-spare-create-form .inline-form-grid {
+        grid-template-columns: 1fr;
     }
 
     body.mobile-app-chrome .planning-mobile-current-list {

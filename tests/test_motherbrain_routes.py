@@ -8116,7 +8116,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(">OOS</span>", html)
         self.assertIn(">EDIT</button>", html)
         self.assertIn('name="operational_status" value="normal"', html)
-        self.assertIn('name="operational_status" value="spare"', html)
+        self.assertNotIn('name="operational_status" value="spare"', html)
         self.assertIn('name="operational_status" value="hot"', html)
         self.assertNotIn("MARK OOS", html)
         self.assertNotIn("RESTORE / GREEN", html)
@@ -9602,6 +9602,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 gateway_code=self.rfd_gateway.code,
                 deice_spacing_threshold_minutes=0,
                 inbound_same_ramp_spacing_minutes=0,
+                prevent_a300_in_position_5=False,
             )
         )
         for index in range(4):
@@ -9637,6 +9638,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 gateway_code=self.rfd_gateway.code,
                 deice_spacing_threshold_minutes=0,
                 inbound_same_ramp_spacing_minutes=0,
+                prevent_a300_in_position_5=False,
             )
         )
         for index in range(5):
@@ -9669,6 +9671,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 gateway_code=self.rfd_gateway.code,
                 deice_spacing_threshold_minutes=0,
                 inbound_same_ramp_spacing_minutes=0,
+                prevent_a300_in_position_5=False,
             )
         )
         for index, position in enumerate(("A01", "A02")):
@@ -10128,6 +10131,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 gateway_id=self.rfd_gateway.id,
                 gateway_code=self.rfd_gateway.code,
                 deice_spacing_threshold_minutes=0,
+                prevent_a300_in_position_5=False,
             )
         )
         for index, position in enumerate(("A01", "A02", "A03")):
@@ -10701,7 +10705,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self._parking_pair(operation, "N349UP", aircraft_type="757", destination="SDF")
         db.session.flush()
         tail_state = SortDateTailState.query.filter_by(tail_number="N457UP").one()
-        tail_state.operational_status = "spare"
+        tail_state.operational_status = "hot"
         self._parking_assignment(operation, "N457UP", "A01")
         db.session.commit()
 
@@ -10710,7 +10714,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         suggestions = {row["tail"]: row for row in preview["suggested_assignments"]}
 
         self.assertEqual(locked["N457UP"]["label"], "A01 Slot 1")
-        self.assertEqual(locked["N457UP"]["reason"], "SPARE parked tail fixed.")
+        self.assertEqual(locked["N457UP"]["reason"], "HOT parked tail fixed.")
         self.assertEqual(suggestions["N349UP"]["label"], "B01 Slot 1")
         self.assertEqual(SortDateParkingAssignment.query.count(), 1)
 
@@ -12289,21 +12293,21 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("ARR42 SDF-RFD 23:40", card_html)
         self.assertIn("DEP42 RFD-DFW 01:20", card_html)
 
-    def test_spare_tail_suppresses_outbound_movement_display(self):
+    def test_arrival_spare_tail_shows_badge_without_fake_departure(self):
         operation = self._parking_operation()
-        departure = self._mission(
+        arrival = self._mission(
             operation=operation,
-            mission_type="departure",
-            flight_number="DEP42",
-            origin="RFD",
-            destination="DFW",
+            mission_type="arrival",
+            flight_number="ARR42",
+            origin="SDF",
+            destination="RFD",
             assigned_tail_number="N542UP",
-            planned_datetime_local=datetime(2026, 6, 19, 1, 20),
-            planned_datetime_utc=datetime(2026, 6, 19, 6, 20),
+            planned_datetime_local=datetime(2026, 6, 18, 23, 40),
+            planned_datetime_utc=datetime(2026, 6, 19, 4, 40),
         )
         db.session.add_all(
             [
-                departure,
+                arrival,
                 SortDateTailState(
                     sort_date=operation.sort_date,
                     gateway_code=operation.gateway_code,
@@ -12324,8 +12328,277 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('data-tail-operational-status="spare"', card_html)
         self.assertIn("parking-badge parking-badge-spare", card_html)
-        self.assertNotIn("DEP42 RFD-DFW 01:20", card_html)
-        self.assertEqual(db.session.get(SortDateMission, departure.id).assigned_tail_number, "N542UP")
+        self.assertIn("ARR42 SDF-RFD 23:40", card_html)
+        self.assertIn("ARRIVAL SPARE", card_html)
+        self.assertNotIn("DEP", card_html)
+        self.assertEqual(db.session.get(SortDateMission, arrival.id).assigned_tail_number, "N542UP")
+
+    def test_departure_planning_marks_and_clears_arrival_spare_without_creating_departure(self):
+        operation = self._parking_operation()
+        arrival = self._mission(
+            operation=operation,
+            mission_type="arrival",
+            flight_number="UPS0910",
+            origin="SDF",
+            destination="RFD",
+            assigned_tail_number="N910UP",
+            planned_datetime_local=datetime(2026, 6, 18, 23, 25),
+            planned_datetime_utc=datetime(2026, 6, 19, 4, 25),
+        )
+        db.session.add_all(
+            [
+                arrival,
+                SortDateTailState(
+                    sort_date=operation.sort_date,
+                    gateway_code=operation.gateway_code,
+                    sort_name=operation.sort_name,
+                    tail_number="N910UP",
+                    aircraft_type="767",
+                    aircraft_type_source="manual",
+                ),
+            ]
+        )
+        self._parking_assignment(operation, "N910UP", "A01")
+        db.session.commit()
+
+        planning = self.client.get(f"/motherbrain/operations/{operation.id}/alp/departure")
+        html = planning.data.decode()
+        self.assertEqual(planning.status_code, 200)
+        self.assertIn("SPARES", html)
+        self.assertIn("ARRIVALS WITHOUT DEPARTURE", html)
+        self.assertIn("N910UP", html)
+        self.assertIn("UPS0910", html)
+        self.assertIn("MARK SPARE", html)
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/spares/mark",
+            data={"tail_number": "N910UP"},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            SortDateMission.query.filter_by(
+                sort_date_operation_id=operation.id,
+                mission_type="departure",
+            ).count(),
+            0,
+        )
+        db.session.refresh(arrival)
+        self.assertEqual(arrival.assigned_tail_number, "N910UP")
+        state = SortDateTailState.query.filter_by(tail_number="N910UP").one()
+        self.assertEqual(state.operational_status, "spare")
+        assignment = SortDateParkingAssignment.query.filter_by(tail_number="N910UP").one()
+        self.assertEqual(assignment.position_code, "A01")
+
+        marked_html = response.data.decode()
+        self.assertIn("ARRIVAL SPARE", marked_html)
+        self.assertIn("CLEAR SPARE", marked_html)
+        candidates_html = marked_html.split("ARRIVALS WITHOUT DEPARTURE", 1)[1]
+        self.assertNotIn("MARK SPARE", candidates_html)
+
+        cleared = self.client.post(
+            f"/motherbrain/operations/{operation.id}/spares/clear",
+            data={"tail_number": "N910UP"},
+            follow_redirects=True,
+        )
+        self.assertEqual(cleared.status_code, 200)
+        db.session.refresh(state)
+        db.session.refresh(assignment)
+        self.assertEqual(state.operational_status, "normal")
+        self.assertEqual(assignment.position_code, "A01")
+        self.assertIn("MARK SPARE", cleared.data.decode())
+
+    def test_create_and_remove_standalone_spare_without_missions(self):
+        operation = self._parking_operation()
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/spares/create",
+            data={"tail_number": "n555up", "aircraft_type": "767"},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(SortDateMission.query.filter_by(sort_date_operation_id=operation.id).count(), 0)
+        state = SortDateTailState.query.filter_by(tail_number="N555UP").one()
+        self.assertEqual(state.operational_status, "spare")
+        self.assertEqual(state.aircraft_type, "767")
+        self.assertEqual(state.aircraft_type_source, "manual")
+
+        departure_html = response.data.decode()
+        self.assertIn("STANDALONE SPARE", departure_html)
+        self.assertIn("REMOVE SPARE", departure_html)
+        self.assertIn("UNPARKED", departure_html)
+
+        parking = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        parking_html = parking.data.decode()
+        self.assertIn("N555UP", parking_html)
+        self.assertIn("SPARE", parking_html)
+        self.assertIn("UNPARKED TAILS", parking_html)
+
+        arrival_planning = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
+        self.assertNotIn(b"N555UP", arrival_planning.data)
+        departure_board = self.client.get(f"/motherbrain/operations/{operation.id}/departures")
+        self.assertNotIn(b"N555UP", departure_board.data)
+
+        removed = self.client.post(
+            f"/motherbrain/operations/{operation.id}/spares/remove",
+            data={"tail_number": "N555UP"},
+            follow_redirects=True,
+        )
+        self.assertEqual(removed.status_code, 200)
+        self.assertIsNone(SortDateTailState.query.filter_by(tail_number="N555UP").first())
+        self.assertIsNone(SortDateParkingAssignment.query.filter_by(tail_number="N555UP").first())
+
+    def test_standalone_spare_parking_counts_as_occupied(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N777UP", destination="DFW")
+        db.session.commit()
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/spares/create",
+            data={
+                "tail_number": "N555UP",
+                "aircraft_type": "767",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+        )
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N777UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn(b"N555UP", response.data)
+        self.assertEqual(SortDateParkingAssignment.query.filter_by(tail_number="N555UP").count(), 1)
+
+    def test_standalone_spare_duplicate_arrival_requires_mark_spare(self):
+        operation = self._parking_operation()
+        db.session.add(
+            self._mission(
+                operation=operation,
+                mission_type="arrival",
+                flight_number="UPS0910",
+                assigned_tail_number="N910UP",
+            )
+        )
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/spares/create",
+            data={"tail_number": "N910UP", "aircraft_type": "767"},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Use MARK SPARE instead", response.data)
+        self.assertIsNone(SortDateTailState.query.filter_by(tail_number="N910UP").first())
+
+    def test_hot_and_spare_are_mutually_exclusive(self):
+        operation = self._parking_operation()
+        db.session.add(
+            self._mission(
+                operation=operation,
+                mission_type="arrival",
+                flight_number="UPS0910",
+                assigned_tail_number="N910UP",
+            )
+        )
+        db.session.add(
+            SortDateTailState(
+                sort_date=operation.sort_date,
+                gateway_code=operation.gateway_code,
+                sort_name=operation.sort_name,
+                tail_number="N910UP",
+                aircraft_type="767",
+                aircraft_type_source="manual",
+            )
+        )
+        db.session.commit()
+
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/spares/mark",
+            data={"tail_number": "N910UP"},
+        )
+        state = SortDateTailState.query.filter_by(tail_number="N910UP").one()
+        self.assertEqual(state.operational_status, "spare")
+
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/hot",
+            data={"tail_number": "N910UP", "is_hot": "1"},
+        )
+        db.session.refresh(state)
+        self.assertEqual(state.operational_status, "hot")
+
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/spares/mark",
+            data={"tail_number": "N910UP"},
+        )
+        db.session.refresh(state)
+        self.assertEqual(state.operational_status, "spare")
+
+    def test_creating_departure_clears_spare_tail_status(self):
+        operation = self._parking_operation()
+        db.session.add(
+            self._mission(
+                operation=operation,
+                mission_type="arrival",
+                flight_number="UPS0910",
+                assigned_tail_number="N910UP",
+            )
+        )
+        db.session.add(
+            SortDateTailState(
+                sort_date=operation.sort_date,
+                gateway_code=operation.gateway_code,
+                sort_name=operation.sort_name,
+                tail_number="N910UP",
+                aircraft_type="767",
+                aircraft_type_source="manual",
+                operational_status="spare",
+            )
+        )
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/new",
+            data=self._mission_form_data(
+                mission_type="departure",
+                flight_number="UPS1910",
+                assigned_tail_number="N910UP",
+                destination="SDF",
+                departure_status="loading",
+            ),
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        state = SortDateTailState.query.filter_by(tail_number="N910UP").one()
+        self.assertEqual(state.operational_status, "normal")
+
+    def test_tail_with_departure_cannot_be_marked_spare_from_parking_plan(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/tail-status",
+            data={"tail_number": "N457UP", "operational_status": "spare"},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"departure mission cannot be marked SPARE", response.data)
+        state = SortDateTailState.query.filter_by(tail_number="N457UP").one()
+        self.assertNotEqual(state.operational_status, "spare")
 
     def test_motherbrain_manage_sort_menu_links_to_parking_plan(self):
         response = self.client.get("/motherbrain/manage-sort")

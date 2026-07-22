@@ -93,7 +93,9 @@
                 <div class="parking-tail-status-options">
                     <button type="submit" name="operational_status" value="normal">CLEAR / NORMAL</button>
                     <button type="submit" name="operational_status" value="oos">OOS</button>
+                    {% if not row.departure %}
                     <button type="submit" name="operational_status" value="spare">SPARE</button>
+                    {% endif %}
                     <button type="submit" name="operational_status" value="hot">HOT</button>
                     {% if row.show_qt_status_option %}
                     <button type="submit" name="operational_status" value="qt">QT</button>

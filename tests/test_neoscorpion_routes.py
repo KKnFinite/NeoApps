@@ -247,6 +247,41 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"UPS901", restored.data)
         self.assertIn(b"23:30", restored.data)
 
+    def test_fuel_dispatch_excludes_standalone_spare_tail(self):
+        self._login_approved_user(role="simulator")
+        operation, _mission = self._add_current_departure(
+            flight_number="UPS901",
+            tail_number="N123UP",
+            destination="ONT",
+        )
+        db.session.add(
+            SortDateTailState(
+                sort_date=operation.sort_date,
+                gateway_code=operation.gateway_code,
+                sort_name=operation.sort_name,
+                tail_number="N555UP",
+                aircraft_type="767",
+                aircraft_type_source="manual",
+                operational_status="spare",
+            )
+        )
+        db.session.add(
+            SortDateParkingAssignment(
+                sort_date_operation_id=operation.id,
+                tail_number="N555UP",
+                ramp_code="A",
+                position_code="A01",
+                lane_number=1,
+            )
+        )
+        db.session.commit()
+
+        response = self.client.get("/neoscorpion/fuel-dispatch")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"UPS901", response.data)
+        self.assertNotIn(b"N555UP", response.data)
+
     def test_fueler_sees_only_assigned_missions_and_a300_center_fuel(self):
         user = self._login_approved_user(role="operator")
         operation, first = self._add_current_departure("UPS301", "N123UP", "SDF")

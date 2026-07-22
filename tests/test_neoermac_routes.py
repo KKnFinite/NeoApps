@@ -2192,6 +2192,37 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'<option value="ONT"', response.data)
         self.assertNotIn(b'<option value="DFW"', response.data)
 
+    def test_building_lineup_excludes_standalone_spare_tail(self):
+        self._add_master_departure("UPS101", "sdf")
+        operation = SortDateOperation(
+            gateway_id=self.gateway.id,
+            sort_date=date(2026, 6, 11),
+            gateway_code=self.gateway.code,
+            sort_name="night",
+            window_minutes=0,
+        )
+        db.session.add(operation)
+        db.session.add(
+            SortDateTailState(
+                sort_date=operation.sort_date,
+                gateway_code=operation.gateway_code,
+                sort_name=operation.sort_name,
+                tail_number="N555UP",
+                aircraft_type="767",
+                aircraft_type_source="manual",
+                operational_status="spare",
+            )
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/building-lineup")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'<option value="SDF"', response.data)
+        self.assertNotIn(b"N555UP", response.data)
+        self.assertNotIn(b"STANDALONE SPARE", response.data)
+
     def test_user_with_building_lineup_edit_can_save_destinations(self):
         self._add_master_departure("UPS301", "sdf")
         self._add_master_departure("UPS302", "ont")

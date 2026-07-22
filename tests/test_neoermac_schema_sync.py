@@ -1,13 +1,15 @@
 import unittest
-from datetime import time
+from datetime import date, time
 
 from sqlalchemy import inspect, text
 
 from app import create_app
 from app.extensions import db
-from app.models import NeoErmacDoorPull
+from app.models import NeoErmacDoorPull, SortDateTailState
 from app.services.schema_sync import (
+    LOCAL_SQLITE_OPTIONAL_COLUMNS,
     POSTGRES_OPTIONAL_COLUMNS,
+    _sync_sort_date_tail_state_status_constraints_postgres,
     sync_database_schema,
     sync_local_sqlite_schema,
 )
@@ -116,6 +118,121 @@ class NeoErmacDoorPullSchemaSyncTest(unittest.TestCase):
             "NOT NULL DEFAULT FALSE",
             POSTGRES_OPTIONAL_COLUMNS["neoermac_door_pulls"]["no_mix_pull"],
         )
+
+    def test_postgres_repair_map_covers_current_motherbrain_parking_rule_columns(self):
+        postgres_columns = POSTGRES_OPTIONAL_COLUMNS["motherbrain_parking_settings"]
+        sqlite_columns = LOCAL_SQLITE_OPTIONAL_COLUMNS["motherbrain_parking_settings"]
+
+        for column_name in (
+            "prevent_767_adjacent_to_a300",
+            "force_767_to_position_4_8",
+            "prevent_a300_in_position_5",
+        ):
+            with self.subTest(column_name=column_name):
+                self.assertIn(column_name, postgres_columns)
+                self.assertIn("BOOLEAN", postgres_columns[column_name])
+                self.assertIn("DEFAULT TRUE", postgres_columns[column_name])
+                self.assertIn(column_name, sqlite_columns)
+                self.assertIn("DEFAULT 1", sqlite_columns[column_name])
+
+    def test_sqlite_tail_state_status_constraint_allows_spare_after_sync(self):
+        db.session.execute(text("DROP TABLE IF EXISTS sort_date_tail_states"))
+        db.session.execute(
+            text(
+                """
+                CREATE TABLE sort_date_tail_states (
+                    id INTEGER PRIMARY KEY,
+                    sort_date DATE NOT NULL,
+                    gateway_code VARCHAR(8) NOT NULL,
+                    sort_name VARCHAR(32) NOT NULL,
+                    tail_number VARCHAR(32) NOT NULL,
+                    aircraft_type VARCHAR(32),
+                    aircraft_type_source VARCHAR(32) NOT NULL DEFAULT 'unknown',
+                    parking_position VARCHAR(64),
+                    fuel_onboard INTEGER,
+                    mechanical_status BOOLEAN NOT NULL DEFAULT 0,
+                    operational_status VARCHAR(16) NOT NULL DEFAULT 'normal',
+                    is_out_of_service BOOLEAN NOT NULL DEFAULT 0,
+                    pushback_status BOOLEAN NOT NULL DEFAULT 0,
+                    deice_status VARCHAR(32) NOT NULL DEFAULT 'unknown',
+                    pretreat_status BOOLEAN NOT NULL DEFAULT 0,
+                    deice_completed_at_utc DATETIME,
+                    created_at DATETIME,
+                    updated_at DATETIME,
+                    CONSTRAINT ck_sort_date_tail_states_operational_status
+                        CHECK (operational_status IN ('normal', 'hot'))
+                )
+                """
+            )
+        )
+        db.session.execute(
+            text(
+                """
+                INSERT INTO sort_date_tail_states (
+                    sort_date,
+                    gateway_code,
+                    sort_name,
+                    tail_number,
+                    aircraft_type_source,
+                    operational_status,
+                    deice_status,
+                    mechanical_status,
+                    pushback_status,
+                    pretreat_status
+                )
+                VALUES (
+                    '2026-06-18',
+                    'RFD',
+                    'night',
+                    'N123UP',
+                    'unknown',
+                    'normal',
+                    'unknown',
+                    0,
+                    0,
+                    0
+                )
+                """
+            )
+        )
+        db.session.commit()
+
+        sync_local_sqlite_schema(self.app)
+        db.session.commit()
+
+        db.session.add(
+            SortDateTailState(
+                sort_date=date(2026, 6, 18),
+                gateway_code="RFD",
+                sort_name="night",
+                tail_number="N555UP",
+                aircraft_type="767",
+                aircraft_type_source="manual",
+                operational_status="spare",
+            )
+        )
+        db.session.commit()
+
+        self.assertEqual(SortDateTailState.query.filter_by(operational_status="spare").count(), 1)
+        self.assertEqual(SortDateTailState.query.filter_by(tail_number="N123UP").count(), 1)
+
+    def test_postgres_tail_state_status_constraint_is_refreshed_for_spare(self):
+        from unittest.mock import patch
+
+        with patch("app.services.schema_sync.db.session.execute") as execute:
+            _sync_sort_date_tail_state_status_constraints_postgres(
+                {"sort_date_tail_states"}
+            )
+
+        statements = "\n".join(str(call.args[0]) for call in execute.call_args_list)
+        self.assertIn(
+            "DROP CONSTRAINT IF EXISTS ck_sort_date_tail_states_operational_status",
+            statements,
+        )
+        self.assertIn("ADD CONSTRAINT ck_sort_date_tail_states_operational_status", statements)
+        self.assertIn("'spare'", statements)
+        self.assertIn("'qt'", statements)
+        self.assertIn("'oos'", statements)
 
     def test_postgres_sync_adds_and_migrates_missing_mix_pull_columns(self):
         from unittest.mock import patch
