@@ -28,6 +28,7 @@ from app.models import (
     SortTimelineSpecialPollTime,
     SortTimelineUsageCounter,
     SortDateCrewAssignment,
+    SortDateAlpPreview,
     SortDateMission,
     SortDateOperation,
     SortDateParkingAssignment,
@@ -5830,6 +5831,264 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(FlightApiReviewItem.query.filter_by(review_status="pending").count(), 0)
         self.assertIn(b"NO UNMATCHED ARRIVAL PLANNING ROWS.", persisted.data)
         self.assertNotIn(b"ADD TO CURRENT SORT</button>", persisted.data)
+
+    def test_arrival_alp_preview_survives_each_unmatched_resolution_action(self):
+        actions = (
+            ("add", "accepted"),
+            ("hot", "accepted"),
+            ("ignore", "ignored"),
+        )
+        for index, (action, expected_status) in enumerate(actions, start=1):
+            with self.subTest(action=action):
+                operation = self._operation(sort_date=date(2026, 8, index))
+                db.session.add(operation)
+                db.session.commit()
+                target_row = (
+                    f"24-JUN-2026\tUPS{900 + index}\tSDF\tN{900 + index}UP"
+                    "\tA01\tScheduled\t07:24 (S)"
+                )
+                remaining_row = (
+                    f"24-JUN-2026\tUPS{950 + index}\tDFW\tN{950 + index}UP"
+                    "\tA02\tScheduled\t07:56 (S)"
+                )
+                invalid_row = "BROKEN ALP ROW"
+                paste = "\n".join((target_row, remaining_row, invalid_row))
+                preview = self.client.post(
+                    f"/motherbrain/operations/{operation.id}/alp/arrival",
+                    data={"paste_text": paste, "alp_action": "preview"},
+                )
+                target = FlightApiReviewItem.query.filter_by(
+                    sort_date_operation_id=operation.id,
+                    flight_number=f"UPS{900 + index:04d}",
+                ).one()
+
+                response = self.client.post(
+                    f"/motherbrain/operations/{operation.id}/planning/arrival/alp/{action}",
+                    data=self._alp_review_item_form(target, wave="2"),
+                    follow_redirects=True,
+                )
+                db.session.refresh(target)
+
+                self.assertEqual(preview.status_code, 200)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(target.review_status, expected_status)
+                self.assertIn(target_row.encode(), response.data)
+                self.assertIn(remaining_row.encode(), response.data)
+                self.assertIn(invalid_row.encode(), response.data)
+                self.assertIn(b"Expected 7 ALP columns.", response.data)
+                self.assertIn(b"APPLY PREVIEW", response.data)
+                self.assertIn(f"UPS{950 + index:04d}".encode(), response.data)
+                self.assertIn(b"ADD TO CURRENT SORT", response.data)
+                self.assertEqual(
+                    SortDateAlpPreview.query.filter_by(
+                        sort_date_operation_id=operation.id,
+                        mission_type="arrival",
+                    ).count(),
+                    1,
+                )
+
+    def test_departure_alp_preview_survives_each_unmatched_resolution_action(self):
+        actions = (
+            ("add", "accepted"),
+            ("hot", "accepted"),
+            ("ignore", "ignored"),
+        )
+        for index, (action, expected_status) in enumerate(actions, start=11):
+            with self.subTest(action=action):
+                operation = self._operation(sort_date=date(2026, 8, index))
+                db.session.add(operation)
+                db.session.commit()
+                target_row = (
+                    f"24-JUN-2026\tUPS{900 + index}\tSDF\tN{900 + index}UP"
+                    "\tA01\tScheduled\t07:24 (S)"
+                )
+                remaining_row = (
+                    f"24-JUN-2026\tUPS{950 + index}\tDFW\tN{950 + index}UP"
+                    "\tA02\tScheduled\t07:56 (S)"
+                )
+                paste = "\n".join((target_row, remaining_row))
+                preview = self.client.post(
+                    f"/motherbrain/operations/{operation.id}/alp/departure",
+                    data={"paste_text": paste, "alp_action": "preview"},
+                )
+                target = FlightApiReviewItem.query.filter_by(
+                    sort_date_operation_id=operation.id,
+                    flight_number=f"UPS{900 + index:04d}",
+                ).one()
+
+                response = self.client.post(
+                    f"/motherbrain/operations/{operation.id}/planning/departure/alp/{action}",
+                    data=self._alp_review_item_form(target, wave="1"),
+                    follow_redirects=True,
+                )
+                db.session.refresh(target)
+
+                self.assertEqual(preview.status_code, 200)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(target.review_status, expected_status)
+                self.assertIn(target_row.encode(), response.data)
+                self.assertIn(remaining_row.encode(), response.data)
+                self.assertIn(b"APPLY PREVIEW", response.data)
+                self.assertIn(f"UPS{950 + index:04d}".encode(), response.data)
+                self.assertIn(b"ADD TO CURRENT SORT", response.data)
+                self.assertEqual(
+                    SortDateAlpPreview.query.filter_by(
+                        sort_date_operation_id=operation.id,
+                        mission_type="departure",
+                    ).count(),
+                    1,
+                )
+
+    def test_departure_alp_preview_survives_mark_spare(self):
+        operation = self._operation(sort_date=date(2026, 8, 20))
+        arrival = self._mission(
+            operation,
+            "arrival",
+            "UPS0800",
+            assigned_tail_number="N800UP",
+            arrival_status="scheduled",
+        )
+        db.session.add_all([operation, arrival])
+        db.session.commit()
+        paste = "24-JUN-2026\tUPS999\tSDF\tN999UP\tA01\tScheduled\t07:24 (S)"
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/departure",
+            data={"paste_text": paste, "alp_action": "preview"},
+        )
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/spares/mark",
+            data={"tail_number": "N800UP"},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(paste.encode(), response.data)
+        self.assertIn(b"APPLY PREVIEW", response.data)
+        self.assertIn(b"UPS0999", response.data)
+        self.assertIn(b"ARRIVAL SPARE", response.data)
+
+    def test_alp_row_validation_error_keeps_preview_and_marks_affected_row(self):
+        operation = self._operation(sort_date=date(2026, 8, 21))
+        db.session.add(operation)
+        db.session.commit()
+        paste = "24-JUN-2026\tUPS999\tSDF\tN999UP\tA01\tScheduled\t07:24 (S)"
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/departure",
+            data={"paste_text": paste, "alp_action": "preview"},
+        )
+        target = FlightApiReviewItem.query.filter_by(
+            sort_date_operation_id=operation.id,
+            flight_number="UPS0999",
+        ).one()
+        invalid_form = self._alp_review_item_form(target)
+        invalid_form.pop("wave", None)
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/planning/departure/alp/add",
+            data=invalid_form,
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(paste.encode(), response.data)
+        self.assertIn(b"APPLY PREVIEW", response.data)
+        self.assertIn(b"planning-row-action-error", response.data)
+        self.assertIn(b"Wave is required. Select 1 or 2.", response.data)
+        self.assertEqual(target.review_status, "pending")
+
+    def test_final_apply_uses_preserved_preview_then_clears_it(self):
+        operation = self._operation(sort_date=date(2026, 8, 22))
+        mission = self._mission(
+            operation,
+            "arrival",
+            "UPS0910",
+            assigned_tail_number="NOLDUP",
+            planned_datetime_utc=datetime(2026, 6, 24, 7, 10),
+            eta_datetime_utc=datetime(2026, 6, 24, 7, 10),
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+        matched_row = "24-JUN-2026\tUPS910\tSDF\tN910UP\tA01\tScheduled\t07:24 (S)"
+        unmatched_row = "24-JUN-2026\tUPS999\tDFW\tN999UP\tA02\tScheduled\t07:56 (S)"
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            data={"paste_text": "\n".join((matched_row, unmatched_row)), "alp_action": "preview"},
+        )
+        unmatched = FlightApiReviewItem.query.filter_by(
+            sort_date_operation_id=operation.id,
+            flight_number="UPS0999",
+        ).one()
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/planning/arrival/alp/ignore",
+            data=self._alp_review_item_form(unmatched),
+        )
+
+        applied = self.client.post(
+            f"/motherbrain/operations/{operation.id}/alp/arrival",
+            data={"alp_action": "apply"},
+        )
+        reloaded = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
+        db.session.refresh(mission)
+
+        self.assertEqual(applied.status_code, 200)
+        self.assertEqual(mission.assigned_tail_number, "N910UP")
+        self.assertEqual(mission.eta_datetime_utc, datetime(2026, 6, 24, 7, 24))
+        self.assertEqual(unmatched.review_status, "ignored")
+        self.assertEqual(
+            SortDateAlpPreview.query.filter_by(sort_date_operation_id=operation.id).count(),
+            0,
+        )
+        self.assertNotIn(matched_row.encode(), reloaded.data)
+        self.assertNotIn(b"APPLY PREVIEW", reloaded.data)
+
+    def test_alp_preview_replacement_clear_and_cancel_manage_saved_state(self):
+        operation = self._operation(sort_date=date(2026, 8, 23))
+        db.session.add(operation)
+        db.session.commit()
+        old_paste = "24-JUN-2026\tUPS901\tSDF\tN901UP\tA01\tScheduled\t07:24 (S)"
+        new_paste = "24-JUN-2026\tUPS902\tDFW\tN902UP\tA02\tScheduled\t07:56 (S)"
+        endpoint = f"/motherbrain/operations/{operation.id}/alp/arrival"
+        self.client.post(endpoint, data={"paste_text": old_paste, "alp_action": "preview"})
+        replaced = self.client.post(
+            endpoint,
+            data={"paste_text": new_paste, "alp_action": "preview"},
+        )
+        state = SortDateAlpPreview.query.filter_by(
+            sort_date_operation_id=operation.id,
+            mission_type="arrival",
+        ).one()
+
+        self.assertIn(new_paste.encode(), replaced.data)
+        self.assertNotIn(old_paste.encode(), replaced.data)
+        self.assertEqual(state.paste_text, new_paste)
+
+        cleared = self.client.post(
+            endpoint,
+            data={"alp_action": "clear"},
+            follow_redirects=True,
+        )
+        self.assertEqual(cleared.status_code, 200)
+        self.assertEqual(SortDateAlpPreview.query.count(), 0)
+        self.assertEqual(
+            FlightApiReviewItem.query.filter_by(review_status="pending").count(),
+            0,
+        )
+        self.assertNotIn(new_paste.encode(), cleared.data)
+
+        self.client.post(endpoint, data={"paste_text": old_paste, "alp_action": "preview"})
+        cancelled = self.client.post(
+            endpoint,
+            data={"alp_action": "cancel"},
+            follow_redirects=False,
+        )
+        self.assertEqual(cancelled.status_code, 302)
+        self.assertIn(f"/motherbrain/operations/{operation.id}", cancelled.location)
+        self.assertEqual(SortDateAlpPreview.query.count(), 0)
+        self.assertEqual(
+            FlightApiReviewItem.query.filter_by(review_status="pending").count(),
+            0,
+        )
 
     def test_duplicate_alp_add_reuses_existing_current_sort_mission(self):
         operation = self._operation(sort_date=date(2026, 6, 24))
@@ -13429,6 +13688,23 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "mix_pull_time_local": "",
         }
         values.update(overrides)
+        return values
+
+    def _alp_review_item_form(self, item, wave=None):
+        payload = json.loads(item.raw_payload or "{}")
+        airport = item.origin if item.mission_type == "arrival" else item.destination
+        values = {
+            "review_key": item.review_key,
+            "line_number": str(payload.get("line_number") or ""),
+            "flight_number": item.flight_number,
+            "airport": airport or "",
+            "tail_number": item.tail_number or "",
+            "utc_datetime": item.revised_time_utc.isoformat(),
+            "reason": payload.get("reason") or "",
+            "reason_detail": payload.get("reason_detail") or "",
+        }
+        if wave is not None:
+            values["wave"] = wave
         return values
 
     def _operation(self, **overrides):

@@ -75,8 +75,10 @@
                     </p>
                     <div class="action-row">
                         <button class="action-button" type="submit" name="alp_action" value="preview">PREVIEW</button>
-                        {% if preview %}
+                        {% if preview_is_active %}
                         <button class="action-button" type="submit" name="alp_action" value="apply">APPLY PREVIEW</button>
+                        <button class="action-button action-button-secondary" type="submit" name="alp_action" value="clear">CLEAR PREVIEW</button>
+                        <button class="action-button action-button-secondary" type="submit" name="alp_action" value="cancel">CANCEL PREVIEW</button>
                         {% endif %}
                     </div>
                 </form>
@@ -262,6 +264,9 @@
                             {{ row.reason }}
                             {% if row.reason_detail %}
                             <br><span class="muted">{{ row.reason_detail }}</span>
+                            {% endif %}
+                            {% if row.action_error %}
+                            <br><span class="planning-row-action-error" role="alert">{{ row.action_error }}</span>
                             {% endif %}
                         </td>
                         <td class="table-actions">

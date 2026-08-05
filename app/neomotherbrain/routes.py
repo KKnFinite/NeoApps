@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 import json
 import re
 
-from flask import abort, current_app, flash, jsonify, redirect, render_template, request, url_for
+from flask import abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import func
 
@@ -60,6 +60,11 @@ from app.services.alp_import import (
     apply_alp_paste,
     normalize_alp_flight_number,
     preview_alp_paste,
+)
+from app.services.alp_preview_state import (
+    clear_alp_preview_state,
+    get_alp_preview_state,
+    save_alp_preview_state,
 )
 from app.services.sort_date_operations import (
     ensure_tail_state_for_mission,
@@ -1775,13 +1780,31 @@ def alp_import(operation_id, mission_type):
     if denied:
         return denied
 
-    paste_text = request.form.get("paste_text", "")
-    action = request.form.get("alp_action", "preview")
+    preview_state = get_alp_preview_state(operation, mission_type, current_user)
+    paste_text = preview_state.paste_text if preview_state else ""
     preview = None
+    preview_is_active = preview_state is not None
     if request.method == "POST":
         denied = _permission_guard(_planning_run_permission(mission_type))
         if denied:
             return denied
+        action = request.form.get("alp_action", "preview")
+        if action in {"clear", "cancel"}:
+            clear_alp_preview_state(operation, mission_type, current_user)
+            _clear_pending_alp_planning_rows(operation, mission_type)
+            db.session.commit()
+            flash("ALP preview cleared.", "info")
+            if action == "cancel":
+                return redirect(
+                    url_for("neomotherbrain.operation_detail", operation_id=operation.id)
+                )
+            return redirect(_planning_url(operation.id, mission_type))
+
+        submitted_paste = request.form.get("paste_text")
+        if action == "apply" and not str(submitted_paste or "").strip() and preview_state:
+            paste_text = preview_state.paste_text
+        else:
+            paste_text = str(submitted_paste or "")
         try:
             if action == "apply":
                 preview = apply_alp_paste(
@@ -1794,13 +1817,29 @@ def alp_import(operation_id, mission_type):
                     f"Applied {preview['applied_count']} ALP {preview['label'].lower()} rows.",
                     "info",
                 )
+                clear_alp_preview_state(operation, mission_type, current_user)
+                preview_is_active = False
             else:
                 preview = preview_alp_paste(operation, mission_type, paste_text)
+                save_alp_preview_state(
+                    operation,
+                    mission_type,
+                    paste_text,
+                    current_user,
+                )
+                preview_is_active = True
             _persist_alp_unmatched_rows(operation, mission_type, preview)
             db.session.commit()
         except ValueError as exc:
             db.session.rollback()
             flash(str(exc), "error")
+            preview_state = get_alp_preview_state(operation, mission_type, current_user)
+            if preview_state:
+                paste_text = preview_state.paste_text
+                preview = preview_alp_paste(operation, mission_type, paste_text)
+                preview_is_active = True
+    elif preview_state:
+        preview = preview_alp_paste(operation, mission_type, paste_text)
 
     settings = ensure_sort_timeline_settings(gateway)
     parking_assignments = _parking_assignments_for_operation(operation)
@@ -1834,6 +1873,10 @@ def alp_import(operation_id, mission_type):
         preview=preview,
         settings=settings,
     )
+    _apply_alp_row_action_error(
+        planning_rows,
+        _consume_alp_row_action_error(operation, mission_type),
+    )
     spare_rows = []
     arrival_spare_candidates = []
     if mission_type == "departure":
@@ -1851,6 +1894,7 @@ def alp_import(operation_id, mission_type):
         planning_title=_planning_title(mission_type),
         paste_text=paste_text,
         preview=preview,
+        preview_is_active=preview_is_active,
         planning_rows=planning_rows,
         mission_rows=mission_rows,
         tail_swap_options=_tail_swap_options_for_operation(operation),
@@ -1891,6 +1935,12 @@ def add_alp_planning_row(operation_id, mission_type):
         flash(f"{row['normalized_flight_number']} added to current sort.", "info")
     except ValueError as error:
         db.session.rollback()
+        _remember_alp_row_action_error(
+            operation,
+            mission_type,
+            request.form.get("review_key"),
+            str(error),
+        )
         flash(str(error), "error")
     return redirect(_planning_url(operation.id, mission_type))
 
@@ -1917,6 +1967,12 @@ def hot_alp_planning_row(operation_id, mission_type):
         flash(f"{row['normalized_flight_number']} added as HOT.", "info")
     except (ParkingPlanError, ValueError) as error:
         db.session.rollback()
+        _remember_alp_row_action_error(
+            operation,
+            mission_type,
+            request.form.get("review_key"),
+            str(error),
+        )
         flash(str(error), "error")
     return redirect(_planning_url(operation.id, mission_type))
 
@@ -1941,6 +1997,12 @@ def ignore_alp_planning_row(operation_id, mission_type):
         flash(f"{row['normalized_flight_number']} ignored for this sort.", "info")
     except ValueError as error:
         db.session.rollback()
+        _remember_alp_row_action_error(
+            operation,
+            mission_type,
+            request.form.get("review_key"),
+            str(error),
+        )
         flash(str(error), "error")
     return redirect(_planning_url(operation.id, mission_type))
 
@@ -1978,6 +2040,12 @@ def add_api_planning_row(operation_id, review_item_id):
         flash("API flight added to current sort operation.", "info")
     except ValueError as error:
         db.session.rollback()
+        _remember_alp_row_action_error(
+            operation,
+            mission_type,
+            review_item.review_key,
+            str(error),
+        )
         flash(str(error), "error")
     return redirect(_planning_url(operation.id, mission_type))
 
@@ -2009,6 +2077,12 @@ def hot_api_planning_row(operation_id, review_item_id):
         flash("API departure added as HOT.", "info")
     except ParkingPlanError as error:
         db.session.rollback()
+        _remember_alp_row_action_error(
+            operation,
+            "departure",
+            review_item.review_key,
+            str(error),
+        )
         flash(str(error), "error")
     return redirect(_planning_url(operation.id, "departure"))
 
@@ -2512,6 +2586,43 @@ def _planning_url(operation_id, mission_type):
     )
 
 
+_ALP_ROW_ACTION_ERROR_SESSION_KEY = "motherbrain_alp_row_action_error"
+
+
+def _remember_alp_row_action_error(operation, mission_type, review_key, message):
+    review_key = str(review_key or "").strip()
+    if not review_key:
+        return
+    session[_ALP_ROW_ACTION_ERROR_SESSION_KEY] = {
+        "operation_id": operation.id,
+        "mission_type": mission_type,
+        "review_key": review_key,
+        "message": str(message or "Unable to resolve this planning row."),
+    }
+
+
+def _consume_alp_row_action_error(operation, mission_type):
+    error = session.get(_ALP_ROW_ACTION_ERROR_SESSION_KEY)
+    if not isinstance(error, dict):
+        return None
+    if (
+        error.get("operation_id") != operation.id
+        or error.get("mission_type") != mission_type
+    ):
+        return None
+    session.pop(_ALP_ROW_ACTION_ERROR_SESSION_KEY, None)
+    return error
+
+
+def _apply_alp_row_action_error(rows, error):
+    if not error:
+        return
+    for row in rows:
+        if row.get("review_key") == error.get("review_key"):
+            row["action_error"] = error.get("message")
+            return
+
+
 def _planning_view_permission(mission_type):
     mission_type = _planning_mission_type_or_404(mission_type)
     if mission_type == "arrival":
@@ -2798,7 +2909,24 @@ def _alp_planning_review_key(operation, mission_type, row):
 def _persist_alp_unmatched_rows(operation, mission_type, preview):
     if not preview:
         return
-    for row in preview.get("unmatched_rows", []):
+    rows = preview.get("unmatched_rows", [])
+    active_review_keys = {
+        _alp_planning_review_key(operation, mission_type, row)
+        for row in rows
+    }
+    pending_alp_items = FlightApiReviewItem.query.filter_by(
+        sort_date_operation_id=operation.id,
+        mission_type=mission_type,
+        review_status="pending",
+    ).all()
+    for item in pending_alp_items:
+        payload = _planning_review_payload(item)
+        if str(payload.get("source") or "").strip().upper() != "ALP":
+            continue
+        if item.review_key not in active_review_keys:
+            db.session.delete(item)
+
+    for row in rows:
         row = {**row, "mission_type": mission_type}
         review_key = _alp_planning_review_key(operation, mission_type, row)
         existing = FlightApiReviewItem.query.filter_by(
@@ -2809,6 +2937,18 @@ def _persist_alp_unmatched_rows(operation, mission_type, preview):
             continue
         row["review_key"] = review_key
         _record_alp_planning_marker(operation, row, "pending")
+
+
+def _clear_pending_alp_planning_rows(operation, mission_type):
+    pending_items = FlightApiReviewItem.query.filter_by(
+        sort_date_operation_id=operation.id,
+        mission_type=mission_type,
+        review_status="pending",
+    ).all()
+    for item in pending_items:
+        payload = _planning_review_payload(item)
+        if str(payload.get("source") or "").strip().upper() == "ALP":
+            db.session.delete(item)
 
 
 def _planning_inferred_wave(operation, mission_type, flight_number):
