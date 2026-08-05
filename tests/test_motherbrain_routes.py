@@ -12409,6 +12409,78 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(assignment.position_code, "A01")
         self.assertIn("MARK SPARE", cleared.data.decode())
 
+    def test_standalone_spare_create_form_uses_clean_heading_and_aircraft_type_dropdown(self):
+        operation = self._parking_operation()
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/departure")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('id="planning-spares-title">SPARES</h2>', html)
+        self.assertNotIn("Current-sort ramp tails intentionally held without a departure mission.", html)
+        self.assertNotIn("CREATE STANDALONE SPARE", html)
+        self.assertIn("CREATE SPARE", html)
+        select_match = re.search(
+            r'<select name="aircraft_type" required>(?P<body>.*?)</select>',
+            html,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(select_match)
+        options = re.findall(
+            r'<option value="([^"]+)">([^<]+)</option>',
+            select_match.group("body"),
+        )
+        self.assertEqual(
+            options,
+            [
+                ("757", "757"),
+                ("767", "767"),
+                ("A300", "A300"),
+                ("Other", "Other"),
+            ],
+        )
+        self.assertNotRegex(html, r'<input[^>]+name="aircraft_type"')
+
+    def test_each_approved_aircraft_type_can_create_standalone_spare(self):
+        operation = self._parking_operation()
+        db.session.commit()
+
+        for index, aircraft_type in enumerate(("757", "767", "A300", "Other"), start=1):
+            response = self.client.post(
+                f"/motherbrain/operations/{operation.id}/spares/create",
+                data={
+                    "tail_number": f"N55{index}UP",
+                    "aircraft_type": aircraft_type,
+                },
+                follow_redirects=True,
+            )
+
+            self.assertEqual(response.status_code, 200)
+            state = SortDateTailState.query.filter_by(tail_number=f"N55{index}UP").one()
+            self.assertEqual(state.operational_status, "spare")
+            self.assertEqual(state.aircraft_type, aircraft_type)
+            self.assertEqual(state.aircraft_type_source, "manual")
+            html = response.data.decode()
+            self.assertIn(f"N55{index}UP", html)
+            self.assertIn(aircraft_type, html)
+
+        self.assertEqual(SortDateMission.query.filter_by(sort_date_operation_id=operation.id).count(), 0)
+
+    def test_invalid_standalone_spare_aircraft_type_is_rejected(self):
+        operation = self._parking_operation()
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/spares/create",
+            data={"tail_number": "N888UP", "aircraft_type": "A330"},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"AC Type must be 757, 767, A300, or Other.", response.data)
+        self.assertIsNone(SortDateTailState.query.filter_by(tail_number="N888UP").first())
+
     def test_create_and_remove_standalone_spare_without_missions(self):
         operation = self._parking_operation()
         db.session.commit()

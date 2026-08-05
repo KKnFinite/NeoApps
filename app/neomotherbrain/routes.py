@@ -87,6 +87,7 @@ from app.services.night_sorting import (
 from app.services.permission_rules import permission_access, user_can
 from app.services.parking_plan import (
     PARKING_RAMP_GROUPS,
+    STANDALONE_SPARE_AIRCRAFT_TYPE_OPTIONS,
     ParkingLaneOccupied,
     ParkingPlanError,
     ParkingRuleConflict,
@@ -1861,6 +1862,7 @@ def alp_import(operation_id, mission_type):
         spare_rows=spare_rows,
         arrival_spare_candidates=arrival_spare_candidates,
         parking_positions=PARKING_RAMP_GROUPS,
+        standalone_spare_aircraft_type_options=STANDALONE_SPARE_AIRCRAFT_TYPE_OPTIONS,
     )
 
 

@@ -332,13 +332,10 @@
     </section>
 
     {% if mission_type == "departure" %}
-    <section class="planning-spares-section" aria-labelledby="planning-spares-title">
-        <h2 id="planning-spares-title">SPARES</h2>
-        <p class="muted">Current-sort ramp tails intentionally held without a departure mission.</p>
-
+    <section class="planning-spares-section">
         {% if can_edit %}
         <form class="operation-form planning-spare-create-form" method="post" action="{{ url_for('neomotherbrain.create_operation_spare', operation_id=operation.id) }}">
-            <h3>CREATE STANDALONE SPARE</h3>
+            <h3>CREATE SPARE</h3>
             <div class="inline-form-grid">
                 <label>
                     <span>TAIL</span>
@@ -346,7 +343,11 @@
                 </label>
                 <label>
                     <span>AC TYPE</span>
-                    <input type="text" name="aircraft_type" maxlength="32" autocomplete="off" autocapitalize="characters" required>
+                    <select name="aircraft_type" required>
+                        {% for aircraft_type in standalone_spare_aircraft_type_options %}
+                        <option value="{{ aircraft_type }}">{{ aircraft_type }}</option>
+                        {% endfor %}
+                    </select>
                 </label>
                 <label>
                     <span>PARKING</span>

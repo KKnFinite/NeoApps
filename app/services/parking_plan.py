@@ -53,6 +53,7 @@ TAIL_OPERATIONAL_STATUSES = {
     TAIL_STATUS_QT,
     TAIL_STATUS_OOS,
 }
+STANDALONE_SPARE_AIRCRAFT_TYPE_OPTIONS = ("757", "767", "A300", "Other")
 TAIL_STATUS_LABELS = {
     TAIL_STATUS_HOT: "HOT",
     TAIL_STATUS_SPARE: "SPARE",
@@ -554,11 +555,11 @@ def create_standalone_spare(
     user=None,
 ):
     tail_number = _normalize_tail(tail_number)
-    aircraft_type = _normalize_aircraft_type(aircraft_type)
+    aircraft_type = _normalize_standalone_spare_aircraft_type(aircraft_type)
     if not tail_number:
         raise ParkingPlanError("Tail is required to create a standalone Spare.")
     if not aircraft_type:
-        raise ParkingPlanError("Aircraft type is required to create a standalone Spare.")
+        raise ParkingPlanError("AC Type must be 757, 767, A300, or Other.")
 
     if _mission_count_for_tail(operation, tail_number, "arrival"):
         raise ParkingPlanError("This tail already has an arrival. Use MARK SPARE instead.")
@@ -1269,12 +1270,23 @@ def _normalize_aircraft_type(value):
     text = str(value or "").strip().upper()
     if not text or text == "UNKNOWN":
         return ""
+    if text == "OTHER":
+        return "Other"
     if "A300" in text or "A-300" in text:
         return "A300"
     for aircraft_type in ("747", "757", "767"):
         if aircraft_type in text:
             return aircraft_type
     return text
+
+
+def _normalize_standalone_spare_aircraft_type(value):
+    text = str(value or "").strip().upper()
+    options_by_upper = {
+        option.upper(): option
+        for option in STANDALONE_SPARE_AIRCRAFT_TYPE_OPTIONS
+    }
+    return options_by_upper.get(text, "")
 
 
 def _is_quick_turn(aircraft_type, ground_minutes):
