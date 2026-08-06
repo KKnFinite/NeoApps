@@ -796,6 +796,7 @@ def _pwa_icon_src(src, sizes, purpose):
 
 def register_blueprints(app):
     from app.auth import bp as auth_bp
+    from app.integrations.google_motherbrain import bp as google_motherbrain_bp
     from app.neomotherbrain import bp as neomotherbrain_bp
     from app.neonodes import bp as neonodes_bp
     from app.neonodes.neoermac import bp as neoermac_bp
@@ -804,6 +805,7 @@ def register_blueprints(app):
     from app.neostaffing import bp as neostaffing_bp
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(google_motherbrain_bp)
     app.register_blueprint(neomotherbrain_bp)
     app.register_blueprint(neonodes_bp, url_prefix="/nodes")
     app.register_blueprint(neoermac_bp, url_prefix="/neoermac")

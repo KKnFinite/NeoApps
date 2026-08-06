@@ -51,11 +51,20 @@ def parking_physical_validation_context(operation, tail_rows=None):
     }
 
 
-def validate_parking_physical_rules(operation, tail_rows=None, include_order_conflicts=False):
+def validate_parking_physical_rules(
+    operation,
+    tail_rows=None,
+    include_order_conflicts=False,
+    assignments=None,
+):
     if not operation:
         return []
 
-    assignments = _active_assignments(operation)
+    assignments = (
+        _active_assignments(operation)
+        if assignments is None
+        else _active_assignments_from_preview(assignments)
+    )
     aircraft_type_by_tail = _aircraft_type_by_tail(tail_rows)
     occupancy = _occupancy_by_position(assignments)
     rule_flags = parking_configurable_rule_flags(getattr(operation, "gateway_id", None))
@@ -260,6 +269,15 @@ def _active_assignments(operation):
         for assignment in SortDateParkingAssignment.query.filter_by(
             sort_date_operation_id=operation.id
         ).all()
+        if _position_number(getattr(assignment, "position_code", "")) is not None
+        and _normalize_ramp(getattr(assignment, "ramp_code", ""))
+    ]
+
+
+def _active_assignments_from_preview(assignments):
+    return [
+        assignment
+        for assignment in (assignments or [])
         if _position_number(getattr(assignment, "position_code", "")) is not None
         and _normalize_ramp(getattr(assignment, "ramp_code", ""))
     ]

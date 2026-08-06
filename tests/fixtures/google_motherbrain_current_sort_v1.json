@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "spreadsheet_id": "10Il5VRW-O3-T9RhrVPvvDphUh03vD-heMbqJwxxmyDg",
+  "spreadsheet_title": "RFD-N-sim: Mother Brain",
+  "gateway_code": "RFD",
+  "sort_name": "night",
+  "sort_date": "2026-08-05",
+  "timezone": "America/Chicago",
+  "submitted_at": "2026-08-05T06:30:00Z",
+  "snapshot": {
+    "inbound": {
+      "manual_rows": [],
+      "alp_rows": [],
+      "official_order": []
+    },
+    "outbound": {
+      "manual_rows": [],
+      "alp_rows": [],
+      "official_order": [],
+      "tail_swaps": []
+    },
+    "parking": {
+      "assignments": []
+    }
+  }
+}

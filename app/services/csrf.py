@@ -58,6 +58,8 @@ def validate_csrf_request():
     """Validate the submitted form or fetch token for an unsafe request."""
     if request.method not in UNSAFE_METHODS or not csrf_protection_enabled():
         return True
+    if _resolved_view_is_csrf_exempt():
+        return True
 
     token = _request_token()
     if not token:
@@ -80,6 +82,12 @@ def validate_csrf_request():
     now = int(time.time())
     ttl = int(current_app.config["CSRF_TOKEN_TTL_SECONDS"])
     return issued_at_value <= now and now - issued_at_value <= ttl
+
+
+def csrf_exempt(view_function):
+    """Mark one resolved view as exempt from the global CSRF request guard."""
+    setattr(view_function, "_neoapps_csrf_exempt", True)
+    return view_function
 
 
 def csrf_failure_response():
@@ -131,6 +139,14 @@ def _request_token():
         if value:
             return value
     return request.form.get(CSRF_FORM_FIELD, "")
+
+
+def _resolved_view_is_csrf_exempt():
+    endpoint = request.endpoint
+    if not endpoint:
+        return False
+    view_function = current_app.view_functions.get(endpoint)
+    return bool(getattr(view_function, "_neoapps_csrf_exempt", False))
 
 
 def _is_api_request():
