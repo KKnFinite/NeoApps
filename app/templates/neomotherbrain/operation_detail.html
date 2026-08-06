@@ -70,6 +70,33 @@
                 </label>
                 <button class="action-button" type="submit">UPDATE WINDOW</button>
             </form>
+
+            <section class="google-current-sort-reader" data-google-current-sort-reader>
+                <div class="section-heading">
+                    <h2>GOOGLE CURRENT SORT</h2>
+                    <p>Preview only &mdash; no Neo data will be changed.</p>
+                </div>
+
+                {% if not google_reader_status.enabled %}
+                    <p class="empty-state" data-google-reader-status="disabled">Google reader is disabled.</p>
+                {% elif not google_reader_status.credentials_configured %}
+                    <p class="empty-state" data-google-reader-status="missing-credentials">Google service-account credentials are not configured.</p>
+                {% elif not google_reader_status.credentials_valid %}
+                    <p class="empty-state" data-google-reader-status="invalid-credentials">Google service-account credentials are invalid.</p>
+                {% elif not google_reader_status.spreadsheet_id_configured %}
+                    <p class="empty-state" data-google-reader-status="missing-spreadsheet">The Google MotherBrain spreadsheet ID is not configured.</p>
+                {% elif not google_reader_status.spreadsheet_id_valid %}
+                    <p class="empty-state" data-google-reader-status="invalid-spreadsheet">The configured spreadsheet ID does not match the locked MotherBrain workbook.</p>
+                {% else %}
+                    <p data-google-reader-status="ready">
+                        READY &mdash; share the locked workbook as Viewer with
+                        <strong>{{ google_reader_status.service_account_email }}</strong>.
+                    </p>
+                    <form method="post" action="{{ url_for('neomotherbrain.google_current_sort_preview', operation_id=operation.id) }}">
+                        <button class="action-button primary-action" type="submit">READ GOOGLE CURRENT SORT</button>
+                    </form>
+                {% endif %}
+            </section>
         </div>
     </div>
 </section>

@@ -24630,3 +24630,59 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         height: 30px;
     }
 }
+.google-current-sort-reader {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(216, 32, 42, 0.5);
+    text-align: center;
+}
+
+.google-current-sort-reader form,
+.google-current-sort-preview-page .page-actions {
+    display: flex;
+    justify-content: center;
+}
+
+.google-current-sort-preview-page [data-preview-section] {
+    margin-top: 2rem;
+}
+
+.google-current-sort-preview-page .status-badge {
+    display: inline-block;
+    padding: 0.55rem 0.8rem;
+    border: 1px solid #ff3b46;
+    color: #fff;
+    background: rgba(122, 15, 22, 0.45);
+}
+
+.google-preview-detail-group {
+    margin-top: 1rem;
+    text-align: left;
+}
+
+.google-preview-detail-group h3 {
+    text-align: center;
+}
+
+.google-preview-detail-table details {
+    min-width: 0;
+    border: 1px solid rgba(216, 32, 42, 0.45);
+    background: rgba(10, 11, 14, 0.75);
+}
+
+.google-preview-detail-table summary {
+    padding: 0.65rem 0.8rem;
+    cursor: pointer;
+    text-align: center;
+}
+
+.google-preview-detail-table pre {
+    max-width: 100%;
+    margin: 0;
+    padding: 0.75rem;
+    overflow: auto;
+    color: #e8edf2;
+    background: #0a0b0e;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}

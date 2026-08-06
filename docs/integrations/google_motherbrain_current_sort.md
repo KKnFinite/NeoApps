@@ -2,9 +2,16 @@
 
 ## Purpose
 
-This integration accepts a complete current-sort snapshot from the locked RFD Google
-MotherBrain workbook, normalizes it with NeoMotherBrain rules, resolves the exact RFD
-Night Sort operation, and returns a machine-readable preview.
+This integration supports two preview-only transports for the locked RFD Google
+MotherBrain workbook:
+
+1. The preferred in-app reader, started by an authenticated operator from the selected
+   RFD Night Sort operation.
+2. The legacy Apps Script sender, which posts the same schema-version-1 envelope to the
+   token-protected external endpoint when that endpoint is explicitly enabled.
+
+Both transports normalize the snapshot with NeoMotherBrain rules, resolve the exact RFD
+Night Sort operation, and return a preview.
 
 This first version is **preview-only**. It contains no Apply endpoint and cannot create,
 update, delete, cancel, park, unpark, or otherwise change operational records.
@@ -23,12 +30,38 @@ update, delete, cancel, park, unpark, or otherwise change operational records.
   successful and exceptional responses.
 - Responses use `Cache-Control: no-store`.
 
+The in-app reader adds these boundaries:
+
+- `GOOGLE_MOTHERBRAIN_READER_ENABLED` defaults to `false`.
+- The operation page checks only local configuration to display reader status; opening the
+  page does not call Google.
+- The reader authenticates with a service account and requests only the
+  `spreadsheets.readonly` scope.
+- It performs two bounded batch reads over the locked ranges: one raw read for date serials
+  and one formatted read for operational text.
+- It never calls a Google write, append, update, clear, Drive, Apps Script, formula, image,
+  or chart API.
+- The browser POST uses normal NeoGateway authentication, MotherBrain node access,
+  `neomotherbrain.manage_sort.edit`, and standard CSRF protection.
+- The browser route also unconditionally rolls back the SQLAlchemy session before returning.
+
 A reviewed, manually installed bound-script sender is available under
 `integrations/google_motherbrain/apps_script`. It provides only a manual preview menu
 action. There are no automatic triggers, spreadsheet writes, Apply action, or
 Neo-to-Google publishing.
 
 ## Endpoint
+
+### Preferred in-app reader
+
+```text
+POST /motherbrain/operations/<operation_id>/google-current-sort/preview
+```
+
+Open the selected RFD Night Sort operation and use **READ GOOGLE CURRENT SORT**. The
+results page has no Apply action and displays **PREVIEW ONLY — NO NEO DATA WAS CHANGED**.
+
+### Legacy external sender
 
 ```text
 POST /integrations/google-motherbrain/current-sort/preview
@@ -40,6 +73,9 @@ X-Neo-Integration-Token: <configured token>
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
+| `GOOGLE_MOTHERBRAIN_READER_ENABLED` | `false` | Enables the authenticated in-app reader when explicitly set true. |
+| `GOOGLE_MOTHERBRAIN_SERVICE_ACCOUNT_JSON` | none | Preferred service-account JSON for the reader. |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | none | Compatibility fallback used only when the dedicated reader credential is absent. |
 | `GOOGLE_MOTHERBRAIN_IMPORT_ENABLED` | `false` | Enables the endpoint when explicitly set true. |
 | `GOOGLE_MOTHERBRAIN_IMPORT_TOKEN` | none | Required shared integration token. Never commit a real value. |
 | `GOOGLE_MOTHERBRAIN_SPREADSHEET_ID` | `10Il5VRW-O3-T9RhrVPvvDphUh03vD-heMbqJwxxmyDg` | Locked workbook ID. |
@@ -47,6 +83,23 @@ X-Neo-Integration-Token: <configured token>
 
 When disabled, the endpoint returns `404`. When enabled without a valid token, it returns a
 generic `401` without exposing configuration details.
+
+The reader remains unavailable until its separate flag is enabled, even when credentials
+are present. Share the locked workbook as **Viewer** with the service account shown on the
+operation page. The configured spreadsheet ID must remain
+`10Il5VRW-O3-T9RhrVPvvDphUh03vD-heMbqJwxxmyDg`; the title must remain
+`RFD-N-sim: Mother Brain`; and its timezone must remain `America/Chicago`.
+
+### Manual production setup
+
+1. Deploy the reader code while leaving `GOOGLE_MOTHERBRAIN_READER_ENABLED=false`.
+2. Add or confirm the service-account JSON in Render without logging its contents.
+3. Share the locked MotherBrain workbook with the service-account client email as Viewer.
+4. Set `GOOGLE_MOTHERBRAIN_READER_ENABLED=true` and redeploy.
+5. Open the matching RFD Night Sort operation.
+6. Select **READ GOOGLE CURRENT SORT**.
+7. Review the preview results; no Google or Neo operational data is written.
+8. Set the reader flag back to `false` immediately if access needs to be withdrawn.
 
 ## Schema Version 1
 

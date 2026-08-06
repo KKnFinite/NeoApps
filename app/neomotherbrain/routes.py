@@ -2,7 +2,18 @@ from datetime import date, datetime, timedelta, timezone
 import json
 import re
 
-from flask import abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import (
+    abort,
+    current_app,
+    flash,
+    jsonify,
+    make_response,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from flask_login import current_user, login_required
 from sqlalchemy import func
 
@@ -113,6 +124,18 @@ from app.services.parking_plan import (
     tail_status_is_hot_for_operation,
     tail_operational_status_label,
     unassign_tail,
+)
+from app.services.google_motherbrain_import import (
+    GoogleMotherBrainOperationError,
+    GoogleMotherBrainPayloadError,
+    build_google_motherbrain_preview,
+    resolve_google_motherbrain_operation,
+    validate_google_motherbrain_envelope,
+)
+from app.services.google_motherbrain_sheets import (
+    GoogleMotherBrainReaderError,
+    google_motherbrain_reader_status,
+    read_google_motherbrain_envelope,
 )
 from app.services.parking_optimizer import (
     apply_parking_optimizer_plan,
@@ -1723,8 +1746,113 @@ def operation_detail(operation_id):
         arrival_count=arrival_count,
         departure_count=departure_count,
         mission_count=arrival_count + departure_count,
+        google_reader_status=google_motherbrain_reader_status(),
         **_flight_api_auto_poll_timer_context(gateway, operation=operation),
     )
+
+
+@bp.post(
+    "/motherbrain/operations/<int:operation_id>/google-current-sort/preview"
+)
+@gateway_node_required("motherbrain", minimum_role="operator")
+def google_current_sort_preview(operation_id):
+    denied = _permission_guard(MANAGE_SORT_EDIT_PERMISSION)
+    if denied:
+        return denied
+
+    operation = _operation_or_404(operation_id)
+    try:
+        if (
+            str(operation.gateway_code or "").strip().upper() != "RFD"
+            or str(operation.sort_name or "").strip().lower() != "night"
+        ):
+            raise GoogleMotherBrainReaderError(
+                "operation_mismatch",
+                "Google current-sort preview is available only for the RFD Night Sort.",
+            )
+
+        envelope = read_google_motherbrain_envelope()
+        validated = validate_google_motherbrain_envelope(
+            envelope,
+            current_app.config.get("GOOGLE_MOTHERBRAIN_SPREADSHEET_ID"),
+        )
+        if (
+            validated["sort_date"] != operation.sort_date
+            or validated["gateway_code"]
+            != str(operation.gateway_code or "").strip().upper()
+            or validated["sort_name"]
+            != str(operation.sort_name or "").strip().lower()
+        ):
+            raise GoogleMotherBrainReaderError(
+                "operation_mismatch",
+                "The Google workbook sort date does not match the selected Neo operation.",
+            )
+
+        resolved_operation = resolve_google_motherbrain_operation(validated)
+        if resolved_operation.id != operation.id:
+            raise GoogleMotherBrainReaderError(
+                "operation_mismatch",
+                "The Google workbook sort date does not match the selected Neo operation.",
+            )
+
+        preview = build_google_motherbrain_preview(validated, resolved_operation)
+        response = make_response(
+            render_template(
+                "neomotherbrain/google_current_sort_preview.html",
+                operation=resolved_operation,
+                preview=preview,
+                preview_timestamp=validated["submitted_at"],
+            )
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    except (
+        GoogleMotherBrainReaderError,
+        GoogleMotherBrainPayloadError,
+        GoogleMotherBrainOperationError,
+    ) as error:
+        current_app.logger.warning(
+            "Google MotherBrain reader preview failed code=%s operation_id=%s",
+            getattr(error, "code", "preview_failed"),
+            operation.id,
+        )
+        flash(
+            getattr(
+                error,
+                "message",
+                "Google current-sort preview could not be built.",
+            ),
+            "error",
+        )
+        response = make_response(
+            redirect(
+                url_for(
+                    "neomotherbrain.operation_detail",
+                    operation_id=operation.id,
+                )
+            )
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    except Exception as error:
+        current_app.logger.error(
+            "Google MotherBrain reader preview failed error_type=%s operation_id=%s",
+            type(error).__name__,
+            operation.id,
+        )
+        flash("Google current-sort preview could not be built.", "error")
+        response = make_response(
+            redirect(
+                url_for(
+                    "neomotherbrain.operation_detail",
+                    operation_id=operation.id,
+                )
+            )
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    finally:
+        db.session.rollback()
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>/arrivals")
