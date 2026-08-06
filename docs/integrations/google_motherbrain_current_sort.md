@@ -23,7 +23,9 @@ update, delete, cancel, park, unpark, or otherwise change operational records.
   successful and exceptional responses.
 - Responses use `Cache-Control: no-store`.
 
-There is no Google Apps Script in this release. There are no automatic triggers and no
+A reviewed, manually installed bound-script sender is available under
+`integrations/google_motherbrain/apps_script`. It provides only a manual preview menu
+action. There are no automatic triggers, spreadsheet writes, Apply action, or
 Neo-to-Google publishing.
 
 ## Endpoint
