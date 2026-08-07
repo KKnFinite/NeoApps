@@ -14,6 +14,7 @@ from app.services.parking_physical_validator import (
     NORMAL_RAMP_CODES,
     REMOTE_ORDER,
     VALID_767_NORMAL_ANCHORS,
+    echo_767_clearance_position,
     parking_767_footprint_positions,
     parking_configurable_rule_flags,
     validate_parking_physical_rules,
@@ -1483,6 +1484,22 @@ def _add_767_block_constraints(model, variables, fill_exprs):
         variables_by_position.setdefault(placement.position, []).append((placement, variable))
 
     for placement, variable in variables.items():
+        clearance_position = (
+            echo_767_clearance_position(placement.position)
+            if placement.aircraft_type == "767"
+            else ""
+        )
+        if clearance_position:
+            if _is_constant_one(_fill_expr(fill_exprs, clearance_position)):
+                model.Add(variable == 0)
+            else:
+                for clearance_placement, clearance_variable in variables_by_position.get(
+                    clearance_position,
+                    [],
+                ):
+                    if clearance_placement.tail != placement.tail:
+                        model.Add(variable + clearance_variable <= 1)
+
         blocked = _blocked_position_for_placement(placement)
         if not blocked:
             continue
@@ -1540,7 +1557,7 @@ def _add_configurable_parking_rule_constraints(
         if placement.aircraft_type == "A300"
     ]
     for placement, variable in variables.items():
-        if placement.aircraft_type != "767":
+        if placement.aircraft_type != "767" or placement.ramp == "E":
             continue
         for a300_placement, a300_variable in a300_placements:
             if placement.ramp != a300_placement.ramp:
@@ -2682,6 +2699,9 @@ def _placement_allows_aircraft(
     ramp = _ramp_from_position(position)
     if aircraft_type != "767":
         return True
+    clearance_position = echo_767_clearance_position(position)
+    if clearance_position:
+        return clearance_position not in (locked_filled_positions or set())
     if ramp not in NORMAL_767_FOOTPRINT_RAMP_CODES or number in (9, 10):
         return True
     footprint = _candidate_footprint_positions(
@@ -2710,6 +2730,8 @@ def _configurable_rule_blocks_candidate(
     ):
         return True
     if aircraft_type == "767":
+        if _ramp_from_position(position) == "E":
+            return False
         if not footprint_positions:
             return True
         if _configurable_rule_enabled(configurable_rule_flags, "force_767_to_position_4_8"):
@@ -2730,6 +2752,8 @@ def _configurable_rule_blocks_candidate(
         aircraft_type == "A300"
         and _configurable_rule_enabled(configurable_rule_flags, "prevent_767_adjacent_to_a300")
     ):
+        if _ramp_from_position(position) == "E":
+            return False
         return any(
             _positions_are_directly_adjacent(locked_767_position, position)
             for locked_767_position in (locked_767_positions or ())

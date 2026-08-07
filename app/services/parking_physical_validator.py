@@ -24,6 +24,7 @@ NORMAL_767_FOOTPRINT_RAMP_CODES = ("A", "B", "C", "D")
 NORMAL_BANKS = ((1, 2, 3, 4), (5, 6, 7, 8))
 REMOTE_ORDER = ("R01", "R02", "R03", "R04")
 VALID_767_NORMAL_ANCHORS = {1: 2, 2: 3, 3: 4, 5: 6, 6: 7, 7: 8}
+ECHO_767_CLEARANCE_POSITIONS = {"E04": "E03", "E08": "E07"}
 PARKING_ALERT_KEY_PREFIX = "parking-physical"
 
 
@@ -77,6 +78,9 @@ def validate_parking_physical_rules(
         conflicts.extend(_remote_fill_order_conflicts(occupancy, blocked))
     conflicts.extend(
         _normal_767_conflicts(assignments, aircraft_type_by_tail, occupancy, rule_flags)
+    )
+    conflicts.extend(
+        _echo_767_clearance_conflicts(assignments, aircraft_type_by_tail, occupancy)
     )
     conflicts.extend(
         _configurable_parking_rule_conflicts(
@@ -411,6 +415,8 @@ def _configurable_parking_rule_conflicts(
         for _assignment, tail, position in typed_assignments:
             if aircraft_type_by_tail.get(tail) != "767":
                 continue
+            if _normalize_ramp(position[:1]) == "E":
+                continue
             for a300_tail, a300_position in a300_positions:
                 if not _positions_are_directly_adjacent(position, a300_position):
                     continue
@@ -567,6 +573,41 @@ def _normal_767_conflicts(assignments, aircraft_type_by_tail, occupancy, rule_fl
                     f"blocked_by_767_{position}_{tail}",
                 )
             )
+    return conflicts
+
+
+def echo_767_clearance_position(position):
+    """Return the Echo slot that must stay clear for a 767 placement."""
+    return ECHO_767_CLEARANCE_POSITIONS.get(_normalize_position(position), "")
+
+
+def _echo_767_clearance_conflicts(assignments, aircraft_type_by_tail, occupancy):
+    conflicts = []
+    for assignment in assignments:
+        position = _normalize_position(getattr(assignment, "position_code", ""))
+        tail = _normalize_tail(getattr(assignment, "tail_number", ""))
+        if aircraft_type_by_tail.get(tail) != "767":
+            continue
+        clearance_position = echo_767_clearance_position(position)
+        if not clearance_position:
+            continue
+        blocking_occupants = [
+            occupant
+            for occupant in occupancy.get(clearance_position, [])
+            if _normalize_tail(getattr(occupant, "tail_number", "")) != tail
+        ]
+        if not blocking_occupants:
+            continue
+        conflicts.append(
+            _conflict(
+                "critical",
+                "Echo 767 clearance conflict",
+                position,
+                tail,
+                f"{clearance_position} must remain clear while 767 {tail} is parked at {position}.",
+                "echo_767_clearance",
+            )
+        )
     return conflicts
 
 
