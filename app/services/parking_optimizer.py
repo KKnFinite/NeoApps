@@ -24,7 +24,11 @@ from app.services.parking_aircraft import (
     normalize_parking_aircraft_type,
     resolve_parking_aircraft_type_from_tail,
 )
-from app.services.parking_plan import parking_position_options, tail_rows_for_operation
+from app.services.parking_plan import (
+    parking_position_options,
+    promote_secondary_parking_slots,
+    tail_rows_for_operation,
+)
 from app.services.parking_rules import (
     AIRCRAFT_TYPE_RAMP_RESTRICTION,
     AIRCRAFT_TYPE_RAMP_PREFERENCE,
@@ -671,7 +675,7 @@ def apply_parking_optimizer_plan(
         occupied_lanes.add((position, lane))
         result["applied_count"] += 1
 
-    db.session.flush()
+    promote_secondary_parking_slots(operation, user=user)
     unresolved_count = len(preview.get("unassigned_tails") or [])
     result["ok"] = result["applied_count"] > 0
     result["message"] = (

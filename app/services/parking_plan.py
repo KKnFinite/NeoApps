@@ -433,7 +433,7 @@ def assign_tail_to_lane(
         assignment.note = str(note or "").strip()
     assignment.assigned_by_user_id = getattr(user, "id", None)
     assignment.assigned_at = _utc_now()
-    db.session.flush()
+    promote_secondary_parking_slots(operation, user=user)
     return assignment
 
 
@@ -446,7 +446,7 @@ def unassign_tail(operation, tail_number, user=None):
     assignment.lane_number = None
     assignment.assigned_by_user_id = getattr(user, "id", None)
     assignment.assigned_at = _utc_now()
-    db.session.flush()
+    promote_secondary_parking_slots(operation, user=user)
     return assignment
 
 
@@ -467,8 +467,56 @@ def clear_parking_assignments(operation, user=None):
         assignment.lane_number = None
         assignment.assigned_by_user_id = user_id
         assignment.assigned_at = now
-    db.session.flush()
+    promote_secondary_parking_slots(operation, user=user)
     return len(assigned)
+
+
+def promote_secondary_parking_slots(operation, user=None):
+    """Promote lone Slot 2 occupants into Slot 1 at the same position."""
+    db.session.flush()
+    assignments = (
+        SortDateParkingAssignment.query.filter_by(
+            sort_date_operation_id=operation.id,
+        )
+        .filter(
+            SortDateParkingAssignment.position_code.isnot(None),
+            SortDateParkingAssignment.lane_number.in_(PARKING_LANES),
+        )
+        .order_by(
+            SortDateParkingAssignment.ramp_code.asc(),
+            SortDateParkingAssignment.position_code.asc(),
+            SortDateParkingAssignment.lane_number.asc(),
+            SortDateParkingAssignment.id.asc(),
+        )
+        .all()
+    )
+    lanes_by_position = {}
+    for assignment in assignments:
+        position_key = (
+            _normalize_ramp_code(assignment.ramp_code),
+            _normalize_position_code(assignment.position_code),
+        )
+        if not all(position_key):
+            continue
+        lanes_by_position.setdefault(position_key, {})[
+            assignment.lane_number
+        ] = assignment
+
+    promoted = []
+    user_id = getattr(user, "id", None)
+    now = _utc_now()
+    for lanes in lanes_by_position.values():
+        secondary = lanes.get(2)
+        if lanes.get(1) is not None or secondary is None:
+            continue
+        secondary.lane_number = 1
+        if user is not None:
+            secondary.assigned_by_user_id = user_id
+        secondary.assigned_at = now
+        promoted.append(secondary)
+
+    db.session.flush()
+    return promoted
 
 
 def set_tail_hot(operation, tail_number, is_hot, user=None, note=None):
@@ -638,6 +686,7 @@ def remove_standalone_spare(operation, tail_number):
         db.session.delete(assignment)
     db.session.delete(tail_state)
     db.session.flush()
+    promote_secondary_parking_slots(operation)
     return tail_number
 
 

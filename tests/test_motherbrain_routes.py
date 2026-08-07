@@ -12957,6 +12957,46 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"N555UP", response.data)
         self.assertEqual(SortDateParkingAssignment.query.filter_by(tail_number="N555UP").count(), 1)
 
+    def test_removing_primary_standalone_spare_promotes_secondary(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N777UP", destination="DFW")
+        db.session.commit()
+        created = self.client.post(
+            f"/motherbrain/operations/{operation.id}/spares/create",
+            data={
+                "tail_number": "N555UP",
+                "aircraft_type": "767",
+                "position_code": "A03",
+                "lane_number": "1",
+            },
+        )
+        secondary = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N777UP",
+                "ramp_code": "A",
+                "position_code": "A03",
+                "lane_number": "2",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(created.status_code, 302)
+        self.assertEqual(secondary.status_code, 200)
+        self.assertEqual(
+            self._parking_assignment_for_tail(operation, "N777UP").lane_number,
+            2,
+        )
+
+        removed = self.client.post(
+            f"/motherbrain/operations/{operation.id}/spares/remove",
+            data={"tail_number": "N555UP"},
+        )
+
+        self.assertEqual(removed.status_code, 302)
+        promoted = self._parking_assignment_for_tail(operation, "N777UP")
+        self.assertEqual((promoted.position_code, promoted.lane_number), ("A03", 1))
+
     def test_standalone_spare_duplicate_arrival_requires_mark_spare(self):
         operation = self._parking_operation()
         db.session.add(
@@ -13179,7 +13219,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(MasterFlightSchedule.query.count(), 1)
         self.assertEqual(db.session.get(MasterFlightSchedule, master.id).destination, "LAX")
 
-    def test_tail_can_only_be_assigned_once_and_moves_slots(self):
+    def test_tail_can_only_be_assigned_once_and_empty_slot_two_promotes(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP")
         db.session.commit()
@@ -13206,7 +13246,163 @@ class MotherBrainRoutesTest(unittest.TestCase):
         assignments = SortDateParkingAssignment.query.all()
         self.assertEqual(len(assignments), 1)
         self.assertEqual(assignments[0].position_code, "B02")
-        self.assertEqual(assignments[0].lane_number, 2)
+        self.assertEqual(assignments[0].lane_number, 1)
+
+    def test_moving_primary_occupant_promotes_secondary_in_old_position(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N111UP", destination="ONT")
+        self._parking_pair(operation, "N222UP", destination="LAX")
+        db.session.flush()
+        self._parking_assignment(operation, "N111UP", "A03", lane_number=1)
+        self._parking_assignment(operation, "N222UP", "A03", lane_number=2)
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N111UP",
+                "ramp_code": "A",
+                "position_code": "A05",
+                "lane_number": "1",
+                "confirm_rule_override": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        moved = self._parking_assignment_for_tail(operation, "N111UP")
+        promoted = self._parking_assignment_for_tail(operation, "N222UP")
+        self.assertEqual((moved.position_code, moved.lane_number), ("A05", 1))
+        self.assertEqual((promoted.position_code, promoted.lane_number), ("A03", 1))
+        self.assertEqual(
+            SortDateParkingAssignment.query.filter_by(
+                sort_date_operation_id=operation.id,
+                position_code="A03",
+                lane_number=2,
+            ).count(),
+            0,
+        )
+
+    def test_unassigning_primary_occupant_promotes_secondary(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N111UP", destination="ONT")
+        self._parking_pair(operation, "N222UP", destination="LAX")
+        db.session.flush()
+        self._parking_assignment(operation, "N111UP", "E04", ramp_code="E", lane_number=1)
+        self._parking_assignment(operation, "N222UP", "E04", ramp_code="E", lane_number=2)
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/unassign",
+            data={"tail_number": "N111UP"},
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        removed = self._parking_assignment_for_tail(operation, "N111UP")
+        promoted = self._parking_assignment_for_tail(operation, "N222UP")
+        self.assertIsNone(removed.position_code)
+        self.assertIsNone(removed.lane_number)
+        self.assertEqual((promoted.position_code, promoted.lane_number), ("E04", 1))
+
+    def test_primary_stays_put_when_secondary_is_removed(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N111UP", destination="ONT")
+        self._parking_pair(operation, "N222UP", destination="LAX")
+        db.session.flush()
+        self._parking_assignment(operation, "N111UP", "A03", lane_number=1)
+        self._parking_assignment(operation, "N222UP", "A03", lane_number=2)
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/unassign",
+            data={"tail_number": "N222UP"},
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        primary = self._parking_assignment_for_tail(operation, "N111UP")
+        removed = self._parking_assignment_for_tail(operation, "N222UP")
+        self.assertEqual((primary.position_code, primary.lane_number), ("A03", 1))
+        self.assertIsNone(removed.position_code)
+        self.assertIsNone(removed.lane_number)
+
+    def test_occupied_primary_keeps_secondary_in_slot_two(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N111UP", destination="ONT")
+        self._parking_pair(operation, "N222UP", destination="LAX")
+        db.session.commit()
+
+        first = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N111UP",
+                "ramp_code": "A",
+                "position_code": "A03",
+                "lane_number": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+        second = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N222UP",
+                "ramp_code": "A",
+                "position_code": "A03",
+                "lane_number": "2",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        primary = self._parking_assignment_for_tail(operation, "N111UP")
+        secondary = self._parking_assignment_for_tail(operation, "N222UP")
+        self.assertEqual((primary.position_code, primary.lane_number), ("A03", 1))
+        self.assertEqual((secondary.position_code, secondary.lane_number), ("A03", 2))
+
+    def test_promotion_keeps_echo_position_and_conflict_alert_lifecycle(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N111UP", aircraft_type="757", destination="ONT")
+        self._parking_pair(operation, "N967UP", aircraft_type="767", destination="LAX")
+        self._parking_pair(operation, "N333UP", aircraft_type="757", destination="SDF")
+        db.session.flush()
+        self._parking_assignment(operation, "N111UP", "E04", ramp_code="E", lane_number=1)
+        self._parking_assignment(operation, "N967UP", "E04", ramp_code="E", lane_number=2)
+        self._parking_assignment(operation, "N333UP", "E03", ramp_code="E", lane_number=1)
+        db.session.commit()
+
+        self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/unassign",
+            data={"tail_number": "N111UP"},
+            headers={"Accept": "application/json"},
+        )
+        promoted = self._parking_assignment_for_tail(operation, "N967UP")
+        self.assertEqual((promoted.position_code, promoted.lane_number), ("E04", 1))
+
+        conflict_page = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        active_alert = MotherBrainAlert.query.filter_by(
+            sort_date_operation_id=operation.id,
+            title="Echo 767 clearance conflict",
+            active=True,
+        ).one()
+        self.assertIn(b"E03 must remain clear", conflict_page.data)
+
+        move_blocker = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N333UP",
+                "ramp_code": "E",
+                "position_code": "E02",
+                "lane_number": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+        self.assertEqual(move_blocker.status_code, 200)
+        cleared_page = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+
+        self.assertNotIn(b"E03 must remain clear", cleared_page.data)
+        self.assertFalse(db.session.get(MotherBrainAlert, active_alert.id).active)
 
     def test_occupied_slot_requires_confirmation_and_replaces_previous_tail(self):
         operation = self._parking_operation()
