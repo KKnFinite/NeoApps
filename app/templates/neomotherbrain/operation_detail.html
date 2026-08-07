@@ -71,10 +71,35 @@
                 <button class="action-button" type="submit">UPDATE WINDOW</button>
             </form>
 
-            <section class="google-current-sort-reader" data-google-current-sort-reader>
+            <section id="google-current-sort-reader" class="google-current-sort-reader" data-google-current-sort-reader>
                 <div class="section-heading">
                     <h2>GOOGLE CURRENT SORT</h2>
                     <p>Preview only &mdash; no Neo data will be changed.</p>
+                </div>
+
+                <div class="google-live-polling-control" data-google-live-polling-control>
+                    <div class="google-live-polling-state">
+                        <span>LIVE GOOGLE POLLING</span>
+                        <strong
+                            class="google-live-polling-badge {{ 'is-on' if google_live_polling_status.enabled else 'is-off' }}"
+                            data-google-live-polling-state="{{ 'on' if google_live_polling_status.enabled else 'off' }}"
+                        >{{ "ON" if google_live_polling_status.enabled else "OFF" }}</strong>
+                    </div>
+                    <p>
+                        ON authorizes future automatic Google MotherBrain polling. OFF keeps
+                        automatic polling disabled; manual preview remains available.
+                    </p>
+                    {% if can_manage_google_live_polling %}
+                        <form method="post" action="{{ url_for('neomotherbrain.update_google_live_polling', operation_id=operation.id) }}">
+                            {% if google_live_polling_status.enabled %}
+                                <button class="action-button destructive-action" type="submit" name="action" value="disable">DISABLE LIVE POLLING</button>
+                            {% else %}
+                                <button class="action-button primary-action" type="submit" name="action" value="enable">ENABLE LIVE POLLING</button>
+                            {% endif %}
+                        </form>
+                    {% else %}
+                        <p class="view-only-pill">VIEW ONLY</p>
+                    {% endif %}
                 </div>
 
                 {% if not google_reader_status.enabled %}

@@ -91,6 +91,11 @@ DEFAULT_PERMISSION_RULES = (
         "Save sort operation windows, mission rows, and generated sort data updates.",
     ),
     (
+        "neomotherbrain.google_live_polling.edit",
+        "simulator",
+        "Enable or disable future Google MotherBrain live polling.",
+    ),
+    (
         "neomotherbrain.arrival_planning.view",
         "operator",
         "View NeoMotherBrain Arrival Planning screens.",
@@ -657,6 +662,15 @@ PERMISSION_RULE_ITEMS = (
         {
             "view": "neomotherbrain.manage_sort.view",
             "edit": "neomotherbrain.manage_sort.edit",
+        },
+    ),
+    (
+        "motherbrain",
+        "neomotherbrain.google_live_polling",
+        "Google Live Polling",
+        "Runtime authorization for future Google MotherBrain live polling.",
+        {
+            "edit": "neomotherbrain.google_live_polling.edit",
         },
     ),
     (

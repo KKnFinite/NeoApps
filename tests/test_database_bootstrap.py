@@ -16,6 +16,7 @@ from app.models import (
     GatewayMembership,
     GatewayNodeRole,
     MasterFlightSchedule,
+    MotherBrainGoogleIntegrationSetting,
     NeoNode,
     NeoSektorOperationalSetting,
     PermissionRule,
@@ -95,6 +96,11 @@ class DatabaseBootstrapTest(unittest.TestCase):
             gateway_id=gateway.id
         ).one()
         self.assertFalse(neosektor_settings.google_sheets_compat_enabled)
+        google_polling_setting = MotherBrainGoogleIntegrationSetting.query.filter_by(
+            gateway_id=gateway.id,
+            sort_name="night",
+        ).one()
+        self.assertFalse(google_polling_setting.live_polling_enabled)
         self.assertTrue(user.check_password(LOCAL_SQLITE_FALLBACK_PASSWORD))
         self.assertTrue(result["created_user"])
         self.assertTrue(result["password_applied"])
@@ -165,6 +171,7 @@ class DatabaseBootstrapTest(unittest.TestCase):
         self.assertEqual(Gateway.query.filter_by(code="RFD").count(), 1)
         self.assertEqual(NeoNode.query.count(), len(DEFAULT_NEONODES))
         self.assertEqual(PermissionRule.query.count(), len(DEFAULT_PERMISSION_RULES))
+        self.assertEqual(MotherBrainGoogleIntegrationSetting.query.count(), 1)
         self.assertEqual(User.query.filter_by(username="Kessler").count(), 1)
         self.assertEqual(GatewayMembership.query.filter_by(user_id=user.id).count(), 1)
         self.assertEqual(

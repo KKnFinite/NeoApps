@@ -24643,6 +24643,40 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     justify-content: center;
 }
 
+.google-live-polling-control {
+    width: min(100%, 720px);
+    margin: 0 auto 1.5rem;
+    padding: 1rem;
+    border: 1px solid rgba(216, 32, 42, 0.45);
+    background: rgba(10, 11, 14, 0.72);
+}
+
+.google-live-polling-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    font-weight: 800;
+}
+
+.google-live-polling-badge {
+    min-width: 3.5rem;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid currentColor;
+    text-align: center;
+}
+
+.google-live-polling-badge.is-off {
+    color: #c6ccd3;
+    background: #202329;
+}
+
+.google-live-polling-badge.is-on {
+    color: #fff;
+    background: #7a0f16;
+    box-shadow: 0 0 14px rgba(255, 59, 70, 0.45);
+}
+
 .google-current-sort-preview-page [data-preview-section] {
     margin-top: 2rem;
 }

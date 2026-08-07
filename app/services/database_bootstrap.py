@@ -12,6 +12,9 @@ from app.services.password_policy import set_user_password
 from app.services.schema_sync import sync_database_schema
 from app.services.database_startup_retry import run_startup_database_action
 from app.services.neosektor_sheets_compat import ensure_sheets_compatibility_setting
+from app.services.google_motherbrain_live_polling import (
+    ensure_google_motherbrain_live_polling_setting,
+)
 
 
 BOOTSTRAP_USERNAME_ENV = "BOOTSTRAP_ADMIN_USERNAME"
@@ -50,6 +53,7 @@ def _bootstrap_database_once(app, username, email, password, used_fallback):
     gateway = ensure_default_gateway_and_nodes()
     ensure_default_permission_rules()
     ensure_sheets_compatibility_setting(gateway)
+    ensure_google_motherbrain_live_polling_setting(gateway)
 
     user, created_user = _find_or_create_bootstrap_user(username, email)
     user.username = username

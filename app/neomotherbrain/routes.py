@@ -137,6 +137,10 @@ from app.services.google_motherbrain_sheets import (
     google_motherbrain_reader_status,
     read_google_motherbrain_envelope,
 )
+from app.services.google_motherbrain_live_polling import (
+    google_motherbrain_live_polling_status,
+    set_google_motherbrain_live_polling_enabled,
+)
 from app.services.parking_optimizer import (
     apply_parking_optimizer_plan,
     parking_optimizer_error_preview,
@@ -183,6 +187,7 @@ NEOGATEWAY_LANDING_VIEW_PERMISSION = "neogateway.landing.view"
 DASHBOARD_VIEW_PERMISSION = "neomotherbrain.dashboard.view"
 MANAGE_SORT_VIEW_PERMISSION = "neomotherbrain.manage_sort.view"
 MANAGE_SORT_EDIT_PERMISSION = "neomotherbrain.manage_sort.edit"
+GOOGLE_LIVE_POLLING_EDIT_PERMISSION = "neomotherbrain.google_live_polling.edit"
 ARRIVAL_PLANNING_VIEW_PERMISSION = "neomotherbrain.arrival_planning.view"
 ARRIVAL_PLANNING_EDIT_PERMISSION = "neomotherbrain.arrival_planning.edit"
 ARRIVAL_PLANNING_RUN_PERMISSION = "neomotherbrain.arrival_planning.run"
@@ -1747,7 +1752,62 @@ def operation_detail(operation_id):
         departure_count=departure_count,
         mission_count=arrival_count + departure_count,
         google_reader_status=google_motherbrain_reader_status(),
+        google_live_polling_status=google_motherbrain_live_polling_status(
+            gateway,
+            operation.sort_name,
+        ),
+        can_manage_google_live_polling=user_can(
+            GOOGLE_LIVE_POLLING_EDIT_PERMISSION
+        ),
         **_flight_api_auto_poll_timer_context(gateway, operation=operation),
+    )
+
+
+@bp.post(
+    "/motherbrain/operations/<int:operation_id>/google-live-polling"
+)
+@gateway_node_required("motherbrain", minimum_role="operator")
+def update_google_live_polling(operation_id):
+    denied = _permission_guard(GOOGLE_LIVE_POLLING_EDIT_PERMISSION)
+    if denied:
+        return denied
+
+    gateway = get_current_gateway()
+    operation = _operation_or_404(operation_id)
+    if (
+        str(operation.gateway_code or "").strip().upper() != "RFD"
+        or str(operation.sort_name or "").strip().lower() != "night"
+    ):
+        abort(400)
+
+    action = str(request.form.get("action") or "").strip().lower()
+    if action not in {"enable", "disable"}:
+        flash("Choose Enable or Disable for Live Google Polling.", "error")
+        return redirect(
+            url_for(
+                "neomotherbrain.operation_detail",
+                operation_id=operation.id,
+                _anchor="google-current-sort-reader",
+            )
+        )
+
+    enabled = action == "enable"
+    set_google_motherbrain_live_polling_enabled(
+        gateway,
+        operation.sort_name,
+        enabled,
+    )
+    db.session.commit()
+    flash(
+        f"Live Google Polling is now {'ON' if enabled else 'OFF'}.",
+        "info",
+    )
+    return redirect(
+        url_for(
+            "neomotherbrain.operation_detail",
+            operation_id=operation.id,
+            _anchor="google-current-sort-reader",
+        )
     )
 
 
