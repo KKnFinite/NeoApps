@@ -58,6 +58,11 @@ class SortDateOperation(db.Model):
     )
 
     missions = db.relationship("SortDateMission", back_populates="sort_date_operation")
+    google_mission_links = db.relationship(
+        "SortDateGoogleMissionLink",
+        back_populates="sort_date_operation",
+        cascade="all, delete-orphan",
+    )
     gateway = db.relationship("Gateway")
     generated_by_user = db.relationship("User")
 

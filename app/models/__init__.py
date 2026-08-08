@@ -36,6 +36,7 @@ from app.models.neo_node import NeoNode
 from app.models.permission_rule import PermissionRule
 from app.models.portal_app_access import PortalAppAccess
 from app.models.sort_date_crew_assignment import SortDateCrewAssignment
+from app.models.sort_date_google_mission_link import SortDateGoogleMissionLink
 from app.models.sort_date_alp_preview import SortDateAlpPreview
 from app.models.sort_date_mission import SortDateMission
 from app.models.sort_date_operation import SortDateOperation
@@ -108,4 +109,5 @@ __all__ = [
     "SortTimelineUsageCounter",
     "Crew",
     "SortDateCrewAssignment",
+    "SortDateGoogleMissionLink",
 ]

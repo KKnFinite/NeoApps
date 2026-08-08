@@ -237,6 +237,7 @@ ARRIVAL_STATUSES = (
     "",
     "scheduled",
     "en_route",
+    "on_ground",
     "arrived",
     "unloaded",
     CANCELLED_MISSION_STATUS,
@@ -248,6 +249,7 @@ DEPARTURE_STATUSES = (
     "ramp_load_complete",
     "crew_load_complete",
     "blocked_out",
+    "departed",
     CANCELLED_MISSION_STATUS,
 )
 MASTER_SCHEDULE_BLANK_ROW_INDEX = "__index__"

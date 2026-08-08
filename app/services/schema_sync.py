@@ -274,6 +274,7 @@ def sync_local_sqlite_schema(app):
 
     _sync_staffing_people_employee_status_sqlite(table_names)
     _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names)
+    _create_google_mission_link_table()
     if _sync_sort_date_tail_state_status_constraints_sqlite(inspector, table_names):
         db.session.commit()
         inspector = inspect(db.engine)
@@ -332,6 +333,7 @@ def sync_database_schema(app):
 
     _sync_staffing_people_employee_status_postgres(table_names)
     _sync_sort_date_mission_status_constraints_postgres(table_names)
+    _create_google_mission_link_table()
     _sync_sort_date_tail_state_status_constraints_postgres(table_names)
     _sync_uld_request_unique_constraint_postgres(table_names)
     _backfill_motherbrain_parking_rule_defaults(table_names, table_columns)
@@ -587,7 +589,20 @@ def _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names):
             "WHERE type = 'table' AND name = 'sort_date_missions'"
         )
     ).scalar() or ""
-    if "'cancelled'" in create_sql:
+    mission_columns = {
+        column["name"]: column for column in inspector.get_columns(table_name)
+    }
+    planned_columns_nullable = all(
+        mission_columns.get(column_name, {}).get("nullable", False)
+        for column_name in ("planned_datetime_local", "planned_datetime_utc")
+    )
+    if (
+        "'cancelled'" in create_sql
+        and "'on_ground'" in create_sql
+        and "'departed'" in create_sql
+        and "'google_motherbrain'" in create_sql
+        and planned_columns_nullable
+    ):
         return
 
     if legacy_table in all_tables:
@@ -627,6 +642,42 @@ def _sync_sort_date_mission_status_constraints_postgres(table_names):
     db.session.execute(
         text(
             "ALTER TABLE sort_date_missions "
+            "ALTER COLUMN planned_datetime_local DROP NOT NULL"
+        )
+    )
+    db.session.execute(
+        text(
+            "ALTER TABLE sort_date_missions "
+            "ALTER COLUMN planned_datetime_utc DROP NOT NULL"
+        )
+    )
+
+    db.session.execute(
+        text(
+            "ALTER TABLE sort_date_missions "
+            "DROP CONSTRAINT IF EXISTS ck_sort_date_missions_mission_source"
+        )
+    )
+    db.session.execute(
+        text(
+            """
+            ALTER TABLE sort_date_missions
+            ADD CONSTRAINT ck_sort_date_missions_mission_source
+            CHECK (
+                mission_source IN (
+                    'master',
+                    'api',
+                    'manual',
+                    'google_motherbrain'
+                )
+            )
+            """
+        )
+    )
+
+    db.session.execute(
+        text(
+            "ALTER TABLE sort_date_missions "
             "DROP CONSTRAINT IF EXISTS ck_sort_date_missions_arrival_status"
         )
     )
@@ -639,6 +690,7 @@ def _sync_sort_date_mission_status_constraints_postgres(table_names):
                 arrival_status IS NULL OR arrival_status IN (
                     'scheduled',
                     'en_route',
+                    'on_ground',
                     'arrived',
                     'unloaded',
                     'cancelled'
@@ -665,6 +717,7 @@ def _sync_sort_date_mission_status_constraints_postgres(table_names):
                     'ramp_load_complete',
                     'crew_load_complete',
                     'blocked_out',
+                    'departed',
                     'cancelled'
                 )
             )
@@ -976,3 +1029,12 @@ def _create_missing_application_tables(existing_table_names):
         if model.__tablename__ in existing_table_names:
             continue
         model.__table__.create(bind=db.engine, checkfirst=True)
+
+
+def _create_google_mission_link_table():
+    from app.models import SortDateGoogleMissionLink
+
+    SortDateGoogleMissionLink.__table__.create(
+        bind=db.session.connection(),
+        checkfirst=True,
+    )

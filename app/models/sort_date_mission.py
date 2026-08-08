@@ -11,7 +11,7 @@ class SortDateMission(db.Model):
             name="ck_sort_date_missions_mission_type",
         ),
         db.CheckConstraint(
-            "mission_source IN ('master', 'api', 'manual')",
+            "mission_source IN ('master', 'api', 'manual', 'google_motherbrain')",
             name="ck_sort_date_missions_mission_source",
         ),
         db.CheckConstraint(
@@ -28,12 +28,12 @@ class SortDateMission(db.Model):
         ),
         db.CheckConstraint(
             "arrival_status IS NULL OR arrival_status IN "
-            "('scheduled', 'en_route', 'arrived', 'unloaded', 'cancelled')",
+            "('scheduled', 'en_route', 'on_ground', 'arrived', 'unloaded', 'cancelled')",
             name="ck_sort_date_missions_arrival_status",
         ),
         db.CheckConstraint(
             "departure_status IN ('loading', 'last_uld_enroute', 'ramp_load_complete', "
-            "'crew_load_complete', 'blocked_out', 'cancelled')",
+            "'crew_load_complete', 'blocked_out', 'departed', 'cancelled')",
             name="ck_sort_date_missions_departure_status",
         ),
     )
@@ -61,8 +61,8 @@ class SortDateMission(db.Model):
     origin = db.Column(db.String(8), nullable=False)
     destination = db.Column(db.String(8), nullable=False)
     timezone = db.Column(db.String(64), nullable=False, default="America/Chicago")
-    planned_datetime_local = db.Column(db.DateTime, nullable=False)
-    planned_datetime_utc = db.Column(db.DateTime, nullable=False, index=True)
+    planned_datetime_local = db.Column(db.DateTime, nullable=True)
+    planned_datetime_utc = db.Column(db.DateTime, nullable=True, index=True)
     planned_source = db.Column(db.String(32), nullable=False, default="unknown")
     eta_datetime_utc = db.Column(db.DateTime, nullable=True)
     eta_source = db.Column(db.String(32), nullable=False, default="unknown")
