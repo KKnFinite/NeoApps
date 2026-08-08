@@ -17,6 +17,9 @@ from app.models.motherbrain_parking_rule import (
 from app.models.motherbrain_google_integration_setting import (
     MotherBrainGoogleIntegrationSetting,
 )
+from app.models.motherbrain_google_live_poll_state import (
+    MotherBrainGoogleLivePollState,
+)
 from app.models.neosektor_ballmat_count import NeoSektorBallmatCount
 from app.models.neosektor_ballmat_wave_count import NeoSektorBallmatWaveCount
 from app.models.neosektor_bay_status import NeoSektorBayStatus
@@ -75,6 +78,7 @@ __all__ = [
     "NeoErmacUldRequest",
     "MotherBrainAlert",
     "MotherBrainGoogleIntegrationSetting",
+    "MotherBrainGoogleLivePollState",
     "MotherBrainParkingRule",
     "MotherBrainParkingSettings",
     "NeoSektorSortState",

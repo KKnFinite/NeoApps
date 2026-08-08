@@ -275,6 +275,7 @@ def sync_local_sqlite_schema(app):
     _sync_staffing_people_employee_status_sqlite(table_names)
     _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names)
     _create_google_mission_link_table()
+    _create_google_live_poll_state_table()
     if _sync_sort_date_tail_state_status_constraints_sqlite(inspector, table_names):
         db.session.commit()
         inspector = inspect(db.engine)
@@ -334,6 +335,7 @@ def sync_database_schema(app):
     _sync_staffing_people_employee_status_postgres(table_names)
     _sync_sort_date_mission_status_constraints_postgres(table_names)
     _create_google_mission_link_table()
+    _create_google_live_poll_state_table()
     _sync_sort_date_tail_state_status_constraints_postgres(table_names)
     _sync_uld_request_unique_constraint_postgres(table_names)
     _backfill_motherbrain_parking_rule_defaults(table_names, table_columns)
@@ -1035,6 +1037,15 @@ def _create_google_mission_link_table():
     from app.models import SortDateGoogleMissionLink
 
     SortDateGoogleMissionLink.__table__.create(
+        bind=db.session.connection(),
+        checkfirst=True,
+    )
+
+
+def _create_google_live_poll_state_table():
+    from app.models import MotherBrainGoogleLivePollState
+
+    MotherBrainGoogleLivePollState.__table__.create(
         bind=db.session.connection(),
         checkfirst=True,
     )
