@@ -42,6 +42,16 @@ GOOGLE_MOTHERBRAIN_RANGE_SPECS = (
     ("outbound_tail_swaps", "Outbound!W4:Z100", 97, 4, 4),
     ("parking_assignments", "Parking Plan!BG3:BH100", 98, 2, 3),
 )
+GOOGLE_MOTHERBRAIN_LIVE_RANGE_SPECS = (
+    ("inbound", "Inbound!P4:W100", 97, ("P", "Q", "R", "S", "T", "U", "V", "W"), 4),
+    (
+        "outbound",
+        "Outbound!P4:Z100",
+        97,
+        ("P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"),
+        4,
+    ),
+)
 GOOGLE_MOTHERBRAIN_REQUIRED_TABS = frozenset(
     {"Inbound", "Outbound", "Parking Plan"}
 )
@@ -91,36 +101,7 @@ def google_motherbrain_reader_status(config=None):
 def read_google_motherbrain_envelope(config=None, client_factory=None, now=None):
     """Read the locked workbook and build the existing schema-version-1 envelope."""
     config = config or current_app.config
-    status = google_motherbrain_reader_status(config)
-    if not status["enabled"]:
-        raise GoogleMotherBrainReaderError(
-            "reader_disabled",
-            "Google reader is disabled.",
-        )
-    if not status["credentials_configured"]:
-        raise GoogleMotherBrainReaderError(
-            "missing_credentials",
-            "Google service-account credentials are not configured.",
-        )
-    if not status["credentials_valid"]:
-        raise GoogleMotherBrainReaderError(
-            "invalid_credentials",
-            "Google service-account credentials are invalid.",
-        )
-    if not status["spreadsheet_id_configured"]:
-        raise GoogleMotherBrainReaderError(
-            "missing_spreadsheet_id",
-            "The Google MotherBrain spreadsheet ID is not configured.",
-        )
-    if not status["spreadsheet_id_valid"]:
-        raise GoogleMotherBrainReaderError(
-            "invalid_spreadsheet_id",
-            "The configured spreadsheet ID does not match the locked MotherBrain workbook.",
-        )
-
-    raw_credentials, _credential_source = _credential_json(config)
-    credentials = _parse_service_account_json(raw_credentials)
-    spreadsheet_id = str(config["GOOGLE_MOTHERBRAIN_SPREADSHEET_ID"]).strip()
+    credentials, spreadsheet_id = _configured_reader_inputs(config)
     client = (client_factory or _create_gspread_client)(credentials)
     spreadsheet = _google_call(
         "open_spreadsheet",
@@ -244,6 +225,43 @@ def read_google_motherbrain_envelope(config=None, client_factory=None, now=None)
     }
 
 
+def read_google_motherbrain_live_rows(config=None, client_factory=None):
+    """Read only the live mission ranges required by the server poll executor."""
+    config = config or current_app.config
+    credentials, spreadsheet_id = _configured_reader_inputs(config)
+    client = (client_factory or _create_gspread_client)(credentials)
+    spreadsheet = _google_call(
+        "open_spreadsheet",
+        lambda: client.open_by_key(spreadsheet_id),
+    )
+    ranges = [spec[1] for spec in GOOGLE_MOTHERBRAIN_LIVE_RANGE_SPECS]
+    response = _google_call(
+        "read_live_ranges",
+        lambda: spreadsheet.values_batch_get(
+            ranges,
+            params={
+                "valueRenderOption": "FORMATTED_VALUE",
+                "dateTimeRenderOption": "FORMATTED_STRING",
+                "majorDimension": "ROWS",
+            },
+        ),
+    )
+    range_values = _range_values(response, GOOGLE_MOTHERBRAIN_LIVE_RANGE_SPECS)
+    live_rows = {}
+    for index, (key, _a1, row_count, columns, start_row) in enumerate(
+        GOOGLE_MOTHERBRAIN_LIVE_RANGE_SPECS
+    ):
+        padded = _padded_rows(range_values[index], row_count, len(columns))
+        source_sheet = "Inbound" if key == "inbound" else "Outbound"
+        live_rows[f"{key}_rows"] = _live_rows(
+            padded,
+            source_sheet=source_sheet,
+            columns=columns,
+            start_row=start_row,
+        )
+    return live_rows
+
+
 def _create_gspread_client(credentials):
     if gspread is None:
         raise GoogleMotherBrainReaderError(
@@ -275,6 +293,41 @@ def _credential_json(config):
     if isinstance(fallback, str) and fallback.strip():
         return fallback.strip(), "fallback"
     return None, None
+
+
+def _configured_reader_inputs(config):
+    status = google_motherbrain_reader_status(config)
+    if not status["enabled"]:
+        raise GoogleMotherBrainReaderError(
+            "reader_disabled",
+            "Google reader is disabled.",
+        )
+    if not status["credentials_configured"]:
+        raise GoogleMotherBrainReaderError(
+            "missing_credentials",
+            "Google service-account credentials are not configured.",
+        )
+    if not status["credentials_valid"]:
+        raise GoogleMotherBrainReaderError(
+            "invalid_credentials",
+            "Google service-account credentials are invalid.",
+        )
+    if not status["spreadsheet_id_configured"]:
+        raise GoogleMotherBrainReaderError(
+            "missing_spreadsheet_id",
+            "The Google MotherBrain spreadsheet ID is not configured.",
+        )
+    if not status["spreadsheet_id_valid"]:
+        raise GoogleMotherBrainReaderError(
+            "invalid_spreadsheet_id",
+            "The configured spreadsheet ID does not match the locked MotherBrain workbook.",
+        )
+
+    raw_credentials, _credential_source = _credential_json(config)
+    return (
+        _parse_service_account_json(raw_credentials),
+        str(config["GOOGLE_MOTHERBRAIN_SPREADSHEET_ID"]).strip(),
+    )
 
 
 def _parse_service_account_json(raw_credentials):
@@ -338,11 +391,9 @@ def _validate_workbook_metadata(metadata):
     return title, timezone_name
 
 
-def _range_values(response):
+def _range_values(response, range_specs=GOOGLE_MOTHERBRAIN_RANGE_SPECS):
     value_ranges = response.get("valueRanges") if isinstance(response, dict) else None
-    if not isinstance(value_ranges, list) or len(value_ranges) != len(
-        GOOGLE_MOTHERBRAIN_RANGE_SPECS
-    ):
+    if not isinstance(value_ranges, list) or len(value_ranges) != len(range_specs):
         raise GoogleMotherBrainReaderError(
             "missing_sheet_range",
             "Google did not return every required MotherBrain range.",
@@ -362,6 +413,22 @@ def _range_values(response):
             )
         values.append(rows)
     return values
+
+
+def _live_rows(padded_rows, *, source_sheet, columns, start_row):
+    rows = []
+    for offset, cells in enumerate(padded_rows):
+        values = [str(value or "").strip() for value in cells]
+        if not any(values):
+            continue
+        row = {
+            "source_sheet": source_sheet,
+            "sheet_row": start_row + offset,
+        }
+        for column, value in zip(columns, values):
+            row[column] = value
+        rows.append(row)
+    return rows
 
 
 def _padded_rows(rows, row_count, column_count):

@@ -41,6 +41,9 @@ from app.services.google_motherbrain_live_poll_lease import (
     complete_google_motherbrain_live_poll_failure,
     complete_google_motherbrain_live_poll_success,
 )
+from app.services.google_motherbrain_live_poll_execution import (
+    execute_google_motherbrain_live_poll,
+)
 from app.services.schema_sync import sync_local_sqlite_schema
 from app.services.permission_rules import (
     DEFAULT_PERMISSION_RULES,
@@ -101,6 +104,7 @@ __all__ = [
     "acquire_google_motherbrain_live_poll_lease",
     "complete_google_motherbrain_live_poll_failure",
     "complete_google_motherbrain_live_poll_success",
+    "execute_google_motherbrain_live_poll",
     "sync_local_sqlite_schema",
     "DEFAULT_PERMISSION_RULES",
     "ensure_default_permission_rules",

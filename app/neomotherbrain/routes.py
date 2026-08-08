@@ -142,6 +142,9 @@ from app.services.google_motherbrain_live_polling import (
     google_motherbrain_live_polling_status,
     set_google_motherbrain_live_polling_enabled,
 )
+from app.services.google_motherbrain_live_poll_execution import (
+    execute_google_motherbrain_live_poll,
+)
 from app.services.parking_optimizer import (
     apply_parking_optimizer_plan,
     parking_optimizer_error_preview,
@@ -611,6 +614,15 @@ def flight_api_auto_poll_check():
             initial_eligible=True,
         )
     )
+
+
+@bp.post("/motherbrain/google-live-poll/execute")
+@gateway_node_required("motherbrain", minimum_role="operator")
+def execute_google_live_poll():
+    """Future heartbeat target; all Google polling scope is resolved server-side."""
+    result = execute_google_motherbrain_live_poll(get_current_gateway())
+    status_code = 500 if result["status"] in {"failed", "lifecycle_error"} else 200
+    return jsonify(result), status_code
 
 
 @bp.route("/motherbrain/flight-api-review")

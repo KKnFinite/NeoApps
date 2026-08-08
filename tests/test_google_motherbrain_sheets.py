@@ -14,11 +14,13 @@ from app.models import Gateway, SortDateMission, SortDateOperation, User
 from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.google_motherbrain_sheets import (
     GOOGLE_MOTHERBRAIN_LOCKED_SPREADSHEET_ID,
+    GOOGLE_MOTHERBRAIN_LIVE_RANGE_SPECS,
     GOOGLE_MOTHERBRAIN_RANGE_SPECS,
     GOOGLE_MOTHERBRAIN_READONLY_SCOPES,
     GoogleMotherBrainReaderError,
     google_motherbrain_reader_status,
     read_google_motherbrain_envelope,
+    read_google_motherbrain_live_rows,
 )
 from app.services.password_policy import set_user_password
 
@@ -354,6 +356,87 @@ class GoogleMotherBrainSheetsReaderTest(unittest.TestCase):
                     )
                 self.assertIn(expected, raised.exception.message)
                 self.assertNotIn(secret_fragment, raised.exception.message)
+
+
+class GoogleMotherBrainLiveRangeReaderTest(unittest.TestCase):
+    def test_live_reader_fetches_only_the_two_live_ranges_and_preserves_rows(self):
+        spreadsheet = _LiveRangeSpreadsheet(
+            {
+                "Inbound!P4:W100": [
+                    ["UPS0947", "N947UP", "SDF", "A01", "22:45", "23:00", "", "DEP"],
+                    [],
+                    ["UPS0948", "N948UP", "ONT", "", "23:15", "", "", "ARR"],
+                ],
+                "Outbound!P4:Z100": [
+                    ["UPS1000", "N100UP", "SDF", "A02", "01:20", "", "", "UPS1001", "ONT", "N101UP", "ACK"],
+                ],
+            }
+        )
+        client = FakeClient(spreadsheet)
+
+        live_rows = read_google_motherbrain_live_rows(
+            reader_config(),
+            client_factory=lambda _credentials: client,
+        )
+
+        expected_ranges = [spec[1] for spec in GOOGLE_MOTHERBRAIN_LIVE_RANGE_SPECS]
+        self.assertEqual(client.opened_ids, [GOOGLE_MOTHERBRAIN_LOCKED_SPREADSHEET_ID])
+        self.assertEqual(len(spreadsheet.batch_calls), 1)
+        self.assertEqual(spreadsheet.batch_calls[0][0], expected_ranges)
+        self.assertNotIn("Inbound!A4:G100", spreadsheet.batch_calls[0][0])
+        self.assertFalse(
+            any(":A" in value or "!A" in value for value in spreadsheet.batch_calls[0][0])
+        )
+        self.assertEqual(
+            live_rows["inbound_rows"],
+            [
+                {
+                    "source_sheet": "Inbound",
+                    "sheet_row": 4,
+                    "P": "UPS0947",
+                    "Q": "N947UP",
+                    "R": "SDF",
+                    "S": "A01",
+                    "T": "22:45",
+                    "U": "23:00",
+                    "V": "",
+                    "W": "DEP",
+                },
+                {
+                    "source_sheet": "Inbound",
+                    "sheet_row": 6,
+                    "P": "UPS0948",
+                    "Q": "N948UP",
+                    "R": "ONT",
+                    "S": "",
+                    "T": "23:15",
+                    "U": "",
+                    "V": "",
+                    "W": "ARR",
+                },
+            ],
+        )
+        outbound = live_rows["outbound_rows"][0]
+        self.assertEqual(outbound["sheet_row"], 4)
+        self.assertEqual(outbound["W"], "UPS1001")
+        self.assertEqual(outbound["X"], "ONT")
+        self.assertEqual(outbound["Y"], "N101UP")
+        self.assertEqual(outbound["Z"], "ACK")
+
+
+class _LiveRangeSpreadsheet:
+    def __init__(self, values_by_range):
+        self.values_by_range = values_by_range
+        self.batch_calls = []
+
+    def values_batch_get(self, ranges, params=None):
+        self.batch_calls.append((list(ranges), dict(params or {})))
+        return {
+            "valueRanges": [
+                {"range": range_name, "values": self.values_by_range.get(range_name, [])}
+                for range_name in ranges
+            ]
+        }
 
 
 class GoogleMotherBrainSheetsRouteTest(unittest.TestCase):
