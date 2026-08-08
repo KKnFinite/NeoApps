@@ -739,6 +739,40 @@
     })();
     </script>
     {% endif %}
+    {% if uses_google_live_poll_heartbeat %}
+    <script data-google-live-poll-heartbeat data-endpoint="{{ url_for('neomotherbrain.execute_google_live_poll') }}">
+    (() => {
+        if (window.__neoGoogleLivePollHeartbeatActive) {
+            return;
+        }
+        window.__neoGoogleLivePollHeartbeatActive = true;
+
+        const heartbeatElement = document.currentScript;
+        const endpoint = heartbeatElement?.dataset.endpoint;
+        if (!endpoint) {
+            return;
+        }
+
+        const HEARTBEAT_MIN_DELAY_MS = 55_000;
+        const HEARTBEAT_JITTER_MS = 10_000;
+        const nextHeartbeatDelay = () => (
+            HEARTBEAT_MIN_DELAY_MS
+            + Math.floor(Math.random() * (HEARTBEAT_JITTER_MS + 1))
+        );
+
+        const scheduleNextHeartbeat = () => {
+            window.setTimeout(runHeartbeat, nextHeartbeatDelay());
+        };
+        const runHeartbeat = () => {
+            window.fetch(endpoint, { method: "POST", cache: "no-store" })
+                .catch(() => {})
+                .finally(scheduleNextHeartbeat);
+        };
+
+        runHeartbeat();
+    })();
+    </script>
+    {% endif %}
     <script>
     (() => {
         const pressableSelector = [

@@ -15,7 +15,10 @@ from app.models import (
     SortTimelineSortSetting,
     User,
 )
-from app.services.access_control import backfill_default_gateway_node_roles
+from app.services.access_control import (
+    backfill_default_gateway_node_roles,
+    user_can_access_node,
+)
 from app.services.google_motherbrain_live_poll_execution import (
     execute_google_motherbrain_live_poll,
 )
@@ -291,17 +294,87 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         ):
             accepted = client.post(
                 "/motherbrain/google-live-poll/execute",
-                data={
-                    "csrf_token": csrf_token,
-                    "operation_id": historical.id,
-                    "sort_date": historical.sort_date.isoformat(),
-                },
+                headers={"X-CSRF-Token": csrf_token},
             )
 
         self.assertEqual(missing.status_code, 400)
         self.assertEqual(accepted.status_code, 200)
         self.assertEqual(accepted.get_json()["status"], "success")
         self.assertNotEqual(accepted.get_json()["operation_id"], historical.id)
+
+    def test_shared_heartbeat_renders_once_on_active_operational_pages_only(self):
+        user = User(username="operational-heartbeat-render", role="grandmaster")
+        set_user_password(user, "TestPassword123!")
+        db.session.add(user)
+        db.session.flush()
+        backfill_default_gateway_node_roles(user, role="grandmaster")
+        db.session.commit()
+
+        client = self.app.test_client()
+        self._login(client, user)
+        for path in (
+            "/rfd",
+            "/motherbrain",
+            "/neoermac",
+            "/neosektor",
+            "/neoscorpion",
+        ):
+            with self.subTest(path=path):
+                response = client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    response.data.count(b"data-google-live-poll-heartbeat"),
+                    1,
+                )
+
+        portal = client.get("/portal")
+        self.assertEqual(portal.status_code, 200)
+        self.assertNotIn(b"data-google-live-poll-heartbeat", portal.data)
+
+    def test_gateway_node_users_can_trigger_without_motherbrain_operator_role(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = self.NOW
+        user = User(username="operational-live-poll-user", role="watcher")
+        set_user_password(user, "TestPassword123!")
+        db.session.add(user)
+        db.session.flush()
+        backfill_default_gateway_node_roles(user, role="watcher")
+        db.session.commit()
+
+        for node_code in ("ermac", "sektor", "scorpion"):
+            with self.subTest(node_code=node_code):
+                self.assertTrue(
+                    user_can_access_node(user, self.gateway.code, node_code)
+                )
+                self.assertFalse(
+                    user_can_access_node(
+                        user,
+                        self.gateway.code,
+                        "motherbrain",
+                        minimum_role="operator",
+                    )
+                )
+
+        client = self.app.test_client()
+        self._login(client, user)
+        response = client.post("/motherbrain/google-live-poll/execute")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["status"], "disabled")
+
+    def test_endpoint_rejects_unauthenticated_and_gateway_denied_requests(self):
+        endpoint = "/motherbrain/google-live-poll/execute"
+        self.assertEqual(self.app.test_client().post(endpoint).status_code, 401)
+
+        user = User(username="no-gateway-live-poll-user", role="watcher")
+        set_user_password(user, "TestPassword123!")
+        db.session.add(user)
+        db.session.commit()
+        client = self.app.test_client()
+        self._login(client, user)
+
+        response = client.post(endpoint)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["status"], "access_denied")
 
     def _enable(self):
         set_google_motherbrain_live_polling_enabled(self.gateway, "night", True)
@@ -318,6 +391,15 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
             sort_name="night",
             sort_date=operation.sort_date,
         ).one()
+
+    @staticmethod
+    def _login(client, user):
+        response = client.post(
+            "/login",
+            data={"username": user.username, "password": "TestPassword123!"},
+        )
+        if response.status_code != 302:
+            raise AssertionError("Expected login to succeed.")
 
     @staticmethod
     def _inbound(row, flight, tail, *, origin, status=""):

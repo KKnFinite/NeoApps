@@ -360,6 +360,14 @@ def resolve_shell_metadata(
         else mobile_shell_word
     )
     uses_gateway_mobile_shell = is_rfd_hub_page or has_node_shell_identity
+    uses_google_live_poll_heartbeat = (
+        is_rfd_hub_page
+        or is_motherbrain_page
+        or is_neoermac_page
+        or is_neosektor_page
+        or is_neoscorpion_page
+        or is_neorain_page
+    )
     mobile_node_icon = (
         "images/icons/neogateway/inapp/neogateway-inapp-128.png"
         if is_rfd_hub_page
@@ -446,6 +454,7 @@ def resolve_shell_metadata(
         "mobile_back_endpoint": mobile_back_endpoint,
         "mobile_back_word": mobile_back_word,
         "uses_gateway_mobile_shell": uses_gateway_mobile_shell,
+        "uses_google_live_poll_heartbeat": uses_google_live_poll_heartbeat,
         "mobile_node_icon": mobile_node_icon,
         "mobile_account_initial_source": mobile_account_initial_source,
         "mobile_account_initial": str(mobile_account_initial_source)[:1].upper(),

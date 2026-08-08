@@ -617,10 +617,16 @@ def flight_api_auto_poll_check():
 
 
 @bp.post("/motherbrain/google-live-poll/execute")
-@gateway_node_required("motherbrain", minimum_role="operator")
 def execute_google_live_poll():
     """Future heartbeat target; all Google polling scope is resolved server-side."""
-    result = execute_google_motherbrain_live_poll(get_current_gateway())
+    if not current_user.is_authenticated:
+        return jsonify({"status": "unauthenticated"}), 401
+
+    gateway = get_current_gateway()
+    if not user_has_gateway_access(current_user, gateway.code):
+        return jsonify({"status": "access_denied"}), 403
+
+    result = execute_google_motherbrain_live_poll(gateway)
     status_code = 500 if result["status"] in {"failed", "lifecycle_error"} else 200
     return jsonify(result), status_code
 

@@ -139,6 +139,47 @@ class ShellMetadataTest(unittest.TestCase):
         self.assertEqual(unknown_metadata["mobile_shell_label"], "PORTAL")
         self.assertEqual(unknown_metadata["mobile_home_endpoint"], "auth.portal_dashboard")
 
+    def test_google_live_poll_heartbeat_is_limited_to_operational_gateway_pages(self):
+        operational_paths = (
+            "/rfd",
+            "/motherbrain/parking-plan",
+            "/neoermac/view-outbound",
+            "/neosektor/tunnel-conductor",
+            "/neoscorpion/fuel-dispatch",
+        )
+        non_operational_paths = (
+            "/login",
+            "/portal",
+            "/neostaffing/people",
+            "/unknown-page",
+        )
+
+        for path in operational_paths:
+            with self.subTest(path=path):
+                self.assertTrue(
+                    self.metadata_for_path(path)["uses_google_live_poll_heartbeat"]
+                )
+
+        for path in non_operational_paths:
+            with self.subTest(path=path):
+                self.assertFalse(
+                    self.metadata_for_path(path)["uses_google_live_poll_heartbeat"]
+                )
+
+        rain_request = SimpleNamespace(
+            path="/neorain",
+            blueprint="neorain",
+            endpoint="neorain.index",
+            args={},
+        )
+        self.assertTrue(
+            resolve_shell_metadata(
+                rain_request,
+                is_authenticated=True,
+                default_gateway_code="RFD",
+            )["uses_google_live_poll_heartbeat"]
+        )
+
     def test_base_template_consumes_context_metadata_without_path_classifier(self):
         with open("app/templates/base.html", encoding="utf-8") as template_file:
             template = template_file.read()
@@ -148,6 +189,26 @@ class ShellMetadataTest(unittest.TestCase):
         self.assertNotIn("{% set neosektor_current_label", template)
         self.assertIn("{{ node_current_label }}", template)
         self.assertIn("{{ mobile_shell_label }}", template)
+
+    def test_base_template_uses_one_shared_csrf_heartbeat_without_scope_payload(self):
+        with open("app/templates/base.html", encoding="utf-8") as template_file:
+            template = template_file.read()
+
+        start = template.index("data-google-live-poll-heartbeat")
+        heartbeat = template[start : template.index("{% endif %}", start)]
+        self.assertIn("{% if uses_google_live_poll_heartbeat %}", template)
+        self.assertEqual(template.count("data-google-live-poll-heartbeat"), 1)
+        self.assertIn("window.__neoGoogleLivePollHeartbeatActive", heartbeat)
+        self.assertIn("const HEARTBEAT_MIN_DELAY_MS = 55_000", heartbeat)
+        self.assertIn("const HEARTBEAT_JITTER_MS = 10_000", heartbeat)
+        self.assertIn('window.fetch(endpoint, { method: "POST", cache: "no-store" })', heartbeat)
+        self.assertIn("runHeartbeat();", heartbeat)
+        self.assertEqual(heartbeat.count("window.setTimeout"), 1)
+        self.assertIn("X-CSRF-Token", template)
+        self.assertNotIn("operation_id", heartbeat)
+        self.assertNotIn("sort_date", heartbeat)
+        self.assertNotIn("google_range", heartbeat)
+        self.assertNotIn("body:", heartbeat)
 
 
 if __name__ == "__main__":
