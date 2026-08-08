@@ -13,7 +13,7 @@ from app.services.sort_date_operations import generate_sort_date_operation_from_
 
 
 def ensure_operational_sort_operations(gateway, now=None):
-    """Ensure operations whose configured preparation windows are active."""
+    """Ensure operations whose configured Sort Windows are active."""
     local_now = current_gateway_local_datetime(gateway, now=now)
     if not gateway or not gateway.is_active:
         return _empty_result(local_now)
@@ -116,25 +116,21 @@ def _sort_settings_for_gateway(gateway):
 
 
 def _configured_lifecycle_window(sort_setting, sort_date):
-    if not sort_setting:
+    if not (
+        sort_setting
+        and sort_setting.sort_window_start_local
+        and sort_setting.sort_window_end_local
+    ):
         return None
 
-    if sort_setting.ops_window_start_local and sort_setting.ops_window_end_local:
-        start_time = sort_setting.ops_window_start_local
-        end_time = sort_setting.ops_window_end_local
-        source = "ops"
-    elif sort_setting.sort_window_start_local and sort_setting.sort_window_end_local:
-        start_time = sort_setting.sort_window_start_local
-        end_time = sort_setting.sort_window_end_local
-        source = "sort"
-    else:
-        return None
+    start_time = sort_setting.sort_window_start_local
+    end_time = sort_setting.sort_window_end_local
 
     start_local = datetime.combine(sort_date, start_time)
     end_local = datetime.combine(sort_date, end_time)
     if end_local <= start_local:
         end_local += timedelta(days=1)
-    return start_local, end_local, source
+    return start_local, end_local, "sort"
 
 
 def _operation_for_window(gateway, window):
