@@ -145,6 +145,9 @@ from app.services.google_motherbrain_live_polling import (
 from app.services.google_motherbrain_live_poll_execution import (
     execute_google_motherbrain_live_poll,
 )
+from app.services.google_motherbrain_live_poll_health import (
+    google_motherbrain_live_poll_health,
+)
 from app.services.parking_optimizer import (
     apply_parking_optimizer_plan,
     parking_optimizer_error_preview,
@@ -1776,6 +1779,10 @@ def operation_detail(operation_id):
         google_live_polling_status=google_motherbrain_live_polling_status(
             gateway,
             operation.sort_name,
+        ),
+        google_live_poll_health=google_motherbrain_live_poll_health(
+            gateway,
+            lifecycle=getattr(g, "operational_sort_ensure_result", None),
         ),
         can_manage_google_live_polling=user_can(
             GOOGLE_LIVE_POLLING_EDIT_PERMISSION

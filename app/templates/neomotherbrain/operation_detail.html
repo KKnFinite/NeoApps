@@ -89,6 +89,18 @@
                         ON authorizes future automatic Google MotherBrain polling. OFF keeps
                         automatic polling disabled; manual preview remains available.
                     </p>
+                    {% if google_live_poll_health.enabled %}
+                        <div
+                            class="google-live-poll-health"
+                            data-google-live-poll-health="{{ google_live_poll_health.status }}"
+                        >
+                            <div class="google-live-poll-health-state">
+                                <span>GOOGLE SYNC</span>
+                                <strong class="google-live-poll-health-badge is-{{ google_live_poll_health.status }}">{{ google_live_poll_health.label }}</strong>
+                            </div>
+                            <p>LAST SUCCESSFUL: <strong>{{ google_live_poll_health.last_success_label }}</strong></p>
+                        </div>
+                    {% endif %}
                     {% if can_manage_google_live_polling %}
                         <form method="post" action="{{ url_for('neomotherbrain.update_google_live_polling', operation_id=operation.id) }}">
                             {% if google_live_polling_status.enabled %}

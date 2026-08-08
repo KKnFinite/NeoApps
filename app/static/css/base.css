@@ -24677,6 +24677,46 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     box-shadow: 0 0 14px rgba(255, 59, 70, 0.45);
 }
 
+.google-live-poll-health {
+    margin: 0.85rem auto 0;
+    padding-top: 0.85rem;
+    border-top: 1px solid rgba(216, 32, 42, 0.3);
+}
+
+.google-live-poll-health-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    font-weight: 800;
+}
+
+.google-live-poll-health-badge {
+    padding: 0.3rem 0.55rem;
+    border: 1px solid currentColor;
+    text-align: center;
+}
+
+.google-live-poll-health-badge.is-current {
+    color: #92f0bd;
+    background: rgba(29, 113, 72, 0.25);
+}
+
+.google-live-poll-health-badge.is-error {
+    color: #ffb0b6;
+    background: rgba(122, 15, 22, 0.45);
+}
+
+.google-live-poll-health-badge.is-stale {
+    color: #ffd38b;
+    background: rgba(121, 76, 20, 0.32);
+}
+
+.google-live-poll-health-badge.is-outside_window {
+    color: #c6ccd3;
+    background: #202329;
+}
+
 .google-current-sort-preview-page [data-preview-section] {
     margin-top: 2rem;
 }
