@@ -1687,6 +1687,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         sort_date = current_gateway_local_date(self.rfd_gateway)
         day = sort_date.strftime("%A").lower()
         self._add_matrix_cell(day, "night")
+        self._set_sort_window("night", time(0, 0), time(23, 59))
         self._add_master(
             flight_number="AUTO01",
             active_days=day,
@@ -1710,6 +1711,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         sort_date = current_gateway_local_date(self.rfd_gateway)
         day = sort_date.strftime("%A").lower()
         self._add_matrix_cell(day, "night")
+        self._set_sort_window("night", time(0, 0), time(23, 59))
         db.session.commit()
 
         response = self.client.get("/rfd")
@@ -1784,6 +1786,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         sort_date = current_gateway_local_date(self.rfd_gateway)
         day = sort_date.strftime("%A").lower()
         self._add_matrix_cell(day, "night")
+        self._set_sort_window("night", time(0, 0), time(23, 59))
         self._add_master(
             flight_number="SORT01",
             active_days=day,
@@ -1849,6 +1852,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         day = sort_date.strftime("%A").lower()
         self._add_matrix_cell(day, "night")
         self._add_matrix_cell(day, "day")
+        self._set_sort_window("night", time(0, 0), time(23, 59))
+        self._set_sort_window("day", time(0, 0), time(23, 59))
         db.session.commit()
 
         self.client.get("/motherbrain/manage-sort")

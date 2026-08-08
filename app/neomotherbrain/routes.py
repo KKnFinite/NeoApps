@@ -6,6 +6,7 @@ from flask import (
     abort,
     current_app,
     flash,
+    g,
     jsonify,
     make_response,
     redirect,
@@ -90,7 +91,6 @@ from app.services.gateway_matrix import (
     DAY_OPTIONS as MATRIX_DAY_OPTIONS,
     SORT_OPTIONS as MATRIX_SORT_OPTIONS,
     current_operations_for_gateway,
-    ensure_sort_operations_for_gateway_date,
     matrix_state_for_gateway,
     operations_for_gateway_date,
     save_gateway_matrix,
@@ -125,6 +125,7 @@ from app.services.parking_plan import (
     tail_operational_status_label,
     unassign_tail,
 )
+from app.services.operation_lifecycle import ensure_operational_sort_operations
 from app.services.google_motherbrain_import import (
     GoogleMotherBrainOperationError,
     GoogleMotherBrainPayloadError,
@@ -2707,12 +2708,12 @@ def _render_new_operation_form(form):
 
 
 def _auto_generate_today_sorts(gateway):
-    result = ensure_sort_operations_for_gateway_date(
-        gateway,
-        generated_by_user_id=current_user.id,
-    )
+    result = getattr(g, "operational_sort_ensure_result", None)
+    if result is None:
+        result = ensure_operational_sort_operations(gateway)
+        g.operational_sort_ensure_result = result
     for error in result["errors"]:
-        current_app.logger.warning("Gateway Matrix generation skipped: %s", error)
+        current_app.logger.warning("Operational sort generation skipped: %s", error)
     return result
 
 

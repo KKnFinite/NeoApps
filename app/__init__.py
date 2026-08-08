@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from flask import Flask, abort, flash, redirect, request, send_from_directory, session, url_for
+from flask import Flask, abort, flash, g, redirect, request, send_from_directory, session, url_for
 from flask_login import current_user, logout_user
 
 from app.auth.permissions import (
@@ -407,9 +407,57 @@ def register_request_guards(app):
             return None
         return csrf_failure_response()
 
+    @app.before_request
+    def ensure_gateway_operation_lifecycle():
+        if request.method not in {"GET", "HEAD"}:
+            return None
+        if (
+            not current_user.is_authenticated
+            or not _is_operational_gateway_path(request.path)
+        ):
+            return None
+
+        from app.services.access_control import get_current_gateway
+        from app.services.operation_lifecycle import ensure_operational_sort_operations
+
+        gateway = get_current_gateway()
+        if not user_has_gateway_access(current_user, gateway.code):
+            return None
+
+        try:
+            g.operational_sort_ensure_result = ensure_operational_sort_operations(gateway)
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("Operational sort lifecycle check failed.")
+            from app.services.gateway_matrix import current_gateway_local_datetime
+
+            local_now = current_gateway_local_datetime(gateway)
+            g.operational_sort_ensure_result = {
+                "sort_date": local_now.date(),
+                "local_now": local_now,
+                "eligible": [],
+                "created": [],
+                "existing": [],
+                "errors": ["Operation lifecycle check failed."],
+            }
+        return None
+
     @app.after_request
     def add_csrf_tokens_to_rendered_forms(response):
         return inject_csrf_tokens(response)
+
+
+def _is_operational_gateway_path(path):
+    path = str(path or "").rstrip("/") or "/"
+    prefixes = (
+        "/rfd",
+        "/motherbrain",
+        "/neoermac",
+        "/neosektor",
+        "/neoscorpion",
+        "/nodes",
+    )
+    return any(path == prefix or path.startswith(f"{prefix}/") for prefix in prefixes)
 
 
 def register_security_headers(app):
