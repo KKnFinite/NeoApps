@@ -35,16 +35,20 @@ from app.services.csrf import (
     validate_csrf_request,
 )
 from app.services.password_policy import user_requires_password_change
+from app.services.google_motherbrain_live_poll_schema import (
+    ensure_google_motherbrain_live_poll_state_table,
+)
 from app.services.shell_metadata import resolve_shell_metadata
 from app.services.time_display import format_local_hhmm
 
 
 def create_app(config_class=Config, auto_bootstrap=False):
-    """Create the web application without blocking Gunicorn worker startup.
+    """Create the web application without broad Gunicorn worker bootstrap.
 
     Database schema/bootstrap work belongs in the deployment bootstrap command.
-    Keeping it opt-in here prevents every worker import from independently
-    running long PostgreSQL retries before the web process can bind its port.
+    Keeping it opt-in here prevents long PostgreSQL retries before the web
+    process can bind its port. The sole exception is the short, lock-protected
+    ensure for the Google live-poll coordination table.
     """
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(Config)
@@ -58,6 +62,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     login_manager.init_app(app)
 
     sync_existing_local_schema(app)
+    ensure_google_motherbrain_live_poll_state_table(app)
 
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)
