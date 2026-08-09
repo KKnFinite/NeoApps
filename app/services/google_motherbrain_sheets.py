@@ -1,4 +1,4 @@
-"""Read-only Google Sheets adapter for the locked MotherBrain workbook."""
+"""Google Sheets adapter for the locked MotherBrain workbook."""
 
 from __future__ import annotations
 
@@ -29,7 +29,11 @@ GOOGLE_MOTHERBRAIN_LOCKED_SPREADSHEET_TITLE = "RFD-N-sim: Mother Brain"
 GOOGLE_MOTHERBRAIN_READONLY_SCOPES = (
     "https://www.googleapis.com/auth/spreadsheets.readonly",
 )
+GOOGLE_MOTHERBRAIN_WRITE_SCOPES = (
+    "https://www.googleapis.com/auth/spreadsheets",
+)
 GOOGLE_SHEETS_EPOCH = datetime(1899, 12, 30)
+GOOGLE_MOTHERBRAIN_RESET_PARKING_FORMULA_RANGE = "Parking Plan!BG3:BG100"
 
 GOOGLE_MOTHERBRAIN_RANGE_SPECS = (
     ("sort_date", "Inbound!H2", 1, 1, 2),
@@ -262,6 +266,77 @@ def read_google_motherbrain_live_rows(config=None, client_factory=None):
     return live_rows
 
 
+def read_google_motherbrain_reset_parking_formulas(config=None, client_factory=None):
+    """Read only the helper formulas used to build a future reset plan."""
+    config = config or current_app.config
+    credentials, spreadsheet_id = _configured_reader_inputs(config)
+    client = (client_factory or _create_gspread_client)(credentials)
+    spreadsheet = _google_call(
+        "open_spreadsheet",
+        lambda: client.open_by_key(spreadsheet_id),
+    )
+    metadata = _google_call(
+        "read_metadata",
+        lambda: spreadsheet.fetch_sheet_metadata(
+            params={"includeGridData": False}
+        ),
+    )
+    _validate_workbook_metadata(metadata)
+    response = _google_call(
+        "read_reset_parking_formulas",
+        lambda: spreadsheet.values_batch_get(
+            [GOOGLE_MOTHERBRAIN_RESET_PARKING_FORMULA_RANGE],
+            params={
+                "valueRenderOption": "FORMULA",
+                "dateTimeRenderOption": "FORMATTED_STRING",
+                "majorDimension": "ROWS",
+            },
+        ),
+    )
+    values = _range_values(
+        response,
+        (("parking_reset_formulas", GOOGLE_MOTHERBRAIN_RESET_PARKING_FORMULA_RANGE, 98, 1, 3),),
+    )
+    return _padded_rows(values[0], 98, 1)
+
+
+def _clear_google_motherbrain_reset_ranges(
+    clear_ranges,
+    config=None,
+    client_factory=None,
+):
+    """Explicitly clear an already validated reset plan in the locked workbook.
+
+    No caller invokes this during startup, polling, or normal requests. It is
+    retained as the future execution primitive for an approved reset workflow.
+    """
+    normalized_ranges = tuple(
+        str(value or "").strip() for value in clear_ranges if str(value or "").strip()
+    )
+    if not normalized_ranges:
+        return normalized_ranges
+
+    config = config or current_app.config
+    credentials, spreadsheet_id = _configured_reader_inputs(config)
+    client = (client_factory or _create_gspread_writer)(credentials)
+    spreadsheet = _google_call(
+        "open_spreadsheet",
+        lambda: client.open_by_key(spreadsheet_id),
+    )
+    metadata = _google_call(
+        "read_metadata",
+        lambda: spreadsheet.fetch_sheet_metadata(
+            params={"includeGridData": False}
+        ),
+    )
+    _validate_workbook_metadata(metadata)
+    _google_call(
+        "clear_reset_ranges",
+        lambda: spreadsheet.values_batch_clear(list(normalized_ranges)),
+    )
+    return normalized_ranges
+
+
 def _create_gspread_client(credentials):
     if gspread is None:
         raise GoogleMotherBrainReaderError(
@@ -272,6 +347,24 @@ def _create_gspread_client(credentials):
         return gspread.service_account_from_dict(
             credentials,
             scopes=GOOGLE_MOTHERBRAIN_READONLY_SCOPES,
+        )
+    except Exception as exc:
+        raise GoogleMotherBrainReaderError(
+            "invalid_credentials",
+            "Google service-account credentials are invalid.",
+        ) from exc
+
+
+def _create_gspread_writer(credentials):
+    if gspread is None:
+        raise GoogleMotherBrainReaderError(
+            "writer_unavailable",
+            "The Google Sheets writer is unavailable.",
+        )
+    try:
+        return gspread.service_account_from_dict(
+            credentials,
+            scopes=GOOGLE_MOTHERBRAIN_WRITE_SCOPES,
         )
     except Exception as exc:
         raise GoogleMotherBrainReaderError(

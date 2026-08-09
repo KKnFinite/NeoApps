@@ -17,10 +17,12 @@ from app.services.google_motherbrain_sheets import (
     GOOGLE_MOTHERBRAIN_LIVE_RANGE_SPECS,
     GOOGLE_MOTHERBRAIN_RANGE_SPECS,
     GOOGLE_MOTHERBRAIN_READONLY_SCOPES,
+    GOOGLE_MOTHERBRAIN_RESET_PARKING_FORMULA_RANGE,
     GoogleMotherBrainReaderError,
     google_motherbrain_reader_status,
     read_google_motherbrain_envelope,
     read_google_motherbrain_live_rows,
+    read_google_motherbrain_reset_parking_formulas,
 )
 from app.services.password_policy import set_user_password
 
@@ -109,6 +111,19 @@ class FakeGoogleError(Exception):
     def __init__(self, status_code):
         self.response = SimpleNamespace(status_code=status_code)
         super().__init__(f"provider failure {status_code}")
+
+
+class ResetFormulaSpreadsheet(FakeSpreadsheet):
+    def values_batch_get(self, ranges, params=None):
+        self.batch_calls.append((list(ranges), dict(params or {})))
+        return {
+            "valueRanges": [
+                {
+                    "range": GOOGLE_MOTHERBRAIN_RESET_PARKING_FORMULA_RANGE,
+                    "values": [["=U13"], ["=AC13"]],
+                }
+            ]
+        }
 
 
 class GoogleMotherBrainSheetsReaderTest(unittest.TestCase):
@@ -328,9 +343,14 @@ class GoogleMotherBrainSheetsReaderTest(unittest.TestCase):
         self.assertNotIn("drive", " ".join(captured["scopes"]).lower())
 
     def test_reader_source_contains_no_google_mutation_calls(self):
-        from app.services import google_motherbrain_sheets as service
-
-        source = inspect.getsource(service)
+        source = "\n".join(
+            inspect.getsource(reader)
+            for reader in (
+                read_google_motherbrain_envelope,
+                read_google_motherbrain_live_rows,
+                read_google_motherbrain_reset_parking_formulas,
+            )
+        )
         for method in (
             "update",
             "update_acell",
@@ -422,6 +442,34 @@ class GoogleMotherBrainLiveRangeReaderTest(unittest.TestCase):
         self.assertEqual(outbound["X"], "ONT")
         self.assertEqual(outbound["Y"], "N101UP")
         self.assertEqual(outbound["Z"], "ACK")
+
+
+class GoogleMotherBrainResetFormulaReaderTest(unittest.TestCase):
+    def test_reset_formula_reader_fetches_only_the_locked_formula_range(self):
+        spreadsheet = ResetFormulaSpreadsheet()
+        client = FakeClient(spreadsheet)
+
+        formulas = read_google_motherbrain_reset_parking_formulas(
+            reader_config(),
+            client_factory=lambda _credentials: client,
+        )
+
+        self.assertEqual(client.opened_ids, [GOOGLE_MOTHERBRAIN_LOCKED_SPREADSHEET_ID])
+        self.assertEqual(
+            spreadsheet.batch_calls,
+            [
+                (
+                    [GOOGLE_MOTHERBRAIN_RESET_PARKING_FORMULA_RANGE],
+                    {
+                        "valueRenderOption": "FORMULA",
+                        "dateTimeRenderOption": "FORMATTED_STRING",
+                        "majorDimension": "ROWS",
+                    },
+                )
+            ],
+        )
+        self.assertEqual(formulas[:2], [["=U13"], ["=AC13"]])
+        self.assertEqual(len(formulas), 98)
 
 
 class _LiveRangeSpreadsheet:
