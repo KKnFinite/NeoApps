@@ -22,7 +22,7 @@ class GoogleMotherBrainResetPlanTest(unittest.TestCase):
             plan["inbound_ranges"],
             (
                 "Inbound!A4:G13",
-                "Inbound!A15:G100",
+                "Inbound!A16:G100",
                 "Inbound!P4:P100",
             ),
         )
@@ -30,7 +30,7 @@ class GoogleMotherBrainResetPlanTest(unittest.TestCase):
             plan["outbound_ranges"],
             (
                 "Outbound!A4:G13",
-                "Outbound!A15:G100",
+                "Outbound!A16:G100",
                 "Outbound!P4:P100",
                 "Outbound!Y4:Y100",
             ),
@@ -39,6 +39,18 @@ class GoogleMotherBrainResetPlanTest(unittest.TestCase):
         self.assertEqual(
             plan["parking_formula_range"],
             GOOGLE_MOTHERBRAIN_RESET_PARKING_FORMULA_RANGE,
+        )
+
+    def test_plan_preserves_the_permanent_alp_header_row_15(self):
+        plan = build_google_motherbrain_reset_plan([['=U13']])
+
+        self.assertIn("Inbound!A16:G100", plan["clear_ranges"])
+        self.assertIn("Outbound!A16:G100", plan["clear_ranges"])
+        self.assertFalse(
+            any(
+                clear_range.startswith(("Inbound!A15:", "Outbound!A15:"))
+                for clear_range in plan["clear_ranges"]
+            )
         )
 
     def test_primary_and_secondary_b_parking_cells_are_included_from_formulas(self):

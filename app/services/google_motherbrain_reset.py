@@ -13,12 +13,12 @@ from app.services.google_motherbrain_sheets import (
 
 INBOUND_RESET_RANGES = (
     "Inbound!A4:G13",
-    "Inbound!A15:G100",
+    "Inbound!A16:G100",
     "Inbound!P4:P100",
 )
 OUTBOUND_RESET_RANGES = (
     "Outbound!A4:G13",
-    "Outbound!A15:G100",
+    "Outbound!A16:G100",
     "Outbound!P4:P100",
     "Outbound!Y4:Y100",
 )
