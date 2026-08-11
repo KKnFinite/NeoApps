@@ -1,0 +1,11 @@
+{% if live_update_status %}
+<div
+    class="live-update-status"
+    data-live-update-status
+    data-live-update-state="{{ live_update_status.reason }}"
+    role="status"
+    aria-live="polite"
+>
+    {{ live_update_status.live_status_label or live_update_status.message }}
+</div>
+{% endif %}

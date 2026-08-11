@@ -88,7 +88,7 @@
     const stateUrl = root.dataset.stateUrl;
     const initialRefreshStatus = {{ state.refresh|tojson }};
     const refreshPaused = root.querySelector("[data-neosektor-refresh-paused]");
-    let refreshTimer = null;
+    let refreshController = null;
 
     const applyRoute = (waveKey, route) => {
         const panel = root.querySelector(`[data-driver-wave="${waveKey}"]`);
@@ -137,7 +137,7 @@
         if (refreshPaused) {
             refreshPaused.hidden = isActive;
             refreshPaused.replaceChildren(
-                document.createTextNode(status.message || "Auto-refresh paused outside the current operation window."),
+                document.createTextNode(status.message || "Live updates off - outside Ops window"),
             );
             if (status.operation_label && status.window_label) {
                 const detail = document.createElement("span");
@@ -146,34 +146,34 @@
             }
         }
 
-        if (isActive) {
-            if (!refreshTimer) {
-                refreshTimer = window.setInterval(refreshState, 5000);
-            }
-            return;
+        if (!refreshController) {
+            refreshController = window.NeoLiveUpdates.create({
+                intervalMs: {{ live_screen_refresh_interval_ms }},
+                statusElement: document.querySelector("[data-live-update-status]"),
+                poll: refreshState,
+            });
         }
-
-        if (refreshTimer) {
-            window.clearInterval(refreshTimer);
-            refreshTimer = null;
-        }
+        refreshController.setServerStatus(status);
     };
 
     const refreshState = async () => {
         try {
             const response = await fetch(stateUrl, { cache: "no-store", credentials: "same-origin" });
             if (!response.ok) {
-                return;
+                throw new Error("Driver Routing refresh failed.");
             }
             const payload = await response.json();
-            if (payload.ok) {
-                setRefreshStatus(payload.state?.refresh);
-                if (payload.state?.refresh?.auto_refresh_enabled === false) {
-                    return;
-                }
-                applyState(payload.state);
+            if (!payload.ok || !payload.state) {
+                throw new Error("Driver Routing refresh failed.");
             }
-        } catch (_error) {}
+            setRefreshStatus(payload.state.refresh);
+            if (payload.state.refresh?.auto_refresh_enabled === false) {
+                return;
+            }
+            applyState(payload.state);
+        } catch (error) {
+            throw error;
+        }
     };
 
     setRefreshStatus(initialRefreshStatus);

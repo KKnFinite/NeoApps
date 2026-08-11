@@ -16,4 +16,7 @@
     <span>{{ operation_refresh_status.operation_label }} &middot; {{ operation_refresh_status.window_label }}</span>
     {% endif %}
 </div>
+{% with live_update_status=operation_refresh_status %}
+{% include "neonodes/_live_update_status.html" %}
+{% endwith %}
 {% endif %}

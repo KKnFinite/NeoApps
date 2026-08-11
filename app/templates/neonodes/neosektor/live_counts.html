@@ -101,7 +101,7 @@
     const stateUrl = root.dataset.stateUrl;
     const initialRefreshStatus = {{ refresh_status|tojson }};
     const refreshPaused = root.querySelector("[data-neosektor-refresh-paused]");
-    let refreshTimer = null;
+    let refreshController = null;
 
     const formatWaveMetric = (metric, value) => {
         const raw = String(value ?? "").trim();
@@ -170,7 +170,7 @@
         if (refreshPaused) {
             refreshPaused.hidden = isActive;
             refreshPaused.replaceChildren(
-                document.createTextNode(status.message || "Auto-refresh paused outside the current operation window."),
+                document.createTextNode(status.message || "Live updates off - outside Ops window"),
             );
             if (status.operation_label && status.window_label) {
                 const detail = document.createElement("span");
@@ -179,17 +179,14 @@
             }
         }
 
-        if (isActive) {
-            if (!refreshTimer) {
-                refreshTimer = window.setInterval(refreshState, 5000);
-            }
-            return;
+        if (!refreshController) {
+            refreshController = window.NeoLiveUpdates.create({
+                intervalMs: {{ live_screen_refresh_interval_ms }},
+                statusElement: document.querySelector("[data-live-update-status]"),
+                poll: refreshState,
+            });
         }
-
-        if (refreshTimer) {
-            window.clearInterval(refreshTimer);
-            refreshTimer = null;
-        }
+        refreshController.setServerStatus(status);
     };
 
     const refreshState = async () => {
@@ -199,18 +196,19 @@
                 cache: "no-store",
             });
             if (!response.ok) {
-                return;
+                throw new Error("Live Counts refresh failed.");
             }
             const payload = await response.json();
-            if (payload.ok && payload.state) {
-                setRefreshStatus(payload.state.refresh);
-                if (payload.state.refresh?.auto_refresh_enabled === false) {
-                    return;
-                }
-                applyState(payload.state);
+            if (!payload.ok || !payload.state) {
+                throw new Error("Live Counts refresh failed.");
             }
+            setRefreshStatus(payload.state.refresh);
+            if (payload.state.refresh?.auto_refresh_enabled === false) {
+                return;
+            }
+            applyState(payload.state);
         } catch (error) {
-            return;
+            throw error;
         }
     };
 

@@ -9,11 +9,18 @@
         return;
     }
 
-    const isActive = root.dataset.refreshActive === "true";
-    if (isActive) {
-        window.setInterval(() => window.location.reload(), 5000);
-        return;
-    }
+    const statusElement = document.querySelector("[data-live-update-status]");
+    const controller = window.NeoLiveUpdates.create({
+        intervalMs: {{ live_screen_refresh_interval_ms }},
+        statusElement,
+        immediate: false,
+        poll: () => window.location.reload(),
+    });
+    controller.setServerStatus({
+        auto_refresh_enabled: root.dataset.refreshActive === "true",
+        reason: {{ operation_refresh_status.reason|tojson }},
+        live_status_label: {{ operation_refresh_status.live_status_label|tojson }},
+    });
 })();
 </script>
 {% endif %}

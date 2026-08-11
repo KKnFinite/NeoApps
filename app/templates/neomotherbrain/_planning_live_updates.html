@@ -1,0 +1,55 @@
+<script data-planning-live-collaboration>
+(() => {
+    const root = document.querySelector("[data-planning-live-root]");
+    if (!root || root.dataset.planningLiveBound === "true") {
+        return;
+    }
+    root.dataset.planningLiveBound = "true";
+
+    const stateUrl = root.dataset.stateUrl;
+    const statusElement = root.querySelector("[data-live-update-status]");
+    const initialStatus = {{ live_update_status|tojson }};
+    let controller = null;
+
+    const reconcile = (payload) => {
+        const fragments = payload.fragments || {};
+        window.NeoLiveUpdates.reconcileRows(
+            root.querySelector("[data-live-rows='review']"),
+            fragments.review || ""
+        );
+        window.NeoLiveUpdates.reconcileRows(
+            root.querySelector("[data-live-rows='missions']"),
+            fragments.missions || ""
+        );
+        window.NeoLiveUpdates.reconcileRows(
+            root.querySelector("[data-live-rows='mobile-missions']"),
+            fragments.mobile_missions || ""
+        );
+    };
+
+    const poll = async () => {
+        const response = await fetch(stateUrl, {
+            cache: "no-store",
+            credentials: "same-origin",
+            headers: {"Accept": "application/json"},
+        });
+        if (!response.ok) {
+            throw new Error("Planning live refresh failed.");
+        }
+        const payload = await response.json();
+        if (!payload.ok) {
+            throw new Error(payload.error || "Planning live refresh failed.");
+        }
+        controller.setServerStatus(payload.refresh || {});
+        reconcile(payload);
+    };
+
+    controller = window.NeoLiveUpdates.create({
+        intervalMs: {{ live_screen_refresh_interval_ms }},
+        statusElement,
+        poll,
+    });
+    window.NeoLiveUpdates.bindConflictSafeForms(root, () => controller.refreshNow());
+    controller.setServerStatus(initialStatus);
+})();
+</script>

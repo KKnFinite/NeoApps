@@ -219,8 +219,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"data-refresh-active", landing_response.data)
         self.assertNotIn(b"data-operation-refresh-reload", landing_response.data)
         self.assertNotIn(b"neoermac-refresh-paused", landing_response.data)
-        self.assertNotIn(b"window.setInterval(refreshState, 5000)", landing_response.data)
-        self.assertNotIn(b"window.setInterval(() => window.location.reload(), 5000)", landing_response.data)
+        self.assertNotIn(b"window.NeoLiveUpdates.create", landing_response.data)
 
         reload_pages = ("/neoermac/upcoming-pulls",)
         for path in reload_pages:
@@ -229,13 +228,16 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(b"data-operation-refresh-reload", response.data)
                 self.assertIn(b'data-refresh-active="true"', response.data)
-                self.assertIn(b"window.setInterval(() => window.location.reload(), 5000)", response.data)
+                self.assertIn(b"window.NeoLiveUpdates.create", response.data)
+                self.assertIn(b"intervalMs: 5000", response.data)
+                self.assertIn(b"immediate: false", response.data)
 
         outbound_response = self.client.get("/neoermac/view-outbound")
         self.assertEqual(outbound_response.status_code, 200)
         self.assertIn(b"data-neoermac-outbound-refresh", outbound_response.data)
         self.assertIn(b'data-refresh-active="true"', outbound_response.data)
-        self.assertIn(b"window.setInterval(refreshOutboundView, 5000)", outbound_response.data)
+        self.assertIn(b"window.NeoLiveUpdates.create", outbound_response.data)
+        self.assertIn(b"intervalMs: 5000", outbound_response.data)
         self.assertNotIn(b"data-operation-refresh-reload", outbound_response.data)
         self.assertNotIn(b"window.location.reload()", outbound_response.data)
 
@@ -243,8 +245,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(door_response.status_code, 200)
         self.assertIn(b'data-state-url="/neoermac/door-view/state?door=D34"', door_response.data)
         self.assertIn(b'data-refresh-active="true"', door_response.data)
-        self.assertIn(b"window.setInterval(refreshState, 5000)", door_response.data)
-        self.assertNotIn(b"window.setInterval(refreshState, 3000)", door_response.data)
+        self.assertIn(b"window.NeoLiveUpdates.create", door_response.data)
+        self.assertIn(b"intervalMs: 5000", door_response.data)
+        self.assertNotIn(b"window.setInterval(refreshState", door_response.data)
         self.assertNotIn(b"neoermac-door-launcher-grid", door_response.data)
 
         non_refresh_pages = (
@@ -257,8 +260,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
                 self.assertNotIn(b"data-operation-refresh-reload", response.data)
-                self.assertNotIn(b"window.setInterval(refreshState, 5000)", response.data)
-                self.assertNotIn(b"window.setInterval(() => window.location.reload(), 5000)", response.data)
+                self.assertNotIn(b"window.NeoLiveUpdates.create", response.data)
 
     def test_neoermac_auto_refresh_pauses_outside_operation_window(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 11, 10, 0)
@@ -274,18 +276,18 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'data-refresh-active="false"', response.data)
         self.assertIn(b"neoermac-refresh-paused", response.data)
-        self.assertIn(b"Auto-refresh paused", response.data)
+        self.assertIn(b"Live updates off - outside Ops window", response.data)
         payload = state_response.get_json()
         self.assertFalse(payload["state"]["refresh"]["auto_refresh_enabled"])
         self.assertEqual(payload["state"]["refresh"]["operation_id"], operation.id)
         self.assertIsNone(payload["state"]["refresh"]["next_check_seconds"])
-        self.assertNotIn(b"setTimeout(refreshState", response.data)
+        self.assertNotIn(b"window.setInterval(refreshState", response.data)
         self.assertNotIn(b"resumeTimer", response.data)
 
         landing_response = self.client.get("/neoermac/door-view")
         self.assertEqual(landing_response.status_code, 200)
         self.assertNotIn(b"neoermac-refresh-paused", landing_response.data)
-        self.assertNotIn(b"Auto-refresh paused", landing_response.data)
+        self.assertNotIn(b"Live updates off - outside Ops window", landing_response.data)
         self.assertNotIn(b"data-operation-refresh-reload", landing_response.data)
         self.assertNotIn(b"window.setInterval", landing_response.data)
 

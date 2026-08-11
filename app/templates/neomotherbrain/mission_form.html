@@ -10,6 +10,19 @@
     </div>
 
     <form class="operation-form" method="post">
+        {% if mode == "edit" %}
+        <input type="hidden" name="expected_version" value="{{ expected_version }}">
+        <input type="hidden" name="original_values" value="{{ original_values|e }}">
+        {% endif %}
+        {% if conflict %}
+        <div class="live-conflict-panel" role="alert">
+            <p>{{ conflict.message }}</p>
+            <div class="live-conflict-actions">
+                <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">USE LATEST</a>
+                <button class="action-button" type="submit" name="force_overwrite" value="1">OVERWRITE WITH MINE</button>
+            </div>
+        </div>
+        {% endif %}
         <label>
             <span>MISSION TYPE</span>
             <select name="mission_type" required data-mission-type-select>

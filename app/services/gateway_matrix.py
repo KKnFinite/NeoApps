@@ -232,6 +232,37 @@ def sort_lookup_window_for_operation(operation, gateway=None):
     return start_local, end_local
 
 
+def ops_window_for_operation(operation, gateway=None):
+    """Return the node-online window, falling back only for legacy config.
+
+    Existing gateways may not have both Ops boundaries populated. In that case
+    live screens retain their previous behavior by using the complete Sort
+    lookup window. A partial Ops window is never mixed with a Sort boundary.
+    """
+    sort_setting = _sort_timeline_sort_setting(
+        gateway or operation.gateway,
+        operation.sort_name,
+    )
+    if not (
+        sort_setting
+        and sort_setting.ops_window_start_local
+        and sort_setting.ops_window_end_local
+    ):
+        return sort_lookup_window_for_operation(operation, gateway)
+
+    start_local = datetime.combine(
+        operation.sort_date,
+        sort_setting.ops_window_start_local,
+    )
+    end_local = datetime.combine(
+        operation.sort_date,
+        sort_setting.ops_window_end_local,
+    )
+    if end_local <= start_local:
+        end_local += timedelta(days=1)
+    return start_local, end_local
+
+
 def _sort_timeline_sort_setting(gateway, sort_name):
     if not gateway:
         return None

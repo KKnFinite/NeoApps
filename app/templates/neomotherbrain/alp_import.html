@@ -1,40 +1,15 @@
 {% extends "base.html" %}
+{% from "neomotherbrain/_planning_macros.html" import planning_parking_cell %}
 
 {% block title %}{{ planning_title }} | NeoApps{% endblock %}
 
-{% macro planning_parking_cell(row, operation) -%}
-    {% set parking = row.parking_context %}
-    {% if parking and parking.has_tail %}
-    <div class="planning-parking-context">
-        <span class="planning-parking-position{% if not parking.is_assigned %} is-not-parked{% endif %}">
-            {{ parking.label|upper }}
-        </span>
-        {% if parking.is_oos %}
-        <span class="planning-parking-badge is-oos">OOS / RED</span>
-        {% endif %}
-        {% if parking.is_cancelled %}
-        <span class="planning-parking-badge is-cancelled">MISSION CANCELLED</span>
-        {% endif %}
-    </div>
-    {% else %}
-    <span class="muted">-</span>
-    {% endif %}
-{%- endmacro %}
-
-{% macro planning_wave_field(row, required=false) -%}
-<label class="planning-review-wave-field">
-    <span>WAVE</span>
-    <select name="wave"{% if required %} required{% endif %} aria-label="Wave">
-        <option value=""{% if not row.inferred_wave %} selected{% endif %}>SELECT WAVE</option>
-        {% for wave_value, wave_label in wave_options %}
-        <option value="{{ wave_value }}"{% if row.inferred_wave == wave_value %} selected{% endif %}>{{ wave_label }}</option>
-        {% endfor %}
-    </select>
-</label>
-{%- endmacro %}
-
 {% block content %}
-<section class="panel centered-command-page manage-sort-sidebar-page planning-page planning-page-{{ mission_type }}">
+<section
+    class="panel centered-command-page manage-sort-sidebar-page planning-page planning-page-{{ mission_type }}"
+    data-planning-live-root
+    data-state-url="{{ url_for('neomotherbrain.planning_live_state', operation_id=operation.id, mission_type=mission_type) }}"
+    data-refresh-active="{{ 'true' if live_update_status.auto_refresh_enabled else 'false' }}"
+>
     {% if can_edit and mission_type == "departure" %}
     <datalist id="tail-swap-options">
         {% for tail in tail_swap_options %}
@@ -52,6 +27,7 @@
                 <h1 class="mobile-shell-duplicate-title motherbrain-body-duplicate-title">{{ planning_title }}</h1>
                 <p>{{ operation.gateway_code }} {{ operation.sort_name|title }} {{ operation.sort_date }}</p>
             </div>
+            {% include "neonodes/_live_update_status.html" %}
 
             {% if can_edit %}
             <div class="action-row planning-local-actions">
@@ -251,86 +227,8 @@
                         <th>ACTIONS</th>
                     </tr>
                 </thead>
-                <tbody>
-                    {% for row in planning_rows %}
-                    <tr>
-                        <td>{{ row.source }}</td>
-                        <td>{{ row.reference }}</td>
-                        <td>{{ row.flight }}</td>
-                        <td>{{ row.airport }}</td>
-                        <td>{{ row.tail }}</td>
-                        <td>{{ row.local_time }}</td>
-                        <td>
-                            {{ row.reason }}
-                            {% if row.reason_detail %}
-                            <br><span class="muted">{{ row.reason_detail }}</span>
-                            {% endif %}
-                            {% if row.action_error %}
-                            <br><span class="planning-row-action-error" role="alert">{{ row.action_error }}</span>
-                            {% endif %}
-                        </td>
-                        <td class="table-actions">
-                            {% if can_edit %}
-                                {% if row.kind == "alp" %}
-                                <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.add_alp_planning_row', operation_id=operation.id, mission_type=mission_type) }}">
-                                    <input type="hidden" name="review_key" value="{{ row.review_key }}">
-                                    <input type="hidden" name="line_number" value="{{ row.line_number }}">
-                                    <input type="hidden" name="flight_number" value="{{ row.flight }}">
-                                    <input type="hidden" name="airport" value="{{ row.airport_value }}">
-                                    <input type="hidden" name="tail_number" value="{{ row.tail_value }}">
-                                    <input type="hidden" name="utc_datetime" value="{{ row.utc_datetime.isoformat() if row.utc_datetime else '' }}">
-                                    <input type="hidden" name="reason" value="{{ row.reason }}">
-                                    <input type="hidden" name="reason_detail" value="{{ row.reason_detail }}">
-                                    {{ planning_wave_field(row, mission_type == "departure") }}
-                                    <button class="table-row-button" type="submit">ADD TO CURRENT SORT</button>
-                                </form>
-                                <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.hot_alp_planning_row', operation_id=operation.id, mission_type=mission_type) }}">
-                                    <input type="hidden" name="review_key" value="{{ row.review_key }}">
-                                    <input type="hidden" name="line_number" value="{{ row.line_number }}">
-                                    <input type="hidden" name="flight_number" value="{{ row.flight }}">
-                                    <input type="hidden" name="airport" value="{{ row.airport_value }}">
-                                    <input type="hidden" name="tail_number" value="{{ row.tail_value }}">
-                                    <input type="hidden" name="utc_datetime" value="{{ row.utc_datetime.isoformat() if row.utc_datetime else '' }}">
-                                    <input type="hidden" name="reason" value="{{ row.reason }}">
-                                    <input type="hidden" name="reason_detail" value="{{ row.reason_detail }}">
-                                    <button class="table-row-button" type="submit">HOT</button>
-                                </form>
-                                <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.ignore_alp_planning_row', operation_id=operation.id, mission_type=mission_type) }}">
-                                    <input type="hidden" name="review_key" value="{{ row.review_key }}">
-                                    <input type="hidden" name="line_number" value="{{ row.line_number }}">
-                                    <input type="hidden" name="flight_number" value="{{ row.flight }}">
-                                    <input type="hidden" name="airport" value="{{ row.airport_value }}">
-                                    <input type="hidden" name="tail_number" value="{{ row.tail_value }}">
-                                    <input type="hidden" name="utc_datetime" value="{{ row.utc_datetime.isoformat() if row.utc_datetime else '' }}">
-                                    <input type="hidden" name="reason" value="{{ row.reason }}">
-                                    <input type="hidden" name="reason_detail" value="{{ row.reason_detail }}">
-                                    <button class="table-row-button table-row-delete-button" type="submit">IGNORE</button>
-                                </form>
-                                {% else %}
-                                <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.add_api_planning_row', operation_id=operation.id, review_item_id=row.item.id) }}">
-                                    <input type="hidden" name="mission_type" value="{{ mission_type }}">
-                                    {{ planning_wave_field(row, mission_type == "departure") }}
-                                    <button class="table-row-button" type="submit">ADD TO CURRENT SORT</button>
-                                </form>
-                                {% if mission_type == "departure" %}
-                                <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.hot_api_planning_row', operation_id=operation.id, review_item_id=row.item.id) }}">
-                                    <input type="hidden" name="mission_type" value="{{ mission_type }}">
-                                    <button class="table-row-button" type="submit">HOT</button>
-                                </form>
-                                {% endif %}
-                                <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.ignore_api_planning_row', operation_id=operation.id, review_item_id=row.item.id) }}">
-                                    <input type="hidden" name="mission_type" value="{{ mission_type }}">
-                                    <button class="table-row-button table-row-delete-button" type="submit">IGNORE</button>
-                                </form>
-                                {% endif %}
-                            {% else %}
-                            <span class="muted">VIEW ONLY</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="8">NO UNMATCHED {{ label|upper }} PLANNING ROWS.</td></tr>
-                    {% endfor %}
+                <tbody data-live-rows="review">
+                    {% include "neomotherbrain/_planning_review_rows.html" %}
                 </tbody>
             </table>
         </div>
@@ -483,64 +381,11 @@
             {{ operation.gateway_code|upper }} {{ operation.sort_name|title }} {{ operation.sort_date.strftime("%m-%d-%Y") }}
         </div>
         {% if mission_type == "arrival" %}
-        <div class="planning-mobile-arrival-list" role="list" aria-label="Current arrival missions">
+        <div class="planning-mobile-arrival-list" data-live-rows="mobile-missions" role="list" aria-label="Current arrival missions">
         {% else %}
-        <div class="planning-mobile-departure-list" role="list" aria-label="Current departure missions">
+        <div class="planning-mobile-departure-list" data-live-rows="mobile-missions" role="list" aria-label="Current departure missions">
         {% endif %}
-        {% for row in mission_rows %}
-        {% set mission = row.mission %}
-        {% set parking = row.parking_context %}
-        {% if mission_type == "arrival" %}
-        <article
-            class="planning-mobile-arrival-row{% if row.is_late %} is-arrival-late{% endif %}"
-            role="listitem"
-            aria-label="Flight {{ mission.flight_number|upper }} tail {{ mission.assigned_tail_number|upper if mission.assigned_tail_number else '-' }} origin {{ mission.origin|upper if mission.origin else '-' }} ETA {{ row.eta_time.strftime('%H:%M') if row.eta_time else '-' }} variance {{ row.eta_delta_display }}"
-            {% if row.is_late %}data-mobile-arrival-late-row{% endif %}
-        >
-            <strong class="planning-mobile-arrival-flight">{{ mission.flight_number|upper }}</strong>
-            <span class="planning-mobile-arrival-tail">{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</span>
-            <span class="planning-mobile-arrival-origin">{{ mission.origin|upper if mission.origin else "-" }}</span>
-            <time class="planning-mobile-arrival-eta" datetime="{{ row.eta_time.isoformat() if row.eta_time else '' }}">{{ row.eta_time.strftime("%H:%M") if row.eta_time else "-" }}</time>
-            <span class="planning-mobile-arrival-variance">{{ row.eta_delta_display }}</span>
-        </article>
-        {% else %}
-        <article
-            class="planning-mobile-departure-row{% if row.is_cancelled %} is-cancelled{% elif row.needs_replacement_tail %} needs-tail{% endif %}"
-            role="listitem"
-            aria-label="Flight {{ mission.flight_number|upper }} tail {{ mission.assigned_tail_number|upper if mission.assigned_tail_number else '-' }} destination {{ mission.destination|upper if mission.destination else '-' }} parking {{ parking.label|upper if parking and parking.has_tail else '-' }}"
-        >
-            <strong class="planning-mobile-departure-flight">{{ mission.flight_number|upper }}</strong>
-            <span class="planning-mobile-departure-tail">{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</span>
-            <span class="planning-mobile-departure-destination">{{ mission.destination|upper if mission.destination else "-" }}</span>
-            <span class="planning-mobile-departure-parking">{{ parking.label|upper if parking and parking.has_tail else "-" }}</span>
-            <div class="planning-mobile-tail-swap" data-mobile-tail-swap-options>
-                {% if can_edit %}
-                    {% if row.is_cancelled %}
-                    <span class="planning-mobile-tail-swap-note">Restore</span>
-                    {% else %}
-                    <details class="planning-mobile-tail-swap-details">
-                        <summary class="planning-mobile-tail-swap-button" role="button" aria-label="Swap tail for {{ mission.flight_number|upper }}">Swap</summary>
-                        <form class="planning-mobile-tail-swap-form" method="post" action="{{ url_for('neomotherbrain.tail_swap_mission', operation_id=operation.id, mission_id=mission.id) }}">
-                            <select name="replacement_tail" aria-label="Replacement tail for {{ mission.flight_number|upper }}" required {% if not tail_swap_options %}disabled{% endif %}>
-                                <option value="">TAIL</option>
-                                {% for tail in tail_swap_options %}
-                                <option value="{{ tail }}">{{ tail }}</option>
-                                {% endfor %}
-                            </select>
-                            <input type="hidden" name="confirm_tail_swap" value="1">
-                            <button class="table-row-button" type="submit" {% if not tail_swap_options %}disabled{% endif %}>Apply</button>
-                        </form>
-                    </details>
-                    {% endif %}
-                {% else %}
-                <span class="planning-mobile-tail-swap-note">View</span>
-                {% endif %}
-            </div>
-        </article>
-        {% endif %}
-        {% else %}
-        <p class="planning-mobile-empty">No current {{ label|lower }} missions found.</p>
-        {% endfor %}
+        {% include "neomotherbrain/_planning_mobile_mission_rows.html" %}
         </div>
     </section>
 
@@ -576,91 +421,8 @@
                     </tr>
                     {% endif %}
                 </thead>
-                <tbody>
-                    {% for row in mission_rows %}
-                    {% set mission = row.mission %}
-                    {% if mission_type == "arrival" %}
-                    <tr{% if row.is_late %} class="is-arrival-late"{% endif %}>
-                        <td>{{ mission.wave|wave_label }}</td>
-                        <td>{{ mission.flight_number|upper }}</td>
-                        <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
-                        <td>{{ mission.origin|upper if mission.origin else "-" }}</td>
-                        <td>{{ mission.planned_datetime_local.strftime("%H:%M") if mission.planned_datetime_local else "-" }}</td>
-                        <td>{{ row.eta_time.strftime("%H:%M") if row.eta_time else "-" }}</td>
-                        <td class="planning-arrival-variance">{{ row.eta_delta_display }}</td>
-                        <td>{{ planning_parking_cell(row, operation) }}</td>
-                        <td>{{ row.status_label }}</td>
-                        <td class="table-actions planning-mission-actions">
-                            {% if can_edit %}
-                            <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT</a>
-                            <button class="table-row-button" type="button" disabled title="Tail Swap is available for departure planning rows.">TAILSWAP</button>
-                            {% if row.is_cancelled %}
-                            <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.restore_mission', operation_id=operation.id, mission_id=mission.id) }}">
-                                <button class="table-row-button" type="submit">RESTORE</button>
-                            </form>
-                            {% else %}
-                            <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.cancel_mission', operation_id=operation.id, mission_id=mission.id) }}">
-                                <button class="table-row-button table-row-delete-button" type="submit">CANCEL</button>
-                            </form>
-                            {% endif %}
-                            {% else %}
-                            <span class="muted">VIEW ONLY</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% else %}
-                    {% set timing = row.timing %}
-                    <tr>
-                        <td>{{ mission.wave|wave_label }}</td>
-                        <td>{{ mission.flight_number|upper }}</td>
-                        <td>{{ mission.assigned_tail_number|upper if mission.assigned_tail_number else "-" }}</td>
-                        <td>{{ mission.destination|upper if mission.destination else "-" }}</td>
-                        <td>{{ timing.adjusted_planned_departure_time.strftime("%H:%M") if timing.adjusted_planned_departure_time else "-" }}</td>
-                        <td>{{ planning_parking_cell(row, operation) }}</td>
-                        <td>
-                            {% if mission.departure_status == "cancelled" %}
-                            CANCELLED
-                            {% elif row.needs_replacement_tail %}
-                            <span class="planning-status-badge is-needs-tail">NEEDS TAIL</span>
-                            {% else %}
-                            {{ mission.departure_status|status_label if mission.departure_status else "-" }}
-                            {% endif %}
-                        </td>
-                        <td class="table-actions planning-mission-actions">
-                            {% if can_edit %}
-                            <a href="{{ url_for('neomotherbrain.edit_mission', operation_id=operation.id, mission_id=mission.id) }}">EDIT</a>
-                            {% if row.is_cancelled %}
-                            <button class="table-row-button" type="button" disabled title="Restore this departure before using Tail Swap.">TAILSWAP</button>
-                            {% else %}
-                            <form class="inline-button-form planning-tail-swap-form" method="post" action="{{ url_for('neomotherbrain.tail_swap_mission', operation_id=operation.id, mission_id=mission.id) }}">
-                                <input class="compact-action-input planning-tail-swap-input" type="text" name="replacement_tail" list="tail-swap-options" placeholder="TAIL" aria-label="Replacement tail for {{ mission.flight_number|upper }}" required>
-                                <label class="planning-tail-swap-confirm">
-                                    <input type="checkbox" name="confirm_tail_swap" value="1">
-                                    CONFIRM
-                                </label>
-                                <button class="table-row-button" type="submit">TAILSWAP</button>
-                            </form>
-                            {% endif %}
-                            {% if row.is_cancelled %}
-                            <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.restore_mission', operation_id=operation.id, mission_id=mission.id) }}">
-                                <button class="table-row-button" type="submit">RESTORE</button>
-                            </form>
-                            {% else %}
-                            <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.cancel_mission', operation_id=operation.id, mission_id=mission.id) }}">
-                                <button class="table-row-button table-row-delete-button" type="submit">CANCEL</button>
-                            </form>
-                            {% endif %}
-                            {% else %}
-                            <span class="muted">VIEW ONLY</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endif %}
-                    {% else %}
-                    <tr>
-                        <td colspan="{{ 10 if mission_type == 'arrival' else 8 }}">NO CURRENT {{ label|upper }} MISSIONS FOUND.</td>
-                    </tr>
-                    {% endfor %}
+                <tbody data-live-rows="missions">
+                    {% include "neomotherbrain/_planning_mission_rows.html" %}
                 </tbody>
             </table>
         </div>
@@ -668,4 +430,5 @@
         </div>
     </div>
 </section>
+{% include "neomotherbrain/_planning_live_updates.html" %}
 {% endblock %}

@@ -1,0 +1,90 @@
+{% from "neomotherbrain/_planning_macros.html" import planning_wave_field %}
+{% for row in planning_rows %}
+<tr
+    data-live-row
+    data-live-id="{{ row.live_id }}"
+    data-live-version="{{ row.live_version }}"
+>
+    <td>{{ row.source }}</td>
+    <td>{{ row.reference }}</td>
+    <td>{{ row.flight }}</td>
+    <td>{{ row.airport }}</td>
+    <td>{{ row.tail }}</td>
+    <td>{{ row.local_time }}</td>
+    <td>
+        {{ row.reason }}
+        {% if row.reason_detail %}
+        <br><span class="muted">{{ row.reason_detail }}</span>
+        {% endif %}
+        {% if row.action_error %}
+        <br><span class="planning-row-action-error" role="alert">{{ row.action_error }}</span>
+        {% endif %}
+    </td>
+    <td class="table-actions">
+        {% if can_edit %}
+            {% if row.kind == "alp" %}
+            <form class="inline-button-form" method="post" data-live-action action="{{ url_for('neomotherbrain.add_alp_planning_row', operation_id=operation.id, mission_type=mission_type) }}">
+                <input type="hidden" name="review_key" value="{{ row.review_key }}">
+                <input type="hidden" name="expected_version" value="{{ row.live_version }}">
+                <input type="hidden" name="line_number" value="{{ row.line_number }}">
+                <input type="hidden" name="flight_number" value="{{ row.flight }}">
+                <input type="hidden" name="airport" value="{{ row.airport_value }}">
+                <input type="hidden" name="tail_number" value="{{ row.tail_value }}">
+                <input type="hidden" name="utc_datetime" value="{{ row.utc_datetime.isoformat() if row.utc_datetime else '' }}">
+                <input type="hidden" name="reason" value="{{ row.reason }}">
+                <input type="hidden" name="reason_detail" value="{{ row.reason_detail }}">
+                {{ planning_wave_field(row, wave_options, mission_type == "departure") }}
+                <button class="table-row-button" type="submit">ADD TO CURRENT SORT</button>
+            </form>
+            <form class="inline-button-form" method="post" data-live-action action="{{ url_for('neomotherbrain.hot_alp_planning_row', operation_id=operation.id, mission_type=mission_type) }}">
+                <input type="hidden" name="review_key" value="{{ row.review_key }}">
+                <input type="hidden" name="expected_version" value="{{ row.live_version }}">
+                <input type="hidden" name="line_number" value="{{ row.line_number }}">
+                <input type="hidden" name="flight_number" value="{{ row.flight }}">
+                <input type="hidden" name="airport" value="{{ row.airport_value }}">
+                <input type="hidden" name="tail_number" value="{{ row.tail_value }}">
+                <input type="hidden" name="utc_datetime" value="{{ row.utc_datetime.isoformat() if row.utc_datetime else '' }}">
+                <input type="hidden" name="reason" value="{{ row.reason }}">
+                <input type="hidden" name="reason_detail" value="{{ row.reason_detail }}">
+                <button class="table-row-button" type="submit">HOT</button>
+            </form>
+            <form class="inline-button-form" method="post" data-live-action action="{{ url_for('neomotherbrain.ignore_alp_planning_row', operation_id=operation.id, mission_type=mission_type) }}">
+                <input type="hidden" name="review_key" value="{{ row.review_key }}">
+                <input type="hidden" name="expected_version" value="{{ row.live_version }}">
+                <input type="hidden" name="line_number" value="{{ row.line_number }}">
+                <input type="hidden" name="flight_number" value="{{ row.flight }}">
+                <input type="hidden" name="airport" value="{{ row.airport_value }}">
+                <input type="hidden" name="tail_number" value="{{ row.tail_value }}">
+                <input type="hidden" name="utc_datetime" value="{{ row.utc_datetime.isoformat() if row.utc_datetime else '' }}">
+                <input type="hidden" name="reason" value="{{ row.reason }}">
+                <input type="hidden" name="reason_detail" value="{{ row.reason_detail }}">
+                <button class="table-row-button table-row-delete-button" type="submit">IGNORE</button>
+            </form>
+            {% else %}
+            <form class="inline-button-form" method="post" data-live-action action="{{ url_for('neomotherbrain.add_api_planning_row', operation_id=operation.id, review_item_id=row.item.id) }}">
+                <input type="hidden" name="mission_type" value="{{ mission_type }}">
+                <input type="hidden" name="expected_version" value="{{ row.live_version }}">
+                {{ planning_wave_field(row, wave_options, mission_type == "departure") }}
+                <button class="table-row-button" type="submit">ADD TO CURRENT SORT</button>
+            </form>
+            {% if mission_type == "departure" %}
+            <form class="inline-button-form" method="post" data-live-action action="{{ url_for('neomotherbrain.hot_api_planning_row', operation_id=operation.id, review_item_id=row.item.id) }}">
+                <input type="hidden" name="mission_type" value="{{ mission_type }}">
+                <input type="hidden" name="expected_version" value="{{ row.live_version }}">
+                <button class="table-row-button" type="submit">HOT</button>
+            </form>
+            {% endif %}
+            <form class="inline-button-form" method="post" data-live-action action="{{ url_for('neomotherbrain.ignore_api_planning_row', operation_id=operation.id, review_item_id=row.item.id) }}">
+                <input type="hidden" name="mission_type" value="{{ mission_type }}">
+                <input type="hidden" name="expected_version" value="{{ row.live_version }}">
+                <button class="table-row-button table-row-delete-button" type="submit">IGNORE</button>
+            </form>
+            {% endif %}
+        {% else %}
+        <span class="muted">VIEW ONLY</span>
+        {% endif %}
+    </td>
+</tr>
+{% else %}
+<tr data-live-empty-row><td colspan="8">NO UNMATCHED {{ label|upper }} PLANNING ROWS.</td></tr>
+{% endfor %}

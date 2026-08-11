@@ -1793,7 +1793,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         for response in responses:
             self.assertEqual(response.status_code, 200)
             self.assertIn(b'class="counts-wrap has-refresh-notice"', response.data)
-            self.assertIn(b"Auto-refresh paused", response.data)
+            self.assertIn(b"Live updates off - outside Ops window", response.data)
             self.assertIn(b"RFD NIGHT 6/29/26", response.data)
 
         self.assertIn(
@@ -3339,17 +3339,18 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'data-refresh-active="false"', response.data)
         self.assertIn(b"neosektor-refresh-paused", response.data)
-        self.assertIn(b"Auto-refresh paused", response.data)
+        self.assertIn(b"Live updates off - outside Ops window", response.data)
         self.assertIn(b"RFD NIGHT 6/29/26", response.data)
         self.assertIn(b"22:00-04:00", response.data)
-        self.assertIn(b"window.clearInterval(refreshTimer)", response.data)
+        self.assertIn(b"window.NeoLiveUpdates.create", response.data)
+        self.assertIn(b"intervalMs: 5000", response.data)
         self.assertIn(b"setRefreshStatus(initialRefreshStatus)", response.data)
 
         payload = state_response.get_json()
         self.assertFalse(payload["state"]["refresh"]["auto_refresh_enabled"])
         self.assertEqual(payload["state"]["refresh"]["operation_id"], operation.id)
         self.assertIsNone(payload["state"]["refresh"]["next_check_seconds"])
-        self.assertNotIn(b"setTimeout(refreshState", response.data)
+        self.assertNotIn(b"window.setInterval(refreshState", response.data)
         self.assertNotIn(b"resumeTimer", response.data)
 
     def test_neosektor_live_views_use_the_shared_operation_refresh_banner(self):
@@ -3430,13 +3431,14 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(b'data-refresh-active="true"', response.data)
-                self.assertIn(b"window.setInterval(refreshState, 5000)", response.data)
-                self.assertNotIn(b"setTimeout(refreshState", response.data)
+                self.assertIn(b"window.NeoLiveUpdates.create", response.data)
+                self.assertIn(b"intervalMs: 5000", response.data)
+                self.assertNotIn(b"window.setInterval(refreshState", response.data)
 
         dashboard_response = self.client.get("/neosektor")
         self.assertEqual(dashboard_response.status_code, 200)
         self.assertNotIn(b"data-state-url=", dashboard_response.data)
-        self.assertNotIn(b"window.setInterval(refreshState, 5000)", dashboard_response.data)
+        self.assertNotIn(b"window.NeoLiveUpdates.create", dashboard_response.data)
 
     def test_neosektor_refresh_active_for_midnight_crossing_operation_window(self):
         self._login_approved_user(role="watcher")
@@ -3501,7 +3503,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'data-state-url="/neosektor/discharge/state"', response.data)
         self.assertIn(b'data-refresh-active="true"', response.data)
-        self.assertIn(b"window.setInterval(refreshState, 5000)", response.data)
+        self.assertIn(b"window.NeoLiveUpdates.create", response.data)
+        self.assertIn(b"intervalMs: 5000", response.data)
         refresh = state_response.get_json()["state"]["refresh"]
         self.assertTrue(refresh["auto_refresh_enabled"])
         self.assertEqual(refresh["operation_id"], operation.id)
@@ -3513,7 +3516,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(b"data-state-url=", response.data)
-        self.assertNotIn(b"window.setInterval(refreshState, 5000)", response.data)
+        self.assertNotIn(b"window.NeoLiveUpdates.create", response.data)
 
     def test_live_counts_css_keeps_bay_status_cards_readable(self):
         css = Path("app/static/css/base.css").read_text()

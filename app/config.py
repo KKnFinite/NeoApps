@@ -40,6 +40,10 @@ class Config:
         "DEFAULT_GATEWAY_LOGO",
         "images/icons/neogateway/inapp/neogateway-inapp-128.png",
     )
+    LIVE_SCREEN_REFRESH_INTERVAL_MS = max(
+        1000,
+        int(os.getenv("LIVE_SCREEN_REFRESH_INTERVAL_MS", "5000")),
+    )
     BREVO_API_KEY = os.getenv("BREVO_API_KEY")
     MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "NeoApps Portal")
     MAIL_FROM_EMAIL = os.getenv(

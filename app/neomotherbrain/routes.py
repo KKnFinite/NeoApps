@@ -126,6 +126,13 @@ from app.services.parking_plan import (
     unassign_tail,
 )
 from app.services.operation_lifecycle import ensure_operational_sort_operations
+from app.services.live_collaboration import (
+    changed_field_conflicts,
+    entity_version,
+    resolved_item_conflict,
+    version_conflict,
+)
+from app.services.node_refresh import node_auto_refresh_status
 from app.services.google_motherbrain_import import (
     GoogleMotherBrainOperationError,
     GoogleMotherBrainPayloadError,
@@ -2090,6 +2097,7 @@ def alp_import(operation_id, mission_type):
         preview=preview,
         settings=settings,
     )
+    _decorate_planning_review_rows(operation, planning_rows)
     _apply_alp_row_action_error(
         planning_rows,
         _consume_alp_row_action_error(operation, mission_type),
@@ -2124,7 +2132,66 @@ def alp_import(operation_id, mission_type):
         arrival_spare_candidates=arrival_spare_candidates,
         parking_positions=PARKING_RAMP_GROUPS,
         standalone_spare_aircraft_type_options=STANDALONE_SPARE_AIRCRAFT_TYPE_OPTIONS,
+        live_update_status=node_auto_refresh_status(
+            gateway,
+            operation=operation,
+        ),
     )
+
+
+@bp.route(
+    "/motherbrain/operations/<int:operation_id>/planning/<mission_type>/state"
+)
+@gateway_node_required("motherbrain", minimum_role="operator")
+def planning_live_state(operation_id, mission_type):
+    gateway = get_current_gateway()
+    operation = _operation_or_404(operation_id)
+    mission_type = _planning_mission_type_or_404(mission_type)
+    denied = _permission_guard(_planning_view_permission(mission_type))
+    if denied:
+        return denied
+
+    collections = _planning_live_collections(operation, mission_type)
+    label = "Arrival" if mission_type == "arrival" else "Departure"
+    fragment_context = {
+        "operation": operation,
+        "mission_type": mission_type,
+        "label": label,
+        "planning_rows": collections["planning_rows"],
+        "mission_rows": collections["mission_rows"],
+        "tail_swap_options": _tail_swap_options_for_operation(operation),
+        "can_edit": _planning_can_edit(mission_type),
+        "wave_options": WAVE_OPTIONS,
+    }
+    refresh = node_auto_refresh_status(gateway, operation=operation)
+    response = jsonify(
+        {
+            "ok": True,
+            "operation_id": operation.id,
+            "mission_type": mission_type,
+            "refresh": refresh,
+            "rows": {
+                "review": _planning_review_state_rows(collections["planning_rows"]),
+                "missions": _planning_mission_state_rows(collections["mission_rows"]),
+            },
+            "fragments": {
+                "review": render_template(
+                    "neomotherbrain/_planning_review_rows.html",
+                    **fragment_context,
+                ),
+                "missions": render_template(
+                    "neomotherbrain/_planning_mission_rows.html",
+                    **fragment_context,
+                ),
+                "mobile_missions": render_template(
+                    "neomotherbrain/_planning_mobile_mission_rows.html",
+                    **fragment_context,
+                ),
+            },
+        }
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @bp.route(
@@ -2137,8 +2204,14 @@ def add_alp_planning_row(operation_id, mission_type):
     operation = _operation_or_404(operation_id)
     mission_type = _planning_mission_type_or_404(mission_type)
     if not _planning_can_run(mission_type):
-        flash("Access denied.", "error")
-        return redirect(_planning_url(operation.id, mission_type))
+        return _planning_action_error(operation, mission_type, "Access denied.", 403)
+
+    conflict = _review_item_conflict(
+        operation,
+        review_key=request.form.get("review_key"),
+    )
+    if conflict:
+        return _planning_conflict_response(operation, mission_type, conflict)
 
     try:
         row = _alp_planning_row_from_form(
@@ -2149,7 +2222,7 @@ def add_alp_planning_row(operation_id, mission_type):
         mission = _create_or_update_mission_from_alp_planning_row(operation, row)
         _record_alp_planning_marker(operation, row, "accepted", mission)
         db.session.commit()
-        flash(f"{row['normalized_flight_number']} added to current sort.", "info")
+        message = f"{row['normalized_flight_number']} added to current sort."
     except ValueError as error:
         db.session.rollback()
         _remember_alp_row_action_error(
@@ -2158,8 +2231,8 @@ def add_alp_planning_row(operation_id, mission_type):
             request.form.get("review_key"),
             str(error),
         )
-        flash(str(error), "error")
-    return redirect(_planning_url(operation.id, mission_type))
+        return _planning_action_error(operation, mission_type, error)
+    return _planning_action_response(operation, mission_type, message)
 
 
 @bp.route(
@@ -2172,8 +2245,14 @@ def hot_alp_planning_row(operation_id, mission_type):
     operation = _operation_or_404(operation_id)
     mission_type = _planning_mission_type_or_404(mission_type)
     if not _planning_can_run(mission_type):
-        flash("Access denied.", "error")
-        return redirect(_planning_url(operation.id, mission_type))
+        return _planning_action_error(operation, mission_type, "Access denied.", 403)
+
+    conflict = _review_item_conflict(
+        operation,
+        review_key=request.form.get("review_key"),
+    )
+    if conflict:
+        return _planning_conflict_response(operation, mission_type, conflict)
 
     try:
         row = _alp_planning_row_from_form(operation, mission_type)
@@ -2181,7 +2260,7 @@ def hot_alp_planning_row(operation_id, mission_type):
         set_tail_hot(operation, mission.assigned_tail_number, True, user=current_user)
         _record_alp_planning_marker(operation, row, "accepted", mission)
         db.session.commit()
-        flash(f"{row['normalized_flight_number']} added as HOT.", "info")
+        message = f"{row['normalized_flight_number']} added as HOT."
     except (ParkingPlanError, ValueError) as error:
         db.session.rollback()
         _remember_alp_row_action_error(
@@ -2190,8 +2269,8 @@ def hot_alp_planning_row(operation_id, mission_type):
             request.form.get("review_key"),
             str(error),
         )
-        flash(str(error), "error")
-    return redirect(_planning_url(operation.id, mission_type))
+        return _planning_action_error(operation, mission_type, error)
+    return _planning_action_response(operation, mission_type, message)
 
 
 @bp.route(
@@ -2204,14 +2283,20 @@ def ignore_alp_planning_row(operation_id, mission_type):
     operation = _operation_or_404(operation_id)
     mission_type = _planning_mission_type_or_404(mission_type)
     if not _planning_can_run(mission_type):
-        flash("Access denied.", "error")
-        return redirect(_planning_url(operation.id, mission_type))
+        return _planning_action_error(operation, mission_type, "Access denied.", 403)
+
+    conflict = _review_item_conflict(
+        operation,
+        review_key=request.form.get("review_key"),
+    )
+    if conflict:
+        return _planning_conflict_response(operation, mission_type, conflict)
 
     try:
         row = _alp_planning_row_from_form(operation, mission_type)
         _record_alp_planning_marker(operation, row, "ignored")
         db.session.commit()
-        flash(f"{row['normalized_flight_number']} ignored for this sort.", "info")
+        message = f"{row['normalized_flight_number']} ignored for this sort."
     except ValueError as error:
         db.session.rollback()
         _remember_alp_row_action_error(
@@ -2220,8 +2305,8 @@ def ignore_alp_planning_row(operation_id, mission_type):
             request.form.get("review_key"),
             str(error),
         )
-        flash(str(error), "error")
-    return redirect(_planning_url(operation.id, mission_type))
+        return _planning_action_error(operation, mission_type, error)
+    return _planning_action_response(operation, mission_type, message)
 
 
 @bp.route(
@@ -2234,15 +2319,27 @@ def add_api_planning_row(operation_id, review_item_id):
     operation = _operation_or_404(operation_id)
     mission_type = request.form.get("mission_type", "arrival")
     if not _planning_can_run(mission_type):
-        flash("Access denied.", "error")
-        return redirect(_planning_url(operation.id, mission_type))
+        return _planning_action_error(operation, mission_type, "Access denied.", 403)
 
-    review_item = review_item_or_404(gateway, review_item_id)
+    review_item, missing_response = _review_item_for_planning_action(
+        gateway,
+        operation,
+        review_item_id,
+        mission_type,
+    )
+    if missing_response:
+        return missing_response
     if review_item.sort_date_operation_id != operation.id:
-        flash("Review item is not part of this sort operation.", "error")
-        return redirect(_planning_url(operation.id, request.form.get("mission_type", "arrival")))
+        return _planning_action_error(
+            operation,
+            mission_type,
+            "Review item is not part of this sort operation.",
+        )
 
     mission_type = review_item.mission_type
+    conflict = _review_item_conflict(operation, item=review_item)
+    if conflict:
+        return _planning_conflict_response(operation, mission_type, conflict)
     try:
         wave = _planning_wave_from_form(required=mission_type == "departure")
         mission = accept_review_item(review_item)
@@ -2254,7 +2351,7 @@ def add_api_planning_row(operation_id, review_item_id):
                 user=current_user,
             )
         db.session.commit()
-        flash("API flight added to current sort operation.", "info")
+        message = "API flight added to current sort operation."
     except ValueError as error:
         db.session.rollback()
         _remember_alp_row_action_error(
@@ -2263,8 +2360,8 @@ def add_api_planning_row(operation_id, review_item_id):
             review_item.review_key,
             str(error),
         )
-        flash(str(error), "error")
-    return redirect(_planning_url(operation.id, mission_type))
+        return _planning_action_error(operation, mission_type, error)
+    return _planning_action_response(operation, mission_type, message)
 
 
 @bp.route(
@@ -2276,22 +2373,37 @@ def hot_api_planning_row(operation_id, review_item_id):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
     if not _planning_can_run("departure"):
-        flash("Access denied.", "error")
-        return redirect(_planning_url(operation.id, "departure"))
+        return _planning_action_error(operation, "departure", "Access denied.", 403)
 
-    review_item = review_item_or_404(gateway, review_item_id)
+    review_item, missing_response = _review_item_for_planning_action(
+        gateway,
+        operation,
+        review_item_id,
+        "departure",
+    )
+    if missing_response:
+        return missing_response
     if review_item.sort_date_operation_id != operation.id or review_item.mission_type != "departure":
-        flash("Review item is not a departure for this sort operation.", "error")
-        return redirect(_planning_url(operation.id, "departure"))
+        return _planning_action_error(
+            operation,
+            "departure",
+            "Review item is not a departure for this sort operation.",
+        )
+    conflict = _review_item_conflict(operation, item=review_item)
+    if conflict:
+        return _planning_conflict_response(operation, "departure", conflict)
     if not review_item.tail_number:
-        flash("A tail is required to mark a planning row HOT.", "error")
-        return redirect(_planning_url(operation.id, "departure"))
+        return _planning_action_error(
+            operation,
+            "departure",
+            "A tail is required to mark a planning row HOT.",
+        )
 
     try:
         mission = accept_review_item(review_item)
         set_tail_hot(operation, mission.assigned_tail_number, True, user=current_user)
         db.session.commit()
-        flash("API departure added as HOT.", "info")
+        message = "API departure added as HOT."
     except ParkingPlanError as error:
         db.session.rollback()
         _remember_alp_row_action_error(
@@ -2300,8 +2412,8 @@ def hot_api_planning_row(operation_id, review_item_id):
             review_item.review_key,
             str(error),
         )
-        flash(str(error), "error")
-    return redirect(_planning_url(operation.id, "departure"))
+        return _planning_action_error(operation, "departure", error)
+    return _planning_action_response(operation, "departure", message)
 
 
 @bp.route(
@@ -2314,19 +2426,35 @@ def ignore_api_planning_row(operation_id, review_item_id):
     operation = _operation_or_404(operation_id)
     mission_type = request.form.get("mission_type", "arrival")
     if not _planning_can_run(mission_type):
-        flash("Access denied.", "error")
-        return redirect(_planning_url(operation.id, mission_type))
+        return _planning_action_error(operation, mission_type, "Access denied.", 403)
 
-    review_item = review_item_or_404(gateway, review_item_id)
+    review_item, missing_response = _review_item_for_planning_action(
+        gateway,
+        operation,
+        review_item_id,
+        mission_type,
+    )
+    if missing_response:
+        return missing_response
     mission_type = review_item.mission_type
     if review_item.sort_date_operation_id != operation.id:
-        flash("Review item is not part of this sort operation.", "error")
-        return redirect(_planning_url(operation.id, mission_type))
+        return _planning_action_error(
+            operation,
+            mission_type,
+            "Review item is not part of this sort operation.",
+        )
+
+    conflict = _review_item_conflict(operation, item=review_item)
+    if conflict:
+        return _planning_conflict_response(operation, mission_type, conflict)
 
     ignore_review_item(review_item)
     db.session.commit()
-    flash("Planning row ignored for this sort operation.", "info")
-    return redirect(_planning_url(operation.id, mission_type))
+    return _planning_action_response(
+        operation,
+        mission_type,
+        "Planning row ignored for this sort operation.",
+    )
 
 
 @bp.route(
@@ -2523,7 +2651,11 @@ def edit_mission(operation_id, mission_id):
     denied = _permission_guard(MANAGE_SORT_EDIT_PERMISSION if request.method == "POST" else MANAGE_SORT_VIEW_PERMISSION)
     if denied:
         return denied
-    mission = _mission_or_404(operation, mission_id)
+    mission = _mission_or_404(
+        operation,
+        mission_id,
+        for_update=request.method == "POST",
+    )
     form = (
         _mission_form_from_request(operation)
         if request.method == "POST"
@@ -2531,6 +2663,22 @@ def edit_mission(operation_id, mission_id):
     )
 
     if request.method == "POST":
+        conflict = _mission_edit_conflict(mission, form)
+        if conflict:
+            db.session.rollback()
+            if _planning_json_requested():
+                return jsonify({"ok": False, "conflict": conflict}), 409
+            return (
+                _render_mission_form(
+                    operation,
+                    form,
+                    "edit",
+                    mission,
+                    conflict=conflict,
+                ),
+                409,
+            )
+
         old_tail_number = mission.assigned_tail_number
         old_aircraft_type = _aircraft_type_for_tail(
             operation,
@@ -2590,15 +2738,28 @@ def delete_mission(operation_id, mission_id):
 def cancel_mission(operation_id, mission_id):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
-    mission = _mission_or_404(operation, mission_id)
+    mission, missing_response = _mission_for_planning_action(operation, mission_id)
+    if missing_response:
+        return missing_response
     if not _planning_can_edit(mission.mission_type):
-        flash("Access denied.", "error")
-        return redirect(_planning_url(operation.id, mission.mission_type))
+        return _planning_action_error(
+            operation,
+            mission.mission_type,
+            "Access denied.",
+            403,
+        )
+
+    conflict = _mission_action_conflict(mission)
+    if conflict:
+        return _planning_conflict_response(operation, mission.mission_type, conflict)
 
     _set_mission_cancelled(mission)
     db.session.commit()
-    flash(f"{mission.flight_number.upper()} cancelled for this sort.", "info")
-    return redirect(_planning_url(operation.id, mission.mission_type))
+    return _planning_action_response(
+        operation,
+        mission.mission_type,
+        f"{mission.flight_number.upper()} cancelled for this sort.",
+    )
 
 
 @bp.route(
@@ -2609,15 +2770,28 @@ def cancel_mission(operation_id, mission_id):
 def restore_mission(operation_id, mission_id):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
-    mission = _mission_or_404(operation, mission_id)
+    mission, missing_response = _mission_for_planning_action(operation, mission_id)
+    if missing_response:
+        return missing_response
     if not _planning_can_edit(mission.mission_type):
-        flash("Access denied.", "error")
-        return redirect(_planning_url(operation.id, mission.mission_type))
+        return _planning_action_error(
+            operation,
+            mission.mission_type,
+            "Access denied.",
+            403,
+        )
+
+    conflict = _mission_action_conflict(mission)
+    if conflict:
+        return _planning_conflict_response(operation, mission.mission_type, conflict)
 
     _restore_mission(mission)
     db.session.commit()
-    flash(f"{mission.flight_number.upper()} restored for this sort.", "info")
-    return redirect(_planning_url(operation.id, mission.mission_type))
+    return _planning_action_response(
+        operation,
+        mission.mission_type,
+        f"{mission.flight_number.upper()} restored for this sort.",
+    )
 
 
 @bp.route(
@@ -2628,42 +2802,60 @@ def restore_mission(operation_id, mission_id):
 def tail_swap_mission(operation_id, mission_id):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
-    mission = _mission_or_404(operation, mission_id)
+    mission, missing_response = _mission_for_planning_action(operation, mission_id)
+    if missing_response:
+        return missing_response
     if not _planning_can_edit(mission.mission_type):
-        flash("Access denied.", "error")
-        return redirect(_planning_url(operation.id, mission.mission_type))
+        return _planning_action_error(
+            operation,
+            mission.mission_type,
+            "Access denied.",
+            403,
+        )
     if mission.mission_type != "departure":
-        flash("Tail Swap is only available for departure missions.", "error")
-        return redirect(_planning_url(operation.id, mission.mission_type))
+        return _planning_action_error(
+            operation,
+            mission.mission_type,
+            "Tail Swap is only available for departure missions.",
+        )
     if _is_cancelled_mission(mission):
-        flash("Restore the departure before swapping its tail.", "error")
-        return redirect(_planning_url(operation.id, mission.mission_type))
+        return _planning_action_error(
+            operation,
+            mission.mission_type,
+            "Restore the departure before swapping its tail.",
+        )
+
+    conflict = _mission_action_conflict(mission)
+    if conflict:
+        return _planning_conflict_response(operation, mission.mission_type, conflict)
 
     try:
         replacement_tail = _normalize_tail_swap_tail(
             request.form.get("replacement_tail")
         )
     except ValueError as error:
-        flash(str(error), "error")
-        return redirect(_planning_url(operation.id, mission.mission_type))
+        return _planning_action_error(operation, mission.mission_type, error)
 
     current_tail = (mission.assigned_tail_number or "").strip().upper()
     if current_tail == replacement_tail:
-        flash(f"{mission.flight_number.upper()} already uses {replacement_tail}.", "info")
-        return redirect(_planning_url(operation.id, mission.mission_type))
+        return _planning_action_response(
+            operation,
+            mission.mission_type,
+            f"{mission.flight_number.upper()} already uses {replacement_tail}.",
+        )
 
     conflicts = _tail_swap_departure_conflicts(operation, mission, replacement_tail)
     if conflicts and not _truthy_form_value(request.form.get("confirm_tail_swap")):
         conflict_list = ", ".join(
             _tail_swap_conflict_label(conflict) for conflict in conflicts
         )
-        flash(
+        return _planning_action_error(
+            operation,
+            mission.mission_type,
             f"{replacement_tail} is already chained to {conflict_list}. "
             "Check CONFIRM to flag the source departure as needing a replacement "
             "tail and finish Tail Swap.",
-            "error",
         )
-        return redirect(_planning_url(operation.id, mission.mission_type))
 
     old_tail_number = mission.assigned_tail_number
     old_aircraft_type = _aircraft_type_for_tail(operation, old_tail_number)
@@ -2702,19 +2894,17 @@ def tail_swap_mission(operation_id, mission_id):
             _tail_swap_conflict_label(conflict)
             for conflict in replacement_needed_conflicts
         )
-        flash(
+        message = (
             f"Tail Swap complete. {mission.flight_number.upper()} now uses "
             f"{replacement_tail}; flagged {conflict_list} as needing a "
-            "replacement tail.",
-            "info",
+            "replacement tail."
         )
     else:
-        flash(
+        message = (
             f"Tail Swap complete. {mission.flight_number.upper()} now uses "
-            f"{replacement_tail}.",
-            "info",
+            f"{replacement_tail}."
         )
-    return redirect(_planning_url(operation.id, mission.mission_type))
+    return _planning_action_response(operation, mission.mission_type, message)
 
 
 def _operation_or_404(operation_id):
@@ -2869,6 +3059,309 @@ def _planning_can_run(mission_type):
     return user_can(_planning_run_permission(mission_type))
 
 
+def _planning_live_collections(operation, mission_type):
+    preview_state = get_alp_preview_state(
+        operation,
+        mission_type,
+        current_user,
+    )
+    preview = None
+    if preview_state:
+        preview = preview_alp_paste(
+            operation,
+            mission_type,
+            preview_state.paste_text,
+        )
+
+    settings = ensure_sort_timeline_settings(operation.gateway)
+    parking_assignments = _parking_assignments_for_operation(operation)
+    tail_states = _tail_states_for_operation(operation)
+    missions = _missions_for_operation(operation, mission_type)
+    if mission_type == "arrival":
+        mission_rows = [
+            _arrival_row(
+                mission,
+                operation,
+                parking_assignments,
+                include_parking_context=True,
+                tail_states=tail_states,
+            )
+            for mission in missions
+        ]
+    else:
+        mission_rows = [
+            _departure_row(
+                mission,
+                operation,
+                parking_assignments,
+                include_parking_context=True,
+                tail_states=tail_states,
+            )
+            for mission in missions
+        ]
+    planning_rows = _planning_review_rows(
+        operation,
+        mission_type,
+        preview=preview,
+        settings=settings,
+    )
+    _decorate_planning_review_rows(operation, planning_rows)
+    return {
+        "planning_rows": planning_rows,
+        "mission_rows": mission_rows,
+    }
+
+
+def _planning_json_requested():
+    return (
+        request.is_json
+        or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or request.accept_mimetypes.best == "application/json"
+    )
+
+
+def _planning_action_response(operation, mission_type, message):
+    if _planning_json_requested():
+        return jsonify({"ok": True, "message": message})
+    flash(message, "info")
+    return redirect(_planning_url(operation.id, mission_type))
+
+
+def _planning_action_error(operation, mission_type, message, status_code=400):
+    if _planning_json_requested():
+        return jsonify({"ok": False, "error": str(message)}), status_code
+    flash(str(message), "error")
+    return redirect(_planning_url(operation.id, mission_type))
+
+
+def _planning_conflict_response(operation, mission_type, conflict):
+    db.session.rollback()
+    if _planning_json_requested():
+        return jsonify({"ok": False, "conflict": conflict}), 409
+    flash(conflict["message"], "error")
+    return redirect(_planning_url(operation.id, mission_type))
+
+
+def _force_planning_overwrite():
+    return str(request.form.get("force_overwrite") or "").strip() == "1"
+
+
+def _review_item_conflict(operation, item=None, review_key=None):
+    expected_version = request.form.get("expected_version")
+    if not expected_version:
+        return None
+    if item is not None:
+        item = (
+            FlightApiReviewItem.query.filter_by(
+                id=item.id,
+                sort_date_operation_id=operation.id,
+            )
+            .with_for_update()
+            .first()
+        )
+    elif review_key:
+        item = (
+            FlightApiReviewItem.query.filter_by(
+                sort_date_operation_id=operation.id,
+                review_key=review_key,
+            )
+            .with_for_update()
+            .first()
+        )
+    if item is None or item.review_status != "pending":
+        return resolved_item_conflict(getattr(item, "id", None))
+    return version_conflict(
+        item,
+        expected_version,
+        force_overwrite=_force_planning_overwrite(),
+    )
+
+
+def _review_item_for_planning_action(
+    gateway,
+    operation,
+    review_item_id,
+    mission_type,
+):
+    item = (
+        FlightApiReviewItem.query.filter_by(
+            id=review_item_id,
+            gateway_id=gateway.id,
+        )
+        .with_for_update()
+        .first()
+    )
+    if item is not None:
+        return item, None
+    if request.form.get("expected_version"):
+        return None, _planning_conflict_response(
+            operation,
+            mission_type,
+            resolved_item_conflict(review_item_id),
+        )
+    abort(404)
+
+
+def _mission_action_conflict(mission):
+    return version_conflict(
+        mission,
+        request.form.get("expected_version"),
+        force_overwrite=_force_planning_overwrite(),
+    )
+
+
+def _mission_for_planning_action(operation, mission_id):
+    mission = (
+        SortDateMission.query.filter_by(
+            id=mission_id,
+            sort_date_operation_id=operation.id,
+        )
+        .with_for_update()
+        .first()
+    )
+    if mission is not None:
+        return mission, None
+    if not request.form.get("expected_version"):
+        abort(404)
+
+    mission_type = _planning_mission_type_or_404(
+        request.form.get("mission_type", "departure")
+    )
+    if not _planning_can_edit(mission_type):
+        return None, _planning_action_error(
+            operation,
+            mission_type,
+            "Access denied.",
+            403,
+        )
+    return None, _planning_conflict_response(
+        operation,
+        mission_type,
+        resolved_item_conflict(mission_id),
+    )
+
+
+def _mission_edit_conflict(mission, submitted_form):
+    if _force_planning_overwrite():
+        return None
+    original_values = _mission_original_values_from_request()
+    current_values = _mission_form_from_model(mission)
+    fields = changed_field_conflicts(
+        original_values,
+        current_values,
+        submitted_form,
+        labels={
+            "mission_type": "Mission type",
+            "wave": "Wave",
+            "flight_number": "Flight number",
+            "origin": "Origin",
+            "destination": "Destination",
+            "assigned_tail_number": "Assigned tail",
+            "planned_time_local": "Planned time",
+            "timezone": "Timezone",
+            "eta_datetime_utc": "ETA",
+            "actual_block_in_datetime_utc": "Actual block in",
+            "actual_block_out_datetime_utc": "Actual block out",
+            "planned_fuel_load": "Planned fuel load",
+            "fuel_status": "Fuel status",
+            "arrival_status": "Arrival status",
+            "departure_status": "Departure status",
+            "pure_pull_time_local": "Pure pull",
+            "mix_pull_time_local": "Mix pull",
+        },
+    )
+    return version_conflict(
+        mission,
+        request.form.get("expected_version"),
+        field_conflicts=fields,
+    )
+
+
+def _mission_original_values_from_request():
+    try:
+        values = json.loads(request.form.get("original_values") or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return values if isinstance(values, dict) else {}
+
+
+def _decorate_planning_review_rows(operation, rows):
+    for row in rows:
+        item = row.get("item")
+        if item is None and row.get("review_key"):
+            item = FlightApiReviewItem.query.filter_by(
+                sort_date_operation_id=operation.id,
+                review_key=row["review_key"],
+                review_status="pending",
+            ).first()
+            if item is not None:
+                row["item"] = item
+        if item is not None:
+            row["live_id"] = f"review:{item.id}"
+            row["live_version"] = entity_version(item)
+        else:
+            row["live_id"] = f"preview:{row.get('review_key', '')}"
+            row["live_version"] = str(row.get("review_key") or "")
+
+
+def _planning_review_state_rows(rows):
+    return [
+        {
+            "id": row["live_id"],
+            "version": row["live_version"],
+            "source": row.get("source"),
+            "flight": row.get("flight"),
+            "airport": row.get("airport"),
+            "tail": row.get("tail"),
+            "local_time": row.get("local_time"),
+            "reason": row.get("reason"),
+        }
+        for row in rows
+    ]
+
+
+def _planning_mission_state_rows(rows):
+    state_rows = []
+    for row in rows:
+        mission = row["mission"]
+        timing = row.get("timing") or {}
+        parking = row.get("parking_context") or {}
+        state_rows.append(
+            {
+                "id": f"mission:{mission.id}",
+                "entity_id": mission.id,
+                "version": entity_version(mission),
+                "mission_type": mission.mission_type,
+                "flight_number": mission.flight_number,
+                "tail_number": mission.assigned_tail_number,
+                "airport": (
+                    mission.origin
+                    if mission.mission_type == "arrival"
+                    else mission.destination
+                ),
+                "wave": mission.wave,
+                "planned_datetime_local": _iso_value(
+                    mission.planned_datetime_local
+                ),
+                "eta_datetime_utc": _iso_value(mission.eta_datetime_utc),
+                "status": (
+                    mission.arrival_status
+                    if mission.mission_type == "arrival"
+                    else mission.departure_status
+                ),
+                "parking": parking.get("label") if parking else None,
+                "adjusted_departure_datetime_local": _iso_value(
+                    timing.get("adjusted_planned_departure_time")
+                ),
+            }
+        )
+    return state_rows
+
+
+def _iso_value(value):
+    return value.isoformat() if value is not None else None
+
+
 def _planning_review_rows(operation, mission_type, preview=None, settings=None):
     rows = []
     persisted_keys = set()
@@ -2923,6 +3416,7 @@ def _alp_planning_rows_from_preview(operation, mission_type, preview):
                     mission_type,
                     row.get("normalized_flight_number") or row.get("flight_number"),
                 ),
+                "item": existing if existing and existing.review_status == "pending" else None,
             }
         )
     return rows
@@ -2989,6 +3483,7 @@ def _alp_planning_row_from_item(operation, item, payload):
             item.mission_type,
             item.flight_number,
         ),
+        "item": item,
     }
 
 
@@ -3410,11 +3905,14 @@ def _sync_operation_with_master(operation):
     return result
 
 
-def _mission_or_404(operation, mission_id):
-    return SortDateMission.query.filter_by(
+def _mission_or_404(operation, mission_id, for_update=False):
+    query = SortDateMission.query.filter_by(
         id=mission_id,
         sort_date_operation_id=operation.id,
-    ).first_or_404()
+    )
+    if for_update:
+        query = query.with_for_update()
+    return query.first_or_404()
 
 
 def _master_schedule_or_404(master_id):
@@ -3990,7 +4488,18 @@ def _normalize_airport_code(value, label):
     return code
 
 
-def _render_mission_form(operation, form, mode, mission=None):
+def _render_mission_form(operation, form, mode, mission=None, conflict=None):
+    current_values = _mission_form_from_model(mission) if mission else {}
+    original_values = request.form.get("original_values") if conflict else None
+    if not original_values:
+        original_values = json.dumps(
+            {
+                key: value
+                for key, value in current_values.items()
+                if key != "expected_version"
+            },
+            sort_keys=True,
+        )
     return render_template(
         "neomotherbrain/mission_form.html",
         arrival_statuses=ARRIVAL_STATUSES,
@@ -4001,6 +4510,13 @@ def _render_mission_form(operation, form, mode, mission=None):
         mode=mode,
         operation=operation,
         wave_options=WAVE_OPTIONS,
+        conflict=conflict,
+        expected_version=(
+            request.form.get("expected_version", "")
+            if conflict
+            else entity_version(mission) if mission else ""
+        ),
+        original_values=original_values,
     )
 
 
@@ -4039,6 +4555,7 @@ def _mission_form_from_request(operation):
             request.form,
             "mix_pull_time_local",
         ),
+        "expected_version": request.form.get("expected_version", ""),
     }
 
 
@@ -4069,6 +4586,7 @@ def _mission_form_from_model(mission):
         "departure_status": mission.departure_status or "",
         "pure_pull_time_local": _format_time(mission.pure_pull_time_local),
         "mix_pull_time_local": _format_time(mission.mix_pull_time_local),
+        "expected_version": entity_version(mission),
     }
 
 

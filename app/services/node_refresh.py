@@ -1,31 +1,45 @@
 from app.services.gateway_matrix import (
     current_gateway_local_datetime,
     current_operations_for_gateway,
-    operation_is_active_at,
+    ops_window_for_operation,
     sort_lookup_window_for_operation,
 )
 
 
 def node_auto_refresh_status(
     gateway,
+    operation=None,
     now=None,
-    active_message="Auto-refresh active for current operation window.",
-    before_message="Auto-refresh paused until the current operation window opens.",
-    outside_message="Auto-refresh paused outside the current operation window.",
+    active_message="Live updates on",
+    before_message="Live updates off - outside Ops window",
+    outside_message="Live updates off - outside Ops window",
 ):
+    """Resolve live-screen eligibility independently from Flight API polling."""
     local_now = current_gateway_local_datetime(gateway, now=now)
+
+    if operation is not None:
+        return _status_for_selected_operation(
+            gateway,
+            operation,
+            local_now,
+            active_message=active_message,
+            before_message=before_message,
+            outside_message=outside_message,
+        )
+
     operations = current_operations_for_gateway(gateway, now=local_now)
     active_operation = next(
         (
-            operation
-            for operation in operations
-            if operation_is_active_at(operation, local_now, gateway)
+            candidate
+            for candidate in operations
+            if _operation_is_current_context(candidate, gateway, local_now)
+            and _operation_is_inside_ops_window(candidate, gateway, local_now)
         ),
         None,
     )
 
     if active_operation:
-        start_local, end_local = sort_lookup_window_for_operation(active_operation, gateway)
+        start_local, end_local = ops_window_for_operation(active_operation, gateway)
         return _refresh_status_payload(
             active_operation,
             start_local,
@@ -38,11 +52,13 @@ def node_auto_refresh_status(
 
     next_operation = None
     next_window = (None, None)
-    for operation in operations:
-        start_local, end_local = sort_lookup_window_for_operation(operation, gateway)
+    for candidate in operations:
+        if not _operation_is_current_context(candidate, gateway, local_now):
+            continue
+        start_local, end_local = ops_window_for_operation(candidate, gateway)
         if start_local and local_now < start_local:
             if not next_window[0] or start_local < next_window[0]:
-                next_operation = operation
+                next_operation = candidate
                 next_window = (start_local, end_local)
 
     if next_operation:
@@ -52,23 +68,89 @@ def node_auto_refresh_status(
             next_window[1],
             local_now,
             active=False,
-            reason="before_operation_window",
+            reason="before_ops_window",
             message=before_message,
         )
 
-    operation = operations[0] if operations else None
-    start_local, end_local = (
-        sort_lookup_window_for_operation(operation, gateway) if operation else (None, None)
+    candidate = next(
+        (
+            row
+            for row in operations
+            if _operation_is_current_context(row, gateway, local_now)
+        ),
+        operations[0] if operations else None,
     )
+    start_local, end_local = (
+        ops_window_for_operation(candidate, gateway) if candidate else (None, None)
+    )
+    return _refresh_status_payload(
+        candidate,
+        start_local,
+        end_local,
+        local_now,
+        active=False,
+        reason="outside_ops_window",
+        message=outside_message,
+    )
+
+
+def _status_for_selected_operation(
+    gateway,
+    operation,
+    local_now,
+    *,
+    active_message,
+    before_message,
+    outside_message,
+):
+    start_local, end_local = ops_window_for_operation(operation, gateway)
+    if not _operation_is_current_context(operation, gateway, local_now):
+        return _refresh_status_payload(
+            operation,
+            start_local,
+            end_local,
+            local_now,
+            active=False,
+            reason="historical_sort",
+            message="Live updates off - historical sort",
+        )
+
+    active = bool(start_local <= local_now < end_local)
+    reason = "active" if active else _outside_window_reason(local_now, start_local)
     return _refresh_status_payload(
         operation,
         start_local,
         end_local,
         local_now,
-        active=False,
-        reason="outside_operation_window",
-        message=outside_message,
+        active=active,
+        reason=reason,
+        message=(
+            active_message
+            if active
+            else before_message if reason == "before_ops_window" else outside_message
+        ),
     )
+
+
+def _operation_is_inside_ops_window(operation, gateway, local_now):
+    start_local, end_local = ops_window_for_operation(operation, gateway)
+    return bool(start_local and end_local and start_local <= local_now < end_local)
+
+
+def _operation_is_current_context(operation, gateway, local_now):
+    if not operation or operation.archived_at_utc is not None:
+        return False
+    if operation.gateway_code != gateway.code:
+        return False
+
+    # Sort lookup identifies whether this is the current operational context.
+    # It does not control whether live refresh is enabled; that remains Ops-only.
+    start_local, end_local = sort_lookup_window_for_operation(operation, gateway)
+    return bool(start_local <= local_now < end_local)
+
+
+def _outside_window_reason(local_now, start_local):
+    return "before_ops_window" if local_now < start_local else "outside_ops_window"
 
 
 def _refresh_status_payload(
@@ -85,6 +167,7 @@ def _refresh_status_payload(
         "is_operation_active": bool(active),
         "reason": reason,
         "message": message,
+        "live_status_label": message,
         "operation_id": operation.id if operation else None,
         "operation_label": _operation_label(operation) if operation else "",
         "sort_date": operation.sort_date.isoformat() if operation else "",

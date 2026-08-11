@@ -345,6 +345,9 @@ def register_template_helpers(app):
             "change_character_targets": change_character_targets,
             "current_pwa_manifest_key": current_pwa_manifest_key,
             "browser_tab_title": browser_tab_title(request),
+            "live_screen_refresh_interval_ms": app.config[
+                "LIVE_SCREEN_REFRESH_INTERVAL_MS"
+            ],
             **shell_metadata,
         }
 

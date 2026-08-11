@@ -1,0 +1,30 @@
+{% macro planning_parking_cell(row, operation) -%}
+    {% set parking = row.parking_context %}
+    {% if parking and parking.has_tail %}
+    <div class="planning-parking-context">
+        <span class="planning-parking-position{% if not parking.is_assigned %} is-not-parked{% endif %}">
+            {{ parking.label|upper }}
+        </span>
+        {% if parking.is_oos %}
+        <span class="planning-parking-badge is-oos">OOS / RED</span>
+        {% endif %}
+        {% if parking.is_cancelled %}
+        <span class="planning-parking-badge is-cancelled">MISSION CANCELLED</span>
+        {% endif %}
+    </div>
+    {% else %}
+    <span class="muted">-</span>
+    {% endif %}
+{%- endmacro %}
+
+{% macro planning_wave_field(row, wave_options, required=false) -%}
+<label class="planning-review-wave-field">
+    <span>WAVE</span>
+    <select name="wave"{% if required %} required{% endif %} aria-label="Wave">
+        <option value=""{% if not row.inferred_wave %} selected{% endif %}>SELECT WAVE</option>
+        {% for wave_value, wave_label in wave_options %}
+        <option value="{{ wave_value }}"{% if row.inferred_wave == wave_value %} selected{% endif %}>{{ wave_label }}</option>
+        {% endfor %}
+    </select>
+</label>
+{%- endmacro %}

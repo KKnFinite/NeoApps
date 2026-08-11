@@ -151,7 +151,7 @@
                 },
             });
             if (!response.ok) {
-                return;
+                throw new Error("Outbound refresh failed.");
             }
             const html = await response.text();
             const doc = new DOMParser().parseFromString(html, "text/html");
@@ -160,10 +160,21 @@
                 return;
             }
             content.replaceChildren(...Array.from(newContent.children).map((node) => node.cloneNode(true)));
-        } catch (_error) {}
+        } catch (error) {
+            throw error;
+        }
     };
 
-    window.setInterval(refreshOutboundView, 5000);
+    const controller = window.NeoLiveUpdates.create({
+        intervalMs: {{ live_screen_refresh_interval_ms }},
+        statusElement: document.querySelector("[data-live-update-status]"),
+        poll: refreshOutboundView,
+    });
+    controller.setServerStatus({
+        auto_refresh_enabled: true,
+        reason: "active",
+        live_status_label: "Live updates on",
+    });
 })();
 </script>
 {% endif %}

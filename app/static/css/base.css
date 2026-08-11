@@ -2936,6 +2936,80 @@ a {
     display: none;
 }
 
+.live-update-status {
+    justify-self: end;
+    min-height: 24px;
+    padding: 4px 8px;
+    border: 1px solid rgba(var(--node-rgb), 0.32);
+    border-radius: 6px;
+    background: rgba(7, 10, 14, 0.78);
+    color: rgba(238, 246, 255, 0.78);
+    font-size: 0.68rem;
+    font-weight: 800;
+    line-height: 1.2;
+    text-align: center;
+}
+
+.live-update-status[data-live-update-state="active"] {
+    color: var(--neo-teal-light);
+    border-color: rgba(30, 196, 174, 0.46);
+}
+
+.live-update-status[data-live-update-state="reconnecting"] {
+    color: #ffd27a;
+    border-color: rgba(255, 180, 72, 0.52);
+}
+
+[data-live-row].is-live-updated {
+    animation: neo-live-row-updated 1.6s ease-out;
+}
+
+[data-live-row].is-live-conflict {
+    outline: 1px solid rgba(255, 180, 72, 0.78);
+    outline-offset: -1px;
+}
+
+.live-conflict-panel {
+    display: grid;
+    gap: 7px;
+    margin: 7px;
+    padding: 8px;
+    border: 1px solid rgba(255, 180, 72, 0.66);
+    border-radius: 6px;
+    background: rgba(34, 23, 8, 0.96);
+    color: #ffe3a6;
+    font-size: 0.76rem;
+}
+
+.live-conflict-panel p {
+    margin: 0;
+}
+
+.live-conflict-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.live-conflict-actions button {
+    min-height: 32px;
+}
+
+@keyframes neo-live-row-updated {
+    0% {
+        background-color: rgba(30, 196, 174, 0.22);
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+
+@media (max-width: 900px) {
+    .live-update-status:not([data-live-update-state="reconnecting"]) {
+        display: none;
+    }
+}
+
 /* Compact NeoSektor live boards can opt into Tunnel Conductor's reference sizing. */
 @media (min-width: 901px) {
     .operation-refresh-banner--neosektor-tunnel-standard {
