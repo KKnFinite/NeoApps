@@ -54,6 +54,7 @@ def execute_google_motherbrain_live_poll(gateway, now=None, *, reader=None, appl
             operation,
             inbound_rows=live_rows.get("inbound_rows", ()),
             outbound_rows=live_rows.get("outbound_rows", ()),
+            now=now,
         )
         db.session.commit()
     except Exception as error:

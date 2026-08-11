@@ -2,6 +2,7 @@ from datetime import date, datetime, time, timedelta
 import re
 import unittest
 from unittest.mock import Mock, patch
+from zoneinfo import ZoneInfo
 
 from app import create_app
 from app.extensions import db
@@ -281,6 +282,57 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         self.assertEqual(result["applied_count"], 2)
         self.assertEqual(result["skipped_count"], 0)
         self.assertEqual(SortDateMission.query.count(), 2)
+
+    def test_future_formatted_block_out_remains_loading_at_poll_time(self):
+        self._enable()
+        db.session.add(
+            GatewaySortMatrix(
+                gateway_id=self.gateway.id,
+                gateway_code=self.gateway.code,
+                day_of_week="monday",
+                sort_name="night",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+        poll_now = datetime(
+            2026,
+            8,
+            10,
+            22,
+            10,
+            tzinfo=ZoneInfo("America/Chicago"),
+        )
+        reader = Mock(
+            return_value={
+                "inbound_rows": [],
+                "outbound_rows": [
+                    self._outbound(
+                        4,
+                        "755",
+                        "N755UP",
+                        destination="SDF",
+                        planned="8/11 02:25",
+                        operational="8/11 02:39",
+                    )
+                ],
+            }
+        )
+
+        result = execute_google_motherbrain_live_poll(
+            self.gateway,
+            now=poll_now,
+            reader=reader,
+        )
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["applied_count"], 1)
+        mission = SortDateMission.query.filter_by(flight_number="UPS0755").one()
+        self.assertEqual(mission.sort_date, date(2026, 8, 10))
+        self.assertEqual(mission.planned_datetime_local, datetime(2026, 8, 11, 2, 25))
+        self.assertIsNone(mission.actual_block_out_datetime_utc)
+        self.assertEqual(mission.actual_block_out_source, "unknown")
+        self.assertEqual(mission.departure_status, "loading")
 
     def test_cross_midnight_poll_uses_previous_operational_sort_date(self):
         self._enable()

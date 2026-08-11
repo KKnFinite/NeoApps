@@ -198,7 +198,8 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
                 "N457UP",
                 planned="08/10 22:20",
                 operational="08/11 00:04",
-            )
+            ),
+            now=datetime(2026, 8, 11, 5, 4),
         )
         db.session.commit()
 
@@ -245,7 +246,8 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
                 "N457UP",
                 planned="12/31 22:20",
                 operational="1/1 0:04",
-            )
+            ),
+            now=datetime(2027, 1, 1, 6, 4),
         )
         db.session.commit()
 
@@ -564,13 +566,107 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
 
     def test_google_block_out_sets_departed(self):
         result = self._apply_departures(
-            self._outbound(4, "755", "N457UP", operational="01:40")
+            self._outbound(4, "755", "N457UP", operational="01:40"),
+            now=datetime(2026, 8, 8, 6, 40),
         )
         db.session.commit()
         mission = db.session.get(SortDateMission, result["results"][0]["mission_id"])
         self.assertEqual(mission.departure_status, "departed")
         self.assertEqual(mission.actual_block_out_source, GOOGLE_MOTHERBRAIN_MISSION_SOURCE)
         self.assertEqual(mission.actual_block_out_datetime_utc, datetime(2026, 8, 8, 6, 40))
+
+    def test_future_google_block_out_is_ignored_without_losing_other_updates(self):
+        self.operation.sort_date = date(2026, 8, 10)
+        db.session.commit()
+
+        with patch(
+            "app.services.google_motherbrain_live_missions.apply_google_motherbrain_parking",
+            return_value={"status": "applied"},
+        ) as parking:
+            result = self._apply_departures(
+                self._outbound(
+                    4,
+                    "755",
+                    "N755UP",
+                    destination="SDF",
+                    parking="E4",
+                    planned="8/11 2:25",
+                    operational="8/11 2:39",
+                ),
+                now=datetime(2026, 8, 11, 3, 10),
+            )
+            db.session.commit()
+
+        mission = self._mission_by_flight("UPS0755")
+        self.assertEqual(mission.departure_status, "loading")
+        self.assertIsNone(mission.actual_block_out_datetime_utc)
+        self.assertEqual(mission.actual_block_out_source, "unknown")
+        self.assertEqual(mission.planned_datetime_local, datetime(2026, 8, 11, 2, 25))
+        self.assertEqual(mission.assigned_tail_number, "N755UP")
+        self.assertEqual(result["results"][0]["parking"]["status"], "applied")
+        self.assertIn("Future Google block-out ignored.", result["results"][0]["warnings"])
+        parking.assert_called_once()
+
+    def test_blank_google_u_clears_existing_future_google_block_out(self):
+        self.operation.sort_date = date(2026, 8, 10)
+        mission = self._mission("departure", "UPS0755", tail="N755UP", destination="SDF")
+        mission.actual_block_out_datetime_utc = datetime(2026, 8, 11, 7, 39)
+        mission.actual_block_out_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
+        mission.departure_status = "departed"
+        db.session.commit()
+
+        result = self._apply_departures(
+            self._outbound(4, "755", "N755UP", operational=""),
+            now=datetime(2026, 8, 11, 3, 10),
+        )
+        db.session.commit()
+
+        mission = db.session.get(SortDateMission, mission.id)
+        self.assertIsNone(mission.actual_block_out_datetime_utc)
+        self.assertEqual(mission.actual_block_out_source, "unknown")
+        self.assertEqual(mission.departure_status, "loading")
+        self.assertIn(
+            "Future Google block-out state cleared.",
+            result["results"][0]["warnings"],
+        )
+
+    def test_future_native_block_out_is_not_cleared(self):
+        self.operation.sort_date = date(2026, 8, 10)
+        mission = self._mission("departure", "UPS0755", tail="N755UP", destination="SDF")
+        mission.actual_block_out_datetime_utc = datetime(2026, 8, 11, 7, 39)
+        mission.actual_block_out_source = "manual"
+        mission.departure_status = "departed"
+        db.session.commit()
+
+        self._apply_departures(
+            self._outbound(4, "755", "N755UP", operational=""),
+            now=datetime(2026, 8, 11, 3, 10),
+        )
+        db.session.commit()
+
+        mission = db.session.get(SortDateMission, mission.id)
+        self.assertEqual(mission.actual_block_out_datetime_utc, datetime(2026, 8, 11, 7, 39))
+        self.assertEqual(mission.actual_block_out_source, "manual")
+        self.assertEqual(mission.departure_status, "departed")
+
+    def test_blank_google_u_does_not_downgrade_past_google_departure(self):
+        self.operation.sort_date = date(2026, 8, 10)
+        mission = self._mission("departure", "UPS0755", tail="N755UP", destination="SDF")
+        mission.actual_block_out_datetime_utc = datetime(2026, 8, 11, 2, 39)
+        mission.actual_block_out_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
+        mission.departure_status = "departed"
+        db.session.commit()
+
+        self._apply_departures(
+            self._outbound(4, "755", "N755UP", operational=""),
+            now=datetime(2026, 8, 11, 3, 10),
+        )
+        db.session.commit()
+
+        mission = db.session.get(SortDateMission, mission.id)
+        self.assertEqual(mission.actual_block_out_datetime_utc, datetime(2026, 8, 11, 2, 39))
+        self.assertEqual(mission.actual_block_out_source, GOOGLE_MOTHERBRAIN_MISSION_SOURCE)
+        self.assertEqual(mission.departure_status, "departed")
 
     def test_native_block_out_authority_is_preserved(self):
         mission = self._mission("departure", "UPS0755", tail="N457UP", destination="SDF")
@@ -732,18 +828,20 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
         self.assertIn("departed", constraint_sql)
         self.assertIn("sort_date_google_mission_links", db.inspect(db.engine).get_table_names())
 
-    def _apply_arrivals(self, *rows):
+    def _apply_arrivals(self, *rows, now=None):
         return apply_google_motherbrain_live_mission_batch(
             self.operation,
             "arrival",
             rows,
+            now=now,
         )
 
-    def _apply_departures(self, *rows):
+    def _apply_departures(self, *rows, now=None):
         return apply_google_motherbrain_live_mission_batch(
             self.operation,
             "departure",
             rows,
+            now=now,
         )
 
     def _inbound(

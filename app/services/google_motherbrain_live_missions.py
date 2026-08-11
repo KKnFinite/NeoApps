@@ -452,21 +452,44 @@ def _apply_outbound_state(
     if mission.departure_status is None:
         mission.departure_status = "loading"
 
+    if _clear_future_google_block_out(mission, applied_at):
+        warnings.append("Future Google block-out state cleared.")
+
     if operational_utc is not None:
-        source = str(mission.actual_block_out_source or "unknown").strip().lower()
-        has_native_authority = bool(
-            mission.actual_block_out_datetime_utc
-            and source in GOOGLE_NATIVE_BLOCK_OUT_SOURCES
-        )
-        if has_native_authority:
-            warnings.append("Native Neo block-out preserved over Google block-out.")
+        if operational_utc > applied_at:
+            warnings.append("Future Google block-out ignored.")
         else:
-            mission.actual_block_out_datetime_utc = operational_utc
-            mission.actual_block_out_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
-            mission.departure_status = "departed"
+            source = str(mission.actual_block_out_source or "unknown").strip().lower()
+            has_native_authority = bool(
+                mission.actual_block_out_datetime_utc
+                and source in GOOGLE_NATIVE_BLOCK_OUT_SOURCES
+            )
+            if has_native_authority:
+                warnings.append("Native Neo block-out preserved over Google block-out.")
+            else:
+                mission.actual_block_out_datetime_utc = operational_utc
+                mission.actual_block_out_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
+                mission.departure_status = "departed"
 
     _apply_pending_tail_swap(link, row)
     return warnings
+
+
+def _clear_future_google_block_out(mission, applied_at):
+    source = str(mission.actual_block_out_source or "unknown").strip().lower()
+    block_out_utc = mission.actual_block_out_datetime_utc
+    if (
+        source != GOOGLE_MOTHERBRAIN_MISSION_SOURCE
+        or block_out_utc is None
+        or _utc_naive(block_out_utc) <= applied_at
+    ):
+        return False
+
+    mission.actual_block_out_datetime_utc = None
+    mission.actual_block_out_source = "unknown"
+    if str(mission.departure_status or "").strip().lower() == "departed":
+        mission.departure_status = "loading"
+    return True
 
 
 def _apply_pending_tail_swap(link, row):
