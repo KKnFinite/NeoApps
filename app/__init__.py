@@ -345,33 +345,35 @@ def register_template_helpers(app):
         }
 
     @app.context_processor
-    def motherbrain_alerts():
-        if (
-            not current_user.is_authenticated
-            or not (
-                request.path.startswith("/motherbrain")
-                or request.path.startswith("/portal/manage")
-            )
-        ):
+    def my_alerts():
+        if not current_user.is_authenticated:
             return {
-                "motherbrain_alert_tray": None,
+                "my_alert_tray": None,
                 "motherbrain_shell_operation": None,
             }
 
-        from app.services.access_control import get_current_gateway
-        from app.services.motherbrain_alerts import (
-            motherbrain_alert_context,
-            motherbrain_alert_operation_for_request,
-        )
+        from app.services.my_alerts import my_alert_context
 
-        gateway = get_current_gateway()
-        operation = motherbrain_alert_operation_for_request(gateway, request)
+        include_motherbrain = request.path.startswith(
+            "/motherbrain"
+        ) or request.path.startswith("/portal/manage")
+        gateway = None
+        operation = None
+        if include_motherbrain:
+            from app.services.access_control import get_current_gateway
+            from app.services.motherbrain_alerts import (
+                motherbrain_alert_operation_for_request,
+            )
+
+            gateway = get_current_gateway()
+            operation = motherbrain_alert_operation_for_request(gateway, request)
 
         return {
-            "motherbrain_alert_tray": motherbrain_alert_context(
-                gateway,
+            "my_alert_tray": my_alert_context(
                 can_view_permission=user_can,
+                gateway=gateway,
                 operation=operation,
+                include_motherbrain=include_motherbrain,
             ),
             "motherbrain_shell_operation": operation,
         }

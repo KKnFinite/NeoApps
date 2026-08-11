@@ -1,13 +1,13 @@
-{% set tray = motherbrain_alert_tray %}
+{% set tray = my_alert_tray %}
 {% if tray %}
-<details class="motherbrain-alert-tray" data-motherbrain-alert-tray data-alert-count="{{ tray.count }}">
-    <summary class="motherbrain-alert-button" aria-label="MotherBrain alerts" data-motherbrain-alert-toggle>
+<details class="motherbrain-alert-tray" data-my-alerts-tray data-motherbrain-alert-tray data-alert-count="{{ tray.count }}">
+    <summary class="motherbrain-alert-button" aria-label="My Alerts" data-motherbrain-alert-toggle>
         <span class="motherbrain-alert-button-label">Alerts</span>
         <span class="motherbrain-alert-count">{{ tray.count }}</span>
     </summary>
-    <aside class="motherbrain-alert-panel" aria-label="MotherBrain alert tray">
+    <aside class="motherbrain-alert-panel" aria-label="My Alerts tray">
         <header class="motherbrain-alert-panel-head">
-            <strong>MotherBrain Alerts</strong>
+            <strong>My Alerts</strong>
             <span>{{ tray.count }} active</span>
         </header>
         {% if tray.has_alerts %}
@@ -16,7 +16,9 @@
             <article class="motherbrain-alert-item motherbrain-alert-item-{{ alert.severity|default('info')|lower }}">
                 <div class="motherbrain-alert-item-top">
                     <span class="motherbrain-alert-severity">{{ alert.severity|motherbrain_alert_severity }}</span>
+                    {% if alert.created_at %}
                     <time datetime="{{ alert.created_at.isoformat() }}">{{ alert.created_at|local_datetime }}</time>
+                    {% endif %}
                 </div>
                 <h3>{{ alert.title }}</h3>
                 {% if alert.message %}

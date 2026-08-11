@@ -7233,15 +7233,17 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertIn(b'data-motherbrain-alert-tray', response.data)
                 self.assertIn(b'data-alert-count="0"', response.data)
                 self.assertIn(b"data-motherbrain-alert-toggle", response.data)
-                self.assertIn(b"MotherBrain Alerts", response.data)
+                self.assertIn(b"My Alerts", response.data)
                 self.assertIn(b"No alerts.", response.data)
 
-    def test_motherbrain_alert_tray_does_not_render_outside_motherbrain_pages(self):
+    def test_my_alert_tray_renders_outside_motherbrain_without_operational_alerts(self):
         response = self.client.get("/rfd")
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotIn(b'data-motherbrain-alert-tray', response.data)
-        self.assertNotIn(b"MotherBrain Alerts", response.data)
+        self.assertIn(b'data-my-alerts-tray', response.data)
+        self.assertIn(b'data-motherbrain-alert-tray', response.data)
+        self.assertIn(b"My Alerts", response.data)
+        self.assertIn(b"No alerts.", response.data)
 
     def test_motherbrain_alert_tray_renders_active_alert_rows(self):
         db.session.add(

@@ -179,8 +179,8 @@
                 {% set character_switcher_use_neofont = true %}
                 {% include "_change_characters.html" %}
                 <div class="topbar-user-row motherbrain-desktop-utility">
-                    {% if motherbrain_alert_tray %}
-                    {% include "neomotherbrain/_alert_tray.html" %}
+                    {% if my_alert_tray %}
+                    {% include "_my_alert_tray.html" %}
                     {% endif %}
                     <div class="user-chip desktop-shell-user-chip" aria-label="Logged in user">
                         <span>Logged In</span>
@@ -260,6 +260,9 @@
                 {% set character_switcher_use_neofont = is_portal_page %}
                 {% include "_change_characters.html" %}
                 {% endif %}
+                {% if my_alert_tray %}
+                {% include "_my_alert_tray.html" %}
+                {% endif %}
                 <div class="user-chip{% if is_rfd_hub_page %} desktop-shell-user-chip{% endif %}" aria-label="Logged in user">
                     <span>{% if is_rfd_hub_page %}Logged In{% else %}Logged in{% endif %}</span>
                     <strong>{% if is_rfd_hub_page %}{{ current_user.header_display_name|upper }}{% else %}{{ current_user.header_display_name }}{% endif %}</strong>
@@ -322,8 +325,8 @@
                 {% endif %}
             </div>
             <div class="mobile-topbar-actions">
-                {% if motherbrain_alert_tray %}
-                {% include "neomotherbrain/_alert_tray.html" %}
+                {% if my_alert_tray %}
+                {% include "_my_alert_tray.html" %}
                 {% endif %}
                 <details class="mobile-account-menu" data-mobile-account-menu>
                     <summary class="mobile-account-trigger" aria-label="Account menu">
@@ -531,11 +534,7 @@
         const alertButtons = Array.from(document.querySelectorAll("[data-mobile-alert-nav]"));
         const switchers = Array.from(document.querySelectorAll("[data-mobile-switcher]"));
         const accountMenus = Array.from(document.querySelectorAll("[data-mobile-account-menu]"));
-        {% if is_motherbrain_page %}
-        const alertTray = topbar ? topbar.querySelector("[data-motherbrain-alert-tray]") : null;
-        {% else %}
-        const alertTray = null;
-        {% endif %}
+        const alertTray = topbar ? topbar.querySelector("[data-my-alerts-tray]") : null;
 
         const popoverAnimationMs = 220;
         const popoverTimers = new WeakMap();
