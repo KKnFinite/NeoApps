@@ -38,6 +38,7 @@ from app.services.password_policy import user_requires_password_change
 from app.services.google_motherbrain_live_poll_schema import (
     ensure_google_motherbrain_live_poll_state_table,
 )
+from app.services.sort_timeline_schema import ensure_sort_timeline_sort_setting_columns
 from app.services.shell_metadata import resolve_shell_metadata
 from app.services.time_display import format_local_hhmm
 
@@ -63,6 +64,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
 
     sync_existing_local_schema(app)
     ensure_google_motherbrain_live_poll_state_table(app)
+    ensure_sort_timeline_sort_setting_columns(app)
 
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)

@@ -124,10 +124,13 @@ class SortTimelineSortSetting(db.Model):
     sort_name = db.Column(db.String(32), nullable=False, index=True)
     sort_window_start_local = db.Column(db.Time, nullable=True)
     sort_window_end_local = db.Column(db.Time, nullable=True)
+    planning_start_local = db.Column(db.Time, nullable=True)
     ops_window_start_local = db.Column(db.Time, nullable=True)
     ops_window_end_local = db.Column(db.Time, nullable=True)
     polling_start_local = db.Column(db.Time, nullable=True)
     polling_end_local = db.Column(db.Time, nullable=True)
+    google_polling_start_local = db.Column(db.Time, nullable=True)
+    google_polling_end_local = db.Column(db.Time, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

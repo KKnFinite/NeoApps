@@ -171,6 +171,10 @@
                             {{ time_input(sort_name ~ "_sort_end", sort_setting.sort_window_end_local) }}
                         </label>
                         <label>
+                            <span>Planning Start</span>
+                            {{ time_input(sort_name ~ "_planning_start", sort_setting.planning_start_local) }}
+                        </label>
+                        <label>
                             <span>Ops Start</span>
                             {{ time_input(sort_name ~ "_ops_start", sort_setting.ops_window_start_local) }}
                         </label>
@@ -185,6 +189,14 @@
                         <label>
                             <span>API Poll End</span>
                             {{ time_input(sort_name ~ "_polling_end", sort_setting.polling_end_local) }}
+                        </label>
+                        <label>
+                            <span>Google Polling Start</span>
+                            {{ time_input(sort_name ~ "_google_polling_start", sort_setting.google_polling_start_local) }}
+                        </label>
+                        <label>
+                            <span>Google Polling End</span>
+                            {{ time_input(sort_name ~ "_google_polling_end", sort_setting.google_polling_end_local) }}
                         </label>
                     </div>
                     <div class="metric-grid sort-timeline-sort-preview">

@@ -874,10 +874,19 @@ def _save_sort_settings(settings, gateway, form):
         sort_setting.gateway_code = gateway.code
         sort_setting.sort_window_start_local = time_value(form.get(f"{sort_name}_sort_start"))
         sort_setting.sort_window_end_local = time_value(form.get(f"{sort_name}_sort_end"))
+        sort_setting.planning_start_local = time_value(
+            form.get(f"{sort_name}_planning_start")
+        )
         sort_setting.ops_window_start_local = time_value(form.get(f"{sort_name}_ops_start"))
         sort_setting.ops_window_end_local = time_value(form.get(f"{sort_name}_ops_end"))
         sort_setting.polling_start_local = time_value(form.get(f"{sort_name}_polling_start"))
         sort_setting.polling_end_local = time_value(form.get(f"{sort_name}_polling_end"))
+        sort_setting.google_polling_start_local = time_value(
+            form.get(f"{sort_name}_google_polling_start")
+        )
+        sort_setting.google_polling_end_local = time_value(
+            form.get(f"{sort_name}_google_polling_end")
+        )
 
         _replace_special_poll_times(
             sort_setting,

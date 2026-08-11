@@ -25,6 +25,7 @@ from app.models import (
     SortTimelineApiParticipation,
     SortTimelineMonthVariance,
     SortTimelineSettings,
+    SortTimelineSortSetting,
     SortTimelineSpecialPollTime,
     SortTimelineUsageCounter,
     SortDateCrewAssignment,
@@ -498,6 +499,47 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(settings.minimum_auto_poll_interval_minutes, 17)
         self.assertTrue(settings.provider_enabled)
         self.assertEqual(variance.variance, 2)
+
+    def test_sort_timeline_saves_and_renders_planning_and_google_polling_times(self):
+        db.session.add(
+            GatewaySortMatrix(
+                gateway_id=self.rfd_gateway.id,
+                gateway_code=self.rfd_gateway.code,
+                day_of_week="monday",
+                sort_name="night",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+
+        response = self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                night_planning_start="14:00",
+                night_google_polling_start="18:00",
+                night_google_polling_end="04:00",
+            ),
+            headers={
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json",
+            },
+        )
+        night_setting = SortTimelineSortSetting.query.filter_by(
+            gateway_id=self.rfd_gateway.id,
+            sort_name="night",
+        ).one()
+        rendered = self.client.get("/motherbrain/sort-timeline?month=2026-06")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(night_setting.planning_start_local, time(14, 0))
+        self.assertEqual(night_setting.google_polling_start_local, time(18, 0))
+        self.assertEqual(night_setting.google_polling_end_local, time(4, 0))
+        self.assertIn(b'name="night_planning_start"', rendered.data)
+        self.assertIn(b'name="night_google_polling_start"', rendered.data)
+        self.assertIn(b'name="night_google_polling_end"', rendered.data)
+        self.assertIn(b'value="14:00"', rendered.data)
+        self.assertIn(b'value="18:00"', rendered.data)
+        self.assertIn(b'value="04:00"', rendered.data)
 
     def test_sort_timeline_taxi_to_ramp_default_is_ten_minutes(self):
         response = self.client.get("/motherbrain/sort-timeline?month=2026-06")
@@ -13966,10 +14008,13 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 {
                     f"{sort_name}_sort_start": "",
                     f"{sort_name}_sort_end": "",
+                    f"{sort_name}_planning_start": "",
                     f"{sort_name}_ops_start": "",
                     f"{sort_name}_ops_end": "",
                     f"{sort_name}_polling_start": "",
                     f"{sort_name}_polling_end": "",
+                    f"{sort_name}_google_polling_start": "",
+                    f"{sort_name}_google_polling_end": "",
                     f"{sort_name}_special_poll_time": [],
                     f"{sort_name}_delete_special_poll_time": [],
                 }

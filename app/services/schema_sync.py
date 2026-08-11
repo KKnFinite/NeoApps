@@ -92,6 +92,11 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "taxi_to_ramp_minutes": "INTEGER DEFAULT 10",
         "minimum_auto_poll_interval_minutes": "INTEGER DEFAULT 10",
     },
+    "sort_timeline_sort_settings": {
+        "planning_start_local": "TIME",
+        "google_polling_start_local": "TIME",
+        "google_polling_end_local": "TIME",
+    },
     "sort_timeline_usage_counters": {
         "units_consumed": "INTEGER DEFAULT 0",
     },
@@ -189,6 +194,11 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "units_per_poll": "INTEGER DEFAULT 2",
         "taxi_to_ramp_minutes": "INTEGER DEFAULT 10",
         "minimum_auto_poll_interval_minutes": "INTEGER DEFAULT 10",
+    },
+    "sort_timeline_sort_settings": {
+        "planning_start_local": "TIME",
+        "google_polling_start_local": "TIME",
+        "google_polling_end_local": "TIME",
     },
     "sort_timeline_usage_counters": {
         "units_consumed": "INTEGER DEFAULT 0",
