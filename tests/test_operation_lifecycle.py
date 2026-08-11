@@ -84,6 +84,113 @@ class OperationLifecycleTest(unittest.TestCase):
         self.assertEqual(result["existing"], [operation])
         self.assertEqual(SortDateOperation.query.count(), 1)
 
+    def test_before_planning_start_does_not_create_operation(self):
+        self._activate("thursday", "night")
+        self._timeline(
+            "night",
+            planning=time(16, 0),
+            sort=(time(22, 0), time(4, 0)),
+        )
+        db.session.commit()
+
+        result = ensure_operational_sort_operations(
+            self.gateway,
+            now=datetime(2026, 6, 18, 15, 59),
+        )
+
+        self.assertEqual(result["eligible"], [])
+        self.assertEqual(SortDateOperation.query.count(), 0)
+
+    def test_at_planning_start_creates_operation(self):
+        self._activate("thursday", "night")
+        self._timeline(
+            "night",
+            planning=time(16, 0),
+            sort=(time(22, 0), time(4, 0)),
+        )
+        db.session.commit()
+
+        result = ensure_operational_sort_operations(
+            self.gateway,
+            now=datetime(2026, 6, 18, 16, 0),
+        )
+
+        self.assertEqual(len(result["created"]), 1)
+        self.assertEqual(result["eligible"][0]["window_source"], "planning")
+        self.assertEqual(
+            result["eligible"][0]["window_start_local"],
+            datetime(2026, 6, 18, 16, 0),
+        )
+
+    def test_planning_start_creates_before_sort_window_start(self):
+        self._activate("thursday", "night")
+        self._timeline(
+            "night",
+            planning=time(16, 0),
+            sort=(time(22, 0), time(4, 0)),
+        )
+        db.session.commit()
+
+        result = ensure_operational_sort_operations(
+            self.gateway,
+            now=datetime(2026, 6, 18, 20, 30),
+        )
+
+        self.assertEqual(len(result["created"]), 1)
+        self.assertEqual(result["created"][0].sort_date, date(2026, 6, 18))
+
+    def test_planning_window_after_midnight_targets_previous_sort_date(self):
+        self._activate("thursday", "night")
+        self._timeline(
+            "night",
+            planning=time(16, 0),
+            sort=(time(22, 0), time(4, 0)),
+        )
+        db.session.commit()
+
+        result = ensure_operational_sort_operations(
+            self.gateway,
+            now=datetime(2026, 6, 19, 3, 0),
+        )
+
+        self.assertEqual(len(result["created"]), 1)
+        self.assertEqual(result["created"][0].sort_date, date(2026, 6, 18))
+        self.assertEqual(
+            result["eligible"][0]["window_end_local"],
+            datetime(2026, 6, 19, 4, 0),
+        )
+
+    def test_planning_window_excludes_sort_window_end(self):
+        self._activate("thursday", "night")
+        self._timeline(
+            "night",
+            planning=time(16, 0),
+            sort=(time(22, 0), time(4, 0)),
+        )
+        db.session.commit()
+
+        result = ensure_operational_sort_operations(
+            self.gateway,
+            now=datetime(2026, 6, 19, 4, 0),
+        )
+
+        self.assertEqual(result["eligible"], [])
+        self.assertEqual(SortDateOperation.query.count(), 0)
+
+    def test_planning_start_without_sort_window_end_does_not_create(self):
+        self._activate("thursday", "night")
+        setting = self._timeline("night", planning=time(16, 0))
+        setting.sort_window_start_local = time(22, 0)
+        db.session.commit()
+
+        result = ensure_operational_sort_operations(
+            self.gateway,
+            now=datetime(2026, 6, 18, 20, 30),
+        )
+
+        self.assertEqual(result["eligible"], [])
+        self.assertEqual(SortDateOperation.query.count(), 0)
+
     def test_outside_sort_window_does_not_create_even_inside_ops_window(self):
         self._activate("thursday", "night")
         self._timeline(
@@ -118,14 +225,17 @@ class OperationLifecycleTest(unittest.TestCase):
         self.assertEqual(len(result["created"]), 1)
         self.assertEqual(result["eligible"][0]["window_source"], "sort")
 
-    def test_polling_window_does_not_control_creation(self):
+    def test_other_operational_and_polling_windows_do_not_control_creation(self):
         self._activate("thursday", "night")
-        self._timeline(
+        setting = self._timeline(
             "night",
-            sort=(time(14, 0), time(5, 0)),
+            planning=time(14, 0),
+            sort=(time(22, 0), time(5, 0)),
             ops=(time(20, 0), time(3, 0)),
             polling=(time(18, 0), time(4, 0)),
         )
+        setting.google_polling_start_local = time(19, 0)
+        setting.google_polling_end_local = time(2, 0)
         db.session.commit()
 
         result = ensure_operational_sort_operations(
@@ -134,6 +244,7 @@ class OperationLifecycleTest(unittest.TestCase):
         )
 
         self.assertEqual(len(result["created"]), 1)
+        self.assertEqual(result["eligible"][0]["window_source"], "planning")
 
     def test_sort_window_creates_when_ops_window_missing(self):
         self._activate("thursday", "night")
@@ -215,7 +326,11 @@ class OperationLifecycleTest(unittest.TestCase):
 
     def test_inactive_matrix_sort_is_not_created(self):
         self._activate("thursday", "night", active=False)
-        self._timeline("night", sort=(time(20, 0), time(23, 0)))
+        self._timeline(
+            "night",
+            planning=time(16, 0),
+            sort=(time(20, 0), time(23, 0)),
+        )
         db.session.commit()
 
         ensure_operational_sort_operations(
@@ -313,7 +428,11 @@ class OperationLifecycleTest(unittest.TestCase):
 
     def test_repeated_ensure_is_idempotent(self):
         self._activate("thursday", "night")
-        self._timeline("night", sort=(time(20, 0), time(23, 0)))
+        self._timeline(
+            "night",
+            planning=time(16, 0),
+            sort=(time(20, 0), time(23, 0)),
+        )
         db.session.commit()
 
         first = ensure_operational_sort_operations(
@@ -526,7 +645,7 @@ class OperationLifecycleTest(unittest.TestCase):
         db.session.add(row)
         return row
 
-    def _timeline(self, sort_name, ops=None, sort=None, polling=None):
+    def _timeline(self, sort_name, ops=None, sort=None, polling=None, planning=None):
         row = SortTimelineSortSetting(
             timeline_settings=self.settings,
             gateway_id=self.gateway.id,
@@ -537,6 +656,8 @@ class OperationLifecycleTest(unittest.TestCase):
             row.ops_window_start_local, row.ops_window_end_local = ops
         if sort:
             row.sort_window_start_local, row.sort_window_end_local = sort
+        if planning:
+            row.planning_start_local = planning
         if polling:
             row.polling_start_local, row.polling_end_local = polling
         db.session.add(row)
