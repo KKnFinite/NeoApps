@@ -42,6 +42,9 @@ from app.services.sort_timeline_schema import ensure_sort_timeline_sort_setting_
 from app.services.sort_date_mission_schema import (
     ensure_sort_date_mission_departure_status_constraint,
 )
+from app.services.neosektor_sheets_compat_schema import (
+    ensure_neosektor_sheets_compat_columns,
+)
 from app.services.shell_metadata import resolve_shell_metadata
 from app.services.time_display import format_local_hhmm
 
@@ -69,6 +72,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     ensure_google_motherbrain_live_poll_state_table(app)
     ensure_sort_timeline_sort_setting_columns(app)
     ensure_sort_date_mission_departure_status_constraint(app)
+    ensure_neosektor_sheets_compat_columns(app)
 
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)

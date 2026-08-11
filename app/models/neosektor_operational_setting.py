@@ -23,6 +23,7 @@ class NeoSektorOperationalSetting(db.Model):
         nullable=False,
         default=False,
     )
+    last_google_read_at_utc = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

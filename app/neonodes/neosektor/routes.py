@@ -26,6 +26,7 @@ from app.services.neosektor_sheets_compat import (
     mirror_neosektor_sheet_update,
     set_sheets_compatibility_enabled,
     sheets_compatibility_status,
+    sync_neosektor_from_google_if_due,
 )
 from app.services.permission_rules import user_can
 from app.services.uld_requests import (
@@ -196,6 +197,7 @@ def tunnel_conductor():
         return redirect(url_for("neosektor.index"))
 
     gateway = get_current_gateway()
+    sync_neosektor_from_google_if_due(gateway)
     context = tunnel_conductor_context(gateway)
     db.session.commit()
     return render_template(
@@ -217,7 +219,9 @@ def tunnel_conductor_state():
     if not access["can_view"]:
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
-    state = driver_routing_state_payload(get_current_gateway())
+    gateway = get_current_gateway()
+    sync_neosektor_from_google_if_due(gateway)
+    state = driver_routing_state_payload(gateway)
     db.session.commit()
     return jsonify({"ok": True, "state": state})
 
@@ -339,6 +343,7 @@ def _render_ballmat_operations(selected_side):
 
     session["neosektor_ballmat_side"] = selected_side
     gateway = get_current_gateway()
+    sync_neosektor_from_google_if_due(gateway)
     context = ballmat_operations_context(gateway, selected_side)
     db.session.commit()
     return render_template(
@@ -356,7 +361,9 @@ def ballmat_state():
     if not _can_view_any_ballmat():
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
-    state = ballmat_state_payload(get_current_gateway())
+    gateway = get_current_gateway()
+    sync_neosektor_from_google_if_due(gateway)
+    state = ballmat_state_payload(gateway)
     db.session.commit()
     return jsonify({"ok": True, "state": state})
 
@@ -498,6 +505,7 @@ def live_counts():
         return redirect(url_for("neosektor.index"))
 
     gateway = get_current_gateway()
+    sync_neosektor_from_google_if_due(gateway)
     context = live_counts_context(gateway)
     db.session.commit()
     return render_template(
@@ -521,7 +529,9 @@ def live_counts_state():
     if not user_can(LIVE_COUNTS_VIEW_PERMISSION):
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
-    state = ballmat_state_payload(get_current_gateway())
+    gateway = get_current_gateway()
+    sync_neosektor_from_google_if_due(gateway)
+    state = ballmat_state_payload(gateway)
     db.session.commit()
     return jsonify({"ok": True, "state": state})
 
@@ -582,6 +592,7 @@ def driver_routing():
         return redirect(url_for("neosektor.index"))
 
     gateway = get_current_gateway()
+    sync_neosektor_from_google_if_due(gateway)
     context = driver_routing_context(gateway)
     db.session.commit()
     return render_template(
@@ -601,7 +612,9 @@ def driver_routing_state():
     if not access["can_view"]:
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
-    state = driver_routing_state_payload(get_current_gateway())
+    gateway = get_current_gateway()
+    sync_neosektor_from_google_if_due(gateway)
+    state = driver_routing_state_payload(gateway)
     db.session.commit()
     return jsonify({"ok": True, "state": state})
 

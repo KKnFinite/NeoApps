@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 
 from app.extensions import db
 from app.models import (
@@ -271,6 +272,86 @@ def update_neosektor_operational_settings(gateway, payload, sort_date=None, sort
     )
     db.session.flush()
     return driver_routing_state_payload(gateway, sort_date, sort_name)
+
+
+def apply_standalone_compat_values(
+    gateway,
+    cell_values,
+    sort_date=None,
+    sort_name=None,
+):
+    """Apply only the established standalone Sheet cells to NeoSektor state."""
+    sort_date = sort_date or date.today()
+    sort_name = normalize_sort_name(sort_name)
+    sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
+    ballmat_wave_counts = _get_or_create_ballmat_wave_counts(sort_state)
+    waves = _get_or_create_waves(sort_state)
+    ballmats = _get_or_create_ballmats(sort_state)
+    open_bays = _get_or_create_open_bays(sort_state)
+    bay_statuses = _get_or_create_bay_statuses(sort_state)
+    driver_routes = _get_or_create_driver_routes(sort_state)
+    operational_settings = get_or_create_operational_settings(gateway)
+    changed = 0
+
+    wave_count_rows = {
+        (row.side, row.wave_name): row
+        for row in ballmat_wave_counts
+    }
+    wave_rows = {row.wave_name: row for row in waves}
+    open_bay_rows = {row.side: row for row in open_bays}
+    bay_rows = {row.bay_name: row for row in bay_statuses}
+
+    count_targets = {
+        "B2": (wave_count_rows[("EAST", "1ST WAVE")], "count", MAIN_BALLMAT_COUNT_MAX),
+        "C2": (wave_count_rows[("WEST", "1ST WAVE")], "count", MAIN_BALLMAT_COUNT_MAX),
+        "D2": (wave_rows["1ST WAVE"], "planned_count", LEFT_TO_ARRIVE_MAX),
+        "B3": (wave_count_rows[("EAST", "2ND WAVE")], "count", MAIN_BALLMAT_COUNT_MAX),
+        "C3": (wave_count_rows[("WEST", "2ND WAVE")], "count", MAIN_BALLMAT_COUNT_MAX),
+        "D3": (wave_rows["2ND WAVE"], "planned_count", LEFT_TO_ARRIVE_MAX),
+        "B4": (open_bay_rows["EAST"], "open_count", MAIN_BALLMAT_COUNT_MAX),
+        "C4": (open_bay_rows["WEST"], "open_count", MAIN_BALLMAT_COUNT_MAX),
+        "B13": (
+            operational_settings,
+            "first_wave_unload_modifier",
+            UNLOAD_MODIFIER_MAX,
+        ),
+        "B14": (
+            operational_settings,
+            "second_wave_unload_modifier",
+            UNLOAD_MODIFIER_MAX,
+        ),
+    }
+    for cell, (row, attribute, maximum) in count_targets.items():
+        parsed = _standalone_compat_count(cell_values.get(cell), maximum)
+        if parsed is not None:
+            changed += _assign_if_changed(row, attribute, parsed)
+
+    status_targets = {
+        "B6": bay_rows["Bay 1"],
+        "B8": bay_rows["Bay 2"],
+        "B10": bay_rows["Bay 3"],
+        "C6": bay_rows["Bay 4"],
+        "C8": bay_rows["Bay 5"],
+    }
+    for cell, row in status_targets.items():
+        parsed = _standalone_compat_status(cell_values.get(cell))
+        if parsed is not None:
+            changed += _assign_if_changed(row, "status", parsed)
+
+    west_offset = _standalone_compat_count(
+        cell_values.get("B15"),
+        DRIVER_OFFSET_MAX,
+    )
+    if west_offset is not None:
+        changed += _assign_if_changed(
+            _driver_route_by_name(driver_routes, DRIVER_ROUTE_WEST_OFFSET_NAME),
+            "route_value",
+            str(west_offset),
+        )
+
+    _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats)
+    db.session.flush()
+    return changed
 
 
 def adjust_tunnel_wave_arrivals(gateway, wave, delta=None, value=None, sort_date=None, sort_name=None):
@@ -988,6 +1069,39 @@ def _clean_offset(value):
     except (TypeError, ValueError):
         cleaned = 0
     return min(max(cleaned, 0), DRIVER_OFFSET_MAX)
+
+
+def _standalone_compat_count(value, maximum):
+    if value is None or isinstance(value, bool):
+        return None
+
+    raw_value = str(value).strip()
+    if not raw_value:
+        return None
+
+    try:
+        numeric = Decimal(raw_value)
+    except (InvalidOperation, ValueError):
+        return None
+    if not numeric.is_finite() or numeric != numeric.to_integral_value():
+        return None
+
+    parsed = int(numeric)
+    if parsed < 0 or parsed > maximum:
+        return None
+    return parsed
+
+
+def _standalone_compat_status(value):
+    normalized = str(value or "").strip().title()
+    return normalized if normalized in STATUS_LABELS else None
+
+
+def _assign_if_changed(row, attribute, value):
+    if getattr(row, attribute) == value:
+        return 0
+    setattr(row, attribute, value)
+    return 1
 
 
 def _status(value):

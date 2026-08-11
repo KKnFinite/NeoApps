@@ -1,10 +1,8 @@
-"""Temporary NeoGateway-to-standalone NeoSektor Google Sheets bridge.
+"""Temporary two-way NeoGateway/standalone NeoSektor Sheets bridge.
 
 The standalone NeoSektor application remains the owner of its Google Sheets
-integration. This adapter mirrors only the existing, fixed-cell operational
-values after a NeoGateway user has committed an update to the NeoGateway
-database. It deliberately has no read or polling hooks so it can be removed
-cleanly when the standalone application is retired.
+integration. This adapter exchanges only the existing fixed-cell operational
+values and remains isolated so it can be removed when standalone is retired.
 """
 
 from __future__ import annotations
@@ -12,8 +10,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 
 from flask import has_app_context
+from sqlalchemy import or_, update
 
 try:
     import gspread
@@ -48,6 +48,7 @@ SHEET_CELL_ORDER = (
     "B14",
     "B15",
 )
+GOOGLE_READ_THROTTLE_SECONDS = 5
 
 
 def mirror_neosektor_sheet_update(before_state, after_state, gateway=None):
@@ -91,6 +92,49 @@ def mirror_neosektor_sheet_update(before_state, after_state, gateway=None):
     return True
 
 
+def sync_neosektor_from_google_if_due(gateway, now=None):
+    """Import standalone-compatible cells at most once per gateway interval."""
+    gateway = _resolve_gateway(gateway)
+    settings = _existing_operational_settings(gateway)
+    if not gateway or not settings or not settings.google_sheets_compat_enabled:
+        return {"status": "disabled", "updated": 0}
+
+    claim_time = _utc_naive(now)
+    if not _claim_google_read(settings.id, claim_time):
+        return {"status": "not_due", "updated": 0}
+
+    if not sheets_credentials_configured():
+        _log_safe_warning(
+            "read configuration",
+            RuntimeError("missing Google Sheets credentials"),
+        )
+        return {"status": "error", "updated": 0}
+
+    try:
+        cell_values = read_neosektor_sheet_values()
+        from app.services.neosektor_live_counts import apply_standalone_compat_values
+
+        updated = apply_standalone_compat_values(gateway, cell_values)
+        db.session.commit()
+    except Exception as error:
+        db.session.rollback()
+        _log_safe_warning("read", error, cell_count=len(SHEET_CELL_ORDER))
+        return {"status": "error", "updated": 0}
+
+    return {"status": "synced", "updated": updated}
+
+
+def read_neosektor_sheet_values(worksheet=None):
+    """Read the fixed standalone contract in one Google batch request."""
+    worksheet = worksheet or _get_worksheet()
+    batch_values = worksheet.batch_get(list(SHEET_CELL_ORDER))
+    return {
+        cell: _batch_item_value(batch_values[index])
+        for index, cell in enumerate(SHEET_CELL_ORDER)
+        if index < len(batch_values)
+    }
+
+
 def sheets_compatibility_enabled(gateway=None):
     """Return whether gateway-scoped Google Sheets mirroring is explicitly ON."""
     settings = _existing_operational_settings(gateway)
@@ -128,7 +172,10 @@ def set_sheets_compatibility_enabled(gateway, enabled):
         db.session.add(settings)
 
     settings.gateway_code = gateway.code
-    settings.google_sheets_compat_enabled = bool(enabled)
+    enabled = bool(enabled)
+    if enabled and not settings.google_sheets_compat_enabled:
+        settings.last_google_read_at_utc = None
+    settings.google_sheets_compat_enabled = enabled
     db.session.flush()
     return settings
 
@@ -164,6 +211,48 @@ def _get_worksheet():
     client = gspread.service_account_from_dict(credentials)
     spreadsheet = client.open_by_key(os.environ["GOOGLE_SHEETS_ID"])
     return spreadsheet.worksheet(os.environ["GOOGLE_SHEETS_TAB"])
+
+
+def _claim_google_read(settings_id, now_utc):
+    cutoff = now_utc - timedelta(seconds=GOOGLE_READ_THROTTLE_SECONDS)
+    result = db.session.execute(
+        update(NeoSektorOperationalSetting)
+        .where(
+            NeoSektorOperationalSetting.id == settings_id,
+            NeoSektorOperationalSetting.google_sheets_compat_enabled.is_(True),
+            or_(
+                NeoSektorOperationalSetting.last_google_read_at_utc.is_(None),
+                NeoSektorOperationalSetting.last_google_read_at_utc <= cutoff,
+            ),
+        )
+        .values(last_google_read_at_utc=now_utc)
+        .execution_options(synchronize_session=False)
+    )
+    db.session.commit()
+    return result.rowcount == 1
+
+
+def _utc_naive(value=None):
+    value = value or datetime.now(timezone.utc)
+    if value.tzinfo is not None:
+        value = value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
+def _batch_item_value(item):
+    if hasattr(item, "first"):
+        try:
+            return item.first(default=None)
+        except TypeError:
+            return item.first()
+
+    if isinstance(item, dict):
+        item = item.get("values")
+    while isinstance(item, (list, tuple)):
+        if not item:
+            return None
+        item = item[0]
+    return item
 
 
 def _existing_operational_settings(gateway=None):

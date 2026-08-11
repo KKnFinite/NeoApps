@@ -38,11 +38,23 @@ from app.services.uld_requests import (
 
 
 class _FakeNeoSektorWorksheet:
-    def __init__(self):
+    def __init__(self, batch_values=None, batch_error=None):
         self.updates = []
+        self.batch_values = batch_values or {}
+        self.batch_error = batch_error
+        self.batch_reads = []
 
     def update_acell(self, cell, value):
         self.updates.append((cell, value))
+
+    def batch_get(self, ranges):
+        self.batch_reads.append(tuple(ranges))
+        if self.batch_error:
+            raise self.batch_error
+        return [
+            [[self.batch_values[cell]]] if cell in self.batch_values else []
+            for cell in ranges
+        ]
 
 
 FAKE_SHEETS_ENV = {
@@ -2057,25 +2069,33 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(worksheet.updates, [("B13", 52), ("B14", 31)])
 
-    def test_neogateway_sheet_bridge_skips_page_loads_and_polling(self):
+    def test_neosektor_refresh_paths_sync_without_invoking_sheet_mirror(self):
         self._login_approved_user(role="simulator")
 
-        with patch(
-            "app.neonodes.neosektor.routes.mirror_neosektor_sheet_update"
-        ) as mirror_update:
+        with (
+            patch(
+                "app.neonodes.neosektor.routes.mirror_neosektor_sheet_update"
+            ) as mirror_update,
+            patch(
+                "app.neonodes.neosektor.routes.sync_neosektor_from_google_if_due"
+            ) as refresh_sync,
+        ):
             for path in (
                 "/neosektor/live-counts",
                 "/neosektor/live-counts/state",
                 "/neosektor/tunnel-conductor",
                 "/neosektor/tunnel-conductor/state",
                 "/neosektor/ebm",
+                "/neosektor/wbm",
                 "/neosektor/ballmat/state",
+                "/neosektor/driver-routing",
                 "/neosektor/driver-routing/state",
             ):
                 with self.subTest(path=path):
                     self.assertEqual(self.client.get(path).status_code, 200)
 
         mirror_update.assert_not_called()
+        self.assertEqual(refresh_sync.call_count, 9)
 
     def test_neosektor_sheets_compatibility_defaults_off_even_with_credentials(self):
         from app.services.neosektor_sheets_compat import (
@@ -2133,6 +2153,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertIn(b"Google Sheets Compatibility", page.data)
         self.assertIn(b"OFF", page.data)
+        self.assertIn(
+            b"reads and writes the existing standalone Google Sheet",
+            page.data,
+        )
 
         enabled = self.client.post(
             "/neosektor/settings",
@@ -2339,6 +2363,197 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 "B6", "B8", "B10", "C6", "C8", "B13", "B14", "B15",
             ),
         )
+
+    def test_neosektor_refresh_with_compatibility_off_does_not_read_google(self):
+        self._login_approved_user(role="simulator")
+
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch("app.services.neosektor_sheets_compat._get_worksheet") as worksheet,
+        ):
+            response = self.client.get("/neosektor/live-counts/state")
+
+        self.assertEqual(response.status_code, 200)
+        worksheet.assert_not_called()
+
+    def test_neosektor_refresh_batch_imports_mapped_values_without_echo_write(self):
+        from app.services.neosektor_sheets_compat import SHEET_CELL_ORDER
+
+        self._login_approved_user(role="simulator")
+        self._set_sheets_compat_enabled(True)
+        worksheet = _FakeNeoSektorWorksheet(
+            {
+                "B2": 7,
+                "C2": 4,
+                "D2": 18,
+                "B3": 5,
+                "C3": 3,
+                "D3": 14,
+                "B4": 2,
+                "C4": 1,
+                "B6": "Full",
+                "B8": "Moderate",
+                "B10": "Light",
+                "C6": "Overflowing",
+                "C8": "Empty",
+                "B13": 52,
+                "B14": 31,
+                "B15": 4,
+            }
+        )
+
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            response = self.client.get("/neosektor/tunnel-conductor/state")
+
+        self.assertEqual(response.status_code, 200)
+        state = response.get_json()["state"]
+        self.assertEqual(worksheet.batch_reads, [SHEET_CELL_ORDER])
+        self.assertEqual(worksheet.updates, [])
+        self.assertEqual(state["sides"]["east"]["waves"][0]["count"], 7)
+        self.assertEqual(state["sides"]["west"]["waves"][1]["count"], 3)
+        self.assertEqual(state["waves"][0]["planned"], 18)
+        self.assertEqual(state["sides"]["east"]["open_bays"], 2)
+        self.assertEqual(state["sides"]["east"]["bays"][0]["status"], "Full")
+        self.assertEqual(state["operational_settings"]["first_modifier"], 52)
+        self.assertEqual(state["operational_settings"]["second_modifier"], 31)
+        self.assertEqual(state["routing"]["west_offset"], 4)
+
+    def test_neosektor_refreshes_share_five_second_google_read_throttle(self):
+        self._login_approved_user(role="simulator")
+        self._set_sheets_compat_enabled(True)
+        worksheet = _FakeNeoSektorWorksheet({"B2": 6})
+
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            first = self.client.get("/neosektor/live-counts/state")
+            second = self.client.get("/neosektor/driver-routing/state")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(len(worksheet.batch_reads), 1)
+
+    def test_neosektor_google_read_can_run_again_after_throttle_interval(self):
+        from app.services.neosektor_sheets_compat import (
+            sync_neosektor_from_google_if_due,
+        )
+
+        self._set_sheets_compat_enabled(True)
+        worksheet = _FakeNeoSektorWorksheet({"B2": 6})
+        first_attempt = datetime(2026, 8, 10, 12, 0, 0)
+
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            first = sync_neosektor_from_google_if_due(self.gateway, first_attempt)
+            early = sync_neosektor_from_google_if_due(
+                self.gateway,
+                first_attempt + timedelta(seconds=4),
+            )
+            due = sync_neosektor_from_google_if_due(
+                self.gateway,
+                first_attempt + timedelta(seconds=6),
+            )
+
+        self.assertEqual(first["status"], "synced")
+        self.assertEqual(early["status"], "not_due")
+        self.assertEqual(due["status"], "synced")
+        self.assertEqual(len(worksheet.batch_reads), 2)
+
+    def test_neosektor_google_read_failure_preserves_database_refresh_state(self):
+        from app.services.neosektor_live_counts import apply_standalone_compat_values
+
+        self._login_approved_user(role="simulator")
+        apply_standalone_compat_values(self.gateway, {"B2": 9, "B4": 3})
+        db.session.commit()
+        self._set_sheets_compat_enabled(True)
+        worksheet = _FakeNeoSektorWorksheet(
+            batch_error=RuntimeError("sheet unavailable")
+        )
+
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+            self.assertLogs(
+                "app.services.neosektor_sheets_compat",
+                level="WARNING",
+            ),
+        ):
+            response = self.client.get("/neosektor/live-counts/state")
+
+        self.assertEqual(response.status_code, 200)
+        state = response.get_json()["state"]
+        self.assertEqual(state["sides"]["east"]["waves"][0]["count"], 9)
+        self.assertEqual(state["sides"]["east"]["open_bays"], 3)
+
+    def test_invalid_google_cells_preserve_valid_and_neo_only_state(self):
+        from app.services.neosektor_live_counts import apply_standalone_compat_values
+
+        self._login_approved_user(role="simulator")
+        apply_standalone_compat_values(
+            self.gateway,
+            {"B2": 8, "B4": 3, "B6": "Full", "B13": 50, "D2": 4},
+        )
+        settings = NeoSektorOperationalSetting.query.filter_by(
+            gateway_id=self.gateway.id
+        ).one()
+        settings.all_up_to_down_minutes = 23
+        event = NeoSektorUldOnTheWayEvent(
+            gateway_id=self.gateway.id,
+            door="D1",
+            uld_type="A2",
+            quantity=2,
+            sent_at_utc=datetime.utcnow(),
+            expires_at_utc=datetime.utcnow() + timedelta(minutes=10),
+        )
+        db.session.add(event)
+        db.session.commit()
+        self._set_sheets_compat_enabled(True)
+        worksheet = _FakeNeoSektorWorksheet(
+            {
+                "B2": "not-a-count",
+                "B4": "",
+                "B6": "not-a-status",
+                "B13": -1,
+                "D2": 12,
+            }
+        )
+
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            response = self.client.get("/neosektor/live-counts/state")
+
+        self.assertEqual(response.status_code, 200)
+        state = response.get_json()["state"]
+        self.assertEqual(state["sides"]["east"]["waves"][0]["count"], 8)
+        self.assertEqual(state["sides"]["east"]["open_bays"], 3)
+        self.assertEqual(state["sides"]["east"]["bays"][0]["status"], "Full")
+        self.assertEqual(state["waves"][0]["planned"], 12)
+        self.assertEqual(state["operational_settings"]["first_modifier"], 50)
+        self.assertEqual(state["operational_settings"]["down_timer_minutes"], 23)
+        self.assertEqual(NeoSektorUldOnTheWayEvent.query.count(), 1)
 
     def test_neosektor_operational_settings_default_when_missing(self):
         self._login_approved_user(role="simulator")

@@ -273,7 +273,7 @@ DEFAULT_PERMISSION_RULES = (
     (
         "neosektor.settings.edit",
         "master",
-        "Enable or disable NeoSektor Google Sheets compatibility writes.",
+        "Enable or disable NeoSektor Google Sheets compatibility synchronization.",
     ),
     (
         "neosektor.live_counts.view",

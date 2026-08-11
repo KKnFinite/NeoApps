@@ -24,9 +24,8 @@
             </div>
 
             <div class="neosektor-settings-copy">
-                <p><strong>ON:</strong> NeoGateway NeoSektor writes updates to the configured Google Sheet.</p>
-                <p><strong>OFF:</strong> NeoGateway continues database updates but sends nothing to Google Sheets.</p>
-                <p class="neosektor-settings-warning">Standalone NeoSektor may still be using the same sheet.</p>
+                <p><strong>ON:</strong> NeoSektor reads and writes the existing standalone Google Sheet so both systems can remain synchronized during transition.</p>
+                <p><strong>OFF:</strong> NeoSektor remains database-only and does not read or write Google Sheets.</p>
             </div>
 
             <dl class="neosektor-settings-status" aria-label="Google Sheets credential status">
