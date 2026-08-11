@@ -7326,6 +7326,11 @@ h2 {
     gap: 8px;
 }
 
+.parking-unassigned-list {
+    display: grid;
+    gap: 8px;
+}
+
 .parking-unassigned h3 {
     margin: 0;
     color: var(--steel);
@@ -7814,6 +7819,69 @@ h2 {
         border-color 140ms ease,
         box-shadow 140ms ease,
         background 140ms ease;
+}
+
+.parking-lane-tail:empty {
+    display: none;
+}
+
+.parking-lane.is-occupied > .parking-slot-expand,
+.parking-lane.is-occupied > .parking-empty-lane,
+.parking-lane.is-occupied > .parking-direct-slot-assign {
+    display: none;
+}
+
+.parking-live-message {
+    margin: 4px 0 0;
+    padding: 7px 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.4);
+    border-radius: 6px;
+    background: rgba(5, 8, 12, 0.9);
+    color: var(--steel);
+    font-size: 0.76rem;
+    font-weight: 800;
+    text-align: center;
+}
+
+.parking-live-message[data-parking-message-state="conflict"],
+.parking-live-message[data-parking-message-state="error"] {
+    border-color: rgba(255, 180, 72, 0.68);
+    color: #ffe3a6;
+}
+
+.parking-live-message[data-parking-message-state="success"] {
+    border-color: rgba(82, 255, 154, 0.52);
+    color: #d9ffe7;
+}
+
+.parking-optimizer-stale-message {
+    margin: 0;
+    padding: 8px 10px;
+    border: 1px solid rgba(255, 180, 72, 0.68);
+    border-radius: 6px;
+    background: rgba(34, 23, 8, 0.94);
+    color: #ffe3a6;
+    font-size: 0.76rem;
+    font-weight: 850;
+    text-align: center;
+}
+
+.parking-optimizer-panel.is-optimizer-preview-stale .parking-optimizer-results {
+    border-color: rgba(255, 180, 72, 0.5);
+}
+
+.is-parking-live-updated {
+    animation: parking-live-updated 1.6s ease-out;
+}
+
+@keyframes parking-live-updated {
+    0% {
+        border-color: rgba(82, 255, 154, 0.94);
+        box-shadow: 0 0 18px rgba(82, 255, 154, 0.32);
+    }
+    100% {
+        box-shadow: none;
+    }
 }
 
 .parking-lane-slot-2.is-collapsed-slot {

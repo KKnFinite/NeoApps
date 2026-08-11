@@ -1,0 +1,6 @@
+{% from "neomotherbrain/_parking_plan_macros.html" import tail_card with context %}
+<div data-parking-live-tail-fragments>
+{% for row in tail_rows %}
+    {{ tail_card(row) }}
+{% endfor %}
+</div>

@@ -1,120 +1,32 @@
 {% extends "base.html" %}
+{% from "neomotherbrain/_parking_plan_macros.html" import tail_card with context %}
 
 {% block title %}Parking Plan | NeoApps{% endblock %}
 
-{% macro tail_badges(row) %}
-    {% if row.operational_status_label %}
-    <span class="parking-badge parking-badge-{{ row.operational_status }}">{{ row.operational_status_label }}</span>
-    {% endif %}
-{% endmacro %}
-
-{% macro tail_card(row) %}
-<article
-    class="parking-tail-card{% if row.operational_status != 'normal' %} is-{{ row.operational_status }}{% endif %}"
-    draggable="true"
-    id="PARKING-TAIL-{{ row.tail }}"
-    data-parking-tail
-    data-tail-number="{{ row.tail }}"
-    data-parking-tail-assigned="{{ '1' if row.assigned_position else '0' }}"
-    data-tail-oos="{{ '1' if row.is_out_of_service else '0' }}"
-    data-tail-operational-status="{{ row.operational_status }}"
->
-    {% if row.assigned_position %}
-    <div class="parking-tail-placed-desktop" aria-label="Parked tail summary for {{ row.tail }}">
-        {% if not row.suppress_arrival_movement %}
-        <div class="parking-tail-route-line parking-tail-arrival-line">
-            <span>ARR</span>
-            <strong>{{ row.arrival_origin or "-" }}</strong>
-            <time>{{ row.arrival_time or "-" }}</time>
-        </div>
-        {% endif %}
-        <div class="parking-tail-center-line">
-            <strong class="parking-tail-number">{{ row.tail }}</strong>
-            <span class="parking-tail-badges">{{ tail_badges(row) }}</span>
-            {% if row.mission_attachment_label %}<span class="parking-tail-mission-label">{{ row.mission_attachment_label }}</span>{% endif %}
-            {% if row.departure_order %}<span class="parking-order">{{ row.departure_order }}</span>{% endif %}
-        </div>
-        {% if not row.suppress_departure_movement %}
-        <div class="parking-tail-route-line parking-tail-departure-line">
-            <span>DEP</span>
-            <strong>{{ row.departure_destination or "-" }}</strong>
-            <time>{{ row.departure_time or "-" }}</time>
-        </div>
-        {% endif %}
-    </div>
-    <div class="parking-tail-placed-mobile">
-    {% endif %}
-    <div class="parking-tail-main">
-        <strong>{{ row.tail }}</strong>
-        <span class="parking-tail-badges">{{ tail_badges(row) }}</span>
-        {% if row.mission_attachment_label %}<span class="parking-tail-mission-label">{{ row.mission_attachment_label }}</span>{% endif %}
-        {% if row.departure_order %}<span class="parking-order">{{ row.departure_order }}</span>{% endif %}
-    </div>
-    {% if row.assigned_position and row.active_mission_lines %}
-    <div class="parking-tail-mission-lines" aria-label="Active mission details for {{ row.tail }}">
-        {% for mission_line in row.active_mission_lines %}
-        <span>{{ mission_line }}</span>
-        {% endfor %}
-    </div>
-    {% elif not (row.suppress_arrival_movement and row.suppress_departure_movement) %}
-    {% if not row.suppress_arrival_movement %}
-    <div class="parking-tail-line">
-        <span>{{ row.arrival_origin }} {{ row.arrival_time }}</span>
-        {% if row.ground_time %}<small>{{ row.ground_time }}</small>{% endif %}
-    </div>
-    {% endif %}
-    {% if not row.suppress_departure_movement %}
-    <div class="parking-tail-line">
-        <span>{{ row.departure_destination }} {{ row.departure_time }}</span>
-    </div>
-    {% endif %}
-    {% endif %}
-    {% if row.assigned_position and row.active_mission_lines and row.ground_time %}
-    <div class="parking-tail-line parking-tail-gt-line">
-        <small>{{ row.ground_time }}</small>
-    </div>
-    {% endif %}
-    {% if row.assigned_position %}
-    </div>
-    {% endif %}
-    {% if row.assigned_position %}
-    <div class="parking-tail-status-edit" data-tail-action>
-        <button class="parking-tail-status-button" type="button" data-tail-status-open="TAIL-STATUS-{{ row.tail }}">EDIT</button>
-        <dialog class="parking-tail-status-modal" id="TAIL-STATUS-{{ row.tail }}" data-tail-status-modal>
-            <form
-                class="parking-tail-status-form"
-                method="post"
-                action="{{ url_for('neomotherbrain.update_parking_plan_tail_status', operation_id=operation.id) }}"
-            >
-                <input type="hidden" name="operation_id" value="{{ operation.id }}">
-                <input type="hidden" name="tail_number" value="{{ row.tail }}">
-                <h3>EDIT {{ row.tail }}</h3>
-                <p class="muted">Set the tail state for this sort operation.</p>
-                <div class="parking-tail-status-options">
-                    <button type="submit" name="operational_status" value="normal">CLEAR / NORMAL</button>
-                    <button type="submit" name="operational_status" value="oos">OOS</button>
-                    {% if not row.departure %}
-                    <button type="submit" name="operational_status" value="spare">SPARE</button>
-                    {% endif %}
-                    <button type="submit" name="operational_status" value="hot">HOT</button>
-                    {% if row.show_qt_status_option %}
-                    <button type="submit" name="operational_status" value="qt">QT</button>
-                    {% endif %}
-                </div>
-            </form>
-            <button class="parking-tail-status-close" type="button" data-tail-status-close>CANCEL</button>
-        </dialog>
-    </div>
-    {% endif %}
-</article>
-{% endmacro %}
-
 {% block content %}
-<section class="parking-plan-page" data-parking-plan data-assign-url="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) if operation else '' }}" data-unassign-url="{{ url_for('neomotherbrain.unassign_parking_plan_tail', operation_id=operation.id) if operation else '' }}">
+<section
+    class="parking-plan-page"
+    data-parking-plan
+    data-assign-url="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) if operation else '' }}"
+    data-unassign-url="{{ url_for('neomotherbrain.unassign_parking_plan_tail', operation_id=operation.id) if operation else '' }}"
+    data-state-url="{{ url_for('neomotherbrain.parking_plan_live_state_endpoint', operation_id=operation.id) if operation else '' }}"
+    data-parking-revision="{{ parking_live_state.revision if operation else '' }}"
+    data-can-edit="{{ '1' if operation and can_edit_parking_plan else '0' }}"
+    data-live-interval-ms="{{ live_screen_refresh_interval_ms }}"
+    data-live-enabled="{{ '1' if operation and live_update_status.auto_refresh_enabled else '0' }}"
+    data-live-reason="{{ live_update_status.reason if operation else 'outside_ops_window' }}"
+    data-live-label="{{ live_update_status.live_status_label if operation else 'Live updates off - outside Ops window' }}"
+>
     <div class="section-heading">
         <h1 class="neo-page-title motherbrain-page-title mobile-shell-duplicate-title motherbrain-body-duplicate-title">Parking Plan</h1>
         {% if operation %}
         <p class="muted">{{ operation.gateway_code }} {{ operation.sort_name|upper }} SORT DATE {{ operation.sort_date }}</p>
+        <span
+            class="live-update-status parking-live-update-status"
+            data-live-update-status
+            data-live-update-state="{{ live_update_status.reason }}"
+        >{{ live_update_status.live_status_label }}</span>
+        <p class="parking-live-message" data-parking-live-message role="status" hidden></p>
         {% if user_can("motherbrain.parking_rules.view") %}
         <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.parking_rules', operation_id=operation.id) }}">PARKING RULES</a>
         {% endif %}
@@ -175,12 +87,12 @@
     {% set manage_sort_sidebar_operation = operation %}
     {% set manage_sort_sidebar_active = "parking-plan" %}
     <section class="parking-summary-grid" aria-label="Parking plan summary">
-        <article><span>TOTAL TAILS</span><strong>{{ summary.total_tails }}</strong></article>
-        <article><span>ASSIGNED</span><strong>{{ summary.assigned_tails }}</strong></article>
-        <article><span>UNASSIGNED</span><strong>{{ summary.unassigned_tails }}</strong></article>
-        <article><span>HOT</span><strong>{{ summary.hot_count }}</strong></article>
-        <article><span>QUICK TURN</span><strong>{{ summary.quick_turn_count }}</strong></article>
-        <article><span>CONFLICTS</span><strong>{{ summary.conflict_count }}</strong></article>
+        <article><span>TOTAL TAILS</span><strong data-parking-summary="total_tails">{{ summary.total_tails }}</strong></article>
+        <article><span>ASSIGNED</span><strong data-parking-summary="assigned_tails">{{ summary.assigned_tails }}</strong></article>
+        <article><span>UNASSIGNED</span><strong data-parking-summary="unassigned_tails">{{ summary.unassigned_tails }}</strong></article>
+        <article><span>HOT</span><strong data-parking-summary="hot_count">{{ summary.hot_count }}</strong></article>
+        <article><span>QUICK TURN</span><strong data-parking-summary="quick_turn_count">{{ summary.quick_turn_count }}</strong></article>
+        <article><span>CONFLICTS</span><strong data-parking-summary="conflict_count">{{ summary.conflict_count }}</strong></article>
     </section>
 
     {% set has_parking_conflict_details = parking_status.duplicate_tail_conflicts or parking_status.duplicate_slot_conflicts or parking_status.physical_conflicts or parking_status.parked_unlinked_tails or parking_status.oos_active_missions %}
@@ -270,7 +182,12 @@
     </section>
     {% endif %}
 
-    <section class="parking-optimizer-panel" aria-label="Parking optimizer preview">
+    <section
+        class="parking-optimizer-panel"
+        aria-label="Parking optimizer preview"
+        data-parking-optimizer-panel
+        {% if optimizer_preview %}data-optimizer-preview-revision="{{ parking_live_state.revision }}"{% endif %}
+    >
         <div class="parking-optimizer-heading">
             <div>
                 <span>PREVIEW ONLY</span>
@@ -296,6 +213,7 @@
 
         {% if optimizer_preview %}
         <div class="parking-optimizer-results" aria-label="Parking optimizer preview results">
+            <p class="parking-optimizer-stale-message" data-parking-optimizer-stale hidden>Parking changed after this preview. Generate a fresh preview before applying.</p>
             <div class="parking-optimizer-result-head">
                 <span>Solver {{ optimizer_preview.solver_status }}</span>
                 <span>Candidates {{ optimizer_preview.candidate_tail_count }}</span>
@@ -364,6 +282,7 @@
             <form class="parking-optimizer-apply-form" method="post" action="{{ url_for('neomotherbrain.apply_parking_plan_optimizer', operation_id=operation.id) }}">
                 <input type="hidden" name="include_remote" value="{{ 1 if optimizer_preview.runtime_toggles.include_remote else 0 }}">
                 <input type="hidden" name="include_throat" value="{{ 1 if optimizer_preview.runtime_toggles.include_throat else 0 }}">
+                <input type="hidden" name="expected_plan_revision" value="{{ parking_live_state.revision }}">
                 <label class="parking-checkbox">
                     <input type="checkbox" name="confirm_apply" value="1" required>
                     <span>I understand this writes the suggested assignments to the current Parking Plan.</span>
@@ -424,7 +343,7 @@
                 <h2>UNPARKED TAILS</h2>
                 <div class="parking-panel-actions">
                     <span>{{ summary.assigned_tails }}/{{ summary.total_tails }} ASSIGNED</span>
-                    {% if summary.assigned_tails %}
+                    {% if summary.assigned_tails and can_edit_parking_plan %}
                     <form
                         method="post"
                         action="{{ url_for('neomotherbrain.clear_parking_plan_assignments', operation_id=operation.id) }}"
@@ -436,6 +355,7 @@
                     {% endif %}
                 </div>
             </div>
+            {% if can_edit_parking_plan %}
             <div class="parking-mobile-assignment" aria-label="Mobile parking assignment controls">
                 <form class="parking-mobile-action-section parking-mobile-assign-controls" method="post" action="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) }}">
                     <input type="hidden" name="operation_id" value="{{ operation.id }}">
@@ -488,6 +408,7 @@
                         </select>
                     </label>
                     <input type="hidden" name="replace_occupied" value="0">
+                    <input type="hidden" name="parking_snapshot" value="0">
                     <button type="submit">ASSIGN TAIL</button>
                 </form>
 
@@ -533,7 +454,9 @@
                     <button class="parking-remove-button" type="submit">REMOVE / UNASSIGN</button>
                 </form>
             </div>
+            {% endif %}
 
+            {% if can_edit_parking_plan %}
             <div class="parking-click-assign-status" data-parking-selection-status hidden>
                 <span>SELECTED <strong data-selected-tail-label></strong></span>
                 <button type="button" data-clear-selected-tail>CANCEL</button>
@@ -548,6 +471,11 @@
                 <input type="hidden" name="tail_number" data-typed-tail-number>
                 <input type="hidden" name="ramp_code" data-typed-ramp-code>
                 <input type="hidden" name="replace_occupied" value="0">
+                <input type="hidden" name="parking_snapshot" value="1">
+                <input type="hidden" name="expected_source_location" data-typed-source-location>
+                <input type="hidden" name="expected_source_version" data-typed-source-version>
+                <input type="hidden" name="expected_target_tail" data-typed-target-tail>
+                <input type="hidden" name="expected_target_version" data-typed-target-version>
                 <label>
                     <span>TYPE POSITION</span>
                     <input
@@ -571,9 +499,11 @@
                 <button type="submit">ASSIGN</button>
                 <p class="parking-typed-assign-error" data-typed-assign-error hidden></p>
             </form>
+            {% endif %}
 
             <div class="parking-unassigned" aria-label="Unassigned tails">
                 <h3>UNASSIGNED</h3>
+                <div class="parking-unassigned-list" data-parking-unassigned-list>
                 {% if unassigned_tail_rows %}
                     {% for row in unassigned_tail_rows %}
                     {{ tail_card(row) }}
@@ -581,6 +511,7 @@
                 {% else %}
                 <p class="muted">All current-sort tails are assigned.</p>
                 {% endif %}
+                </div>
             </div>
             </section>
         </aside>
@@ -607,6 +538,8 @@
                         <h3 class="parking-position-label">{{ position.code }}</h3>
                         <div class="parking-lanes">
                             {% for lane in position.lanes %}
+                            {% set parking_slot_id = 'slot:' ~ ramp.code ~ ':' ~ position.code ~ ':' ~ lane.number %}
+                            {% set parking_slot_state = parking_live_state.slots_by_id.get(parking_slot_id, {}) %}
                             <div
                                 class="parking-lane parking-lane-slot-{{ lane.number }}{% if lane.row %} is-occupied{% elif lane.number == 2 %} is-collapsed-slot{% endif %}"
                                 data-parking-lane
@@ -615,19 +548,24 @@
                                 data-lane-number="{{ lane.number }}"
                                 data-slot-number="{{ lane.number }}"
                                 data-occupied-tail="{{ lane.tail or '' }}"
+                                data-parking-slot-id="{{ parking_slot_id }}"
+                                data-parking-slot-version="{{ parking_slot_state.get('version', 'empty') }}"
                                 data-slot-collapsed="{{ '1' if lane.number == 2 and not lane.row else '0' }}"
                             >
                                 <span class="parking-lane-label">SLOT {{ lane.number }}</span>
+                                <div class="parking-lane-tail" data-parking-lane-tail>
                                 {% if lane.row %}
                                     {{ tail_card(lane.row) }}
+                                {% endif %}
+                                </div>
+                                {% if lane.number == 2 %}
+                                <button class="parking-slot-expand" type="button" data-slot-expand aria-label="Show {{ position.code }} Slot 2">+</button>
+                                <span class="parking-empty-lane">SLOT 2</span>
                                 {% else %}
-                                    {% if lane.number == 2 %}
-                                    <button class="parking-slot-expand" type="button" data-slot-expand aria-label="Show {{ position.code }} Slot 2">+</button>
-                                    <span class="parking-empty-lane">SLOT 2</span>
-                                    {% else %}
-                                    <span class="parking-empty-lane">DROP SLOT 1</span>
-                                    {% endif %}
-                                    <div class="parking-direct-slot-assign" aria-label="Assign unparked tail to {{ position.code }} Slot {{ lane.number }}">
+                                <span class="parking-empty-lane">DROP SLOT 1</span>
+                                {% endif %}
+                                {% if can_edit_parking_plan %}
+                                <div class="parking-direct-slot-assign" aria-label="Assign unparked tail to {{ position.code }} Slot {{ lane.number }}">
                                         <span>ASSIGN TAIL</span>
                                         <input
                                             type="text"
@@ -654,8 +592,7 @@
                                             <option value="" disabled>NO UNPARKED TAILS</option>
                                             {% endif %}
                                         </select>
-                                    </div>
-                                {% endif %}
+                                </div>
                                 <form
                                     class="parking-mobile-slot-change"
                                     method="post"
@@ -668,6 +605,11 @@
                                     <input type="hidden" name="position_code" value="{{ position.code }}">
                                     <input type="hidden" name="lane_number" value="{{ lane.number }}">
                                     <input type="hidden" name="replace_occupied" value="{{ 1 if lane.row else 0 }}">
+                                    <input type="hidden" name="parking_snapshot" value="1">
+                                    <input type="hidden" name="expected_source_location">
+                                    <input type="hidden" name="expected_source_version">
+                                    <input type="hidden" name="expected_target_tail" value="{{ lane.tail or '' }}">
+                                    <input type="hidden" name="expected_target_version" value="{{ parking_slot_state.get('version', 'empty') }}">
                                     <label>
                                         <span>{{ "Swap Tail" if lane.row else "Change Tail" }}</span>
                                         <select name="tail_number" required>
@@ -679,6 +621,7 @@
                                     </label>
                                     <button type="submit">{{ "Swap" if lane.row else "Change" }}</button>
                                 </form>
+                                {% endif %}
                             </div>
                             {% endfor %}
                         </div>
@@ -692,492 +635,5 @@
     {% endif %}
 </section>
 
-<script>
-(() => {
-    const page = document.querySelector("[data-parking-plan]");
-    if (!page) {
-        return;
-    }
-
-    const mobileForm = page.querySelector(".parking-mobile-assign-controls");
-    if (mobileForm) {
-        const positionSelect = mobileForm.querySelector('select[name="position_code"]');
-        const rampSelect = mobileForm.querySelector('select[name="ramp_code"]');
-        const slotSelect = mobileForm.querySelector('select[name="lane_number"]');
-        const replaceInput = mobileForm.querySelector('input[name="replace_occupied"]');
-        const updateReplaceFlag = () => {
-            if (!replaceInput || !slotSelect || !positionSelect) {
-                return;
-            }
-            const selected = positionSelect.options[positionSelect.selectedIndex];
-            const selectedSlot = slotSelect.value;
-            const occupiedTail = selected?.dataset?.[`slot${selectedSlot}Tail`] || "";
-            replaceInput.value = occupiedTail ? "1" : "0";
-        };
-        const updateSlotChoices = () => {
-            const selected = positionSelect.options[positionSelect.selectedIndex];
-            const rampCode = selected?.dataset?.rampCode;
-            if (rampCode && rampSelect) {
-                rampSelect.value = rampCode;
-            }
-            if (!slotSelect) {
-                return;
-            }
-            const slot1Tail = selected?.dataset?.slot1Tail || "";
-            const slot2Tail = selected?.dataset?.slot2Tail || "";
-            const slot1Option = slotSelect.querySelector('option[value="1"]');
-            const slot2Option = slotSelect.querySelector('option[value="2"]');
-            if (slot1Option) {
-                slot1Option.textContent = slot1Tail ? `REPLACE SLOT 1 (${slot1Tail})` : "SLOT 1";
-            }
-            if (slot2Option) {
-                slot2Option.textContent = slot2Tail ? `REPLACE SLOT 2 (${slot2Tail})` : "USE SLOT 2";
-            }
-            if (!slot1Tail) {
-                slotSelect.value = "1";
-            } else if (!slot2Tail) {
-                slotSelect.value = "2";
-            }
-            updateReplaceFlag();
-        };
-        positionSelect?.addEventListener("change", updateSlotChoices);
-        slotSelect?.addEventListener("change", updateReplaceFlag);
-        updateSlotChoices();
-    }
-
-    let selectedTail = "";
-    const selectionStatus = page.querySelector("[data-parking-selection-status]");
-    const selectedTailLabel = page.querySelector("[data-selected-tail-label]");
-    const clearSelectedTailButton = page.querySelector("[data-clear-selected-tail]");
-    const typedAssignForm = page.querySelector("[data-parking-typed-assign-form]");
-    const typedPositionInput = page.querySelector("[data-typed-position-input]");
-    const typedTailInput = page.querySelector("[data-typed-tail-number]");
-    const typedRampInput = page.querySelector("[data-typed-ramp-code]");
-    const typedSlotSelect = page.querySelector("[data-typed-slot-select]");
-    const typedAssignError = page.querySelector("[data-typed-assign-error]");
-    const normalizeTypedPosition = (value) => {
-        const cleaned = String(value || "").trim().toUpperCase().replace(/\s+/g, "");
-        const match = cleaned.match(/^([A-ER])0*(\d{1,2})$/);
-        if (!match) {
-            return cleaned;
-        }
-        return `${match[1]}${String(Number(match[2])).padStart(2, "0")}`;
-    };
-    const laneForTypedPosition = (positionCode, slotNumber) => {
-        return Array.from(page.querySelectorAll("[data-parking-lane]")).find((lane) => {
-            return lane.dataset.positionCode === positionCode && lane.dataset.laneNumber === slotNumber;
-        });
-    };
-    const showTypedError = (message) => {
-        if (!typedAssignError) {
-            window.alert(message);
-            return;
-        }
-        typedAssignError.textContent = message;
-        typedAssignError.hidden = false;
-    };
-    const clearTypedError = () => {
-        if (typedAssignError) {
-            typedAssignError.textContent = "";
-            typedAssignError.hidden = true;
-        }
-    };
-    page.querySelectorAll("[data-tail-status-open]").forEach((button) => {
-        button.addEventListener("click", () => {
-            const modal = document.getElementById(button.dataset.tailStatusOpen || "");
-            if (!modal) {
-                return;
-            }
-            if (typeof modal.showModal === "function") {
-                modal.showModal();
-            } else {
-                modal.setAttribute("open", "open");
-            }
-        });
-    });
-    page.querySelectorAll("[data-tail-status-close]").forEach((button) => {
-        button.addEventListener("click", () => {
-            const modal = button.closest("[data-tail-status-modal]");
-            if (!modal) {
-                return;
-            }
-            if (typeof modal.close === "function") {
-                modal.close();
-            } else {
-                modal.removeAttribute("open");
-            }
-        });
-    });
-    page.querySelectorAll("[data-tail-status-modal]").forEach((modal) => {
-        modal.addEventListener("click", (event) => {
-            if (event.target === modal && typeof modal.close === "function") {
-                modal.close();
-            }
-        });
-    });
-    const setSelectedTail = (tail) => {
-        selectedTail = tail || "";
-        page.classList.toggle("has-selected-tail", Boolean(selectedTail));
-        page.querySelectorAll("[data-parking-tail]").forEach((card) => {
-            card.classList.toggle("is-selected", Boolean(selectedTail) && card.dataset.tailNumber === selectedTail);
-        });
-        if (selectionStatus) {
-            selectionStatus.hidden = !selectedTail;
-        }
-        if (selectedTailLabel) {
-            selectedTailLabel.textContent = selectedTail;
-        }
-        if (typedAssignForm) {
-            typedAssignForm.hidden = !selectedTail;
-        }
-        if (typedTailInput) {
-            typedTailInput.value = selectedTail;
-        }
-        clearTypedError();
-        closeDirectSlotSelectors();
-    };
-    const assignTailToLane = async (lane, tail, options = {}) => {
-        const reportError = options.errorTarget ? showTypedError : (message) => window.alert(message);
-        const occupiedTail = lane.dataset.occupiedTail || "";
-        let replaceOccupied = "0";
-        if (occupiedTail && occupiedTail !== tail) {
-            const confirmed = window.confirm(`${occupiedTail} is already in ${lane.dataset.positionCode} Slot ${lane.dataset.slotNumber}. Replace it with ${tail}?`);
-            if (!confirmed) {
-                if (options.errorTarget) {
-                    reportError(`${occupiedTail} remains in ${lane.dataset.positionCode} Slot ${lane.dataset.slotNumber}. Assignment cancelled.`);
-                }
-                return false;
-            }
-            replaceOccupied = "1";
-        }
-
-        const formData = new URLSearchParams();
-        formData.set("tail_number", tail);
-        formData.set("ramp_code", lane.dataset.rampCode);
-        formData.set("position_code", lane.dataset.positionCode);
-        formData.set("lane_number", lane.dataset.laneNumber);
-        formData.set("replace_occupied", replaceOccupied);
-
-        const sendAssignment = async () => {
-            const response = await fetch(page.dataset.assignUrl, {
-                method: "POST",
-                credentials: "same-origin",
-                headers: {
-                    "Accept": "application/json",
-                    "X-Requested-With": "XMLHttpRequest",
-                },
-                body: formData,
-            });
-            const payload = await response.json();
-            return { response, payload };
-        };
-        let { response, payload } = await sendAssignment();
-        if (payload.requires_confirmation) {
-            const confirmed = window.confirm(`${payload.message}\n\nOverride this Parking Rule?`);
-            if (!confirmed) {
-                reportError("Parking assignment cancelled.");
-                return false;
-            }
-            formData.set("confirm_rule_override", "1");
-            ({ response, payload } = await sendAssignment());
-        }
-        if (!response.ok || !payload.ok) {
-            reportError(payload.message || "Parking assignment failed.");
-            return false;
-        }
-        window.location.reload();
-        return true;
-    };
-    page.querySelectorAll("[data-mobile-slot-tail-picker]").forEach((form) => {
-        form.addEventListener("submit", async (event) => {
-            if (!window.matchMedia("(max-width: 720px)").matches) {
-                return;
-            }
-            event.preventDefault();
-            const lane = form.closest("[data-parking-lane]");
-            const tail = form.querySelector('select[name="tail_number"]')?.value || "";
-            if (!lane || !tail) {
-                return;
-            }
-            await assignTailToLane(lane, tail);
-        });
-    });
-    const closeDirectSlotSelectors = (exceptLane = null) => {
-        page.querySelectorAll(".parking-lane.is-direct-selecting").forEach((lane) => {
-            if (exceptLane && lane === exceptLane) {
-                return;
-            }
-            lane.classList.remove("is-direct-selecting");
-            lane.classList.remove("has-tail-picker-match");
-            const input = lane.querySelector("[data-direct-slot-input]");
-            if (input) {
-                input.value = "";
-                input.dataset.matchedTail = "";
-            }
-            const select = lane.querySelector("[data-direct-slot-select]");
-            if (select) {
-                select.value = "";
-            }
-        });
-    };
-    const openDirectSlotSelector = (lane) => {
-        const input = lane.querySelector("[data-direct-slot-input]");
-        const select = lane.querySelector("[data-direct-slot-select]");
-        if ((!input && !select) || lane.dataset.occupiedTail) {
-            return false;
-        }
-        closeDirectSlotSelectors(lane);
-        lane.classList.add("is-direct-selecting");
-        window.setTimeout(() => (input || select).focus(), 0);
-        return true;
-    };
-    const tailOptionsForDirectPicker = (lane) => {
-        const select = lane.querySelector("[data-direct-slot-select]");
-        return Array.from(select?.options || [])
-            .map((option) => (option.value || "").trim().toUpperCase())
-            .filter(Boolean);
-    };
-    const matchDirectPickerTail = (lane, rawValue) => {
-        const typed = String(rawValue || "").trim().toUpperCase().replace(/\s+/g, "");
-        const options = tailOptionsForDirectPicker(lane);
-        const exact = options.find((tail) => tail === typed);
-        if (exact) {
-            return exact;
-        }
-        const prefixMatches = options.filter((tail) => tail.startsWith(typed));
-        if (typed && prefixMatches.length === 1) {
-            return prefixMatches[0];
-        }
-        const containsMatches = options.filter((tail) => tail.includes(typed));
-        if (typed && containsMatches.length === 1) {
-            return containsMatches[0];
-        }
-        return "";
-    };
-    const exactDirectPickerTail = (lane, rawValue) => {
-        const typed = String(rawValue || "").trim().toUpperCase().replace(/\s+/g, "");
-        return tailOptionsForDirectPicker(lane).find((tail) => tail === typed) || "";
-    };
-    const updateDirectPickerMatch = (input) => {
-        const lane = input.closest("[data-parking-lane]");
-        if (!lane) {
-            return "";
-        }
-        input.value = String(input.value || "").toUpperCase().replace(/\s+/g, "");
-        const match = matchDirectPickerTail(lane, input.value);
-        input.dataset.matchedTail = match;
-        const select = lane.querySelector("[data-direct-slot-select]");
-        if (select) {
-            select.value = match;
-        }
-        lane.classList.toggle("has-tail-picker-match", Boolean(match));
-        return match;
-    };
-    const assignDirectPickerTail = async (input) => {
-        const lane = input.closest("[data-parking-lane]");
-        if (!lane) {
-            return;
-        }
-        const tail = updateDirectPickerMatch(input);
-        if (!tail) {
-            window.alert("Type or select an available unparked tail.");
-            input.focus();
-            return;
-        }
-        input.disabled = true;
-        try {
-            await assignTailToLane(lane, tail);
-        } finally {
-            input.disabled = false;
-        }
-    };
-    clearSelectedTailButton?.addEventListener("click", () => {
-        setSelectedTail("");
-    });
-    typedAssignForm?.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        clearTypedError();
-        if (!selectedTail) {
-            showTypedError("Select an unparked tail before assigning parking.");
-            return;
-        }
-        const normalizedPosition = normalizeTypedPosition(typedPositionInput?.value || "");
-        if (typedPositionInput) {
-            typedPositionInput.value = normalizedPosition;
-        }
-        const slotNumber = typedSlotSelect?.value || "1";
-        const lane = laneForTypedPosition(normalizedPosition, slotNumber);
-        if (!lane) {
-            showTypedError("Enter a valid parking position.");
-            return;
-        }
-        if (typedRampInput) {
-            typedRampInput.value = lane.dataset.rampCode || "";
-        }
-        if (typedTailInput) {
-            typedTailInput.value = selectedTail;
-        }
-        await assignTailToLane(lane, selectedTail, { errorTarget: typedAssignError });
-    });
-
-    page.querySelectorAll("[data-parking-tail]").forEach((card) => {
-        card.addEventListener("click", (event) => {
-            if (event.target.closest("[data-tail-action]")) {
-                return;
-            }
-            if (card.dataset.parkingTailAssigned === "1") {
-                return;
-            }
-            event.preventDefault();
-            setSelectedTail(card.dataset.tailNumber || "");
-        });
-    });
-
-    const dragEnabled = window.matchMedia("(min-width: 721px) and (pointer: fine)").matches;
-    if (!dragEnabled) {
-        return;
-    }
-
-    let draggedTail = "";
-    page.querySelectorAll("[data-parking-tail]").forEach((card) => {
-        card.addEventListener("dragstart", (event) => {
-            draggedTail = card.dataset.tailNumber || "";
-            event.dataTransfer.setData("text/plain", draggedTail);
-            event.dataTransfer.effectAllowed = "move";
-        });
-    });
-
-    page.querySelectorAll("[data-direct-slot-input]").forEach((input) => {
-        input.addEventListener("click", (event) => {
-            event.stopPropagation();
-        });
-        input.addEventListener("input", () => {
-            updateDirectPickerMatch(input);
-        });
-        input.addEventListener("change", async () => {
-            const lane = input.closest("[data-parking-lane]");
-            const exactTail = lane ? exactDirectPickerTail(lane, input.value) : "";
-            updateDirectPickerMatch(input);
-            if (exactTail) {
-                await assignDirectPickerTail(input);
-            }
-        });
-        input.addEventListener("keydown", async (event) => {
-            if (event.key !== "Enter") {
-                return;
-            }
-            event.preventDefault();
-            await assignDirectPickerTail(input);
-        });
-    });
-
-    page.querySelectorAll("[data-direct-slot-select]").forEach((select) => {
-        select.addEventListener("click", (event) => {
-            event.stopPropagation();
-        });
-        select.addEventListener("change", async () => {
-            const tail = select.value || "";
-            const lane = select.closest("[data-parking-lane]");
-            if (!tail || !lane) {
-                return;
-            }
-            select.disabled = true;
-            try {
-                await assignTailToLane(lane, tail);
-            } finally {
-                select.disabled = false;
-            }
-        });
-    });
-
-    page.querySelectorAll("[data-parking-lane]").forEach((lane) => {
-        lane.addEventListener("click", async (event) => {
-            if (event.target.closest("[data-direct-slot-input], [data-direct-slot-select]")) {
-                return;
-            }
-            if (event.target.closest("[data-parking-tail]")) {
-                return;
-            }
-            if (lane.dataset.slotCollapsed === "1" && !selectedTail && !lane.classList.contains("is-expanded-slot")) {
-                lane.classList.add("is-expanded-slot");
-                return;
-            }
-            if (!selectedTail) {
-                openDirectSlotSelector(lane);
-                return;
-            }
-            closeDirectSlotSelectors();
-            await assignTailToLane(lane, selectedTail);
-        });
-        lane.addEventListener("dragover", (event) => {
-            event.preventDefault();
-            closeDirectSlotSelectors();
-            lane.classList.add("is-drag-over");
-        });
-        lane.addEventListener("dragleave", () => {
-            lane.classList.remove("is-drag-over");
-        });
-        lane.addEventListener("drop", async (event) => {
-            event.preventDefault();
-            lane.classList.remove("is-drag-over");
-            const tail = event.dataTransfer.getData("text/plain") || draggedTail;
-            if (!tail) {
-                return;
-            }
-            closeDirectSlotSelectors();
-            await assignTailToLane(lane, tail);
-        });
-    });
-
-    document.addEventListener("click", (event) => {
-        if (!page.contains(event.target)) {
-            closeDirectSlotSelectors();
-            return;
-        }
-        if (!event.target.closest("[data-parking-lane]")) {
-            closeDirectSlotSelectors();
-        }
-    });
-
-    const unassignDropTarget = page.querySelector("[data-parking-unassign-drop]");
-    if (unassignDropTarget) {
-        unassignDropTarget.addEventListener("dragover", (event) => {
-            event.preventDefault();
-            unassignDropTarget.classList.add("is-drag-over");
-        });
-        unassignDropTarget.addEventListener("dragleave", (event) => {
-            if (!unassignDropTarget.contains(event.relatedTarget)) {
-                unassignDropTarget.classList.remove("is-drag-over");
-            }
-        });
-        unassignDropTarget.addEventListener("drop", async (event) => {
-            event.preventDefault();
-            unassignDropTarget.classList.remove("is-drag-over");
-            const tail = event.dataTransfer.getData("text/plain") || draggedTail;
-            if (!tail || !page.dataset.unassignUrl) {
-                return;
-            }
-
-            const formData = new URLSearchParams();
-            formData.set("tail_number", tail);
-
-            const response = await fetch(page.dataset.unassignUrl, {
-                method: "POST",
-                credentials: "same-origin",
-                headers: {
-                    "Accept": "application/json",
-                    "X-Requested-With": "XMLHttpRequest",
-                },
-                body: formData,
-            });
-            const payload = await response.json();
-            if (!response.ok || !payload.ok) {
-                window.alert(payload.message || "Parking unassign failed.");
-                return;
-            }
-            window.location.reload();
-        });
-    }
-})();
-</script>
+<script src="{{ url_for('static', filename='js/parking_plan_live.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 {% endblock %}

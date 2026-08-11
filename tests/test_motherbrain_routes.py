@@ -47,6 +47,11 @@ from app.services.parking_plan import (
     parking_status_for_rows,
     set_tail_hot,
 )
+from app.services.parking_plan_collaboration import (
+    assignment_snapshot,
+    parking_plan_live_state,
+    parking_plan_revision,
+)
 from app.services.parking_optimizer import (
     _four_eight_slot_score,
     apply_parking_optimizer_plan as service_apply_parking_optimizer_plan,
@@ -11579,7 +11584,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
-            data={"confirm_apply": "1"},
+            data=self._parking_optimizer_apply_data(operation),
             follow_redirects=True,
         )
         assignment = self._parking_assignment_for_tail(operation, "N457UP")
@@ -11961,7 +11966,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
-            data={"confirm_apply": "1"},
+            data=self._parking_optimizer_apply_data(operation),
             follow_redirects=True,
         )
 
@@ -11995,7 +12000,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
-            data={"confirm_apply": "1"},
+            data=self._parking_optimizer_apply_data(operation),
             follow_redirects=True,
         )
 
@@ -12059,7 +12064,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
-            data={"confirm_apply": "1"},
+            data=self._parking_optimizer_apply_data(operation),
             follow_redirects=True,
         )
 
@@ -12118,7 +12123,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
-            data={"confirm_apply": "1"},
+            data=self._parking_optimizer_apply_data(operation),
             follow_redirects=True,
         )
 
@@ -12150,7 +12155,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         ) as apply_mock:
             response = self.client.post(
                 f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
-                data={"confirm_apply": "1"},
+                data=self._parking_optimizer_apply_data(operation),
                 follow_redirects=True,
             )
 
@@ -12165,7 +12170,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
-            data={"confirm_apply": "1"},
+            data=self._parking_optimizer_apply_data(operation),
             follow_redirects=True,
         )
         assignment = self._parking_assignment_for_tail(operation, "N457UP")
@@ -12188,7 +12193,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             }
             response = self.client.post(
                 f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
-                data={"confirm_apply": "1"},
+                data=self._parking_optimizer_apply_data(operation),
                 follow_redirects=True,
             )
 
@@ -12205,7 +12210,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
-            data={"confirm_apply": "1"},
+            data=self._parking_optimizer_apply_data(operation),
             follow_redirects=True,
         )
 
@@ -12219,18 +12224,22 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self._parking_pair(operation, "N457UP", aircraft_type="757")
         db.session.commit()
         preview = self._parking_optimizer_preview(operation)
+        preview_revision = parking_plan_revision(operation)
         self.assertEqual(preview["suggested_assignments"][0]["label"], "A01 Slot 1")
         self._parking_assignment(operation, "N457UP", "B01")
         db.session.commit()
 
         response = self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
-            data={"confirm_apply": "1"},
+            data=self._parking_optimizer_apply_data(
+                operation,
+                expected_plan_revision=preview_revision,
+            ),
             follow_redirects=True,
         )
         assignment = self._parking_assignment_for_tail(operation, "N457UP")
 
-        self.assertIn(b"No suggested assignments were available to apply.", response.data)
+        self.assertIn(b"Parking changed after this optimizer preview.", response.data)
         self.assertEqual((assignment.position_code, assignment.lane_number), ("B01", 1))
 
     def test_parking_optimizer_apply_does_not_create_duplicate_tail_assignments(self):
@@ -12240,12 +12249,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
-            data={"confirm_apply": "1"},
+            data=self._parking_optimizer_apply_data(operation),
             follow_redirects=True,
         )
         self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
-            data={"confirm_apply": "1"},
+            data=self._parking_optimizer_apply_data(operation),
             follow_redirects=True,
         )
 
@@ -12266,7 +12275,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
-            data={"confirm_apply": "1"},
+            data=self._parking_optimizer_apply_data(operation),
             follow_redirects=True,
         )
 
@@ -12284,7 +12293,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
-            data={"confirm_apply": "1"},
+            data=self._parking_optimizer_apply_data(operation),
             follow_redirects=True,
         )
 
@@ -12308,7 +12317,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
-            data={"confirm_apply": "1"},
+            data=self._parking_optimizer_apply_data(operation),
             follow_redirects=True,
         )
 
@@ -12393,20 +12402,22 @@ class MotherBrainRoutesTest(unittest.TestCase):
         response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
         html = response.data.decode()
         css = Path("app/static/css/base.css").read_text()
+        client_source = Path("app/static/js/parking_plan_live.js").read_text()
 
         self.assertIn("data-parking-lane", html)
         self.assertIn("data-parking-unassign-drop", html)
-        self.assertIn("page.dataset.unassignUrl", html)
-        self.assertIn("Parking unassign failed.", html)
+        self.assertIn("page.dataset.unassignUrl", client_source)
+        self.assertIn("Parking unassign failed.", client_source)
+
         self.assertIn("data-parking-selection-status", html)
         self.assertIn("data-clear-selected-tail", html)
-        self.assertIn("setSelectedTail", html)
-        self.assertIn("assignTailToLane(lane, selectedTail)", html)
+        self.assertIn("setSelectedTail", client_source)
+        self.assertIn("assignTailToLane(lane, selectedTail)", client_source)
         self.assertIn("data-direct-slot-select", html)
-        self.assertIn("openDirectSlotSelector", html)
-        self.assertIn("await assignTailToLane(lane, tail)", html)
+        self.assertIn("openDirectSlotSelector", client_source)
+        self.assertIn("await assignTailToLane(lane, tail)", client_source)
         self.assertIn("parking-position-label", html)
-        self.assertIn("is-expanded-slot", html)
+        self.assertIn('lane.classList.add("is-expanded-slot")', client_source)
         self.assertIn('data-ramp-code="A"', html)
         self.assertIn('data-position-code="A01"', html)
         self.assertIn('data-lane-number="1"', html)
@@ -12426,8 +12437,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("SLOT 1", html)
         self.assertIn("SLOT 2", html)
         self.assertNotIn("LANE 1", html)
-        self.assertIn("REPLACE SLOT 1", html)
-        self.assertIn("USE SLOT 2", html)
+        self.assertIn("REPLACE SLOT 1", client_source)
+        self.assertIn("USE SLOT 2", client_source)
         self.assertIn("Change Tail", html)
         self.assertIn(">Change</button>", html)
 
@@ -12522,6 +12533,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
         html = response.data.decode()
+        client_source = Path("app/static/js/parking_plan_live.js").read_text()
         lane_html = html.split('id="PARKING-POSITION-A01"', 1)[1].split(
             'data-lane-number="2"',
             1,
@@ -12535,10 +12547,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("data-direct-slot-select", lane_html)
         self.assertIn('<option value="N457UP">N457UP</option>', lane_html)
         self.assertIn('<option value="N349UP">N349UP</option>', lane_html)
-        self.assertIn("matchDirectPickerTail", html)
-        self.assertIn("exactDirectPickerTail", html)
-        self.assertIn("assignDirectPickerTail", html)
-        self.assertIn("has-tail-picker-match", html)
+        self.assertIn("matchDirectPickerTail", client_source)
+        self.assertIn("tailOptionsForDirectPicker", client_source)
+        self.assertIn("assignDirectPickerTail", client_source)
+        self.assertIn("has-tail-picker-match", client_source)
 
     def test_parking_plan_desktop_visual_clarity_css_hooks_render(self):
         css = Path("app/static/css/base.css").read_text()
@@ -12575,6 +12587,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         empty_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
         empty_html = empty_response.data.decode()
+        client_source = Path("app/static/js/parking_plan_live.js").read_text()
 
         self.assertIn("parking-lane-slot-1", empty_html)
         self.assertIn("parking-lane-slot-2 is-collapsed-slot", empty_html)
@@ -12595,8 +12608,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         slot_one_html = slot_one_response.data.decode()
         self.assertIn('data-slot-1-tail="N457UP"', slot_one_html)
         self.assertIn('data-slot-2-tail=""', slot_one_html)
-        self.assertIn("REPLACE SLOT 1", slot_one_html)
-        self.assertIn("USE SLOT 2", slot_one_html)
+        self.assertIn("REPLACE SLOT 1", client_source)
+        self.assertIn("USE SLOT 2", client_source)
 
         self.client.post(
             f"/motherbrain/parking-plan/{operation.id}/assign",
@@ -12641,10 +12654,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("data-clear-selected-tail", html)
         self.assertIn("data-parking-tail-assigned=\"0\"", html)
         self.assertIn("data-parking-tail-assigned=\"1\"", html)
-        self.assertIn("card.dataset.parkingTailAssigned === \"1\"", html)
-        self.assertIn("page.classList.toggle(\"has-selected-tail\"", html)
-        self.assertIn("await assignTailToLane(lane, selectedTail)", html)
-        self.assertIn("window.confirm(`${occupiedTail} is already", html)
+        client_source = Path("app/static/js/parking_plan_live.js").read_text()
+        self.assertIn("card.dataset.parkingTailAssigned === \"1\"", client_source)
+        self.assertIn("page.classList.toggle(\"has-selected-tail\"", client_source)
+        self.assertIn("await assignTailToLane(lane, selectedTail)", client_source)
+        self.assertIn("withConfirmation", client_source)
 
     def test_parking_plan_typed_assignment_controls_render_for_selected_tail(self):
         operation = self._parking_operation()
@@ -12654,15 +12668,17 @@ class MotherBrainRoutesTest(unittest.TestCase):
         response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
         html = response.data.decode()
 
+        client_source = Path("app/static/js/parking_plan_live.js").read_text()
+
         self.assertIn("data-parking-typed-assign-form", html)
         self.assertIn("data-typed-position-input", html)
         self.assertIn("TYPE POSITION", html)
         self.assertIn("placeholder=\"A01\"", html)
-        self.assertIn("typedAssignForm.hidden = !selectedTail", html)
-        self.assertIn("normalizeTypedPosition", html)
-        self.assertIn("laneForTypedPosition", html)
-        self.assertIn("Select an unparked tail before assigning parking.", html)
-        self.assertIn("Enter a valid parking position.", html)
+        self.assertIn("typedForm.hidden = !selectedTail", client_source)
+        self.assertIn("normalizeTypedPosition", client_source)
+        self.assertIn("laneFor", client_source)
+        self.assertIn("Select an unparked tail before assigning parking.", client_source)
+        self.assertIn("Enter a valid parking position.", client_source)
 
     def test_parking_plan_typed_assignment_normalizes_position_codes(self):
         operation = self._parking_operation()
@@ -12758,6 +12774,311 @@ class MotherBrainRoutesTest(unittest.TestCase):
         current = SortDateParkingAssignment.query.filter_by(tail_number="N349UP").one()
         self.assertIsNone(previous.position_code)
         self.assertEqual(current.position_code, "A01")
+
+    def test_parking_plan_live_state_has_stable_tail_slot_and_revision_data(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        assignment = self._parking_assignment(operation, "N457UP", "A01")
+        db.session.commit()
+        expected_revision = parking_plan_revision(operation)
+
+        response = self.client.get(
+            f"/motherbrain/parking-plan/{operation.id}/state"
+        )
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["revision"], expected_revision)
+        self.assertEqual(payload["operation"]["id"], operation.id)
+        tail = next(row for row in payload["tails"] if row["tail_number"] == "N457UP")
+        slot = next(row for row in payload["slots"] if row["id"] == "slot:A:A01:1")
+        self.assertEqual(tail["id"], "tail:N457UP")
+        self.assertTrue(tail["version"])
+        self.assertEqual(tail["source"]["location"], "A01:1")
+        self.assertEqual(tail["source"]["version"], assignment_snapshot(assignment)["version"])
+        self.assertEqual(slot["occupant_tail"], "N457UP")
+        self.assertEqual(slot["version"], assignment_snapshot(assignment)["version"])
+        self.assertIn("refresh", payload)
+        self.assertIn("tail_cards", payload["fragments"])
+
+        unchanged = self.client.get(
+            f"/motherbrain/parking-plan/{operation.id}/state?revision={expected_revision}"
+        ).get_json()
+        self.assertFalse(unchanged["changed"])
+        self.assertNotIn("fragments", unchanged)
+
+    def test_parking_plan_stale_source_move_returns_structured_conflict(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        assignment = self._parking_assignment(operation, "N457UP", "A01")
+        db.session.commit()
+        original = assignment_snapshot(assignment)
+
+        assignment.position_code = "A02"
+        assignment.ramp_code = "A"
+        assignment.lane_number = 1
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "B",
+                "position_code": "B01",
+                "lane_number": "1",
+                "parking_snapshot": "1",
+                "expected_source_location": original["location"],
+                "expected_source_version": original["version"],
+                "expected_target_tail": "",
+                "expected_target_version": "empty",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        conflict = response.get_json()["conflict"]
+        self.assertEqual(conflict["type"], "parking_state_changed")
+        self.assertEqual(conflict["reason"], "source_changed")
+        self.assertFalse(conflict["can_overwrite"])
+        db.session.refresh(assignment)
+        self.assertEqual((assignment.position_code, assignment.lane_number), ("A02", 1))
+
+    def test_parking_plan_newly_occupied_destination_is_concurrency_conflict(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        self._parking_pair(operation, "N349UP", destination="ONT")
+        db.session.commit()
+        source = assignment_snapshot(None)
+
+        occupied = self._parking_assignment(operation, "N349UP", "A01")
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+                "replace_occupied": "1",
+                "parking_snapshot": "1",
+                "expected_source_location": source["location"],
+                "expected_source_version": source["version"],
+                "expected_target_tail": "",
+                "expected_target_version": "empty",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.get_json()["conflict"]["reason"], "destination_changed")
+        db.session.refresh(occupied)
+        self.assertEqual(occupied.tail_number, "N349UP")
+        self.assertEqual(occupied.position_code, "A01")
+        self.assertIsNone(self._parking_assignment_for_tail(operation, "N457UP"))
+
+    def test_parking_plan_known_occupied_destination_keeps_confirmation_path(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        self._parking_pair(operation, "N349UP", destination="ONT")
+        occupied = self._parking_assignment(operation, "N349UP", "A01")
+        db.session.commit()
+        source = assignment_snapshot(None)
+        target = assignment_snapshot(occupied)
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+                "replace_occupied": "1",
+                "parking_snapshot": "1",
+                "expected_source_location": source["location"],
+                "expected_source_version": source["version"],
+                "expected_target_tail": "N349UP",
+                "expected_target_version": target["version"],
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        replacement = self._parking_assignment_for_tail(operation, "N457UP")
+        db.session.refresh(occupied)
+        self.assertEqual((replacement.position_code, replacement.lane_number), ("A01", 1))
+        self.assertIsNone(occupied.position_code)
+
+    def test_parking_plan_stale_optimizer_preview_cannot_apply(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        old_revision = parking_plan_revision(operation)
+        assignment = self._parking_assignment(operation, "N457UP", "B01")
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/optimize/apply",
+            data={
+                "confirm_apply": "1",
+                "expected_plan_revision": old_revision,
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.get_json()["conflict"]["type"], "parking_optimizer_stale")
+        db.session.refresh(assignment)
+        self.assertEqual(assignment.position_code, "B01")
+
+    def test_parking_plan_live_client_is_drag_safe_and_selective(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+        source = Path("app/static/js/parking_plan_live.js").read_text(encoding="utf-8")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("data-state-url=", html)
+        self.assertIn("data-parking-revision=", html)
+        self.assertIn("data-parking-slot-version=", html)
+        self.assertIn("data-parking-source-version=", html)
+        self.assertIn("live_screen_refresh_interval_ms", Path(
+            "app/templates/neomotherbrain/parking_plan.html"
+        ).read_text(encoding="utf-8"))
+        self.assertIn("NeoLiveUpdates.create", source)
+        self.assertIn("parkingEditIsActive()", source)
+        self.assertIn("deferredPayload = payload", source)
+        self.assertIn("await reconcileLatest()", source)
+        self.assertIn("currentPayloadMatchesSnapshot", source)
+        self.assertIn("markOptimizerStale", source)
+        self.assertIn("is-parking-live-updated", source)
+        self.assertNotIn("window.location.reload", source)
+        self.assertNotIn("5000", source)
+
+    def test_parking_plan_view_only_user_has_live_state_without_edit_controls(self):
+        self._login_motherbrain_role("ParkingPlanViewer", "operator")
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        page_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        state_response = self.client.get(f"/motherbrain/parking-plan/{operation.id}/state")
+        denied = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(page_response.status_code, 200)
+        self.assertIn(b'data-can-edit="0"', page_response.data)
+        self.assertIn(b'draggable="false"', page_response.data)
+        self.assertNotIn(b"parking-tail-status-button", page_response.data)
+        self.assertNotIn(b"parking-mobile-assignment", page_response.data)
+        self.assertNotIn(b"data-parking-typed-assign-form", page_response.data)
+        self.assertNotIn(b"data-direct-slot-input", page_response.data)
+        self.assertEqual(state_response.status_code, 200)
+        self.assertFalse(state_response.get_json()["can_edit"])
+        self.assertEqual(denied.status_code, 403)
+
+    def test_parking_plan_live_status_respects_ops_window_and_historical_sort(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        settings = ensure_sort_timeline_settings(self.rfd_gateway)
+        sort_setting = next(
+            row for row in settings.sort_settings if row.sort_name == operation.sort_name
+        )
+        sort_setting.ops_window_start_local = time(22, 0)
+        sort_setting.ops_window_end_local = time(4, 0)
+        db.session.commit()
+
+        active = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        self.assertIn(b'data-live-enabled="1"', active.data)
+        self.assertIn(b'data-live-reason="active"', active.data)
+
+        sort_setting.ops_window_start_local = time(0, 0)
+        sort_setting.ops_window_end_local = time(1, 0)
+        db.session.commit()
+        outside = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        self.assertIn(b'data-live-enabled="0"', outside.data)
+        self.assertIn(b'data-live-reason="outside_ops_window"', outside.data)
+
+        historical = self._operation(sort_date=date(2026, 6, 17))
+        db.session.add(historical)
+        db.session.commit()
+        historical_page = self.client.get(
+            f"/motherbrain/parking-plan/{historical.id}"
+        )
+        self.assertIn(b'data-live-enabled="0"', historical_page.data)
+        self.assertIn(b'data-live-reason="historical_sort"', historical_page.data)
+        self.assertIn(b"Live updates off - historical sort", historical_page.data)
+
+    def test_parking_plan_live_revision_changes_after_parking_move(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+        initial = self.client.get(
+            f"/motherbrain/parking-plan/{operation.id}/state"
+        ).get_json()
+
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/assign",
+            data={
+                "tail_number": "N457UP",
+                "ramp_code": "A",
+                "position_code": "A01",
+                "lane_number": "1",
+                "parking_snapshot": "1",
+                "expected_source_location": "unassigned",
+                "expected_source_version": "missing",
+                "expected_target_tail": "",
+                "expected_target_version": "empty",
+            },
+            headers={"Accept": "application/json"},
+        )
+        refreshed = self.client.get(
+            f"/motherbrain/parking-plan/{operation.id}/state"
+            f"?revision={initial['revision']}"
+        ).get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(refreshed["changed"])
+        self.assertNotEqual(refreshed["revision"], initial["revision"])
+        slot = next(row for row in refreshed["slots"] if row["id"] == "slot:A:A01:1")
+        self.assertEqual(slot["occupant_tail"], "N457UP")
+
+    def test_parking_plan_stale_unassign_does_not_remove_remote_move(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        assignment = self._parking_assignment(operation, "N457UP", "A01")
+        db.session.commit()
+        original = assignment_snapshot(assignment)
+
+        assignment.position_code = "B01"
+        assignment.ramp_code = "B"
+        db.session.commit()
+        response = self.client.post(
+            f"/motherbrain/parking-plan/{operation.id}/unassign",
+            data={
+                "tail_number": "N457UP",
+                "parking_snapshot": "1",
+                "expected_source_location": original["location"],
+                "expected_source_version": original["version"],
+            },
+            headers={"Accept": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.get_json()["conflict"]["reason"], "source_changed")
+        db.session.refresh(assignment)
+        self.assertEqual((assignment.position_code, assignment.lane_number), ("B01", 1))
 
     def test_parking_plan_physical_validator_allows_typed_out_of_order_assignment(self):
         operation = self._parking_operation()
@@ -14095,6 +14416,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
             include_throat=include_throat,
             tail_rows=context["tail_rows"],
         )
+
+    def _parking_optimizer_apply_data(self, operation, **overrides):
+        data = {
+            "confirm_apply": "1",
+            "expected_plan_revision": parking_plan_revision(operation),
+        }
+        data.update(overrides)
+        return data
 
     def _master_schedule_form_data(self, **overrides):
         values = {

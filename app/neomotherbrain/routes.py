@@ -17,6 +17,7 @@ from flask import (
 )
 from flask_login import current_user, login_required
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
@@ -125,6 +126,14 @@ from app.services.parking_plan import (
     tail_status_is_hot_for_operation,
     tail_operational_status_label,
     unassign_tail,
+)
+from app.services.parking_plan_collaboration import (
+    ParkingStateConflict,
+    optimizer_revision_conflict,
+    parking_plan_live_state,
+    parking_snapshot_from_form,
+    validate_parking_move_snapshot,
+    validate_parking_source_snapshot,
 )
 from app.services.operation_lifecycle import ensure_operational_sort_operations
 from app.services.live_collaboration import (
@@ -761,6 +770,7 @@ def parking_plan_operation(operation_id):
         return denied
     operation = _parking_plan_operation_or_404(gateway, operation_id)
     context = parking_plan_context(gateway, operation=operation)
+    live_context = _parking_plan_live_context(gateway, context)
     if context.get("parking_physical_alert_sync", {}).get("changed"):
         db.session.commit()
     return render_template(
@@ -771,6 +781,8 @@ def parking_plan_operation(operation_id):
         optimizer_preview=None,
         can_run_parking_optimizer=user_can(PARKING_OPTIMIZER_RUN_PERMISSION),
         can_apply_parking_optimizer=user_can(PARKING_OPTIMIZER_APPLY_PERMISSION),
+        can_edit_parking_plan=user_can(PARKING_PLAN_EDIT_PERMISSION),
+        **live_context,
         **context,
         **_flight_api_auto_poll_timer_context(gateway, operation=context["operation"]),
     )
@@ -791,6 +803,7 @@ def optimize_parking_plan(operation_id):
     include_remote = request.form.get("include_remote") == "1"
     include_throat = request.form.get("include_throat") == "1"
     context = parking_plan_context(gateway, operation=operation)
+    live_context = _parking_plan_live_context(gateway, context)
     try:
         optimizer_preview = parking_optimizer_preview(
             gateway,
@@ -827,6 +840,8 @@ def optimize_parking_plan(operation_id):
         optimizer_preview=optimizer_preview,
         can_run_parking_optimizer=True,
         can_apply_parking_optimizer=user_can(PARKING_OPTIMIZER_APPLY_PERMISSION),
+        can_edit_parking_plan=user_can(PARKING_PLAN_EDIT_PERMISSION),
+        **live_context,
         **context,
         **_flight_api_auto_poll_timer_context(gateway, operation=context["operation"]),
     )
@@ -849,6 +864,19 @@ def apply_parking_plan_optimizer(operation_id):
     if request.form.get("confirm_apply") != "1":
         flash("Confirm optimizer apply before writing suggested assignments.", "error")
         return redirect(url_for("neomotherbrain.parking_plan_operation", operation_id=operation.id))
+
+    conflict = optimizer_revision_conflict(
+        operation,
+        request.form.get("expected_plan_revision"),
+    )
+    if conflict:
+        return _parking_plan_response(
+            False,
+            conflict["message"],
+            status=409,
+            payload={"conflict": conflict},
+            operation_id=operation.id,
+        )
 
     try:
         result = apply_parking_optimizer_plan(
@@ -878,6 +906,49 @@ def apply_parking_plan_optimizer(operation_id):
         )
     db.session.commit()
     return redirect(url_for("neomotherbrain.parking_plan_operation", operation_id=operation.id))
+
+
+@bp.route("/motherbrain/parking-plan/<int:operation_id>/state")
+@gateway_node_required("motherbrain", minimum_role="operator")
+def parking_plan_live_state_endpoint(operation_id):
+    gateway = get_current_gateway()
+    denied = _permission_guard(PARKING_PLAN_VIEW_PERMISSION)
+    if denied:
+        return denied
+    operation = _parking_plan_operation_or_404(gateway, operation_id)
+    context = parking_plan_context(gateway, operation=operation)
+    live_context = _parking_plan_live_context(gateway, context)
+    state = live_context["parking_live_state"]
+    if context.get("parking_physical_alert_sync", {}).get("changed"):
+        db.session.commit()
+
+    client_revision = str(request.args.get("revision") or "").strip()
+    changed = client_revision != state["revision"]
+    payload = {
+        "ok": True,
+        "changed": changed,
+        "revision": state["revision"],
+        "operation": state["operation"],
+        "summary": state["summary"],
+        "conflicts": state["conflicts"],
+        "tails": state["tails"],
+        "slots": state["slots"],
+        "refresh": live_context["live_update_status"],
+        "can_edit": user_can(PARKING_PLAN_EDIT_PERMISSION),
+    }
+    if changed:
+        payload["fragments"] = {
+            "tail_cards": render_template(
+                "neomotherbrain/_parking_plan_live_tail_cards.html",
+                operation=operation,
+                tail_rows=context["tail_rows"],
+                parking_live_state=state,
+                can_edit_parking_plan=user_can(PARKING_PLAN_EDIT_PERMISSION),
+            )
+        }
+    response = jsonify(payload)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @bp.route("/motherbrain/parking-rules", methods=["GET", "POST"])
@@ -947,6 +1018,14 @@ def assign_parking_plan_tail(operation_id=None):
         )
 
     try:
+        validate_parking_move_snapshot(
+            operation,
+            tail_number=request.form.get("tail_number"),
+            ramp_code=request.form.get("ramp_code"),
+            position_code=request.form.get("position_code"),
+            lane_number=request.form.get("lane_number"),
+            expected=parking_snapshot_from_form(request.form),
+        )
         assignment = assign_tail_to_lane(
             operation,
             request.form.get("tail_number"),
@@ -962,6 +1041,15 @@ def assign_parking_plan_tail(operation_id=None):
             confirm_rule_override=request.form.get("confirm_rule_override") == "1",
         )
         db.session.commit()
+    except ParkingStateConflict as error:
+        db.session.rollback()
+        return _parking_plan_response(
+            False,
+            str(error),
+            status=409,
+            payload={"conflict": error.conflict, "refresh_required": True},
+            operation_id=operation.id,
+        )
     except ParkingLaneOccupied as error:
         db.session.rollback()
         return _parking_plan_response(
@@ -981,6 +1069,22 @@ def assign_parking_plan_tail(operation_id=None):
     except ParkingPlanError as error:
         db.session.rollback()
         return _parking_plan_response(False, str(error), status=400)
+    except IntegrityError:
+        db.session.rollback()
+        conflict = {
+            "type": "parking_state_changed",
+            "reason": "concurrent_write",
+            "message": "Parking changed while you were editing. Latest plan has been loaded.",
+            "can_overwrite": False,
+            "refresh_required": True,
+        }
+        return _parking_plan_response(
+            False,
+            conflict["message"],
+            status=409,
+            payload={"conflict": conflict, "refresh_required": True},
+            operation_id=operation.id,
+        )
 
     return _parking_plan_response(
         True,
@@ -1005,8 +1109,23 @@ def unassign_parking_plan_tail(operation_id=None):
         )
 
     tail_number = request.form.get("tail_number")
-    unassign_tail(operation, tail_number, user=current_user)
-    db.session.commit()
+    try:
+        validate_parking_source_snapshot(
+            operation,
+            tail_number=tail_number,
+            expected=parking_snapshot_from_form(request.form),
+        )
+        unassign_tail(operation, tail_number, user=current_user)
+        db.session.commit()
+    except ParkingStateConflict as error:
+        db.session.rollback()
+        return _parking_plan_response(
+            False,
+            str(error),
+            status=409,
+            payload={"conflict": error.conflict, "refresh_required": True},
+            operation_id=operation.id,
+        )
     return _parking_plan_response(
         True,
         f"{str(tail_number or '').strip().upper()} unassigned.",
@@ -1139,6 +1258,23 @@ def _parking_plan_operation_for_action(gateway, operation_id=None):
         except (TypeError, ValueError):
             abort(404)
     return current_active_sort_operation(gateway)
+
+
+def _parking_plan_live_context(gateway, context):
+    operation = context["operation"]
+    state = parking_plan_live_state(
+        operation,
+        tail_rows=context["tail_rows"],
+        summary=context["summary"],
+        parking_status=context["parking_status"],
+    )
+    return {
+        "parking_live_state": state,
+        "live_update_status": node_auto_refresh_status(
+            gateway,
+            operation=operation,
+        ),
+    }
 
 
 def _parking_rules_operation_context(gateway):

@@ -1,0 +1,111 @@
+{% macro tail_badges(row) %}
+    {% if row.operational_status_label %}
+    <span class="parking-badge parking-badge-{{ row.operational_status }}">{{ row.operational_status_label }}</span>
+    {% endif %}
+{% endmacro %}
+
+{% macro tail_card(row) %}
+{% set live_tail = parking_live_state.tails_by_number.get(row.tail, {}) if parking_live_state else {} %}
+{% set live_source = live_tail.get('source', {}) %}
+<article
+    class="parking-tail-card{% if row.operational_status != 'normal' %} is-{{ row.operational_status }}{% endif %}"
+    draggable="{{ 'true' if can_edit_parking_plan else 'false' }}"
+    id="PARKING-TAIL-{{ row.tail }}"
+    data-parking-tail
+    data-tail-number="{{ row.tail }}"
+    data-parking-tail-version="{{ live_tail.get('version', '') }}"
+    data-parking-source-location="{{ live_source.get('location', 'unassigned') }}"
+    data-parking-source-version="{{ live_source.get('version', 'missing') }}"
+    data-parking-tail-assigned="{{ '1' if row.assigned_position else '0' }}"
+    data-tail-oos="{{ '1' if row.is_out_of_service else '0' }}"
+    data-tail-operational-status="{{ row.operational_status }}"
+>
+    {% if row.assigned_position %}
+    <div class="parking-tail-placed-desktop" aria-label="Parked tail summary for {{ row.tail }}">
+        {% if not row.suppress_arrival_movement %}
+        <div class="parking-tail-route-line parking-tail-arrival-line">
+            <span>ARR</span>
+            <strong>{{ row.arrival_origin or "-" }}</strong>
+            <time>{{ row.arrival_time or "-" }}</time>
+        </div>
+        {% endif %}
+        <div class="parking-tail-center-line">
+            <strong class="parking-tail-number">{{ row.tail }}</strong>
+            <span class="parking-tail-badges">{{ tail_badges(row) }}</span>
+            {% if row.mission_attachment_label %}<span class="parking-tail-mission-label">{{ row.mission_attachment_label }}</span>{% endif %}
+            {% if row.departure_order %}<span class="parking-order">{{ row.departure_order }}</span>{% endif %}
+        </div>
+        {% if not row.suppress_departure_movement %}
+        <div class="parking-tail-route-line parking-tail-departure-line">
+            <span>DEP</span>
+            <strong>{{ row.departure_destination or "-" }}</strong>
+            <time>{{ row.departure_time or "-" }}</time>
+        </div>
+        {% endif %}
+    </div>
+    <div class="parking-tail-placed-mobile">
+    {% endif %}
+    <div class="parking-tail-main">
+        <strong>{{ row.tail }}</strong>
+        <span class="parking-tail-badges">{{ tail_badges(row) }}</span>
+        {% if row.mission_attachment_label %}<span class="parking-tail-mission-label">{{ row.mission_attachment_label }}</span>{% endif %}
+        {% if row.departure_order %}<span class="parking-order">{{ row.departure_order }}</span>{% endif %}
+    </div>
+    {% if row.assigned_position and row.active_mission_lines %}
+    <div class="parking-tail-mission-lines" aria-label="Active mission details for {{ row.tail }}">
+        {% for mission_line in row.active_mission_lines %}
+        <span>{{ mission_line }}</span>
+        {% endfor %}
+    </div>
+    {% elif not (row.suppress_arrival_movement and row.suppress_departure_movement) %}
+    {% if not row.suppress_arrival_movement %}
+    <div class="parking-tail-line">
+        <span>{{ row.arrival_origin }} {{ row.arrival_time }}</span>
+        {% if row.ground_time %}<small>{{ row.ground_time }}</small>{% endif %}
+    </div>
+    {% endif %}
+    {% if not row.suppress_departure_movement %}
+    <div class="parking-tail-line">
+        <span>{{ row.departure_destination }} {{ row.departure_time }}</span>
+    </div>
+    {% endif %}
+    {% endif %}
+    {% if row.assigned_position and row.active_mission_lines and row.ground_time %}
+    <div class="parking-tail-line parking-tail-gt-line">
+        <small>{{ row.ground_time }}</small>
+    </div>
+    {% endif %}
+    {% if row.assigned_position %}
+    </div>
+    {% endif %}
+    {% if row.assigned_position and can_edit_parking_plan %}
+    <div class="parking-tail-status-edit" data-tail-action>
+        <button class="parking-tail-status-button" type="button" data-tail-status-open="TAIL-STATUS-{{ row.tail }}">EDIT</button>
+        <dialog class="parking-tail-status-modal" id="TAIL-STATUS-{{ row.tail }}" data-tail-status-modal>
+            <form
+                class="parking-tail-status-form"
+                method="post"
+                action="{{ url_for('neomotherbrain.update_parking_plan_tail_status', operation_id=operation.id) }}"
+            >
+                <input type="hidden" name="operation_id" value="{{ operation.id }}">
+                <input type="hidden" name="tail_number" value="{{ row.tail }}">
+                <h3>EDIT {{ row.tail }}</h3>
+                <p class="muted">Set the tail state for this sort operation.</p>
+                <div class="parking-tail-status-options">
+                    <button type="submit" name="operational_status" value="normal">CLEAR / NORMAL</button>
+                    <button type="submit" name="operational_status" value="oos">OOS</button>
+                    {% if not row.departure %}
+                    <button type="submit" name="operational_status" value="spare">SPARE</button>
+                    {% endif %}
+                    <button type="submit" name="operational_status" value="hot">HOT</button>
+                    {% if row.show_qt_status_option %}
+                    <button type="submit" name="operational_status" value="qt">QT</button>
+                    {% endif %}
+                </div>
+            </form>
+            <button class="parking-tail-status-close" type="button" data-tail-status-close>CANCEL</button>
+        </dialog>
+    </div>
+    {% endif %}
+</article>
+{% endmacro %}
