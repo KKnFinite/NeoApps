@@ -12,6 +12,12 @@ from app.services.neoermac_building_lineup import (
     normalize_destination,
 )
 from app.services.node_refresh import node_auto_refresh_status
+from app.services.neoermac_tail_presence import (
+    arrival_presence_by_tail,
+    departure_tail_presence,
+    normalize_tail_number,
+    tail_presence_status_override,
+)
 from app.services.sort_date_operations import mission_display_timing_data
 
 
@@ -32,6 +38,7 @@ def view_outbound_context(gateway):
     assignments_by_destination = _lineup_assignments_by_destination(gateway)
     pulls_by_destination = _door_pulls_by_destination(gateway, operation)
     parking_by_tail = _parking_assignments_by_tail(operation)
+    arrivals_by_tail = arrival_presence_by_tail(operation)
     missions = _departure_missions(operation)
 
     rows = []
@@ -49,6 +56,7 @@ def view_outbound_context(gateway):
                 operation,
                 mission,
                 parking_by_tail,
+                arrivals_by_tail,
             )
         )
 
@@ -61,6 +69,7 @@ def view_outbound_context(gateway):
                 operation,
                 None,
                 parking_by_tail,
+                arrivals_by_tail,
             )
         )
 
@@ -82,6 +91,7 @@ def _row_for_destination(
     operation,
     mission,
     parking_by_tail,
+    arrivals_by_tail,
 ):
     timing_data = mission_display_timing_data(mission, operation) if mission else {}
     row_window = timing_data.get("effective_window_minutes")
@@ -115,13 +125,15 @@ def _row_for_destination(
     )
     if not assigned_doors and door_pull:
         assigned_doors = [door_pull.door]
+    tail_presence = departure_tail_presence(mission, arrivals_by_tail) if mission else None
 
     return {
         "destination": destination,
         "flight_number": _text_value(getattr(mission, "flight_number", "")),
         "tail": _text_value(getattr(mission, "assigned_tail_number", "")),
         "parking": _parking_for_mission(mission, parking_by_tail),
-        "status": _status_for_mission(mission),
+        "status": _status_for_mission(mission, tail_presence),
+        "tail_presence": tail_presence,
         "etd": _time_value(
             timing_data.get("adjusted_planned_departure_time")
             or getattr(mission, "planned_datetime_local", None)
@@ -183,7 +195,7 @@ def _parking_assignments_by_tail(operation):
     if not operation:
         return {}
     return {
-        _text_value(assignment.tail_number): _text_value(assignment.position_code)
+        normalize_tail_number(assignment.tail_number): _text_value(assignment.position_code)
         for assignment in SortDateParkingAssignment.query.filter_by(
             sort_date_operation_id=operation.id,
         ).all()
@@ -194,15 +206,18 @@ def _parking_assignments_by_tail(operation):
 def _parking_for_mission(mission, parking_by_tail):
     if not mission:
         return ""
-    tail = _text_value(getattr(mission, "assigned_tail_number", ""))
+    tail = normalize_tail_number(getattr(mission, "assigned_tail_number", ""))
     if not tail:
         return ""
     return parking_by_tail.get(tail, "")
 
 
-def _status_for_mission(mission):
+def _status_for_mission(mission, tail_presence=None):
     if not mission:
         return "NO MISSION"
+    override = tail_presence_status_override(mission, tail_presence)
+    if override:
+        return override
     status = _text_value(getattr(mission, "departure_status", ""))
     if not status:
         return "SCHEDULED"

@@ -22,6 +22,12 @@ from app.services.gateway_matrix import (
     sort_lookup_window_for_operation,
 )
 from app.services.node_refresh import node_auto_refresh_status
+from app.services.neoermac_tail_presence import (
+    arrival_presence_by_tail,
+    departure_tail_presence,
+    normalize_tail_number,
+    tail_presence_status_override,
+)
 from app.services.sort_date_operations import mission_display_timing_data
 from app.services.uld_requests import (
     ULD_TYPES,
@@ -252,6 +258,7 @@ def _door_card_state_payload(card, order_index):
         "tail": card["tail"],
         "parking": card["parking"] or "-",
         "status": card["status"],
+        "tail_presence": card["tail_presence"],
         "window_minutes": card["window_minutes"],
         "planned": card["planned"],
         "base_planned": card["base_planned"],
@@ -286,6 +293,7 @@ def _destination_cards_for_door(gateway, selected_door, operation):
     destination_slots = _destination_slots_for_door(gateway, selected_door)
     missions = _missions_by_destination(gateway, operation)
     parking_by_tail = _parking_assignments_by_tail(operation)
+    arrivals_by_tail = arrival_presence_by_tail(operation)
     masters = _master_departures_by_destination(gateway)
     cards = []
 
@@ -310,16 +318,24 @@ def _destination_cards_for_door(gateway, selected_door, operation):
             "pure": bool(getattr(door_pull, "no_pure_pull", False)),
             "mix": bool(getattr(door_pull, "no_mix_pull", False)),
         }
+        tail_presence = departure_tail_presence(mission, arrivals_by_tail) if mission else None
+        assigned_parking = _parking_for_mission(mission, parking_by_tail)
+        visible_parking = (
+            assigned_parking
+            if tail_presence is None or tail_presence["show_door_parking"]
+            else ""
+        )
 
         pulls_complete = _pulls_complete(actual, no_pull)
         cards.append(
             {
                 "flight_number": _flight_number_for_card(mission, master),
                 "destination": destination,
-                "status": _status_for_card(mission, master),
+                "status": _status_for_card(mission, master, tail_presence),
                 "slot_labels": slot_labels,
                 "tail": mission.assigned_tail_number if mission else "",
-                "parking": _parking_for_mission(mission, parking_by_tail),
+                "parking": visible_parking,
+                "tail_presence": tail_presence,
                 "window_minutes": timing_data.get("effective_window_minutes"),
                 "planned": {
                     "pure": _time_value(planned_times["pure"]),
@@ -343,7 +359,7 @@ def _destination_cards_for_door(gateway, selected_door, operation):
                 "pulls_complete": pulls_complete,
                 "complete_title": _complete_title(
                     destination,
-                    _parking_for_mission(mission, parking_by_tail),
+                    visible_parking,
                 ),
                 "pull_summary": _pull_summary(actual, no_pull),
                 "_sort_key": _door_card_sort_key(
@@ -427,16 +443,16 @@ def _parking_assignments_by_tail(operation):
         sort_date_operation_id=operation.id,
     ).all()
     return {
-        _normalize_tail(assignment.tail_number): assignment.position_code
+        normalize_tail_number(assignment.tail_number): assignment.position_code
         for assignment in assignments
-        if _normalize_tail(assignment.tail_number) and assignment.position_code
+        if normalize_tail_number(assignment.tail_number) and assignment.position_code
     }
 
 
 def _parking_for_mission(mission, parking_by_tail):
     if not mission:
         return ""
-    tail = _normalize_tail(mission.assigned_tail_number)
+    tail = normalize_tail_number(mission.assigned_tail_number)
     if not tail:
         return ""
     return str(parking_by_tail.get(tail) or "").strip().upper()
@@ -528,10 +544,6 @@ def _uld_request_for_door(gateway, selected_door, operation):
     return aggregate_uld_request_for_door(gateway, selected_door, operation)
 
 
-def _normalize_tail(value):
-    return str(value or "").strip().upper()
-
-
 def _sync_mission_actual_pulls(gateway, operation, destination, door_pull):
     if not operation:
         return
@@ -592,8 +604,11 @@ def _flight_number_for_card(mission, master):
     return str(flight_number or "").strip().upper()
 
 
-def _status_for_card(mission, master):
+def _status_for_card(mission, master, tail_presence=None):
     if mission:
+        override = tail_presence_status_override(mission, tail_presence)
+        if override:
+            return override
         status = str(getattr(mission, "departure_status", "") or "").strip()
         return _labelize(status) if status else "Scheduled"
     if master:

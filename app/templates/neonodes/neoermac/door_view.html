@@ -176,6 +176,7 @@
                     data-door-destination-card
                     data-door-destination="{{ card.destination }}"
                     data-destination-index="{{ destination_index }}"
+                    data-tail-presence="{{ card.tail_presence.state if card.tail_presence else '' }}"
                 >
                     <input type="hidden" name="destination_{{ destination_index }}" value="{{ card.destination }}">
                     <div class="neoermac-door-card-head neoermac-door-flight-info-row" data-door-flight-info-row>
@@ -414,6 +415,7 @@
             return;
         }
         const protectLocal = options.protectLocal !== false;
+        card.dataset.tailPresence = cardData.tail_presence?.state || "";
 
         const tail = card.querySelector("[data-door-tail]");
         if (tail) {
