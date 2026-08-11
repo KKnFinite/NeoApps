@@ -3733,6 +3733,22 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(mission.pull_time_source, "manual")
         self.assertEqual(mission.departure_status, "loading")
 
+    def test_create_manual_departure_defaults_to_scheduled(self):
+        operation = self._operation()
+        db.session.add(operation)
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/missions/new",
+            data=self._mission_form_data(flight_number="DEPSCHED"),
+            follow_redirects=False,
+        )
+
+        mission = SortDateMission.query.filter_by(flight_number="DEPSCHED").one()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(mission.mission_type, "departure")
+        self.assertEqual(mission.departure_status, "scheduled")
+
     def test_arrival_mission_form_does_not_render_pull_time_fields(self):
         operation = self._operation()
         db.session.add(operation)
@@ -5973,6 +5989,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertEqual(preview.status_code, 200)
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(target.review_status, expected_status)
+                if action == "add":
+                    mission = SortDateMission.query.filter_by(
+                        sort_date_operation_id=operation.id,
+                        flight_number=target.flight_number,
+                    ).one()
+                    self.assertEqual(mission.departure_status, "scheduled")
                 self.assertIn(target_row.encode(), response.data)
                 self.assertIn(remaining_row.encode(), response.data)
                 self.assertIn(b"APPLY PREVIEW", response.data)
@@ -6596,6 +6618,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(mission.destination, "DFW")
         self.assertEqual(mission.assigned_tail_number, "N856UP")
         self.assertEqual(mission.wave, "2")
+        self.assertEqual(mission.departure_status, "scheduled")
         self.assertTrue(mission.api_added_current_sort_only)
         self.assertIsNone(mission.master_flight_schedule_id)
         self.assertEqual(item.review_status, "accepted")

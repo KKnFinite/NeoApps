@@ -251,6 +251,7 @@ ARRIVAL_STATUSES = (
 )
 DEPARTURE_STATUSES = (
     "",
+    "scheduled",
     "loading",
     "last_uld_enroute",
     "ramp_load_complete",
@@ -3286,7 +3287,7 @@ def _create_mission_from_alp_planning_row(operation, row):
     else:
         mission.actual_block_out_datetime_utc = planned_utc
         mission.actual_block_out_source = "alp"
-        mission.departure_status = "loading"
+        mission.departure_status = "scheduled"
 
     _raise_for_duplicate_operation_flight_number(
         operation,
@@ -4158,7 +4159,7 @@ def _apply_mission_form(mission, operation, form):
         form["departure_status"],
         DEPARTURE_STATUSES,
         "Departure status",
-    )
+    ) or "scheduled"
     mission.pure_pull_time_local = _parse_optional_time(
         form["pure_pull_time_local"],
         "Pure pull time",

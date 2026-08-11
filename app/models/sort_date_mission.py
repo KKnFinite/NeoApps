@@ -32,8 +32,9 @@ class SortDateMission(db.Model):
             name="ck_sort_date_missions_arrival_status",
         ),
         db.CheckConstraint(
-            "departure_status IN ('loading', 'last_uld_enroute', 'ramp_load_complete', "
-            "'crew_load_complete', 'blocked_out', 'departed', 'cancelled')",
+            "departure_status IN ('scheduled', 'loading', 'last_uld_enroute', "
+            "'ramp_load_complete', 'crew_load_complete', 'blocked_out', 'departed', "
+            "'cancelled')",
             name="ck_sort_date_missions_departure_status",
         ),
     )

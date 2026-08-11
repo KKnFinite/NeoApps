@@ -359,7 +359,7 @@ def _create_google_mission(
         tail_updated_at=datetime.utcnow(),
         fuel_status="waiting",
         arrival_status="scheduled" if mission_type == "arrival" else None,
-        departure_status="loading" if mission_type == "departure" else None,
+        departure_status="scheduled" if mission_type == "departure" else None,
     )
     db.session.add(mission)
     db.session.flush()
@@ -450,7 +450,12 @@ def _apply_outbound_state(
         set_tail_hot(operation, new_tail, False, user=user)
 
     if mission.departure_status is None:
-        mission.departure_status = "loading"
+        mission.departure_status = "scheduled"
+    elif (
+        str(mission.departure_status).strip().lower() == "loading"
+        and not _has_downstream_departure_progress(mission)
+    ):
+        mission.departure_status = "scheduled"
 
     if _clear_future_google_block_out(mission, applied_at):
         warnings.append("Future Google block-out state cleared.")
@@ -488,8 +493,19 @@ def _clear_future_google_block_out(mission, applied_at):
     mission.actual_block_out_datetime_utc = None
     mission.actual_block_out_source = "unknown"
     if str(mission.departure_status or "").strip().lower() == "departed":
-        mission.departure_status = "loading"
+        mission.departure_status = "scheduled"
     return True
+
+
+def _has_downstream_departure_progress(mission):
+    return any(
+        (
+            mission.last_uld_enroute_at_utc,
+            mission.ramp_load_completed_at_utc,
+            mission.crew_load_completed_at_utc,
+            mission.actual_block_out_datetime_utc,
+        )
+    )
 
 
 def _apply_pending_tail_swap(link, row):

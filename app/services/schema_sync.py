@@ -612,6 +612,7 @@ def _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names):
         "'cancelled'" in create_sql
         and "'on_ground'" in create_sql
         and "'departed'" in create_sql
+        and "departure_status IN ('scheduled', 'loading'" in create_sql
         and "'google_motherbrain'" in create_sql
         and planned_columns_nullable
     ):
@@ -724,6 +725,7 @@ def _sync_sort_date_mission_status_constraints_postgres(table_names):
             ADD CONSTRAINT ck_sort_date_missions_departure_status
             CHECK (
                 departure_status IS NULL OR departure_status IN (
+                    'scheduled',
                     'loading',
                     'last_uld_enroute',
                     'ramp_load_complete',

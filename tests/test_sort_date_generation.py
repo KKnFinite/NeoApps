@@ -134,6 +134,7 @@ class SortDateGenerationTest(unittest.TestCase):
         self.assertEqual(mission.pure_pull_time_local, time(1, 20))
         self.assertEqual(mission.mix_pull_time_local, time(1, 55))
         self.assertEqual(mission.pull_time_source, "master")
+        self.assertEqual(mission.departure_status, "scheduled")
 
     def test_arrival_has_no_pull_times_or_pull_source(self):
         self._add_master(

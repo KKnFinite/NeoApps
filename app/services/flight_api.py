@@ -2030,7 +2030,7 @@ def build_api_added_mission(operation, normalized):
     if mission.mission_type == "arrival":
         mission.arrival_status = "scheduled"
     else:
-        mission.departure_status = "loading"
+        mission.departure_status = "scheduled"
     return mission
 
 

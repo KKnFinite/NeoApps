@@ -39,6 +39,9 @@ from app.services.google_motherbrain_live_poll_schema import (
     ensure_google_motherbrain_live_poll_state_table,
 )
 from app.services.sort_timeline_schema import ensure_sort_timeline_sort_setting_columns
+from app.services.sort_date_mission_schema import (
+    ensure_sort_date_mission_departure_status_constraint,
+)
 from app.services.shell_metadata import resolve_shell_metadata
 from app.services.time_display import format_local_hhmm
 
@@ -48,8 +51,8 @@ def create_app(config_class=Config, auto_bootstrap=False):
 
     Database schema/bootstrap work belongs in the deployment bootstrap command.
     Keeping it opt-in here prevents long PostgreSQL retries before the web
-    process can bind its port. The sole exception is the short, lock-protected
-    ensure for the Google live-poll coordination table.
+    process can bind its port. Short, lock-protected targeted ensures handle
+    only additive or constraint changes required by the active model.
     """
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(Config)
@@ -65,6 +68,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     sync_existing_local_schema(app)
     ensure_google_motherbrain_live_poll_state_table(app)
     ensure_sort_timeline_sort_setting_columns(app)
+    ensure_sort_date_mission_departure_status_constraint(app)
 
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)

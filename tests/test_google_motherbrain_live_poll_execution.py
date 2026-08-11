@@ -283,7 +283,7 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         self.assertEqual(result["skipped_count"], 0)
         self.assertEqual(SortDateMission.query.count(), 2)
 
-    def test_future_formatted_block_out_remains_loading_at_poll_time(self):
+    def test_future_formatted_block_out_remains_scheduled_at_poll_time(self):
         self._enable()
         db.session.add(
             GatewaySortMatrix(
@@ -332,7 +332,7 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         self.assertEqual(mission.planned_datetime_local, datetime(2026, 8, 11, 2, 25))
         self.assertIsNone(mission.actual_block_out_datetime_utc)
         self.assertEqual(mission.actual_block_out_source, "unknown")
-        self.assertEqual(mission.departure_status, "loading")
+        self.assertEqual(mission.departure_status, "scheduled")
 
     def test_cross_midnight_poll_uses_previous_operational_sort_date(self):
         self._enable()

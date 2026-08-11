@@ -4527,6 +4527,8 @@ class FlightApiTestPageTest(unittest.TestCase):
             self.assertEqual(mission.mission_source, "api")
             self.assertTrue(mission.api_added_current_sort_only)
             self.assertIsNone(mission.master_flight_schedule_id)
+            if item.mission_type == "departure":
+                self.assertEqual(mission.departure_status, "scheduled")
 
     def test_flight_api_review_ignore_provider_unmatched_hides_future_polls_for_operation(self):
         operation, _settings = self._setup_auto_poll_operation()

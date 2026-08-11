@@ -381,6 +381,7 @@ def _build_mission_from_master(operation, master_row, sort_date):
     )
 
     if master_row.mission_type == "departure":
+        mission.departure_status = "scheduled"
         mission.pure_pull_time_local = master_row.pure_pull_time_local
         mission.mix_pull_time_local = master_row.mix_pull_time_local
         if any(
@@ -425,11 +426,13 @@ def _apply_master_template_to_mission(mission, master_row, operation):
 
     if master_row.mission_type == "arrival":
         mission.arrival_status = mission.arrival_status or "scheduled"
+        mission.departure_status = None
         mission.pure_pull_time_local = None
         mission.mix_pull_time_local = None
         mission.pull_time_source = None
     else:
         mission.arrival_status = None
+        mission.departure_status = mission.departure_status or "scheduled"
         mission.pure_pull_time_local = master_row.pure_pull_time_local
         mission.mix_pull_time_local = master_row.mix_pull_time_local
         mission.pull_time_source = (
@@ -463,6 +466,7 @@ def _master_template_snapshot(mission):
         mission.planned_datetime_utc,
         mission.planned_source,
         mission.arrival_status,
+        mission.departure_status,
         mission.pure_pull_time_local,
         mission.mix_pull_time_local,
         mission.pull_time_source,
