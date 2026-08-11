@@ -2337,6 +2337,80 @@ a {
     margin: 6px 0 0;
 }
 
+.portal-request-filters {
+    display: grid;
+    gap: 7px;
+}
+
+.portal-request-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.portal-request-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    padding: 6px 10px;
+    border: 1px solid rgba(235, 241, 246, 0.18);
+    border-radius: 6px;
+    background: rgba(5, 7, 10, 0.68);
+    color: var(--steel);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.portal-request-filter-chip:hover,
+.portal-request-filter-chip:focus-visible,
+.portal-request-filter-chip.is-active {
+    border-color: var(--node-highlight);
+    color: var(--neo-bright-silver);
+    background: rgba(var(--node-rgb), 0.18);
+    box-shadow: 0 0 12px rgba(var(--node-rgb), 0.16);
+}
+
+.portal-request-filter-count {
+    margin-left: 4px;
+    color: var(--node-highlight);
+    font-size: 0.66rem;
+    font-weight: 900;
+}
+
+.portal-request-status-filters {
+    gap: 4px;
+}
+
+.portal-request-status-chip {
+    min-height: 26px;
+    padding: 5px 9px;
+    font-size: 0.66rem;
+}
+
+.portal-request-status {
+    color: var(--steel);
+    font-size: 0.72rem;
+    font-weight: 850;
+}
+
+.portal-request-status.is-pending {
+    color: var(--node-highlight);
+}
+
+.portal-request-status.is-approved {
+    color: #78dc97;
+}
+
+.portal-request-status.is-denied {
+    color: #ff7777;
+}
+
 .portal-management-back-link,
 .portal-management-all-users-link {
     flex: 0 0 auto;
@@ -2398,12 +2472,13 @@ a {
         table-layout: fixed;
     }
 
-    .portal-management-access-table th:nth-child(1) { width: 12%; }
+    .portal-management-access-table th:nth-child(1) { width: 11%; }
     .portal-management-access-table th:nth-child(2) { width: 9%; }
-    .portal-management-access-table th:nth-child(3) { width: 16%; }
-    .portal-management-access-table th:nth-child(4) { width: 11%; }
+    .portal-management-access-table th:nth-child(3) { width: 8%; }
+    .portal-management-access-table th:nth-child(4) { width: 15%; }
     .portal-management-access-table th:nth-child(5) { width: 10%; }
-    .portal-management-access-table th:nth-child(6) { width: 42%; }
+    .portal-management-access-table th:nth-child(6) { width: 10%; }
+    .portal-management-access-table th:nth-child(7) { width: 37%; }
 
     .portal-management-page .user-role-table th:nth-child(1) { width: 13%; }
     .portal-management-page .user-role-table th:nth-child(2) { width: 11%; }

@@ -17,6 +17,35 @@
             <h2 id="app-access-requests-title">APP ACCESS REQUESTS</h2>
         </div>
 
+        <div class="portal-request-filters" data-portal-request-filters>
+            <nav class="portal-request-filter-row" aria-label="Filter access requests by application">
+                <a
+                    class="portal-request-filter-chip{% if not selected_app %} is-active{% endif %}"
+                    data-app-filter="all"
+                    href="{{ url_for('auth.portal_management', status=selected_status, q=search or none) }}"
+                    {% if not selected_app %}aria-current="page"{% endif %}
+                >ALL REQUESTS</a>
+                {% for app in app_definitions %}
+                <a
+                    class="portal-request-filter-chip{% if selected_app == app.code %} is-active{% endif %}"
+                    data-app-filter="{{ app.code }}"
+                    href="{{ url_for('auth.portal_management', app=app.code, status=selected_status, q=search or none) }}"
+                    {% if selected_app == app.code %}aria-current="page"{% endif %}
+                >{{ app.name }} <span class="portal-request-filter-count">({{ app_pending_counts[app.code] }})</span></a>
+                {% endfor %}
+            </nav>
+            <nav class="portal-request-filter-row portal-request-status-filters" aria-label="Filter access requests by status">
+                {% for status_filter in request_status_filters %}
+                <a
+                    class="portal-request-filter-chip portal-request-status-chip{% if selected_status == status_filter.value %} is-active{% endif %}"
+                    data-status-filter="{{ status_filter.value }}"
+                    href="{{ url_for('auth.portal_management', app=selected_app or none, status=status_filter.value, q=search or none) }}"
+                    {% if selected_status == status_filter.value %}aria-current="page"{% endif %}
+                >{{ status_filter.label }}</a>
+                {% endfor %}
+            </nav>
+        </div>
+
         {% if app_access_requests %}
         <div class="table-wrap portal-management-table-wrap">
             <table class="data-table pending-users-table portal-management-access-table">
@@ -24,6 +53,7 @@
                     <tr>
                         <th>NAME</th>
                         <th>APP</th>
+                        <th>STATUS</th>
                         <th>EMAIL</th>
                         <th>VERIFIED</th>
                         <th>REQUESTED</th>
@@ -34,16 +64,21 @@
                     {% for access in app_access_requests %}
                     <tr>
                         <td data-label="Name">{{ access.user.display_name }}</td>
-                        <td data-label="App">{{ access.app_code|replace("neo", "Neo") }}</td>
+                        <td data-label="App">{{ app_definition_by_code[access.app_code].name if access.app_code in app_definition_by_code else access.app_code }}</td>
+                        <td data-label="Status"><span class="portal-request-status is-{{ access.status }}">{{ access.status|replace("_", " ")|title }}</span></td>
                         <td data-label="Email">{{ access.user.email or "" }}</td>
                         <td data-label="Verified">{{ "Yes" if access.user.email_verified_at else "Email not verified yet" }}</td>
                         <td data-label="Requested">{{ access.created_at.strftime("%Y-%m-%d %H:%M") if access.created_at else "" }}</td>
                         <td data-label="Actions">
                             <div class="table-actions">
                                 <a href="{{ url_for('auth.user_detail', user_id=access.user.id) }}">VIEW DETAILS</a>
+                                {% if access.status == "pending" %}
                                 {% if access.user.email_verified_at %}
                                 <form class="inline-button-form" method="post" action="{{ url_for('auth.update_portal_app_access', access_id=access.id) }}">
                                     <input type="hidden" name="action" value="approve">
+                                    <input type="hidden" name="return_app" value="{{ selected_app or '' }}">
+                                    <input type="hidden" name="return_status" value="{{ selected_status }}">
+                                    {% if search %}<input type="hidden" name="return_q" value="{{ search }}">{% endif %}
                                     {% if access.app_code == "neogateway" %}
                                     <span class="muted compact-access-note">Seed RFD NeoNode role</span>
                                     {% endif %}
@@ -60,9 +95,13 @@
                                 {% endif %}
                                 <form class="inline-button-form" method="post" action="{{ url_for('auth.update_portal_app_access', access_id=access.id) }}">
                                     <input type="hidden" name="action" value="deny">
+                                    <input type="hidden" name="return_app" value="{{ selected_app or '' }}">
+                                    <input type="hidden" name="return_status" value="{{ selected_status }}">
+                                    {% if search %}<input type="hidden" name="return_q" value="{{ search }}">{% endif %}
                                     <input class="compact-action-input" name="notes" placeholder="Denial notes">
                                     <button type="submit">DENY</button>
                                 </form>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
@@ -71,7 +110,7 @@
             </table>
         </div>
         {% else %}
-        <p class="muted centered-empty-message">There are no pending app access requests.</p>
+        <p class="muted centered-empty-message">There are no app access requests matching these filters.</p>
         {% endif %}
     </section>
 

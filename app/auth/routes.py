@@ -83,6 +83,13 @@ ACCESS_REQUESTS_EDIT_PERMISSION = "neoapps.access_requests.edit"
 PERMISSION_RULES_VIEW_PERMISSION = "neomotherbrain.permission_rules.view"
 PERMISSION_RULES_EDIT_PERMISSION = "neomotherbrain.permission_rules.edit"
 NEOBID_PLACEHOLDER_VIEW_PERMISSION = "neobid.placeholder.view"
+PORTAL_ACCESS_REQUEST_DEFAULT_STATUS = "pending"
+PORTAL_ACCESS_REQUEST_STATUS_FILTERS = (
+    {"value": "all", "label": "All"},
+    {"value": "pending", "label": "Pending"},
+    {"value": "approved", "label": "Approved"},
+    {"value": "denied", "label": "Denied"},
+)
 
 
 def portal_permission_required(permission_key, message="Access denied."):
@@ -439,18 +446,38 @@ def change_password():
 def portal_management():
     gateway = get_current_gateway()
     memberships = _pending_memberships_for_gateway(gateway).all()
-    app_access_requests = _pending_portal_app_accesses().all()
+    app_definitions = portal_app_definitions()
+    selected_app = _portal_management_app_filter(app_definitions)
+    selected_status = _portal_management_status_filter()
+    app_access_requests = _portal_app_access_requests(
+        app_code=selected_app,
+        status=selected_status,
+    ).all()
     search = request.args.get("q", "").strip()
     rows = _search_user_management_rows(gateway, search) if search else []
+    search_hidden_fields = {"status": selected_status}
+    if selected_app:
+        search_hidden_fields["app"] = selected_app
     return render_template(
         "auth/portal_management.html",
         app_access_requests=app_access_requests,
-        app_definitions=portal_app_definitions(),
+        app_definition_by_code={app["code"]: app for app in app_definitions},
+        app_definitions=app_definitions,
+        app_pending_counts=_portal_app_pending_counts(app_definitions),
         gateway=gateway,
         memberships=memberships,
+        request_status_filters=PORTAL_ACCESS_REQUEST_STATUS_FILTERS,
         role_choices=ROLE_CHOICES,
         rows=rows,
         search=search,
+        search_clear_url=url_for(
+            "auth.portal_management",
+            app=selected_app,
+            status=selected_status,
+        ),
+        search_hidden_fields=search_hidden_fields,
+        selected_app=selected_app,
+        selected_status=selected_status,
         can_list_all_users=user_can(USER_MANAGEMENT_VIEW_PERMISSION),
     )
 
@@ -480,7 +507,7 @@ def update_portal_app_access(access_id):
         db.session.rollback()
         flash(str(error), "error")
 
-    return redirect(url_for("auth.portal_management"))
+    return redirect(_portal_management_return_url())
 
 
 @bp.route("/admin/users")
@@ -879,12 +906,79 @@ def _requested_portal_apps_from_form():
     return normalized
 
 
-def _pending_portal_app_accesses():
-    return (
-        PortalAppAccess.query.filter_by(status="pending", is_active=True)
-        .join(User, PortalAppAccess.user_id == User.id)
-        .order_by(PortalAppAccess.created_at.asc())
+def _portal_app_access_requests(*, app_code=None, status=None):
+    query = PortalAppAccess.query.join(User, PortalAppAccess.user_id == User.id)
+    if app_code:
+        query = query.filter(PortalAppAccess.app_code == app_code)
+    if status and status != "all":
+        query = query.filter(PortalAppAccess.status == status)
+    if status == "pending":
+        query = query.filter(PortalAppAccess.is_active.is_(True))
+    return query.order_by(
+        PortalAppAccess.created_at.asc(),
+        PortalAppAccess.id.asc(),
     )
+
+
+def _portal_management_app_filter(app_definitions, value=None):
+    requested = str(
+        request.args.get("app", "") if value is None else value
+    ).strip().lower()
+    valid_codes = {app["code"] for app in app_definitions}
+    return requested if requested in valid_codes else None
+
+
+def _portal_management_status_filter(value=None):
+    requested = str(
+        request.args.get("status", PORTAL_ACCESS_REQUEST_DEFAULT_STATUS)
+        if value is None
+        else value
+    ).strip().lower()
+    valid_statuses = {
+        status_filter["value"]
+        for status_filter in PORTAL_ACCESS_REQUEST_STATUS_FILTERS
+    }
+    return (
+        requested
+        if requested in valid_statuses
+        else PORTAL_ACCESS_REQUEST_DEFAULT_STATUS
+    )
+
+
+def _portal_app_pending_counts(app_definitions):
+    counts = {app["code"]: 0 for app in app_definitions}
+    rows = (
+        db.session.query(PortalAppAccess.app_code, func.count(PortalAppAccess.id))
+        .filter(
+            PortalAppAccess.status == "pending",
+            PortalAppAccess.is_active.is_(True),
+        )
+        .group_by(PortalAppAccess.app_code)
+        .all()
+    )
+    for app_code, count in rows:
+        if app_code in counts:
+            counts[app_code] = count
+    return counts
+
+
+def _portal_management_return_url():
+    raw_app = request.form.get("return_app")
+    raw_status = request.form.get("return_status")
+    search = request.form.get("return_q", "").strip()
+    if raw_app is None and raw_status is None and not search:
+        return url_for("auth.portal_management")
+
+    app_definitions = portal_app_definitions()
+    selected_app = _portal_management_app_filter(app_definitions, raw_app)
+    selected_status = _portal_management_status_filter(raw_status)
+    query = {}
+    if selected_app:
+        query["app"] = selected_app
+    query["status"] = selected_status
+    if search:
+        query["q"] = search
+    return url_for("auth.portal_management", **query)
 
 
 def _portal_app_access_rows(user):

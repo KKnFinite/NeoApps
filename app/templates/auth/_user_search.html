@@ -1,10 +1,15 @@
 <form class="operation-form user-search-form" method="get" action="{{ search_action }}">
+    {% if search_hidden_fields %}
+    {% for field_name, field_value in search_hidden_fields.items() %}
+    <input type="hidden" name="{{ field_name }}" value="{{ field_value }}">
+    {% endfor %}
+    {% endif %}
     <label>
         <input name="q" value="{{ search }}" placeholder="Name, employee ID, or email" autocomplete="off" autofocus>
     </label>
     <button type="submit">SEARCH</button>
     {% if search %}
-    <a class="action-button action-button-secondary" href="{{ search_action }}">CLEAR</a>
+    <a class="action-button action-button-secondary" href="{{ search_clear_url|default(search_action) }}">CLEAR</a>
     {% endif %}
 </form>
 
