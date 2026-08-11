@@ -175,7 +175,37 @@ def save_building_lineup(gateway, form_data):
             setattr(row, field_name, value or None)
 
     db.session.flush()
+    _recompute_current_sort_door_pull_aggregates(gateway)
+    db.session.flush()
     return rows
+
+
+def get_building_lineup_doors_by_destination(gateway):
+    door_numbers = {door: _door_number(door) for door in OUTBOUND_DOOR_OPTIONS}
+    doors_by_destination = {}
+    for row in get_building_lineup_rows(gateway):
+        start = _door_number(row.door_start)
+        end = _door_number(row.door_end)
+        if start is None or end is None:
+            continue
+        low, high = sorted((start, end))
+        row_doors = tuple(
+            door
+            for door, number in door_numbers.items()
+            if number is not None and low <= number <= high
+        )
+        for field_name in DESTINATION_FIELDS:
+            destination = normalize_destination(getattr(row, field_name, None))
+            if not destination:
+                continue
+            assigned_doors = doors_by_destination.setdefault(destination, [])
+            for door in row_doors:
+                if door not in assigned_doors:
+                    assigned_doors.append(door)
+    return {
+        destination: tuple(doors)
+        for destination, doors in doors_by_destination.items()
+    }
 
 
 def save_building_lineup_destination(gateway, field_token, destination):
@@ -193,6 +223,8 @@ def save_building_lineup_destination(gateway, field_token, destination):
         for field_name in DESTINATION_FIELDS:
             if lineup_field_name(row, field_name) == field_token:
                 setattr(row, field_name, value or None)
+                db.session.flush()
+                _recompute_current_sort_door_pull_aggregates(gateway)
                 db.session.flush()
                 return {
                     "field": field_token,
@@ -319,3 +351,18 @@ def _current_sort_destination_pull_times(gateway):
 def _fill_pull_time(destination_times, key, value):
     if destination_times[key] == "--" and value:
         destination_times[key] = value.strftime("%H:%M")
+
+
+def _recompute_current_sort_door_pull_aggregates(gateway):
+    from app.services.neoermac_pull_aggregation import (
+        recompute_current_sort_door_pull_aggregates,
+    )
+
+    return recompute_current_sort_door_pull_aggregates(gateway)
+
+
+def _door_number(door):
+    value = str(door or "").strip().upper()
+    if value.startswith("D"):
+        value = value[1:]
+    return int(value) if value.isdigit() else None

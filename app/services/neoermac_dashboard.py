@@ -59,6 +59,8 @@ def neoermac_dashboard_context(gateway):
 
             for pull_order, pull_field in enumerate(PULL_FIELDS):
                 planned_time = _planned_pull_time(mission, operation, pull_field["key"])
+                if planned_time is None:
+                    continue
                 if _pull_is_complete(mission, related_door_pulls, pull_field, required_doors):
                     continue
                 rows[side].append(

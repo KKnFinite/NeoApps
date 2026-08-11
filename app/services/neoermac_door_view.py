@@ -28,6 +28,9 @@ from app.services.neoermac_tail_presence import (
     normalize_tail_number,
     tail_presence_status_override,
 )
+from app.services.neoermac_pull_aggregation import (
+    recompute_current_sort_door_pull_aggregates,
+)
 from app.services.sort_date_operations import mission_display_timing_data
 from app.services.uld_requests import (
     ULD_TYPES,
@@ -110,6 +113,7 @@ def save_door_pulls(gateway, selected_door, form_data):
     operation = context["operation"]
 
     row_count = _int_value(form_data.get("destination_count"), default=0)
+    changed_destinations = set()
     for index in range(row_count):
         destination = normalize_destination(form_data.get(f"destination_{index}"))
         if not destination:
@@ -130,8 +134,14 @@ def save_door_pulls(gateway, selected_door, form_data):
                 field["actual_attr"],
                 _parse_optional_time(form_data.get(f"{field['actual_field']}_{index}")),
             )
-        _sync_mission_actual_pulls(gateway, operation, destination, record)
+        changed_destinations.add(destination)
 
+    db.session.flush()
+    recompute_current_sort_door_pull_aggregates(
+        gateway,
+        operation=operation,
+        destinations=changed_destinations,
+    )
     db.session.flush()
 
 
@@ -163,8 +173,12 @@ def save_single_door_pull(gateway, selected_door, destination, pull_key, actual_
         setattr(record, field["actual_attr"], None)
     else:
         setattr(record, field["actual_attr"], _parse_optional_time(actual_value))
-    _sync_mission_actual_pulls(gateway, operation, destination, record)
-
+    db.session.flush()
+    recompute_current_sort_door_pull_aggregates(
+        gateway,
+        operation=operation,
+        destinations=(destination,),
+    )
     db.session.flush()
     return _pull_card_payload(gateway, selected_door, destination, operation)
 
@@ -326,7 +340,7 @@ def _destination_cards_for_door(gateway, selected_door, operation):
             else ""
         )
 
-        pulls_complete = _pulls_complete(actual, no_pull)
+        pulls_complete = _pulls_complete(actual, no_pull, planned_times)
         cards.append(
             {
                 "flight_number": _flight_number_for_card(mission, master),
@@ -544,51 +558,6 @@ def _uld_request_for_door(gateway, selected_door, operation):
     return aggregate_uld_request_for_door(gateway, selected_door, operation)
 
 
-def _sync_mission_actual_pulls(gateway, operation, destination, door_pull):
-    if not operation:
-        return
-
-    mission = _mission_for_destination(gateway, operation, destination)
-    if not mission:
-        return
-
-    sync_fields = (
-        (
-            "actual_pure_pull_time_local",
-            "no_pure_pull",
-        ),
-        (
-            "actual_mix_pull_time_local",
-            "no_mix_pull",
-        ),
-    )
-    for actual_attr, no_attr in sync_fields:
-        value = None if getattr(door_pull, no_attr, False) else getattr(door_pull, actual_attr, None)
-        setattr(mission, actual_attr, value)
-
-
-def _mission_for_destination(gateway, operation, destination):
-    destination = normalize_destination(destination)
-    if not operation or not destination:
-        return None
-
-    return (
-        SortDateMission.query.filter_by(
-            sort_date_operation_id=operation.id,
-            mission_type="departure",
-        )
-        .filter(
-            SortDateMission.destination == destination,
-            or_(
-                SortDateMission.gateway_code == gateway.code,
-                SortDateMission.sort_date_operation.has(SortDateOperation.gateway_id == gateway.id),
-            ),
-        )
-        .order_by(SortDateMission.planned_datetime_utc.asc(), SortDateMission.id.asc())
-        .first()
-    )
-
-
 def _mission_timing_data(mission, operation):
     if not mission:
         return {}
@@ -768,8 +737,16 @@ def _pull_field_by_key(pull_key):
     return None
 
 
-def _pulls_complete(actual, no_pull):
-    return all(bool(no_pull[field["key"]] or actual[field["key"]]) for field in PULL_FIELDS)
+def _pulls_complete(actual, no_pull, planned_times):
+    required_fields = [
+        field
+        for field in PULL_FIELDS
+        if planned_times.get(field["key"]) is not None
+    ]
+    return bool(required_fields) and all(
+        bool(no_pull[field["key"]] or actual[field["key"]])
+        for field in required_fields
+    )
 
 
 def _pull_summary(actual, no_pull):
