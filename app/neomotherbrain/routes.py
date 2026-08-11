@@ -86,7 +86,6 @@ from app.services.sort_date_operations import (
     mission_display_timing_data,
     normalize_optional_window_minutes,
     normalize_wave,
-    normalize_window_minutes,
     sync_sort_operation_with_master,
 )
 from app.services.gateway_matrix import (
@@ -2706,15 +2705,17 @@ def update_operation_window(operation_id):
     operation = _operation_or_404(operation_id)
 
     try:
-        operation.window_minutes = normalize_window_minutes(
-            request.form.get("window_minutes", 0)
+        operation.window_minutes = normalize_optional_window_minutes(
+            request.form.get("window_minutes", "")
         )
-        operation.first_wave_window_minutes = normalize_optional_window_minutes(
-            request.form.get("first_wave_window_minutes", "")
-        )
-        operation.second_wave_window_minutes = normalize_optional_window_minutes(
-            request.form.get("second_wave_window_minutes", "")
-        )
+        if "first_wave_window_minutes" in request.form:
+            operation.first_wave_window_minutes = normalize_optional_window_minutes(
+                request.form.get("first_wave_window_minutes", "")
+            )
+        if "second_wave_window_minutes" in request.form:
+            operation.second_wave_window_minutes = normalize_optional_window_minutes(
+                request.form.get("second_wave_window_minutes", "")
+            )
     except (TypeError, ValueError):
         flash("Window minutes must be 0 or higher.", "error")
         return redirect(url_for("neomotherbrain.operation_detail", operation_id=operation.id))

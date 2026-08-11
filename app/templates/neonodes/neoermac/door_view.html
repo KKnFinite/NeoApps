@@ -194,7 +194,7 @@
                     </div>
 
                     <div class="neoermac-door-window-row">
-                        <span class="neoermac-door-window" data-door-window>WINDOW {{ card.window_minutes ~ " MIN" if card.window_minutes else "TBD" }}</span>
+                        <span class="neoermac-door-window" data-door-window>WINDOW {{ card.window_minutes ~ " MIN" if card.window_minutes is not none else "TBD" }}</span>
                     </div>
 
                     <div class="neoermac-door-complete-summary" data-pull-complete-summary {% if not card.pulls_complete %}hidden{% endif %}>
@@ -222,6 +222,7 @@
                             data-pull-alert-key="{{ pull_alert.key }}"
                         >
                             <div class="neoermac-door-planned">
+                                {% set show_base_window = card.window_minutes is not none and card.window_minutes != 0 and card.base_planned[pull.key] and card.base_planned[pull.key] != card.planned[pull.key] %}
                                 <span class="neoermac-label-desktop">PLANNED {{ pull.label }}</span>
                                 <span class="neoermac-label-mobile">{{ pull.short_label }}</span>
                                 <strong data-door-planned="{{ pull.key }}">{{ card.planned[pull.key] or "-" }}</strong>
@@ -230,8 +231,8 @@
                                 {% endif %}
                                 <em
                                     data-door-base-planned="{{ pull.key }}"
-                                    {% if not (card.window_minutes and card.base_planned[pull.key] and card.base_planned[pull.key] != card.planned[pull.key]) %}hidden{% endif %}
-                                >BASE {{ card.base_planned[pull.key] }} +{{ card.window_minutes }} MIN</em>
+                                    {% if not show_base_window %}hidden{% endif %}
+                                >{% if show_base_window %}BASE {{ card.base_planned[pull.key] }} +{{ card.window_minutes }} MIN{% endif %}</em>
                             </div>
                             {% if can_edit %}
                             <label class="neoermac-door-actual">
@@ -428,7 +429,8 @@
         }
         const windowLabel = card.querySelector("[data-door-window]");
         if (windowLabel) {
-            windowLabel.textContent = cardData.window_minutes
+            windowLabel.textContent = cardData.window_minutes !== null
+                && cardData.window_minutes !== undefined
                 ? `WINDOW ${cardData.window_minutes} MIN`
                 : "WINDOW TBD";
         }
@@ -440,7 +442,9 @@
             }
             const base = card.querySelector(`[data-door-base-planned="${pullKey}"]`);
             const showBase = Boolean(
-                cardData.window_minutes
+                cardData.window_minutes !== null
+                && cardData.window_minutes !== undefined
+                && cardData.window_minutes !== 0
                 && cardData.base_planned?.[pullKey]
                 && cardData.base_planned[pullKey] !== cardData.planned?.[pullKey]
             );

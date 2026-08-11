@@ -9,7 +9,7 @@ class SortDateOperation(db.Model):
     __tablename__ = "sort_date_operations"
     __table_args__ = (
         db.CheckConstraint(
-            "window_minutes >= 0",
+            "window_minutes IS NULL OR window_minutes >= 0",
             name="ck_sort_date_operations_window_minutes_nonnegative",
         ),
         db.CheckConstraint(
@@ -33,7 +33,7 @@ class SortDateOperation(db.Model):
     sort_date = db.Column(db.Date, nullable=False, index=True)
     gateway_code = db.Column(db.String(8), nullable=False, index=True)
     sort_name = db.Column(db.String(32), nullable=False, index=True)
-    window_minutes = db.Column(db.Integer, nullable=False, default=0)
+    window_minutes = db.Column(db.Integer, nullable=True)
     first_wave_window_minutes = db.Column(db.Integer, nullable=True)
     second_wave_window_minutes = db.Column(db.Integer, nullable=True)
     generated_at_utc = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
@@ -66,15 +66,10 @@ class SortDateOperation(db.Model):
     gateway = db.relationship("Gateway")
     generated_by_user = db.relationship("User")
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        if self.window_minutes is None:
-            self.window_minutes = 0
-
     @validates("window_minutes")
     def validate_window_minutes(self, key, value):
-        if value is None:
-            return 0
+        if value in (None, ""):
+            return None
 
         value = int(value)
         if value < 0:

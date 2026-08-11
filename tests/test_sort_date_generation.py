@@ -52,7 +52,9 @@ class SortDateGenerationTest(unittest.TestCase):
             generated_by_user_id=7,
         )
 
-        self.assertEqual(operation.window_minutes, 0)
+        self.assertIsNone(operation.window_minutes)
+        self.assertIsNone(operation.first_wave_window_minutes)
+        self.assertIsNone(operation.second_wave_window_minutes)
         self.assertEqual(operation.generated_by_user_id, 7)
         self.assertEqual(len(operation.missions), 2)
         self.assertEqual(

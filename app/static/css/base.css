@@ -12727,6 +12727,18 @@ select::-ms-expand {
     align-items: end;
 }
 
+.manage-sort-window-form [data-wave-window-field] {
+    transition: opacity 140ms ease;
+}
+
+.manage-sort-window-form [data-wave-window-field].is-window-overridden {
+    opacity: 0.48;
+}
+
+.manage-sort-window-form [data-wave-window-input]:disabled {
+    cursor: not-allowed;
+}
+
 @media (min-width: 761px) {
     .manage-sort-window-form {
         grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr) auto;

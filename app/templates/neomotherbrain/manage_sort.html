@@ -41,16 +41,24 @@
                     <h2 id="manage-sort-settings-title">OPERATION SETTINGS</h2>
                     <dl class="manage-sort-detail-list">
                         <div>
-                            <dt>Default Window</dt>
-                            <dd>{{ selected_operation.window_minutes }} MIN</dd>
+                            <dt>Global Window</dt>
+                            <dd>{{ selected_operation.window_minutes ~ " MIN" if selected_operation.window_minutes is not none else "TBD" }}</dd>
                         </div>
                         <div>
                             <dt>1st Wave Window</dt>
-                            <dd>{{ selected_operation.first_wave_window_minutes if selected_operation.first_wave_window_minutes is not none else selected_operation.window_minutes }} MIN</dd>
+                            <dd>
+                                {% if selected_operation.window_minutes is not none %}{{ selected_operation.window_minutes }} MIN
+                                {% elif selected_operation.first_wave_window_minutes is not none %}{{ selected_operation.first_wave_window_minutes }} MIN
+                                {% else %}TBD{% endif %}
+                            </dd>
                         </div>
                         <div>
                             <dt>2nd Wave Window</dt>
-                            <dd>{{ selected_operation.second_wave_window_minutes if selected_operation.second_wave_window_minutes is not none else selected_operation.window_minutes }} MIN</dd>
+                            <dd>
+                                {% if selected_operation.window_minutes is not none %}{{ selected_operation.window_minutes }} MIN
+                                {% elif selected_operation.second_wave_window_minutes is not none %}{{ selected_operation.second_wave_window_minutes }} MIN
+                                {% else %}TBD{% endif %}
+                            </dd>
                         </div>
                     </dl>
                     <p class="muted">Use Manage Sort to edit operation windows. Boards remain data-view screens.</p>

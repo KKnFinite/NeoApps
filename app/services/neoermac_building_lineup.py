@@ -305,12 +305,12 @@ def _current_sort_destination_pull_times(gateway):
         _fill_pull_time(
             destination_times,
             "pure",
-            timing_data.get("base_pure_pull_time") or mission.pure_pull_time_local,
+            timing_data.get("adjusted_pure_pull_time") or mission.pure_pull_time_local,
         )
         _fill_pull_time(
             destination_times,
             "mix",
-            timing_data.get("base_mix_pull_time") or mission.mix_pull_time_local,
+            timing_data.get("adjusted_mix_pull_time") or mission.mix_pull_time_local,
         )
 
     return pull_times

@@ -26,11 +26,11 @@ def create_sort_date_operation(
     sort_date,
     gateway_code,
     sort_name,
-    window_minutes=0,
+    window_minutes=None,
     generated_by_user_id=None,
 ):
     gateway_code = str(gateway_code).strip().upper()
-    window_minutes = normalize_window_minutes(window_minutes)
+    window_minutes = normalize_optional_window_minutes(window_minutes)
     gateway = Gateway.query.filter_by(code=gateway_code).first() if has_app_context() else None
     return SortDateOperation(
         sort_date=sort_date,
@@ -79,7 +79,6 @@ def generate_sort_date_operation_from_master(
         sort_date=sort_date,
         gateway_code=gateway_code,
         sort_name=sort_name,
-        window_minutes=0,
         generated_by_user_id=generated_by_user_id,
     )
     db.session.add(operation)
@@ -248,8 +247,8 @@ def create_default_crew_assignments_for_mission(mission, aircraft_type="unknown"
 
 
 def normalize_window_minutes(window_minutes):
-    if window_minutes is None:
-        return 0
+    if window_minutes is None or str(window_minutes).strip() == "":
+        return None
 
     window_minutes = int(window_minutes)
     if window_minutes < 0:
@@ -259,9 +258,6 @@ def normalize_window_minutes(window_minutes):
 
 
 def normalize_optional_window_minutes(window_minutes):
-    if window_minutes in (None, ""):
-        return None
-
     return normalize_window_minutes(window_minutes)
 
 
@@ -277,11 +273,14 @@ def normalize_wave(wave):
 
 
 def effective_window_minutes_for_mission(mission, operation=None):
-    default_window = normalize_window_minutes(
-        getattr(operation, "window_minutes", 0) if operation else 0
-    )
     if not operation:
-        return default_window
+        return None
+
+    global_window = normalize_optional_window_minutes(
+        getattr(operation, "window_minutes", None)
+    )
+    if global_window is not None:
+        return global_window
 
     wave = normalize_wave(getattr(mission, "wave", None))
     if wave == "1":
@@ -289,20 +288,17 @@ def effective_window_minutes_for_mission(mission, operation=None):
     elif wave == "2":
         wave_window = getattr(operation, "second_wave_window_minutes", None)
     else:
-        return default_window
+        return None
 
-    if wave_window is None:
-        return default_window
-
-    return normalize_window_minutes(wave_window)
+    return normalize_optional_window_minutes(wave_window)
 
 
 def apply_window_minutes(value, window_minutes):
     if value is None:
         return None
 
-    window_minutes = normalize_window_minutes(window_minutes)
-    if window_minutes == 0:
+    window_minutes = normalize_optional_window_minutes(window_minutes)
+    if window_minutes in (None, 0):
         return value
 
     if isinstance(value, datetime):

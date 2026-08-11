@@ -15,16 +15,24 @@
 
             <div class="metric-grid">
                 <article class="metric-tile">
-                    <span>WINDOW</span>
-                    <strong>{{ operation.window_minutes }} MIN</strong>
+                    <span>GLOBAL WINDOW</span>
+                    <strong>{{ operation.window_minutes ~ " MIN" if operation.window_minutes is not none else "TBD" }}</strong>
                 </article>
                 <article class="metric-tile">
                     <span>WAVE 1 WINDOW</span>
-                    <strong>{{ operation.first_wave_window_minutes if operation.first_wave_window_minutes is not none else operation.window_minutes }} MIN</strong>
+                    <strong>
+                        {% if operation.window_minutes is not none %}{{ operation.window_minutes }} MIN
+                        {% elif operation.first_wave_window_minutes is not none %}{{ operation.first_wave_window_minutes }} MIN
+                        {% else %}TBD{% endif %}
+                    </strong>
                 </article>
                 <article class="metric-tile">
                     <span>WAVE 2 WINDOW</span>
-                    <strong>{{ operation.second_wave_window_minutes if operation.second_wave_window_minutes is not none else operation.window_minutes }} MIN</strong>
+                    <strong>
+                        {% if operation.window_minutes is not none %}{{ operation.window_minutes }} MIN
+                        {% elif operation.second_wave_window_minutes is not none %}{{ operation.second_wave_window_minutes }} MIN
+                        {% else %}TBD{% endif %}
+                    </strong>
                 </article>
                 <article class="metric-tile">
                     <span>TOTAL MISSIONS</span>
@@ -55,18 +63,18 @@
                 </div>
             </dl>
 
-            <form class="operation-form inline-operation-form manage-sort-window-form" method="post" action="{{ url_for('neomotherbrain.update_operation_window', operation_id=operation.id) }}">
+            <form class="operation-form inline-operation-form manage-sort-window-form" method="post" action="{{ url_for('neomotherbrain.update_operation_window', operation_id=operation.id) }}" data-operation-window-form>
                 <label>
-                    <span>GLOBAL / LEFT WINDOW</span>
-                    <input type="number" name="window_minutes" value="{{ operation.window_minutes }}" min="0" step="1" required>
+                    <span>GLOBAL WINDOW</span>
+                    <input type="number" name="window_minutes" value="{{ operation.window_minutes if operation.window_minutes is not none else '' }}" min="0" step="1" placeholder="TBD" data-global-window-input>
                 </label>
-                <label>
+                <label{% if operation.window_minutes is not none %} class="is-window-overridden"{% endif %} data-wave-window-field>
                     <span>WAVE 1 WINDOW</span>
-                    <input type="number" name="first_wave_window_minutes" value="{{ operation.first_wave_window_minutes if operation.first_wave_window_minutes is not none else '' }}" min="0" step="1" placeholder="Default">
+                    <input type="number" name="first_wave_window_minutes" value="{{ operation.first_wave_window_minutes if operation.first_wave_window_minutes is not none else '' }}" min="0" step="1" placeholder="TBD" data-wave-window-input{% if operation.window_minutes is not none %} disabled{% endif %}>
                 </label>
-                <label>
+                <label{% if operation.window_minutes is not none %} class="is-window-overridden"{% endif %} data-wave-window-field>
                     <span>WAVE 2 WINDOW</span>
-                    <input type="number" name="second_wave_window_minutes" value="{{ operation.second_wave_window_minutes if operation.second_wave_window_minutes is not none else '' }}" min="0" step="1" placeholder="Default">
+                    <input type="number" name="second_wave_window_minutes" value="{{ operation.second_wave_window_minutes if operation.second_wave_window_minutes is not none else '' }}" min="0" step="1" placeholder="TBD" data-wave-window-input{% if operation.window_minutes is not none %} disabled{% endif %}>
                 </label>
                 <button class="action-button" type="submit">UPDATE WINDOW</button>
             </form>
@@ -137,4 +145,27 @@
         </div>
     </div>
 </section>
+<script>
+(() => {
+    const form = document.querySelector("[data-operation-window-form]");
+    const globalInput = form?.querySelector("[data-global-window-input]");
+    if (!form || !globalInput) {
+        return;
+    }
+
+    const syncWaveOverride = () => {
+        const globalOverridesWaves = globalInput.value.trim() !== "";
+        form.querySelectorAll("[data-wave-window-input]").forEach((input) => {
+            input.disabled = globalOverridesWaves;
+            input.closest("[data-wave-window-field]")?.classList.toggle(
+                "is-window-overridden",
+                globalOverridesWaves,
+            );
+        });
+    };
+
+    globalInput.addEventListener("input", syncWaveOverride);
+    syncWaveOverride();
+})();
+</script>
 {% endblock %}

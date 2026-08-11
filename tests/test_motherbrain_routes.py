@@ -6890,7 +6890,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Window minutes must be 0 or higher.", response.data)
-        self.assertEqual(db.session.get(SortDateOperation, operation.id).window_minutes, 0)
+        self.assertIsNone(db.session.get(SortDateOperation, operation.id).window_minutes)
 
     def test_operation_detail_renders_manage_sort_header_and_compact_windows(self):
         operation = self._operation(sort_date=date(2026, 7, 1), window_minutes=18)
@@ -6912,8 +6912,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("RFD Night 07-01-2026", html)
         self.assertIn("manage-sort-operation-title neo-page-title", html)
         self.assertIn("manage-sort-window-form", html)
-        self.assertIn("GLOBAL / LEFT WINDOW", html)
-        self.assertGreaterEqual(html.count("<strong>18 MIN</strong>"), 3)
+        self.assertIn("GLOBAL WINDOW", html)
+        self.assertNotIn("GLOBAL / LEFT WINDOW", html)
+        self.assertIn("data-global-window-input", html)
+        self.assertIn("data-wave-window-input", html)
+        self.assertIn("disabled", html)
+        self.assertGreaterEqual(html.count("18 MIN"), 3)
         self.assertNotIn("ADD MISSION", html)
         self.assertNotIn("<th>FLIGHT</th>", html)
         self.assertNotIn("UPS1234", html)
@@ -6951,6 +6955,30 @@ class MotherBrainRoutesTest(unittest.TestCase):
             "        grid-template-columns: repeat(3, minmax(0, 1fr));",
             css,
         )
+
+    def test_operation_window_form_keeps_blank_and_zero_values_distinct(self):
+        operation = self._operation(
+            window_minutes=None,
+            first_wave_window_minutes=0,
+            second_wave_window_minutes=None,
+        )
+        db.session.add(operation)
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/operations/{operation.id}")
+        html = response.data.decode()
+        first_wave_input = re.search(
+            r'<input[^>]+name="first_wave_window_minutes"[^>]*>',
+            html,
+        ).group(0)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('name="window_minutes" value=""', html)
+        self.assertIn('name="first_wave_window_minutes" value="0"', html)
+        self.assertIn('name="second_wave_window_minutes" value=""', html)
+        self.assertNotIn("disabled", first_wave_input)
+        self.assertIn('globalInput.value.trim() !== ""', html)
+        self.assertGreaterEqual(html.count("TBD"), 3)
 
     def test_mobile_arrival_planning_renders_simple_current_sort_list(self):
         operation = self._operation(sort_date=date(2026, 7, 2))
@@ -7116,6 +7144,12 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         self.assertEqual(db.session.get(SortDateOperation, operation.id).window_minutes, 0)
 
+        self.client.post(
+            f"/motherbrain/operations/{operation.id}/window",
+            data={"window_minutes": ""},
+        )
+        self.assertIsNone(db.session.get(SortDateOperation, operation.id).window_minutes)
+
     def test_window_update_accepts_wave_specific_overrides(self):
         operation = self._operation(window_minutes=20)
         db.session.add(operation)
@@ -7136,6 +7170,88 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(updated.window_minutes, 20)
         self.assertEqual(updated.first_wave_window_minutes, 5)
         self.assertEqual(updated.second_wave_window_minutes, 35)
+
+    def test_global_override_preserves_stored_wave_values_when_inputs_are_disabled(self):
+        operation = self._operation(
+            window_minutes=None,
+            first_wave_window_minutes=5,
+            second_wave_window_minutes=35,
+        )
+        db.session.add(operation)
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/window",
+            data={"window_minutes": "0"},
+            follow_redirects=False,
+        )
+
+        updated = db.session.get(SortDateOperation, operation.id)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(updated.window_minutes, 0)
+        self.assertEqual(updated.first_wave_window_minutes, 5)
+        self.assertEqual(updated.second_wave_window_minutes, 35)
+
+    def test_blank_wave_inputs_persist_as_null(self):
+        operation = self._operation(
+            window_minutes=10,
+            first_wave_window_minutes=5,
+            second_wave_window_minutes=35,
+        )
+        db.session.add(operation)
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/window",
+            data={
+                "window_minutes": "",
+                "first_wave_window_minutes": "8",
+                "second_wave_window_minutes": "",
+            },
+            follow_redirects=False,
+        )
+
+        updated = db.session.get(SortDateOperation, operation.id)
+        self.assertEqual(response.status_code, 302)
+        self.assertIsNone(updated.window_minutes)
+        self.assertEqual(updated.first_wave_window_minutes, 8)
+        self.assertIsNone(updated.second_wave_window_minutes)
+
+    def test_window_update_recalculates_current_sort_timing_without_mutating_operations(self):
+        operation = self._operation(window_minutes=None)
+        mission = self._mission(
+            operation,
+            "departure",
+            "UPS2200",
+            wave="1",
+            assigned_tail_number="N220UP",
+            destination="SDF",
+            planned_datetime_local=datetime(2026, 6, 1, 2, 0),
+            pure_pull_time_local=time(1, 10),
+            mix_pull_time_local=time(1, 30),
+            actual_pure_pull_time_local=time(1, 12),
+            actual_mix_pull_time_local=time(1, 33),
+            departure_status="ramp_load_complete",
+        )
+        db.session.add_all([operation, mission])
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/operations/{operation.id}/window",
+            data={"window_minutes": "15"},
+            follow_redirects=False,
+        )
+
+        updated_mission = db.session.get(SortDateMission, mission.id)
+        timing = mission_display_timing_data(updated_mission, operation)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(timing["adjusted_planned_departure_time"], datetime(2026, 6, 1, 2, 15))
+        self.assertEqual(timing["adjusted_pure_pull_time"], time(1, 25))
+        self.assertEqual(timing["adjusted_mix_pull_time"], time(1, 45))
+        self.assertEqual(updated_mission.actual_pure_pull_time_local, time(1, 12))
+        self.assertEqual(updated_mission.actual_mix_pull_time_local, time(1, 33))
+        self.assertEqual(updated_mission.departure_status, "ramp_load_complete")
+        self.assertEqual(updated_mission.assigned_tail_number, "N220UP")
 
     def _add_master(self, **overrides):
         values = {

@@ -84,7 +84,7 @@ def _row_for_destination(
     parking_by_tail,
 ):
     timing_data = mission_display_timing_data(mission, operation) if mission else {}
-    row_window = timing_data.get("effective_window_minutes", 0)
+    row_window = timing_data.get("effective_window_minutes")
     planned_pulls = {}
     adjusted_pulls = {}
     actual_pulls = {}
@@ -122,7 +122,10 @@ def _row_for_destination(
         "tail": _text_value(getattr(mission, "assigned_tail_number", "")),
         "parking": _parking_for_mission(mission, parking_by_tail),
         "status": _status_for_mission(mission),
-        "etd": _time_value(getattr(mission, "planned_datetime_local", None)),
+        "etd": _time_value(
+            timing_data.get("adjusted_planned_departure_time")
+            or getattr(mission, "planned_datetime_local", None)
+        ),
         "assigned_doors": assigned_doors,
         "assignment_locations": assignment_locations,
         "planned_pulls": planned_pulls,
@@ -133,7 +136,10 @@ def _row_for_destination(
         "has_window_adjustment": bool(row_window),
         "has_mission": bool(mission),
         "sort_pull": sort_pull,
-        "sort_etd": getattr(mission, "planned_datetime_local", None),
+        "sort_etd": (
+            timing_data.get("adjusted_planned_departure_time")
+            or getattr(mission, "planned_datetime_local", None)
+        ),
     }
 
 

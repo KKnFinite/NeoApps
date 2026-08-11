@@ -15,7 +15,7 @@
                     <th>SORT DATE</th>
                     <th>GATEWAY</th>
                     <th>SORT</th>
-                    <th>WINDOW</th>
+                    <th>GLOBAL WINDOW</th>
                     <th>GENERATED</th>
                     <th>MISSIONS</th>
                     <th>LINKS</th>
@@ -27,7 +27,7 @@
                     <td>{{ operation.sort_date }}</td>
                     <td>{{ operation.gateway_code }}</td>
                     <td>{{ operation.sort_name }}</td>
-                    <td>{{ operation.window_minutes }} MIN</td>
+                    <td>{{ operation.window_minutes ~ " MIN" if operation.window_minutes is not none else "TBD" }}</td>
                     <td>{{ operation.generated_at_utc.strftime("%Y-%m-%d %H:%M") if operation.generated_at_utc else "-" }} UTC</td>
                     <td>{{ operation.missions|length }}</td>
                     <td class="table-actions">

@@ -320,7 +320,7 @@ def _destination_cards_for_door(gateway, selected_door, operation):
                 "slot_labels": slot_labels,
                 "tail": mission.assigned_tail_number if mission else "",
                 "parking": _parking_for_mission(mission, parking_by_tail),
-                "window_minutes": timing_data.get("effective_window_minutes", 0),
+                "window_minutes": timing_data.get("effective_window_minutes"),
                 "planned": {
                     "pure": _time_value(planned_times["pure"]),
                     "mix": _time_value(planned_times["mix"]),

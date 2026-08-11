@@ -1089,6 +1089,82 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"BASE 01:20 +20 MIN", response.data)
         self.assertIn(b"02:15", response.data)
 
+    def test_door_view_distinguishes_tbd_zero_and_positive_windows(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        mission = self._add_operation_departure(
+            "UPS401",
+            "SDF",
+            window_minutes=None,
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        tbd = self.client.get("/neoermac/door-view?door=D34")
+        operation = db.session.get(SortDateOperation, mission.sort_date_operation_id)
+        operation.window_minutes = 0
+        db.session.commit()
+        zero = self.client.get("/neoermac/door-view?door=D34")
+        operation.window_minutes = 12
+        db.session.commit()
+        positive = self.client.get("/neoermac/door-view?door=D34")
+
+        self.assertIn(b"WINDOW TBD", tbd.data)
+        self.assertIn(b"WINDOW 0 MIN", zero.data)
+        self.assertNotIn(b"BASE 01:20 +0 MIN", zero.data)
+        self.assertIn(b"WINDOW 12 MIN", positive.data)
+        self.assertIn(b"BASE 01:20 +12 MIN", positive.data)
+
+    def test_door_view_uses_independent_wave_windows_when_global_is_blank(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "ONT")
+        first_wave = self._add_operation_departure(
+            "UPS401",
+            "SDF",
+            window_minutes=None,
+            wave="1st Wave",
+        )
+        self._add_operation_departure(
+            "UPS402",
+            "ONT",
+            window_minutes=None,
+            wave="2nd Wave",
+        )
+        operation = db.session.get(SortDateOperation, first_wave.sort_date_operation_id)
+        operation.first_wave_window_minutes = 10
+        operation.second_wave_window_minutes = None
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view/state?door=D34")
+
+        cards = {
+            card["destination"]: card
+            for card in response.get_json()["state"]["destinations"]
+        }
+        self.assertEqual(cards["SDF"]["window_minutes"], 10)
+        self.assertEqual(cards["SDF"]["planned"]["pure"], "01:30")
+        self.assertIsNone(cards["ONT"]["window_minutes"])
+        self.assertEqual(cards["ONT"]["planned"]["pure"], "01:20")
+
+    def test_door_view_global_zero_overrides_stored_wave_window(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        mission = self._add_operation_departure(
+            "UPS401",
+            "SDF",
+            window_minutes=0,
+            wave="1",
+        )
+        operation = db.session.get(SortDateOperation, mission.sort_date_operation_id)
+        operation.first_wave_window_minutes = 25
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view/state?door=D34")
+        card = response.get_json()["state"]["destinations"][0]
+
+        self.assertEqual(card["window_minutes"], 0)
+        self.assertEqual(card["planned"]["pure"], "01:20")
+
     def test_door_view_warns_for_pull_due_within_five_minutes(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 12, 1, 16)
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
@@ -2453,6 +2529,24 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"00:55", response.data)
         self.assertIn(b"01:25", response.data)
 
+    def test_building_lineup_displays_effective_window_adjusted_pull_times(self):
+        self._assign_lineup_destination("green_runout", "east_destination_2", "SDF")
+        self._add_operation_departure(
+            "UPS205",
+            "SDF",
+            window_minutes=10,
+            pure_pull_time_local=time(0, 55),
+            mix_pull_time_local=time(1, 25),
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/building-lineup")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"01:05", response.data)
+        self.assertIn(b"01:35", response.data)
+
     def test_building_lineup_renders_pull_times_for_each_destination_side(self):
         self._add_master_departure("UPS210", "SDF")
         self._add_master_departure("UPS211", "ONT")
@@ -2934,7 +3028,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"UPS501", response.data)
         self.assertIn(b"N501UP", response.data)
         self.assertIn(b"A14", response.data)
-        self.assertIn(b"02:15", response.data)
+        self.assertIn(b"02:35", response.data)
         self.assertIn(b"D32-D34", response.data)
         self.assertNotIn(b"EAST BLU/BLU BELT", response.data)
         self.assertIn(b"PURE PLAN", response.data)
@@ -2943,7 +3037,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"MIX ACT", response.data)
         self.assertLess(response.data.index(b"PURE PLAN"), response.data.index(b"PURE ACT"))
         self.assertLess(response.data.index(b"MIX PLAN"), response.data.index(b"MIX ACT"))
-        self.assertIn(b"01:20", response.data)
+        self.assertIn(b"01:40", response.data)
+        self.assertIn(b"02:15", response.data)
         self.assertIn(b"01:45", response.data)
         self.assertIn(b"02:20", response.data)
         self.assertIn(b"20 MIN", response.data)
@@ -3157,7 +3252,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         destination,
         tail=None,
         parking=None,
-        window_minutes=0,
+        window_minutes=None,
         departure_status=None,
         wave="1",
         planned_datetime_local=None,
