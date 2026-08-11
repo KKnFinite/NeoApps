@@ -8,6 +8,7 @@ from app.models import (
     GatewayNodeRole,
     NeoErmacBuildingLineup,
     NeoNode,
+    SortDateGoogleMissionLink,
     SortDateMission,
     SortDateOperation,
     SortDateParkingAssignment,
@@ -16,6 +17,9 @@ from app.models import (
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.neoermac_door_view import door_view_uld_state
 from app.services.neoermac_tail_presence import (
+    PRESENCE_EVIDENCE_ACTUAL_BLOCK_IN,
+    PRESENCE_EVIDENCE_API_ASSUMED_ARRIVED,
+    PRESENCE_EVIDENCE_GOOGLE_HERE,
     TAIL_PRESENCE_ARRIVED,
     TAIL_PRESENCE_ASSUMED_HERE,
     TAIL_PRESENCE_NOT_ARRIVED,
@@ -151,6 +155,97 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
         self.assertEqual(card["tail_presence"]["state"], TAIL_PRESENCE_ARRIVED)
         self.assertTrue(card["tail_presence"]["has_actual_block_in"])
 
+    def test_api_assumed_arrived_is_present_without_fake_block_in(self):
+        self._departure(tail="N123UP")
+        arrival = self._arrival(tail="N123UP")
+        arrival.api_assumed_arrived_time_utc = datetime(2026, 8, 11, 20, 0)
+        self._parking("N123UP", "A01")
+        db.session.commit()
+
+        card = self._door_card()
+
+        self.assertEqual(card["status"], "Scheduled")
+        self.assertEqual(card["parking"], "A01")
+        self.assertEqual(card["tail_presence"]["state"], TAIL_PRESENCE_ARRIVED)
+        evidence = arrival_presence_by_tail(self.operation)["N123UP"]
+        self.assertEqual(
+            evidence["presence_evidence"],
+            PRESENCE_EVIDENCE_API_ASSUMED_ARRIVED,
+        )
+        self.assertIsNone(arrival.actual_block_in_datetime_utc)
+
+    def test_google_here_is_present_without_fake_block_in(self):
+        self._departure(tail="N123UP")
+        arrival = self._arrival(tail="N123UP")
+        self._google_link(arrival, tail="N123UP", status="HERE")
+        self._parking("N123UP", "A01")
+        db.session.commit()
+
+        card = self._door_card()
+
+        self.assertEqual(card["status"], "Scheduled")
+        self.assertEqual(card["parking"], "A01")
+        self.assertEqual(card["tail_presence"]["state"], TAIL_PRESENCE_ARRIVED)
+        evidence = arrival_presence_by_tail(self.operation)["N123UP"]
+        self.assertEqual(
+            evidence["presence_evidence"],
+            PRESENCE_EVIDENCE_GOOGLE_HERE,
+        )
+        self.assertIsNone(arrival.actual_block_in_datetime_utc)
+
+    def test_actual_block_in_wins_over_api_and_google_presence(self):
+        self._departure(tail="N123UP")
+        arrival = self._arrival(tail="N123UP")
+        arrival.api_assumed_arrived_time_utc = datetime(2026, 8, 11, 20, 0)
+        self._google_link(arrival, tail="N123UP", status="HERE")
+        db.session.commit()
+
+        before = arrival_presence_by_tail(self.operation)["N123UP"]
+        arrival.actual_block_in_datetime_utc = datetime(2026, 8, 12, 1, 30)
+        arrival.actual_block_in_source = "manual"
+        db.session.commit()
+        after = arrival_presence_by_tail(self.operation)["N123UP"]
+
+        self.assertEqual(
+            before["presence_evidence"],
+            PRESENCE_EVIDENCE_GOOGLE_HERE,
+        )
+        self.assertEqual(
+            after["presence_evidence"],
+            PRESENCE_EVIDENCE_ACTUAL_BLOCK_IN,
+        )
+        self.assertTrue(after["has_actual_block_in"])
+        self.assertEqual(
+            arrival.actual_block_in_datetime_utc,
+            datetime(2026, 8, 12, 1, 30),
+        )
+
+    def test_stale_google_here_for_different_tail_is_ignored(self):
+        self._departure(tail="N123UP")
+        arrival = self._arrival(tail="N123UP")
+        self._google_link(arrival, tail="NOLDUP", status="HERE")
+        self._parking("N123UP", "A01")
+        db.session.commit()
+
+        card = self._door_card()
+
+        self.assertEqual(card["status"], "TAIL NOT ARRIVED")
+        self.assertEqual(card["parking"], "-")
+        self.assertFalse(card["tail_presence"]["is_present"])
+
+    def test_cancelled_arrival_with_google_here_is_present(self):
+        self._departure(tail="N123UP")
+        arrival = self._arrival(tail="N123UP", arrival_status="cancelled")
+        self._google_link(arrival, tail="N123UP", status="HERE")
+        self._parking("N123UP", "A01")
+        db.session.commit()
+
+        card = self._door_card()
+
+        self.assertEqual(card["status"], "Scheduled")
+        self.assertEqual(card["parking"], "A01")
+        self.assertIsNone(arrival.actual_block_in_datetime_utc)
+
     def test_google_block_in_and_normalized_tail_match_are_authoritative(self):
         self._departure(tail=" n123 up ")
         arrival = self._arrival(
@@ -266,6 +361,20 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
         self.assertEqual(payload["parking"], "-")
         self.assertEqual(payload["tail_presence"]["state"], TAIL_PRESENCE_NOT_ARRIVED)
 
+        arrival = SortDateMission.query.filter_by(mission_type="arrival").one()
+        self._google_link(arrival, tail="N123UP", status="HERE")
+        db.session.commit()
+        reconciled = self.client.get(
+            "/neoermac/door-view/state?door=D34"
+        ).get_json()["state"]["destinations"][0]
+
+        self.assertEqual(reconciled["status"], "Scheduled")
+        self.assertEqual(reconciled["parking"], "A01")
+        self.assertEqual(
+            reconciled["tail_presence"]["state"],
+            TAIL_PRESENCE_ARRIVED,
+        )
+
     def _door_card(self):
         return door_view_uld_state(self.gateway, "D34")["destinations"][0]
 
@@ -340,6 +449,21 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
         db.session.add(assignment)
         db.session.flush()
         return assignment
+
+    def _google_link(self, arrival, *, tail, status):
+        link = SortDateGoogleMissionLink(
+            sort_date_operation_id=self.operation.id,
+            sort_date_mission_id=arrival.id,
+            mission_type="arrival",
+            source_sheet="Inbound",
+            source_row=4 + SortDateGoogleMissionLink.query.count(),
+            last_flight_number=arrival.flight_number,
+            last_tail_number=tail,
+            last_status_raw=status,
+        )
+        db.session.add(link)
+        db.session.flush()
+        return link
 
     def _login(self):
         user = User(

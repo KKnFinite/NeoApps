@@ -1,6 +1,7 @@
+from datetime import datetime, timezone
 import re
 
-from app.models import SortDateMission
+from app.models import SortDateGoogleMissionLink, SortDateMission
 
 
 TAIL_PRESENCE_TBD = "tail_tbd"
@@ -10,30 +11,59 @@ TAIL_PRESENCE_NOT_ARRIVED = "not_arrived"
 
 _STATUS_OVERRIDE_ALLOWED = {"", "scheduled"}
 
+PRESENCE_EVIDENCE_ACTUAL_BLOCK_IN = "actual_block_in"
+PRESENCE_EVIDENCE_GOOGLE_HERE = "google_here"
+PRESENCE_EVIDENCE_API_ASSUMED_ARRIVED = "api_assumed_arrived"
 
-def arrival_presence_by_tail(operation):
+_EVIDENCE_PRIORITY = {
+    None: 0,
+    PRESENCE_EVIDENCE_API_ASSUMED_ARRIVED: 1,
+    PRESENCE_EVIDENCE_GOOGLE_HERE: 2,
+    PRESENCE_EVIDENCE_ACTUAL_BLOCK_IN: 3,
+}
+
+
+def arrival_presence_by_tail(operation, now=None):
     """Build current-operation arrival presence without caching tail assignments."""
     if not operation:
         return {}
 
+    now_utc = _utc_naive(now) or datetime.now(timezone.utc).replace(tzinfo=None)
     arrivals = SortDateMission.query.filter_by(
         sort_date_operation_id=operation.id,
         mission_type="arrival",
     ).all()
+    links_by_mission_id = _google_arrival_links_by_mission_id(operation)
     presence = {}
     for arrival in arrivals:
         tail = normalize_tail_number(arrival.assigned_tail_number)
         if not tail:
             continue
+        arrival_evidence = _arrival_presence_evidence(
+            arrival,
+            tail,
+            links_by_mission_id.get(arrival.id, ()),
+            now_utc,
+        )
+        evidence = arrival_evidence["presence_evidence"]
         state = presence.setdefault(
             tail,
             {
                 "has_matching_arrival": True,
                 "has_actual_block_in": False,
+                "has_google_here": False,
+                "has_api_assumed_arrived": False,
+                "presence_evidence": None,
             },
         )
-        if arrival.actual_block_in_datetime_utc is not None:
-            state["has_actual_block_in"] = True
+        state["has_actual_block_in"] |= arrival_evidence["has_actual_block_in"]
+        state["has_google_here"] |= arrival_evidence["has_google_here"]
+        state["has_api_assumed_arrived"] |= arrival_evidence[
+            "has_api_assumed_arrived"
+        ]
+        current_evidence = state["presence_evidence"]
+        if _EVIDENCE_PRIORITY[evidence] > _EVIDENCE_PRIORITY[current_evidence]:
+            state["presence_evidence"] = evidence
     return presence
 
 
@@ -59,10 +89,12 @@ def departure_tail_presence(mission, arrivals_by_tail=None):
         )
 
     has_actual_block_in = bool(arrival.get("has_actual_block_in"))
+    presence_evidence = arrival.get("presence_evidence")
+    is_present = presence_evidence is not None
     return _presence_payload(
-        TAIL_PRESENCE_ARRIVED if has_actual_block_in else TAIL_PRESENCE_NOT_ARRIVED,
+        TAIL_PRESENCE_ARRIVED if is_present else TAIL_PRESENCE_NOT_ARRIVED,
         tail=tail,
-        is_present=has_actual_block_in,
+        is_present=is_present,
         has_matching_arrival=True,
         has_actual_block_in=has_actual_block_in,
     )
@@ -83,6 +115,60 @@ def tail_presence_status_override(mission, presence):
 
 def normalize_tail_number(value):
     return re.sub(r"\s+", "", str(value or "")).upper()
+
+
+def _arrival_presence_evidence(arrival, tail, google_links, now_utc):
+    has_actual_block_in = arrival.actual_block_in_datetime_utc is not None
+    has_google_here = any(
+        _link_confirms_google_here(link, arrival, tail) for link in google_links
+    )
+    assumed_arrived_at = _utc_naive(arrival.api_assumed_arrived_time_utc)
+    has_api_assumed_arrived = (
+        assumed_arrived_at is not None and assumed_arrived_at <= now_utc
+    )
+    if has_actual_block_in:
+        presence_evidence = PRESENCE_EVIDENCE_ACTUAL_BLOCK_IN
+    elif has_google_here:
+        presence_evidence = PRESENCE_EVIDENCE_GOOGLE_HERE
+    elif has_api_assumed_arrived:
+        presence_evidence = PRESENCE_EVIDENCE_API_ASSUMED_ARRIVED
+    else:
+        presence_evidence = None
+    return {
+        "has_actual_block_in": has_actual_block_in,
+        "has_google_here": has_google_here,
+        "has_api_assumed_arrived": has_api_assumed_arrived,
+        "presence_evidence": presence_evidence,
+    }
+
+
+def _google_arrival_links_by_mission_id(operation):
+    links = SortDateGoogleMissionLink.query.filter_by(
+        sort_date_operation_id=operation.id,
+        mission_type="arrival",
+    ).all()
+    by_mission_id = {}
+    for link in links:
+        if link.sort_date_mission_id is not None:
+            by_mission_id.setdefault(link.sort_date_mission_id, []).append(link)
+    return by_mission_id
+
+
+def _link_confirms_google_here(link, arrival, tail):
+    return (
+        link.sort_date_mission_id == arrival.id
+        and str(link.last_status_raw or "").strip().upper() == "HERE"
+        and normalize_tail_number(link.last_tail_number) == tail
+        and normalize_tail_number(arrival.assigned_tail_number) == tail
+    )
+
+
+def _utc_naive(value):
+    if value is None:
+        return None
+    if value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
 
 
 def _presence_payload(
