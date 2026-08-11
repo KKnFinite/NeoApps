@@ -563,6 +563,34 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertFalse(status["eligible"])
         self.assertEqual(status["reason"], "outside API Polling Window")
 
+    def test_google_polling_window_does_not_change_flight_api_eligibility(self):
+        self._configure_api_ready_sort()
+        sort_setting = next(
+            setting
+            for setting in self.settings.sort_settings
+            if setting.sort_name == "night"
+        )
+        sort_setting.google_polling_start_local = time(0, 0)
+        sort_setting.google_polling_end_local = time(1, 0)
+        db.session.commit()
+
+        status = flight_api_auto_poll_status(
+            self.gateway,
+            operation=self.operation,
+            now=datetime(2026, 6, 1, 19, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertTrue(status["eligible"])
+        self.assertEqual(status["reason"], "eligible")
+        self.assertEqual(
+            status["polling_window_start_local"],
+            datetime(2026, 6, 1, 8, 0),
+        )
+        self.assertEqual(
+            status["polling_window_end_local"],
+            datetime(2026, 6, 1, 16, 0),
+        )
+
     def test_auto_poll_disabled_provider_or_api_schedule_is_not_eligible(self):
         self._configure_api_ready_sort()
         self.settings.provider_enabled = False

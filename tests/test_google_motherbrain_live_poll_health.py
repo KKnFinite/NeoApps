@@ -61,18 +61,19 @@ class GoogleMotherBrainLivePollHealthTest(unittest.TestCase):
                 is_active=True,
             )
         )
-        db.session.add(
-            SortTimelineSortSetting(
-                timeline_settings=settings,
-                gateway_id=self.gateway.id,
-                gateway_code=self.gateway.code,
-                sort_name="night",
-                sort_window_start_local=time(14, 0),
-                sort_window_end_local=time(5, 0),
-                polling_start_local=time(18, 0),
-                polling_end_local=time(4, 0),
-            )
+        self.sort_setting = SortTimelineSortSetting(
+            timeline_settings=settings,
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_name="night",
+            sort_window_start_local=time(14, 0),
+            sort_window_end_local=time(5, 0),
+            polling_start_local=time(18, 0),
+            polling_end_local=time(4, 0),
+            google_polling_start_local=time(18, 0),
+            google_polling_end_local=time(4, 0),
         )
+        db.session.add(self.sort_setting)
         db.session.commit()
         self.operation = ensure_operational_sort_operations(
             self.gateway,
@@ -143,6 +144,22 @@ class GoogleMotherBrainLivePollHealthTest(unittest.TestCase):
         self.assertFalse(health["polling_window_active"])
         self.assertEqual(health["status"], "outside_window")
         self.assertEqual(health["label"], "Outside Polling Window")
+
+    def test_health_uses_google_window_instead_of_api_polling_window(self):
+        self._enable()
+        self.sort_setting.polling_start_local = time(14, 0)
+        self.sort_setting.polling_end_local = time(5, 0)
+        self.sort_setting.google_polling_start_local = time(23, 0)
+        self.sort_setting.google_polling_end_local = time(2, 0)
+        db.session.commit()
+
+        health = google_motherbrain_live_poll_health(
+            self.gateway,
+            now=self.NOW_UTC,
+        )
+
+        self.assertFalse(health["polling_window_active"])
+        self.assertEqual(health["status"], "outside_window")
 
     def test_cross_midnight_health_uses_previous_operational_date(self):
         self._enable()

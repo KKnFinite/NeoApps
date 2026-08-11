@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from flask import current_app
 
 from app.extensions import db
-from app.services.flight_api import api_polling_window_for_operation
-from app.services.gateway_matrix import current_gateway_local_datetime
+from app.models import SortDateOperation
+from app.services.gateway_matrix import (
+    active_sorts_for_gateway_date,
+    current_gateway_local_datetime,
+)
 from app.services.google_motherbrain_import import (
     GOOGLE_MOTHERBRAIN_GATEWAY_CODE,
     GOOGLE_MOTHERBRAIN_SORT_NAME,
@@ -21,7 +26,7 @@ from app.services.google_motherbrain_live_poll_lease import (
 )
 from app.services.google_motherbrain_sheets import read_google_motherbrain_live_rows
 from app.services.operation_lifecycle import ensure_operational_sort_operations
-from app.services.sort_timeline import ensure_sort_timeline_settings
+from app.services.sort_timeline import ensure_sort_timeline_settings, sort_settings_by_name
 
 
 def execute_google_motherbrain_live_poll(gateway, now=None, *, reader=None, applier=None):
@@ -76,19 +81,46 @@ def execute_google_motherbrain_live_poll(gateway, now=None, *, reader=None, appl
 
 
 def _polling_window_operation(gateway, lifecycle, now=None):
-    """Return the locked workbook operation only while its polling window is live."""
+    """Return the locked workbook operation while its Google window is live."""
     if str(gateway.code or "").strip().upper() != GOOGLE_MOTHERBRAIN_GATEWAY_CODE:
         return None
 
     local_now = lifecycle.get("local_now") or current_gateway_local_datetime(gateway, now=now)
     settings = ensure_sort_timeline_settings(gateway)
-    for candidate in lifecycle.get("eligible", ()):
-        operation = candidate.get("operation")
-        if operation is None:
+    candidate_dates = (local_now.date() - timedelta(days=1), local_now.date())
+    operations = (
+        SortDateOperation.query.filter(
+            SortDateOperation.gateway_code == gateway.code,
+            SortDateOperation.sort_name == GOOGLE_MOTHERBRAIN_SORT_NAME,
+            SortDateOperation.sort_date.in_(candidate_dates),
+            SortDateOperation.archived_at_utc.is_(None),
+        )
+        .order_by(SortDateOperation.sort_date.desc(), SortDateOperation.id.desc())
+        .all()
+    )
+    for operation in operations:
+        if operation.sort_name not in active_sorts_for_gateway_date(
+            gateway,
+            operation.sort_date,
+        ):
             continue
-        if str(operation.sort_name or "").strip().lower() != GOOGLE_MOTHERBRAIN_SORT_NAME:
-            continue
-        start_local, end_local = api_polling_window_for_operation(operation, settings)
+        start_local, end_local = google_polling_window_for_operation(operation, settings)
         if start_local and end_local and start_local <= local_now < end_local:
             return operation
     return None
+
+
+def google_polling_window_for_operation(operation, settings):
+    """Resolve one operation's configured Google polling window without fallback."""
+    sort_name = str(operation.sort_name or "").strip().lower()
+    sort_setting = sort_settings_by_name(settings).get(sort_name)
+    start_time = getattr(sort_setting, "google_polling_start_local", None)
+    end_time = getattr(sort_setting, "google_polling_end_local", None)
+    if not start_time or not end_time:
+        return None, None
+
+    start_local = datetime.combine(operation.sort_date, start_time)
+    end_local = datetime.combine(operation.sort_date, end_time)
+    if end_local <= start_local:
+        end_local += timedelta(days=1)
+    return start_local, end_local
