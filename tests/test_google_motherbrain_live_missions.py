@@ -149,6 +149,170 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
         mission = db.session.get(SortDateMission, mission_id)
         self.assertEqual(mission.planned_datetime_local, datetime(2026, 8, 8, 1, 20))
 
+    def test_formatted_google_dates_apply_inbound_planned_eta_and_actual(self):
+        self.operation.sort_date = date(2026, 8, 10)
+        db.session.commit()
+
+        result = self._apply_arrivals(
+            self._inbound(
+                4,
+                "947",
+                "N457UP",
+                planned="8/10 22:20",
+                operational="8/11 0:04",
+                status="DEP",
+            ),
+            self._inbound(
+                5,
+                "955",
+                "N458UP",
+                planned="8/10 23:30",
+                operational="8/11 3:38",
+                status="ARR",
+            ),
+        )
+        db.session.commit()
+
+        self.assertEqual(result["applied_count"], 2)
+        self.assertEqual(result["skipped_count"], 0)
+        en_route = self._mission_by_flight("UPS0947")
+        arrived = self._mission_by_flight("UPS0955")
+        self.assertEqual(
+            en_route.planned_datetime_local,
+            datetime(2026, 8, 10, 22, 20),
+        )
+        self.assertEqual(en_route.eta_datetime_utc, datetime(2026, 8, 11, 5, 4))
+        self.assertEqual(
+            arrived.actual_block_in_datetime_utc,
+            datetime(2026, 8, 11, 8, 38),
+        )
+
+    def test_formatted_google_dates_apply_outbound_planned_and_block_out(self):
+        self.operation.sort_date = date(2026, 8, 10)
+        db.session.commit()
+
+        result = self._apply_departures(
+            self._outbound(
+                4,
+                "755",
+                "N457UP",
+                planned="08/10 22:20",
+                operational="08/11 00:04",
+            )
+        )
+        db.session.commit()
+
+        self.assertEqual(result["applied_count"], 1)
+        self.assertEqual(result["skipped_count"], 0)
+        mission = self._mission_by_flight("UPS0755")
+        self.assertEqual(
+            mission.planned_datetime_local,
+            datetime(2026, 8, 10, 22, 20),
+        )
+        self.assertEqual(
+            mission.actual_block_out_datetime_utc,
+            datetime(2026, 8, 11, 5, 4),
+        )
+
+    def test_dash_live_datetime_is_treated_as_blank(self):
+        result = self._apply_departures(
+            self._outbound(
+                4,
+                "755",
+                "N457UP",
+                destination="HOT",
+                planned="-",
+                operational="-",
+            )
+        )
+        db.session.commit()
+
+        self.assertEqual(result["applied_count"], 1)
+        self.assertEqual(result["skipped_count"], 0)
+        mission = self._mission_by_flight("UPS0755")
+        self.assertEqual(mission.destination, "HOT")
+        self.assertIsNone(mission.planned_datetime_local)
+        self.assertIsNone(mission.actual_block_out_datetime_utc)
+
+    def test_formatted_google_date_resolves_december_to_january_year(self):
+        self.operation.sort_date = date(2026, 12, 31)
+        db.session.commit()
+
+        result = self._apply_departures(
+            self._outbound(
+                4,
+                "755",
+                "N457UP",
+                planned="12/31 22:20",
+                operational="1/1 0:04",
+            )
+        )
+        db.session.commit()
+
+        self.assertEqual(result["applied_count"], 1)
+        mission = self._mission_by_flight("UPS0755")
+        self.assertEqual(
+            mission.planned_datetime_local,
+            datetime(2026, 12, 31, 22, 20),
+        )
+        self.assertEqual(
+            mission.actual_block_out_datetime_utc,
+            datetime(2027, 1, 1, 6, 4),
+        )
+
+    def test_hhmm_live_datetime_behavior_is_unchanged(self):
+        result = self._apply_arrivals(
+            self._inbound(
+                4,
+                "947",
+                "N457UP",
+                planned="23:15",
+                operational="00:04",
+                status="DEP",
+            )
+        )
+        db.session.commit()
+
+        self.assertEqual(result["applied_count"], 1)
+        mission = self._mission_by_flight("UPS0947")
+        self.assertEqual(
+            mission.planned_datetime_local,
+            datetime(2026, 8, 7, 23, 15),
+        )
+        self.assertEqual(mission.eta_datetime_utc, datetime(2026, 8, 8, 5, 4))
+
+    def test_formatted_google_live_batch_creates_missions_instead_of_skipping(self):
+        self.operation.sort_date = date(2026, 8, 10)
+        db.session.commit()
+
+        result = apply_google_motherbrain_live_rows(
+            self.operation,
+            inbound_rows=[
+                self._inbound(
+                    4,
+                    "947",
+                    "N457UP",
+                    planned="8/10 22:20",
+                    operational="8/11 0:04",
+                    status="DEP",
+                )
+            ],
+            outbound_rows=[
+                self._outbound(
+                    4,
+                    "755",
+                    "N458UP",
+                    planned="8/10 23:20",
+                    operational="8/11 3:38",
+                )
+            ],
+        )
+        db.session.commit()
+
+        self.assertEqual(result["applied_count"], 2)
+        self.assertEqual(result["skipped_count"], 0)
+        self.assertEqual(SortDateMission.query.count(), 2)
+
     def test_inbound_status_and_timing_mappings(self):
         cases = (
             (4, "901", "", "", "scheduled"),

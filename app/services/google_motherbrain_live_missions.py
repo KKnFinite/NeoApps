@@ -67,6 +67,9 @@ GOOGLE_NATIVE_BLOCK_OUT_SOURCES = {
 }
 _TAIL_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9-]{0,31}$")
 _HHMM_PATTERN = re.compile(r"^(\d{1,2}):(\d{2})$")
+_MONTH_DAY_HHMM_PATTERN = re.compile(
+    r"^(\d{1,2})/(\d{1,2})\s+(\d{1,2}):(\d{2})$"
+)
 
 
 class GoogleMotherBrainMissionError(ValueError):
@@ -683,7 +686,10 @@ def _raw_row_context(supplied_row, mission_type, batch_index):
 
 
 def _parse_optional_live_datetime(value, operation, field_name):
-    if value is None or (isinstance(value, str) and not value.strip()):
+    if value is None or (
+        isinstance(value, str)
+        and value.strip() in {"", "-"}
+    ):
         return None, None
     timezone_name = gateway_timezone(operation.gateway)
     if isinstance(value, datetime):
@@ -703,6 +709,24 @@ def _parse_optional_live_datetime(value, operation, field_name):
         return local_value, _planned_datetime_utc(local_value, timezone_name)
 
     text = str(value).strip()
+    dated_match = _MONTH_DAY_HHMM_PATTERN.fullmatch(text)
+    if dated_match:
+        month, day, hour, minute = (
+            int(part) for part in dated_match.groups()
+        )
+        if hour > 23 or minute > 59:
+            raise GoogleMotherBrainMissionError(f"Invalid {field_name}: {text}.")
+        local_value = _formatted_live_datetime(
+            operation.sort_date,
+            month,
+            day,
+            hour,
+            minute,
+            field_name,
+            text,
+        )
+        return local_value, _planned_datetime_utc(local_value, timezone_name)
+
     match = _HHMM_PATTERN.fullmatch(text)
     if match:
         hour, minute = (int(part) for part in match.groups())
@@ -720,6 +744,33 @@ def _parse_optional_live_datetime(value, operation, field_name):
     except ValueError:
         raise GoogleMotherBrainMissionError(f"Invalid {field_name}: {text}.") from None
     return _parse_optional_live_datetime(parsed, operation, field_name)
+
+
+def _formatted_live_datetime(
+    sort_date,
+    month,
+    day,
+    hour,
+    minute,
+    field_name,
+    text,
+):
+    candidates = []
+    for year in (sort_date.year - 1, sort_date.year, sort_date.year + 1):
+        try:
+            candidates.append(datetime(year, month, day, hour, minute))
+        except ValueError:
+            continue
+    if not candidates:
+        raise GoogleMotherBrainMissionError(f"Invalid {field_name}: {text}.")
+
+    return min(
+        candidates,
+        key=lambda candidate: (
+            abs((candidate.date() - sort_date).days),
+            candidate.year != sort_date.year,
+        ),
+    )
 
 
 def _normalize_mission_type(value):

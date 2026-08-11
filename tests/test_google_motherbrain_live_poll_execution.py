@@ -243,6 +243,45 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         self.assertEqual(state.lease_token, "")
         self.assertIsNone(state.last_error)
 
+    def test_successful_poll_applies_formatted_google_datetime_rows(self):
+        self._enable()
+        reader = Mock(
+            return_value={
+                "inbound_rows": [
+                    self._inbound(
+                        4,
+                        "947",
+                        "N947UP",
+                        origin="SDF",
+                        status="DEP",
+                        planned="6/18 22:20",
+                        operational="6/19 0:04",
+                    )
+                ],
+                "outbound_rows": [
+                    self._outbound(
+                        4,
+                        "755",
+                        "N755UP",
+                        destination="SDF",
+                        planned="6/18 23:20",
+                        operational="6/19 3:38",
+                    )
+                ],
+            }
+        )
+
+        result = execute_google_motherbrain_live_poll(
+            self.gateway,
+            now=self.NOW,
+            reader=reader,
+        )
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["applied_count"], 2)
+        self.assertEqual(result["skipped_count"], 0)
+        self.assertEqual(SortDateMission.query.count(), 2)
+
     def test_cross_midnight_poll_uses_previous_operational_sort_date(self):
         self._enable()
         reader = Mock(return_value={"inbound_rows": [], "outbound_rows": []})
@@ -499,7 +538,16 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
             raise AssertionError("Expected login to succeed.")
 
     @staticmethod
-    def _inbound(row, flight, tail, *, origin, status=""):
+    def _inbound(
+        row,
+        flight,
+        tail,
+        *,
+        origin,
+        status="",
+        planned="22:45",
+        operational="",
+    ):
         return {
             "source_sheet": "Inbound",
             "sheet_row": row,
@@ -507,13 +555,21 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
             "Q": tail,
             "R": origin,
             "S": "",
-            "T": "22:45",
-            "U": "",
+            "T": planned,
+            "U": operational,
             "W": status,
         }
 
     @staticmethod
-    def _outbound(row, flight, tail, *, destination):
+    def _outbound(
+        row,
+        flight,
+        tail,
+        *,
+        destination,
+        planned="01:20",
+        operational="",
+    ):
         return {
             "source_sheet": "Outbound",
             "sheet_row": row,
@@ -521,8 +577,8 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
             "Q": tail,
             "R": destination,
             "S": "",
-            "T": "01:20",
-            "U": "",
+            "T": planned,
+            "U": operational,
             "W": "",
             "X": "",
             "Y": "",
