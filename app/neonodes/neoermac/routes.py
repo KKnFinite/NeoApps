@@ -1,4 +1,13 @@
-from flask import flash, jsonify, make_response, redirect, render_template, request, url_for
+from flask import (
+    current_app,
+    flash,
+    jsonify,
+    make_response,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
@@ -246,21 +255,64 @@ def door_view_pull_autosave():
         db.session.rollback()
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
+    selected_door = request.form.get("door", "")
+    destination = request.form.get("destination", "")
+    pull_key = request.form.get("pull_key", "")
     try:
         card = save_single_door_pull(
             gateway,
-            request.form.get("door", ""),
-            request.form.get("destination", ""),
-            request.form.get("pull_key", ""),
+            selected_door,
+            destination,
+            pull_key,
             request.form.get("actual_pull", ""),
             request.form.get("no_pull") == "1",
         )
+        state = door_view_uld_state(gateway, selected_door)
+        db.session.commit()
     except ValueError as exc:
         db.session.rollback()
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        error_code, field = _pull_autosave_validation_details(exc)
+        return jsonify(
+            {
+                "ok": False,
+                "error": str(exc),
+                "error_code": error_code,
+                "field": field,
+            }
+        ), 400
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception(
+            "NeoErmac Door View pull autosave failed "
+            "gateway_id=%s door=%s destination=%s pull_key=%s",
+            gateway.id,
+            str(selected_door or "").strip().upper(),
+            str(destination or "").strip().upper(),
+            str(pull_key or "").strip().lower(),
+        )
+        return jsonify(
+            {
+                "ok": False,
+                "error": "Pull could not be saved. Refresh the door and try again.",
+                "error_code": "pull_save_failed",
+                "field": "",
+            }
+        ), 500
 
-    db.session.commit()
-    return jsonify({"ok": True, "card": card})
+    return jsonify({"ok": True, "card": card, "state": state})
+
+
+def _pull_autosave_validation_details(error):
+    message = str(error)
+    if "HH:MM" in message:
+        return "invalid_pull_time", "actual_pull"
+    if "door" in message.lower():
+        return "invalid_door", "door"
+    if "destination" in message.lower() or "assigned" in message.lower():
+        return "invalid_destination", "destination"
+    if "pull type" in message.lower():
+        return "invalid_pull_type", "pull_key"
+    return "invalid_pull_request", ""
 
 
 @bp.route("/tug-assignments")

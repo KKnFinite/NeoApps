@@ -4246,6 +4246,7 @@ a {
 .neoermac-door-pull-row.is-pull-due-soon .neoermac-door-planned,
 .neoermac-door-pull-row.is-pull-due-soon .neoermac-door-actual,
 .neoermac-door-pull-row.is-pull-due-soon .neoermac-door-toggle {
+    --neoermac-pull-alert-rgb: 255, 203, 87;
     border-color: rgba(255, 203, 87, 0.72);
     background:
         linear-gradient(135deg, rgba(255, 203, 87, 0.16), rgba(2, 3, 5, 0.68)),
@@ -4253,11 +4254,27 @@ a {
     box-shadow:
         inset 0 0 0 1px rgba(255, 203, 87, 0.12),
         0 0 12px rgba(255, 203, 87, 0.12);
+    animation: neoermac-pull-critical-pulse 1.15s ease-in-out infinite;
+}
+
+.neoermac-door-pull-row.is-pull-due-now .neoermac-door-planned,
+.neoermac-door-pull-row.is-pull-due-now .neoermac-door-actual,
+.neoermac-door-pull-row.is-pull-due-now .neoermac-door-toggle {
+    --neoermac-pull-alert-rgb: 54, 226, 123;
+    border-color: rgba(54, 226, 123, 0.88);
+    background:
+        linear-gradient(135deg, rgba(54, 226, 123, 0.22), rgba(0, 24, 12, 0.8)),
+        rgba(0, 32, 16, 0.82);
+    box-shadow:
+        inset 0 0 0 1px rgba(54, 226, 123, 0.18),
+        0 0 16px rgba(54, 226, 123, 0.24);
+    animation: neoermac-pull-critical-pulse 1.15s ease-in-out infinite;
 }
 
 .neoermac-door-pull-row.is-pull-late .neoermac-door-planned,
 .neoermac-door-pull-row.is-pull-late .neoermac-door-actual,
 .neoermac-door-pull-row.is-pull-late .neoermac-door-toggle {
+    --neoermac-pull-alert-rgb: 255, 62, 86;
     border-color: rgba(255, 62, 86, 0.9);
     background:
         linear-gradient(135deg, rgba(255, 62, 86, 0.24), rgba(35, 0, 7, 0.84)),
@@ -4290,21 +4307,33 @@ a {
     box-shadow: 0 0 12px rgba(255, 48, 79, 0.42);
 }
 
+.neoermac-door-pull-row.is-pull-due-now .neoermac-pull-alert-badge {
+    color: #02160b;
+    background: #36e27b;
+    box-shadow: 0 0 12px rgba(54, 226, 123, 0.38);
+}
+
 @keyframes neoermac-pull-critical-pulse {
     0%,
     100% {
         box-shadow:
-            inset 0 0 0 1px rgba(255, 62, 86, 0.18),
-            0 0 12px rgba(255, 62, 86, 0.2);
+            inset 0 0 0 1px rgba(var(--neoermac-pull-alert-rgb), 0.18),
+            0 0 12px rgba(var(--neoermac-pull-alert-rgb), 0.2);
     }
     50% {
         box-shadow:
-            inset 0 0 0 1px rgba(255, 62, 86, 0.4),
-            0 0 24px rgba(255, 62, 86, 0.46);
+            inset 0 0 0 1px rgba(var(--neoermac-pull-alert-rgb), 0.4),
+            0 0 24px rgba(var(--neoermac-pull-alert-rgb), 0.46);
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
+    .neoermac-door-pull-row.is-pull-due-soon .neoermac-door-planned,
+    .neoermac-door-pull-row.is-pull-due-soon .neoermac-door-actual,
+    .neoermac-door-pull-row.is-pull-due-soon .neoermac-door-toggle,
+    .neoermac-door-pull-row.is-pull-due-now .neoermac-door-planned,
+    .neoermac-door-pull-row.is-pull-due-now .neoermac-door-actual,
+    .neoermac-door-pull-row.is-pull-due-now .neoermac-door-toggle,
     .neoermac-door-pull-row.is-pull-late .neoermac-door-planned,
     .neoermac-door-pull-row.is-pull-late .neoermac-door-actual,
     .neoermac-door-pull-row.is-pull-late .neoermac-door-toggle {

@@ -701,7 +701,15 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("content: none;", css)
         self.assertNotIn('.neoermac-door-destination::before {\n    content: "";', css)
         self.assertIn(".neoermac-door-pull-row.is-pull-due-soon", css)
+        self.assertIn(".neoermac-door-pull-row.is-pull-due-now", css)
         self.assertIn(".neoermac-door-pull-row.is-pull-late", css)
+        self.assertIn("--neoermac-pull-alert-rgb: 255, 203, 87;", css)
+        self.assertIn("--neoermac-pull-alert-rgb: 54, 226, 123;", css)
+        self.assertIn("--neoermac-pull-alert-rgb: 255, 62, 86;", css)
+        self.assertGreaterEqual(
+            css.count("animation: neoermac-pull-critical-pulse 1.15s ease-in-out infinite;"),
+            3,
+        )
         self.assertIn("@keyframes neoermac-pull-critical-pulse", css)
 
     def test_door_view_initial_render_shows_parking_plan_assignment(self):
@@ -752,6 +760,170 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(payload["state"]["destinations"][0]["destination"], "SDF")
         self.assertEqual(payload["state"]["destinations"][0]["tail"], "N316UP")
         self.assertEqual(payload["state"]["destinations"][0]["parking"], "A01")
+
+    def test_door_view_state_supports_selective_live_card_reconciliation(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._add_operation_departure(
+            "UPS948",
+            "SDF",
+            tail="N316UP",
+            departure_status="loading",
+            window_minutes=15,
+            pure_pull_time_local=time(1, 20),
+            mix_pull_time_local=time(1, 55),
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+        state_response = self.client.get("/neoermac/door-view/state?door=D34")
+
+        card = state_response.get_json()["state"]["destinations"][0]
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(card["destination"], "SDF")
+        self.assertEqual(card["status"], "Loading")
+        self.assertEqual(card["window_minutes"], 15)
+        self.assertEqual(card["planned"], {"pure": "01:35", "mix": "02:10"})
+        self.assertEqual(card["base_planned"], {"pure": "01:20", "mix": "01:55"})
+        self.assertEqual(card["actual"], {"pure": "", "mix": ""})
+        self.assertEqual(card["no_pull"], {"pure": False, "mix": False})
+        self.assertFalse(card["pulls_complete"])
+        self.assertEqual(card["order_index"], 0)
+        self.assertIn(b"data-door-destination-list", response.data)
+        self.assertIn(b"dataset.localDirty", response.data)
+        self.assertIn(b"neoErmacApplyDoorCardState", response.data)
+        self.assertIn(b"neoErmacReconcileDoorDestinations", response.data)
+        self.assertNotIn(b"window.location.reload", response.data)
+
+    def test_door_view_orders_unfinished_by_effective_pure_then_tbd_and_completed(self):
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        assignments = (
+            ("east_destination_1", "SDF"),
+            ("east_destination_2", "ONT"),
+            ("west_destination_1", "LAX"),
+            ("west_destination_2", "MEM"),
+        )
+        for field_name, destination in assignments:
+            self._assign_lineup_destination("runout_10", field_name, destination)
+
+        sdf = self._add_operation_departure(
+            "UPS401",
+            "SDF",
+            pure_pull_time_local=time(1, 0),
+        )
+        ont = self._add_operation_departure(
+            "UPS402",
+            "ONT",
+            pure_pull_time_local=time(0, 30),
+        )
+        lax = self._add_operation_departure("UPS403", "LAX")
+        lax.pure_pull_time_local = None
+        mem = self._add_operation_departure(
+            "UPS404",
+            "MEM",
+            pure_pull_time_local=time(0, 15),
+        )
+        db.session.add(
+            NeoErmacDoorPull(
+                gateway_id=self.gateway.id,
+                sort_date_operation_id=mem.sort_date_operation_id,
+                door="D34",
+                destination="MEM",
+                actual_pure_pull_time_local=time(0, 16),
+                no_mix_pull=True,
+            )
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        payload = self.client.get(
+            "/neoermac/door-view/state?door=D34"
+        ).get_json()["state"]["destinations"]
+
+        self.assertEqual(
+            [row["destination"] for row in payload],
+            ["ONT", "SDF", "LAX", "MEM"],
+        )
+        self.assertEqual([row["order_index"] for row in payload], [0, 1, 2, 3])
+        self.assertFalse(payload[0]["pulls_complete"])
+        self.assertFalse(payload[1]["pulls_complete"])
+        self.assertFalse(payload[2]["pulls_complete"])
+        self.assertTrue(payload[3]["pulls_complete"])
+        self.assertEqual(sdf.destination, "SDF")
+        self.assertEqual(ont.destination, "ONT")
+
+    def test_door_view_uses_destination_as_stable_tie_breaker(self):
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "east_destination_2", "ATL")
+        self._add_operation_departure(
+            "UPS402",
+            "SDF",
+            pure_pull_time_local=time(1, 0),
+        )
+        self._add_operation_departure(
+            "UPS401",
+            "ATL",
+            pure_pull_time_local=time(1, 0),
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        payload = self.client.get(
+            "/neoermac/door-view/state?door=D34"
+        ).get_json()["state"]["destinations"]
+
+        self.assertEqual([row["destination"] for row in payload], ["ATL", "SDF"])
+
+    def test_door_view_completion_autosave_moves_card_to_completed_bottom(self):
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "east_destination_2", "ONT")
+        self._add_operation_departure(
+            "UPS401",
+            "SDF",
+            pure_pull_time_local=time(0, 30),
+        )
+        self._add_operation_departure(
+            "UPS402",
+            "ONT",
+            pure_pull_time_local=time(1, 0),
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        pure_response = self.client.post(
+            "/neoermac/door-view/pull-autosave",
+            data={
+                "door": "D34",
+                "destination": "SDF",
+                "pull_key": "pure",
+                "actual_pull": "00:31",
+                "no_pull": "0",
+            },
+        )
+        mix_response = self.client.post(
+            "/neoermac/door-view/pull-autosave",
+            data={
+                "door": "D34",
+                "destination": "SDF",
+                "pull_key": "mix",
+                "actual_pull": "",
+                "no_pull": "1",
+            },
+        )
+
+        self.assertEqual(pure_response.status_code, 200)
+        self.assertFalse(pure_response.get_json()["card"]["pulls_complete"])
+        self.assertEqual(mix_response.status_code, 200)
+        self.assertTrue(mix_response.get_json()["card"]["pulls_complete"])
+        self.assertEqual(
+            [
+                row["destination"]
+                for row in mix_response.get_json()["state"]["destinations"]
+            ],
+            ["ONT", "SDF"],
+        )
 
     def test_door_view_shared_position_slots_both_display_position_only(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
@@ -932,7 +1104,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"is-pull-due-soon", response.data)
         self.assertIn(b'data-pull-alert-state="due_soon"', response.data)
         self.assertIn(f'op-{mission.sort_date_operation_id}:D34:SDF:pure:202606120120'.encode(), response.data)
-        self.assertIn(b"DUE 4 MIN", response.data)
+        self.assertIn(b"DUE SOON", response.data)
         payload = state_response.get_json()
         pure_alert = payload["state"]["destinations"][0]["pull_alerts"]["pure"]
         self.assertEqual(pure_alert["state"], "due_soon")
@@ -968,6 +1140,109 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"neoermac-pull-alert-badge", late_response.data)
         self.assertIn(b"LATE", late_response.data)
         self.assertNotIn(b'data-pull-alert-state="late"', resolved_response.data)
+
+    def test_door_view_pull_urgency_uses_exact_yellow_green_red_boundaries(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._add_operation_departure(
+            "UPS401",
+            "SDF",
+            pure_pull_time_local=time(2, 0),
+            mix_pull_time_local=time(2, 30),
+        )
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        cases = (
+            (datetime(2026, 6, 12, 1, 54, 59), ""),
+            (datetime(2026, 6, 12, 1, 55, 0), "due_soon"),
+            (datetime(2026, 6, 12, 1, 59, 0), "due_soon"),
+            (datetime(2026, 6, 12, 2, 0, 0), "due_now"),
+            (datetime(2026, 6, 12, 2, 4, 59), "due_now"),
+            (datetime(2026, 6, 12, 2, 5, 0), "late"),
+            (datetime(2026, 6, 12, 2, 20, 0), "late"),
+        )
+        for local_now, expected_state in cases:
+            with self.subTest(local_now=local_now, expected_state=expected_state):
+                self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = local_now
+                payload = self.client.get(
+                    "/neoermac/door-view/state?door=D34"
+                ).get_json()
+                pure_alert = payload["state"]["destinations"][0]["pull_alerts"]["pure"]
+                self.assertEqual(pure_alert["state"], expected_state)
+
+    def test_door_view_pull_urgency_is_independent_and_resolves_per_pull(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026,
+            6,
+            12,
+            2,
+            1,
+        )
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        mission = self._add_operation_departure(
+            "UPS401",
+            "SDF",
+            pure_pull_time_local=time(2, 0),
+            mix_pull_time_local=time(2, 30),
+        )
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        db.session.add(
+            NeoErmacDoorPull(
+                gateway_id=self.gateway.id,
+                sort_date_operation_id=mission.sort_date_operation_id,
+                door="D34",
+                destination="SDF",
+                actual_pure_pull_time_local=time(2, 1),
+            )
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        actual_payload = self.client.get(
+            "/neoermac/door-view/state?door=D34"
+        ).get_json()["state"]["destinations"][0]
+        self.assertEqual(actual_payload["pull_alerts"]["pure"]["state"], "")
+        self.assertEqual(actual_payload["pull_alerts"]["mix"]["state"], "")
+
+        pull = NeoErmacDoorPull.query.filter_by(destination="SDF").one()
+        pull.actual_pure_pull_time_local = None
+        pull.no_pure_pull = True
+        db.session.commit()
+        no_payload = self.client.get(
+            "/neoermac/door-view/state?door=D34"
+        ).get_json()["state"]["destinations"][0]
+        self.assertEqual(no_payload["pull_alerts"]["pure"]["state"], "")
+        self.assertEqual(no_payload["pull_alerts"]["mix"]["state"], "")
+
+    def test_door_view_pull_urgency_handles_cross_midnight_planned_times(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026,
+            6,
+            12,
+            0,
+            1,
+        )
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._add_operation_departure(
+            "UPS401",
+            "SDF",
+            pure_pull_time_local=time(0, 2),
+        )
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        payload = self.client.get(
+            "/neoermac/door-view/state?door=D34"
+        ).get_json()
+
+        pure_alert = payload["state"]["destinations"][0]["pull_alerts"]["pure"]
+        self.assertEqual(pure_alert["state"], "due_soon")
+        self.assertEqual(
+            pure_alert["key"],
+            f"op-{SortDateOperation.query.one().id}:D34:SDF:pure:202606120002",
+        )
 
     def test_door_view_does_not_alert_for_pull_time_outside_operation_window(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 12, 1, 16)
@@ -1114,6 +1389,144 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertFalse(saved.no_pure_pull)
         self.assertEqual(mission.actual_pure_pull_time_local, time(14, 5))
 
+    def test_door_view_pull_autosave_creates_and_updates_pure_and_mix_records(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "east_destination_2", "ONT")
+        self._add_operation_departure("UPS302", "SDF")
+        self._add_operation_departure("UPS303", "ONT")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        responses = (
+            self.client.post(
+                "/neoermac/door-view/pull-autosave",
+                data={
+                    "door": "D34",
+                    "destination": "SDF",
+                    "pull_key": "pure",
+                    "actual_pull": "01:44",
+                    "no_pull": "0",
+                },
+            ),
+            self.client.post(
+                "/neoermac/door-view/pull-autosave",
+                data={
+                    "door": "D34",
+                    "destination": "ONT",
+                    "pull_key": "mix",
+                    "actual_pull": "02:14",
+                    "no_pull": "0",
+                },
+            ),
+            self.client.post(
+                "/neoermac/door-view/pull-autosave",
+                data={
+                    "door": "D34",
+                    "destination": "SDF",
+                    "pull_key": "pure",
+                    "actual_pull": "01:49",
+                    "no_pull": "0",
+                },
+            ),
+            self.client.post(
+                "/neoermac/door-view/pull-autosave",
+                data={
+                    "door": "D34",
+                    "destination": "ONT",
+                    "pull_key": "mix",
+                    "actual_pull": "02:19",
+                    "no_pull": "0",
+                },
+            ),
+        )
+
+        self.assertTrue(all(response.status_code == 200 for response in responses))
+        self.assertEqual(NeoErmacDoorPull.query.count(), 2)
+        sdf_pull = NeoErmacDoorPull.query.filter_by(destination="SDF").one()
+        ont_pull = NeoErmacDoorPull.query.filter_by(destination="ONT").one()
+        self.assertEqual(sdf_pull.actual_pure_pull_time_local, time(1, 49))
+        self.assertEqual(ont_pull.actual_mix_pull_time_local, time(2, 19))
+        self.assertEqual(
+            SortDateMission.query.filter_by(destination="SDF").one().actual_pure_pull_time_local,
+            time(1, 49),
+        )
+        self.assertEqual(
+            SortDateMission.query.filter_by(destination="ONT").one().actual_mix_pull_time_local,
+            time(2, 19),
+        )
+
+    def test_door_view_pull_autosave_saves_no_pure_and_no_mix(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "east_destination_2", "ONT")
+        self._add_operation_departure("UPS302", "SDF")
+        self._add_operation_departure("UPS303", "ONT")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        pure_response = self.client.post(
+            "/neoermac/door-view/pull-autosave",
+            data={
+                "door": "D34",
+                "destination": "SDF",
+                "pull_key": "pure",
+                "actual_pull": "",
+                "no_pull": "1",
+            },
+        )
+        mix_response = self.client.post(
+            "/neoermac/door-view/pull-autosave",
+            data={
+                "door": "D34",
+                "destination": "ONT",
+                "pull_key": "mix",
+                "actual_pull": "",
+                "no_pull": "1",
+            },
+        )
+
+        self.assertEqual(pure_response.status_code, 200)
+        self.assertEqual(mix_response.status_code, 200)
+        sdf_pull = NeoErmacDoorPull.query.filter_by(destination="SDF").one()
+        ont_pull = NeoErmacDoorPull.query.filter_by(destination="ONT").one()
+        self.assertTrue(sdf_pull.no_pure_pull)
+        self.assertIsNone(sdf_pull.actual_pure_pull_time_local)
+        self.assertTrue(ont_pull.no_mix_pull)
+        self.assertIsNone(ont_pull.actual_mix_pull_time_local)
+        self.assertIsNone(
+            SortDateMission.query.filter_by(destination="SDF").one().actual_pure_pull_time_local
+        )
+        self.assertIsNone(
+            SortDateMission.query.filter_by(destination="ONT").one().actual_mix_pull_time_local
+        )
+
+    def test_door_view_pull_autosave_returns_structured_safe_server_error(self):
+        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._add_operation_departure("UPS302", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        with patch(
+            "app.neonodes.neoermac.routes.save_single_door_pull",
+            side_effect=RuntimeError("database details must stay private"),
+        ), self.assertLogs(self.app.logger, level="ERROR") as captured:
+            response = self.client.post(
+                "/neoermac/door-view/pull-autosave",
+                data={
+                    "door": "D34",
+                    "destination": "SDF",
+                    "pull_key": "pure",
+                    "actual_pull": "01:44",
+                    "no_pull": "0",
+                },
+            )
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 500)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error_code"], "pull_save_failed")
+        self.assertNotIn("database details", payload["error"])
+        self.assertIn("gateway_id=", "\n".join(captured.output))
+
     def test_door_view_pull_entries_render_autosave_without_manual_save_button(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
         self._add_operation_departure("UPS302", "SDF")
@@ -1166,6 +1579,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(payload["ok"])
         self.assertIn("HH:MM", payload["error"])
+        self.assertEqual(payload["error_code"], "invalid_pull_time")
+        self.assertEqual(payload["field"], "actual_pull")
         self.assertEqual(saved.actual_pure_pull_time_local, time(14, 5))
         self.assertEqual(mission.actual_pure_pull_time_local, time(14, 5))
 

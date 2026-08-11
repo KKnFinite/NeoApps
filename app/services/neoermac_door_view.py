@@ -226,14 +226,8 @@ def door_view_uld_state(gateway, selected_door):
     state = door_uld_state_payload(gateway, selected_door, operation=operation)
     state["refresh"] = neoermac_refresh_status(gateway)
     state["destinations"] = [
-        {
-            "destination": card["destination"],
-            "flight_number": card["flight_number"],
-            "tail": card["tail"],
-            "parking": card["parking"] or "-",
-            "pull_alerts": card["pull_alerts"],
-        }
-        for card in destinations
+        _door_card_state_payload(card, order_index=index)
+        for index, card in enumerate(destinations)
     ]
     return state
 
@@ -243,19 +237,32 @@ def neoermac_refresh_status(gateway, now=None):
 
 
 def _pull_card_payload(gateway, selected_door, destination, operation):
-    for card in _destination_cards_for_door(gateway, selected_door, operation):
+    for index, card in enumerate(
+        _destination_cards_for_door(gateway, selected_door, operation)
+    ):
         if card["destination"] == destination:
-            return {
-                "destination": card["destination"],
-                "parking": card["parking"] or "-",
-                "actual": card["actual"],
-                "no_pull": card["no_pull"],
-                "pull_alerts": card["pull_alerts"],
-                "pulls_complete": card["pulls_complete"],
-                "complete_title": card["complete_title"],
-                "pull_summary": card["pull_summary"],
-            }
+            return _door_card_state_payload(card, order_index=index)
     raise ValueError(f"{destination} is not assigned to {selected_door}.")
+
+
+def _door_card_state_payload(card, order_index):
+    return {
+        "destination": card["destination"],
+        "flight_number": card["flight_number"],
+        "tail": card["tail"],
+        "parking": card["parking"] or "-",
+        "status": card["status"],
+        "window_minutes": card["window_minutes"],
+        "planned": card["planned"],
+        "base_planned": card["base_planned"],
+        "actual": card["actual"],
+        "no_pull": card["no_pull"],
+        "pull_alerts": card["pull_alerts"],
+        "pulls_complete": card["pulls_complete"],
+        "complete_title": card["complete_title"],
+        "pull_summary": card["pull_summary"],
+        "order_index": order_index,
+    }
 
 
 def normalize_door(value):
@@ -304,9 +311,9 @@ def _destination_cards_for_door(gateway, selected_door, operation):
             "mix": bool(getattr(door_pull, "no_mix_pull", False)),
         }
 
+        pulls_complete = _pulls_complete(actual, no_pull)
         cards.append(
             {
-                "sort_priority": _card_sort_priority(mission, master),
                 "flight_number": _flight_number_for_card(mission, master),
                 "destination": destination,
                 "status": _status_for_card(mission, master),
@@ -333,19 +340,61 @@ def _destination_cards_for_door(gateway, selected_door, operation):
                     actual,
                     no_pull,
                 ),
-                "pulls_complete": _pulls_complete(actual, no_pull),
+                "pulls_complete": pulls_complete,
                 "complete_title": _complete_title(
                     destination,
                     _parking_for_mission(mission, parking_by_tail),
                 ),
                 "pull_summary": _pull_summary(actual, no_pull),
+                "_sort_key": _door_card_sort_key(
+                    destination,
+                    _flight_number_for_card(mission, master),
+                    planned_times["pure"],
+                    pulls_complete,
+                    operation,
+                ),
             }
         )
 
-    cards.sort(key=lambda card: (card["sort_priority"], card["destination"]))
+    cards.sort(key=lambda card: card["_sort_key"])
     for card in cards:
-        card.pop("sort_priority", None)
+        card.pop("_sort_key", None)
     return cards
+
+
+def _door_card_sort_key(
+    destination,
+    flight_number,
+    effective_pure_pull_time,
+    pulls_complete,
+    operation,
+):
+    return (
+        1 if pulls_complete else 0,
+        *_effective_pull_sort_key(operation, effective_pure_pull_time),
+        normalize_destination(destination),
+        str(flight_number or "").strip().upper(),
+    )
+
+
+def _effective_pull_sort_key(operation, planned_time):
+    if not planned_time:
+        return (1, 0)
+
+    if not operation:
+        return (
+            0,
+            planned_time.hour * 3600 + planned_time.minute * 60 + planned_time.second,
+        )
+
+    start_local, _end_local = sort_lookup_window_for_operation(
+        operation,
+        operation.gateway,
+    )
+    planned_local = datetime.combine(operation.sort_date, planned_time)
+    if planned_local < start_local:
+        planned_local += timedelta(days=1)
+    return (0, int((planned_local - start_local).total_seconds()))
 
 
 def _destination_slots_for_door(gateway, selected_door):
@@ -552,14 +601,6 @@ def _status_for_card(mission, master):
     return "NO FLIGHT DATA"
 
 
-def _card_sort_priority(mission, master):
-    if mission:
-        return 0
-    if master:
-        return 1
-    return 2
-
-
 def _planned_pull_time(timing_data, master, pull_key):
     adjusted_key = {
         "pure": "adjusted_pure_pull_time",
@@ -620,7 +661,7 @@ def _pull_alerts_for_card(
             continue
 
         seconds_until = (planned_local - local_now).total_seconds()
-        if seconds_until < 0:
+        if seconds_until <= -(PULL_DUE_WARNING_MINUTES * 60):
             alerts[pull_key].update(
                 {
                     "state": "late",
@@ -629,12 +670,21 @@ def _pull_alerts_for_card(
                     "minutes": int(abs(seconds_until) // 60),
                 }
             )
+        elif seconds_until <= 0:
+            alerts[pull_key].update(
+                {
+                    "state": "due_now",
+                    "css_class": "is-pull-due-now",
+                    "label": "PULL NOW",
+                    "minutes": int(abs(seconds_until) // 60),
+                }
+            )
         elif seconds_until <= PULL_DUE_WARNING_MINUTES * 60:
             alerts[pull_key].update(
                 {
                     "state": "due_soon",
                     "css_class": "is-pull-due-soon",
-                    "label": f"DUE {int(seconds_until // 60)} MIN",
+                    "label": "DUE SOON",
                     "minutes": int(seconds_until // 60),
                 }
             )

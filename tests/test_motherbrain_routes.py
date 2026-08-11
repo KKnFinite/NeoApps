@@ -85,7 +85,10 @@ from app.services.sort_timeline import (
     record_sort_timeline_api_attempt,
     sort_timeline_context,
 )
-from app.services.sort_date_operations import generate_sort_date_operation_from_master
+from app.services.sort_date_operations import (
+    generate_sort_date_operation_from_master,
+    mission_display_timing_data,
+)
 
 
 class MotherBrainRoutesTest(unittest.TestCase):
@@ -2960,6 +2963,108 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIsNone(updated.wave)
         self.assertIsNone(updated.pure_pull_time_local)
         self.assertIsNone(updated.mix_pull_time_local)
+
+    def test_master_schedule_time_edit_propagates_to_current_linked_departure_only(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026,
+            6,
+            1,
+            23,
+            0,
+        )
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        master = self._add_master(
+            gateway_id=self.rfd_gateway.id,
+            flight_number="DEPTIME",
+            destination="ONT",
+            active_days="monday,tuesday",
+            planned_time_local=time(3, 0),
+            pure_pull_time_local=time(2, 0),
+            mix_pull_time_local=time(2, 30),
+        )
+        db.session.flush()
+        operation = self._operation(sort_date=date(2026, 6, 1), window_minutes=10)
+        db.session.add(operation)
+        db.session.flush()
+        mission = self._mission(
+            operation=operation,
+            mission_type="departure",
+            flight_number="DEPTIME",
+            mission_source="master",
+            master_flight_schedule_id=master.id,
+            destination="ONT",
+            planned_datetime_local=datetime(2026, 6, 2, 3, 15),
+            planned_datetime_utc=datetime(2026, 6, 2, 8, 15),
+            planned_source="manual",
+            pure_pull_time_local=time(2, 15),
+            mix_pull_time_local=time(2, 45),
+            pull_time_source="manual",
+            actual_pure_pull_time_local=time(2, 16),
+            actual_mix_pull_time_local=time(2, 46),
+            actual_block_out_datetime_utc=datetime(2026, 6, 2, 8, 20),
+            actual_block_out_source="manual",
+            assigned_tail_number="N123UP",
+            tail_source="manual",
+            departure_status="ramp_load_complete",
+            planned_fuel_load=42000,
+            fuel_status="assigned",
+        )
+        db.session.add(mission)
+        db.session.flush()
+        parking = SortDateParkingAssignment(
+            sort_date_operation_id=operation.id,
+            tail_number="N123UP",
+            ramp_code="A",
+            position_code="A01",
+            lane_number=1,
+        )
+        db.session.add(parking)
+        db.session.commit()
+
+        response = self.client.post(
+            f"/motherbrain/master-schedule/{master.id}/edit",
+            data=self._master_schedule_form_data(
+                flight_number="DEPTIME",
+                destination="ONT",
+                planned_time_local="03:30",
+                pure_pull_time_local="02:30",
+                mix_pull_time_local="03:00",
+            ),
+            follow_redirects=False,
+        )
+
+        db.session.expire_all()
+        updated = db.session.get(SortDateMission, mission.id)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(updated.planned_datetime_local, datetime(2026, 6, 2, 3, 30))
+        self.assertEqual(updated.planned_datetime_utc, datetime(2026, 6, 2, 8, 30))
+        self.assertEqual(updated.planned_source, "master")
+        self.assertEqual(updated.pure_pull_time_local, time(2, 30))
+        self.assertEqual(updated.mix_pull_time_local, time(3, 0))
+        self.assertEqual(updated.pull_time_source, "master")
+        self.assertEqual(updated.actual_pure_pull_time_local, time(2, 16))
+        self.assertEqual(updated.actual_mix_pull_time_local, time(2, 46))
+        self.assertEqual(
+            updated.actual_block_out_datetime_utc,
+            datetime(2026, 6, 2, 8, 20),
+        )
+        self.assertEqual(updated.actual_block_out_source, "manual")
+        self.assertEqual(updated.assigned_tail_number, "N123UP")
+        self.assertEqual(updated.tail_source, "manual")
+        self.assertEqual(updated.departure_status, "ramp_load_complete")
+        self.assertEqual(updated.planned_fuel_load, 42000)
+        self.assertEqual(updated.fuel_status, "assigned")
+        self.assertEqual(
+            db.session.get(SortDateParkingAssignment, parking.id).position_code,
+            "A01",
+        )
+        timing = mission_display_timing_data(updated, operation)
+        self.assertEqual(
+            timing["adjusted_planned_departure_time"],
+            datetime(2026, 6, 2, 3, 40),
+        )
+        self.assertEqual(timing["adjusted_pure_pull_time"], time(2, 40))
+        self.assertEqual(timing["adjusted_mix_pull_time"], time(3, 10))
 
     def test_master_schedule_explicit_new_row_save_rejects_invalid_partial_row(self):
         response = self.client.post(

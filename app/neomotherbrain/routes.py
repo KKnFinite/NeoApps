@@ -79,6 +79,7 @@ from app.services.alp_preview_state import (
     save_alp_preview_state,
 )
 from app.services.sort_date_operations import (
+    apply_master_planned_times_to_mission,
     ensure_tail_state_for_mission,
     generate_sort_date_operation_from_master,
     mission_display_timing_data,
@@ -4278,6 +4279,15 @@ def _master_schedule_board_row_is_complete(row):
 
 
 def _apply_master_schedule_form(master_schedule, form, gateway=None):
+    previous_planned_times = (
+        (
+            master_schedule.planned_time_local,
+            master_schedule.pure_pull_time_local,
+            master_schedule.mix_pull_time_local,
+        )
+        if master_schedule.id is not None
+        else None
+    )
     gateway_code = gateway.code if gateway else form["gateway_code"].strip().upper()
     sort_name = form["sort_name"].strip().lower()
     mission_type = form["mission_type"].strip().lower()
@@ -4326,6 +4336,46 @@ def _apply_master_schedule_form(master_schedule, form, gateway=None):
         form["mix_pull_time_local"],
         "Mix pull time",
     )
+    current_planned_times = (
+        master_schedule.planned_time_local,
+        master_schedule.pure_pull_time_local,
+        master_schedule.mix_pull_time_local,
+    )
+    if (
+        gateway
+        and previous_planned_times is not None
+        and previous_planned_times != current_planned_times
+    ):
+        _propagate_master_planned_times(master_schedule, gateway)
+
+
+def _propagate_master_planned_times(master_schedule, gateway):
+    operation_ids = [
+        operation.id
+        for operation in current_operations_for_gateway(gateway)
+        if operation.id is not None
+    ]
+    if not operation_ids:
+        return []
+
+    missions = (
+        SortDateMission.query.filter(
+            SortDateMission.master_flight_schedule_id == master_schedule.id,
+            SortDateMission.sort_date_operation_id.in_(operation_ids),
+            SortDateMission.mission_type == "departure",
+        )
+        .order_by(SortDateMission.id.asc())
+        .all()
+    )
+    return [
+        mission
+        for mission in missions
+        if apply_master_planned_times_to_mission(
+            mission,
+            master_schedule,
+            mission.sort_date_operation,
+        )
+    ]
 
 
 def _raise_for_duplicate_active_master_schedule(master_schedule):

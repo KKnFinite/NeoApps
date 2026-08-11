@@ -348,6 +348,57 @@ def mission_display_timing_data(mission, operation=None):
     }
 
 
+def apply_master_planned_times_to_mission(mission, master_row, operation=None):
+    """Apply only authoritative Master planned-time data to a departure mission."""
+    if (
+        not mission
+        or not master_row
+        or mission.mission_type != "departure"
+        or master_row.mission_type != "departure"
+    ):
+        return False
+
+    operation = operation or mission.sort_date_operation
+    if not operation:
+        return False
+
+    before = (
+        mission.planned_datetime_local,
+        mission.planned_datetime_utc,
+        mission.planned_source,
+        mission.pure_pull_time_local,
+        mission.mix_pull_time_local,
+        mission.pull_time_source,
+    )
+    planned_datetime_local = _planned_datetime_local(
+        operation.sort_date,
+        master_row.sort_name,
+        master_row.planned_time_local,
+    )
+    mission.planned_datetime_local = planned_datetime_local
+    mission.planned_datetime_utc = _planned_datetime_utc(
+        planned_datetime_local,
+        master_row.timezone,
+    )
+    mission.planned_source = "master"
+    mission.pure_pull_time_local = master_row.pure_pull_time_local
+    mission.mix_pull_time_local = master_row.mix_pull_time_local
+    mission.pull_time_source = (
+        "master"
+        if any((mission.pure_pull_time_local, mission.mix_pull_time_local))
+        else None
+    )
+    after = (
+        mission.planned_datetime_local,
+        mission.planned_datetime_utc,
+        mission.planned_source,
+        mission.pure_pull_time_local,
+        mission.mix_pull_time_local,
+        mission.pull_time_source,
+    )
+    return before != after
+
+
 def _build_mission_from_master(operation, master_row, sort_date):
     planned_datetime_local = _planned_datetime_local(
         sort_date,
@@ -399,15 +450,6 @@ def _build_mission_from_master(operation, master_row, sort_date):
 
 def _apply_master_template_to_mission(mission, master_row, operation):
     before = _master_template_snapshot(mission)
-    planned_datetime_local = _planned_datetime_local(
-        operation.sort_date,
-        master_row.sort_name,
-        master_row.planned_time_local,
-    )
-    planned_datetime_utc = _planned_datetime_utc(
-        planned_datetime_local,
-        master_row.timezone,
-    )
 
     mission.sort_date = operation.sort_date
     mission.gateway_code = master_row.gateway_code
@@ -420,11 +462,19 @@ def _apply_master_template_to_mission(mission, master_row, operation):
     mission.origin = master_row.origin.strip().upper()
     mission.destination = master_row.destination.strip().upper()
     mission.timezone = master_row.timezone
-    mission.planned_datetime_local = planned_datetime_local
-    mission.planned_datetime_utc = planned_datetime_utc
-    mission.planned_source = "master"
 
     if master_row.mission_type == "arrival":
+        planned_datetime_local = _planned_datetime_local(
+            operation.sort_date,
+            master_row.sort_name,
+            master_row.planned_time_local,
+        )
+        mission.planned_datetime_local = planned_datetime_local
+        mission.planned_datetime_utc = _planned_datetime_utc(
+            planned_datetime_local,
+            master_row.timezone,
+        )
+        mission.planned_source = "master"
         mission.arrival_status = mission.arrival_status or "scheduled"
         mission.departure_status = None
         mission.pure_pull_time_local = None
@@ -433,18 +483,7 @@ def _apply_master_template_to_mission(mission, master_row, operation):
     else:
         mission.arrival_status = None
         mission.departure_status = mission.departure_status or "scheduled"
-        mission.pure_pull_time_local = master_row.pure_pull_time_local
-        mission.mix_pull_time_local = master_row.mix_pull_time_local
-        mission.pull_time_source = (
-            "master"
-            if any(
-                (
-                    mission.pure_pull_time_local,
-                    mission.mix_pull_time_local,
-                )
-            )
-            else None
-        )
+        apply_master_planned_times_to_mission(mission, master_row, operation)
 
     return _master_template_snapshot(mission) != before
 

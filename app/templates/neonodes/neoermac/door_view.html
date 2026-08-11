@@ -168,7 +168,7 @@
             <input type="hidden" name="action" value="save_pulls">
             <input type="hidden" name="destination_count" value="{{ destinations|length }}">
 
-            <div class="neoermac-door-destination-list">
+            <div class="neoermac-door-destination-list" data-door-destination-list>
                 {% for card in destinations %}
                 {% set destination_index = loop.index0 %}
                 <article
@@ -189,12 +189,12 @@
                             <strong data-door-tail>{{ card.tail or "-" }}</strong>
                         </div>
                         <div class="neoermac-door-status" data-door-flight-info-cell="status">
-                            <strong>{{ card.status }}</strong>
+                            <strong data-door-status>{{ card.status }}</strong>
                         </div>
                     </div>
 
                     <div class="neoermac-door-window-row">
-                        <span class="neoermac-door-window">WINDOW {{ card.window_minutes ~ " MIN" if card.window_minutes else "TBD" }}</span>
+                        <span class="neoermac-door-window" data-door-window>WINDOW {{ card.window_minutes ~ " MIN" if card.window_minutes else "TBD" }}</span>
                     </div>
 
                     <div class="neoermac-door-complete-summary" data-pull-complete-summary {% if not card.pulls_complete %}hidden{% endif %}>
@@ -224,13 +224,14 @@
                             <div class="neoermac-door-planned">
                                 <span class="neoermac-label-desktop">PLANNED {{ pull.label }}</span>
                                 <span class="neoermac-label-mobile">{{ pull.short_label }}</span>
-                                <strong>{{ card.planned[pull.key] or "-" }}</strong>
+                                <strong data-door-planned="{{ pull.key }}">{{ card.planned[pull.key] or "-" }}</strong>
                                 {% if pull_alert.label %}
                                 <span class="neoermac-pull-alert-badge" data-pull-alert-badge>{{ pull_alert.label }}</span>
                                 {% endif %}
-                                {% if card.window_minutes and card.base_planned[pull.key] and card.base_planned[pull.key] != card.planned[pull.key] %}
-                                <em>BASE {{ card.base_planned[pull.key] }} +{{ card.window_minutes }} MIN</em>
-                                {% endif %}
+                                <em
+                                    data-door-base-planned="{{ pull.key }}"
+                                    {% if not (card.window_minutes and card.base_planned[pull.key] and card.base_planned[pull.key] != card.planned[pull.key]) %}hidden{% endif %}
+                                >BASE {{ card.base_planned[pull.key] }} +{{ card.window_minutes }} MIN</em>
                             </div>
                             {% if can_edit %}
                             <label class="neoermac-door-actual">
@@ -269,7 +270,7 @@
                             <div class="neoermac-door-actual neoermac-door-static">
                                 <span class="neoermac-label-desktop">ACTUAL {{ pull.label }}</span>
                                 <span class="neoermac-label-mobile">ACTUAL</span>
-                                <strong>{{ "NO " ~ pull.label if card.no_pull[pull.key] else (card.actual[pull.key] or "-") }}</strong>
+                                <strong data-door-static-actual="{{ pull.key }}">{{ "NO " ~ pull.label if card.no_pull[pull.key] else (card.actual[pull.key] or "-") }}</strong>
                             </div>
                             {% endif %}
                         </section>
@@ -342,7 +343,8 @@
     const refreshPaused = root.querySelector("[data-neoermac-refresh-paused]");
     const canEditRequests = {{ "true" if can_edit else "false" }};
     const selectedDoor = root.querySelector('[name="door"]')?.value || "";
-    const pullAlertClasses = ["is-pull-due-soon", "is-pull-late"];
+    const pullKeys = ["pure", "mix"];
+    const pullAlertClasses = ["is-pull-due-soon", "is-pull-due-now", "is-pull-late"];
     let refreshController = null;
 
     const applyPullAlerts = (card, pullAlerts) => {
@@ -375,6 +377,139 @@
     };
 
     window.neoErmacApplyPullAlerts = applyPullAlerts;
+
+    const findPullControl = (card, selector, pullKey) => Array.from(
+        card.querySelectorAll(selector)
+    ).find((control) => control.dataset.pullKey === pullKey);
+
+    const controlIsProtected = (control) => Boolean(
+        control
+        && (
+            document.activeElement === control
+            || control.dataset.localDirty === "true"
+            || control.closest("[data-door-destination-card]")?.classList.contains("is-pull-saving")
+        )
+    );
+
+    const cardHasProtectedInput = (card) => Array.from(
+        card.querySelectorAll("[data-hhmm-input], [data-no-pull-toggle]")
+    ).some(controlIsProtected);
+
+    const updatePullFormCompleteState = () => {
+        const form = root.querySelector("[data-door-pull-form]");
+        if (!form) {
+            return;
+        }
+        const cards = Array.from(form.querySelectorAll("[data-door-destination-card]"));
+        const allCompleteCollapsed = cards.length > 0 && cards.every((card) => (
+            card.classList.contains("is-pulls-complete")
+            && card.classList.contains("is-pulls-collapsed")
+        ));
+        form.classList.toggle("is-all-pulls-complete", allCompleteCollapsed);
+    };
+
+    const applyDoorCardState = (card, cardData, options = {}) => {
+        if (!card || !cardData) {
+            return;
+        }
+        const protectLocal = options.protectLocal !== false;
+
+        const tail = card.querySelector("[data-door-tail]");
+        if (tail) {
+            tail.textContent = cardData.tail || "-";
+        }
+        const parking = card.querySelector("[data-door-parking]");
+        if (parking) {
+            parking.textContent = cardData.parking || "-";
+        }
+        const status = card.querySelector("[data-door-status]");
+        if (status) {
+            status.textContent = cardData.status || "Scheduled";
+        }
+        const windowLabel = card.querySelector("[data-door-window]");
+        if (windowLabel) {
+            windowLabel.textContent = cardData.window_minutes
+                ? `WINDOW ${cardData.window_minutes} MIN`
+                : "WINDOW TBD";
+        }
+
+        pullKeys.forEach((pullKey) => {
+            const planned = card.querySelector(`[data-door-planned="${pullKey}"]`);
+            if (planned) {
+                planned.textContent = cardData.planned?.[pullKey] || "-";
+            }
+            const base = card.querySelector(`[data-door-base-planned="${pullKey}"]`);
+            const showBase = Boolean(
+                cardData.window_minutes
+                && cardData.base_planned?.[pullKey]
+                && cardData.base_planned[pullKey] !== cardData.planned?.[pullKey]
+            );
+            if (base) {
+                base.hidden = !showBase;
+                base.textContent = showBase
+                    ? `BASE ${cardData.base_planned[pullKey]} +${cardData.window_minutes} MIN`
+                    : "";
+            }
+
+            const input = findPullControl(card, "[data-hhmm-input]", pullKey);
+            const toggle = findPullControl(card, "[data-no-pull-toggle]", pullKey);
+            const protectedValue = protectLocal
+                && (controlIsProtected(input) || controlIsProtected(toggle));
+            const noPull = Boolean(cardData.no_pull?.[pullKey]);
+            if (!protectedValue) {
+                if (toggle) {
+                    toggle.checked = noPull;
+                }
+                if (input) {
+                    input.value = noPull ? "" : (cardData.actual?.[pullKey] || "");
+                    input.disabled = noPull;
+                }
+            }
+
+            const staticActual = card.querySelector(`[data-door-static-actual="${pullKey}"]`);
+            if (staticActual) {
+                staticActual.textContent = noPull
+                    ? `NO ${pullKey === "pure" ? "Pure" : "Mix Pull"}`
+                    : (cardData.actual?.[pullKey] || "-");
+            }
+        });
+
+        const summary = card.querySelector("[data-pull-complete-summary]");
+        const title = card.querySelector("[data-pull-complete-title]");
+        const pullLine = card.querySelector("[data-pull-complete-lines]");
+        if (title) {
+            title.textContent = cardData.pulls_complete
+                ? (cardData.complete_title || `${cardData.destination || "-"} ${cardData.parking || "-"} COMPLETE`)
+                : "";
+        }
+        if (pullLine) {
+            pullLine.textContent = cardData.pull_summary || "";
+        }
+        if (cardData.pulls_complete) {
+            card.classList.add("is-pulls-complete");
+            if (!cardHasProtectedInput(card)) {
+                card.classList.add("is-pulls-collapsed");
+            }
+            if (summary) {
+                summary.hidden = false;
+            }
+            const editToggle = card.querySelector("[data-pull-edit-toggle]");
+            if (editToggle && card.classList.contains("is-pulls-collapsed")) {
+                editToggle.setAttribute("aria-expanded", "false");
+                editToggle.textContent = "EDIT PULLS";
+            }
+        } else {
+            card.classList.remove("is-pulls-complete", "is-pulls-collapsed");
+            if (summary) {
+                summary.hidden = true;
+            }
+        }
+
+        applyPullAlerts(card, cardData.pull_alerts || {});
+        updatePullFormCompleteState();
+    };
+
+    window.neoErmacApplyDoorCardState = applyDoorCardState;
 
     const renderEvents = (events) => {
         const panel = root.querySelector("[data-uld-events]");
@@ -500,26 +635,33 @@
             ])
         );
 
+        const cards = new Map();
         root.querySelectorAll("[data-door-destination-card]").forEach((card) => {
             const destination = String(card.dataset.doorDestination || "").toUpperCase();
+            cards.set(destination, card);
             const row = rows.get(destination);
             if (!row) {
                 return;
             }
-
-            const tail = card.querySelector("[data-door-tail]");
-            if (tail) {
-                tail.textContent = row.tail || "-";
-            }
-
-            const parking = card.querySelector("[data-door-parking]");
-            if (parking) {
-                parking.textContent = row.parking || "-";
-            }
-
-            applyPullAlerts(card, row.pull_alerts || {});
+            applyDoorCardState(card, row, { protectLocal: true });
         });
+
+        const list = root.querySelector("[data-door-destination-list]");
+        const protectedCard = Array.from(cards.values()).some(cardHasProtectedInput);
+        if (list && !protectedCard) {
+            destinations
+                .slice()
+                .sort((left, right) => Number(left.order_index) - Number(right.order_index))
+                .forEach((row) => {
+                    const card = cards.get(String(row.destination || "").toUpperCase());
+                    if (card) {
+                        list.appendChild(card);
+                    }
+                });
+        }
     };
+
+    window.neoErmacReconcileDoorDestinations = renderDestinations;
 
     const refreshState = async () => {
         try {
@@ -626,56 +768,30 @@
         })
         .join(" \u00B7 ");
 
-    const applyCardState = (card, cardData) => {
+    const applyCardState = (card, cardData, savedPullKey) => {
         if (!cardData) {
             return;
         }
-
-        pullKeys.forEach((key) => {
-            const input = findActualInput(card, key);
-            const toggle = findNoPullToggle(card, key);
-            const noPull = Boolean(cardData.no_pull?.[key]);
-            if (toggle) {
-                toggle.checked = noPull;
-            }
-            if (input) {
-                input.value = noPull ? "" : (cardData.actual?.[key] || "");
-                input.disabled = noPull;
-            }
-        });
-
-        const summary = card.querySelector("[data-pull-complete-summary]");
-        const title = card.querySelector("[data-pull-complete-title]");
-        const pullLine = card.querySelector("[data-pull-complete-lines]");
-        if (title) {
-            title.textContent = cardData.pulls_complete
-                ? (cardData.complete_title || `${cardData.destination || card.dataset.doorDestination || "-"} ${cardData.parking || "-"} COMPLETE`)
-                : "";
+        const savedInput = findActualInput(card, savedPullKey);
+        const savedToggle = findNoPullToggle(card, savedPullKey);
+        if (savedInput) {
+            delete savedInput.dataset.localDirty;
         }
-        if (pullLine) {
-            pullLine.textContent = cardData.pull_summary || summaryText(cardData);
+        if (savedToggle) {
+            delete savedToggle.dataset.localDirty;
         }
 
-        if (cardData.pulls_complete) {
-            card.classList.add("is-pulls-complete", "is-pulls-collapsed");
-            if (summary) {
-                summary.hidden = false;
-            }
-            const toggle = card.querySelector("[data-pull-edit-toggle]");
-            if (toggle) {
-                toggle.setAttribute("aria-expanded", "false");
-                toggle.textContent = "EDIT PULLS";
-            }
-        } else {
-            card.classList.remove("is-pulls-complete", "is-pulls-collapsed");
-            if (summary) {
-                summary.hidden = true;
-            }
-        }
+        window.neoErmacApplyDoorCardState?.(
+            card,
+            {
+                ...cardData,
+                pull_summary: cardData.pull_summary || summaryText(cardData),
+            },
+            { protectLocal: true },
+        );
 
         setCardError(card, "");
         setCardStatus(card, "SAVED", "saved");
-        window.neoErmacApplyPullAlerts?.(card, cardData.pull_alerts || {});
         updatePullFormCompleteState();
     };
 
@@ -706,6 +822,7 @@
         card.classList.add("is-pull-saving");
         setCardError(card, "");
         setCardStatus(card, "SAVING", "saving");
+        let payload;
         try {
             const response = await fetch(saveUrl, {
                 method: "POST",
@@ -715,16 +832,29 @@
                     "X-Requested-With": "XMLHttpRequest",
                 },
             });
-            const payload = await response.json().catch(() => ({}));
+            payload = await response.json().catch(() => ({}));
             if (!response.ok || !payload.ok) {
-                throw new Error(payload.error || "Pull save failed.");
+                const serverMessage = typeof payload.error === "string"
+                    ? payload.error
+                    : payload.error?.message;
+                throw new Error(serverMessage || "Pull save failed.");
             }
-            applyCardState(card, payload.card);
         } catch (error) {
             setCardError(card, error.message || "Pull save failed.");
             setCardStatus(card, "", "");
-        } finally {
             card.classList.remove("is-pull-saving");
+            return;
+        }
+
+        card.classList.remove("is-pull-saving");
+        try {
+            applyCardState(card, payload.card, pullKey);
+            if (payload.state?.destinations) {
+                window.neoErmacReconcileDoorDestinations?.(payload.state.destinations);
+            }
+        } catch (_reconciliationError) {
+            setCardError(card, "");
+            setCardStatus(card, "SAVED - VIEW WILL REFRESH", "saved");
         }
     };
 
@@ -760,6 +890,7 @@
 
     document.querySelectorAll("[data-hhmm-input]").forEach((input) => {
         input.addEventListener("input", () => {
+            input.dataset.localDirty = "true";
             const digits = input.value.replace(/\D/g, "").slice(0, 4);
             if (digits.length >= 3) {
                 input.value = `${digits.slice(0, 2)}:${digits.slice(2)}`;
@@ -808,6 +939,7 @@
         };
 
         toggle.addEventListener("change", () => {
+            toggle.dataset.localDirty = "true";
             syncInput();
             const card = toggle.closest("[data-door-destination-card]");
             if (card) {
