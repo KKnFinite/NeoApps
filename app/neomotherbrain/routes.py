@@ -24,6 +24,7 @@ from app.extensions import db
 from app.models import (
     FlightApiReviewItem,
     MasterFlightSchedule,
+    MotherBrainAlert,
     SortDateCrewAssignment,
     SortDateMission,
     SortDateOperation,
@@ -142,6 +143,14 @@ from app.services.live_collaboration import (
     version_conflict,
 )
 from app.services.node_refresh import node_auto_refresh_status
+from app.services.unmatched_review_alerts import (
+    UNMATCHED_REVIEW_ALERT_PERMISSION,
+    is_unmatched_review_alert,
+    mark_unmatched_review_alert_read,
+    pending_review_key_sets,
+    sync_unmatched_review_alert,
+    sync_unmatched_review_alerts_for_operation,
+)
 from app.services.google_motherbrain_import import (
     GoogleMotherBrainOperationError,
     GoogleMotherBrainPayloadError,
@@ -670,7 +679,14 @@ def flight_api_review():
         operations,
         operation_id=request.args.get("operation_id"),
     )
+    mission_type_filter = str(request.args.get("mission_type") or "").strip().lower()
+    if mission_type_filter not in {"arrival", "departure"}:
+        mission_type_filter = None
     pending_items = pending_review_items_for_operation(selected_operation)
+    if mission_type_filter:
+        pending_items = [
+            item for item in pending_items if item.mission_type == mission_type_filter
+        ]
     pending_item_rows = flight_api_review_display_rows(pending_items, selected_operation)
     settings = ensure_sort_timeline_settings(gateway)
     return render_template(
@@ -681,7 +697,9 @@ def flight_api_review():
         selected_operation=selected_operation,
         pending_review_items=pending_items,
         pending_review_item_rows=pending_item_rows,
+        mission_type_filter=mission_type_filter,
         can_edit=access["can_edit"],
+        entity_version=entity_version,
         sort_timeline_settings=settings,
         flight_api_operational_time=flight_api_operational_time_utc,
         flight_api_provider_time=flight_api_provider_time_utc,
@@ -699,12 +717,16 @@ def add_flight_api_review_item(review_item_id):
         return redirect(url_for("neomotherbrain.rfd_hub"))
 
     gateway = get_current_gateway()
-    review_item = review_item_or_404(gateway, review_item_id)
+    review_item = review_item_or_404(gateway, review_item_id, for_update=True)
     if not _review_item_matches_selected_operation(gateway, review_item):
         db.session.rollback()
         flash("Review item is not part of the selected current sort operation.", "error")
         return redirect(url_for("neomotherbrain.flight_api_review"))
 
+    operation = db.session.get(SortDateOperation, review_item.sort_date_operation_id)
+    conflict = _review_item_conflict(operation, item=review_item)
+    if conflict:
+        return _flight_api_review_conflict_response(operation, review_item, conflict)
     accept_review_item(review_item)
     db.session.commit()
     flash("API flight added to current sort operation.", "info")
@@ -712,6 +734,7 @@ def add_flight_api_review_item(review_item_id):
         url_for(
             "neomotherbrain.flight_api_review",
             operation_id=review_item.sort_date_operation_id,
+            mission_type=request.form.get("mission_type") or None,
         )
     )
 
@@ -725,12 +748,16 @@ def ignore_flight_api_review_item(review_item_id):
         return redirect(url_for("neomotherbrain.rfd_hub"))
 
     gateway = get_current_gateway()
-    review_item = review_item_or_404(gateway, review_item_id)
+    review_item = review_item_or_404(gateway, review_item_id, for_update=True)
     if not _review_item_matches_selected_operation(gateway, review_item):
         db.session.rollback()
         flash("Review item is not part of the selected current sort operation.", "error")
         return redirect(url_for("neomotherbrain.flight_api_review"))
 
+    operation = db.session.get(SortDateOperation, review_item.sort_date_operation_id)
+    conflict = _review_item_conflict(operation, item=review_item)
+    if conflict:
+        return _flight_api_review_conflict_response(operation, review_item, conflict)
     ignore_review_item(review_item)
     db.session.commit()
     flash("API flight ignored for this sort operation.", "info")
@@ -738,6 +765,58 @@ def ignore_flight_api_review_item(review_item_id):
         url_for(
             "neomotherbrain.flight_api_review",
             operation_id=review_item.sort_date_operation_id,
+            mission_type=request.form.get("mission_type") or None,
+        )
+    )
+
+
+@bp.post("/motherbrain/alerts/<int:alert_id>/read")
+@login_required
+def read_motherbrain_alert(alert_id):
+    alert = _unmatched_review_alert_for_user(alert_id)
+    mark_unmatched_review_alert_read(alert, current_user)
+    db.session.commit()
+    return jsonify({"ok": True, "alert_id": alert.id, "unread": False})
+
+
+@bp.post("/motherbrain/alerts/<int:alert_id>/open")
+@login_required
+def open_motherbrain_alert(alert_id):
+    alert = _unmatched_review_alert_for_user(alert_id)
+    mark_unmatched_review_alert_read(alert, current_user)
+    db.session.commit()
+    target = str(alert.related_url or "/motherbrain/flight-api-review")
+    if not target.startswith("/") or target.startswith("//"):
+        target = "/motherbrain/flight-api-review"
+    return redirect(target)
+
+
+def _unmatched_review_alert_for_user(alert_id):
+    gateway = get_current_gateway()
+    alert = MotherBrainAlert.query.filter_by(
+        id=alert_id,
+        gateway_id=gateway.id,
+        scope="motherbrain",
+        active=True,
+        acknowledged=False,
+    ).first_or_404()
+    if not is_unmatched_review_alert(alert):
+        abort(404)
+    if not user_can(alert.permission_key or UNMATCHED_REVIEW_ALERT_PERMISSION):
+        abort(403)
+    return alert
+
+
+def _flight_api_review_conflict_response(operation, review_item, conflict):
+    db.session.rollback()
+    if _planning_json_requested():
+        return jsonify({"ok": False, "conflict": conflict}), 409
+    flash(conflict["message"], "error")
+    return redirect(
+        url_for(
+            "neomotherbrain.flight_api_review",
+            operation_id=operation.id,
+            mission_type=request.form.get("mission_type") or review_item.mission_type,
         )
     )
 
@@ -2323,6 +2402,7 @@ def planning_live_state(operation_id, mission_type):
                     "neomotherbrain/_planning_mobile_mission_rows.html",
                     **fragment_context,
                 ),
+                "alert_tray": render_template("_my_alert_tray.html"),
             },
         }
     )
@@ -3759,6 +3839,7 @@ def _alp_planning_review_key(operation, mission_type, row):
 def _persist_alp_unmatched_rows(operation, mission_type, preview):
     if not preview:
         return
+    previous_keys = pending_review_key_sets(operation)
     rows = preview.get("unmatched_rows", [])
     active_review_keys = {
         _alp_planning_review_key(operation, mission_type, row)
@@ -3786,10 +3867,16 @@ def _persist_alp_unmatched_rows(operation, mission_type, preview):
         if existing and existing.review_status in {"ignored", "accepted"}:
             continue
         row["review_key"] = review_key
-        _record_alp_planning_marker(operation, row, "pending")
+        _record_alp_planning_marker(operation, row, "pending", sync_alert=False)
+    db.session.flush()
+    sync_unmatched_review_alerts_for_operation(
+        operation,
+        previous_keys=previous_keys,
+    )
 
 
 def _clear_pending_alp_planning_rows(operation, mission_type):
+    previous_keys = pending_review_key_sets(operation)
     pending_items = FlightApiReviewItem.query.filter_by(
         sort_date_operation_id=operation.id,
         mission_type=mission_type,
@@ -3799,6 +3886,11 @@ def _clear_pending_alp_planning_rows(operation, mission_type):
         payload = _planning_review_payload(item)
         if str(payload.get("source") or "").strip().upper() == "ALP":
             db.session.delete(item)
+    db.session.flush()
+    sync_unmatched_review_alerts_for_operation(
+        operation,
+        previous_keys=previous_keys,
+    )
 
 
 def _planning_inferred_wave(operation, mission_type, flight_number):
@@ -3971,7 +4063,14 @@ def _existing_operation_mission_for_alp_row(operation, row):
     ).first()
 
 
-def _record_alp_planning_marker(operation, row, review_status, mission=None):
+def _record_alp_planning_marker(
+    operation,
+    row,
+    review_status,
+    mission=None,
+    *,
+    sync_alert=True,
+):
     review_key = row.get("review_key") or _alp_planning_review_key(
         operation,
         row["mission_type"],
@@ -3981,6 +4080,7 @@ def _record_alp_planning_marker(operation, row, review_status, mission=None):
         sort_date_operation_id=operation.id,
         review_key=review_key,
     ).first()
+    was_pending = bool(item and item.review_status == "pending")
     if not item:
         item = FlightApiReviewItem(
             sort_date_operation_id=operation.id,
@@ -4014,6 +4114,16 @@ def _record_alp_planning_marker(operation, row, review_status, mission=None):
         sort_keys=True,
     )
     db.session.flush()
+    if sync_alert:
+        sync_unmatched_review_alert(
+            operation,
+            row["mission_type"],
+            new_review_keys=(
+                {review_key}
+                if review_status == "pending" and not was_pending
+                else set()
+            ),
+        )
     return item
 
 

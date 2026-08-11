@@ -24,6 +24,7 @@ def my_alert_context(
     operation=None,
     include_motherbrain=False,
     limit=20,
+    current_user_id=None,
 ):
     alerts = []
     if include_motherbrain:
@@ -33,6 +34,7 @@ def my_alert_context(
                 can_view_permission=can_view_permission,
                 limit=limit,
                 operation=operation,
+                user_id=current_user_id,
             )
         )
 
@@ -40,9 +42,14 @@ def my_alert_context(
     if pending_alert:
         alerts.append(pending_alert)
 
+    unread_count = sum(
+        1 for alert in alerts if getattr(alert, "is_unread", True)
+    )
     return {
         "alerts": alerts,
         "count": len(alerts),
+        "active_count": len(alerts),
+        "unread_count": unread_count,
         "has_alerts": bool(alerts),
         "empty_message": "No alerts.",
     }

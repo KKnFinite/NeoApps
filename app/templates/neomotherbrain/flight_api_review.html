@@ -24,6 +24,9 @@
             </div>
 
     <form class="operation-form inline-operation-form" method="get">
+        {% if mission_type_filter %}
+        <input type="hidden" name="mission_type" value="{{ mission_type_filter }}">
+        {% endif %}
         <label>
             <span>Current Sort Operation</span>
             <select name="operation_id">
@@ -57,7 +60,7 @@
     {% endif %}
 
     <section class="table-wrap" aria-labelledby="flight-api-review-table-title">
-        <h2 id="flight-api-review-table-title">UNMATCHED UPS REVIEW QUEUE</h2>
+        <h2 id="flight-api-review-table-title">UNMATCHED{% if mission_type_filter %} {{ mission_type_filter|upper }}{% endif %} UPS REVIEW QUEUE</h2>
         <table class="data-table">
             <thead>
                 <tr>
@@ -122,10 +125,14 @@
                         {% if can_edit %}
                         <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.add_flight_api_review_item', review_item_id=item.id) }}">
                             <input type="hidden" name="operation_id" value="{{ selected_operation.id }}">
+                            <input type="hidden" name="mission_type" value="{{ mission_type_filter or item.mission_type }}">
+                            <input type="hidden" name="expected_version" value="{{ entity_version(item) }}">
                             <button class="table-row-button" type="submit">ADD TO CURRENT SORT</button>
                         </form>
                         <form class="inline-button-form" method="post" action="{{ url_for('neomotherbrain.ignore_flight_api_review_item', review_item_id=item.id) }}">
                             <input type="hidden" name="operation_id" value="{{ selected_operation.id }}">
+                            <input type="hidden" name="mission_type" value="{{ mission_type_filter or item.mission_type }}">
+                            <input type="hidden" name="expected_version" value="{{ entity_version(item) }}">
                             <button class="table-row-button table-row-delete-button" type="submit" aria-label="Ignore {{ item.flight_number }} for this sort operation" title="Ignore {{ item.flight_number }} for this sort operation">&times; IGNORE</button>
                         </form>
                         {% else %}

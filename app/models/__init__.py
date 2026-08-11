@@ -10,6 +10,7 @@ from app.models.neoermac_building_lineup import NeoErmacBuildingLineup
 from app.models.neoermac_door_pull import NeoErmacDoorPull
 from app.models.neoermac_uld_request import NeoErmacUldRequest
 from app.models.motherbrain_alert import MotherBrainAlert
+from app.models.motherbrain_alert_user_state import MotherBrainAlertUserState
 from app.models.motherbrain_parking_rule import (
     MotherBrainParkingRule,
     MotherBrainParkingSettings,
@@ -77,6 +78,7 @@ __all__ = [
     "NeoErmacDoorPull",
     "NeoErmacUldRequest",
     "MotherBrainAlert",
+    "MotherBrainAlertUserState",
     "MotherBrainGoogleIntegrationSetting",
     "MotherBrainGoogleLivePollState",
     "MotherBrainParkingRule",

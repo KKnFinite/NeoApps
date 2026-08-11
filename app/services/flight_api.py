@@ -29,6 +29,11 @@ from app.services.sort_timeline import (
     sort_settings_by_name,
     sort_timeline_context,
 )
+from app.services.unmatched_review_alerts import (
+    pending_review_key_sets,
+    sync_unmatched_review_alert,
+    sync_unmatched_review_alerts_for_operation,
+)
 
 
 AIRPORT_CODE = "RFD"
@@ -431,6 +436,7 @@ def process_api_flights_for_operation(
     suppressed_review_count = 0
     non_ups_ignored = 0
     diagnostics = _empty_import_count_diagnostics()
+    previous_review_keys = pending_review_key_sets(operation) if apply else None
     replaced_review_count = replace_active_review_queue_for_operation(operation) if apply else 0
     ups_departure_candidates = []
     ups_last_poll_rows = []
@@ -562,6 +568,11 @@ def process_api_flights_for_operation(
         )
 
     db.session.flush()
+    if apply:
+        sync_unmatched_review_alerts_for_operation(
+            operation,
+            previous_keys=previous_review_keys,
+        )
     departure_match_audit = build_departure_match_audit(
         missions,
         ups_departure_candidates,
@@ -800,6 +811,11 @@ def accept_review_item(review_item, settings=None, now=None):
     review_item.review_status = "accepted"
     review_item.accepted_mission_id = mission.id
     db.session.flush()
+    sync_unmatched_review_alert(
+        operation,
+        review_item.mission_type,
+        new_review_keys=set(),
+    )
     return mission
 
 
@@ -826,6 +842,13 @@ def _fill_normalized_from_review_item(normalized, review_item):
 def ignore_review_item(review_item):
     review_item.review_status = "ignored"
     db.session.flush()
+    operation = db.session.get(SortDateOperation, review_item.sort_date_operation_id)
+    if operation:
+        sync_unmatched_review_alert(
+            operation,
+            review_item.mission_type,
+            new_review_keys=set(),
+        )
     return review_item
 
 
@@ -2205,11 +2228,14 @@ def _review_item_raw_payload(review_item):
     return payload if isinstance(payload, dict) else {}
 
 
-def review_item_or_404(gateway, review_item_id):
-    return FlightApiReviewItem.query.filter_by(
+def review_item_or_404(gateway, review_item_id, for_update=False):
+    query = FlightApiReviewItem.query.filter_by(
         id=review_item_id,
         gateway_code=gateway.code,
-    ).first_or_404()
+    )
+    if for_update:
+        query = query.with_for_update()
+    return query.first_or_404()
 
 
 def _empty_result(gateway, operation, provider_enabled, message):

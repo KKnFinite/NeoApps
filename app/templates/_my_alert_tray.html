@@ -1,19 +1,24 @@
 {% set tray = my_alert_tray %}
 {% if tray %}
-<details class="motherbrain-alert-tray" data-my-alerts-tray data-motherbrain-alert-tray data-alert-count="{{ tray.count }}">
+<details class="motherbrain-alert-tray" data-my-alerts-tray data-motherbrain-alert-tray data-alert-count="{{ tray.unread_count|default(tray.count) }}">
     <summary class="motherbrain-alert-button" aria-label="My Alerts" data-motherbrain-alert-toggle>
         <span class="motherbrain-alert-button-label">Alerts</span>
-        <span class="motherbrain-alert-count">{{ tray.count }}</span>
+        <span class="motherbrain-alert-count">{{ tray.unread_count|default(tray.count) }}</span>
     </summary>
     <aside class="motherbrain-alert-panel" aria-label="My Alerts tray">
         <header class="motherbrain-alert-panel-head">
             <strong>My Alerts</strong>
-            <span>{{ tray.count }} active</span>
+            <span>{{ tray.active_count|default(tray.count) }} active</span>
         </header>
         {% if tray.has_alerts %}
         <div class="motherbrain-alert-list">
             {% for alert in tray.alerts %}
-            <article class="motherbrain-alert-item motherbrain-alert-item-{{ alert.severity|default('info')|lower }}">
+            <article
+                class="motherbrain-alert-item motherbrain-alert-item-{{ alert.severity|default('info')|lower }}{% if alert.is_unread is defined and alert.is_unread %} is-unread{% else %} is-read{% endif %}"
+                {% if alert.id is defined %}data-alert-id="{{ alert.id }}"{% endif %}
+                data-alert-unread="{{ 'true' if alert.is_unread|default(true) else 'false' }}"
+                {% if alert.mark_read_url is defined and alert.mark_read_url %}data-alert-read-url="{{ alert.mark_read_url }}"{% endif %}
+            >
                 <div class="motherbrain-alert-item-top">
                     <span class="motherbrain-alert-severity">{{ alert.severity|motherbrain_alert_severity }}</span>
                     {% if alert.created_at %}
@@ -24,7 +29,11 @@
                 {% if alert.message %}
                 <p>{{ alert.message }}</p>
                 {% endif %}
-                {% if alert.related_url %}
+                {% if alert.open_url is defined and alert.open_url %}
+                <form class="motherbrain-alert-action-form" method="post" action="{{ alert.open_url }}">
+                    <button class="motherbrain-alert-link" type="submit">{{ alert.related_label or "VIEW" }}</button>
+                </form>
+                {% elif alert.related_url %}
                 <a class="motherbrain-alert-link" href="{{ alert.related_url }}">{{ alert.related_label or "VIEW" }}</a>
                 {% endif %}
             </article>

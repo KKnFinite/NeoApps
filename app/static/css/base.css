@@ -1227,6 +1227,22 @@ a {
         linear-gradient(180deg, rgba(12, 14, 18, 0.96), rgba(4, 5, 7, 0.92));
 }
 
+.motherbrain-alert-item.is-read {
+    opacity: 0.76;
+}
+
+.motherbrain-alert-item.is-unread h3::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: var(--node-highlight);
+    box-shadow: 0 0 8px rgba(var(--node-highlight-rgb), 0.72);
+    vertical-align: 0.08em;
+}
+
 .motherbrain-alert-item-critical {
     border-left-color: #ff4a4a;
 }
@@ -1278,6 +1294,18 @@ a {
     font-weight: 900;
     letter-spacing: 0.08em;
     text-transform: uppercase;
+}
+
+.motherbrain-alert-action-form {
+    margin: 0;
+}
+
+.motherbrain-alert-action-form .motherbrain-alert-link {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
 }
 
 .motherbrain-fixed-header .content {

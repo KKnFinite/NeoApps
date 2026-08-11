@@ -25,6 +25,7 @@
             root.querySelector("[data-live-rows='mobile-missions']"),
             fragments.mobile_missions || ""
         );
+        window.NeoLiveUpdates.reconcileAlertTrays(fragments.alert_tray);
     };
 
     const poll = async () => {

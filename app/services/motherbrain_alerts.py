@@ -1,6 +1,9 @@
+from dataclasses import dataclass
+
 from sqlalchemy import and_, or_
 
-from app.models import MotherBrainAlert, SortDateOperation
+from app.models import MotherBrainAlert, MotherBrainAlertUserState, SortDateOperation
+from app.services.unmatched_review_alerts import is_unmatched_review_alert
 
 
 MOTHERBRAIN_ALERT_SCOPE = "motherbrain"
@@ -20,22 +23,52 @@ SEVERITY_ORDER = {
 }
 
 
-def motherbrain_alert_context(gateway, can_view_permission=None, limit=20, operation=None):
+@dataclass(frozen=True)
+class AlertPresentation:
+    id: int
+    severity: str
+    title: str
+    message: str
+    related_url: str
+    related_label: str
+    created_at: object
+    alert_key: str
+    is_unread: bool = True
+    mark_read_url: str = ""
+    open_url: str = ""
+
+
+def motherbrain_alert_context(
+    gateway,
+    can_view_permission=None,
+    limit=20,
+    operation=None,
+    user_id=None,
+):
     alerts = active_motherbrain_alerts(
         gateway,
         can_view_permission=can_view_permission,
         limit=limit,
         operation=operation,
+        user_id=user_id,
     )
     return {
         "alerts": alerts,
         "count": len(alerts),
+        "active_count": len(alerts),
+        "unread_count": sum(1 for alert in alerts if alert.is_unread),
         "has_alerts": bool(alerts),
         "empty_message": "No alerts.",
     }
 
 
-def active_motherbrain_alerts(gateway, can_view_permission=None, limit=20, operation=None):
+def active_motherbrain_alerts(
+    gateway,
+    can_view_permission=None,
+    limit=20,
+    operation=None,
+    user_id=None,
+):
     if not gateway:
         return []
 
@@ -70,7 +103,24 @@ def active_motherbrain_alerts(gateway, can_view_permission=None, limit=20, opera
             alert.id,
         )
     )
-    return visible_alerts
+    read_alert_ids = set()
+    unmatched_ids = [
+        alert.id for alert in visible_alerts if is_unmatched_review_alert(alert)
+    ]
+    if user_id and unmatched_ids:
+        read_alert_ids = {
+            alert_id
+            for (alert_id,) in MotherBrainAlertUserState.query.filter(
+                MotherBrainAlertUserState.user_id == user_id,
+                MotherBrainAlertUserState.alert_id.in_(unmatched_ids),
+            )
+            .with_entities(MotherBrainAlertUserState.alert_id)
+            .all()
+        }
+    return [
+        _alert_presentation(alert, read_alert_ids, user_id=user_id)
+        for alert in visible_alerts
+    ]
 
 
 def motherbrain_alert_operation_for_request(gateway, request_obj):
@@ -161,3 +211,25 @@ def _request_operation_id(request_obj):
         return int(raw_operation_id)
     except (TypeError, ValueError):
         return None
+
+
+def _alert_presentation(alert, read_alert_ids, user_id=None):
+    supports_read_state = is_unmatched_review_alert(alert)
+    is_unread = not (supports_read_state and user_id and alert.id in read_alert_ids)
+    return AlertPresentation(
+        id=alert.id,
+        severity=alert.severity,
+        title=alert.title,
+        message=alert.message,
+        related_url=alert.related_url,
+        related_label=alert.related_label,
+        created_at=alert.created_at,
+        alert_key=alert.alert_key,
+        is_unread=is_unread,
+        mark_read_url=(
+            f"/motherbrain/alerts/{alert.id}/read" if supports_read_state else ""
+        ),
+        open_url=(
+            f"/motherbrain/alerts/{alert.id}/open" if supports_read_state else ""
+        ),
+    )

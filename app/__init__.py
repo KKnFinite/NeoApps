@@ -38,6 +38,9 @@ from app.services.password_policy import user_requires_password_change
 from app.services.google_motherbrain_live_poll_schema import (
     ensure_google_motherbrain_live_poll_state_table,
 )
+from app.services.motherbrain_alert_user_state_schema import (
+    ensure_motherbrain_alert_user_state_table,
+)
 from app.services.sort_timeline_schema import ensure_sort_timeline_sort_setting_columns
 from app.services.sort_date_mission_schema import (
     ensure_sort_date_mission_departure_status_constraint,
@@ -73,6 +76,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
 
     sync_existing_local_schema(app)
     ensure_google_motherbrain_live_poll_state_table(app)
+    ensure_motherbrain_alert_user_state_table(app)
     ensure_sort_timeline_sort_setting_columns(app)
     ensure_sort_date_mission_departure_status_constraint(app)
     ensure_sort_date_operation_window_nullable(app)
@@ -385,6 +389,7 @@ def register_template_helpers(app):
                 gateway=gateway,
                 operation=operation,
                 include_motherbrain=include_motherbrain,
+                current_user_id=current_user.id,
             ),
             "motherbrain_shell_operation": operation,
         }
@@ -464,6 +469,16 @@ def register_request_guards(app):
                 "existing": [],
                 "errors": ["Operation lifecycle check failed."],
             }
+        try:
+            from app.services.unmatched_review_alerts import (
+                expire_unmatched_review_alerts,
+            )
+
+            if expire_unmatched_review_alerts(gateway):
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("Unmatched review alert expiration failed safely.")
         return None
 
     @app.after_request
