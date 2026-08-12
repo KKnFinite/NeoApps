@@ -264,7 +264,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 self.assertNotIn(b"data-operation-refresh-reload", response.data)
                 self.assertNotIn(b"window.NeoLiveUpdates.create", response.data)
 
-    def test_neoermac_auto_refresh_pauses_outside_operation_window(self):
+    def test_neoermac_auto_refresh_pauses_before_sort_window(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 11, 10, 0)
         mission = self._add_operation_departure("UPS701", "BOS")
         operation = db.session.get(SortDateOperation, mission.sort_date_operation_id)
@@ -278,10 +278,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'data-refresh-active="false"', response.data)
         self.assertIn(b"neoermac-refresh-paused", response.data)
-        self.assertIn(b"Live updates off - outside Ops window", response.data)
+        self.assertIn(b"Live updates off - outside Sort window", response.data)
+        self.assertIn(b"22:00-04:00", response.data)
         payload = state_response.get_json()
         self.assertFalse(payload["state"]["refresh"]["auto_refresh_enabled"])
+        self.assertEqual(payload["state"]["refresh"]["reason"], "outside_sort_window")
         self.assertEqual(payload["state"]["refresh"]["operation_id"], operation.id)
+        self.assertEqual(payload["state"]["refresh"]["window_label"], "22:00-04:00")
         self.assertIsNone(payload["state"]["refresh"]["next_check_seconds"])
         self.assertNotIn(b"window.setInterval(refreshState", response.data)
         self.assertNotIn(b"resumeTimer", response.data)
@@ -289,15 +292,98 @@ class NeoErmacRoutesTest(unittest.TestCase):
         landing_response = self.client.get("/neoermac/door-view")
         self.assertEqual(landing_response.status_code, 200)
         self.assertNotIn(b"neoermac-refresh-paused", landing_response.data)
-        self.assertNotIn(b"Live updates off - outside Ops window", landing_response.data)
+        self.assertNotIn(b"Live updates off - outside Sort window", landing_response.data)
         self.assertNotIn(b"data-operation-refresh-reload", landing_response.data)
         self.assertNotIn(b"window.setInterval", landing_response.data)
 
         reload_response = self.client.get("/neoermac/view-outbound")
         self.assertEqual(reload_response.status_code, 200)
         self.assertIn(b'data-refresh-active="false"', reload_response.data)
+        self.assertIn(b'data-refresh-reason="outside_sort_window"', reload_response.data)
         self.assertNotIn(b"data-next-check-seconds", reload_response.data)
         self.assertNotIn(b"() => window.location.reload()", reload_response.data)
+
+        upcoming_response = self.client.get("/neoermac/upcoming-pulls")
+        self.assertEqual(upcoming_response.status_code, 200)
+        self.assertIn(b'data-refresh-active="false"', upcoming_response.data)
+        self.assertIn(b"Live updates off - outside Sort window", upcoming_response.data)
+
+    def test_neoermac_live_views_stay_on_after_ops_end_until_sort_end(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026,
+            6,
+            12,
+            3,
+            30,
+        )
+        self._add_operation_departure("UPS701", "BOS")
+        settings = ensure_sort_timeline_settings(self.gateway)
+        sort_setting = next(
+            row for row in settings.sort_settings if row.sort_name == "night"
+        )
+        sort_setting.sort_window_start_local = time(14, 0)
+        sort_setting.sort_window_end_local = time(5, 0)
+        sort_setting.ops_window_start_local = time(20, 0)
+        sort_setting.ops_window_end_local = time(3, 0)
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        for path in (
+            "/neoermac/door-view?door=D34",
+            "/neoermac/view-outbound",
+            "/neoermac/upcoming-pulls",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b'data-refresh-active="true"', response.data)
+                self.assertIn(b"Live updates on", response.data)
+                self.assertIn(b"14:00-05:00", response.data)
+
+        state = self.client.get("/neoermac/door-view/state?door=D34").get_json()["state"]
+        self.assertTrue(state["refresh"]["auto_refresh_enabled"])
+        self.assertEqual(state["refresh"]["window_label"], "14:00-05:00")
+
+        outbound_template = Path(
+            "app/templates/neonodes/neoermac/view_outbound.html"
+        ).read_text()
+        self.assertIn('newRoot.dataset.refreshReason || "outside_sort_window"', outbound_template)
+        self.assertIn("currentBanner.hidden = refreshEnabled", outbound_template)
+
+    def test_neoermac_live_views_stop_at_sort_end(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026,
+            6,
+            12,
+            5,
+            0,
+        )
+        self._add_operation_departure("UPS701", "BOS")
+        settings = ensure_sort_timeline_settings(self.gateway)
+        sort_setting = next(
+            row for row in settings.sort_settings if row.sort_name == "night"
+        )
+        sort_setting.sort_window_start_local = time(14, 0)
+        sort_setting.sort_window_end_local = time(5, 0)
+        sort_setting.ops_window_start_local = time(20, 0)
+        sort_setting.ops_window_end_local = time(3, 0)
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        for path in (
+            "/neoermac/door-view?door=D34",
+            "/neoermac/view-outbound",
+            "/neoermac/upcoming-pulls",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b'data-refresh-active="false"', response.data)
+                self.assertIn(b"Live updates off - outside Sort window", response.data)
+
+        state = self.client.get("/neoermac/door-view/state?door=D34").get_json()["state"]
+        self.assertFalse(state["refresh"]["auto_refresh_enabled"])
+        self.assertEqual(state["refresh"]["reason"], "outside_sort_window")
 
     def test_neoermac_live_views_use_the_shared_operation_refresh_banner(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 11, 10, 0)
@@ -1091,6 +1177,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"BASE 01:20 +20 MIN", response.data)
         self.assertIn(b"02:15", response.data)
 
+        css = Path("app/static/css/base.css").read_text()
+        self.assertRegex(
+            css,
+            r"\.neoermac-door-window \{[^}]*font-size: 1rem;",
+        )
+        self.assertIn("font-size: 0.88rem;", css)
+
     def test_door_view_distinguishes_tbd_zero_and_positive_windows(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
         mission = self._add_operation_departure(
@@ -1519,10 +1612,42 @@ class NeoErmacRoutesTest(unittest.TestCase):
         db.session.refresh(mission)
         self.assertEqual(response.status_code, 200)
         self.assertTrue(payload["ok"])
-        self.assertFalse(payload["state"]["refresh"]["auto_refresh_enabled"])
-        self.assertEqual(payload["state"]["refresh"]["reason"], "before_ops_window")
+        self.assertTrue(payload["state"]["refresh"]["auto_refresh_enabled"])
+        self.assertEqual(payload["state"]["refresh"]["reason"], "active")
+        self.assertEqual(payload["state"]["refresh"]["window_label"], "14:00-05:00")
         self.assertEqual(saved.actual_pure_pull_time_local, time(1, 45))
         self.assertEqual(mission.actual_pure_pull_time_local, time(1, 45))
+        self.assertEqual(mission.departure_status, "departed")
+
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026,
+            6,
+            11,
+            10,
+            0,
+        )
+        outside_response = self.client.post(
+            "/neoermac/door-view/pull-autosave",
+            data={
+                "door": "D9",
+                "destination": "DEN",
+                "pull_key": "pure",
+                "actual_pull": "01:46",
+                "no_pull": "0",
+            },
+        )
+        outside_payload = outside_response.get_json()
+        db.session.refresh(saved)
+        db.session.refresh(mission)
+        self.assertEqual(outside_response.status_code, 200)
+        self.assertTrue(outside_payload["ok"])
+        self.assertFalse(outside_payload["state"]["refresh"]["auto_refresh_enabled"])
+        self.assertEqual(
+            outside_payload["state"]["refresh"]["reason"],
+            "outside_sort_window",
+        )
+        self.assertEqual(saved.actual_pure_pull_time_local, time(1, 46))
+        self.assertEqual(mission.actual_pure_pull_time_local, time(1, 46))
         self.assertEqual(mission.departure_status, "departed")
 
     def test_door_view_pull_autosave_creates_and_updates_pure_and_mix_records(self):

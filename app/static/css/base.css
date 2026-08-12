@@ -4200,12 +4200,12 @@ a {
     justify-self: center;
     width: max-content;
     max-width: 100%;
-    padding: 2px 6px;
+    padding: 4px 10px;
     border: 1px solid rgba(54, 226, 123, 0.24);
     border-radius: 999px;
     color: var(--node-ermac-secondary);
     background: rgba(54, 226, 123, 0.08);
-    font-size: 0.52rem;
+    font-size: 1rem;
     line-height: 1;
     white-space: nowrap;
 }
@@ -5294,8 +5294,8 @@ a {
     }
 
     .neoermac-door-window {
-        padding: 2px 4px;
-        font-size: 0.44rem;
+        padding: 3px 7px;
+        font-size: 0.88rem;
     }
 
     .neoermac-door-actual input {

@@ -13,7 +13,10 @@ from app.models import (
     SortTimelineSortSetting,
 )
 from app.services.gateway_matrix import sort_lookup_window_for_operation
-from app.services.node_refresh import node_auto_refresh_status
+from app.services.node_refresh import (
+    node_auto_refresh_status,
+    sort_window_auto_refresh_status,
+)
 
 
 class LiveScreenRefreshTest(unittest.TestCase):
@@ -165,6 +168,30 @@ class LiveScreenRefreshTest(unittest.TestCase):
                 self.assertTrue(status["auto_refresh_enabled"])
                 self.assertEqual(status["window_start_local"], "14:00")
                 self.assertEqual(status["window_end_local"], "05:00")
+
+    def test_sort_window_refresh_ignores_ops_end_and_uses_physical_boundaries(self):
+        status = sort_window_auto_refresh_status(
+            self.gateway,
+            operation=self.operation,
+            now=datetime(2026, 8, 11, 3, 30),
+        )
+
+        self.assertTrue(status["auto_refresh_enabled"])
+        self.assertEqual(status["reason"], "active")
+        self.assertEqual(status["window_start_local"], "14:00")
+        self.assertEqual(status["window_end_local"], "05:00")
+        self.assertEqual(status["window_label"], "14:00-05:00")
+
+    def test_sort_window_refresh_keeps_historical_operation_inactive(self):
+        status = sort_window_auto_refresh_status(
+            self.gateway,
+            operation=self.operation,
+            now=datetime(2026, 8, 12, 15, 0),
+        )
+
+        self.assertFalse(status["auto_refresh_enabled"])
+        self.assertEqual(status["reason"], "historical_sort")
+        self.assertEqual(status["live_status_label"], "Live updates off - historical sort")
 
     def test_shared_refresh_interval_defaults_to_5000_and_is_in_template_context(self):
         self.assertEqual(self.app.config["LIVE_SCREEN_REFRESH_INTERVAL_MS"], 5000)

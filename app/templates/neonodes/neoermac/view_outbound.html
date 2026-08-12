@@ -17,6 +17,8 @@
     aria-labelledby="neoermac-outbound-title"
     data-neoermac-outbound-refresh
     data-refresh-active="{{ 'true' if refresh_status.auto_refresh_enabled else 'false' }}"
+    data-refresh-reason="{{ refresh_status.reason }}"
+    data-refresh-label="{{ refresh_status.live_status_label }}"
     data-refresh-url="{{ url_for('neoermac.view_outbound') }}"
 >
     <div class="neoermac-hero neoermac-outbound-hero mobile-shell-duplicate-title">
@@ -155,11 +157,28 @@
             }
             const html = await response.text();
             const doc = new DOMParser().parseFromString(html, "text/html");
+            const newRoot = doc.querySelector("[data-neoermac-outbound-refresh]");
             const newContent = doc.querySelector("[data-neoermac-outbound-content]");
-            if (!newContent) {
+            if (!newRoot || !newContent) {
                 return;
             }
             content.replaceChildren(...Array.from(newContent.children).map((node) => node.cloneNode(true)));
+            const refreshEnabled = newRoot.dataset.refreshActive === "true";
+            const currentBanner = root.querySelector("[data-operation-refresh-banner]");
+            const newBanner = newRoot.querySelector("[data-operation-refresh-banner]");
+            if (currentBanner && newBanner) {
+                currentBanner.replaceChildren(
+                    ...Array.from(newBanner.childNodes).map((node) => node.cloneNode(true))
+                );
+                currentBanner.hidden = refreshEnabled;
+            }
+            root.dataset.refreshActive = refreshEnabled ? "true" : "false";
+            controller.setServerStatus({
+                auto_refresh_enabled: refreshEnabled,
+                reason: newRoot.dataset.refreshReason || "outside_sort_window",
+                live_status_label: newRoot.dataset.refreshLabel
+                    || "Live updates off - outside Sort window",
+            });
         } catch (error) {
             throw error;
         }

@@ -614,7 +614,7 @@
         if (refreshPaused) {
             refreshPaused.hidden = isActive;
             refreshPaused.replaceChildren(
-                document.createTextNode(status.message || "Live updates off - outside Ops window")
+                document.createTextNode(status.message || "Live updates off - outside Sort window")
             );
             if (status.operation_label && status.window_label) {
                 const detail = document.createElement("span");

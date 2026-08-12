@@ -21,7 +21,7 @@ from app.services.gateway_matrix import (
     operation_is_active_at,
     sort_lookup_window_for_operation,
 )
-from app.services.node_refresh import node_auto_refresh_status
+from app.services.node_refresh import sort_window_auto_refresh_status
 from app.services.neoermac_tail_presence import (
     arrival_presence_by_tail,
     departure_tail_presence,
@@ -253,7 +253,7 @@ def door_view_uld_state(gateway, selected_door):
 
 
 def neoermac_refresh_status(gateway, now=None):
-    return node_auto_refresh_status(gateway, now=now)
+    return sort_window_auto_refresh_status(gateway, now=now)
 
 
 def _pull_card_payload(gateway, selected_door, destination, operation):

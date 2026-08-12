@@ -15,6 +15,53 @@ def node_auto_refresh_status(
     outside_message="Live updates off - outside Ops window",
 ):
     """Resolve live-screen eligibility independently from Flight API polling."""
+    return _auto_refresh_status(
+        gateway,
+        operation=operation,
+        now=now,
+        window_resolver=ops_window_for_operation,
+        before_reason="before_ops_window",
+        outside_reason="outside_ops_window",
+        active_message=active_message,
+        before_message=before_message,
+        outside_message=outside_message,
+    )
+
+
+def sort_window_auto_refresh_status(
+    gateway,
+    operation=None,
+    now=None,
+    active_message="Live updates on",
+    before_message="Live updates off - outside Sort window",
+    outside_message="Live updates off - outside Sort window",
+):
+    """Resolve live-screen eligibility against the physical Sort window."""
+    return _auto_refresh_status(
+        gateway,
+        operation=operation,
+        now=now,
+        window_resolver=sort_lookup_window_for_operation,
+        before_reason="before_sort_window",
+        outside_reason="outside_sort_window",
+        active_message=active_message,
+        before_message=before_message,
+        outside_message=outside_message,
+    )
+
+
+def _auto_refresh_status(
+    gateway,
+    *,
+    operation,
+    now,
+    window_resolver,
+    before_reason,
+    outside_reason,
+    active_message,
+    before_message,
+    outside_message,
+):
     local_now = current_gateway_local_datetime(gateway, now=now)
 
     if operation is not None:
@@ -22,6 +69,9 @@ def node_auto_refresh_status(
             gateway,
             operation,
             local_now,
+            window_resolver=window_resolver,
+            before_reason=before_reason,
+            outside_reason=outside_reason,
             active_message=active_message,
             before_message=before_message,
             outside_message=outside_message,
@@ -33,13 +83,18 @@ def node_auto_refresh_status(
             candidate
             for candidate in operations
             if _operation_is_current_context(candidate, gateway, local_now)
-            and _operation_is_inside_ops_window(candidate, gateway, local_now)
+            and _operation_is_inside_window(
+                candidate,
+                gateway,
+                local_now,
+                window_resolver,
+            )
         ),
         None,
     )
 
     if active_operation:
-        start_local, end_local = ops_window_for_operation(active_operation, gateway)
+        start_local, end_local = window_resolver(active_operation, gateway)
         return _refresh_status_payload(
             active_operation,
             start_local,
@@ -55,7 +110,7 @@ def node_auto_refresh_status(
     for candidate in operations:
         if not _operation_is_current_context(candidate, gateway, local_now):
             continue
-        start_local, end_local = ops_window_for_operation(candidate, gateway)
+        start_local, end_local = window_resolver(candidate, gateway)
         if start_local and local_now < start_local:
             if not next_window[0] or start_local < next_window[0]:
                 next_operation = candidate
@@ -68,7 +123,7 @@ def node_auto_refresh_status(
             next_window[1],
             local_now,
             active=False,
-            reason="before_ops_window",
+            reason=before_reason,
             message=before_message,
         )
 
@@ -81,7 +136,7 @@ def node_auto_refresh_status(
         operations[0] if operations else None,
     )
     start_local, end_local = (
-        ops_window_for_operation(candidate, gateway) if candidate else (None, None)
+        window_resolver(candidate, gateway) if candidate else (None, None)
     )
     return _refresh_status_payload(
         candidate,
@@ -89,7 +144,7 @@ def node_auto_refresh_status(
         end_local,
         local_now,
         active=False,
-        reason="outside_ops_window",
+        reason=outside_reason,
         message=outside_message,
     )
 
@@ -99,11 +154,14 @@ def _status_for_selected_operation(
     operation,
     local_now,
     *,
+    window_resolver,
+    before_reason,
+    outside_reason,
     active_message,
     before_message,
     outside_message,
 ):
-    start_local, end_local = ops_window_for_operation(operation, gateway)
+    start_local, end_local = window_resolver(operation, gateway)
     if not _operation_is_current_context(operation, gateway, local_now):
         return _refresh_status_payload(
             operation,
@@ -116,7 +174,16 @@ def _status_for_selected_operation(
         )
 
     active = bool(start_local <= local_now < end_local)
-    reason = "active" if active else _outside_window_reason(local_now, start_local)
+    reason = (
+        "active"
+        if active
+        else _outside_window_reason(
+            local_now,
+            start_local,
+            before_reason,
+            outside_reason,
+        )
+    )
     return _refresh_status_payload(
         operation,
         start_local,
@@ -127,13 +194,13 @@ def _status_for_selected_operation(
         message=(
             active_message
             if active
-            else before_message if reason == "before_ops_window" else outside_message
+            else before_message if reason == before_reason else outside_message
         ),
     )
 
 
-def _operation_is_inside_ops_window(operation, gateway, local_now):
-    start_local, end_local = ops_window_for_operation(operation, gateway)
+def _operation_is_inside_window(operation, gateway, local_now, window_resolver):
+    start_local, end_local = window_resolver(operation, gateway)
     return bool(start_local and end_local and start_local <= local_now < end_local)
 
 
@@ -144,13 +211,13 @@ def _operation_is_current_context(operation, gateway, local_now):
         return False
 
     # Sort lookup identifies whether this is the current operational context.
-    # It does not control whether live refresh is enabled; that remains Ops-only.
+    # The caller-selected window resolver controls live refresh eligibility.
     start_local, end_local = sort_lookup_window_for_operation(operation, gateway)
     return bool(start_local <= local_now < end_local)
 
 
-def _outside_window_reason(local_now, start_local):
-    return "before_ops_window" if local_now < start_local else "outside_ops_window"
+def _outside_window_reason(local_now, start_local, before_reason, outside_reason):
+    return before_reason if local_now < start_local else outside_reason
 
 
 def _refresh_status_payload(
