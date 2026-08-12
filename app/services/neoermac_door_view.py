@@ -11,6 +11,7 @@ from app.models import (
     SortDateParkingAssignment,
 )
 from app.services.neoermac_building_lineup import (
+    get_building_lineup_assignments,
     get_building_lineup_destinations_for_door,
     get_linked_building_lineup_doors,
     get_outbound_door_options,
@@ -303,7 +304,7 @@ def delete_door_uld_request(gateway, selected_door, form_data):
     )
 
 
-def door_view_uld_state(gateway, selected_door):
+def door_view_uld_state(gateway, selected_door, supervised_doors=()):
     selected_door = normalize_door(selected_door)
     if not selected_door:
         raise ValueError("Select a door.")
@@ -318,7 +319,92 @@ def door_view_uld_state(gateway, selected_door):
         _door_card_state_payload(card, order_index=index)
         for index, card in enumerate(destinations)
     ]
+    state["door_tab_alerts"] = door_tab_pull_alerts(
+        gateway,
+        selected_door,
+        supervised_doors,
+        operation=operation,
+    )
     return state
+
+
+def door_tab_pull_alerts(gateway, active_door, supervised_doors, operation=None):
+    """Summarize unresolved pull urgency for supervised Door View tabs."""
+    available_doors = set(get_door_options(gateway))
+    active_door = normalize_door(active_door)
+    doors = []
+    for value in supervised_doors or ():
+        door = normalize_door(value)
+        if door in available_doors and door not in doors:
+            doors.append(door)
+
+    result = {door: _empty_door_tab_alert() for door in doors}
+    operation = operation or _current_operation(gateway)
+    if not operation or not doors:
+        return result
+
+    destinations_by_door = {door: set() for door in doors}
+    for assignment in get_building_lineup_assignments(gateway):
+        door = assignment["supervising_door"]
+        if door in destinations_by_door and assignment["destination"]:
+            destinations_by_door[door].add(assignment["destination"])
+
+    missions = _missions_by_destination(gateway, operation)
+    masters = _master_departures_by_destination(gateway)
+    pulls = NeoErmacDoorPull.query.filter(
+        NeoErmacDoorPull.gateway_id == gateway.id,
+        NeoErmacDoorPull.sort_date_operation_id == operation.id,
+        NeoErmacDoorPull.door.in_(doors),
+    ).all()
+    pulls_by_door_destination = {
+        (normalize_door(pull.door), normalize_destination(pull.destination)): pull
+        for pull in pulls
+    }
+
+    for door in doors:
+        if door == active_door:
+            continue
+        tab_state = ""
+        for destination in destinations_by_door[door]:
+            mission = missions.get(destination)
+            master = masters.get(destination)
+            timing_data = _mission_timing_data(mission, operation)
+            planned_times = {
+                "pure": _planned_pull_time(timing_data, master, "pure"),
+                "mix": _planned_pull_time(timing_data, master, "mix"),
+            }
+            door_pull = pulls_by_door_destination.get((door, destination))
+            actual = {
+                "pure": _time_value(
+                    getattr(door_pull, "actual_pure_pull_time_local", None)
+                ),
+                "mix": _time_value(
+                    getattr(door_pull, "actual_mix_pull_time_local", None)
+                ),
+            }
+            no_pull = {
+                "pure": bool(getattr(door_pull, "no_pure_pull", False)),
+                "mix": bool(getattr(door_pull, "no_mix_pull", False)),
+            }
+            pull_alerts = _pull_alerts_for_card(
+                gateway,
+                door,
+                destination,
+                operation,
+                planned_times,
+                actual,
+                no_pull,
+            )
+            states = {alert["state"] for alert in pull_alerts.values()}
+            if "late" in states:
+                tab_state = "late"
+                break
+            if "due_now" in states:
+                tab_state = "due_now"
+
+        result[door] = _door_tab_alert(tab_state)
+
+    return result
 
 
 def neoermac_refresh_status(gateway, now=None):
@@ -740,6 +826,26 @@ def _empty_pull_alert():
         "key": "",
         "minutes": None,
     }
+
+
+def _empty_door_tab_alert():
+    return _door_tab_alert("")
+
+
+def _door_tab_alert(state):
+    if state == "late":
+        return {
+            "state": "late",
+            "css_class": "is-pull-late",
+            "label": "Late pull",
+        }
+    if state == "due_now":
+        return {
+            "state": "due_now",
+            "css_class": "is-pull-due-now",
+            "label": "Pull now",
+        }
+    return {"state": "", "css_class": "", "label": ""}
 
 
 def _pull_planned_datetime(operation, start_local, end_local, planned_time):

@@ -72,12 +72,17 @@
     <nav class="neoermac-door-supervision" aria-label="Supervised doors" data-door-supervision>
         {% if supervised_doors %}
         <div class="neoermac-door-tabs" role="tablist" aria-label="Supervised Door Views" data-door-tabs>
+            {% set supervised_tab_alerts = door_tab_alerts|default({}) %}
             {% for door_option in supervised_doors %}
+            {% set tab_alert = supervised_tab_alerts.get(door_option, {}) %}
             <a
-                class="neoermac-door-tab{% if selected_door == door_option %} is-active{% endif %}"
+                class="neoermac-door-tab{% if selected_door == door_option %} is-active{% elif tab_alert.css_class %} {{ tab_alert.css_class }}{% endif %}"
                 href="{{ url_for('neoermac.door_view', door=door_option) }}"
                 role="tab"
                 aria-selected="{{ 'true' if selected_door == door_option else 'false' }}"
+                aria-label="{{ door_option }}{% if selected_door != door_option and tab_alert.label %}, {{ tab_alert.label }}{% endif %}"
+                data-door-tab="{{ door_option }}"
+                data-door-tab-alert-state="{{ tab_alert.state if selected_door != door_option else '' }}"
                 {% if selected_door == door_option %}aria-current="page"{% endif %}
             >{{ door_option }}</a>
             {% endfor %}
@@ -417,7 +422,35 @@
     const selectedDoor = root.querySelector('[name="door"]')?.value || "";
     const pullKeys = ["pure", "mix"];
     const pullAlertClasses = ["is-pull-due-soon", "is-pull-due-now", "is-pull-late"];
+    const initialDoorTabAlerts = {{ (door_tab_alerts|default({}))|tojson }};
     let refreshController = null;
+
+    const applyDoorTabAlerts = (doorTabAlerts) => {
+        document.querySelectorAll("[data-door-tab]").forEach((tab) => {
+            const door = tab.dataset.doorTab || "";
+            const isActive = tab.classList.contains("is-active");
+            const alert = isActive ? {} : (doorTabAlerts?.[door] || {});
+            const state = alert.state === "late"
+                ? "late"
+                : (alert.state === "due_now" ? "due_now" : "");
+
+            tab.classList.remove("is-pull-due-now", "is-pull-late");
+            if (state === "late") {
+                tab.classList.add("is-pull-late");
+            } else if (state === "due_now") {
+                tab.classList.add("is-pull-due-now");
+            }
+            tab.dataset.doorTabAlertState = state;
+            tab.setAttribute(
+                "aria-label",
+                state === "late"
+                    ? `${door}, late pull`
+                    : (state === "due_now" ? `${door}, pull now` : door),
+            );
+        });
+    };
+
+    window.neoErmacApplyDoorTabAlerts = applyDoorTabAlerts;
 
     const applyPullAlerts = (card, pullAlerts) => {
         if (!card) {
@@ -674,6 +707,7 @@
         renderRequests(state.requests || []);
         renderEvents(state.on_the_way_events || []);
         renderDestinations(state.destinations || []);
+        applyDoorTabAlerts(state.door_tab_alerts || {});
     };
 
     const setRefreshStatus = (refresh) => {
@@ -775,6 +809,7 @@
         return match ? match[1] : String(value).slice(0, 5);
     };
 
+    applyDoorTabAlerts(initialDoorTabAlerts);
     setRefreshStatus(initialRefreshStatus);
 })();
 </script>
@@ -927,6 +962,9 @@
             applyCardState(card, payload.card, pullKey);
             if (payload.state?.destinations) {
                 window.neoErmacReconcileDoorDestinations?.(payload.state.destinations);
+            }
+            if (payload.state?.door_tab_alerts) {
+                window.neoErmacApplyDoorTabAlerts?.(payload.state.door_tab_alerts);
             }
         } catch (_reconciliationError) {
             setCardError(card, "");

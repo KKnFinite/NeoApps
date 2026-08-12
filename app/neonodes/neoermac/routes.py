@@ -27,6 +27,7 @@ from app.services.neoermac_building_lineup import (
 )
 from app.services.neoermac_door_view import (
     delete_door_uld_request,
+    door_tab_pull_alerts,
     door_view_context,
     door_view_uld_state,
     edit_door_uld_request,
@@ -281,7 +282,11 @@ def door_view_state():
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
     try:
-        state = door_view_uld_state(gateway, request.args.get("door", ""))
+        state = door_view_uld_state(
+            gateway,
+            request.args.get("door", ""),
+            supervised_doors=_current_user_supervised_doors(gateway),
+        )
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
@@ -302,6 +307,7 @@ def door_view_pull_autosave():
     destination = request.form.get("destination", "")
     pull_key = request.form.get("pull_key", "")
     try:
+        supervised_doors = _current_user_supervised_doors(gateway)
         card = save_single_door_pull(
             gateway,
             selected_door,
@@ -309,9 +315,13 @@ def door_view_pull_autosave():
             pull_key,
             request.form.get("actual_pull", ""),
             request.form.get("no_pull") == "1",
-            supervised_doors=_current_user_supervised_doors(gateway),
+            supervised_doors=supervised_doors,
         )
-        state = door_view_uld_state(gateway, selected_door)
+        state = door_view_uld_state(
+            gateway,
+            selected_door,
+            supervised_doors=supervised_doors,
+        )
         db.session.commit()
     except ValueError as exc:
         db.session.rollback()
@@ -418,6 +428,12 @@ def _door_view_response(gateway, access, selected_door, status_code=200):
     active_door = supervision["active_door"]
     if active_door != context["selected_door"]:
         context = door_view_context(gateway, active_door)
+    context["door_tab_alerts"] = door_tab_pull_alerts(
+        gateway,
+        active_door,
+        supervision["selected_doors"],
+        operation=context["operation"],
+    )
     response = make_response(
         render_template(
             "neonodes/neoermac/door_view.html",

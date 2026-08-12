@@ -3764,6 +3764,49 @@ a {
         0 0 14px rgba(54, 226, 123, 0.18);
 }
 
+.neoermac-door-tab:not(.is-active).is-pull-due-now,
+.neoermac-door-tab:not(.is-active).is-pull-late {
+    color: #ffffff;
+    animation: neoermac-door-tab-pull-pulse 1.05s ease-in-out infinite;
+}
+
+.neoermac-door-tab:not(.is-active).is-pull-due-now {
+    --neoermac-door-tab-alert-rgb: 54, 226, 123;
+    border-color: rgba(54, 226, 123, 0.94);
+    background:
+        linear-gradient(180deg, rgba(54, 226, 123, 0.32), rgba(4, 36, 18, 0.92)),
+        rgba(7, 9, 12, 0.94);
+}
+
+.neoermac-door-tab:not(.is-active).is-pull-late {
+    --neoermac-door-tab-alert-rgb: 255, 48, 79;
+    border-color: rgba(255, 48, 79, 0.96);
+    background:
+        linear-gradient(180deg, rgba(255, 48, 79, 0.34), rgba(45, 0, 9, 0.94)),
+        rgba(7, 9, 12, 0.94);
+}
+
+@keyframes neoermac-door-tab-pull-pulse {
+    0%,
+    100% {
+        box-shadow:
+            inset 0 0 0 1px rgba(var(--neoermac-door-tab-alert-rgb), 0.22),
+            0 0 7px rgba(var(--neoermac-door-tab-alert-rgb), 0.26);
+    }
+    50% {
+        box-shadow:
+            inset 0 0 0 1px rgba(var(--neoermac-door-tab-alert-rgb), 0.62),
+            0 0 22px rgba(var(--neoermac-door-tab-alert-rgb), 0.74);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .neoermac-door-tab:not(.is-active).is-pull-due-now,
+    .neoermac-door-tab:not(.is-active).is-pull-late {
+        animation: none;
+    }
+}
+
 .neoermac-door-supervision-edit {
     min-height: 40px;
     white-space: nowrap;

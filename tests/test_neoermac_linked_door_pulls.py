@@ -1,5 +1,6 @@
 import unittest
 from datetime import date, datetime, time
+from pathlib import Path
 
 from app import create_app
 from app.extensions import db
@@ -178,6 +179,128 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
         self.assertEqual(set(pulls), {"D1"})
         self.assertEqual(pulls["D1"].actual_mix_pull_time_local, time(2, 10))
 
+    def test_inactive_tab_is_green_during_pull_now_period(self):
+        self._supervise("D1", "D4")
+        self._set_planned_pulls(time(23, 0), time(23, 30))
+
+        payload = self._state("D1")
+        page = self.client.get("/neoermac/door-view?door=D1")
+
+        self.assertEqual(payload["door_tab_alerts"]["D1"]["state"], "")
+        self.assertEqual(payload["door_tab_alerts"]["D4"]["state"], "due_now")
+        self.assertIn(
+            b'class="neoermac-door-tab is-pull-due-now"',
+            page.data,
+        )
+        self.assertIn(b'data-door-tab-alert-state="due_now"', page.data)
+        self.assertNotIn(
+            b'class="neoermac-door-tab is-active is-pull-due-now"',
+            page.data,
+        )
+
+    def test_inactive_tab_is_red_and_red_overrides_green(self):
+        self._supervise("D1", "D4")
+        self._set_planned_pulls(time(23, 0), time(22, 50))
+
+        payload = self._state("D1")
+        page = self.client.get("/neoermac/door-view?door=D1")
+
+        self.assertEqual(payload["door_tab_alerts"]["D4"]["state"], "late")
+        self.assertIn(b'class="neoermac-door-tab is-pull-late"', page.data)
+        self.assertNotIn(
+            b'class="neoermac-door-tab is-pull-due-now is-pull-late"',
+            page.data,
+        )
+
+    def test_due_soon_pull_does_not_animate_an_inactive_tab(self):
+        self._supervise("D1", "D4")
+        self._set_planned_pulls(time(23, 4), time(23, 30))
+
+        payload = self._state("D1")
+
+        self.assertEqual(payload["door_tab_alerts"]["D4"]["state"], "")
+        self.assertEqual(
+            payload["destinations"][0]["pull_alerts"]["pure"]["state"],
+            "due_soon",
+        )
+
+    def test_unsupervised_doors_are_absent_from_tab_alert_state(self):
+        self._supervise("D1")
+        self._set_planned_pulls(time(22, 50), time(23, 30))
+
+        payload = self._state("D1")
+
+        self.assertEqual(set(payload["door_tab_alerts"]), {"D1"})
+
+    def test_actual_or_no_pull_clears_inactive_tab_alert(self):
+        self._supervise("D1", "D4")
+        self._set_planned_pulls(time(22, 50), time(23, 30))
+        pull = NeoErmacDoorPull(
+            gateway_id=self.gateway.id,
+            sort_date_operation_id=self.operation.id,
+            door="D4",
+            destination="SDF",
+            actual_pure_pull_time_local=time(22, 55),
+        )
+        db.session.add(pull)
+        db.session.commit()
+
+        self.assertEqual(self._state("D1")["door_tab_alerts"]["D4"]["state"], "")
+
+        pull.actual_pure_pull_time_local = None
+        pull.no_pure_pull = True
+        db.session.commit()
+
+        self.assertEqual(self._state("D1")["door_tab_alerts"]["D4"]["state"], "")
+
+    def test_live_state_recomputes_inactive_tab_without_page_reload(self):
+        self._supervise("D1", "D4")
+        self._set_planned_pulls(time(23, 30), time(23, 40))
+        self.assertEqual(self._state("D1")["door_tab_alerts"]["D4"]["state"], "")
+
+        self._set_planned_pulls(time(23, 0), time(23, 40))
+        payload = self._state("D1")
+        page = self.client.get("/neoermac/door-view?door=D1")
+
+        self.assertEqual(payload["door_tab_alerts"]["D4"]["state"], "due_now")
+        self.assertIn(b"applyDoorTabAlerts(state.door_tab_alerts", page.data)
+        self.assertIn(b"window.neoErmacApplyDoorTabAlerts", page.data)
+
+    def test_linked_pull_save_immediately_clears_counterpart_tab_alert(self):
+        self._supervise("D1", "D4")
+        self._set_planned_pulls(time(22, 50), time(23, 30))
+        self.assertEqual(
+            self._state("D1")["door_tab_alerts"]["D4"]["state"],
+            "late",
+        )
+
+        response = self._save("D1", "pure", "22:58")
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["state"]["door_tab_alerts"]["D4"]["state"], "")
+        self.assertEqual(
+            self._pulls_by_door()["D4"].actual_pure_pull_time_local,
+            time(22, 58),
+        )
+
+    def test_tab_alert_css_blinks_green_and_red_only_on_inactive_tabs(self):
+        css = Path("app/static/css/base.css").read_text()
+
+        self.assertIn(
+            ".neoermac-door-tab:not(.is-active).is-pull-due-now",
+            css,
+        )
+        self.assertIn(
+            ".neoermac-door-tab:not(.is-active).is-pull-late",
+            css,
+        )
+        self.assertIn("@keyframes neoermac-door-tab-pull-pulse", css)
+        self.assertNotIn(
+            ".neoermac-door-tab:not(.is-active).is-pull-due-soon",
+            css,
+        )
+
     def _assign(self, runout_key, field_name, destination):
         row = next(
             row
@@ -205,6 +328,17 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
                 "no_pull": "1" if no_pull else "0",
             },
         )
+
+    def _state(self, door):
+        response = self.client.get(f"/neoermac/door-view/state?door={door}")
+        self.assertEqual(response.status_code, 200)
+        return response.get_json()["state"]
+
+    def _set_planned_pulls(self, pure, mix):
+        mission = db.session.get(SortDateMission, self.mission.id)
+        mission.pure_pull_time_local = pure
+        mission.mix_pull_time_local = mix
+        db.session.commit()
 
     def _pulls_by_door(self):
         return {
