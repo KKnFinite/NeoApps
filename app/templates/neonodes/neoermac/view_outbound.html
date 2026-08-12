@@ -88,7 +88,7 @@
                             <span class="neoermac-outbound-missing">NO CURRENT SORT MISSION FOR {{ row.destination }}.</span>
                             {% endif %}
                         </td>
-                        <td data-label="Location" data-outbound-field="location">{{ row.assigned_doors|join(" / ") if row.assigned_doors else "-" }}</td>
+                        <td data-label="Location" data-outbound-field="location">{{ row.assignment_locations|join(" / ") if row.assignment_locations else "-" }}</td>
                         <td data-label="PURE PLAN" data-outbound-pull-cell="pure-plan">{{ row.adjusted_pulls.pure or "-" }}</td>
                         <td data-label="PURE ACT" data-outbound-pull-cell="pure-actual"><strong>{{ actual_pull(row, "pure", "Pure") }}</strong></td>
                         <td data-label="MIX PLAN" data-outbound-pull-cell="mix-plan">{{ row.adjusted_pulls.mix or "-" }}</td>

@@ -17288,8 +17288,42 @@ select::-ms-expand {
     min-width: 0;
 }
 
+.neoermac-belt-side {
+    display: grid;
+    align-content: start;
+    gap: 6px;
+    min-width: 0;
+    padding: 7px;
+    border: 1px solid rgba(244, 247, 251, 0.2);
+    border-radius: 6px;
+    background: rgba(4, 6, 9, 0.46);
+}
+
+.neoermac-belt-side-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 8px;
+    color: #f8fbff;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.neoermac-belt-side-heading strong {
+    font-size: 0.76rem;
+    font-weight: 950;
+}
+
+.neoermac-belt-side-heading span {
+    color: rgba(238, 246, 255, 0.68);
+    font-size: 0.58rem;
+    font-weight: 900;
+}
+
 .neoermac-belt-destination-row {
-    display: block;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
     min-width: 0;
 }
 
@@ -17370,6 +17404,7 @@ select::-ms-expand {
 
     .neoermac-belt-destination-row {
         display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         min-width: 0;
     }
 }
@@ -17383,7 +17418,7 @@ select::-ms-expand {
 
 @media (max-width: 760px) {
     .neoermac-belt-group .neoermac-belt-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: minmax(0, 1fr);
         gap: 8px;
         padding: 3px 0 8px;
     }
@@ -17392,7 +17427,24 @@ select::-ms-expand {
         padding: 7px;
     }
 
+    .neoermac-belt-block .neoermac-belt-name {
+        display: grid;
+    }
+
     .neoermac-belt-destination-stack {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 6px;
+    }
+
+    .neoermac-belt-side {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 6px;
+    }
+
+    .neoermac-belt-block .neoermac-belt-side > .neoermac-belt-destination-row {
+        display: grid;
+        grid-area: auto;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 6px;
     }
 

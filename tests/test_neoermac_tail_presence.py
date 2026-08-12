@@ -64,7 +64,7 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
                 gateway_id=self.gateway.id,
                 runout_key="runout_10",
                 runout_name="D32-D34 Belts",
-                east_destination_1="SDF",
+                west_destination_1="SDF",
             )
         )
         db.session.commit()

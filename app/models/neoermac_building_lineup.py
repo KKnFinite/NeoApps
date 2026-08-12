@@ -21,6 +21,10 @@ class NeoErmacBuildingLineup(db.Model):
     east_destination_2 = db.Column(db.String(8), nullable=True)
     west_destination_1 = db.Column(db.String(8), nullable=True)
     west_destination_2 = db.Column(db.String(8), nullable=True)
+    east_destination_1_slot_2 = db.Column(db.String(8), nullable=True)
+    east_destination_2_slot_2 = db.Column(db.String(8), nullable=True)
+    west_destination_1_slot_2 = db.Column(db.String(8), nullable=True)
+    west_destination_2_slot_2 = db.Column(db.String(8), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

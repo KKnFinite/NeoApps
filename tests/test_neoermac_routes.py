@@ -441,13 +441,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertLess(response.data.index(b"West upcoming pulls"), response.data.index(b"East upcoming pulls"))
         self.assertIn(b"SDF / N702UP / D32", west_html)
         self.assertNotIn(b"UPS702 / SDF", west_html)
-        self.assertIn(b"D32-D34 BRN/WHT BELT", west_html)
-        self.assertNotIn(b"D32-D34 WEST BRN/WHT BELT", west_html)
+        self.assertIn(b"D32-D34 BELT 2 WEST SLOT 1", west_html)
         self.assertNotIn(b"BOS / N701UP / D13", west_html)
         self.assertIn(b"BOS / N701UP / D13", east_html)
         self.assertNotIn(b"UPS701 / BOS", east_html)
-        self.assertIn(b"D13-D17 BRN/ORG BELT", east_html)
-        self.assertNotIn(b"D13-D17 EAST BRN/ORG BELT", east_html)
+        self.assertIn(b"D13-D17 BELT 1 EAST SLOT 1", east_html)
         self.assertNotIn(b"SDF / N702UP / D32", east_html)
 
     def test_neoermac_upcoming_pulls_combines_duplicate_belt_side_entries(self):
@@ -468,9 +466,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(east_html.count(b"DEN / - / -"), 2)
         self.assertNotIn(b"UPS810 / DEN", east_html)
-        self.assertEqual(east_html.count(b"D9-D13 BRN/WHT BELT"), 2)
-        self.assertNotIn(b"D9-D13 EAST BRN/WHT BELT", east_html)
-        self.assertNotIn(b"D9-D13 WEST BRN/WHT BELT", east_html)
+        self.assertEqual(east_html.count(b"D9-D13 BELT 2 EAST SLOT 1"), 2)
+        self.assertEqual(east_html.count(b"D9-D13 BELT 2 WEST SLOT 1"), 2)
 
     def test_neoermac_upcoming_pulls_keeps_different_destinations_on_same_belt(self):
         self._assign_lineup_destination("runout_3", "east_destination_2", "DEN")
@@ -488,7 +485,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"OMA / - / -", east_html)
         self.assertNotIn(b"UPS811 / DEN", east_html)
         self.assertNotIn(b"UPS812 / OMA", east_html)
-        self.assertEqual(east_html.count(b"D9-D13 BRN/WHT BELT"), 4)
+        self.assertEqual(east_html.count(b"D9-D13 BELT 2 EAST SLOT 1"), 2)
+        self.assertEqual(east_html.count(b"D9-D13 BELT 2 WEST SLOT 1"), 2)
 
     def test_neoermac_upcoming_pulls_removes_actual_and_no_pull_items(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
@@ -708,8 +706,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("/neoermac", response.location)
 
     def test_door_view_selected_door_shows_building_lineup_destinations(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
-        self._assign_lineup_destination("runout_11", "west_destination_2", "ONT")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
+        self._assign_lineup_destination("runout_11", "east_destination_2", "ONT")
         self._add_operation_departure("UPS301", "SDF", tail="N123UP", parking="A01")
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -756,8 +754,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"No active on-the-way events.", response.data)
 
     def test_door_view_outbound_destination_cards_have_prominent_scan_markup(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "CID")
-        self._assign_lineup_destination("runout_11", "west_destination_2", "EWR")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "CID")
+        self._assign_lineup_destination("runout_11", "east_destination_2", "EWR")
         self._add_operation_departure("UPS401", "CID", tail="N440UP", parking="D07")
         self._add_operation_departure("UPS402", "EWR", tail="N441UP", parking="D08")
         db.session.commit()
@@ -801,7 +799,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("@keyframes neoermac-pull-critical-pulse", css)
 
     def test_door_view_initial_render_shows_parking_plan_assignment(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         mission = self._add_operation_departure("UPS948", "SDF", tail="N316UP")
         db.session.add(
             SortDateParkingAssignment(
@@ -827,7 +825,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"UPS948", row_html)
 
     def test_door_view_state_shows_parking_plan_assignment(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         mission = self._add_operation_departure("UPS948", "SDF", tail="N316UP")
         db.session.add(
             SortDateParkingAssignment(
@@ -850,7 +848,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(payload["state"]["destinations"][0]["parking"], "A01")
 
     def test_door_view_state_supports_selective_live_card_reconciliation(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         self._add_operation_departure(
             "UPS948",
             "SDF",
@@ -886,10 +884,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
     def test_door_view_orders_unfinished_by_effective_pure_then_tbd_and_completed(self):
         self._set_sort_window("night", time(22, 0), time(4, 0))
         assignments = (
-            ("east_destination_1", "SDF"),
-            ("east_destination_2", "ONT"),
-            ("west_destination_1", "LAX"),
-            ("west_destination_2", "MEM"),
+            ("west_destination_1", "SDF"),
+            ("west_destination_2", "ONT"),
+            ("west_destination_1_slot_2", "LAX"),
+            ("west_destination_2_slot_2", "MEM"),
         )
         for field_name, destination in assignments:
             self._assign_lineup_destination("runout_10", field_name, destination)
@@ -942,8 +940,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
     def test_door_view_uses_destination_as_stable_tie_breaker(self):
         self._set_sort_window("night", time(22, 0), time(4, 0))
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
-        self._assign_lineup_destination("runout_10", "east_destination_2", "ATL")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_2", "ATL")
         self._add_operation_departure(
             "UPS402",
             "SDF",
@@ -965,8 +963,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
     def test_door_view_completion_autosave_moves_card_to_completed_bottom(self):
         self._set_sort_window("night", time(22, 0), time(4, 0))
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
-        self._assign_lineup_destination("runout_10", "east_destination_2", "ONT")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_2", "ONT")
         self._add_operation_departure(
             "UPS401",
             "SDF",
@@ -1014,8 +1012,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         )
 
     def test_door_view_shared_position_slots_both_display_position_only(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
-        self._assign_lineup_destination("runout_10", "east_destination_2", "ONT")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_2", "ONT")
         first = self._add_operation_departure("UPS948", "SDF", tail="N316UP")
         second = self._add_operation_departure("UPS949", "ONT", tail="N317UP")
         db.session.add_all(
@@ -1052,7 +1050,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         )
 
     def test_door_view_parking_is_current_sort_operation_only(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         current_mission = self._add_operation_departure("UPS948", "SDF", tail="N316UP")
         other_operation = SortDateOperation(
             gateway_id=self.gateway.id,
@@ -1084,7 +1082,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"B02", response.data)
 
     def test_door_view_parking_returns_to_dash_after_unassign(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         mission = self._add_operation_departure("UPS948", "SDF", tail="N316UP")
         assignment = SortDateParkingAssignment(
             sort_date_operation_id=mission.sort_date_operation_id,
@@ -1110,7 +1108,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(state_response.get_json()["state"]["destinations"][0]["parking"], "-")
 
     def test_door_view_parking_assignment_does_not_mutate_master_schedule(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         master = MasterFlightSchedule(
             gateway_id=self.gateway.id,
             gateway_code=self.gateway.code,
@@ -1149,7 +1147,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(master.preferred_parking, "OLD")
 
     def test_door_view_renders_actual_flight_status(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         self._add_operation_departure("UPS402", "SDF", departure_status="blocked_out")
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -1161,7 +1159,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"LIVE SORT", response.data)
 
     def test_door_view_displays_window_adjusted_planned_pull_times(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         self._add_operation_departure("UPS401", "SDF", window_minutes=20)
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -1185,7 +1183,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("font-size: 0.88rem;", css)
 
     def test_door_view_distinguishes_tbd_zero_and_positive_windows(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         mission = self._add_operation_departure(
             "UPS401",
             "SDF",
@@ -1210,8 +1208,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"BASE 01:20 +12 MIN", positive.data)
 
     def test_door_view_uses_independent_wave_windows_when_global_is_blank(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
-        self._assign_lineup_destination("runout_10", "west_destination_1", "ONT")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_2", "ONT")
         first_wave = self._add_operation_departure(
             "UPS401",
             "SDF",
@@ -1242,7 +1240,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(cards["ONT"]["planned"]["pure"], "01:20")
 
     def test_door_view_global_zero_overrides_stored_wave_window(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         mission = self._add_operation_departure(
             "UPS401",
             "SDF",
@@ -1262,7 +1260,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
     def test_door_view_warns_for_pull_due_within_five_minutes(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 12, 1, 16)
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         mission = self._add_operation_departure("UPS401", "SDF")
         self._set_sort_window("night", time(22, 0), time(4, 0))
         db.session.commit()
@@ -1286,7 +1284,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
     def test_door_view_marks_late_pull_critical_until_resolved(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 12, 1, 26)
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         mission = self._add_operation_departure("UPS401", "SDF")
         self._set_sort_window("night", time(22, 0), time(4, 0))
         db.session.commit()
@@ -1313,7 +1311,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b'data-pull-alert-state="late"', resolved_response.data)
 
     def test_door_view_pull_urgency_uses_exact_yellow_green_red_boundaries(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         self._add_operation_departure(
             "UPS401",
             "SDF",
@@ -1350,7 +1348,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             2,
             1,
         )
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         mission = self._add_operation_departure(
             "UPS401",
             "SDF",
@@ -1394,7 +1392,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             0,
             1,
         )
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         self._add_operation_departure(
             "UPS401",
             "SDF",
@@ -1417,7 +1415,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
     def test_door_view_does_not_alert_for_pull_time_outside_operation_window(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 12, 1, 16)
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         self._add_operation_departure("UPS401", "SDF", pure_pull_time_local=time(18, 0))
         self._set_sort_window("night", time(22, 0), time(4, 0))
         db.session.commit()
@@ -1434,7 +1432,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
     def test_door_view_view_only_user_cannot_save_pulls_or_uld_requests(self):
         edit_rule = PermissionRule.query.filter_by(permission_key="neoermac.door_view.edit").one()
         edit_rule.minimum_role = "simulator"
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         db.session.commit()
         self._login_approved_user(role="operator")
 
@@ -1500,7 +1498,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"neoermac-uld-request-cancel", rendered_page)
 
     def test_door_view_edit_user_can_save_actual_pull_and_no_pull_states(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         self._add_operation_departure("UPS302", "SDF")
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -1533,7 +1531,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b" PM", reload_response.data)
 
     def test_door_view_pull_autosave_saves_valid_hhmm_actual_pull(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         self._add_operation_departure("UPS302", "SDF")
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -1651,8 +1649,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(mission.departure_status, "departed")
 
     def test_door_view_pull_autosave_creates_and_updates_pure_and_mix_records(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
-        self._assign_lineup_destination("runout_10", "east_destination_2", "ONT")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_2", "ONT")
         self._add_operation_departure("UPS302", "SDF")
         self._add_operation_departure("UPS303", "ONT")
         db.session.commit()
@@ -1717,8 +1715,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         )
 
     def test_door_view_pull_autosave_saves_no_pure_and_no_mix(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
-        self._assign_lineup_destination("runout_10", "east_destination_2", "ONT")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_2", "ONT")
         self._add_operation_departure("UPS302", "SDF")
         self._add_operation_departure("UPS303", "ONT")
         db.session.commit()
@@ -1761,7 +1759,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         )
 
     def test_door_view_pull_autosave_returns_structured_safe_server_error(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         self._add_operation_departure("UPS302", "SDF")
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -1789,7 +1787,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("gateway_id=", "\n".join(captured.output))
 
     def test_door_view_pull_entries_render_autosave_without_manual_save_button(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         self._add_operation_departure("UPS302", "SDF")
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -1807,7 +1805,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"data-manual-pull-save", response.data)
 
     def test_door_view_pull_autosave_rejects_invalid_hhmm_without_overwriting_saved_value(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         self._add_operation_departure("UPS302", "SDF")
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -1846,7 +1844,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(mission.actual_pure_pull_time_local, time(14, 5))
 
     def test_door_view_pull_autosave_saves_no_checkbox_state(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         self._add_operation_departure("UPS302", "SDF")
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -1873,7 +1871,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIsNone(mission.actual_mix_pull_time_local)
 
     def test_door_view_completed_pull_card_collapses_with_summary(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         mission = self._add_operation_departure("UPS302", "SDF", tail="N302UP", parking="A01")
         db.session.add(
             NeoErmacDoorPull(
@@ -1907,7 +1905,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"data-pull-edit-toggle", response.data)
 
     def test_door_view_partial_pull_card_does_not_collapse(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         mission = self._add_operation_departure("UPS302", "SDF")
         db.session.add(
             NeoErmacDoorPull(
@@ -1932,7 +1930,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"SDF - COMPLETE", rendered_html)
 
     def test_door_view_edit_user_can_create_and_update_uld_requested_counts(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         db.session.commit()
         self._login_approved_user(role="operator")
 
@@ -2177,7 +2175,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         )
 
     def test_door_view_request_form_renders_clean_mobile_markup(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         db.session.commit()
         self._login_approved_user(role="operator")
 
@@ -2218,7 +2216,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("font-size: 0.84rem", css)
 
     def test_door_view_request_inputs_remain_clean_after_submission(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         db.session.commit()
         self._login_approved_user(role="operator")
 
@@ -2662,6 +2660,20 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'data-pull-time-key="pure"', response.data)
         self.assertIn(b'data-lineup-assignment-slot="east_destination_1"', response.data)
         self.assertIn(b'data-lineup-assignment-slot="east_destination_2"', response.data)
+        self.assertIn(b'data-lineup-assignment-slot="east_destination_1_slot_2"', response.data)
+        self.assertIn(b'data-lineup-assignment-slot="east_destination_2_slot_2"', response.data)
+        self.assertIn(b'data-lineup-assignment-slot="west_destination_1_slot_2"', response.data)
+        self.assertIn(b'data-lineup-assignment-slot="west_destination_2_slot_2"', response.data)
+        self.assertEqual(
+            response.data.count(b"data-lineup-assignment-slot="),
+            96,
+        )
+        self.assertIn(b'data-belt-side="east" data-supervising-door="D1"', response.data)
+        self.assertIn(b'data-belt-side="west" data-supervising-door="D4"', response.data)
+        self.assertIn(b'data-belt-side="east" data-supervising-door="D34"', response.data)
+        self.assertIn(b'data-belt-side="west" data-supervising-door="D37"', response.data)
+        self.assertIn(b"FACES D1", response.data)
+        self.assertIn(b"FACES D37", response.data)
         self.assertIn(b"D1", response.data)
         self.assertIn(b"D37", response.data)
         self.assertNotIn(b"BELT SECTION", response.data)
@@ -2835,6 +2847,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         response = self.client.get("/neoermac/building-lineup")
         html = response.data.decode()
+        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
         left_pair = html.split('name="lineup_green_runout_east_destination_1"', 1)[
             1
         ].split("</label>", 1)[0]
@@ -2856,6 +2869,21 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("02:05", right_pair)
         self.assertIn("02:35", right_pair)
         self.assertNotIn("neoermac-mobile-slot-belt-name", html)
+        self.assertIn(
+            ".neoermac-belt-block .neoermac-belt-name {\n"
+            "        display: grid;",
+            css,
+        )
+        self.assertIn(
+            ".neoermac-belt-block .neoermac-belt-side > "
+            ".neoermac-belt-destination-row {\n"
+            "        display: grid;",
+            css,
+        )
+        self.assertIn(
+            "grid-template-columns: repeat(2, minmax(0, 1fr));",
+            css,
+        )
 
     def test_building_lineup_missing_pull_times_show_clean_blanks(self):
         self._add_master_departure("UPS212", "PHX")
@@ -2964,6 +2992,14 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'name="lineup_green_runout_east_destination_2"', response.data)
         self.assertIn(b'name="lineup_green_runout_west_destination_2"', response.data)
+        self.assertIn(
+            b'name="lineup_green_runout_east_destination_1_slot_2"',
+            response.data,
+        )
+        self.assertIn(
+            b'name="lineup_green_runout_west_destination_2_slot_2"',
+            response.data,
+        )
         self.assertIn(b"data-lineup-autosave-status", response.data)
         self.assertIn(b"data-lineup-autosave-error", response.data)
         self.assertNotIn(
@@ -3174,7 +3210,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"SAVE", response.data)
 
     def test_view_outbound_renders_summary_and_door_actuals(self):
-        self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         self._add_operation_departure(
             "UPS501",
             "SDF",
@@ -3214,7 +3250,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"N501UP", response.data)
         self.assertIn(b"A14", response.data)
         self.assertIn(b"02:35", response.data)
-        self.assertIn(b"D32-D34", response.data)
+        self.assertIn(b"D34", response.data)
+        self.assertIn(b"D32-D34 BELT 1 WEST SLOT 1", response.data)
         self.assertNotIn(b"EAST BLU/BLU BELT", response.data)
         self.assertIn(b"PURE PLAN", response.data)
         self.assertIn(b"PURE ACT", response.data)

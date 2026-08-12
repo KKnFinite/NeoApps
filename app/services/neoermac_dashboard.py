@@ -7,9 +7,7 @@ from app.models import (
     SortDateParkingAssignment,
 )
 from app.services.neoermac_building_lineup import (
-    DESTINATION_FIELDS,
-    get_building_lineup_rows,
-    get_outbound_door_options,
+    get_building_lineup_assignments,
     normalize_destination,
 )
 from app.services.neoermac_door_view import PULL_FIELDS
@@ -95,45 +93,42 @@ def _lineup_assignments_by_destination(gateway):
     assignments_by_destination = {}
     assignment_index = {}
 
-    for row in get_building_lineup_rows(gateway):
-        for field_name in DESTINATION_FIELDS:
-            destination = normalize_destination(getattr(row, field_name, None))
-            if not destination:
-                continue
+    for slot in get_building_lineup_assignments(gateway):
+        destination = slot["destination"]
+        primary_door = slot["supervising_door"]
+        side = _side_for_door(primary_door)
+        if not side:
+            continue
 
-            primary_door = row.door_start if field_name.startswith("east_") else row.door_end
-            side = _side_for_door(primary_door)
-            if not side:
-                continue
-
-            slot_label = row.slot_labels.get(field_name, field_name.replace("_", " ").upper())
-            location = f"{row.belt_group_label} {_dashboard_belt_label(slot_label)}"
-            assignment_key = (destination, side, location)
-            assignment = assignment_index.get(assignment_key)
-            if not assignment:
-                assignment = {
-                    "door": row.belt_group_label,
-                    "location": location,
-                    "side": side,
-                    "required_doors": [],
-                }
-                assignment_index[assignment_key] = assignment
-                assignments_by_destination.setdefault(destination, []).append(assignment)
-            if primary_door not in assignment["required_doors"]:
-                assignment["required_doors"].append(primary_door)
+        assignment_key = (destination, side)
+        assignment = assignment_index.get(assignment_key)
+        if not assignment:
+            assignment = {
+                "door": "",
+                "location": "",
+                "locations": [],
+                "side": side,
+                "required_doors": [],
+            }
+            assignment_index[assignment_key] = assignment
+            assignments_by_destination.setdefault(destination, []).append(assignment)
+        if primary_door not in assignment["required_doors"]:
+            assignment["required_doors"].append(primary_door)
+        location = _dashboard_belt_label(slot["display_label"])
+        if location not in assignment["locations"]:
+            assignment["locations"].append(location)
 
     for assignments in assignments_by_destination.values():
         for assignment in assignments:
             assignment["required_doors"] = tuple(assignment["required_doors"])
+            assignment["door"] = "/".join(assignment["required_doors"])
+            assignment["location"] = " / ".join(assignment.pop("locations"))
 
     return assignments_by_destination
 
 
 def _dashboard_belt_label(slot_label):
-    parts = str(slot_label or "").strip().upper().split()
-    if parts and parts[0] in {"EAST", "WEST"}:
-        parts = parts[1:]
-    return " ".join(parts)
+    return str(slot_label or "").strip().upper()
 
 
 def _door_pulls_by_destination(gateway, operation):

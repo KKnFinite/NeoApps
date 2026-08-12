@@ -92,6 +92,12 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "created_at": "DATETIME",
         "updated_at": "DATETIME",
     },
+    "neoermac_building_lineups": {
+        "east_destination_1_slot_2": "VARCHAR(8)",
+        "east_destination_2_slot_2": "VARCHAR(8)",
+        "west_destination_1_slot_2": "VARCHAR(8)",
+        "west_destination_2_slot_2": "VARCHAR(8)",
+    },
     "sort_timeline_settings": {
         "units_per_poll": "INTEGER DEFAULT 2",
         "taxi_to_ramp_minutes": "INTEGER DEFAULT 10",
@@ -199,6 +205,12 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "no_mix_pull": "BOOLEAN NOT NULL DEFAULT FALSE",
         "created_at": "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
         "updated_at": "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
+    },
+    "neoermac_building_lineups": {
+        "east_destination_1_slot_2": "VARCHAR(8)",
+        "east_destination_2_slot_2": "VARCHAR(8)",
+        "west_destination_1_slot_2": "VARCHAR(8)",
+        "west_destination_2_slot_2": "VARCHAR(8)",
     },
     "sort_timeline_settings": {
         "units_per_poll": "INTEGER DEFAULT 2",

@@ -51,6 +51,7 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
         db.session.add(self.operation)
         db.session.flush()
         self._assign_destination("runout_10", "east_destination_1", "SDF")
+        self._assign_destination("runout_10", "west_destination_1", "SDF")
         self.mission = self._add_departure()
         db.session.commit()
 
@@ -210,13 +211,13 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
         )
         db.session.commit()
         mission = self._mission()
-        self.assertIsNone(mission.actual_pure_pull_time_local)
-        self.assertEqual(mission.departure_status, "scheduled")
+        self.assertEqual(mission.actual_pure_pull_time_local, time(23, 50))
+        self.assertEqual(mission.departure_status, "last_uld_enroute")
         self.assertEqual(NeoErmacDoorPull.query.count(), 2)
 
         save_building_lineup_destination(
             self.gateway,
-            "lineup_runout_11_east_destination_1",
+            "lineup_runout_11_west_destination_1",
             "SDF",
         )
         db.session.commit()

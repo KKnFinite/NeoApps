@@ -11,8 +11,7 @@ from app.models import (
     SortDateParkingAssignment,
 )
 from app.services.neoermac_building_lineup import (
-    DESTINATION_FIELDS,
-    get_building_lineup_rows,
+    get_building_lineup_destinations_for_door,
     get_outbound_door_options,
     normalize_destination,
 )
@@ -428,26 +427,14 @@ def _effective_pull_sort_key(operation, planned_time):
 
 
 def _destination_slots_for_door(gateway, selected_door):
-    selected_number = _door_number(selected_door)
-    destination_slots = {}
-
-    for row in get_building_lineup_rows(gateway):
-        start = _door_number(row.door_start)
-        end = _door_number(row.door_end)
-        if selected_number is None or start is None or end is None:
-            continue
-        low, high = sorted((start, end))
-        if not (low <= selected_number <= high):
-            continue
-
-        for field_name in DESTINATION_FIELDS:
-            destination = normalize_destination(getattr(row, field_name, None))
-            if not destination:
-                continue
-            label = row.slot_labels.get(field_name, field_name.replace("_", " ").upper())
-            destination_slots.setdefault(destination, []).append(f"{row.belt_group_label} {label}")
-
-    return dict(sorted(destination_slots.items()))
+    return dict(
+        sorted(
+            get_building_lineup_destinations_for_door(
+                gateway,
+                selected_door,
+            ).items()
+        )
+    )
 
 
 def _parking_assignments_by_tail(operation):
@@ -779,10 +766,3 @@ def _int_value(value, default=0):
     if parsed < 0:
         raise ValueError("ULD counts cannot be negative.")
     return parsed
-
-
-def _door_number(door):
-    normalized = normalize_door(door)
-    if not normalized:
-        return None
-    return int(normalized[1:])

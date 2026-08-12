@@ -50,24 +50,27 @@
                     <div class="neoermac-runout-slots neoermac-belt-grid" aria-label="{{ row.belt_group_label }} belt assignments">
                         {% for block in row.belt_blocks %}
                         <div class="neoermac-belt-block neoermac-belt-block--{{ block.color_key }}" data-mobile-destination-slot="{{ block.slot_number }}" data-belt-color="{{ block.color_key }}">
-                            <div class="neoermac-belt-name">{{ block.label }}</div>
+                            <div class="neoermac-belt-name">
+                                <span>BELT {{ block.belt_number }}</span>
+                                <strong>{{ block.label }}</strong>
+                            </div>
                             <div class="neoermac-belt-destination-stack" aria-label="{{ block.label }} destinations">
-                            <div class="neoermac-belt-destination-row" data-belt-destination-position="upper">
-                                {% for slot in block.top_slots %}
-                                {% set selected_value = row|attr(slot.field) if slot.field else "" %}
-                                {% call destination_select(row, slot, selected_value, destination_choices, can_edit) %}
-                                    {{ pull_times_display(selected_value, pull_time_lookup.get(selected_value, {})) }}
-                                {% endcall %}
+                                {% for side in block.sides %}
+                                <section class="neoermac-belt-side" data-belt-side="{{ side.side }}" data-supervising-door="{{ side.door }}" aria-label="{{ side.label }} side faces {{ side.door }}">
+                                    <header class="neoermac-belt-side-heading">
+                                        <strong>{{ side.label }}</strong>
+                                        <span>FACES {{ side.door }}</span>
+                                    </header>
+                                    <div class="neoermac-belt-destination-row" data-belt-destination-position="{{ side.side }}">
+                                        {% for slot in side.slots %}
+                                        {% set selected_value = row|attr(slot.field) if slot.field else "" %}
+                                        {% call destination_select(row, slot, selected_value, destination_choices, can_edit) %}
+                                            {{ pull_times_display(selected_value, pull_time_lookup.get(selected_value, {})) }}
+                                        {% endcall %}
+                                        {% endfor %}
+                                    </div>
+                                </section>
                                 {% endfor %}
-                            </div>
-                            <div class="neoermac-belt-destination-row" data-belt-destination-position="lower">
-                                {% for slot in block.bottom_slots %}
-                                {% set selected_value = row|attr(slot.field) if slot.field else "" %}
-                                {% call destination_select(row, slot, selected_value, destination_choices, can_edit) %}
-                                    {{ pull_times_display(selected_value, pull_time_lookup.get(selected_value, {})) }}
-                                {% endcall %}
-                                {% endfor %}
-                            </div>
                             </div>
                         </div>
                         {% endfor %}

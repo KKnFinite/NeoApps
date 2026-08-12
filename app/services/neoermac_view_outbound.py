@@ -7,8 +7,7 @@ from app.models import (
     SortDateParkingAssignment,
 )
 from app.services.neoermac_building_lineup import (
-    DESTINATION_FIELDS,
-    get_building_lineup_rows,
+    get_building_lineup_assignments,
     normalize_destination,
 )
 from app.services.node_refresh import sort_window_auto_refresh_status
@@ -52,7 +51,7 @@ def view_outbound_context(gateway):
             _row_for_destination(
                 destination,
                 assignments_by_destination.get(destination, []),
-                pulls_by_destination.get(destination),
+                pulls_by_destination.get(destination, []),
                 operation,
                 mission,
                 parking_by_tail,
@@ -65,7 +64,7 @@ def view_outbound_context(gateway):
             _row_for_destination(
                 destination,
                 assignments_by_destination.get(destination, []),
-                pulls_by_destination.get(destination),
+                pulls_by_destination.get(destination, []),
                 operation,
                 None,
                 parking_by_tail,
@@ -87,7 +86,7 @@ def view_outbound_context(gateway):
 def _row_for_destination(
     destination,
     assignments,
-    door_pull,
+    door_pulls,
     operation,
     mission,
     parking_by_tail,
@@ -100,15 +99,30 @@ def _row_for_destination(
     actual_pulls = {}
     no_pulls = {}
     sort_pull = None
+    assigned_doors = _unique(
+        assignment["door"] for assignment in assignments if assignment.get("door")
+    )
+    pulls_by_door = {door_pull.door: door_pull for door_pull in door_pulls}
 
     for key, _label, planned_attr, actual_attr, no_attr in PULL_KEYS:
         base_value = getattr(mission, planned_attr, None) if mission else None
         adjusted_value = _adjusted_pull_value(timing_data, key) or base_value
-        no_pull = bool(getattr(door_pull, no_attr, False))
-        actual_value = None
-        if not no_pull:
-            actual_value = getattr(mission, actual_attr, None) if mission else None
-            actual_value = actual_value or getattr(door_pull, actual_attr, None)
+        actual_value = getattr(mission, actual_attr, None) if mission else None
+        if actual_value is None:
+            actual_values = [
+                getattr(door_pull, actual_attr, None)
+                for door_pull in door_pulls
+                if not getattr(door_pull, no_attr, False)
+                and getattr(door_pull, actual_attr, None) is not None
+            ]
+            actual_value = max(actual_values) if actual_values else None
+        no_pull = bool(assigned_doors) and all(
+            pulls_by_door.get(door) is not None
+            and bool(getattr(pulls_by_door[door], no_attr, False))
+            for door in assigned_doors
+        )
+        if actual_value is not None:
+            no_pull = False
 
         planned_pulls[key] = _time_value(base_value)
         adjusted_pulls[key] = _time_value(adjusted_value)
@@ -117,14 +131,11 @@ def _row_for_destination(
         if sort_pull is None:
             sort_pull = adjusted_value or base_value
 
-    assigned_doors = _unique(
-        assignment["door"] for assignment in assignments if assignment.get("door")
-    )
     assignment_locations = _unique(
         assignment["location"] for assignment in assignments if assignment.get("location")
     )
-    if not assigned_doors and door_pull:
-        assigned_doors = [door_pull.door]
+    if not assigned_doors and door_pulls:
+        assigned_doors = _unique(door_pull.door for door_pull in door_pulls)
     tail_presence = departure_tail_presence(mission, arrivals_by_tail) if mission else None
 
     return {
@@ -157,18 +168,13 @@ def _row_for_destination(
 
 def _lineup_assignments_by_destination(gateway):
     assignments_by_destination = {}
-    for row in get_building_lineup_rows(gateway):
-        for field_name in DESTINATION_FIELDS:
-            destination = normalize_destination(getattr(row, field_name, None))
-            if not destination:
-                continue
-            slot_label = row.slot_labels.get(field_name, field_name.replace("_", " ").upper())
-            assignments_by_destination.setdefault(destination, []).append(
-                {
-                    "door": row.belt_group_label,
-                    "location": f"{row.belt_group_label} {slot_label}",
-                }
-            )
+    for slot in get_building_lineup_assignments(gateway):
+        assignments_by_destination.setdefault(slot["destination"], []).append(
+            {
+                "door": slot["supervising_door"],
+                "location": slot["display_label"],
+            }
+        )
     return assignments_by_destination
 
 
@@ -185,9 +191,7 @@ def _door_pulls_by_destination(gateway, operation):
         destination = normalize_destination(row.destination)
         if not destination:
             continue
-        existing = pulls_by_destination.get(destination)
-        if existing is None or (_pull_has_data(row) and not _pull_has_data(existing)):
-            pulls_by_destination[destination] = row
+        pulls_by_destination.setdefault(destination, []).append(row)
     return pulls_by_destination
 
 
@@ -262,17 +266,6 @@ def _adjusted_pull_value(timing_data, pull_key):
             "pure": "adjusted_pure_pull_time",
             "mix": "adjusted_mix_pull_time",
         }[pull_key]
-    )
-
-
-def _pull_has_data(door_pull):
-    return any(
-        (
-            door_pull.actual_pure_pull_time_local,
-            door_pull.no_pure_pull,
-            door_pull.actual_mix_pull_time_local,
-            door_pull.no_mix_pull,
-        )
     )
 
 

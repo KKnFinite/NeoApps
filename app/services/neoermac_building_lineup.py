@@ -41,11 +41,20 @@ BUILDING_LINEUP_BELT_GROUPS = (
     ("runout_11", OUTBOUND_DOOR_OPTIONS[11], OUTBOUND_DOOR_OPTIONS[12], ("BLU/YEL", "BLU/BLK")),
 )
 
-DESTINATION_FIELDS = (
-    "east_destination_1",
-    "east_destination_2",
-    "west_destination_1",
-    "west_destination_2",
+BUILDING_LINEUP_SLOT_LAYOUT = (
+    (1, "east", 1, "east_destination_1"),
+    (1, "east", 2, "east_destination_1_slot_2"),
+    (1, "west", 1, "west_destination_1"),
+    (1, "west", 2, "west_destination_1_slot_2"),
+    (2, "east", 1, "east_destination_2"),
+    (2, "east", 2, "east_destination_2_slot_2"),
+    (2, "west", 1, "west_destination_2"),
+    (2, "west", 2, "west_destination_2_slot_2"),
+)
+
+DESTINATION_FIELDS = tuple(
+    field_name
+    for _belt_number, _side, _slot_number, field_name in BUILDING_LINEUP_SLOT_LAYOUT
 )
 
 BELT_COLOR_LABELS = {
@@ -168,10 +177,14 @@ def save_building_lineup(gateway, form_data):
     destination_choices = set(get_departure_destination_choices(gateway))
 
     for row in rows:
+        normalized_values = {}
         for field_name in DESTINATION_FIELDS:
             value = normalize_destination(form_data.get(lineup_field_name(row, field_name)))
             if value and value not in destination_choices:
                 raise ValueError(f"{value} is not an available master departure destination.")
+            normalized_values[field_name] = value
+        _validate_physical_belt_side_destinations(row, normalized_values)
+        for field_name, value in normalized_values.items():
             setattr(row, field_name, value or None)
 
     db.session.flush()
@@ -181,31 +194,40 @@ def save_building_lineup(gateway, form_data):
 
 
 def get_building_lineup_doors_by_destination(gateway):
-    door_numbers = {door: _door_number(door) for door in OUTBOUND_DOOR_OPTIONS}
     doors_by_destination = {}
-    for row in get_building_lineup_rows(gateway):
-        start = _door_number(row.door_start)
-        end = _door_number(row.door_end)
-        if start is None or end is None:
-            continue
-        low, high = sorted((start, end))
-        row_doors = tuple(
-            door
-            for door, number in door_numbers.items()
-            if number is not None and low <= number <= high
-        )
-        for field_name in DESTINATION_FIELDS:
-            destination = normalize_destination(getattr(row, field_name, None))
-            if not destination:
-                continue
-            assigned_doors = doors_by_destination.setdefault(destination, [])
-            for door in row_doors:
-                if door not in assigned_doors:
-                    assigned_doors.append(door)
+    for assignment in get_building_lineup_assignments(gateway):
+        destination = assignment["destination"]
+        door = assignment["supervising_door"]
+        assigned_doors = doors_by_destination.setdefault(destination, [])
+        if door not in assigned_doors:
+            assigned_doors.append(door)
     return {
-        destination: tuple(doors)
+        destination: tuple(
+            sorted(doors, key=lambda door: OUTBOUND_DOOR_OPTIONS.index(door))
+        )
         for destination, doors in doors_by_destination.items()
     }
+
+
+def get_building_lineup_assignments(gateway, include_blank=False):
+    assignments = []
+    for row in get_building_lineup_rows(gateway):
+        assignments.extend(
+            building_lineup_slot_descriptors(row, include_blank=include_blank)
+        )
+    return tuple(assignments)
+
+
+def get_building_lineup_destinations_for_door(gateway, door):
+    door = str(door or "").strip().upper()
+    destinations = {}
+    for assignment in get_building_lineup_assignments(gateway):
+        if assignment["supervising_door"] != door:
+            continue
+        labels = destinations.setdefault(assignment["destination"], [])
+        if assignment["display_label"] not in labels:
+            labels.append(assignment["display_label"])
+    return destinations
 
 
 def save_building_lineup_destination(gateway, field_token, destination):
@@ -222,6 +244,12 @@ def save_building_lineup_destination(gateway, field_token, destination):
     for row in rows:
         for field_name in DESTINATION_FIELDS:
             if lineup_field_name(row, field_name) == field_token:
+                normalized_values = {
+                    candidate: normalize_destination(getattr(row, candidate, None))
+                    for candidate in DESTINATION_FIELDS
+                }
+                normalized_values[field_name] = value
+                _validate_physical_belt_side_destinations(row, normalized_values)
                 setattr(row, field_name, value or None)
                 db.session.flush()
                 _recompute_current_sort_door_pull_aggregates(gateway)
@@ -241,44 +269,116 @@ def lineup_field_name(row, field_name):
 
 def apply_belt_display_metadata(row, start_door, end_door, belt_names):
     first_belt, second_belt = belt_names
-    row.door_start = start_door
-    row.door_end = end_door
+    row.door_start, row.door_end = _ordered_doors(start_door, end_door)
     row.belt_names = belt_names
-    row.belt_group_label = f"{start_door}-{end_door}"
+    row.belt_group_label = f"{row.door_start}-{row.door_end}"
     row.belt_blocks = (
         {
+            "belt_number": 1,
             "label": display_belt_label(first_belt),
             "color_key": belt_color_key(first_belt),
             "slot_number": "1",
-            "top_field": "east_destination_1",
-            "bottom_field": "west_destination_1",
-            "top_slots": (
-                {"field": "east_destination_1", "placeholder": "DEST 1"},
-            ),
-            "bottom_slots": (
-                {"field": "west_destination_1", "placeholder": "DEST 1"},
+            "sides": (
+                {
+                    "side": "east",
+                    "label": "EAST",
+                    "door": row.door_start,
+                    "slots": (
+                        {"field": "east_destination_1", "placeholder": "DEST 1"},
+                        {"field": "east_destination_1_slot_2", "placeholder": "DEST 2"},
+                    ),
+                },
+                {
+                    "side": "west",
+                    "label": "WEST",
+                    "door": row.door_end,
+                    "slots": (
+                        {"field": "west_destination_1", "placeholder": "DEST 1"},
+                        {"field": "west_destination_1_slot_2", "placeholder": "DEST 2"},
+                    ),
+                },
             ),
         },
         {
+            "belt_number": 2,
             "label": display_belt_label(second_belt),
             "color_key": belt_color_key(second_belt),
             "slot_number": "2",
-            "top_field": "east_destination_2",
-            "bottom_field": "west_destination_2",
-            "top_slots": (
-                {"field": "east_destination_2", "placeholder": "DEST 2"},
-            ),
-            "bottom_slots": (
-                {"field": "west_destination_2", "placeholder": "DEST 2"},
+            "sides": (
+                {
+                    "side": "east",
+                    "label": "EAST",
+                    "door": row.door_start,
+                    "slots": (
+                        {"field": "east_destination_2", "placeholder": "DEST 1"},
+                        {"field": "east_destination_2_slot_2", "placeholder": "DEST 2"},
+                    ),
+                },
+                {
+                    "side": "west",
+                    "label": "WEST",
+                    "door": row.door_end,
+                    "slots": (
+                        {"field": "west_destination_2", "placeholder": "DEST 1"},
+                        {"field": "west_destination_2_slot_2", "placeholder": "DEST 2"},
+                    ),
+                },
             ),
         },
     )
     row.slot_labels = {
-        "east_destination_1": f"EAST {first_belt} BELT",
-        "east_destination_2": f"EAST {second_belt} BELT",
-        "west_destination_1": f"WEST {first_belt} BELT",
-        "west_destination_2": f"WEST {second_belt} BELT",
+        descriptor["field_name"]: descriptor["display_label"]
+        for descriptor in building_lineup_slot_descriptors(row, include_blank=True)
     }
+
+
+def building_lineup_slot_descriptors(row, include_blank=False):
+    descriptors = []
+    for belt_number, side, slot_number, field_name in BUILDING_LINEUP_SLOT_LAYOUT:
+        destination = normalize_destination(getattr(row, field_name, None))
+        if not destination and not include_blank:
+            continue
+        belt_name = row.belt_names[belt_number - 1]
+        supervising_door = row.door_start if side == "east" else row.door_end
+        descriptors.append(
+            {
+                "runout_key": row.runout_key,
+                "runout_label": row.belt_group_label,
+                "belt_number": belt_number,
+                "belt_name": belt_name,
+                "belt_label": display_belt_label(belt_name),
+                "side": side,
+                "slot_number": slot_number,
+                "field_name": field_name,
+                "supervising_door": supervising_door,
+                "destination": destination,
+                "display_label": (
+                    f"{row.belt_group_label} BELT {belt_number} "
+                    f"{side.upper()} SLOT {slot_number}"
+                ),
+            }
+        )
+    return tuple(descriptors)
+
+
+def _validate_physical_belt_side_destinations(row, values):
+    for belt_number in (1, 2):
+        for side in ("east", "west"):
+            side_values = [
+                values[field_name]
+                for candidate_belt, candidate_side, _slot_number, field_name
+                in BUILDING_LINEUP_SLOT_LAYOUT
+                if candidate_belt == belt_number and candidate_side == side
+            ]
+            if side_values[0] and side_values[0] == side_values[1]:
+                raise ValueError(
+                    f"{side_values[0]} cannot fill both destination slots on "
+                    f"{row.belt_group_label} Belt {belt_number} {side.title()}."
+                )
+
+
+def _ordered_doors(first, second):
+    return tuple(sorted((first, second), key=lambda door: _door_number(door) or 0))
 
 
 def normalize_destination(destination):
