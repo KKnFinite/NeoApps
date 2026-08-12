@@ -6,6 +6,7 @@ from app.extensions import db
 from app.models import SortDateMission
 from app.services.sort_date_mission_schema import (
     DEPARTURE_STATUS_CONSTRAINT_NAME,
+    GOOGLE_RAIN_MILESTONE_COLUMNS,
     SORT_DATE_MISSION_SCHEMA_LOCK_KEY,
     ensure_sort_date_mission_departure_status_constraint,
 )
@@ -54,6 +55,13 @@ class SortDateMissionSchemaTest(unittest.TestCase):
             with self.subTest(status=status):
                 self.assertIn(f"'{status}'", constraint_sql)
 
+    def test_model_exposes_google_rain_milestone_and_source_columns(self):
+        model_columns = SortDateMission.__table__.columns
+
+        for column_name in GOOGLE_RAIN_MILESTONE_COLUMNS:
+            with self.subTest(column_name=column_name):
+                self.assertIn(column_name, model_columns)
+
     def test_testing_and_sqlite_skip_targeted_postgresql_ensure(self):
         with patch(
             "app.services.sort_date_mission_schema.db.session.connection"
@@ -80,13 +88,13 @@ class SortDateMissionSchemaTest(unittest.TestCase):
         definition_result.scalar.return_value = (
             "CHECK (departure_status IN ('loading', 'departed', 'cancelled'))"
         )
-        connection.execute.side_effect = [
-            Mock(),
-            Mock(),
-            definition_result,
-            Mock(),
-            Mock(),
-        ]
+
+        def execute(statement, *_args, **_kwargs):
+            if "SELECT pg_get_constraintdef" in str(statement):
+                return definition_result
+            return Mock()
+
+        connection.execute.side_effect = execute
 
         with (
             patch(
@@ -115,6 +123,11 @@ class SortDateMissionSchemaTest(unittest.TestCase):
             "DROP CONSTRAINT IF EXISTS ck_sort_date_missions_departure_status",
             statements,
         )
+        for column_name, column_sql in GOOGLE_RAIN_MILESTONE_COLUMNS.items():
+            self.assertIn(
+                f"ADD COLUMN IF NOT EXISTS {column_name} {column_sql}",
+                statements,
+            )
         self.assertIn("ADD CONSTRAINT ck_sort_date_missions_departure_status", statements)
         self.assertIn("'scheduled'", statements)
         self.assertNotIn("CREATE TABLE", statements)
@@ -131,7 +144,13 @@ class SortDateMissionSchemaTest(unittest.TestCase):
         definition_result.scalar.return_value = (
             "CHECK (departure_status IN ('scheduled', 'loading', 'departed'))"
         )
-        connection.execute.side_effect = [Mock(), Mock(), definition_result]
+
+        def execute(statement, *_args, **_kwargs):
+            if "SELECT pg_get_constraintdef" in str(statement):
+                return definition_result
+            return Mock()
+
+        connection.execute.side_effect = execute
 
         with (
             patch(
@@ -149,7 +168,9 @@ class SortDateMissionSchemaTest(unittest.TestCase):
         statements = "\n".join(
             str(call.args[0]) for call in connection.execute.call_args_list
         )
-        self.assertNotIn("ALTER TABLE", statements)
+        self.assertNotIn("DROP CONSTRAINT", statements)
+        for column_name in GOOGLE_RAIN_MILESTONE_COLUMNS:
+            self.assertIn(f"ADD COLUMN IF NOT EXISTS {column_name}", statements)
         commit.assert_called_once_with()
 
     def test_factory_invokes_targeted_departure_status_ensure(self):

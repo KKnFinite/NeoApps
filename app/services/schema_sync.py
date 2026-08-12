@@ -53,6 +53,10 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "api_aircraft_model": "VARCHAR(120)",
         "api_last_seen_at_utc": "DATETIME",
         "api_added_current_sort_only": "BOOLEAN DEFAULT 0",
+        "elmac_completed_at_utc": "DATETIME",
+        "elmac_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
+        "ramp_load_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
+        "crew_load_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
     },
     "sort_date_operations": {
         "first_wave_window_minutes": "INTEGER",
@@ -157,6 +161,10 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "api_aircraft_model": "VARCHAR(120)",
         "api_last_seen_at_utc": "TIMESTAMP",
         "api_added_current_sort_only": "BOOLEAN DEFAULT FALSE",
+        "elmac_completed_at_utc": "TIMESTAMP",
+        "elmac_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
+        "ramp_load_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
+        "crew_load_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
     },
     "sort_date_operations": {
         "first_wave_window_minutes": "INTEGER",

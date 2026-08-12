@@ -1,4 +1,4 @@
-"""Targeted production schema ensure for SortDateMission departure statuses."""
+"""Targeted production schema ensure for active SortDateMission additions."""
 
 from sqlalchemy import text
 
@@ -9,10 +9,16 @@ from app.models import SortDateMission
 SORT_DATE_MISSION_SCHEMA_LOCK_KEY = 7_483_327_341_903
 SORT_DATE_MISSION_SCHEMA_LOCK_TIMEOUT = "5s"
 DEPARTURE_STATUS_CONSTRAINT_NAME = "ck_sort_date_missions_departure_status"
+GOOGLE_RAIN_MILESTONE_COLUMNS = {
+    "elmac_completed_at_utc": "TIMESTAMP",
+    "elmac_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
+    "ramp_load_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
+    "crew_load_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
+}
 
 
 def ensure_sort_date_mission_departure_status_constraint(app):
-    """Ensure PostgreSQL accepts the model's scheduled departure status."""
+    """Ensure only the active departure constraint and additive Rain columns."""
     if app.config.get("TESTING") or not _is_postgresql(app):
         return False
 
@@ -29,6 +35,13 @@ def ensure_sort_date_mission_departure_status_constraint(app):
                 text("SELECT pg_advisory_xact_lock(:lock_key)"),
                 {"lock_key": SORT_DATE_MISSION_SCHEMA_LOCK_KEY},
             )
+            for column_name, column_sql in GOOGLE_RAIN_MILESTONE_COLUMNS.items():
+                connection.execute(
+                    text(
+                        f"ALTER TABLE {SortDateMission.__tablename__} "
+                        f"ADD COLUMN IF NOT EXISTS {column_name} {column_sql}"
+                    )
+                )
             definition = connection.execute(
                 text(
                     "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
@@ -55,12 +68,12 @@ def ensure_sort_date_mission_departure_status_constraint(app):
         except Exception as error:
             db.session.rollback()
             app.logger.error(
-                "Departure-status constraint ensure failed safely: error=%s",
+                "SortDateMission targeted schema ensure failed safely: error=%s",
                 type(error).__name__,
             )
             raise
 
-    app.logger.info("Departure-status constraint ensure completed")
+    app.logger.info("SortDateMission targeted schema ensure completed")
     return True
 
 

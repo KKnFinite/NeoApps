@@ -795,6 +795,23 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
         self.assertEqual(mission.actual_block_out_source, "manual")
         self.assertIn("Native Neo block-out preserved", result["results"][0]["warnings"][0])
 
+    def test_google_rain_block_out_authority_is_preserved(self):
+        mission = self._mission("departure", "UPS0755", tail="N457UP", destination="SDF")
+        mission.actual_block_out_datetime_utc = datetime(2026, 8, 8, 6, 35)
+        mission.actual_block_out_source = "google_rain"
+        mission.departure_status = "departed"
+        db.session.commit()
+
+        result = self._apply_departures(
+            self._outbound(4, "755", "N457UP", operational="01:45")
+        )
+        db.session.commit()
+
+        mission = db.session.get(SortDateMission, mission.id)
+        self.assertEqual(mission.actual_block_out_datetime_utc, datetime(2026, 8, 8, 6, 35))
+        self.assertEqual(mission.actual_block_out_source, "google_rain")
+        self.assertIn("Native Neo block-out preserved", result["results"][0]["warnings"][0])
+
     def test_pending_tail_swap_is_recorded_but_not_effective_then_clears(self):
         first = self._apply_departures(
             self._outbound(

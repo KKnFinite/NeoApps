@@ -64,6 +64,7 @@ GOOGLE_NATIVE_BLOCK_OUT_SOURCES = {
     "neorain",
     "neo_rain",
     "rain",
+    "google_rain",
 }
 _TAIL_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9-]{0,31}$")
 _HHMM_PATTERN = re.compile(r"^(\d{1,2}):(\d{2})$")

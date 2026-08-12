@@ -25,11 +25,23 @@ from app.services.google_motherbrain_live_poll_lease import (
     complete_google_motherbrain_live_poll_success,
 )
 from app.services.google_motherbrain_sheets import read_google_motherbrain_live_rows
+from app.services.google_rain_live_milestones import (
+    apply_google_rain_departure_milestones,
+)
+from app.services.google_rain_sheets import read_google_rain_outbound_milestones
 from app.services.operation_lifecycle import ensure_operational_sort_operations
 from app.services.sort_timeline import ensure_sort_timeline_settings, sort_settings_by_name
 
 
-def execute_google_motherbrain_live_poll(gateway, now=None, *, reader=None, applier=None):
+def execute_google_motherbrain_live_poll(
+    gateway,
+    now=None,
+    *,
+    reader=None,
+    applier=None,
+    rain_reader=None,
+    rain_applier=None,
+):
     """Run one server-resolved live poll without accepting client scope input."""
     lifecycle = ensure_operational_sort_operations(gateway, now=now)
     if lifecycle["errors"]:
@@ -73,9 +85,45 @@ def execute_google_motherbrain_live_poll(gateway, now=None, *, reader=None, appl
             operation.id,
         )
         return {"status": "lease_lost", "operation_id": operation.id}
+    rain_result = _run_google_rain_best_effort(
+        operation,
+        now=now,
+        reader=rain_reader,
+        applier=rain_applier,
+    )
     return {
         "status": "success",
         "operation_id": operation.id,
+        "applied_count": application.get("applied_count", 0),
+        "skipped_count": application.get("skipped_count", 0),
+        "rain_status": rain_result["status"],
+        "rain_applied_count": rain_result.get("applied_count", 0),
+        "rain_skipped_count": rain_result.get("skipped_count", 0),
+    }
+
+
+def _run_google_rain_best_effort(operation, *, now=None, reader=None, applier=None):
+    """Run Rain after the primary poll is durable; never undo that success."""
+    if current_app.config.get("TESTING") and reader is None and applier is None:
+        return {"status": "not_run"}
+
+    reader = reader or read_google_rain_outbound_milestones
+    applier = applier or apply_google_rain_departure_milestones
+    try:
+        rows = reader()
+        application = applier(operation, rows=rows, now=now)
+        db.session.commit()
+    except Exception as error:
+        db.session.rollback()
+        current_app.logger.warning(
+            "Google Rain milestone poll failed safely: operation_id=%s error=%s",
+            operation.id,
+            type(error).__name__,
+        )
+        return {"status": "failed"}
+
+    return {
+        "status": "success",
         "applied_count": application.get("applied_count", 0),
         "skipped_count": application.get("skipped_count", 0),
     }

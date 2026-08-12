@@ -205,15 +205,18 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
 
     def test_disabled_polling_does_not_read_or_create_lease_state(self):
         reader = Mock()
+        rain_reader = Mock()
 
         result = execute_google_motherbrain_live_poll(
             self.gateway,
             now=self.NOW,
             reader=reader,
+            rain_reader=rain_reader,
         )
 
         self.assertEqual(result["status"], "disabled")
         reader.assert_not_called()
+        rain_reader.assert_not_called()
         self.assertEqual(MotherBrainGoogleLivePollState.query.count(), 0)
 
     def test_successful_poll_applies_live_rows_then_marks_lease_success(self):
@@ -242,6 +245,74 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         state = self._state(operation)
         self.assertEqual(state.last_success_at_utc, self.NOW)
         self.assertEqual(state.lease_token, "")
+        self.assertIsNone(state.last_error)
+
+    def test_successful_poll_applies_rain_in_separate_followup_transaction(self):
+        self._enable()
+        operation = self._ensure_operation()
+        mission = SortDateMission(
+            sort_date=operation.sort_date,
+            gateway_code="RFD",
+            sort_name="night",
+            sort_date_operation_id=operation.id,
+            mission_type="departure",
+            mission_source="master",
+            flight_number="UPS0910",
+            origin="RFD",
+            destination="LAX",
+            timezone="America/Chicago",
+            planned_datetime_local=datetime(2026, 6, 19, 2, 24),
+            departure_status="scheduled",
+        )
+        db.session.add(mission)
+        db.session.commit()
+
+        result = execute_google_motherbrain_live_poll(
+            self.gateway,
+            now=self.NOW,
+            reader=Mock(return_value={"inbound_rows": [], "outbound_rows": []}),
+            rain_reader=Mock(
+                return_value=[
+                    {
+                        "sheet_row": 4,
+                        "flight_number": "UPS0910",
+                        "destination": "LAX",
+                        "std": "2:24",
+                        "block": "2:29",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["rain_status"], "success")
+        self.assertEqual(result["rain_applied_count"], 1)
+        self.assertEqual(mission.departure_status, "departed")
+        self.assertEqual(mission.actual_block_out_source, "google_rain")
+
+    def test_rain_read_failure_does_not_break_successful_motherbrain_poll(self):
+        self._enable()
+        reader = Mock(
+            return_value={
+                "inbound_rows": [
+                    self._inbound(4, "947", "N947UP", origin="SDF", status="DEP")
+                ],
+                "outbound_rows": [],
+            }
+        )
+
+        result = execute_google_motherbrain_live_poll(
+            self.gateway,
+            now=self.NOW,
+            reader=reader,
+            rain_reader=Mock(side_effect=RuntimeError("Rain unavailable")),
+        )
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["rain_status"], "failed")
+        self.assertEqual(SortDateMission.query.count(), 1)
+        state = self._state(db.session.get(SortDateOperation, result["operation_id"]))
+        self.assertEqual(state.last_success_at_utc, self.NOW)
         self.assertIsNone(state.last_error)
 
     def test_successful_poll_applies_formatted_google_datetime_rows(self):

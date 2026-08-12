@@ -93,8 +93,18 @@ class SortDateMission(db.Model):
     arrival_status = db.Column(db.String(32), nullable=True)
     departure_status = db.Column(db.String(32), nullable=True)
     last_uld_enroute_at_utc = db.Column(db.DateTime, nullable=True)
+    elmac_completed_at_utc = db.Column(db.DateTime, nullable=True)
+    elmac_completed_source = db.Column(
+        db.String(32), nullable=False, default="unknown"
+    )
     ramp_load_completed_at_utc = db.Column(db.DateTime, nullable=True)
+    ramp_load_completed_source = db.Column(
+        db.String(32), nullable=False, default="unknown"
+    )
     crew_load_completed_at_utc = db.Column(db.DateTime, nullable=True)
+    crew_load_completed_source = db.Column(
+        db.String(32), nullable=False, default="unknown"
+    )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
