@@ -4,6 +4,8 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+from sqlalchemy import text
+
 from app import create_app
 from app.extensions import db
 from app.models import (
@@ -1464,6 +1466,64 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(saved.actual_pure_pull_time_local, time(14, 5))
         self.assertFalse(saved.no_pure_pull)
         self.assertEqual(mission.actual_pure_pull_time_local, time(14, 5))
+
+    def test_door_view_pull_autosave_succeeds_outside_ops_with_departed_mission(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026,
+            6,
+            11,
+            19,
+            0,
+        )
+        self._assign_lineup_destination("runout_3", "east_destination_2", "DEN")
+        mission = self._add_operation_departure(
+            "UPS0810",
+            "DEN",
+            departure_status="departed",
+            pure_pull_time_local=time(1, 49),
+        )
+        settings = ensure_sort_timeline_settings(self.gateway)
+        sort_setting = next(row for row in settings.sort_settings if row.sort_name == "night")
+        sort_setting.sort_window_start_local = time(14, 0)
+        sort_setting.sort_window_end_local = time(5, 0)
+        sort_setting.ops_window_start_local = time(20, 0)
+        sort_setting.ops_window_end_local = time(3, 0)
+        db.session.execute(
+            text(
+                "ALTER TABLE neoermac_door_pulls "
+                "ADD COLUMN no_first_mix_pull BOOLEAN NOT NULL DEFAULT 0"
+            )
+        )
+        db.session.execute(
+            text(
+                "ALTER TABLE neoermac_door_pulls "
+                "ADD COLUMN no_second_mix_pull BOOLEAN NOT NULL DEFAULT 0"
+            )
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.post(
+            "/neoermac/door-view/pull-autosave",
+            data={
+                "door": "D9",
+                "destination": "DEN",
+                "pull_key": "pure",
+                "actual_pull": "01:45",
+                "no_pull": "0",
+            },
+        )
+
+        payload = response.get_json()
+        saved = NeoErmacDoorPull.query.filter_by(door="D9", destination="DEN").one()
+        db.session.refresh(mission)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["state"]["refresh"]["auto_refresh_enabled"])
+        self.assertEqual(payload["state"]["refresh"]["reason"], "before_ops_window")
+        self.assertEqual(saved.actual_pure_pull_time_local, time(1, 45))
+        self.assertEqual(mission.actual_pure_pull_time_local, time(1, 45))
+        self.assertEqual(mission.departure_status, "departed")
 
     def test_door_view_pull_autosave_creates_and_updates_pure_and_mix_records(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")

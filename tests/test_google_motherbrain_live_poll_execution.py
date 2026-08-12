@@ -94,12 +94,12 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
-    def test_outside_polling_window_does_not_read_or_lease(self):
+    def test_before_sort_window_does_not_read_or_lease(self):
         reader = Mock()
 
         result = execute_google_motherbrain_live_poll(
             self.gateway,
-            now=datetime(2026, 6, 18, 15, 0),
+            now=datetime(2026, 6, 18, 13, 59),
             reader=reader,
         )
 
@@ -107,26 +107,26 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         reader.assert_not_called()
         self.assertEqual(MotherBrainGoogleLivePollState.query.count(), 0)
 
-    def test_google_polling_window_start_is_inclusive(self):
+    def test_sort_window_start_is_inclusive(self):
         self._enable()
         reader = Mock(return_value={"inbound_rows": [], "outbound_rows": []})
 
         result = execute_google_motherbrain_live_poll(
             self.gateway,
-            now=datetime(2026, 6, 18, 18, 0),
+            now=datetime(2026, 6, 18, 14, 0),
             reader=reader,
         )
 
         self.assertEqual(result["status"], "success")
         reader.assert_called_once_with()
 
-    def test_google_polling_window_end_is_exclusive(self):
+    def test_sort_window_end_is_exclusive(self):
         self._enable()
         reader = Mock()
 
         result = execute_google_motherbrain_live_poll(
             self.gateway,
-            now=datetime(2026, 6, 19, 4, 0),
+            now=datetime(2026, 6, 19, 5, 0),
             reader=reader,
         )
 
@@ -134,17 +134,17 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         reader.assert_not_called()
         self.assertEqual(MotherBrainGoogleLivePollState.query.count(), 0)
 
-    def test_missing_google_polling_bound_does_not_fall_back_to_api_window(self):
+    def test_missing_sort_window_bound_is_outside_window(self):
         self._enable()
         reader = Mock()
 
         for missing_field in (
-            "google_polling_start_local",
-            "google_polling_end_local",
+            "sort_window_start_local",
+            "sort_window_end_local",
         ):
             with self.subTest(missing_field=missing_field):
-                self.sort_setting.google_polling_start_local = time(18, 0)
-                self.sort_setting.google_polling_end_local = time(4, 0)
+                self.sort_setting.sort_window_start_local = time(14, 0)
+                self.sort_setting.sort_window_end_local = time(5, 0)
                 setattr(self.sort_setting, missing_field, None)
                 db.session.commit()
 
@@ -159,12 +159,14 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         reader.assert_not_called()
         self.assertEqual(MotherBrainGoogleLivePollState.query.count(), 0)
 
-    def test_api_polling_window_cannot_make_google_polling_eligible(self):
+    def test_api_and_google_windows_cannot_make_google_polling_eligible(self):
         self._enable()
         self.sort_setting.polling_start_local = time(14, 0)
         self.sort_setting.polling_end_local = time(5, 0)
-        self.sort_setting.google_polling_start_local = time(23, 0)
-        self.sort_setting.google_polling_end_local = time(1, 0)
+        self.sort_setting.google_polling_start_local = time(14, 0)
+        self.sort_setting.google_polling_end_local = time(5, 0)
+        self.sort_setting.sort_window_start_local = time(23, 0)
+        self.sort_setting.sort_window_end_local = time(1, 0)
         db.session.commit()
         reader = Mock()
 
@@ -177,12 +179,12 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         self.assertEqual(result["status"], "outside_window")
         reader.assert_not_called()
 
-    def test_existing_operation_uses_google_window_outside_lifecycle_window(self):
+    def test_existing_operation_uses_sort_window_despite_google_window(self):
         self._enable()
-        self.sort_setting.sort_window_start_local = time(14, 0)
-        self.sort_setting.sort_window_end_local = time(17, 0)
-        self.sort_setting.google_polling_start_local = time(18, 0)
-        self.sort_setting.google_polling_end_local = time(20, 0)
+        self.sort_setting.sort_window_start_local = time(18, 0)
+        self.sort_setting.sort_window_end_local = time(20, 0)
+        self.sort_setting.google_polling_start_local = time(23, 0)
+        self.sort_setting.google_polling_end_local = time(1, 0)
         operation = SortDateOperation(
             gateway_id=self.gateway.id,
             gateway_code=self.gateway.code,
@@ -201,6 +203,22 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
 
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["operation_id"], operation.id)
+        reader.assert_called_once_with()
+
+    def test_ops_window_does_not_restrict_google_polling(self):
+        self._enable()
+        self.sort_setting.ops_window_start_local = time(23, 0)
+        self.sort_setting.ops_window_end_local = time(1, 0)
+        db.session.commit()
+        reader = Mock(return_value={"inbound_rows": [], "outbound_rows": []})
+
+        result = execute_google_motherbrain_live_poll(
+            self.gateway,
+            now=self.NOW,
+            reader=reader,
+        )
+
+        self.assertEqual(result["status"], "success")
         reader.assert_called_once_with()
 
     def test_disabled_polling_does_not_read_or_create_lease_state(self):

@@ -145,12 +145,14 @@ class GoogleMotherBrainLivePollHealthTest(unittest.TestCase):
         self.assertEqual(health["status"], "outside_window")
         self.assertEqual(health["label"], "Outside Polling Window")
 
-    def test_health_uses_google_window_instead_of_api_polling_window(self):
+    def test_health_uses_sort_window_instead_of_api_or_google_windows(self):
         self._enable()
+        self.sort_setting.sort_window_start_local = time(23, 0)
+        self.sort_setting.sort_window_end_local = time(2, 0)
         self.sort_setting.polling_start_local = time(14, 0)
         self.sort_setting.polling_end_local = time(5, 0)
-        self.sort_setting.google_polling_start_local = time(23, 0)
-        self.sort_setting.google_polling_end_local = time(2, 0)
+        self.sort_setting.google_polling_start_local = time(14, 0)
+        self.sort_setting.google_polling_end_local = time(5, 0)
         db.session.commit()
 
         health = google_motherbrain_live_poll_health(

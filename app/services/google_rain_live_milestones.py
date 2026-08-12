@@ -10,6 +10,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.extensions import db
 from app.models import SortDateMission
 from app.services.alp_import import alp_flight_key, normalize_alp_flight_number
+from app.services.departure_progress import (
+    recompute_departure_status_after_external_clear,
+    repair_orphaned_external_departed_status,
+)
 from app.services.google_motherbrain_live_missions import (
     GoogleMotherBrainMissionError,
     _parse_optional_live_datetime,
@@ -110,6 +114,7 @@ def apply_google_rain_departure_milestones(operation, rows=(), now=None):
 def _apply_row(operation, mission, row):
     changed_fields = []
     warnings = []
+    block_supplied_blank = False
     for row_key, timestamp_attr, source_attr, target_status in _MILESTONE_SPECS:
         raw_value = row[row_key]
         if raw_value is _MISSING:
@@ -124,6 +129,8 @@ def _apply_row(operation, mission, row):
             warnings.append(str(error))
             continue
 
+        previous_timestamp = getattr(mission, timestamp_attr)
+        previous_source = _normalized_source(getattr(mission, source_attr))
         ownership = _apply_owned_timestamp(
             mission,
             timestamp_attr,
@@ -135,9 +142,25 @@ def _apply_row(operation, mission, row):
             continue
         if ownership == "changed":
             changed_fields.append(timestamp_attr)
+            if (
+                target_status
+                and timestamp_utc is None
+                and previous_timestamp is not None
+                and previous_source == GOOGLE_RAIN_SOURCE
+                and recompute_departure_status_after_external_clear(
+                    mission,
+                    target_status,
+                )
+            ):
+                changed_fields.append("departure_status")
         if timestamp_utc is not None and target_status:
             if _advance_departure_status(mission, target_status):
                 changed_fields.append("departure_status")
+        if row_key == "block" and timestamp_utc is None:
+            block_supplied_blank = True
+
+    if block_supplied_blank and repair_orphaned_external_departed_status(mission):
+        changed_fields.append("departure_status")
 
     return {
         "status": "applied",

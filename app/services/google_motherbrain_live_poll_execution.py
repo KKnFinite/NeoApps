@@ -130,7 +130,7 @@ def _run_google_rain_best_effort(operation, *, now=None, reader=None, applier=No
 
 
 def _polling_window_operation(gateway, lifecycle, now=None):
-    """Return the locked workbook operation while its Google window is live."""
+    """Return the locked workbook operation while its physical Sort Window is live."""
     if str(gateway.code or "").strip().upper() != GOOGLE_MOTHERBRAIN_GATEWAY_CODE:
         return None
 
@@ -160,11 +160,11 @@ def _polling_window_operation(gateway, lifecycle, now=None):
 
 
 def google_polling_window_for_operation(operation, settings):
-    """Resolve one operation's configured Google polling window without fallback."""
+    """Resolve the physical Sort Window used by both Google read adapters."""
     sort_name = str(operation.sort_name or "").strip().lower()
     sort_setting = sort_settings_by_name(settings).get(sort_name)
-    start_time = getattr(sort_setting, "google_polling_start_local", None)
-    end_time = getattr(sort_setting, "google_polling_end_local", None)
+    start_time = getattr(sort_setting, "sort_window_start_local", None)
+    end_time = getattr(sort_setting, "sort_window_end_local", None)
     if not start_time or not end_time:
         return None, None
 

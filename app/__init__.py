@@ -51,6 +51,9 @@ from app.services.sort_date_operation_schema import (
 from app.services.neosektor_sheets_compat_schema import (
     ensure_neosektor_sheets_compat_columns,
 )
+from app.services.neoermac_door_pull_schema import (
+    ensure_neoermac_door_pull_legacy_defaults,
+)
 from app.services.shell_metadata import resolve_shell_metadata
 from app.services.time_display import format_local_hhmm
 
@@ -81,6 +84,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     ensure_sort_date_mission_departure_status_constraint(app)
     ensure_sort_date_operation_window_nullable(app)
     ensure_neosektor_sheets_compat_columns(app)
+    ensure_neoermac_door_pull_legacy_defaults(app)
 
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)

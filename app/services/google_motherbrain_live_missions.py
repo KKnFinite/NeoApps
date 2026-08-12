@@ -11,6 +11,10 @@ from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.extensions import db
+from app.services.departure_progress import (
+    recompute_departure_status_after_external_clear,
+    repair_orphaned_external_departed_status,
+)
 from app.models import (
     SortDateGoogleMissionLink,
     SortDateMission,
@@ -452,14 +456,15 @@ def _apply_outbound_state(
 
     if mission.departure_status is None:
         mission.departure_status = "scheduled"
-    elif (
-        str(mission.departure_status).strip().lower() == "loading"
-        and not _has_downstream_departure_progress(mission)
-    ):
-        mission.departure_status = "scheduled"
 
     if _clear_future_google_block_out(mission, applied_at):
         warnings.append("Future Google block-out state cleared.")
+
+    if operational_utc is None:
+        if _clear_google_block_out(mission):
+            warnings.append("Cleared Google block-out no longer present in the sheet.")
+        elif repair_orphaned_external_departed_status(mission):
+            warnings.append("Stale Google departure status repaired.")
 
     if operational_utc is not None:
         if operational_utc > applied_at:
@@ -493,20 +498,22 @@ def _clear_future_google_block_out(mission, applied_at):
 
     mission.actual_block_out_datetime_utc = None
     mission.actual_block_out_source = "unknown"
-    if str(mission.departure_status or "").strip().lower() == "departed":
-        mission.departure_status = "scheduled"
+    recompute_departure_status_after_external_clear(mission, "departed")
     return True
 
 
-def _has_downstream_departure_progress(mission):
-    return any(
-        (
-            mission.last_uld_enroute_at_utc,
-            mission.ramp_load_completed_at_utc,
-            mission.crew_load_completed_at_utc,
-            mission.actual_block_out_datetime_utc,
-        )
-    )
+def _clear_google_block_out(mission):
+    source = str(mission.actual_block_out_source or "unknown").strip().lower()
+    if (
+        source != GOOGLE_MOTHERBRAIN_MISSION_SOURCE
+        or mission.actual_block_out_datetime_utc is None
+    ):
+        return False
+
+    mission.actual_block_out_datetime_utc = None
+    mission.actual_block_out_source = "unknown"
+    recompute_departure_status_after_external_clear(mission, "departed")
+    return True
 
 
 def _apply_pending_tail_swap(link, row):

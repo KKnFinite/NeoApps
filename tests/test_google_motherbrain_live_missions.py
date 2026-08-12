@@ -678,7 +678,7 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
         self.assertEqual(mission.actual_block_out_source, "manual")
         self.assertEqual(mission.departure_status, "departed")
 
-    def test_blank_google_u_does_not_downgrade_past_google_departure(self):
+    def test_blank_google_u_clears_past_google_block_out_and_departed_status(self):
         self.operation.sort_date = date(2026, 8, 10)
         mission = self._mission("departure", "UPS0755", tail="N755UP", destination="SDF")
         mission.actual_block_out_datetime_utc = datetime(2026, 8, 11, 2, 39)
@@ -693,11 +693,30 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
         db.session.commit()
 
         mission = db.session.get(SortDateMission, mission.id)
-        self.assertEqual(mission.actual_block_out_datetime_utc, datetime(2026, 8, 11, 2, 39))
-        self.assertEqual(mission.actual_block_out_source, GOOGLE_MOTHERBRAIN_MISSION_SOURCE)
-        self.assertEqual(mission.departure_status, "departed")
+        self.assertIsNone(mission.actual_block_out_datetime_utc)
+        self.assertEqual(mission.actual_block_out_source, "unknown")
+        self.assertEqual(mission.departure_status, "scheduled")
 
-    def test_legacy_google_loading_without_progress_self_heals_to_scheduled(self):
+    def test_blank_google_u_restores_strongest_remaining_progress(self):
+        self.operation.sort_date = date(2026, 8, 10)
+        mission = self._mission("departure", "UPS0755", tail="N755UP", destination="SDF")
+        mission.crew_load_completed_at_utc = datetime(2026, 8, 11, 2, 20)
+        mission.actual_block_out_datetime_utc = datetime(2026, 8, 11, 2, 39)
+        mission.actual_block_out_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
+        mission.departure_status = "departed"
+        db.session.commit()
+
+        self._apply_departures(
+            self._outbound(4, "755", "N755UP", operational=""),
+            now=datetime(2026, 8, 11, 3, 10),
+        )
+        db.session.commit()
+
+        mission = db.session.get(SortDateMission, mission.id)
+        self.assertIsNone(mission.actual_block_out_datetime_utc)
+        self.assertEqual(mission.departure_status, "crew_load_complete")
+
+    def test_google_updates_do_not_regress_loading_without_timestamps(self):
         mission = self._mission(
             "departure",
             "UPS0755",
@@ -716,8 +735,25 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
 
         self.assertEqual(
             db.session.get(SortDateMission, mission.id).departure_status,
-            "scheduled",
+            "loading",
         )
+
+    def test_blank_google_u_never_regresses_cancelled(self):
+        mission = self._mission("departure", "UPS0755", tail="N755UP", destination="SDF")
+        mission.actual_block_out_datetime_utc = datetime(2026, 8, 8, 6, 35)
+        mission.actual_block_out_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
+        mission.departure_status = "cancelled"
+        db.session.commit()
+
+        self._apply_departures(
+            self._outbound(4, "755", "N755UP", operational=""),
+            now=datetime(2026, 8, 8, 7, 0),
+        )
+        db.session.commit()
+
+        mission = db.session.get(SortDateMission, mission.id)
+        self.assertIsNone(mission.actual_block_out_datetime_utc)
+        self.assertEqual(mission.departure_status, "cancelled")
 
     def test_real_downstream_departure_statuses_are_not_downgraded(self):
         statuses = (
@@ -741,6 +777,9 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
                 source=GOOGLE_MOTHERBRAIN_MISSION_SOURCE,
             )
             mission.departure_status = status
+            if status == "departed":
+                mission.actual_block_out_datetime_utc = datetime(2026, 8, 8, 2, 45)
+                mission.actual_block_out_source = "manual"
             missions.append((mission, status))
             rows.append(self._outbound(index + 3, f"8{index}", tail, operational=""))
         db.session.commit()

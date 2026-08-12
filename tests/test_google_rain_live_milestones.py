@@ -196,7 +196,34 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
         self.assertIsNone(mission.actual_block_out_datetime_utc)
         self.assertEqual(mission.elmac_completed_source, "unknown")
         self.assertEqual(mission.actual_block_out_source, "unknown")
-        self.assertEqual(mission.departure_status, "departed")
+        self.assertEqual(mission.departure_status, "scheduled")
+
+    def test_cleared_rain_block_restores_strongest_remaining_progress(self):
+        mission = self._mission("UPS0910", "LAX")
+        self._apply(
+            self._row(
+                "UPS0910",
+                ramp_load_complete="1:50",
+                crew_load_complete="2:00",
+                block="2:10",
+            )
+        )
+
+        self._apply(self._row("UPS0910", block=""))
+
+        self.assertIsNone(mission.actual_block_out_datetime_utc)
+        self.assertEqual(mission.actual_block_out_source, "unknown")
+        self.assertEqual(mission.departure_status, "crew_load_complete")
+
+    def test_blank_rain_block_repairs_departed_state_stranded_by_old_adapter(self):
+        mission = self._mission("UPS0910", "LAX", status="departed")
+        mission.actual_block_out_datetime_utc = None
+        mission.actual_block_out_source = "unknown"
+        db.session.commit()
+
+        self._apply(self._row("UPS0910", block=""))
+
+        self.assertEqual(mission.departure_status, "scheduled")
 
     def test_native_and_unattributed_milestones_are_protected(self):
         native_time = datetime(2026, 8, 11, 7, 0)
