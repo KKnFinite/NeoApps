@@ -12,6 +12,7 @@ from app.models import (
 )
 from app.services.neoermac_building_lineup import (
     get_building_lineup_destinations_for_door,
+    get_linked_building_lineup_doors,
     get_outbound_door_options,
     normalize_destination,
 )
@@ -102,7 +103,7 @@ def door_view_context(gateway, selected_door=None):
     }
 
 
-def save_door_pulls(gateway, selected_door, form_data):
+def save_door_pulls(gateway, selected_door, form_data, supervised_doors=()):
     selected_door = normalize_door(selected_door)
     if not selected_door:
         raise ValueError("Select a door.")
@@ -120,18 +121,24 @@ def save_door_pulls(gateway, selected_door, form_data):
         if destination not in allowed_destinations:
             raise ValueError(f"{destination} is not assigned to {selected_door}.")
 
-        record = _door_pull_record(gateway, selected_door, destination, operation, create=True)
         for field in PULL_FIELDS:
             no_pull = form_data.get(f"{field['no_field']}_{index}") == "on"
-            setattr(record, field["no_attr"], no_pull)
-            if no_pull:
-                setattr(record, field["actual_attr"], None)
-                continue
-
-            setattr(
-                record,
-                field["actual_attr"],
-                _parse_optional_time(form_data.get(f"{field['actual_field']}_{index}")),
+            actual_value = (
+                None
+                if no_pull
+                else _parse_optional_time(
+                    form_data.get(f"{field['actual_field']}_{index}")
+                )
+            )
+            _apply_pull_value(
+                gateway,
+                operation,
+                selected_door,
+                destination,
+                field,
+                actual_value,
+                no_pull,
+                supervised_doors,
             )
         changed_destinations.add(destination)
 
@@ -144,7 +151,15 @@ def save_door_pulls(gateway, selected_door, form_data):
     db.session.flush()
 
 
-def save_single_door_pull(gateway, selected_door, destination, pull_key, actual_value, no_pull):
+def save_single_door_pull(
+    gateway,
+    selected_door,
+    destination,
+    pull_key,
+    actual_value,
+    no_pull,
+    supervised_doors=(),
+):
     selected_door = normalize_door(selected_door)
     if not selected_door:
         raise ValueError("Select a door.")
@@ -165,13 +180,18 @@ def save_single_door_pull(gateway, selected_door, destination, pull_key, actual_
     if destination not in allowed_destinations:
         raise ValueError(f"{destination} is not assigned to {selected_door}.")
 
-    record = _door_pull_record(gateway, selected_door, destination, operation, create=True)
     no_pull = bool(no_pull)
-    setattr(record, field["no_attr"], no_pull)
-    if no_pull:
-        setattr(record, field["actual_attr"], None)
-    else:
-        setattr(record, field["actual_attr"], _parse_optional_time(actual_value))
+    parsed_actual = None if no_pull else _parse_optional_time(actual_value)
+    _apply_pull_value(
+        gateway,
+        operation,
+        selected_door,
+        destination,
+        field,
+        parsed_actual,
+        no_pull,
+        supervised_doors,
+    )
     db.session.flush()
     recompute_current_sort_door_pull_aggregates(
         gateway,
@@ -180,6 +200,56 @@ def save_single_door_pull(gateway, selected_door, destination, pull_key, actual_
     )
     db.session.flush()
     return _pull_card_payload(gateway, selected_door, destination, operation)
+
+
+def _apply_pull_value(
+    gateway,
+    operation,
+    selected_door,
+    destination,
+    field,
+    actual_value,
+    no_pull,
+    supervised_doors,
+):
+    for target_door in _pull_write_doors(
+        gateway,
+        selected_door,
+        destination,
+        supervised_doors,
+    ):
+        record = _door_pull_record(
+            gateway,
+            target_door,
+            destination,
+            operation,
+            create=True,
+        )
+        setattr(record, field["no_attr"], bool(no_pull))
+        setattr(record, field["actual_attr"], None if no_pull else actual_value)
+
+
+def _pull_write_doors(gateway, selected_door, destination, supervised_doors):
+    supervised = {
+        normalize_door(door)
+        for door in (supervised_doors or ())
+        if normalize_door(door)
+    }
+    if selected_door not in supervised:
+        return (selected_door,)
+
+    linked = set(
+        get_linked_building_lineup_doors(
+            gateway,
+            selected_door,
+            destination,
+        )
+    )
+    return (selected_door,) + tuple(
+        door
+        for door in get_outbound_door_options()
+        if door in linked and door in supervised
+    )
 
 
 def save_uld_request(gateway, selected_door, form_data):

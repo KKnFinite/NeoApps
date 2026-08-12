@@ -89,6 +89,15 @@ def save_door_supervision(
     return _payload(selected, active or None, operation)
 
 
+def supervised_doors_for_user(user, operation, available_doors):
+    """Return one user's persisted supervised doors without changing them."""
+    if not operation or not getattr(user, "is_authenticated", False):
+        return []
+    available = _normalized_available_doors(available_doors)
+    record = _record_for(user.id, operation.id)
+    return _selected_doors(record, available)
+
+
 def _record_for(user_id, operation_id):
     return NeoErmacDoorSupervision.query.filter_by(
         user_id=user_id,

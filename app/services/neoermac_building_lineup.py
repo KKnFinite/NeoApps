@@ -230,6 +230,39 @@ def get_building_lineup_destinations_for_door(gateway, door):
     return destinations
 
 
+def get_linked_building_lineup_doors(gateway, door, destination):
+    """Return doors facing the same physical belt and destination."""
+    door = str(door or "").strip().upper()
+    destination = normalize_destination(destination)
+    if not door or not destination:
+        return ()
+
+    assignments = get_building_lineup_assignments(gateway)
+    source_assignments = [
+        assignment
+        for assignment in assignments
+        if assignment["supervising_door"] == door
+        and assignment["destination"] == destination
+    ]
+    linked_doors = set()
+    for source in source_assignments:
+        for candidate in assignments:
+            if (
+                candidate["runout_key"] == source["runout_key"]
+                and candidate["belt_number"] == source["belt_number"]
+                and candidate["side"] != source["side"]
+                and candidate["destination"] == destination
+                and candidate["supervising_door"] != door
+            ):
+                linked_doors.add(candidate["supervising_door"])
+
+    return tuple(
+        candidate
+        for candidate in OUTBOUND_DOOR_OPTIONS
+        if candidate in linked_doors
+    )
+
+
 def save_building_lineup_destination(gateway, field_token, destination):
     field_token = str(field_token or "").strip()
     if not field_token:

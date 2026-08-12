@@ -37,6 +37,7 @@ from app.services.neoermac_door_view import (
 from app.services.neoermac_door_supervision import (
     door_supervision_for_user,
     save_door_supervision,
+    supervised_doors_for_user,
 )
 from app.services.neoermac_dashboard import neoermac_dashboard_context
 from app.services.neoermac_view_outbound import view_outbound_context
@@ -205,7 +206,12 @@ def door_view():
         action = request.form.get("action")
         try:
             if action == "save_pulls":
-                save_door_pulls(gateway, selected_door, request.form)
+                save_door_pulls(
+                    gateway,
+                    selected_door,
+                    request.form,
+                    supervised_doors=_current_user_supervised_doors(gateway),
+                )
                 flash("DOOR PULLS SAVED.", "success")
             elif action == "save_uld_request":
                 save_uld_request(gateway, selected_door, request.form)
@@ -303,6 +309,7 @@ def door_view_pull_autosave():
             pull_key,
             request.form.get("actual_pull", ""),
             request.form.get("no_pull") == "1",
+            supervised_doors=_current_user_supervised_doors(gateway),
         )
         state = door_view_uld_state(gateway, selected_door)
         db.session.commit()
@@ -337,6 +344,15 @@ def door_view_pull_autosave():
         ), 500
 
     return jsonify({"ok": True, "card": card, "state": state})
+
+
+def _current_user_supervised_doors(gateway):
+    operation = door_view_context(gateway)["operation"]
+    return supervised_doors_for_user(
+        current_user,
+        operation,
+        get_outbound_door_options(),
+    )
 
 
 def _pull_autosave_validation_details(error):
