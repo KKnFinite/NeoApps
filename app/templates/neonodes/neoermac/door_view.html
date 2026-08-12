@@ -68,6 +68,56 @@
     {% include "neonodes/_operation_refresh_banner.html" %}
     {% endif %}
 
+    {% if operation %}
+    <nav class="neoermac-door-supervision" aria-label="Supervised doors" data-door-supervision>
+        {% if supervised_doors %}
+        <div class="neoermac-door-tabs" role="tablist" aria-label="Supervised Door Views" data-door-tabs>
+            {% for door_option in supervised_doors %}
+            <a
+                class="neoermac-door-tab{% if selected_door == door_option %} is-active{% endif %}"
+                href="{{ url_for('neoermac.door_view', door=door_option) }}"
+                role="tab"
+                aria-selected="{{ 'true' if selected_door == door_option else 'false' }}"
+                {% if selected_door == door_option %}aria-current="page"{% endif %}
+            >{{ door_option }}</a>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <button
+            class="neoermac-menu-link neoermac-door-supervision-edit"
+            type="button"
+            data-door-supervision-open
+        >{{ "EDIT DOORS" if supervised_doors else "+ ADD DOOR" }}</button>
+    </nav>
+
+    <dialog class="neoermac-door-supervision-dialog" data-door-supervision-dialog>
+        <form method="post" action="{{ url_for('neoermac.door_view_supervision') }}">
+            <input type="hidden" name="active_door" value="{{ selected_door or '' }}">
+            <header>
+                <h2>SUPERVISED DOORS</h2>
+                <p>Select every door you want available as a tab.</p>
+            </header>
+            <fieldset class="neoermac-door-supervision-grid">
+                <legend class="sr-only">Select supervised doors</legend>
+                {% for door_option in canonical_door_options %}
+                <label>
+                    <input
+                        type="checkbox"
+                        name="doors"
+                        value="{{ door_option }}"
+                        {% if door_option in supervised_doors %}checked{% endif %}
+                    >
+                    <span>{{ door_option }}</span>
+                </label>
+                {% endfor %}
+            </fieldset>
+            <footer>
+                <button class="neoermac-menu-link neoermac-menu-link-secondary" type="button" data-door-supervision-close>CANCEL</button>
+                <button class="neoermac-menu-link" type="submit">SAVE DOORS</button>
+            </footer>
+        </form>
+    </dialog>
+    {% else %}
     <form class="neoermac-door-selector" method="get" action="{{ url_for('neoermac.door_view') }}">
         <div class="neoermac-door-selector-row">
             <select id="door-select" class="neoermac-destination-select" name="door" data-canonical-doors='{{ canonical_door_options|tojson }}'>
@@ -79,6 +129,7 @@
             <button class="neoermac-menu-link" type="submit">OPEN</button>
         </div>
     </form>
+    {% endif %}
 
     {% if not selected_door %}
     <nav class="neoermac-door-launcher-grid" aria-label="Open a door">
@@ -328,6 +379,25 @@
         const option = new Option(door, door);
         option.selected = door === selectedDoor;
         select.append(option);
+    });
+})();
+</script>
+
+<script>
+(() => {
+    const dialog = document.querySelector("[data-door-supervision-dialog]");
+    const openButton = document.querySelector("[data-door-supervision-open]");
+    const closeButton = dialog?.querySelector("[data-door-supervision-close]");
+    if (!dialog || !openButton) {
+        return;
+    }
+
+    openButton.addEventListener("click", () => dialog.showModal());
+    closeButton?.addEventListener("click", () => dialog.close());
+    dialog.addEventListener("click", (event) => {
+        if (event.target === dialog) {
+            dialog.close();
+        }
     });
 })();
 </script>

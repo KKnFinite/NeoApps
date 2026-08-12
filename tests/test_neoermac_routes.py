@@ -291,8 +291,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         landing_response = self.client.get("/neoermac/door-view")
         self.assertEqual(landing_response.status_code, 200)
-        self.assertNotIn(b"neoermac-refresh-paused", landing_response.data)
-        self.assertNotIn(b"Live updates off - outside Sort window", landing_response.data)
+        self.assertIn(b"neoermac-refresh-paused", landing_response.data)
+        self.assertIn(b"Live updates off - outside Sort window", landing_response.data)
+        self.assertIn(b'data-door-view', landing_response.data)
+        self.assertIn(b'class="neoermac-door-tab is-active"', landing_response.data)
         self.assertNotIn(b"data-operation-refresh-reload", landing_response.data)
         self.assertNotIn(b"window.setInterval", landing_response.data)
 
@@ -409,7 +411,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 self.assertIn(hook, response.data)
 
         landing_response = self.client.get("/neoermac/door-view")
-        self.assertNotIn(b"data-operation-refresh-banner", landing_response.data)
+        self.assertIn(b"data-operation-refresh-banner", landing_response.data)
+        self.assertIn(b'class="neoermac-door-tab is-active"', landing_response.data)
 
     def test_neoermac_upcoming_pulls_shows_west_and_east_pull_lists(self):
         self._assign_lineup_destination("runout_4", "east_destination_1", "BOS")

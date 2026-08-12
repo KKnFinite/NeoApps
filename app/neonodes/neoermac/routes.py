@@ -8,6 +8,7 @@ from flask import (
     request,
     url_for,
 )
+from flask_login import current_user
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
@@ -32,6 +33,10 @@ from app.services.neoermac_door_view import (
     save_door_pulls,
     save_single_door_pull,
     save_uld_request,
+)
+from app.services.neoermac_door_supervision import (
+    door_supervision_for_user,
+    save_door_supervision,
 )
 from app.services.neoermac_dashboard import neoermac_dashboard_context
 from app.services.neoermac_view_outbound import view_outbound_context
@@ -225,8 +230,40 @@ def door_view():
         flash("Access denied.", "error")
         return redirect(url_for("neoermac.index"))
 
+    response = _door_view_response(gateway, access, selected_door)
     db.session.commit()
-    return _door_view_response(gateway, access, selected_door)
+    return response
+
+
+@bp.route("/door-view/supervision", methods=["POST"])
+@gateway_node_required("ermac")
+def door_view_supervision():
+    gateway = get_current_gateway()
+    access = permission_access(DOOR_VIEW_VIEW_PERMISSION)
+    if not access["can_view"]:
+        db.session.rollback()
+        flash("Access denied.", "error")
+        return redirect(url_for("neoermac.index"))
+
+    base_context = door_view_context(gateway)
+    try:
+        supervision = save_door_supervision(
+            current_user,
+            base_context["operation"],
+            request.form.getlist("doors"),
+            get_outbound_door_options(),
+            active_door=request.form.get("active_door", ""),
+        )
+    except ValueError as exc:
+        db.session.rollback()
+        flash(str(exc), "error")
+        return redirect(url_for("neoermac.door_view"))
+
+    db.session.commit()
+    active_door = supervision["active_door"]
+    if active_door:
+        return redirect(url_for("neoermac.door_view", door=active_door))
+    return redirect(url_for("neoermac.door_view"))
 
 
 @bp.route("/door-view/state")
@@ -354,14 +391,25 @@ def _building_lineup_response(gateway, access, rows=None, status_code=200):
 
 
 def _door_view_response(gateway, access, selected_door, status_code=200):
+    canonical_door_options = get_outbound_door_options()
     context = door_view_context(gateway, selected_door)
+    supervision = door_supervision_for_user(
+        current_user,
+        context["operation"],
+        canonical_door_options,
+        requested_door=selected_door,
+    )
+    active_door = supervision["active_door"]
+    if active_door != context["selected_door"]:
+        context = door_view_context(gateway, active_door)
     response = make_response(
         render_template(
             "neonodes/neoermac/door_view.html",
             gateway=gateway,
             can_view=access["can_view"],
             can_edit=access["can_edit"],
-            canonical_door_options=get_outbound_door_options(),
+            canonical_door_options=canonical_door_options,
+            supervised_doors=supervision["selected_doors"],
             **context,
         ),
         status_code,

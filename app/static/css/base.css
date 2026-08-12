@@ -3712,6 +3712,165 @@ a {
     padding-inline: 14px;
 }
 
+.neoermac-door-supervision {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.neoermac-door-tabs {
+    display: flex;
+    gap: 6px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding: 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+}
+
+.neoermac-door-tab {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    min-width: 64px;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid rgba(var(--node-rgb), 0.34);
+    border-radius: 5px;
+    color: rgba(238, 246, 255, 0.78);
+    background: rgba(7, 9, 12, 0.9);
+    font-size: 0.78rem;
+    font-weight: 950;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    text-decoration: none;
+}
+
+.neoermac-door-tab.is-active {
+    border-color: rgba(54, 226, 123, 0.72);
+    color: #ffffff;
+    background:
+        linear-gradient(180deg, rgba(54, 226, 123, 0.14), rgba(7, 9, 12, 0.94)),
+        rgba(7, 9, 12, 0.94);
+    box-shadow:
+        inset 0 0 0 1px rgba(54, 226, 123, 0.08),
+        0 0 14px rgba(54, 226, 123, 0.18);
+}
+
+.neoermac-door-supervision-edit {
+    min-height: 40px;
+    white-space: nowrap;
+}
+
+.neoermac-door-supervision-dialog {
+    width: min(92vw, 620px);
+    max-width: calc(100vw - 24px);
+    max-height: min(82vh, 720px);
+    padding: 0;
+    overflow: auto;
+    border: 1px solid rgba(var(--node-rgb), 0.62);
+    border-radius: 7px;
+    color: #eef6ff;
+    background:
+        linear-gradient(180deg, rgba(var(--node-rgb), 0.18), transparent 120px),
+        #090b0e;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.72);
+}
+
+.neoermac-door-supervision-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.76);
+    backdrop-filter: blur(3px);
+}
+
+.neoermac-door-supervision-dialog form {
+    display: grid;
+    gap: 16px;
+    padding: 18px;
+}
+
+.neoermac-door-supervision-dialog header {
+    display: grid;
+    gap: 5px;
+    text-align: center;
+}
+
+.neoermac-door-supervision-dialog h2,
+.neoermac-door-supervision-dialog p {
+    margin: 0;
+}
+
+.neoermac-door-supervision-dialog h2 {
+    color: #ffffff;
+    font-size: 1rem;
+    letter-spacing: 0.08em;
+}
+
+.neoermac-door-supervision-dialog p {
+    color: var(--muted);
+    font-size: 0.75rem;
+}
+
+.neoermac-door-supervision-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+    gap: 8px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.neoermac-door-supervision-grid label {
+    display: grid;
+    place-items: center;
+    min-height: 52px;
+    cursor: pointer;
+}
+
+.neoermac-door-supervision-grid input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.neoermac-door-supervision-grid span {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    min-height: 48px;
+    border: 1px solid rgba(var(--node-rgb), 0.34);
+    border-radius: 5px;
+    background: rgba(4, 5, 7, 0.86);
+    color: rgba(238, 246, 255, 0.76);
+    font-size: 0.82rem;
+    font-weight: 950;
+}
+
+.neoermac-door-supervision-grid input:checked + span {
+    border-color: rgba(54, 226, 123, 0.72);
+    color: #ffffff;
+    background: rgba(54, 226, 123, 0.13);
+    box-shadow: 0 0 14px rgba(54, 226, 123, 0.16);
+}
+
+.neoermac-door-supervision-grid input:focus-visible + span {
+    outline: 2px solid rgba(54, 226, 123, 0.78);
+    outline-offset: 2px;
+}
+
+.neoermac-door-supervision-dialog footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
 .neoermac-selected-door {
     display: grid;
     justify-items: center;
@@ -5160,6 +5319,42 @@ a {
         min-height: 34px;
         padding-inline: 9px;
         font-size: 0.7rem;
+    }
+
+    .neoermac-door-supervision {
+        gap: 5px;
+    }
+
+    .neoermac-door-tabs {
+        gap: 4px;
+    }
+
+    .neoermac-door-tab {
+        min-width: 54px;
+        min-height: 36px;
+        padding: 7px 9px;
+        font-size: 0.7rem;
+    }
+
+    .neoermac-door-supervision-edit {
+        min-height: 36px;
+        padding-inline: 9px;
+        font-size: 0.62rem;
+    }
+
+    .neoermac-door-supervision-dialog form {
+        gap: 12px;
+        padding: 14px;
+    }
+
+    .neoermac-door-supervision-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .neoermac-door-supervision-grid label,
+    .neoermac-door-supervision-grid span {
+        min-height: 44px;
     }
 
     .neoermac-selected-door {

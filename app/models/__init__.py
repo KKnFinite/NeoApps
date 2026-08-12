@@ -8,6 +8,7 @@ from app.models.gateway_sort_matrix import GatewaySortMatrix
 from app.models.master_flight_schedule import MasterFlightSchedule
 from app.models.neoermac_building_lineup import NeoErmacBuildingLineup
 from app.models.neoermac_door_pull import NeoErmacDoorPull
+from app.models.neoermac_door_supervision import NeoErmacDoorSupervision
 from app.models.neoermac_uld_request import NeoErmacUldRequest
 from app.models.motherbrain_alert import MotherBrainAlert
 from app.models.motherbrain_alert_user_state import MotherBrainAlertUserState
@@ -76,6 +77,7 @@ __all__ = [
     "PortalAppAccess",
     "NeoErmacBuildingLineup",
     "NeoErmacDoorPull",
+    "NeoErmacDoorSupervision",
     "NeoErmacUldRequest",
     "MotherBrainAlert",
     "MotherBrainAlertUserState",

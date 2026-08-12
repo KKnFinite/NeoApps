@@ -57,6 +57,9 @@ from app.services.neoermac_door_pull_schema import (
 from app.services.neoermac_building_lineup_schema import (
     ensure_neoermac_building_lineup_columns,
 )
+from app.services.neoermac_door_supervision_schema import (
+    ensure_neoermac_door_supervision_table,
+)
 from app.services.shell_metadata import resolve_shell_metadata
 from app.services.time_display import format_local_hhmm
 
@@ -89,6 +92,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     ensure_neosektor_sheets_compat_columns(app)
     ensure_neoermac_door_pull_legacy_defaults(app)
     ensure_neoermac_building_lineup_columns(app)
+    ensure_neoermac_door_supervision_table(app)
 
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)
