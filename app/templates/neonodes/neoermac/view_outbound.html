@@ -20,6 +20,7 @@
     data-refresh-reason="{{ refresh_status.reason }}"
     data-refresh-label="{{ refresh_status.live_status_label }}"
     data-refresh-url="{{ url_for('neoermac.view_outbound') }}"
+    data-outbound-revision="{{ outbound_revision|default('') }}"
 >
     <div class="neoermac-hero neoermac-outbound-hero mobile-shell-duplicate-title">
         <h1 id="neoermac-outbound-title" class="neo-page-title neoermac-operation-title">Outbound View</h1>
@@ -143,9 +144,37 @@
         return;
     }
 
+    let currentRevision = root.dataset.outboundRevision || "";
+
+    const applyRefreshStatus = (status) => {
+        const refresh = status || {};
+        const refreshEnabled = refresh.auto_refresh_enabled !== false;
+        const currentBanner = root.querySelector("[data-operation-refresh-banner]");
+        if (currentBanner) {
+            if (!refreshEnabled && refresh.message) {
+                currentBanner.replaceChildren(document.createTextNode(refresh.message));
+                if (refresh.operation_label && refresh.window_label) {
+                    const detail = document.createElement("span");
+                    detail.textContent = `${refresh.operation_label} \u00b7 ${refresh.window_label}`;
+                    currentBanner.appendChild(detail);
+                }
+            }
+            currentBanner.hidden = refreshEnabled;
+        }
+        root.dataset.refreshActive = refreshEnabled ? "true" : "false";
+        root.dataset.refreshReason = refresh.reason || "outside_sort_window";
+        root.dataset.refreshLabel = refresh.live_status_label
+            || "Live updates off - outside Sort window";
+        controller.setServerStatus(refresh);
+    };
+
     const refreshOutboundView = async () => {
         try {
-            const response = await fetch(root.dataset.refreshUrl || window.location.href, {
+            const pollUrl = new URL(root.dataset.refreshUrl || window.location.href, window.location.origin);
+            if (currentRevision) {
+                pollUrl.searchParams.set("revision", currentRevision);
+            }
+            const response = await fetch(pollUrl, {
                 cache: "no-store",
                 credentials: "same-origin",
                 headers: {
@@ -155,6 +184,15 @@
             if (!response.ok) {
                 throw new Error("Outbound refresh failed.");
             }
+            if ((response.headers.get("content-type") || "").includes("application/json")) {
+                const payload = await response.json();
+                if (!payload.ok || payload.changed !== false) {
+                    throw new Error("Outbound refresh failed.");
+                }
+                currentRevision = payload.revision || currentRevision;
+                applyRefreshStatus(payload.refresh);
+                return;
+            }
             const html = await response.text();
             const doc = new DOMParser().parseFromString(html, "text/html");
             const newRoot = doc.querySelector("[data-neoermac-outbound-refresh]");
@@ -162,6 +200,7 @@
             if (!newRoot || !newContent) {
                 return;
             }
+            currentRevision = newRoot.dataset.outboundRevision || currentRevision;
             content.replaceChildren(...Array.from(newContent.children).map((node) => node.cloneNode(true)));
             const refreshEnabled = newRoot.dataset.refreshActive === "true";
             const currentBanner = root.querySelector("[data-operation-refresh-banner]");
@@ -172,8 +211,7 @@
                 );
                 currentBanner.hidden = refreshEnabled;
             }
-            root.dataset.refreshActive = refreshEnabled ? "true" : "false";
-            controller.setServerStatus({
+            applyRefreshStatus({
                 auto_refresh_enabled: refreshEnabled,
                 reason: newRoot.dataset.refreshReason || "outside_sort_window",
                 live_status_label: newRoot.dataset.refreshLabel

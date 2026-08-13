@@ -46,7 +46,12 @@ from app.services.neoermac_door_supervision import (
     supervised_doors_for_user,
 )
 from app.services.neoermac_dashboard import neoermac_dashboard_context
-from app.services.neoermac_view_outbound import view_outbound_context
+from app.services.neoermac_view_outbound import (
+    current_view_outbound_operation,
+    view_outbound_context,
+    view_outbound_refresh_status,
+    view_outbound_revision,
+)
 from app.services.permission_rules import permission_access
 
 
@@ -187,11 +192,30 @@ def view_outbound():
         flash("Access denied.", "error")
         return redirect(url_for("neoermac.index"))
 
-    context = view_outbound_context(gateway)
+    operation = current_view_outbound_operation(gateway)
+    revision = view_outbound_revision(gateway, operation=operation)
+    refresh_status = view_outbound_refresh_status(gateway)
+    client_revision = str(request.args.get("revision") or "").strip()
+    if client_revision and client_revision == revision:
+        return jsonify(
+            {
+                "ok": True,
+                "changed": False,
+                "revision": revision,
+                "refresh": refresh_status,
+            }
+        )
+
+    context = view_outbound_context(
+        gateway,
+        operation=operation,
+        refresh_status=refresh_status,
+    )
     return render_template(
         "neonodes/neoermac/view_outbound.html",
         gateway=gateway,
         can_view=access["can_view"],
+        outbound_revision=revision,
         **context,
     )
 

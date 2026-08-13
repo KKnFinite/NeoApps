@@ -1,10 +1,24 @@
-from sqlalchemy import or_
+import hashlib
+import json
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from sqlalchemy import func, literal, or_, select, union_all
+
+from app.extensions import db
 from app.models import (
+    NeoErmacBuildingLineup,
     NeoErmacDoorPull,
+    SortDateGoogleMissionLink,
     SortDateMission,
     SortDateOperation,
     SortDateParkingAssignment,
+    SortTimelineSettings,
+    SortTimelineSortSetting,
+)
+from app.services.gateway_matrix import (
+    current_gateway_local_datetime,
+    gateway_timezone,
 )
 from app.services.neoermac_building_lineup import (
     get_building_lineup_assignments,
@@ -30,10 +44,17 @@ PULL_KEYS = (
         "no_mix_pull",
     ),
 )
+_OPERATION_UNSET = object()
 
 
-def view_outbound_context(gateway):
-    operation = _current_operation(gateway)
+def view_outbound_context(
+    gateway,
+    *,
+    operation=_OPERATION_UNSET,
+    refresh_status=None,
+):
+    if operation is _OPERATION_UNSET:
+        operation = _current_operation(gateway)
     assignments_by_destination = _lineup_assignments_by_destination(gateway)
     pulls_by_destination = _door_pulls_by_destination(gateway, operation)
     parking_by_tail = _parking_assignments_by_tail(operation)
@@ -77,10 +98,134 @@ def view_outbound_context(gateway):
     return {
         "operation": operation,
         "operation_window_minutes": getattr(operation, "window_minutes", None),
-        "refresh_status": sort_window_auto_refresh_status(gateway),
+        "refresh_status": refresh_status
+        or sort_window_auto_refresh_status(gateway),
         "rows": rows,
         "pull_labels": PULL_KEYS,
     }
+
+
+def current_view_outbound_operation(gateway):
+    """Resolve the operation without loading View Outbound row state."""
+    return _current_operation(gateway)
+
+
+def view_outbound_refresh_status(gateway):
+    return sort_window_auto_refresh_status(gateway)
+
+
+def view_outbound_revision(gateway, *, operation=_OPERATION_UNSET, now=None):
+    """Return a compact fingerprint for every persisted View Outbound input."""
+    if operation is _OPERATION_UNSET:
+        operation = _current_operation(gateway)
+    local_now = current_gateway_local_datetime(gateway, now=now)
+    try:
+        now_utc = (
+            local_now.replace(tzinfo=ZoneInfo(gateway_timezone(gateway)))
+            .astimezone(timezone.utc)
+            .replace(tzinfo=None)
+        )
+    except ZoneInfoNotFoundError:
+        now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    operation_id = operation.id if operation else None
+    operation_criterion = lambda model: (
+        model.sort_date_operation_id == operation_id
+        if operation_id is not None
+        else model.sort_date_operation_id.is_(None)
+    )
+    aggregate_queries = (
+        _revision_aggregate(
+            "lineup",
+            NeoErmacBuildingLineup,
+            NeoErmacBuildingLineup.updated_at,
+            NeoErmacBuildingLineup.gateway_id == gateway.id,
+        ),
+        _revision_aggregate(
+            "missions",
+            SortDateMission,
+            SortDateMission.updated_at,
+            operation_criterion(SortDateMission),
+        ),
+        _revision_aggregate(
+            "assumed_arrived_missions",
+            SortDateMission,
+            SortDateMission.updated_at,
+            operation_criterion(SortDateMission),
+            SortDateMission.mission_type == "arrival",
+            SortDateMission.api_assumed_arrived_time_utc.is_not(None),
+            SortDateMission.api_assumed_arrived_time_utc <= now_utc,
+        ),
+        _revision_aggregate(
+            "google_mission_links",
+            SortDateGoogleMissionLink,
+            SortDateGoogleMissionLink.updated_at,
+            operation_criterion(SortDateGoogleMissionLink),
+        ),
+        _revision_aggregate(
+            "parking",
+            SortDateParkingAssignment,
+            SortDateParkingAssignment.updated_at,
+            operation_criterion(SortDateParkingAssignment),
+        ),
+        _revision_aggregate(
+            "door_pulls",
+            NeoErmacDoorPull,
+            NeoErmacDoorPull.updated_at,
+            NeoErmacDoorPull.gateway_id == gateway.id,
+            operation_criterion(NeoErmacDoorPull),
+        ),
+        _revision_aggregate(
+            "timeline_settings",
+            SortTimelineSettings,
+            SortTimelineSettings.updated_at,
+            SortTimelineSettings.gateway_id == gateway.id,
+        ),
+        _revision_aggregate(
+            "sort_windows",
+            SortTimelineSortSetting,
+            SortTimelineSortSetting.updated_at,
+            SortTimelineSortSetting.gateway_id == gateway.id,
+        ),
+    )
+    rows = sorted(
+        db.session.execute(union_all(*aggregate_queries)).all(),
+        key=lambda row: row.source,
+    )
+    payload = {
+        "gateway_id": gateway.id,
+        "operation_id": operation_id,
+        "operation_updated_at": _revision_value(
+            getattr(operation, "updated_at", None)
+        ),
+        "inputs": [
+            {
+                "source": row.source,
+                "row_count": int(row.row_count or 0),
+                "max_id": int(row.max_id or 0),
+                "id_sum": int(row.id_sum or 0),
+                "latest_updated_at": _revision_value(row.latest_updated_at),
+            }
+            for row in rows
+        ],
+    }
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _revision_aggregate(source, model, timestamp_column, *criteria):
+    return select(
+        literal(source).label("source"),
+        func.count(model.id).label("row_count"),
+        func.max(model.id).label("max_id"),
+        func.coalesce(func.sum(model.id), 0).label("id_sum"),
+        func.max(timestamp_column).label("latest_updated_at"),
+    ).where(*criteria)
+
+
+def _revision_value(value):
+    if isinstance(value, datetime):
+        return value.isoformat(timespec="microseconds")
+    return str(value or "")
 
 
 def _row_for_destination(

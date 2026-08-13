@@ -3405,6 +3405,116 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"DISCHARGE", response.data)
         self.assertNotIn(b"SAVE", response.data)
 
+    def test_view_outbound_short_circuits_unchanged_revision(self):
+        from app.services.neoermac_building_lineup import get_building_lineup_rows
+
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026, 6, 11, 1, 0, 30
+        )
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
+        get_building_lineup_rows(self.gateway)
+        self._add_operation_departure("UPS501", "SDF", tail="N501UP")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+        page = self.client.get("/neoermac/view-outbound")
+        revision = re.search(
+            rb'data-outbound-revision="([a-f0-9]+)"',
+            page.data,
+        ).group(1).decode()
+
+        with patch("app.neonodes.neoermac.routes.view_outbound_context") as full_context:
+            response = self.client.get(
+                "/neoermac/view-outbound?revision=" + revision,
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["changed"])
+        self.assertEqual(payload["revision"], revision)
+        self.assertIn("refresh", payload)
+        full_context.assert_not_called()
+        self.assertIn(b'pollUrl.searchParams.set("revision", currentRevision)', page.data)
+
+    def test_view_outbound_changed_revision_returns_updated_html(self):
+        from app.services.neoermac_building_lineup import get_building_lineup_rows
+
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026, 6, 11, 1, 0, 30
+        )
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
+        get_building_lineup_rows(self.gateway)
+        mission = self._add_operation_departure(
+            "UPS501",
+            "SDF",
+            tail="N501UP",
+            departure_status="scheduled",
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+        first = self.client.get("/neoermac/view-outbound")
+        revision = re.search(
+            rb'data-outbound-revision="([a-f0-9]+)"',
+            first.data,
+        ).group(1).decode()
+
+        mission.departure_status = "loading"
+        db.session.commit()
+        response = self.client.get(
+            "/neoermac/view-outbound?revision=" + revision,
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.content_type.startswith("text/html"))
+        self.assertIn(b"LOADING", response.data)
+        changed_revision = re.search(
+            rb'data-outbound-revision="([a-f0-9]+)"',
+            response.data,
+        ).group(1).decode()
+        self.assertNotEqual(changed_revision, revision)
+
+    def test_view_outbound_revision_tracks_assumed_arrival_transition(self):
+        from app.services.neoermac_view_outbound import view_outbound_revision
+
+        departure = self._add_operation_departure("UPS501", "SDF", tail="N501UP")
+        operation = db.session.get(
+            SortDateOperation,
+            departure.sort_date_operation_id,
+        )
+        db.session.add(
+            SortDateMission(
+                sort_date=operation.sort_date,
+                gateway_code=self.gateway.code,
+                sort_name=operation.sort_name,
+                sort_date_operation_id=operation.id,
+                mission_type="arrival",
+                mission_source="api",
+                flight_number="UPS500",
+                origin="SDF",
+                destination=self.gateway.code,
+                timezone="America/Chicago",
+                planned_source="api",
+                assigned_tail_number="N501UP",
+                api_assumed_arrived_time_utc=datetime(2026, 6, 11, 6, 1),
+            )
+        )
+        db.session.commit()
+
+        first = view_outbound_revision(
+            self.gateway,
+            operation=operation,
+            now=datetime(2026, 6, 11, 1, 0, 59),
+        )
+        second = view_outbound_revision(
+            self.gateway,
+            operation=operation,
+            now=datetime(2026, 6, 11, 1, 1, 0),
+        )
+
+        self.assertNotEqual(first, second)
+
     def test_view_outbound_renders_summary_and_door_actuals(self):
         self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         self._add_operation_departure(
