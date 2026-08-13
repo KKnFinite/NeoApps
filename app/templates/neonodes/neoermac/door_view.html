@@ -55,6 +55,7 @@
     {% if selected_door %}
     data-door-view
     data-state-url="{{ url_for('neoermac.door_view_state', door=selected_door) }}"
+    data-door-view-revision="{{ door_view_revision|default('') }}"
     data-pull-save-url="{{ url_for('neoermac.door_view_pull_autosave') }}"
     data-refresh-active="{{ 'true' if refresh_status.auto_refresh_enabled else 'false' }}"
     {% endif %}
@@ -820,14 +821,28 @@
 
     window.neoErmacReconcileDoorDestinations = renderDestinations;
 
+    let currentRevision = root.dataset.doorViewRevision || "";
+
     const refreshState = async () => {
         try {
-            const response = await fetch(stateUrl, { cache: "no-store", credentials: "same-origin" });
+            const pollUrl = new URL(stateUrl, window.location.origin);
+            if (currentRevision) {
+                pollUrl.searchParams.set("revision", currentRevision);
+            }
+            const response = await fetch(pollUrl, { cache: "no-store", credentials: "same-origin" });
             if (!response.ok) {
                 throw new Error("Door View refresh failed.");
             }
             const payload = await response.json();
-            if (!payload.ok || !payload.state) {
+            if (!payload.ok) {
+                throw new Error("Door View refresh failed.");
+            }
+            currentRevision = payload.revision || currentRevision;
+            if (payload.changed === false) {
+                setRefreshStatus(payload.refresh);
+                return;
+            }
+            if (!payload.state) {
                 throw new Error("Door View refresh failed.");
             }
             setRefreshStatus(payload.state.refresh);

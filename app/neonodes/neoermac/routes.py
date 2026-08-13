@@ -26,9 +26,11 @@ from app.services.neoermac_building_lineup import (
     save_building_lineup_destination,
 )
 from app.services.neoermac_door_view import (
+    current_door_view_operation,
     delete_door_uld_request,
     door_tab_pull_alerts,
     door_view_context,
+    door_view_poll_revision,
     door_view_uld_state,
     door_view_uld_workspace,
     edit_door_uld_request,
@@ -36,6 +38,7 @@ from app.services.neoermac_door_view import (
     save_door_pulls,
     save_single_door_pull,
     save_uld_request,
+    neoermac_refresh_status,
 )
 from app.services.neoermac_door_supervision import (
     door_supervision_for_user,
@@ -299,20 +302,63 @@ def door_view_state():
 
     try:
         selected_door = request.args.get("door", "")
+        operation = current_door_view_operation(gateway)
+        revision = door_view_poll_revision(
+            gateway,
+            selected_door,
+            current_user.id,
+            operation=operation,
+        )
+        refresh_status = neoermac_refresh_status(gateway)
+        client_revision = str(request.args.get("revision") or "").strip()
+        if client_revision and client_revision == revision:
+            return jsonify(
+                {
+                    "ok": True,
+                    "changed": False,
+                    "revision": revision,
+                    "refresh": refresh_status,
+                }
+            )
+        supervised_doors = _uld_workspace_doors(
+            supervised_doors_for_user(
+                current_user,
+                operation,
+                get_outbound_door_options(),
+            ),
+            selected_door,
+        )
         state = door_view_uld_state(
             gateway,
             selected_door,
-            supervised_doors=_uld_workspace_doors(
-                _current_user_supervised_doors(gateway),
-                selected_door,
-            ),
+            supervised_doors=supervised_doors,
             requested_by_user_id=current_user.id,
+            operation=operation,
+            refresh_status=refresh_status,
+            revision=revision,
         )
+        # Full construction may seed missing lineup rows. Return a revision for
+        # the state actually delivered, not the pre-build database snapshot.
+        db.session.flush()
+        revision = door_view_poll_revision(
+            gateway,
+            selected_door,
+            current_user.id,
+            operation=operation,
+        )
+        state["revision"] = revision
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
     db.session.commit()
-    return jsonify({"ok": True, "state": state})
+    return jsonify(
+        {
+            "ok": True,
+            "changed": True,
+            "revision": revision,
+            "state": state,
+        }
+    )
 
 
 @bp.route("/door-view/pull-autosave", methods=["POST"])
@@ -472,6 +518,16 @@ def _door_view_response(gateway, access, selected_door, status_code=200):
     context["uld_workspace"] = workspace
     context["uld_requests"] = workspace["requests"]
     context["on_the_way_events"] = workspace["on_the_way_events"]
+    context["door_view_revision"] = (
+        door_view_poll_revision(
+            gateway,
+            active_door,
+            current_user.id,
+            operation=context["operation"],
+        )
+        if active_door
+        else ""
+    )
     response = make_response(
         render_template(
             "neonodes/neoermac/door_view.html",

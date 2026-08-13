@@ -1,11 +1,18 @@
-from datetime import datetime, timedelta
+import hashlib
+import json
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import or_
+from sqlalchemy import func, literal, or_, select, union_all
 
 from app.extensions import db
 from app.models import (
     MasterFlightSchedule,
+    NeoErmacBuildingLineup,
     NeoErmacDoorPull,
+    NeoErmacDoorSupervision,
+    NeoErmacUldRequest,
+    NeoSektorUldOnTheWayEvent,
+    SortDateGoogleMissionLink,
     SortDateMission,
     SortDateOperation,
     SortDateParkingAssignment,
@@ -47,6 +54,8 @@ from app.services.uld_requests import (
 
 
 PULL_DUE_WARNING_MINUTES = 5
+_OPERATION_UNSET = object()
+_DOOR_PULL_LOOKUP_UNSET = object()
 
 PULL_FIELDS = (
     {
@@ -316,6 +325,9 @@ def door_view_uld_state(
     selected_door,
     supervised_doors=(),
     requested_by_user_id=None,
+    operation=_OPERATION_UNSET,
+    refresh_status=None,
+    revision=None,
 ):
     selected_door = normalize_door(selected_door)
     if not selected_door:
@@ -323,8 +335,22 @@ def door_view_uld_state(
     if selected_door not in get_door_options(gateway):
         raise ValueError(f"{selected_door} is not available.")
 
-    operation = _current_operation(gateway)
-    destinations = _destination_cards_for_door(gateway, selected_door, operation)
+    if operation is _OPERATION_UNSET:
+        operation = _current_operation(gateway)
+    workspace_doors = list(supervised_doors or ())
+    if selected_door not in workspace_doors:
+        workspace_doors.append(selected_door)
+    door_pulls = _door_pulls_by_door_destination(
+        gateway,
+        operation,
+        workspace_doors,
+    )
+    destinations = _destination_cards_for_door(
+        gateway,
+        selected_door,
+        operation,
+        door_pulls=door_pulls,
+    )
     state = door_uld_state_payload(gateway, selected_door, operation=operation)
     workspace = uld_workspace_state_payload(
         gateway,
@@ -335,7 +361,9 @@ def door_view_uld_state(
     state["uld_workspace"] = workspace
     state["requests"] = workspace["requests"]
     state["on_the_way_events"] = workspace["on_the_way_events"]
-    state["refresh"] = neoermac_refresh_status(gateway)
+    state["refresh"] = refresh_status or neoermac_refresh_status(gateway)
+    if revision is not None:
+        state["revision"] = revision
     state["destinations"] = [
         _door_card_state_payload(card, order_index=index)
         for index, card in enumerate(destinations)
@@ -345,6 +373,7 @@ def door_view_uld_state(
         selected_door,
         supervised_doors,
         operation=operation,
+        door_pulls=door_pulls,
     )
     return state
 
@@ -363,7 +392,13 @@ def door_view_uld_workspace(
     )
 
 
-def door_tab_pull_alerts(gateway, active_door, supervised_doors, operation=None):
+def door_tab_pull_alerts(
+    gateway,
+    active_door,
+    supervised_doors,
+    operation=None,
+    door_pulls=_DOOR_PULL_LOOKUP_UNSET,
+):
     """Summarize unresolved pull urgency for supervised Door View tabs."""
     available_doors = set(get_door_options(gateway))
     active_door = normalize_door(active_door)
@@ -386,15 +421,8 @@ def door_tab_pull_alerts(gateway, active_door, supervised_doors, operation=None)
 
     missions = _missions_by_destination(gateway, operation)
     masters = _master_departures_by_destination(gateway)
-    pulls = NeoErmacDoorPull.query.filter(
-        NeoErmacDoorPull.gateway_id == gateway.id,
-        NeoErmacDoorPull.sort_date_operation_id == operation.id,
-        NeoErmacDoorPull.door.in_(doors),
-    ).all()
-    pulls_by_door_destination = {
-        (normalize_door(pull.door), normalize_destination(pull.destination)): pull
-        for pull in pulls
-    }
+    if door_pulls is _DOOR_PULL_LOOKUP_UNSET:
+        door_pulls = _door_pulls_by_door_destination(gateway, operation, doors)
 
     for door in doors:
         if door == active_door:
@@ -408,7 +436,7 @@ def door_tab_pull_alerts(gateway, active_door, supervised_doors, operation=None)
                 "pure": _planned_pull_time(timing_data, master, "pure"),
                 "mix": _planned_pull_time(timing_data, master, "mix"),
             }
-            door_pull = pulls_by_door_destination.get((door, destination))
+            door_pull = door_pulls.get((door, destination))
             actual = {
                 "pure": _time_value(
                     getattr(door_pull, "actual_pure_pull_time_local", None)
@@ -444,6 +472,142 @@ def door_tab_pull_alerts(gateway, active_door, supervised_doors, operation=None)
 
 def neoermac_refresh_status(gateway, now=None):
     return sort_window_auto_refresh_status(gateway, now=now)
+
+
+def current_door_view_operation(gateway):
+    """Resolve the operation used by Door View without constructing page state."""
+    return _current_operation(gateway)
+
+
+def door_view_poll_revision(
+    gateway,
+    selected_door,
+    requested_by_user_id,
+    *,
+    operation=_OPERATION_UNSET,
+    now=None,
+):
+    """Return a database-light fingerprint for every visible Door View input."""
+    selected_door = normalize_door(selected_door)
+    if not selected_door or selected_door not in get_door_options(gateway):
+        raise ValueError("Select a door.")
+    if operation is _OPERATION_UNSET:
+        operation = _current_operation(gateway)
+
+    now_local = current_gateway_local_datetime(gateway, now=now)
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    operation_id = operation.id if operation else None
+    operation_criteria = lambda model: (
+        model.sort_date_operation_id == operation_id
+        if operation_id is not None
+        else model.sort_date_operation_id.is_(None)
+    )
+    aggregate_queries = (
+        _door_revision_aggregate(
+            "lineup",
+            NeoErmacBuildingLineup,
+            NeoErmacBuildingLineup.updated_at,
+            NeoErmacBuildingLineup.gateway_id == gateway.id,
+        ),
+        _door_revision_aggregate(
+            "missions",
+            SortDateMission,
+            SortDateMission.updated_at,
+            operation_criteria(SortDateMission),
+        ),
+        _door_revision_aggregate(
+            "google_mission_links",
+            SortDateGoogleMissionLink,
+            SortDateGoogleMissionLink.updated_at,
+            operation_criteria(SortDateGoogleMissionLink),
+        ),
+        _door_revision_aggregate(
+            "parking",
+            SortDateParkingAssignment,
+            SortDateParkingAssignment.updated_at,
+            operation_criteria(SortDateParkingAssignment),
+        ),
+        _door_revision_aggregate(
+            "door_pulls",
+            NeoErmacDoorPull,
+            NeoErmacDoorPull.updated_at,
+            NeoErmacDoorPull.gateway_id == gateway.id,
+            operation_criteria(NeoErmacDoorPull),
+        ),
+        _door_revision_aggregate(
+            "supervision",
+            NeoErmacDoorSupervision,
+            NeoErmacDoorSupervision.updated_at,
+            NeoErmacDoorSupervision.user_id == requested_by_user_id,
+            operation_criteria(NeoErmacDoorSupervision),
+        ),
+        _door_revision_aggregate(
+            "uld_requests",
+            NeoErmacUldRequest,
+            NeoErmacUldRequest.updated_at,
+            NeoErmacUldRequest.gateway_id == gateway.id,
+            operation_criteria(NeoErmacUldRequest),
+        ),
+        _door_revision_aggregate(
+            "active_uld_events",
+            NeoSektorUldOnTheWayEvent,
+            NeoSektorUldOnTheWayEvent.created_at,
+            NeoSektorUldOnTheWayEvent.gateway_id == gateway.id,
+            operation_criteria(NeoSektorUldOnTheWayEvent),
+            NeoSektorUldOnTheWayEvent.expires_at_utc > now_utc,
+        ),
+        _door_revision_aggregate(
+            "master_departures",
+            MasterFlightSchedule,
+            MasterFlightSchedule.updated_at,
+            MasterFlightSchedule.gateway_id == gateway.id,
+            MasterFlightSchedule.mission_type == "departure",
+            MasterFlightSchedule.active.is_(True),
+        ),
+    )
+    rows = sorted(
+        db.session.execute(union_all(*aggregate_queries)).all(),
+        key=lambda row: row.source,
+    )
+    payload = {
+        "gateway_id": gateway.id,
+        "operation_id": operation_id,
+        "operation_updated_at": _revision_value(
+            getattr(operation, "updated_at", None)
+        ),
+        "selected_door": selected_door,
+        "requested_by_user_id": requested_by_user_id,
+        # Pull urgency changes at minute boundaries even without a database write.
+        "local_minute": now_local.replace(second=0, microsecond=0).isoformat(),
+        "inputs": [
+            {
+                "source": row.source,
+                "row_count": int(row.row_count or 0),
+                "max_id": int(row.max_id or 0),
+                "id_sum": int(row.id_sum or 0),
+                "latest_updated_at": _revision_value(row.latest_updated_at),
+            }
+            for row in rows
+        ],
+    }
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _door_revision_aggregate(source, model, timestamp_column, *criteria):
+    return select(
+        literal(source).label("source"),
+        func.count(model.id).label("row_count"),
+        func.max(model.id).label("max_id"),
+        func.coalesce(func.sum(model.id), 0).label("id_sum"),
+        func.max(timestamp_column).label("latest_updated_at"),
+    ).where(*criteria)
+
+
+def _revision_value(value):
+    if isinstance(value, datetime):
+        return value.isoformat(timespec="microseconds")
+    return str(value or "")
 
 
 def _pull_card_payload(gateway, selected_door, destination, operation):
@@ -493,18 +657,29 @@ def get_door_options(gateway):
     return get_outbound_door_options()
 
 
-def _destination_cards_for_door(gateway, selected_door, operation):
+def _destination_cards_for_door(
+    gateway,
+    selected_door,
+    operation,
+    door_pulls=_DOOR_PULL_LOOKUP_UNSET,
+):
     destination_slots = _destination_slots_for_door(gateway, selected_door)
     missions = _missions_by_destination(gateway, operation)
     parking_by_tail = _parking_assignments_by_tail(operation)
     arrivals_by_tail = arrival_presence_by_tail(operation)
     masters = _master_departures_by_destination(gateway)
+    if door_pulls is _DOOR_PULL_LOOKUP_UNSET:
+        door_pulls = _door_pulls_by_door_destination(
+            gateway,
+            operation,
+            (selected_door,),
+        )
     cards = []
 
     for destination, slot_labels in destination_slots.items():
         mission = missions.get(destination)
         master = masters.get(destination)
-        door_pull = _door_pull_record(gateway, selected_door, destination, operation)
+        door_pull = door_pulls.get((selected_door, destination))
         timing_data = _mission_timing_data(mission, operation)
         planned_times = {
             "pure": _planned_pull_time(timing_data, master, "pure"),
@@ -730,6 +905,26 @@ def _door_pull_record(gateway, selected_door, destination, operation, create=Fal
         )
         db.session.add(record)
     return record
+
+
+def _door_pulls_by_door_destination(gateway, operation, doors):
+    """Load DoorPull rows once for the changed-state workspace."""
+    if not operation:
+        return {}
+    normalized_doors = {
+        normalize_door(door) for door in doors or () if normalize_door(door)
+    }
+    if not normalized_doors:
+        return {}
+    records = NeoErmacDoorPull.query.filter(
+        NeoErmacDoorPull.gateway_id == gateway.id,
+        NeoErmacDoorPull.sort_date_operation_id == operation.id,
+        NeoErmacDoorPull.door.in_(normalized_doors),
+    ).all()
+    return {
+        (normalize_door(record.door), normalize_destination(record.destination)): record
+        for record in records
+    }
 
 
 def _uld_request_for_door(gateway, selected_door, operation):

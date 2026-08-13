@@ -4,7 +4,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from app import create_app
 from app.extensions import db
@@ -2572,6 +2572,110 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertFalse(response.get_json()["ok"])
+
+    def test_door_view_state_short_circuits_an_unchanged_revision(self):
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
+        self._add_operation_departure("UPS948", "SDF", tail="N316UP")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        page = self.client.get("/neoermac/door-view?door=D34")
+        self.assertIn(b"data-door-view-revision=", page.data)
+        self.assertIn(b'pollUrl.searchParams.set("revision", currentRevision)', page.data)
+        first = self.client.get("/neoermac/door-view/state?door=D34").get_json()
+        with patch("app.neonodes.neoermac.routes.door_view_uld_state") as full_state:
+            response = self.client.get(
+                "/neoermac/door-view/state?door=D34&revision=" + first["revision"]
+            )
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["changed"])
+        self.assertEqual(payload["revision"], first["revision"])
+        self.assertIn("refresh", payload)
+        self.assertNotIn("state", payload)
+        full_state.assert_not_called()
+
+    def test_door_view_state_revision_change_runs_full_payload(self):
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
+        mission = self._add_operation_departure(
+            "UPS948",
+            "SDF",
+            tail="N316UP",
+            departure_status="scheduled",
+        )
+        db.session.commit()
+        self._login_approved_user(role="operator")
+        first = self.client.get("/neoermac/door-view/state?door=D34").get_json()
+
+        mission.departure_status = "loading"
+        db.session.commit()
+        response = self.client.get(
+            "/neoermac/door-view/state?door=D34&revision=" + first["revision"]
+        )
+
+        payload = response.get_json()
+        self.assertTrue(payload["changed"])
+        self.assertNotEqual(payload["revision"], first["revision"])
+        self.assertEqual(payload["state"]["destinations"][0]["status"], "Loading")
+
+        db.session.add(
+            NeoErmacDoorPull(
+                gateway_id=self.gateway.id,
+                sort_date_operation_id=mission.sort_date_operation_id,
+                door="D34",
+                destination="SDF",
+                no_pure_pull=True,
+            )
+        )
+        db.session.commit()
+        after_pull = self.client.get(
+            "/neoermac/door-view/state?door=D34&revision=" + payload["revision"]
+        ).get_json()
+        self.assertTrue(after_pull["changed"])
+        self.assertNotEqual(after_pull["revision"], payload["revision"])
+        self.assertTrue(after_pull["state"]["destinations"][0]["no_pull"]["pure"])
+
+    def test_door_view_changed_state_bulk_loads_door_pulls_once(self):
+        from app.services.neoermac_door_view import door_view_uld_state
+
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
+        self._assign_lineup_destination("runout_10", "west_destination_2", "ONT")
+        first = self._add_operation_departure("UPS948", "SDF")
+        self._add_operation_departure("UPS949", "ONT")
+        db.session.add_all(
+            [
+                NeoErmacDoorPull(
+                    gateway_id=self.gateway.id,
+                    sort_date_operation_id=first.sort_date_operation_id,
+                    door="D34",
+                    destination=destination,
+                    no_pure_pull=True,
+                )
+                for destination in ("SDF", "ONT")
+            ]
+        )
+        db.session.commit()
+        statements = []
+
+        def capture_statement(_conn, _cursor, statement, _params, _context, _many):
+            normalized = " ".join(statement.lower().split())
+            if "from neoermac_door_pulls" in normalized:
+                statements.append(normalized)
+
+        event.listen(db.engine, "before_cursor_execute", capture_statement)
+        try:
+            state = door_view_uld_state(
+                self.gateway,
+                "D34",
+                supervised_doors=("D34",),
+            )
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture_statement)
+
+        self.assertEqual(len(state["destinations"]), 2)
+        self.assertEqual(len(statements), 1)
 
     def test_door_view_displays_active_on_the_way_events(self):
         sent_at = datetime.utcnow()
