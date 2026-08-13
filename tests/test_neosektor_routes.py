@@ -4,6 +4,9 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+from sqlalchemy import event
+from sqlalchemy.orm import Session
+
 from app import create_app
 from app.extensions import db
 from app.models import (
@@ -21,6 +24,7 @@ from app.models import (
     NeoSektorUldOnTheWayEvent,
     NeoSektorWaveState,
     PermissionRule,
+    PortalAppAccess,
     SortDateOperation,
     User,
 )
@@ -2210,7 +2214,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_second_wave_does_not_all_up_while_ballmat_back_row_has_count(self):
         self._login_approved_user(role="simulator")
-        self.client.get("/neosektor/live-counts/state")
+        self.client.get("/neosektor/live-counts")
         first_wave = NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one()
         first_wave.all_up_started_at = datetime.utcnow() - timedelta(minutes=16)
         db.session.commit()
@@ -2652,6 +2656,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_all_up_transitions_to_down_after_15_minutes(self):
         self._login_approved_user(role="watcher")
+        page_response = self.client.get("/neosektor/live-counts")
+        self.assertEqual(page_response.status_code, 200)
         initial_response = self.client.get("/neosektor/live-counts/state")
         self.assertEqual(initial_response.status_code, 200)
         self.assertEqual(initial_response.get_json()["state"]["waves"][0]["left"], "ALL UP")
@@ -2680,7 +2686,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_second_wave_uses_open_bays_and_modifier_after_first_wave_down(self):
         self._login_approved_user(role="simulator")
-        self.client.get("/neosektor/live-counts/state")
+        self.client.get("/neosektor/live-counts")
         first_wave = NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one()
         first_wave.all_up_started_at = datetime.utcnow() - timedelta(minutes=16)
         db.session.commit()
@@ -2780,6 +2786,187 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("sides", payload["state"])
         self.assertEqual(payload["state"]["sides"]["east"]["bays"][0]["bay_name"], "Bay 1")
         self.assertIn("refresh", payload["state"])
+
+    def test_direct_lightweight_state_request_does_not_seed_access_rows(self):
+        self._login_approved_user(role="watcher")
+        statements = {"writes": 0, "commits": 0}
+
+        def track_statement(_conn, _cursor, statement, _params, _context, _many):
+            if statement.lstrip().split(None, 1)[0].upper() in {
+                "INSERT",
+                "UPDATE",
+                "DELETE",
+            }:
+                statements["writes"] += 1
+
+        def track_commit(_session):
+            statements["commits"] += 1
+
+        engine = db.engine
+        event.listen(engine, "before_cursor_execute", track_statement)
+        event.listen(Session, "after_commit", track_commit)
+        try:
+            response = self.client.get("/neosektor/live-counts/state")
+        finally:
+            event.remove(engine, "before_cursor_execute", track_statement)
+            event.remove(Session, "after_commit", track_commit)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(statements["writes"], 0)
+        self.assertEqual(statements["commits"], 0)
+        self.assertEqual(PortalAppAccess.query.count(), 0)
+        self.assertEqual(GatewayNodeRole.query.count(), 0)
+
+    def test_live_state_revisions_short_circuit_all_neosektor_screens(self):
+        self._login_approved_user(role="simulator")
+        self._add_sort_operation(date.today(), "night")
+        self._set_sort_window("night", time(0, 0), time(23, 59, 59))
+        screens = (
+            (
+                "/neosektor/live-counts",
+                "/neosektor/live-counts/state",
+                "app.neonodes.neosektor.routes.ballmat_state_payload",
+            ),
+            (
+                "/neosektor/ebm",
+                "/neosektor/ballmat/state?side=east",
+                "app.neonodes.neosektor.routes.ballmat_state_payload",
+            ),
+            (
+                "/neosektor/tunnel-conductor",
+                "/neosektor/tunnel-conductor/state",
+                "app.neonodes.neosektor.routes.driver_routing_state_payload",
+            ),
+            (
+                "/neosektor/driver-routing",
+                "/neosektor/driver-routing/state",
+                "app.neonodes.neosektor.routes.driver_routing_state_payload",
+            ),
+            (
+                "/neosektor/discharge",
+                "/neosektor/discharge/state",
+                "app.neonodes.neosektor.routes.discharge_state_payload",
+            ),
+        )
+        revisions = {}
+        for page_url, _state_url, _builder in screens:
+            page = self.client.get(page_url)
+            match = re.search(
+                rb'data-neosektor-revision="([^"]+)"',
+                page.data,
+            )
+            self.assertEqual(page.status_code, 200)
+            self.assertIsNotNone(match)
+            self.assertIn(
+                b'pollUrl.searchParams.set("revision", currentRevision)',
+                page.data,
+            )
+            revisions[page_url] = match.group(1).decode()
+
+        statements = {"selects": 0, "writes": 0, "commits": 0}
+
+        def track_statement(_conn, _cursor, statement, _params, _context, _many):
+            kind = statement.lstrip().split(None, 1)[0].upper()
+            if kind == "SELECT":
+                statements["selects"] += 1
+            elif kind in {"INSERT", "UPDATE", "DELETE"}:
+                statements["writes"] += 1
+
+        def track_commit(_session):
+            statements["commits"] += 1
+
+        engine = db.engine
+        event.listen(engine, "before_cursor_execute", track_statement)
+        event.listen(Session, "after_commit", track_commit)
+        try:
+            for page_url, state_url, builder in screens:
+                with self.subTest(state_url=state_url):
+                    statements.update(selects=0, writes=0, commits=0)
+                    separator = "&" if "?" in state_url else "?"
+                    with patch(builder, side_effect=AssertionError("full state built")):
+                        response = self.client.get(
+                            f"{state_url}{separator}revision={revisions[page_url]}"
+                        )
+
+                    payload = response.get_json()
+                    self.assertEqual(response.status_code, 200)
+                    self.assertTrue(payload["ok"])
+                    self.assertFalse(payload["changed"])
+                    self.assertEqual(payload["revision"], revisions[page_url])
+                    self.assertNotIn("state", payload)
+                    self.assertLessEqual(statements["selects"], 15)
+                    self.assertEqual(statements["writes"], 0)
+                    self.assertEqual(statements["commits"], 0)
+                    self.assertLess(len(response.data), 1000)
+        finally:
+            event.remove(engine, "before_cursor_execute", track_statement)
+            event.remove(Session, "after_commit", track_commit)
+
+    def test_live_state_revision_invalidates_for_settings_and_counts(self):
+        self._login_approved_user(role="simulator")
+        self._add_sort_operation(date.today(), "night")
+        self._set_sort_window("night", time(0, 0), time(23, 59, 59))
+        page = self.client.get("/neosektor/live-counts")
+        revision = re.search(
+            rb'data-neosektor-revision="([^"]+)"',
+            page.data,
+        ).group(1).decode()
+
+        settings = NeoSektorOperationalSetting.query.one()
+        settings.first_wave_unload_modifier += 1
+        db.session.commit()
+        settings_response = self.client.get(
+            f"/neosektor/live-counts/state?revision={revision}"
+        ).get_json()
+
+        self.assertTrue(settings_response["changed"])
+        self.assertNotEqual(settings_response["revision"], revision)
+        self.assertIn("state", settings_response)
+
+        count_revision = settings_response["revision"]
+        update = self.client.post(
+            "/neosektor/ballmat/update?side=east",
+            json={
+                "side": "east",
+                "waves": {"first": {"count": 4}},
+                "open_bays": 1,
+                "bay_statuses": {"Bay 1": "Light"},
+            },
+        )
+        count_response = self.client.get(
+            f"/neosektor/live-counts/state?revision={count_revision}"
+        ).get_json()
+
+        self.assertEqual(update.status_code, 200)
+        self.assertTrue(count_response["changed"])
+        self.assertNotEqual(count_response["revision"], count_revision)
+        self.assertEqual(
+            count_response["state"]["sides"]["east"]["waves"][0]["count"],
+            4,
+        )
+
+    def test_discharge_workflow_change_invalidates_live_revision(self):
+        self._login_approved_user(role="operator")
+        operation = self._add_sort_operation(date.today(), "night")
+        self._set_sort_window("night", time(0, 0), time(23, 59, 59))
+        page = self.client.get("/neosektor/discharge")
+        revision = re.search(
+            rb'data-neosektor-revision="([^"]+)"',
+            page.data,
+        ).group(1).decode()
+
+        request_record = self._add_uld_request("D13", a2_count=2)
+        request_record.sort_date_operation_id = operation.id
+        db.session.commit()
+        response = self.client.get(
+            f"/neosektor/discharge/state?revision={revision}"
+        )
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["changed"])
+        self.assertNotEqual(payload["revision"], revision)
+        self.assertEqual(payload["state"]["requests"][0]["id"], request_record.id)
 
     def test_neosektor_refresh_pauses_outside_operation_window(self):
         self._login_approved_user(role="watcher")

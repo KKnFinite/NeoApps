@@ -4,7 +4,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from flask import current_app
 
 from app.extensions import db
-from app.models import GatewaySortMatrix, SortDateOperation, SortTimelineSettings
+from app.models import GatewaySortMatrix, SortDateOperation, SortTimelineSortSetting
+from app.services.request_cache import request_cached
 from app.services.sort_date_operations import generate_sort_date_operation_from_master
 
 
@@ -266,17 +267,14 @@ def ops_window_for_operation(operation, gateway=None):
 def _sort_timeline_sort_setting(gateway, sort_name):
     if not gateway:
         return None
-    settings = SortTimelineSettings.query.filter_by(gateway_id=gateway.id).first()
-    if not settings:
-        return None
     sort_name = str(sort_name or "").strip().lower()
-    return next(
-        (
-            sort_setting
-            for sort_setting in settings.sort_settings
-            if sort_setting.sort_name == sort_name
-        ),
-        None,
+    return request_cached(
+        "sort_timeline_sort_setting",
+        (gateway.id, sort_name),
+        lambda: SortTimelineSortSetting.query.filter_by(
+            gateway_id=gateway.id,
+            sort_name=sort_name,
+        ).first(),
     )
 
 

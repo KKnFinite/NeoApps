@@ -9,13 +9,16 @@ LIGHTWEIGHT_LIVE_STATE_ENDPOINTS = frozenset(
         "neoermac.upcoming_pulls_state",
         "neomotherbrain.parking_plan_live_state_endpoint",
         "neomotherbrain.planning_live_state",
+        "neosektor.ballmat_state",
         "neosektor.discharge_state",
+        "neosektor.driver_routing_state",
+        "neosektor.live_counts_state",
+        "neosektor.tunnel_conductor_state",
     }
 )
 
-# NeoSektor count/routing state routes are deliberately absent: those GETs can
-# advance the persisted all-up timer or synchronize derived driver-route rows.
-# Discharge is the only currently established read-only NeoSektor state route.
+# NeoSektor state routes use virtual defaults and pure calculations. Required
+# row initialization remains on normal page/setup and write paths.
 
 # View Outbound serves both its normal page and revision-based live polling from
 # one endpoint. Only a request carrying a client revision is a reconciliation

@@ -24,6 +24,7 @@
     aria-labelledby="neosektor-discharge-title"
     data-neosektor-discharge
     data-state-url="{{ url_for('neosektor.discharge_state') }}"
+    data-neosektor-revision="{{ live_revision }}"
     data-refresh-active="{{ 'true' if refresh_status.auto_refresh_enabled else 'false' }}"
     data-selected-request-id="{{ selected_request.id if selected_request else '' }}"
     data-discharge-url="{{ url_for('neosektor.discharge') }}"
@@ -143,6 +144,7 @@
     }
 
     const stateUrl = root.dataset.stateUrl;
+    let currentRevision = root.dataset.neosektorRevision || "";
     const dischargeUrl = root.dataset.dischargeUrl;
     const selectedRequestId = Number.parseInt(root.dataset.selectedRequestId || "", 10);
     const initialRefreshStatus = {{ refresh_status|tojson }};
@@ -263,17 +265,24 @@
 
     const refreshState = async () => {
         try {
-            const response = await fetch(stateUrl, { cache: "no-store", credentials: "same-origin" });
-        if (!response.ok) {
-            throw new Error("Discharge refresh failed.");
-            }
-            const payload = await response.json();
-            if (!payload.ok || !payload.state) {
+            const pollUrl = new URL(stateUrl, window.location.href);
+            pollUrl.searchParams.set("revision", currentRevision);
+            const response = await fetch(pollUrl, { cache: "no-store", credentials: "same-origin" });
+            if (!response.ok) {
                 throw new Error("Discharge refresh failed.");
             }
-            setRefreshStatus(payload.state.refresh);
-            if (payload.state.refresh?.auto_refresh_enabled === false) {
+            const payload = await response.json();
+            if (!payload.ok) {
+                throw new Error("Discharge refresh failed.");
+            }
+            currentRevision = payload.revision || currentRevision;
+            const refresh = payload.refresh || payload.state?.refresh || {};
+            setRefreshStatus(refresh);
+            if (refresh.auto_refresh_enabled === false || payload.changed === false) {
                 return;
+            }
+            if (!payload.state) {
+                throw new Error("Discharge refresh failed.");
             }
             renderQueue(payload.state.requests || []);
             renderSelected(payload.state.requests || []);

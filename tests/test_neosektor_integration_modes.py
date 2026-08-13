@@ -2,6 +2,9 @@ import os
 import unittest
 from unittest.mock import patch
 
+from sqlalchemy import event
+from sqlalchemy.orm import Session
+
 from app import create_app
 from app.extensions import db
 from app.models import (
@@ -15,13 +18,23 @@ from app.services.access_control import (
     backfill_default_gateway_node_roles,
     ensure_default_gateway_and_nodes,
 )
-from app.services.neosektor_live_counts import apply_standalone_compat_values
+from app.services.neosektor_live_counts import (
+    apply_standalone_compat_values,
+    update_tunnel_driver_offset,
+)
+from app.services.neosektor_live_refresh import (
+    COUNT_STATE_SCOPE,
+    ROUTING_STATE_SCOPE,
+    neosektor_state_revision,
+)
 from app.services.neosektor_sheets_compat import (
     GOOGLE_PRIMARY,
     NEO_ONLY,
     NEO_PRIMARY_GOOGLE_MIRROR,
     SHEET_CELL_ORDER,
     clear_neosektor_google_cache,
+    google_primary_operational_values,
+    google_primary_wave_timer_starts,
     neosektor_integration_mode,
 )
 from app.services.password_policy import set_user_password
@@ -187,11 +200,136 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
         self.assertEqual(first.status_code, 200)
         self.assertEqual(second.status_code, 200)
         self.assertEqual(worksheet.batch_reads, [SHEET_CELL_ORDER])
-        settings = NeoSektorOperationalSetting.query.one()
-        self.assertIsNone(settings.last_google_read_at_utc)
+        self.assertEqual(NeoSektorOperationalSetting.query.count(), 0)
         self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 0)
         self.assertEqual(NeoSektorOpenBayState.query.count(), 0)
         self.assertEqual(NeoSektorBayStatus.query.count(), 0)
+
+    def test_google_primary_all_up_observation_is_process_local(self):
+        worksheet = _FakeWorksheet(
+            _complete_sheet_values(B2=0, C2=0, D2=0, B3=1, C3=0, D3=0)
+        )
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            google_primary_operational_values(self.gateway)
+            started = google_primary_wave_timer_starts(self.gateway)
+            worksheet.values["B2"] = 1
+            google_primary_operational_values(self.gateway, force=True)
+            cleared = google_primary_wave_timer_starts(self.gateway)
+
+        self.assertIn("1ST WAVE", started)
+        self.assertNotIn("2ND WAVE", started)
+        self.assertNotIn("1ST WAVE", cleared)
+        self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 0)
+
+    def test_google_primary_operational_change_invalidates_revision(self):
+        worksheet = _FakeWorksheet()
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            first_revision = neosektor_state_revision(
+                self.gateway,
+                COUNT_STATE_SCOPE,
+            )
+            worksheet.values["B2"] = 8
+            clear_neosektor_google_cache(self.gateway)
+            second_revision = neosektor_state_revision(
+                self.gateway,
+                COUNT_STATE_SCOPE,
+            )
+
+        self.assertNotEqual(first_revision, second_revision)
+        self.assertEqual(worksheet.batch_reads, [SHEET_CELL_ORDER, SHEET_CELL_ORDER])
+        self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 0)
+        self.assertEqual(NeoSektorOpenBayState.query.count(), 0)
+        self.assertEqual(NeoSektorBayStatus.query.count(), 0)
+
+    def test_google_primary_neo_owned_driver_offset_invalidates_routing_revision(self):
+        worksheet = _FakeWorksheet()
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            first_revision = neosektor_state_revision(
+                self.gateway,
+                ROUTING_STATE_SCOPE,
+            )
+            update_tunnel_driver_offset(self.gateway, {"west_offset": 3})
+            db.session.commit()
+            second_revision = neosektor_state_revision(
+                self.gateway,
+                ROUTING_STATE_SCOPE,
+            )
+
+        self.assertNotEqual(first_revision, second_revision)
+        self.assertEqual(worksheet.batch_reads, [SHEET_CELL_ORDER])
+
+    def test_state_gets_are_read_only_in_all_integration_modes(self):
+        self._login("simulator")
+        worksheet = _FakeWorksheet()
+        statements = {"writes": 0, "commits": 0}
+
+        def track_statement(_conn, _cursor, statement, _params, _context, _many):
+            if statement.lstrip().split(None, 1)[0].upper() in {
+                "INSERT",
+                "UPDATE",
+                "DELETE",
+            }:
+                statements["writes"] += 1
+
+        def track_commit(_session):
+            statements["commits"] += 1
+
+        engine = db.engine
+        event.listen(engine, "before_cursor_execute", track_statement)
+        event.listen(Session, "after_commit", track_commit)
+        try:
+            with (
+                patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+                patch(
+                    "app.services.neosektor_sheets_compat._get_worksheet",
+                    return_value=worksheet,
+                ),
+            ):
+                for mode in (
+                    GOOGLE_PRIMARY,
+                    NEO_PRIMARY_GOOGLE_MIRROR,
+                    NEO_ONLY,
+                ):
+                    with self.subTest(mode=mode):
+                        self._set_mode(mode)
+                        if mode != GOOGLE_PRIMARY:
+                            apply_standalone_compat_values(
+                                self.gateway,
+                                _complete_sheet_values(),
+                            )
+                            db.session.commit()
+                        clear_neosektor_google_cache(self.gateway)
+                        statements.update(writes=0, commits=0)
+
+                        response = self.client.get("/neosektor/live-counts/state")
+
+                        self.assertEqual(response.status_code, 200)
+                        self.assertTrue(response.get_json()["ok"])
+                        self.assertEqual(statements["writes"], 0)
+                        self.assertEqual(statements["commits"], 0)
+        finally:
+            event.remove(engine, "before_cursor_execute", track_statement)
+            event.remove(Session, "after_commit", track_commit)
+
+        self.assertEqual(worksheet.batch_reads, [SHEET_CELL_ORDER])
 
     def test_google_primary_writes_google_and_keeps_neo_settings_in_neon(self):
         self._login("simulator")

@@ -83,14 +83,16 @@ class NeoSektorGoogleError(ValueError):
     """Safe, user-displayable NeoSektor Google transition failure."""
 
 
-def neosektor_integration_mode(gateway=None):
-    settings = _existing_operational_settings(gateway)
+def neosektor_integration_mode(gateway=None, *, settings=None):
+    if settings is None:
+        settings = _existing_operational_settings(gateway)
     return _normalized_mode(getattr(settings, "integration_mode", None))
 
 
-def neosektor_integration_status(gateway=None):
+def neosektor_integration_status(gateway=None, *, settings=None):
     gateway = _resolve_gateway(gateway)
-    settings = _existing_operational_settings(gateway)
+    if settings is None:
+        settings = _existing_operational_settings(gateway)
     mode = _normalized_mode(getattr(settings, "integration_mode", None))
     return {
         "mode": mode,
@@ -200,6 +202,16 @@ def google_primary_operational_values(gateway, force=False):
 
     _store_google_values(gateway.id, values)
     return dict(values)
+
+
+def google_primary_wave_timer_starts(gateway):
+    """Return process-local ALL UP observation times for Google-owned waves."""
+    gateway = _resolve_gateway(gateway)
+    if not gateway:
+        return {}
+    with _google_state_cache_lock:
+        cached = _google_state_cache.get(gateway.id) or {}
+        return dict(cached.get("wave_all_up_started_at") or {})
 
 
 def write_google_primary_operational_values(gateway, updates):
@@ -407,9 +419,14 @@ def _cached_google_values(gateway_id):
 
 def _store_google_values(gateway_id, values):
     with _google_state_cache_lock:
+        cached = _google_state_cache.get(gateway_id) or {}
         _google_state_cache[gateway_id] = {
             "stored_at": time.monotonic(),
             "values": dict(values),
+            "wave_all_up_started_at": _updated_google_wave_timers(
+                cached.get("wave_all_up_started_at"),
+                values,
+            ),
         }
 
 
@@ -421,7 +438,27 @@ def _merge_cached_google_values(gateway_id, updates):
         _google_state_cache[gateway_id] = {
             "stored_at": time.monotonic(),
             "values": values,
+            "wave_all_up_started_at": _updated_google_wave_timers(
+                (cached or {}).get("wave_all_up_started_at"),
+                values,
+            ),
         }
+
+
+def _updated_google_wave_timers(existing, values):
+    now = datetime.utcnow()
+    starts = dict(existing or {})
+    wave_cells = {
+        "1ST WAVE": ("B2", "C2", "D2"),
+        "2ND WAVE": ("B3", "C3", "D3"),
+    }
+    for wave_name, cells in wave_cells.items():
+        is_all_up = all(int(values.get(cell) or 0) == 0 for cell in cells)
+        if is_all_up:
+            starts.setdefault(wave_name, now)
+        else:
+            starts.pop(wave_name, None)
+    return starts
 
 
 def _sheet_values_from_state(state):

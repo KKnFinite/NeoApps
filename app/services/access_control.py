@@ -1,6 +1,7 @@
 from datetime import datetime
+from types import SimpleNamespace
 
-from flask import current_app
+from flask import current_app, g, has_request_context
 
 from app.extensions import db
 from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess
@@ -286,6 +287,8 @@ def get_user_node_role(user, gateway_code, node_code):
             return node_role.role
 
         seed_role = _neogateway_seed_role_for_user(user)
+        if _is_lightweight_live_state_request():
+            return seed_role
         seed_gateway_node_roles(membership, seed_role, overwrite_existing=False)
         node_role = GatewayNodeRole.query.filter_by(
             gateway_membership_id=membership.id,
@@ -450,15 +453,26 @@ def get_user_app_access(user, app_code):
     cache_key = (user.id, normalized)
 
     def resolve():
-        if normalized == "neogateway":
-            synced = _sync_neogateway_app_access_from_gateway_membership(user)
-            if synced:
-                return synced
-
-        return PortalAppAccess.query.filter_by(
+        access = PortalAppAccess.query.filter_by(
             user_id=user.id,
             app_code=normalized,
         ).first()
+        if access or normalized != "neogateway":
+            return access
+
+        if _is_lightweight_live_state_request():
+            membership = get_user_gateway_membership(user, _default_gateway_code())
+            if not _membership_is_approved_active(membership):
+                return None
+            return SimpleNamespace(
+                user_id=user.id,
+                app_code="neogateway",
+                status=membership.status,
+                role=_role_from_gateway_membership(user, membership),
+                is_active=membership.is_active,
+            )
+
+        return _sync_neogateway_app_access_from_gateway_membership(user)
 
     return request_cached("access.app_access", cache_key, resolve)
 
@@ -618,6 +632,13 @@ def _is_authenticated_user(user):
 
 def _is_real_user(user):
     return bool(user and getattr(user, "id", None))
+
+
+def _is_lightweight_live_state_request():
+    return bool(
+        has_request_context()
+        and getattr(g, "is_lightweight_live_state_request", False)
+    )
 
 
 def _membership_is_approved_active(membership):

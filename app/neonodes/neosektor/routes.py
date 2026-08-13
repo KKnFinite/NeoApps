@@ -2,6 +2,7 @@ from flask import flash, jsonify, redirect, render_template, request, session, u
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
+from app.models import SortDateOperation
 from app.neonodes.neosektor import bp
 from app.services.access_control import get_current_gateway
 from app.services.neosektor_live_counts import (
@@ -19,6 +20,12 @@ from app.services.neosektor_live_counts import (
     update_neosektor_operational_settings,
     update_tunnel_driver_offset,
     update_ballmat_side,
+)
+from app.services.neosektor_live_refresh import (
+    COUNT_STATE_SCOPE,
+    ROUTING_STATE_SCOPE,
+    neosektor_discharge_revision,
+    neosektor_state_revision,
 )
 from app.services.neosektor_sheets_compat import (
     NeoSektorGoogleError,
@@ -199,6 +206,10 @@ def tunnel_conductor():
     except NeoSektorGoogleError as exc:
         flash(str(exc), "error")
         return redirect(url_for("neosektor.index"))
+    context["live_revision"] = neosektor_state_revision(
+        gateway,
+        ROUTING_STATE_SCOPE,
+    )
     db.session.commit()
     return render_template(
         "neonodes/neosektor/tunnel_conductor.html",
@@ -221,11 +232,13 @@ def tunnel_conductor_state():
 
     gateway = get_current_gateway()
     try:
-        state = driver_routing_state_payload(gateway)
+        return _neosektor_live_state_response(
+            gateway,
+            ROUTING_STATE_SCOPE,
+            driver_routing_state_payload,
+        )
     except NeoSektorGoogleError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 503
-    db.session.commit()
-    return jsonify({"ok": True, "state": state})
 
 
 @bp.route("/tunnel-conductor/wave", methods=["POST"])
@@ -356,6 +369,10 @@ def _render_ballmat_operations(selected_side):
     except NeoSektorGoogleError as exc:
         flash(str(exc), "error")
         return redirect(url_for("neosektor.index"))
+    context["live_revision"] = neosektor_state_revision(
+        gateway,
+        COUNT_STATE_SCOPE,
+    )
     db.session.commit()
     return render_template(
         "neonodes/neosektor/ballmat.html",
@@ -374,11 +391,13 @@ def ballmat_state():
 
     gateway = get_current_gateway()
     try:
-        state = ballmat_state_payload(gateway)
+        return _neosektor_live_state_response(
+            gateway,
+            COUNT_STATE_SCOPE,
+            ballmat_state_payload,
+        )
     except NeoSektorGoogleError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 503
-    db.session.commit()
-    return jsonify({"ok": True, "state": state})
 
 
 @bp.route("/ballmat/update", methods=["POST"])
@@ -417,6 +436,10 @@ def discharge():
     gateway = get_current_gateway()
     context = discharge_context(gateway)
     context["refresh_status"] = neosektor_refresh_status(gateway)
+    context["live_revision"] = neosektor_discharge_revision(
+        gateway,
+        operation_id=(context["operation"].id if context["operation"] else None),
+    )
     selected_request_id = request.args.get("request_id", type=int)
     selected_request = next(
         (
@@ -445,10 +468,7 @@ def discharge_state():
     if not access["can_view"]:
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
-    gateway = get_current_gateway()
-    state = discharge_state_payload(gateway)
-    state["refresh"] = neosektor_refresh_status(gateway)
-    return jsonify({"ok": True, "state": state})
+    return _neosektor_discharge_state_response(get_current_gateway())
 
 
 @bp.route("/discharge/send", methods=["POST"])
@@ -525,6 +545,10 @@ def live_counts():
     except NeoSektorGoogleError as exc:
         flash(str(exc), "error")
         return redirect(url_for("neosektor.index"))
+    context["live_revision"] = neosektor_state_revision(
+        gateway,
+        COUNT_STATE_SCOPE,
+    )
     db.session.commit()
     return render_template(
         "neonodes/neosektor/live_counts.html",
@@ -549,11 +573,13 @@ def live_counts_state():
 
     gateway = get_current_gateway()
     try:
-        state = ballmat_state_payload(gateway)
+        return _neosektor_live_state_response(
+            gateway,
+            COUNT_STATE_SCOPE,
+            ballmat_state_payload,
+        )
     except NeoSektorGoogleError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 503
-    db.session.commit()
-    return jsonify({"ok": True, "state": state})
 
 
 @bp.route("/settings")
@@ -586,6 +612,10 @@ def driver_routing():
     except NeoSektorGoogleError as exc:
         flash(str(exc), "error")
         return redirect(url_for("neosektor.index"))
+    context["live_revision"] = neosektor_state_revision(
+        gateway,
+        ROUTING_STATE_SCOPE,
+    )
     db.session.commit()
     return render_template(
         "neonodes/neosektor/driver_routing.html",
@@ -606,11 +636,103 @@ def driver_routing_state():
 
     gateway = get_current_gateway()
     try:
-        state = driver_routing_state_payload(gateway)
+        return _neosektor_live_state_response(
+            gateway,
+            ROUTING_STATE_SCOPE,
+            driver_routing_state_payload,
+        )
     except NeoSektorGoogleError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 503
-    db.session.commit()
-    return jsonify({"ok": True, "state": state})
+
+
+def _neosektor_live_state_response(gateway, revision_scope, state_builder):
+    client_revision = str(request.args.get("revision") or "").strip()
+    refresh = neosektor_refresh_status(gateway)
+    if client_revision and not refresh.get("auto_refresh_enabled"):
+        return _live_state_json(
+            {
+                "ok": True,
+                "changed": False,
+                "revision": client_revision,
+                "refresh": refresh,
+            }
+        )
+
+    revision = neosektor_state_revision(gateway, revision_scope)
+    if client_revision and client_revision == revision:
+        return _live_state_json(
+            {
+                "ok": True,
+                "changed": False,
+                "revision": revision,
+                "refresh": refresh,
+            }
+        )
+
+    state = state_builder(
+        gateway,
+        initialize=False,
+        refresh_status=refresh,
+    )
+    return _live_state_json(
+        {
+            "ok": True,
+            "changed": True,
+            "revision": revision,
+            "refresh": refresh,
+            "state": state,
+        }
+    )
+
+
+def _neosektor_discharge_state_response(gateway):
+    client_revision = str(request.args.get("revision") or "").strip()
+    refresh = neosektor_refresh_status(gateway)
+    if client_revision and not refresh.get("auto_refresh_enabled"):
+        return _live_state_json(
+            {
+                "ok": True,
+                "changed": False,
+                "revision": client_revision,
+                "refresh": refresh,
+            }
+        )
+
+    operation_id = refresh.get("operation_id")
+    revision = neosektor_discharge_revision(
+        gateway,
+        operation_id=operation_id,
+    )
+    if client_revision and client_revision == revision:
+        return _live_state_json(
+            {
+                "ok": True,
+                "changed": False,
+                "revision": revision,
+                "refresh": refresh,
+            }
+        )
+
+    operation = (
+        db.session.get(SortDateOperation, operation_id) if operation_id else None
+    )
+    state = discharge_state_payload(gateway, operation=operation)
+    state["refresh"] = refresh
+    return _live_state_json(
+        {
+            "ok": True,
+            "changed": True,
+            "revision": revision,
+            "refresh": refresh,
+            "state": state,
+        }
+    )
+
+
+def _live_state_json(payload):
+    response = jsonify(payload)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 def _page_by_title(title):

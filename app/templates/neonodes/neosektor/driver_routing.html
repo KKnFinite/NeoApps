@@ -8,6 +8,7 @@
     aria-labelledby="neosektor-driver-title"
     data-driver-routing
     data-state-url="{{ url_for('neosektor.driver_routing_state') }}"
+    data-neosektor-revision="{{ live_revision }}"
     data-refresh-active="{{ 'true' if state.refresh.auto_refresh_enabled else 'false' }}"
 >
     <header class="app-header neosektor-standalone-header">
@@ -86,6 +87,7 @@
     }
 
     const stateUrl = root.dataset.stateUrl;
+    let currentRevision = root.dataset.neosektorRevision || "";
     const initialRefreshStatus = {{ state.refresh|tojson }};
     const refreshPaused = root.querySelector("[data-neosektor-refresh-paused]");
     let refreshController = null;
@@ -158,17 +160,24 @@
 
     const refreshState = async () => {
         try {
-            const response = await fetch(stateUrl, { cache: "no-store", credentials: "same-origin" });
+            const pollUrl = new URL(stateUrl, window.location.href);
+            pollUrl.searchParams.set("revision", currentRevision);
+            const response = await fetch(pollUrl, { cache: "no-store", credentials: "same-origin" });
             if (!response.ok) {
                 throw new Error("Driver Routing refresh failed.");
             }
             const payload = await response.json();
-            if (!payload.ok || !payload.state) {
+            if (!payload.ok) {
                 throw new Error("Driver Routing refresh failed.");
             }
-            setRefreshStatus(payload.state.refresh);
-            if (payload.state.refresh?.auto_refresh_enabled === false) {
+            currentRevision = payload.revision || currentRevision;
+            const refresh = payload.refresh || payload.state?.refresh || {};
+            setRefreshStatus(refresh);
+            if (refresh.auto_refresh_enabled === false || payload.changed === false) {
                 return;
+            }
+            if (!payload.state) {
+                throw new Error("Driver Routing refresh failed.");
             }
             applyState(payload.state);
         } catch (error) {

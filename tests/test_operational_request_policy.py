@@ -13,7 +13,11 @@ class OperationalRequestPolicyTest(unittest.TestCase):
             "neoermac.upcoming_pulls_state",
             "neomotherbrain.parking_plan_live_state_endpoint",
             "neomotherbrain.planning_live_state",
+            "neosektor.ballmat_state",
             "neosektor.discharge_state",
+            "neosektor.driver_routing_state",
+            "neosektor.live_counts_state",
+            "neosektor.tunnel_conductor_state",
         }
 
         self.assertEqual(LIGHTWEIGHT_LIVE_STATE_ENDPOINTS, expected)
