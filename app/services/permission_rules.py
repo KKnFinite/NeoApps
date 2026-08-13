@@ -7,6 +7,7 @@ from app.extensions import db
 from app.models import PermissionRule
 from app.models.user import ROLE_LEVELS
 from app.services.access_control import get_current_gateway, get_user_app_role, get_user_node_role
+from app.services.request_cache import request_cached
 
 
 DEFAULT_PERMISSION_RULES = (
@@ -1184,7 +1185,11 @@ def get_permission_rule(permission_key):
     if not normalized_key:
         return None
 
-    return PermissionRule.query.filter_by(permission_key=normalized_key).first()
+    return request_cached(
+        "permission.rule",
+        normalized_key,
+        lambda: PermissionRule.query.filter_by(permission_key=normalized_key).first(),
+    )
 
 
 def default_minimum_role(permission_key):
@@ -1239,19 +1244,25 @@ def user_can(permission_key, user=None):
     if not _is_authenticated_user(user):
         return False
 
-    role = _role_for_permission_key(permission_key, user)
-    if role is None:
-        return False
+    normalized_key = normalize_permission_key(permission_key)
+    cache_key = (user.id, normalized_key)
 
-    if role == "grandmaster":
-        return True
+    def resolve():
+        role = _role_for_permission_key(normalized_key, user)
+        if role is None:
+            return False
 
-    rule = get_permission_rule(permission_key)
-    minimum_role = rule.minimum_role if rule else default_minimum_role(permission_key)
-    if not minimum_role:
-        return False
+        if role == "grandmaster":
+            return True
 
-    return ROLE_LEVELS.get(role, 0) >= ROLE_LEVELS.get(minimum_role, 0)
+        rule = get_permission_rule(normalized_key)
+        minimum_role = rule.minimum_role if rule else default_minimum_role(normalized_key)
+        if not minimum_role:
+            return False
+
+        return ROLE_LEVELS.get(role, 0) >= ROLE_LEVELS.get(minimum_role, 0)
+
+    return request_cached("permission.user_can", cache_key, resolve)
 
 
 def permission_access(view_permission_key, edit_permission_key=None, user=None):

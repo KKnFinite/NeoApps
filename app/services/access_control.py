@@ -5,6 +5,13 @@ from flask import current_app
 from app.extensions import db
 from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess
 from app.models.user import ROLE_LEVELS
+from app.services.request_cache import (
+    MISSING,
+    clear_request_cache,
+    get_request_cached,
+    request_cached,
+    set_request_cached,
+)
 
 
 PORTAL_APPS = (
@@ -155,11 +162,16 @@ PWA_INSTALL_TARGETS = (
 
 
 def get_default_gateway():
-    gateway = Gateway.query.filter_by(code=_default_gateway_code()).first()
-    if gateway:
-        return gateway
+    gateway_code = _default_gateway_code()
 
-    return ensure_default_gateway_and_nodes()
+    def resolve():
+        gateway = Gateway.query.filter_by(code=gateway_code).first()
+        if gateway:
+            return gateway
+
+        return ensure_default_gateway_and_nodes()
+
+    return request_cached("access.default_gateway", gateway_code, resolve)
 
 
 def get_current_gateway():
@@ -168,38 +180,47 @@ def get_current_gateway():
 
 def ensure_default_gateway_and_nodes():
     gateway_code = _default_gateway_code()
-    gateway = Gateway.query.filter_by(code=gateway_code).first()
-    if not gateway:
-        gateway = Gateway(
-            code=gateway_code,
-            name=current_app.config.get("DEFAULT_GATEWAY_NAME", "NeoGateway"),
-            is_active=True,
-        )
-        db.session.add(gateway)
-        db.session.flush()
-    else:
-        gateway.name = current_app.config.get("DEFAULT_GATEWAY_NAME", gateway.name)
-        gateway.is_active = True
+    cache_key = gateway_code
 
-    for code, name, sort_order in DEFAULT_NEONODES:
-        node = NeoNode.query.filter_by(code=code).first()
-        if not node:
-            db.session.add(
-                NeoNode(
+    def ensure():
+        gateway = get_request_cached("access.default_gateway", gateway_code)
+        if gateway is MISSING:
+            gateway = Gateway.query.filter_by(code=gateway_code).first()
+        if not gateway:
+            gateway = Gateway(
+                code=gateway_code,
+                name=current_app.config.get("DEFAULT_GATEWAY_NAME", "NeoGateway"),
+                is_active=True,
+            )
+            db.session.add(gateway)
+            db.session.flush()
+        else:
+            gateway.name = current_app.config.get("DEFAULT_GATEWAY_NAME", gateway.name)
+            gateway.is_active = True
+
+        set_request_cached("access.default_gateway", gateway_code, gateway)
+
+        for code, name, sort_order in DEFAULT_NEONODES:
+            node = NeoNode.query.filter_by(code=code).first()
+            if not node:
+                node = NeoNode(
                     code=code,
                     name=name,
                     sort_order=sort_order,
                     is_active=True,
                 )
-            )
-            continue
+                db.session.add(node)
+            else:
+                node.name = name
+                node.sort_order = sort_order
+                node.is_active = True
 
-        node.name = name
-        node.sort_order = sort_order
-        node.is_active = True
+            set_request_cached("access.active_node", code, node)
 
-    db.session.flush()
-    return gateway
+        db.session.flush()
+        return gateway
+
+    return request_cached("access.default_gateway_ensured", cache_key, ensure)
 
 
 def get_user_gateway_membership(user, gateway_code):
@@ -207,15 +228,20 @@ def get_user_gateway_membership(user, gateway_code):
         return None
 
     gateway_code = _normalize_gateway_code(gateway_code)
-    return (
-        GatewayMembership.query.join(Gateway)
-        .filter(
-            GatewayMembership.user_id == user.id,
-            Gateway.code == gateway_code,
-            Gateway.is_active.is_(True),
+    cache_key = (user.id, gateway_code)
+
+    def resolve():
+        return (
+            GatewayMembership.query.join(Gateway)
+            .filter(
+                GatewayMembership.user_id == user.id,
+                Gateway.code == gateway_code,
+                Gateway.is_active.is_(True),
+            )
+            .first()
         )
-        .first()
-    )
+
+    return request_cached("access.gateway_membership", cache_key, resolve)
 
 
 def user_has_gateway_access(user, gateway_code):
@@ -230,38 +256,45 @@ def user_has_gateway_access(user, gateway_code):
 
 
 def get_user_node_role(user, gateway_code, node_code):
-    membership = get_user_gateway_membership(user, gateway_code)
-    if not _membership_is_approved_active(membership):
-        return None
-    if _normalize_gateway_code(gateway_code) == _default_gateway_code() and not user_has_app_access(
-        user,
-        "neogateway",
-    ):
+    if not _is_authenticated_user(user):
         return None
 
-    node = NeoNode.query.filter_by(
-        code=_normalize_node_code(node_code),
-        is_active=True,
-    ).first()
-    if not node:
-        return None
+    gateway_code = _normalize_gateway_code(gateway_code)
+    node_code = _normalize_node_code(node_code)
+    cache_key = (user.id, gateway_code, node_code)
 
-    node_role = GatewayNodeRole.query.filter_by(
-        gateway_membership_id=membership.id,
-        node_id=node.id,
-        is_active=True,
-    ).first()
-    if node_role:
-        return node_role.role
+    def resolve():
+        membership = get_user_gateway_membership(user, gateway_code)
+        if not _membership_is_approved_active(membership):
+            return None
+        if gateway_code == _default_gateway_code() and not user_has_app_access(
+            user,
+            "neogateway",
+        ):
+            return None
 
-    seed_role = _neogateway_seed_role_for_user(user)
-    seed_gateway_node_roles(membership, seed_role, overwrite_existing=False)
-    node_role = GatewayNodeRole.query.filter_by(
-        gateway_membership_id=membership.id,
-        node_id=node.id,
-        is_active=True,
-    ).first()
-    return node_role.role if node_role else "watcher"
+        node = _get_active_node(node_code)
+        if not node:
+            return None
+
+        node_role = GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            node_id=node.id,
+            is_active=True,
+        ).first()
+        if node_role:
+            return node_role.role
+
+        seed_role = _neogateway_seed_role_for_user(user)
+        seed_gateway_node_roles(membership, seed_role, overwrite_existing=False)
+        node_role = GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            node_id=node.id,
+            is_active=True,
+        ).first()
+        return node_role.role if node_role else "watcher"
+
+    return request_cached("access.node_role", cache_key, resolve)
 
 
 def user_can_access_node(user, gateway_code, node_code, minimum_role="watcher"):
@@ -293,6 +326,7 @@ def request_default_gateway_access_for_user(user):
 
     db.session.flush()
     request_app_access_for_user(user, "neogateway")
+    clear_request_cache()
     return membership
 
 
@@ -324,6 +358,7 @@ def backfill_default_gateway_node_roles(user, role="grandmaster"):
     app_access.role = role
     app_access.is_active = True
     app_access.approved_at = app_access.approved_at or datetime.utcnow()
+    clear_request_cache()
     return membership
 
 
@@ -359,6 +394,7 @@ def seed_gateway_node_roles(membership, role="watcher", overwrite_existing=False
             node_role.is_active = True
 
     db.session.flush()
+    clear_request_cache()
 
 
 def portal_app_definitions():
@@ -402,6 +438,7 @@ def ensure_user_app_access(user, app_code):
     )
     db.session.add(access)
     db.session.flush()
+    clear_request_cache()
     return access
 
 
@@ -410,15 +447,20 @@ def get_user_app_access(user, app_code):
         return None
 
     normalized = _normalize_app_code(app_code)
-    if normalized == "neogateway":
-        synced = _sync_neogateway_app_access_from_gateway_membership(user)
-        if synced:
-            return synced
+    cache_key = (user.id, normalized)
 
-    return PortalAppAccess.query.filter_by(
-        user_id=user.id,
-        app_code=normalized,
-    ).first()
+    def resolve():
+        if normalized == "neogateway":
+            synced = _sync_neogateway_app_access_from_gateway_membership(user)
+            if synced:
+                return synced
+
+        return PortalAppAccess.query.filter_by(
+            user_id=user.id,
+            app_code=normalized,
+        ).first()
+
+    return request_cached("access.app_access", cache_key, resolve)
 
 
 def user_has_app_access(user, app_code):
@@ -447,6 +489,7 @@ def request_app_access_for_user(user, app_code):
         access.status = "pending"
     access.is_active = True
     db.session.flush()
+    clear_request_cache()
     return access
 
 
@@ -497,10 +540,7 @@ def _sync_neogateway_app_access_from_gateway_membership(user):
         return None
 
     gateway = ensure_default_gateway_and_nodes()
-    membership = GatewayMembership.query.filter_by(
-        user_id=user.id,
-        gateway_id=gateway.id,
-    ).first()
+    membership = get_user_gateway_membership(user, gateway.code)
     if not membership:
         return None
 
@@ -526,6 +566,7 @@ def _sync_neogateway_app_access_from_gateway_membership(user):
     )
     db.session.add(access)
     db.session.flush()
+    clear_request_cache()
     return access
 
 
@@ -540,13 +581,19 @@ def _role_from_gateway_membership(user, membership):
 
 
 def _neogateway_seed_role_for_user(user):
-    access = PortalAppAccess.query.filter_by(
-        user_id=user.id,
-        app_code="neogateway",
-    ).first()
+    access = get_user_app_access(user, "neogateway")
     if access and access.status == "approved" and access.is_active and access.role in ROLE_LEVELS:
         return access.role
     return "watcher"
+
+
+def _get_active_node(node_code):
+    normalized = _normalize_node_code(node_code)
+    return request_cached(
+        "access.active_node",
+        normalized,
+        lambda: NeoNode.query.filter_by(code=normalized, is_active=True).first(),
+    )
 
 
 def _default_gateway_code():
