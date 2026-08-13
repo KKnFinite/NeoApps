@@ -81,6 +81,8 @@ def _title_parts(path, ballmat_side):
         return "Gateway Matrix", "NeoGateway"
     if path.startswith("/motherbrain/sort-timeline"):
         return "Sort Timeline", "NeoGateway"
+    if path.startswith("/motherbrain/system-settings"):
+        return "System Settings", "NeoMotherBrain"
     if path.startswith("/motherbrain/master-schedule"):
         return "Master Schedule", "NeoGateway"
     if path.startswith("/motherbrain/flight-api-test"):

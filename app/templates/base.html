@@ -217,6 +217,7 @@
                     {% if can_manage_system(current_user) %}
                     <a class="motherbrain-nav-link{% if is_sort_timeline_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.sort_timeline') }}" {% if is_sort_timeline_page %}aria-current="page"{% endif %}>SORT TIMELINE</a>
                     {% endif %}
+                    <a class="motherbrain-nav-link{% if is_system_settings_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.system_settings') }}" {% if is_system_settings_page %}aria-current="page"{% endif %}>SYSTEM SETTINGS</a>
                     <a class="motherbrain-nav-link{% if is_master_schedule_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule') }}" {% if is_master_schedule_page %}aria-current="page"{% endif %}>MASTER SCHEDULE</a>
                     <a class="motherbrain-nav-link{% if is_gateway_matrix_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.gateway_matrix') }}" {% if is_gateway_matrix_page %}aria-current="page"{% endif %}>GATEWAY MATRIX</a>
                     {% if can_manage_system(current_user) %}

@@ -18,6 +18,7 @@
         <a class="manage-sort-sidebar-link{% if sidebar_active == 'sort-timeline' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.sort_timeline', operation_id=sidebar_operation.id) }}">Sort Timeline</a>
         <a class="manage-sort-sidebar-link{% if sidebar_active == 'manage-api' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.flight_api_test', operation_id=sidebar_operation.id) }}">Manage API</a>
         {% endif %}
+        <a class="manage-sort-sidebar-link{% if is_system_settings_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.system_settings') }}">System Settings</a>
         {% if user_can("neomotherbrain.flight_api_review.view") %}
         <a class="manage-sort-sidebar-link{% if sidebar_active == 'unmatched-queue' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.flight_api_review', operation_id=sidebar_operation.id) }}">Unmatched Queue</a>
         {% endif %}

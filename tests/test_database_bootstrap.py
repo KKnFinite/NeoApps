@@ -96,6 +96,7 @@ class DatabaseBootstrapTest(unittest.TestCase):
             gateway_id=gateway.id
         ).one()
         self.assertFalse(neosektor_settings.google_sheets_compat_enabled)
+        self.assertEqual(neosektor_settings.integration_mode, "google_primary")
         google_polling_setting = MotherBrainGoogleIntegrationSetting.query.filter_by(
             gateway_id=gateway.id,
             sort_name="night",

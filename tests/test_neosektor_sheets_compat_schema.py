@@ -35,21 +35,24 @@ class NeoSektorSheetsCompatSchemaTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
-    def test_model_and_schema_maps_include_google_read_throttle_column(self):
-        column = NeoSektorOperationalSetting.__table__.c.last_google_read_at_utc
+    def test_model_and_schema_maps_include_transition_columns(self):
+        table = NeoSektorOperationalSetting.__table__.c
 
-        self.assertTrue(column.nullable)
+        self.assertFalse(table.integration_mode.nullable)
+        self.assertFalse(table.google_mirror_sync_needed.nullable)
+        self.assertTrue(table.google_mirror_last_error.nullable)
+        self.assertTrue(table.google_mirror_failed_at_utc.nullable)
         self.assertEqual(
             LOCAL_SQLITE_OPTIONAL_COLUMNS["neosektor_operational_settings"][
-                "last_google_read_at_utc"
+                "integration_mode"
             ],
-            "DATETIME",
+            "VARCHAR(40) NOT NULL DEFAULT 'google_primary'",
         )
         self.assertEqual(
             POSTGRES_OPTIONAL_COLUMNS["neosektor_operational_settings"][
-                "last_google_read_at_utc"
+                "google_mirror_sync_needed"
             ],
-            "TIMESTAMP",
+            "BOOLEAN NOT NULL DEFAULT FALSE",
         )
 
     def test_testing_and_sqlite_skip_postgresql_column_ensure(self):
@@ -64,7 +67,7 @@ class NeoSektorSheetsCompatSchemaTest(unittest.TestCase):
 
         connection.assert_not_called()
 
-    def test_postgresql_ensure_targets_only_the_additive_throttle_column(self):
+    def test_postgresql_ensure_targets_only_additive_transition_columns(self):
         self.app.config.update(
             TESTING=False,
             SQLALCHEMY_DATABASE_URI="postgresql://example.test/neoapps",
@@ -92,6 +95,24 @@ class NeoSektorSheetsCompatSchemaTest(unittest.TestCase):
         self.assertIn(
             "ALTER TABLE neosektor_operational_settings ADD COLUMN IF NOT EXISTS "
             "last_google_read_at_utc TIMESTAMP",
+            statements,
+        )
+        self.assertIn(
+            "ADD COLUMN IF NOT EXISTS integration_mode VARCHAR(40) "
+            "NOT NULL DEFAULT 'google_primary'",
+            statements,
+        )
+        self.assertIn(
+            "ADD COLUMN IF NOT EXISTS google_mirror_sync_needed BOOLEAN "
+            "NOT NULL DEFAULT FALSE",
+            statements,
+        )
+        self.assertIn(
+            "ADD COLUMN IF NOT EXISTS google_mirror_last_error VARCHAR(255)",
+            statements,
+        )
+        self.assertIn(
+            "ADD COLUMN IF NOT EXISTS google_mirror_failed_at_utc TIMESTAMP",
             statements,
         )
         self.assertEqual(

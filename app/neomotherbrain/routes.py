@@ -20,6 +20,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
+from app.auth.permissions import can_manage_system
 from app.extensions import db
 from app.models import (
     FlightApiReviewItem,
@@ -174,6 +175,12 @@ from app.services.google_motherbrain_live_poll_execution import (
 from app.services.google_motherbrain_live_poll_health import (
     google_motherbrain_live_poll_health,
 )
+from app.services.neosektor_sheets_compat import (
+    NeoSektorGoogleError,
+    change_neosektor_integration_mode,
+    neosektor_integration_status,
+    retry_neosektor_google_mirror,
+)
 from app.services.parking_optimizer import (
     apply_parking_optimizer_plan,
     parking_optimizer_error_preview,
@@ -220,7 +227,6 @@ NEOGATEWAY_LANDING_VIEW_PERMISSION = "neogateway.landing.view"
 DASHBOARD_VIEW_PERMISSION = "neomotherbrain.dashboard.view"
 MANAGE_SORT_VIEW_PERMISSION = "neomotherbrain.manage_sort.view"
 MANAGE_SORT_EDIT_PERMISSION = "neomotherbrain.manage_sort.edit"
-GOOGLE_LIVE_POLLING_EDIT_PERMISSION = "neomotherbrain.google_live_polling.edit"
 ARRIVAL_PLANNING_VIEW_PERMISSION = "neomotherbrain.arrival_planning.view"
 ARRIVAL_PLANNING_EDIT_PERMISSION = "neomotherbrain.arrival_planning.edit"
 ARRIVAL_PLANNING_RUN_PERMISSION = "neomotherbrain.arrival_planning.run"
@@ -419,6 +425,73 @@ def gateway_matrix():
         sort_options=MATRIX_SORT_OPTIONS,
         matrix=matrix_state_for_gateway(gateway),
         selected_operation=selected_operation,
+    )
+
+
+@bp.route("/motherbrain/system-settings", methods=["GET", "POST"])
+@gateway_node_required("motherbrain", minimum_role="operator")
+def system_settings():
+    gateway = get_current_gateway()
+    can_edit = can_manage_system(current_user)
+
+    if request.method == "POST":
+        if not can_edit:
+            db.session.rollback()
+            flash("System Settings changes require Grandmaster access.", "error")
+            return _render_system_settings(gateway, can_edit=False), 403
+
+        action = str(request.form.get("action") or "").strip().lower()
+        try:
+            if action == "set_neosektor_mode":
+                status = change_neosektor_integration_mode(
+                    gateway,
+                    request.form.get("integration_mode"),
+                )
+                flash(
+                    f"NeoSektor integration mode is now {status['mode_label']}.",
+                    "success",
+                )
+            elif action in {"enable_google_live_polling", "disable_google_live_polling"}:
+                enabled = action == "enable_google_live_polling"
+                set_google_motherbrain_live_polling_enabled(
+                    gateway,
+                    "night",
+                    enabled,
+                )
+                db.session.commit()
+                flash(
+                    f"Live Google Polling is now {'ON' if enabled else 'OFF'}.",
+                    "success",
+                )
+            elif action == "retry_neosektor_google_mirror":
+                retry_neosektor_google_mirror(gateway)
+                flash("NeoSektor Google mirror is current.", "success")
+            else:
+                raise ValueError("Choose a valid System Settings action.")
+        except (NeoSektorGoogleError, ValueError) as error:
+            db.session.rollback()
+            flash(str(error), "error")
+            return _render_system_settings(gateway, can_edit=True), 400
+
+        return redirect(url_for("neomotherbrain.system_settings"))
+
+    return _render_system_settings(gateway, can_edit=can_edit)
+
+
+def _render_system_settings(gateway, can_edit):
+    return render_template(
+        "neomotherbrain/system_settings.html",
+        gateway=gateway,
+        can_edit_system_settings=can_edit,
+        neosektor_status=neosektor_integration_status(gateway),
+        google_live_polling_status=google_motherbrain_live_polling_status(
+            gateway,
+            "night",
+        ),
+        google_live_poll_health=google_motherbrain_live_poll_health(
+            gateway,
+            lifecycle=getattr(g, "operational_sort_ensure_result", None),
+        ),
     )
 
 
@@ -2035,17 +2108,6 @@ def operation_detail(operation_id):
         departure_count=departure_count,
         mission_count=arrival_count + departure_count,
         google_reader_status=google_motherbrain_reader_status(),
-        google_live_polling_status=google_motherbrain_live_polling_status(
-            gateway,
-            operation.sort_name,
-        ),
-        google_live_poll_health=google_motherbrain_live_poll_health(
-            gateway,
-            lifecycle=getattr(g, "operational_sort_ensure_result", None),
-        ),
-        can_manage_google_live_polling=user_can(
-            GOOGLE_LIVE_POLLING_EDIT_PERMISSION
-        ),
         **_flight_api_auto_poll_timer_context(gateway, operation=operation),
     )
 
@@ -2055,9 +2117,8 @@ def operation_detail(operation_id):
 )
 @gateway_node_required("motherbrain", minimum_role="operator")
 def update_google_live_polling(operation_id):
-    denied = _permission_guard(GOOGLE_LIVE_POLLING_EDIT_PERMISSION)
-    if denied:
-        return denied
+    if not can_manage_system(current_user):
+        return _permission_denied_redirect()
 
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
@@ -2070,13 +2131,7 @@ def update_google_live_polling(operation_id):
     action = str(request.form.get("action") or "").strip().lower()
     if action not in {"enable", "disable"}:
         flash("Choose Enable or Disable for Live Google Polling.", "error")
-        return redirect(
-            url_for(
-                "neomotherbrain.operation_detail",
-                operation_id=operation.id,
-                _anchor="google-current-sort-reader",
-            )
-        )
+        return redirect(url_for("neomotherbrain.system_settings"))
 
     enabled = action == "enable"
     set_google_motherbrain_live_polling_enabled(
@@ -2089,13 +2144,7 @@ def update_google_live_polling(operation_id):
         f"Live Google Polling is now {'ON' if enabled else 'OFF'}.",
         "info",
     )
-    return redirect(
-        url_for(
-            "neomotherbrain.operation_detail",
-            operation_id=operation.id,
-            _anchor="google-current-sort-reader",
-        )
-    )
+    return redirect(url_for("neomotherbrain.system_settings"))
 
 
 @bp.post(

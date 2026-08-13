@@ -32,6 +32,7 @@
         {% if can_manage_system(current_user) %}
         <a class="motherbrain-desktop-side-link{% if is_sort_timeline_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.sort_timeline', operation_id=sidebar_operation.id) }}" {% if is_sort_timeline_page %}aria-current="page"{% endif %}>Sort Timeline</a>
         {% endif %}
+        <a class="motherbrain-desktop-side-link{% if is_system_settings_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.system_settings') }}" {% if is_system_settings_page %}aria-current="page"{% endif %}>System Settings</a>
         <a class="motherbrain-desktop-side-link{% if is_flight_api_test_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.flight_api_test', operation_id=sidebar_operation.id) }}" {% if is_flight_api_test_page %}aria-current="page"{% endif %}>Manage API</a>
         {% if user_can("neomotherbrain.flight_api_review.view") %}
         <a class="motherbrain-desktop-side-link{% if is_flight_api_review_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.flight_api_review', operation_id=sidebar_operation.id) }}" {% if is_flight_api_review_page %}aria-current="page"{% endif %}>Unmatched Queue</a>
@@ -47,6 +48,7 @@
         {% if can_manage_system(current_user) %}
         <a class="motherbrain-desktop-side-link{% if is_sort_timeline_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.sort_timeline') }}" {% if is_sort_timeline_page %}aria-current="page"{% endif %}>Sort Timeline</a>
         {% endif %}
+        <a class="motherbrain-desktop-side-link{% if is_system_settings_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.system_settings') }}" {% if is_system_settings_page %}aria-current="page"{% endif %}>System Settings</a>
         <a class="motherbrain-desktop-side-link{% if is_flight_api_test_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.flight_api_test') }}" {% if is_flight_api_test_page %}aria-current="page"{% endif %}>Manage API</a>
         {% if user_can("neomotherbrain.flight_api_review.view") %}
         <a class="motherbrain-desktop-side-link{% if is_flight_api_review_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.flight_api_review') }}" {% if is_flight_api_review_page %}aria-current="page"{% endif %}>Unmatched Queue</a>

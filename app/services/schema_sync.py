@@ -77,6 +77,10 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "neosektor_operational_settings": {
         "google_sheets_compat_enabled": "BOOLEAN NOT NULL DEFAULT 0",
         "last_google_read_at_utc": "DATETIME",
+        "integration_mode": "VARCHAR(40) NOT NULL DEFAULT 'google_primary'",
+        "google_mirror_sync_needed": "BOOLEAN NOT NULL DEFAULT 0",
+        "google_mirror_last_error": "VARCHAR(255)",
+        "google_mirror_failed_at_utc": "DATETIME",
     },
     "master_flight_schedules": {
         "aircraft_type": "VARCHAR(16)",
@@ -193,6 +197,10 @@ POSTGRES_OPTIONAL_COLUMNS = {
     "neosektor_operational_settings": {
         "google_sheets_compat_enabled": "BOOLEAN NOT NULL DEFAULT FALSE",
         "last_google_read_at_utc": "TIMESTAMP",
+        "integration_mode": "VARCHAR(40) NOT NULL DEFAULT 'google_primary'",
+        "google_mirror_sync_needed": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "google_mirror_last_error": "VARCHAR(255)",
+        "google_mirror_failed_at_utc": "TIMESTAMP",
     },
     "master_flight_schedules": {
         "aircraft_type": "VARCHAR(16)",

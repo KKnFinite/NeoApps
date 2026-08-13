@@ -1,10 +1,9 @@
 from flask import flash, jsonify, redirect, render_template, request, session, url_for
-from flask_login import current_user
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
 from app.neonodes.neosektor import bp
-from app.services.access_control import get_current_gateway, user_can_access_node
+from app.services.access_control import get_current_gateway
 from app.services.neosektor_live_counts import (
     TUNNEL_CONDUCTOR_EDIT_PERMISSION,
     TUNNEL_CONDUCTOR_VIEW_PERMISSION,
@@ -22,11 +21,9 @@ from app.services.neosektor_live_counts import (
     update_ballmat_side,
 )
 from app.services.neosektor_sheets_compat import (
-    ensure_sheets_compatibility_setting,
+    NeoSektorGoogleError,
     mirror_neosektor_sheet_update,
-    set_sheets_compatibility_enabled,
-    sheets_compatibility_status,
-    sync_neosektor_from_google_if_due,
+    neosektor_integration_status,
 )
 from app.services.permission_rules import user_can
 from app.services.uld_requests import (
@@ -59,7 +56,7 @@ NEOSEKTOR_PAGES = (
         "neosektor.settings",
         NEOSEKTOR_SETTINGS_VIEW_PERMISSION,
         NEOSEKTOR_SETTINGS_EDIT_PERMISSION,
-        "NeoSektor Google Sheets compatibility controls.",
+        "NeoSektor application settings.",
     ),
     (
         "EBM",
@@ -122,7 +119,7 @@ NEOSEKTOR_MOBILE_DASHBOARD = (
         "neosektor.settings",
         NEOSEKTOR_SETTINGS_VIEW_PERMISSION,
         "settings",
-        "Google Sheets compatibility.",
+        "NeoSektor application settings.",
     ),
     (
         "EBM",
@@ -197,8 +194,11 @@ def tunnel_conductor():
         return redirect(url_for("neosektor.index"))
 
     gateway = get_current_gateway()
-    sync_neosektor_from_google_if_due(gateway)
-    context = tunnel_conductor_context(gateway)
+    try:
+        context = tunnel_conductor_context(gateway)
+    except NeoSektorGoogleError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("neosektor.index"))
     db.session.commit()
     return render_template(
         "neonodes/neosektor/tunnel_conductor.html",
@@ -220,8 +220,10 @@ def tunnel_conductor_state():
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
     gateway = get_current_gateway()
-    sync_neosektor_from_google_if_due(gateway)
-    state = driver_routing_state_payload(gateway)
+    try:
+        state = driver_routing_state_payload(gateway)
+    except NeoSektorGoogleError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 503
     db.session.commit()
     return jsonify({"ok": True, "state": state})
 
@@ -246,6 +248,9 @@ def tunnel_conductor_wave():
             payload.get("delta"),
             value=payload.get("value") if "value" in payload else None,
         )
+    except NeoSektorGoogleError as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 502
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
@@ -309,6 +314,9 @@ def tunnel_conductor_ballmat():
         before_state = driver_routing_state_payload(gateway)
         update_ballmat_side(gateway, side, payload)
         state = driver_routing_state_payload(gateway)
+    except NeoSektorGoogleError as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 502
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
@@ -343,8 +351,11 @@ def _render_ballmat_operations(selected_side):
 
     session["neosektor_ballmat_side"] = selected_side
     gateway = get_current_gateway()
-    sync_neosektor_from_google_if_due(gateway)
-    context = ballmat_operations_context(gateway, selected_side)
+    try:
+        context = ballmat_operations_context(gateway, selected_side)
+    except NeoSektorGoogleError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("neosektor.index"))
     db.session.commit()
     return render_template(
         "neonodes/neosektor/ballmat.html",
@@ -362,8 +373,10 @@ def ballmat_state():
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
     gateway = get_current_gateway()
-    sync_neosektor_from_google_if_due(gateway)
-    state = ballmat_state_payload(gateway)
+    try:
+        state = ballmat_state_payload(gateway)
+    except NeoSektorGoogleError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 503
     db.session.commit()
     return jsonify({"ok": True, "state": state})
 
@@ -381,6 +394,9 @@ def ballmat_update():
         gateway = get_current_gateway()
         before_state = driver_routing_state_payload(gateway)
         state = update_ballmat_side(gateway, selected_side, payload)
+    except NeoSektorGoogleError as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 502
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 403
 
@@ -505,8 +521,11 @@ def live_counts():
         return redirect(url_for("neosektor.index"))
 
     gateway = get_current_gateway()
-    sync_neosektor_from_google_if_due(gateway)
-    context = live_counts_context(gateway)
+    try:
+        context = live_counts_context(gateway)
+    except NeoSektorGoogleError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("neosektor.index"))
     db.session.commit()
     return render_template(
         "neonodes/neosektor/live_counts.html",
@@ -530,13 +549,15 @@ def live_counts_state():
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
     gateway = get_current_gateway()
-    sync_neosektor_from_google_if_due(gateway)
-    state = ballmat_state_payload(gateway)
+    try:
+        state = ballmat_state_payload(gateway)
+    except NeoSektorGoogleError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 503
     db.session.commit()
     return jsonify({"ok": True, "state": state})
 
 
-@bp.route("/settings", methods=["GET", "POST"])
+@bp.route("/settings")
 @gateway_node_required("sektor")
 def settings():
     gateway = get_current_gateway()
@@ -544,37 +565,6 @@ def settings():
         NEOSEKTOR_SETTINGS_VIEW_PERMISSION,
         NEOSEKTOR_SETTINGS_EDIT_PERMISSION,
     )
-    can_manage_sheets_compat = user_can_access_node(
-        current_user,
-        gateway.code,
-        "sektor",
-        minimum_role="master",
-    )
-    access = {
-        "can_view": access["can_view"],
-        "can_edit": access["can_edit"] and can_manage_sheets_compat,
-    }
-    if request.method == "POST":
-        if not access["can_edit"]:
-            db.session.rollback()
-            flash("Access denied.", "error")
-            return _settings_response(gateway, access, status_code=403)
-
-        action = str(request.form.get("action") or "").strip().lower()
-        enabled = action == "enable"
-        if action not in {"enable", "disable"}:
-            enabled = request.form.get("google_sheets_compat_enabled") == "1"
-
-        set_sheets_compatibility_enabled(gateway, enabled)
-        db.session.commit()
-        flash(
-            "GOOGLE SHEETS COMPATIBILITY ENABLED."
-            if enabled
-            else "GOOGLE SHEETS COMPATIBILITY DISABLED.",
-            "success",
-        )
-        return redirect(url_for("neosektor.settings"))
-
     if not access["can_view"]:
         flash("Access denied.", "error")
         return redirect(url_for("neosektor.index"))
@@ -592,8 +582,11 @@ def driver_routing():
         return redirect(url_for("neosektor.index"))
 
     gateway = get_current_gateway()
-    sync_neosektor_from_google_if_due(gateway)
-    context = driver_routing_context(gateway)
+    try:
+        context = driver_routing_context(gateway)
+    except NeoSektorGoogleError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("neosektor.index"))
     db.session.commit()
     return render_template(
         "neonodes/neosektor/driver_routing.html",
@@ -613,8 +606,10 @@ def driver_routing_state():
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
     gateway = get_current_gateway()
-    sync_neosektor_from_google_if_due(gateway)
-    state = driver_routing_state_payload(gateway)
+    try:
+        state = driver_routing_state_payload(gateway)
+    except NeoSektorGoogleError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 503
     db.session.commit()
     return jsonify({"ok": True, "state": state})
 
@@ -715,19 +710,21 @@ def _ballmat_route_for_side(side):
 
 
 def _settings_response(gateway, access, status_code=200):
-    ensure_sheets_compatibility_setting(gateway)
-    db.session.flush()
     response = render_template(
         "neonodes/neosektor/settings.html",
         gateway=gateway,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
-        sheets_status=sheets_compatibility_status(gateway),
+        integration_status=neosektor_integration_status(gateway),
     )
     return response, status_code
 
 
 def _commit_neosektor_update_and_mirror(before_state, after_state):
-    """Commit NeoGateway state first, then best-effort mirror the shared sheet."""
+    """Commit Neo state first, then mirror only when Mode 2 owns the values."""
     db.session.commit()
-    mirror_neosektor_sheet_update(before_state, after_state)
+    mirror_neosektor_sheet_update(
+        before_state,
+        after_state,
+        gateway=get_current_gateway(),
+    )

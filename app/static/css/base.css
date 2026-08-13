@@ -25600,6 +25600,95 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     background: #202329;
 }
 
+.system-settings-page {
+    width: min(100%, 1040px);
+    margin-inline: auto;
+}
+
+.system-settings-sections {
+    display: grid;
+    gap: 1rem;
+}
+
+.system-settings-section {
+    padding: 1rem;
+    border: 1px solid rgba(216, 32, 42, 0.55);
+    border-radius: 6px;
+    background: rgba(15, 17, 21, 0.88);
+}
+
+.system-settings-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.system-settings-section-heading h2,
+.system-settings-section-heading p {
+    margin: 0;
+}
+
+.system-settings-section-heading p {
+    margin-top: 0.35rem;
+    color: var(--muted);
+}
+
+.system-settings-mode-badge {
+    flex: 0 0 auto;
+    color: #fff;
+    text-align: right;
+}
+
+.system-settings-mode-options {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.6rem;
+}
+
+.system-settings-mode-option {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-height: 44px;
+    padding: 0.65rem;
+    border: 1px solid rgba(216, 32, 42, 0.35);
+    background: #101216;
+}
+
+.system-settings-mode-help {
+    margin-block: 0.85rem;
+    color: var(--muted);
+}
+
+.system-settings-mode-help p {
+    margin: 0.35rem 0;
+}
+
+.system-settings-warning {
+    margin-top: 1rem;
+    padding: 0.8rem;
+    border: 1px solid #ffb347;
+    color: #ffd38b;
+    background: rgba(121, 76, 20, 0.22);
+}
+
+@media (max-width: 760px) {
+    .system-settings-section-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .system-settings-mode-badge {
+        text-align: left;
+    }
+
+    .system-settings-mode-options {
+        grid-template-columns: 1fr;
+    }
+}
+
 .google-current-sort-preview-page [data-preview-section] {
     margin-top: 2rem;
 }

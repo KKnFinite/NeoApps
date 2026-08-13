@@ -157,6 +157,9 @@ def resolve_shell_metadata(
     is_sort_timeline_page = is_motherbrain_page and path.startswith(
         "/motherbrain/sort-timeline"
     )
+    is_system_settings_page = is_motherbrain_page and path.startswith(
+        "/motherbrain/system-settings"
+    )
     is_flight_api_test_page = is_motherbrain_page and path.startswith(
         "/motherbrain/flight-api-test"
     )
@@ -175,6 +178,7 @@ def resolve_shell_metadata(
         is_parking_rules_page=is_parking_rules_page,
         is_parking_plan_page=is_parking_plan_page,
         is_sort_timeline_page=is_sort_timeline_page,
+        is_system_settings_page=is_system_settings_page,
         is_gateway_matrix_page=is_gateway_matrix_page,
         is_master_schedule_page=is_master_schedule_page,
         is_departure_planning_page=is_departure_planning_page,
@@ -404,6 +408,7 @@ def resolve_shell_metadata(
         "is_motherbrain_manage_sort_detail": is_motherbrain_manage_sort_detail,
         "is_parking_plan_page": is_parking_plan_page,
         "is_sort_timeline_page": is_sort_timeline_page,
+        "is_system_settings_page": is_system_settings_page,
         "is_flight_api_test_page": is_flight_api_test_page,
         "is_flight_api_review_page": is_flight_api_review_page,
         "is_parking_rules_page": is_parking_rules_page,
@@ -468,6 +473,8 @@ def _motherbrain_labels(**flags):
         return "Permission Rules", "Permissions"
     if flags["is_user_management_page"]:
         return "Portal Management", "Portal Mgmt"
+    if flags["is_system_settings_page"]:
+        return "System Settings", "Settings"
     if flags["is_flight_api_review_page"]:
         return "Unmatched Queue", "Queue"
     if flags["is_flight_api_test_page"]:

@@ -15,41 +15,24 @@
     </header>
 
     <main class="neosektor-settings-wrap">
-        <section class="neosektor-settings-panel" aria-labelledby="sheets-compat-title">
+        <section class="neosektor-settings-panel" aria-labelledby="neosektor-local-settings-title">
             <div class="neosektor-settings-panel-head">
-                <span>Google Sheets Compatibility</span>
-                <strong class="neosektor-settings-state {{ 'is-on' if sheets_status.enabled else 'is-off' }}">
-                    {{ "ON" if sheets_status.enabled else "OFF" }}
+                <span id="neosektor-local-settings-title">NeoSektor Settings</span>
+                <strong class="neosektor-settings-state">
+                    {{ integration_status.mode_label }}
                 </strong>
             </div>
 
             <div class="neosektor-settings-copy">
-                <p><strong>ON:</strong> NeoSektor reads and writes the existing standalone Google Sheet so both systems can remain synchronized during transition.</p>
-                <p><strong>OFF:</strong> NeoSektor remains database-only and does not read or write Google Sheets.</p>
+                <p>Unload modifiers, driver offset, and application configuration remain NeoApps-owned in every integration mode.</p>
+                <p>Gateway-wide Google/Neo authority is managed in MotherBrain System Settings.</p>
             </div>
 
-            <dl class="neosektor-settings-status" aria-label="Google Sheets credential status">
-                <div>
-                    <dt>Credentials</dt>
-                    <dd>{{ "CONFIGURED" if sheets_status.credentials_configured else "MISSING" }}</dd>
-                </div>
-            </dl>
-
-            {% if can_edit %}
-            <form class="neosektor-settings-form" method="post" action="{{ url_for('neosektor.settings') }}">
-                {% if sheets_status.enabled %}
-                <button class="action-button neosektor-settings-toggle" type="submit" name="action" value="disable">
-                    Disable Google Sheets Compatibility
-                </button>
-                {% else %}
-                <button class="action-button neosektor-settings-toggle" type="submit" name="action" value="enable">
-                    Enable Google Sheets Compatibility
-                </button>
-                {% endif %}
-            </form>
-            {% else %}
-            <p class="view-only-pill">View Only</p>
+            {% if integration_status.google_mirror_sync_needed %}
+            <p class="neosektor-inline-edit-error" data-neosektor-mirror-warning>Google mirror needs attention. A Grandmaster can retry it from System Settings.</p>
             {% endif %}
+
+            <a class="action-button" href="{{ url_for('neomotherbrain.system_settings') }}">VIEW SYSTEM SETTINGS</a>
         </section>
     </main>
 </section>

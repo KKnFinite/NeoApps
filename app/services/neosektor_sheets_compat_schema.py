@@ -1,4 +1,4 @@
-"""Targeted production schema ensure for NeoSektor Sheets read throttling."""
+"""Targeted production schema ensure for NeoSektor transition settings."""
 
 from sqlalchemy import text
 
@@ -11,7 +11,7 @@ NEOSEKTOR_SHEETS_SCHEMA_LOCK_TIMEOUT = "5s"
 
 
 def ensure_neosektor_sheets_compat_columns(app):
-    """Ensure only the additive Google-read throttle column exists."""
+    """Ensure only additive NeoSektor transition columns exist."""
     if app.config.get("TESTING") or not _is_postgresql(app):
         return False
 
@@ -34,16 +34,42 @@ def ensure_neosektor_sheets_compat_columns(app):
                     "ADD COLUMN IF NOT EXISTS last_google_read_at_utc TIMESTAMP"
                 )
             )
+            connection.execute(
+                text(
+                    f"ALTER TABLE {NeoSektorOperationalSetting.__tablename__} "
+                    "ADD COLUMN IF NOT EXISTS integration_mode VARCHAR(40) "
+                    "NOT NULL DEFAULT 'google_primary'"
+                )
+            )
+            connection.execute(
+                text(
+                    f"ALTER TABLE {NeoSektorOperationalSetting.__tablename__} "
+                    "ADD COLUMN IF NOT EXISTS google_mirror_sync_needed BOOLEAN "
+                    "NOT NULL DEFAULT FALSE"
+                )
+            )
+            connection.execute(
+                text(
+                    f"ALTER TABLE {NeoSektorOperationalSetting.__tablename__} "
+                    "ADD COLUMN IF NOT EXISTS google_mirror_last_error VARCHAR(255)"
+                )
+            )
+            connection.execute(
+                text(
+                    f"ALTER TABLE {NeoSektorOperationalSetting.__tablename__} "
+                    "ADD COLUMN IF NOT EXISTS google_mirror_failed_at_utc TIMESTAMP"
+                )
+            )
             db.session.commit()
         except Exception as error:
             db.session.rollback()
             app.logger.error(
-                "NeoSektor Sheets throttle-column ensure failed safely: error=%s",
+                "NeoSektor transition-column ensure failed safely: error=%s",
                 type(error).__name__,
             )
             raise
 
-    app.logger.info("NeoSektor Sheets throttle-column ensure completed")
+    app.logger.info("NeoSektor transition-column ensure completed")
     return True
 
 

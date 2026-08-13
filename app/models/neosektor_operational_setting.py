@@ -24,6 +24,18 @@ class NeoSektorOperationalSetting(db.Model):
         default=False,
     )
     last_google_read_at_utc = db.Column(db.DateTime, nullable=True)
+    integration_mode = db.Column(
+        db.String(40),
+        nullable=False,
+        default="google_primary",
+    )
+    google_mirror_sync_needed = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False,
+    )
+    google_mirror_last_error = db.Column(db.String(255), nullable=True)
+    google_mirror_failed_at_utc = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

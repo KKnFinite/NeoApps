@@ -93,8 +93,8 @@ DEFAULT_PERMISSION_RULES = (
     ),
     (
         "neomotherbrain.google_live_polling.edit",
-        "simulator",
-        "Enable or disable future Google MotherBrain live polling.",
+        "grandmaster",
+        "Enable or disable Google MotherBrain live polling in System Settings.",
     ),
     (
         "neomotherbrain.arrival_planning.view",
@@ -684,7 +684,7 @@ PERMISSION_RULE_ITEMS = (
         "motherbrain",
         "neomotherbrain.google_live_polling",
         "Google Live Polling",
-        "Runtime authorization for future Google MotherBrain live polling.",
+        "System Settings control for Google MotherBrain live polling.",
         {
             "edit": "neomotherbrain.google_live_polling.edit",
         },

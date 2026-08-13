@@ -63,6 +63,10 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertEqual(rules["neostaffing.org_chart.edit_structure"], "master")
         self.assertEqual(rules["neobid.placeholder.view"], "watcher")
         self.assertEqual(rules["neoermac.dashboard.view"], "watcher")
+        self.assertEqual(
+            rules["neomotherbrain.google_live_polling.edit"],
+            "grandmaster",
+        )
         self.assertEqual(rules["neosektor.dashboard.view"], "watcher")
         self.assertEqual(rules["neosektor.settings.view"], "master")
         self.assertEqual(rules["neosektor.settings.edit"], "master")

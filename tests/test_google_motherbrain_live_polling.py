@@ -72,13 +72,14 @@ class GoogleMotherBrainLivePollingTest(unittest.TestCase):
         self.client = self.app.test_client()
         self.detail_endpoint = f"/motherbrain/operations/{self.operation.id}"
         self.toggle_endpoint = f"{self.detail_endpoint}/google-live-polling"
+        self.system_settings_endpoint = "/motherbrain/system-settings"
 
     def tearDown(self):
         db.session.remove()
         db.drop_all()
         self.context.pop()
 
-    def test_default_state_is_off_and_permission_defaults_to_simulator(self):
+    def test_default_state_is_off_and_permission_defaults_to_grandmaster(self):
         rule = PermissionRule.query.filter_by(
             permission_key="neomotherbrain.google_live_polling.edit"
         ).one()
@@ -87,7 +88,7 @@ class GoogleMotherBrainLivePollingTest(unittest.TestCase):
             google_motherbrain_live_polling_enabled(self.gateway, "night")
         )
         self.assertEqual(MotherBrainGoogleIntegrationSetting.query.count(), 0)
-        self.assertEqual(rule.minimum_role, "simulator")
+        self.assertEqual(rule.minimum_role, "grandmaster")
 
     def test_ensure_and_set_persist_gateway_sort_state(self):
         setting = ensure_google_motherbrain_live_polling_setting(self.gateway)
@@ -105,51 +106,44 @@ class GoogleMotherBrainLivePollingTest(unittest.TestCase):
         self.assertFalse(google_motherbrain_live_polling_enabled(gateway, "day"))
         self.assertEqual(MotherBrainGoogleIntegrationSetting.query.count(), 1)
 
-    def test_simulator_master_and_grandmaster_can_turn_polling_on_and_off(self):
-        for role in ("simulator", "master", "grandmaster"):
+    def test_only_grandmaster_can_turn_polling_on_and_off_from_system_settings(self):
+        for role in ("operator", "simulator", "master"):
             with self.subTest(role=role):
                 self._login_role(role)
-                enabled = self.client.post(
-                    self.toggle_endpoint,
-                    data={"action": "enable"},
-                    follow_redirects=True,
+                denied = self.client.post(
+                    self.system_settings_endpoint,
+                    data={"action": "enable_google_live_polling"},
                 )
-                self.assertEqual(enabled.status_code, 200)
-                self.assertIn(b"Live Google Polling is now ON.", enabled.data)
-                self.assertIn(
-                    b'data-google-live-polling-state="on"',
-                    enabled.data,
-                )
-                self.assertTrue(
-                    google_motherbrain_live_polling_enabled(
-                        self.gateway,
-                        "night",
-                    )
+                self.assertEqual(denied.status_code, 403)
+                self.assertFalse(
+                    google_motherbrain_live_polling_enabled(self.gateway, "night")
                 )
 
-                disabled = self.client.post(
-                    self.toggle_endpoint,
-                    data={"action": "disable"},
-                    follow_redirects=True,
-                )
-                self.assertEqual(disabled.status_code, 200)
-                self.assertIn(b"Live Google Polling is now OFF.", disabled.data)
-                self.assertIn(
-                    b'data-google-live-polling-state="off"',
-                    disabled.data,
-                )
-                self.assertFalse(
-                    google_motherbrain_live_polling_enabled(
-                        self.gateway,
-                        "night",
-                    )
-                )
+        self._login_role("grandmaster")
+        enabled = self.client.post(
+            self.system_settings_endpoint,
+            data={"action": "enable_google_live_polling"},
+            follow_redirects=True,
+        )
+        self.assertEqual(enabled.status_code, 200)
+        self.assertIn(b"Live Google Polling is now ON.", enabled.data)
+        self.assertIn(b'data-google-live-polling-state="on"', enabled.data)
+        self.assertTrue(google_motherbrain_live_polling_enabled(self.gateway, "night"))
+
+        disabled = self.client.post(
+            self.system_settings_endpoint,
+            data={"action": "disable_google_live_polling"},
+            follow_redirects=True,
+        )
+        self.assertEqual(disabled.status_code, 200)
+        self.assertIn(b"Live Google Polling is now OFF.", disabled.data)
+        self.assertFalse(google_motherbrain_live_polling_enabled(self.gateway, "night"))
 
     def test_watcher_and_operator_cannot_change_state_by_direct_post(self):
         ensure_google_motherbrain_live_polling_setting(self.gateway)
         db.session.commit()
 
-        for role in ("watcher", "operator"):
+        for role in ("watcher", "operator", "simulator", "master"):
             with self.subTest(role=role):
                 self._login_role(role)
                 response = self.client.post(
@@ -165,16 +159,19 @@ class GoogleMotherBrainLivePollingTest(unittest.TestCase):
                     )
                 )
 
-    def test_normal_sync_area_access_sees_state_and_operator_is_view_only(self):
+    def test_system_settings_is_viewable_and_operator_is_view_only(self):
         self._login_role("operator")
 
-        response = self.client.get(self.detail_endpoint)
+        response = self.client.get(self.system_settings_endpoint)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"LIVE GOOGLE POLLING", response.data)
+        self.assertIn(b"GOOGLE LIVE POLLING", response.data)
         self.assertIn(b'data-google-live-polling-state="off"', response.data)
         self.assertIn(b"VIEW ONLY", response.data)
         self.assertNotIn(b"ENABLE LIVE POLLING</button>", response.data)
+
+        detail = self.client.get(self.detail_endpoint)
+        self.assertNotIn(b"data-google-live-polling-control", detail.data)
 
     def test_manual_preview_remains_available_while_live_polling_is_off(self):
         self._login_role("simulator")
@@ -182,7 +179,6 @@ class GoogleMotherBrainLivePollingTest(unittest.TestCase):
         response = self.client.get(self.detail_endpoint)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'data-google-live-polling-state="off"', response.data)
         self.assertIn(b"READ GOOGLE CURRENT SORT", response.data)
 
     def test_toggle_does_not_call_google_or_modify_mission_or_parking_data(self):
@@ -218,12 +214,12 @@ class GoogleMotherBrainLivePollingTest(unittest.TestCase):
             side_effect=AssertionError("toggle must not read Google"),
         ) as google_read:
             enable_response = self.client.post(
-                self.toggle_endpoint,
-                data={"action": "enable"},
+                self.system_settings_endpoint,
+                data={"action": "enable_google_live_polling"},
             )
             disable_response = self.client.post(
-                self.toggle_endpoint,
-                data={"action": "disable"},
+                self.system_settings_endpoint,
+                data={"action": "disable_google_live_polling"},
             )
 
         self.assertEqual(enable_response.status_code, 302)

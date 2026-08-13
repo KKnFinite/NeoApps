@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}System Settings | NeoMotherBrain{% endblock %}
+
+{% block content %}
+<section class="panel centered-command-page system-settings-page" aria-labelledby="system-settings-title" data-system-settings>
+    <div class="section-heading">
+        <h1 id="system-settings-title" class="mobile-shell-duplicate-title motherbrain-body-duplicate-title">System Settings</h1>
+        <p class="muted">{{ gateway.code }} gateway-wide operational integration settings.</p>
+    </div>
+
+    <div class="system-settings-sections">
+        <section class="system-settings-section" aria-labelledby="google-neo-transition-title">
+            <div class="system-settings-section-heading">
+                <div>
+                    <h2 id="google-neo-transition-title">GOOGLE / NEO TRANSITION</h2>
+                    <p>Choose the authoritative source for NeoSektor live counts and bay status.</p>
+                </div>
+                <strong class="system-settings-mode-badge" data-neosektor-mode="{{ neosektor_status.mode }}">{{ neosektor_status.mode_label }}</strong>
+            </div>
+
+            <form method="post" class="system-settings-form" data-neosektor-mode-form>
+                <input type="hidden" name="action" value="set_neosektor_mode">
+                <div class="system-settings-mode-options" role="radiogroup" aria-label="NeoSektor integration mode">
+                    {% for mode in neosektor_status.modes %}
+                    <label class="system-settings-mode-option">
+                        <input type="radio" name="integration_mode" value="{{ mode.value }}" {% if mode.value == neosektor_status.mode %}checked{% endif %} {% if not can_edit_system_settings %}disabled{% endif %}>
+                        <span>{{ mode.label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                <div class="system-settings-mode-help">
+                    <p><strong>GOOGLE PRIMARY:</strong> Google owns the operational cells; Neo settings remain in Neon.</p>
+                    <p><strong>NEO PRIMARY + GOOGLE MIRROR:</strong> Neon owns operational state and mirrors changes to Google.</p>
+                    <p><strong>NEO ONLY:</strong> Neon owns operational state and NeoSektor performs no Google traffic.</p>
+                </div>
+                {% if can_edit_system_settings %}
+                <button class="action-button primary-action" type="submit">SAVE NEOSEKTOR MODE</button>
+                {% else %}
+                <p class="view-only-pill">VIEW ONLY</p>
+                {% endif %}
+            </form>
+
+            {% if neosektor_status.google_mirror_sync_needed %}
+            <div class="system-settings-warning" data-neosektor-mirror-warning>
+                <strong>GOOGLE MIRROR NEEDS ATTENTION</strong>
+                <p>{{ neosektor_status.google_mirror_last_error or "Google mirror retry is required." }}</p>
+                {% if can_edit_system_settings and neosektor_status.mode == "neo_primary_google_mirror" %}
+                <form method="post">
+                    <button class="action-button" type="submit" name="action" value="retry_neosektor_google_mirror">RETRY GOOGLE MIRROR</button>
+                </form>
+                {% endif %}
+            </div>
+            {% endif %}
+        </section>
+
+        <section class="system-settings-section" aria-labelledby="google-live-polling-title" data-google-live-polling-control>
+            <div class="system-settings-section-heading">
+                <div>
+                    <h2 id="google-live-polling-title">GOOGLE LIVE POLLING</h2>
+                    <p>Authorizes MotherBrain and Rain live reads during the configured sort window.</p>
+                </div>
+                <strong
+                    class="google-live-polling-badge {{ 'is-on' if google_live_polling_status.enabled else 'is-off' }}"
+                    data-google-live-polling-state="{{ 'on' if google_live_polling_status.enabled else 'off' }}"
+                >{{ "ON" if google_live_polling_status.enabled else "OFF" }}</strong>
+            </div>
+
+            {% if google_live_poll_health.enabled %}
+            <div class="google-live-poll-health" data-google-live-poll-health="{{ google_live_poll_health.status }}">
+                <div class="google-live-poll-health-state">
+                    <span>GOOGLE SYNC</span>
+                    <strong class="google-live-poll-health-badge is-{{ google_live_poll_health.status }}">{{ google_live_poll_health.label }}</strong>
+                </div>
+                <p>LAST SUCCESSFUL: <strong>{{ google_live_poll_health.last_success_label }}</strong></p>
+            </div>
+            {% endif %}
+
+            {% if can_edit_system_settings %}
+            <form method="post" class="system-settings-form">
+                {% if google_live_polling_status.enabled %}
+                <button class="action-button destructive-action" type="submit" name="action" value="disable_google_live_polling">DISABLE LIVE POLLING</button>
+                {% else %}
+                <button class="action-button primary-action" type="submit" name="action" value="enable_google_live_polling">ENABLE LIVE POLLING</button>
+                {% endif %}
+            </form>
+            {% else %}
+            <p class="view-only-pill">VIEW ONLY</p>
+            {% endif %}
+        </section>
+    </div>
+</section>
+{% endblock %}

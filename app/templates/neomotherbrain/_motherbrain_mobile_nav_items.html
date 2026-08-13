@@ -13,6 +13,7 @@
 {% if can_manage_system(current_user) %}
 <a class="{{ motherbrain_mobile_item_class }}{% if is_sort_timeline_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.sort_timeline', operation_id=motherbrain_mobile_operation.id) if motherbrain_mobile_operation else url_for('neomotherbrain.sort_timeline') }}" role="menuitem" {% if is_sort_timeline_page %}aria-current="page"{% endif %}>Sort Timeline</a>
 {% endif %}
+<a class="{{ motherbrain_mobile_item_class }}{% if is_system_settings_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.system_settings') }}" role="menuitem" {% if is_system_settings_page %}aria-current="page"{% endif %}>System Settings</a>
 <a class="{{ motherbrain_mobile_item_class }}{% if is_flight_api_test_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.flight_api_test', operation_id=motherbrain_mobile_operation.id) if motherbrain_mobile_operation else url_for('neomotherbrain.flight_api_test') }}" role="menuitem" {% if is_flight_api_test_page %}aria-current="page"{% endif %}>Manage API</a>
 {% if user_can("neomotherbrain.flight_api_review.view") %}
 <a class="{{ motherbrain_mobile_item_class }}{% if is_flight_api_review_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.flight_api_review', operation_id=motherbrain_mobile_operation.id) if motherbrain_mobile_operation else url_for('neomotherbrain.flight_api_review') }}" role="menuitem" {% if is_flight_api_review_page %}aria-current="page"{% endif %}>Unmatched Queue</a>

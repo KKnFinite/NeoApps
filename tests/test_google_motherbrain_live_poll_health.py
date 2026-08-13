@@ -205,7 +205,7 @@ class GoogleMotherBrainLivePollHealthTest(unittest.TestCase):
         self.assertEqual(health["operation_id"], self.operation.id)
         self.assertEqual(health["status"], "current")
 
-    def test_health_renders_only_in_motherbrain_google_controls(self):
+    def test_health_renders_only_in_system_settings_google_controls(self):
         self._enable()
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
             2026,
@@ -227,11 +227,17 @@ class GoogleMotherBrainLivePollHealthTest(unittest.TestCase):
         )
 
         detail = client.get(f"/motherbrain/operations/{self.operation.id}")
+        system_settings = client.get("/motherbrain/system-settings")
         dashboard = client.get("/motherbrain")
 
         self.assertEqual(detail.status_code, 200)
-        reader_panel = detail.data.split(b"data-google-current-sort-reader", 1)[1]
-        self.assertIn(b"data-google-live-poll-health=", reader_panel)
+        self.assertNotIn(b"data-google-live-poll-health=", detail.data)
+        self.assertEqual(system_settings.status_code, 200)
+        polling_panel = system_settings.data.split(
+            b"data-google-live-polling-control",
+            1,
+        )[1]
+        self.assertIn(b"data-google-live-poll-health=", polling_panel)
         self.assertEqual(dashboard.status_code, 200)
         self.assertNotIn(b"data-google-live-poll-health=", dashboard.data)
 
