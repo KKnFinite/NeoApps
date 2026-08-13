@@ -19,6 +19,11 @@
             <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.attendance') }}">
                 <span>ATTENDANCE</span>
             </a>
+            {% if user_can("neostaffing.vacation_selection.view") %}
+            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.vacation_selection') }}">
+                <span>VACATION SELECTION</span>
+            </a>
+            {% endif %}
             {% if user_can("neostaffing.permissions.view") %}
             <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.permissions') }}">
                 <span>PERMISSIONS</span>

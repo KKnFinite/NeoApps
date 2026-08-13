@@ -421,6 +421,11 @@ DEFAULT_PERMISSION_RULES = (
         "View NeoStaffing Reports.",
     ),
     (
+        "neostaffing.vacation_selection.view",
+        "watcher",
+        "View the NeoStaffing Vacation Selection placeholder.",
+    ),
+    (
         "neostaffing.permissions.view",
         "master",
         "View NeoStaffing permission settings.",
@@ -1067,6 +1072,15 @@ PERMISSION_RULE_ITEMS = (
         "NeoStaffing staffing, seniority, and attendance reports.",
         {
             "view": "neostaffing.reports.view",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.vacation_selection",
+        "Vacation Selection",
+        "NeoStaffing management vacation selection and seniority-based scheduling placeholder.",
+        {
+            "view": "neostaffing.vacation_selection.view",
         },
     ),
     (

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}NeoStaffing Vacation Selection{% endblock %}
+
+{% block content %}
+<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="vacation-selection-title">
+    <div class="neostaffing-dashboard-shell">
+        {% include "neostaffing/_section_nav.html" %}
+        <main class="neostaffing-dashboard-main">
+            <header class="neostaffing-dashboard-topbar">
+                <div>
+                    <h1 id="vacation-selection-title">VACATION SELECTION</h1>
+                    <p>Management vacation selection and seniority-based scheduling will be available here.</p>
+                </div>
+            </header>
+
+            <section class="neostaffing-data-card" aria-label="Vacation Selection status">
+                <h2>COMING LATER</h2>
+            </section>
+        </main>
+    </div>
+</section>
+{% endblock %}

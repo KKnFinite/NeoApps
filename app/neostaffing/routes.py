@@ -26,6 +26,7 @@ ATTENDANCE_TAKE_PERMISSION = "neostaffing.attendance.take"
 ORG_CHART_VIEW_PERMISSION = "neostaffing.org_chart.view"
 ORG_CHART_EDIT_STRUCTURE_PERMISSION = "neostaffing.org_chart.edit_structure"
 REPORTS_VIEW_PERMISSION = "neostaffing.reports.view"
+VACATION_SELECTION_VIEW_PERMISSION = "neostaffing.vacation_selection.view"
 MANAGEMENT_ASSIGN_PERMISSION = "neostaffing.management.assign"
 HIERARCHY_VIEW_PERMISSION = "neostaffing.hierarchy.view"
 PLANNED_STAFFING_EDIT_PERMISSION = "neostaffing.planned_staffing.edit"
@@ -43,6 +44,7 @@ NEOSTAFFING_PERMISSION_LABELS = {
     "neostaffing.org_chart.view": "View Org Chart",
     "neostaffing.org_chart.edit_structure": "Edit Org Chart Structure",
     "neostaffing.reports.view": "View Reports",
+    "neostaffing.vacation_selection.view": "View Vacation Selection",
     "neostaffing.permissions.view": "View Permissions",
     "neostaffing.permissions.edit": "Edit Permissions",
     "neostaffing.management.assign": "Assign Management",
@@ -296,6 +298,15 @@ def reports():
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
         employee_status_labels=staffing_service.EMPLOYEE_STATUS_LABELS,
         attendance_status_labels=staffing_service.ATTENDANCE_STATUS_LABELS,
+    )
+
+
+@bp.route("/vacation-selection")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_selection():
+    return render_template(
+        "neostaffing/vacation_selection.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
     )
 
 
