@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from flask import current_app
 
 from app.extensions import db
-from app.models import SortDateOperation
+from app.models import SortDateOperation, SortTimelineSortSetting
 from app.services.gateway_matrix import (
     active_sorts_for_gateway_date,
     current_gateway_local_datetime,
@@ -24,6 +24,9 @@ from app.services.google_motherbrain_live_poll_lease import (
     complete_google_motherbrain_live_poll_failure,
     complete_google_motherbrain_live_poll_success,
 )
+from app.services.google_motherbrain_live_polling import (
+    google_motherbrain_live_polling_enabled,
+)
 from app.services.google_motherbrain_sheets import read_google_motherbrain_live_rows
 from app.services.google_rain_live_milestones import (
     apply_google_rain_departure_milestones,
@@ -31,6 +34,10 @@ from app.services.google_rain_live_milestones import (
 from app.services.google_rain_sheets import read_google_rain_outbound_milestones
 from app.services.operation_lifecycle import ensure_operational_sort_operations
 from app.services.sort_timeline import ensure_sort_timeline_settings, sort_settings_by_name
+
+
+GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_HEADER = "X-Neo-Google-Live-Poll-Client"
+GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_VERSION = "2"
 
 
 def execute_google_motherbrain_live_poll(
@@ -43,6 +50,10 @@ def execute_google_motherbrain_live_poll(
     rain_applier=None,
 ):
     """Run one server-resolved live poll without accepting client scope input."""
+    preflight = google_motherbrain_live_poll_preflight(gateway, now=now)
+    if preflight["status"] != "eligible":
+        return {"status": preflight["status"]}
+
     lifecycle = ensure_operational_sort_operations(gateway, now=now)
     if lifecycle["errors"]:
         db.session.rollback()
@@ -50,7 +61,12 @@ def execute_google_motherbrain_live_poll(
 
     # Lifecycle-created operations must be durable before another worker can lease them.
     db.session.commit()
-    operation = _polling_window_operation(gateway, lifecycle, now=now)
+    operation = _polling_window_operation(
+        gateway,
+        lifecycle,
+        now=now,
+        candidate_sort_date=preflight["sort_date"],
+    )
     if operation is None:
         return {"status": "outside_window"}
 
@@ -102,6 +118,45 @@ def execute_google_motherbrain_live_poll(
     }
 
 
+def google_motherbrain_live_poll_preflight(gateway, now=None):
+    """Resolve the two cheap gates before lifecycle or lease work.
+
+    The persistent ON/OFF switch is checked first so an idle gateway performs
+    only that indexed lookup.  When enabled, the configured physical Sort
+    Window is checked without ensuring operations or creating timeline rows.
+    """
+    if str(getattr(gateway, "code", "") or "").strip().upper() != (
+        GOOGLE_MOTHERBRAIN_GATEWAY_CODE
+    ):
+        return {"status": "outside_window", "sort_date": None}
+
+    if not google_motherbrain_live_polling_enabled(
+        gateway,
+        GOOGLE_MOTHERBRAIN_SORT_NAME,
+    ):
+        return {"status": "disabled", "sort_date": None}
+
+    sort_setting = SortTimelineSortSetting.query.filter_by(
+        gateway_id=gateway.id,
+        sort_name=GOOGLE_MOTHERBRAIN_SORT_NAME,
+    ).first()
+    if not sort_setting:
+        return {"status": "outside_window", "sort_date": None}
+
+    local_now = current_gateway_local_datetime(gateway, now=now)
+    for sort_date in (local_now.date() - timedelta(days=1), local_now.date()):
+        start_local, end_local = _physical_sort_window(sort_date, sort_setting)
+        if start_local and end_local and start_local <= local_now < end_local:
+            if GOOGLE_MOTHERBRAIN_SORT_NAME not in active_sorts_for_gateway_date(
+                gateway,
+                sort_date,
+            ):
+                return {"status": "outside_window", "sort_date": None}
+            return {"status": "eligible", "sort_date": sort_date}
+
+    return {"status": "outside_window", "sort_date": None}
+
+
 def _run_google_rain_best_effort(operation, *, now=None, reader=None, applier=None):
     """Run Rain after the primary poll is durable; never undo that success."""
     if current_app.config.get("TESTING") and reader is None and applier is None:
@@ -129,10 +184,28 @@ def _run_google_rain_best_effort(operation, *, now=None, reader=None, applier=No
     }
 
 
-def _polling_window_operation(gateway, lifecycle, now=None):
+def _polling_window_operation(
+    gateway,
+    lifecycle,
+    now=None,
+    *,
+    candidate_sort_date=None,
+):
     """Return the locked workbook operation while its physical Sort Window is live."""
     if str(gateway.code or "").strip().upper() != GOOGLE_MOTHERBRAIN_GATEWAY_CODE:
         return None
+
+    if candidate_sort_date is not None:
+        return (
+            SortDateOperation.query.filter(
+                SortDateOperation.gateway_code == gateway.code,
+                SortDateOperation.sort_name == GOOGLE_MOTHERBRAIN_SORT_NAME,
+                SortDateOperation.sort_date == candidate_sort_date,
+                SortDateOperation.archived_at_utc.is_(None),
+            )
+            .order_by(SortDateOperation.id.desc())
+            .first()
+        )
 
     local_now = lifecycle.get("local_now") or current_gateway_local_datetime(gateway, now=now)
     settings = ensure_sort_timeline_settings(gateway)
@@ -163,13 +236,17 @@ def google_polling_window_for_operation(operation, settings):
     """Resolve the physical Sort Window used by both Google read adapters."""
     sort_name = str(operation.sort_name or "").strip().lower()
     sort_setting = sort_settings_by_name(settings).get(sort_name)
+    return _physical_sort_window(operation.sort_date, sort_setting)
+
+
+def _physical_sort_window(sort_date, sort_setting):
     start_time = getattr(sort_setting, "sort_window_start_local", None)
     end_time = getattr(sort_setting, "sort_window_end_local", None)
     if not start_time or not end_time:
         return None, None
 
-    start_local = datetime.combine(operation.sort_date, start_time)
-    end_local = datetime.combine(operation.sort_date, end_time)
+    start_local = datetime.combine(sort_date, start_time)
+    end_local = datetime.combine(sort_date, end_time)
     if end_local <= start_local:
         end_local += timedelta(days=1)
     return start_local, end_local

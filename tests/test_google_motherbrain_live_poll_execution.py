@@ -21,6 +21,8 @@ from app.services.access_control import (
     user_can_access_node,
 )
 from app.services.google_motherbrain_live_poll_execution import (
+    GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_HEADER,
+    GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_VERSION,
     execute_google_motherbrain_live_poll,
 )
 from app.services.google_motherbrain_live_poll_lease import (
@@ -95,17 +97,24 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         self.context.pop()
 
     def test_before_sort_window_does_not_read_or_lease(self):
+        self._enable()
         reader = Mock()
 
-        result = execute_google_motherbrain_live_poll(
-            self.gateway,
-            now=datetime(2026, 6, 18, 13, 59),
-            reader=reader,
-        )
+        with patch(
+            "app.services.google_motherbrain_live_poll_execution."
+            "ensure_operational_sort_operations"
+        ) as lifecycle:
+            result = execute_google_motherbrain_live_poll(
+                self.gateway,
+                now=datetime(2026, 6, 18, 13, 59),
+                reader=reader,
+            )
 
         self.assertEqual(result["status"], "outside_window")
+        lifecycle.assert_not_called()
         reader.assert_not_called()
         self.assertEqual(MotherBrainGoogleLivePollState.query.count(), 0)
+        self.assertEqual(SortDateOperation.query.count(), 0)
 
     def test_sort_window_start_is_inclusive(self):
         self._enable()
@@ -124,13 +133,18 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         self._enable()
         reader = Mock()
 
-        result = execute_google_motherbrain_live_poll(
-            self.gateway,
-            now=datetime(2026, 6, 19, 5, 0),
-            reader=reader,
-        )
+        with patch(
+            "app.services.google_motherbrain_live_poll_execution."
+            "ensure_operational_sort_operations"
+        ) as lifecycle:
+            result = execute_google_motherbrain_live_poll(
+                self.gateway,
+                now=datetime(2026, 6, 19, 5, 0),
+                reader=reader,
+            )
 
         self.assertEqual(result["status"], "outside_window")
+        lifecycle.assert_not_called()
         reader.assert_not_called()
         self.assertEqual(MotherBrainGoogleLivePollState.query.count(), 0)
 
@@ -225,17 +239,23 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         reader = Mock()
         rain_reader = Mock()
 
-        result = execute_google_motherbrain_live_poll(
-            self.gateway,
-            now=self.NOW,
-            reader=reader,
-            rain_reader=rain_reader,
-        )
+        with patch(
+            "app.services.google_motherbrain_live_poll_execution."
+            "ensure_operational_sort_operations"
+        ) as lifecycle:
+            result = execute_google_motherbrain_live_poll(
+                self.gateway,
+                now=self.NOW,
+                reader=reader,
+                rain_reader=rain_reader,
+            )
 
         self.assertEqual(result["status"], "disabled")
+        lifecycle.assert_not_called()
         reader.assert_not_called()
         rain_reader.assert_not_called()
         self.assertEqual(MotherBrainGoogleLivePollState.query.count(), 0)
+        self.assertEqual(SortDateOperation.query.count(), 0)
 
     def test_successful_poll_applies_live_rows_then_marks_lease_success(self):
         self._enable()
@@ -571,15 +591,23 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         ):
             accepted = client.post(
                 "/motherbrain/google-live-poll/execute",
-                headers={"X-CSRF-Token": csrf_token},
+                headers={
+                    "X-CSRF-Token": csrf_token,
+                    GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_HEADER: (
+                        GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_VERSION
+                    ),
+                },
             )
 
         self.assertEqual(missing.status_code, 400)
         self.assertEqual(accepted.status_code, 200)
         self.assertEqual(accepted.get_json()["status"], "success")
+        self.assertTrue(accepted.get_json()["continue_heartbeat"])
         self.assertNotEqual(accepted.get_json()["operation_id"], historical.id)
 
     def test_shared_heartbeat_renders_once_on_active_operational_pages_only(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = self.NOW
+        self._enable()
         user = User(username="operational-heartbeat-render", role="grandmaster")
         set_user_password(user, "TestPassword123!")
         db.session.add(user)
@@ -603,10 +631,73 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
                     response.data.count(b"data-google-live-poll-heartbeat"),
                     1,
                 )
+                self.assertIn(
+                    b'data-client-version="2"',
+                    response.data,
+                )
 
         portal = client.get("/portal")
         self.assertEqual(portal.status_code, 200)
         self.assertNotIn(b"data-google-live-poll-heartbeat", portal.data)
+
+    def test_disabled_and_outside_window_pages_do_not_start_heartbeat(self):
+        user = User(username="idle-heartbeat-render", role="grandmaster")
+        set_user_password(user, "TestPassword123!")
+        db.session.add(user)
+        db.session.flush()
+        backfill_default_gateway_node_roles(user, role="grandmaster")
+        db.session.commit()
+        client = self.app.test_client()
+        self._login(client, user)
+
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = self.NOW
+        disabled = client.get("/rfd")
+        self.assertNotIn(b"data-google-live-poll-heartbeat", disabled.data)
+
+        self._enable()
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026,
+            6,
+            18,
+            13,
+            59,
+        )
+        outside = client.get("/rfd")
+        self.assertNotIn(b"data-google-live-poll-heartbeat", outside.data)
+
+    def test_terminal_status_stops_new_client_and_legacy_client_is_retired(self):
+        user = User(username="stale-heartbeat-client", role="grandmaster")
+        set_user_password(user, "TestPassword123!")
+        db.session.add(user)
+        db.session.flush()
+        backfill_default_gateway_node_roles(user, role="grandmaster")
+        db.session.commit()
+        client = self.app.test_client()
+        self._login(client, user)
+
+        with patch(
+            "app.neomotherbrain.routes.execute_google_motherbrain_live_poll"
+        ) as execute:
+            legacy = client.post(
+                "/motherbrain/google-live-poll/execute",
+                headers={"X-CSRF-Token": "legacy-page-token"},
+            )
+        self.assertEqual(legacy.status_code, 410)
+        self.assertEqual(legacy.get_json()["status"], "stale_client")
+        self.assertFalse(legacy.get_json()["continue_heartbeat"])
+        execute.assert_not_called()
+
+        current = client.post(
+            "/motherbrain/google-live-poll/execute",
+            headers={
+                GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_HEADER: (
+                    GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_VERSION
+                ),
+            },
+        )
+        self.assertEqual(current.status_code, 200)
+        self.assertEqual(current.get_json()["status"], "disabled")
+        self.assertFalse(current.get_json()["continue_heartbeat"])
 
     def test_gateway_node_users_can_trigger_without_motherbrain_operator_role(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = self.NOW

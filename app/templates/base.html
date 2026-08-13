@@ -740,7 +740,11 @@
     </script>
     {% endif %}
     {% if uses_google_live_poll_heartbeat %}
-    <script data-google-live-poll-heartbeat data-endpoint="{{ url_for('neomotherbrain.execute_google_live_poll') }}">
+    <script
+        data-google-live-poll-heartbeat
+        data-endpoint="{{ url_for('neomotherbrain.execute_google_live_poll') }}"
+        data-client-version="{{ google_live_poll_heartbeat_client_version }}"
+    >
     (() => {
         if (window.__neoGoogleLivePollHeartbeatActive) {
             return;
@@ -749,7 +753,8 @@
 
         const heartbeatElement = document.currentScript;
         const endpoint = heartbeatElement?.dataset.endpoint;
-        if (!endpoint) {
+        const clientVersion = heartbeatElement?.dataset.clientVersion;
+        if (!endpoint || !clientVersion) {
             return;
         }
 
@@ -763,10 +768,29 @@
         const scheduleNextHeartbeat = () => {
             window.setTimeout(runHeartbeat, nextHeartbeatDelay());
         };
-        const runHeartbeat = () => {
-            window.fetch(endpoint, { method: "POST", cache: "no-store" })
-                .catch(() => {})
-                .finally(scheduleNextHeartbeat);
+        const runHeartbeat = async () => {
+            let shouldContinue = true;
+            try {
+                const response = await window.fetch(endpoint, {
+                    method: "POST",
+                    cache: "no-store",
+                    headers: { "X-Neo-Google-Live-Poll-Client": clientVersion },
+                });
+                if ([400, 401, 403, 410].includes(response.status)) {
+                    shouldContinue = false;
+                } else {
+                    const payload = await response.json().catch(() => null);
+                    shouldContinue = payload?.continue_heartbeat !== false;
+                }
+            } catch (_error) {
+                // A transient connectivity failure must not stop an active poll driver.
+            }
+
+            if (shouldContinue) {
+                scheduleNextHeartbeat();
+            } else {
+                window.__neoGoogleLivePollHeartbeatActive = false;
+            }
         };
 
         runHeartbeat();

@@ -650,13 +650,21 @@ def flight_api_auto_poll_check():
 def execute_google_live_poll():
     """Future heartbeat target; all Google polling scope is resolved server-side."""
     if not current_user.is_authenticated:
-        return jsonify({"status": "unauthenticated"}), 401
+        return jsonify(
+            {"status": "unauthenticated", "continue_heartbeat": False}
+        ), 401
 
     gateway = get_current_gateway()
     if not user_has_gateway_access(current_user, gateway.code):
-        return jsonify({"status": "access_denied"}), 403
+        return jsonify(
+            {"status": "access_denied", "continue_heartbeat": False}
+        ), 403
 
     result = execute_google_motherbrain_live_poll(gateway)
+    result["continue_heartbeat"] = result["status"] not in {
+        "disabled",
+        "outside_window",
+    }
     status_code = 500 if result["status"] in {"failed", "lifecycle_error"} else 200
     return jsonify(result), status_code
 

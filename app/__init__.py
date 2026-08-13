@@ -8,7 +8,18 @@ from pathlib import Path
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from flask import Flask, abort, flash, g, redirect, request, send_from_directory, session, url_for
+from flask import (
+    Flask,
+    abort,
+    flash,
+    g,
+    jsonify,
+    redirect,
+    request,
+    send_from_directory,
+    session,
+    url_for,
+)
 from flask_login import current_user, logout_user
 
 from app.auth.permissions import (
@@ -357,6 +368,23 @@ def register_template_helpers(app):
             user_display_name=getattr(current_user, "display_name", None),
             default_gateway_code=app.config["DEFAULT_GATEWAY_CODE"],
         )
+        google_live_poll_heartbeat_client_version = None
+        if shell_metadata["uses_google_live_poll_heartbeat"]:
+            from app.services.access_control import get_current_gateway
+            from app.services.google_motherbrain_live_poll_execution import (
+                GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_VERSION,
+                google_motherbrain_live_poll_preflight,
+            )
+
+            preflight = google_motherbrain_live_poll_preflight(
+                get_current_gateway()
+            )
+            shell_metadata["uses_google_live_poll_heartbeat"] = (
+                preflight["status"] == "eligible"
+            )
+            google_live_poll_heartbeat_client_version = (
+                GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_VERSION
+            )
         return {
             "can_enter_data": can_enter_data,
             "can_make_decisions": can_make_decisions,
@@ -372,6 +400,9 @@ def register_template_helpers(app):
             "live_screen_refresh_interval_ms": app.config[
                 "LIVE_SCREEN_REFRESH_INTERVAL_MS"
             ],
+            "google_live_poll_heartbeat_client_version": (
+                google_live_poll_heartbeat_client_version
+            ),
             **shell_metadata,
         }
 
@@ -422,6 +453,35 @@ def register_template_helpers(app):
 
 
 def register_request_guards(app):
+    @app.before_request
+    def retire_legacy_google_live_poll_heartbeat():
+        """Keep pre-deploy heartbeat tabs from touching authentication or Neon."""
+        if (
+            request.method != "POST"
+            or request.endpoint != "neomotherbrain.execute_google_live_poll"
+            or not request.headers.get("X-CSRF-Token")
+        ):
+            return None
+
+        from app.services.google_motherbrain_live_poll_execution import (
+            GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_HEADER,
+            GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_VERSION,
+        )
+
+        if request.headers.get(GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_HEADER) == (
+            GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_VERSION
+        ):
+            return None
+        return (
+            jsonify(
+                {
+                    "status": "stale_client",
+                    "continue_heartbeat": False,
+                }
+            ),
+            410,
+        )
+
     @app.before_request
     def force_required_password_change():
         if not current_user.is_authenticated:
