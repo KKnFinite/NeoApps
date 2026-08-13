@@ -232,6 +232,50 @@ class LiveScreenRefreshTest(unittest.TestCase):
         self.assertIn("focus({ preventScroll: true })", source)
         self.assertIn("data-live-confirmation-active", source)
 
+    def test_shared_client_has_foreground_inactivity_and_monitor_mode(self):
+        source = Path("app/static/js/live_updates.js").read_text(encoding="utf-8")
+        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+
+        self.assertIn("INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000", source)
+        for event_name in (
+            "pointerdown",
+            "mousedown",
+            "touchstart",
+            "keydown",
+            "scroll",
+            "input",
+            "change",
+        ):
+            self.assertIn(f'["{event_name}", true]', source)
+        self.assertIn("this.inactivityPaused = true", source)
+        self.assertIn("LIVE UPDATES PAUSED \\u2014 INACTIVE", source)
+        self.assertIn("KEEP LIVE / MONITOR MODE", source)
+        self.assertIn("this.monitorMode", source)
+        self.assertNotIn("localStorage", source)
+        self.assertNotIn("sessionStorage", source)
+        self.assertIn('[data-live-update-state="inactive"]', css)
+        self.assertIn(".live-update-monitor-toggle", css)
+
+    def test_shared_idle_handling_is_inherited_by_representative_consumers(self):
+        consumers = (
+            "app/templates/neomotherbrain/_planning_live_updates.html",
+            "app/static/js/parking_plan_live.js",
+            "app/templates/neonodes/_operation_refresh_reload.html",
+            "app/templates/neonodes/neoermac/door_view.html",
+            "app/templates/neonodes/neoermac/view_outbound.html",
+            "app/templates/neonodes/neosektor/live_counts.html",
+            "app/templates/neonodes/neosektor/ballmat.html",
+            "app/templates/neonodes/neosektor/tunnel_conductor.html",
+            "app/templates/neonodes/neosektor/driver_routing.html",
+            "app/templates/neonodes/neosektor/discharge.html",
+        )
+
+        for consumer_path in consumers:
+            with self.subTest(consumer=consumer_path):
+                source = Path(consumer_path).read_text(encoding="utf-8")
+                self.assertIn("NeoLiveUpdates.create", source)
+                self.assertNotIn("INACTIVITY_TIMEOUT_MS", source)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3053,12 +3053,66 @@ a {
     text-align: center;
 }
 
+.live-update-controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    justify-self: end;
+    gap: 6px;
+    min-width: 0;
+}
+
+.live-update-controls .live-update-status {
+    justify-self: auto;
+}
+
+.live-update-monitor-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 24px;
+    padding: 4px 8px;
+    border: 1px solid rgba(var(--node-rgb), 0.32);
+    border-radius: 6px;
+    background: rgba(7, 10, 14, 0.78);
+    color: rgba(238, 246, 255, 0.78);
+    font-size: 0.62rem;
+    font-weight: 800;
+    line-height: 1.2;
+    text-align: center;
+}
+
+.live-update-monitor-toggle[aria-pressed="true"] {
+    border-color: rgba(30, 196, 174, 0.58);
+    color: var(--neo-teal-light);
+    background: rgba(9, 39, 35, 0.9);
+}
+
+.live-update-monitor-toggle:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+}
+
+.live-update-monitor-state {
+    color: rgba(238, 246, 255, 0.58);
+}
+
+.live-update-monitor-toggle[aria-pressed="true"] .live-update-monitor-state {
+    color: var(--neo-teal-light);
+}
+
 .live-update-status[data-live-update-state="active"] {
     color: var(--neo-teal-light);
     border-color: rgba(30, 196, 174, 0.46);
 }
 
 .live-update-status[data-live-update-state="reconnecting"] {
+    color: #ffd27a;
+    border-color: rgba(255, 180, 72, 0.52);
+}
+
+.live-update-status[data-live-update-state="inactive"] {
     color: #ffd27a;
     border-color: rgba(255, 180, 72, 0.52);
 }
@@ -3108,8 +3162,16 @@ a {
 }
 
 @media (max-width: 900px) {
-    .live-update-status:not([data-live-update-state="reconnecting"]) {
+    .live-update-status:not([data-live-update-state="reconnecting"]):not([data-live-update-state="inactive"]) {
         display: none;
+    }
+
+    .live-update-controls {
+        flex-wrap: wrap;
+    }
+
+    .live-update-monitor-toggle {
+        margin-left: auto;
     }
 }
 

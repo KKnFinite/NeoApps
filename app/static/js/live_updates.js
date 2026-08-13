@@ -6,6 +6,16 @@
     }
 
     const DEFAULT_FAILURE_THRESHOLD = 3;
+    const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+    const USER_ACTIVITY_EVENTS = Object.freeze([
+        ["pointerdown", true],
+        ["mousedown", true],
+        ["touchstart", true],
+        ["keydown", true],
+        ["scroll", true],
+        ["input", true],
+        ["change", true],
+    ]);
 
     class LiveUpdateController {
         constructor(options) {
@@ -20,11 +30,26 @@
             this.enabled = false;
             this.running = false;
             this.timer = null;
+            this.inactivityTimer = null;
+            this.inactivityPaused = false;
+            this.monitorMode = false;
             this.failures = 0;
             this.serverStatus = options.serverStatus || {};
             this.destroyed = false;
+            this.statusLabelElement = null;
+            this.monitorButton = null;
+            this.monitorStateElement = null;
             this.onVisibilityChange = this.onVisibilityChange.bind(this);
+            this.onUserActivity = this.onUserActivity.bind(this);
+            this.onInactivityTimeout = this.onInactivityTimeout.bind(this);
             document.addEventListener("visibilitychange", this.onVisibilityChange);
+            USER_ACTIVITY_EVENTS.forEach(([eventName, capture]) => {
+                document.addEventListener(eventName, this.onUserActivity, {
+                    capture,
+                    passive: ["pointerdown", "mousedown", "touchstart", "scroll"].includes(eventName),
+                });
+            });
+            this.buildMonitorControl();
         }
 
         setServerStatus(status) {
@@ -35,8 +60,11 @@
         setEnabled(enabled) {
             const wasEnabled = this.enabled;
             this.enabled = Boolean(enabled);
+            this.updateMonitorControl();
             if (!this.enabled) {
                 this.clearTimer();
+                this.clearInactivityTimer();
+                this.inactivityPaused = false;
                 this.renderStatus(
                     this.serverStatus.reason || "outside_ops_window",
                     this.serverStatus.live_status_label
@@ -46,7 +74,15 @@
                 return;
             }
 
+            if (this.inactivityPaused) {
+                this.renderInactiveStatus();
+                return;
+            }
+
             this.renderStatus("active", "Live updates on");
+            if (!wasEnabled) {
+                this.armInactivityTimer();
+            }
             if (!wasEnabled && !document.hidden) {
                 if (this.immediate) {
                     this.refreshNow();
@@ -57,7 +93,13 @@
         }
 
         refreshNow() {
-            if (!this.enabled || this.running || this.destroyed || document.hidden) {
+            if (
+                !this.enabled
+                || this.running
+                || this.destroyed
+                || document.hidden
+                || this.inactivityPaused
+            ) {
                 return Promise.resolve(false);
             }
             this.clearTimer();
@@ -66,14 +108,14 @@
                 .then(() => this.poll())
                 .then(() => {
                     this.failures = 0;
-                    if (this.enabled) {
+                    if (this.enabled && !this.inactivityPaused) {
                         this.renderStatus("active", "Live updates on");
                     }
                     return true;
                 })
                 .catch(() => {
                     this.failures += 1;
-                    if (this.failures >= this.failureThreshold) {
+                    if (!this.inactivityPaused && this.failures >= this.failureThreshold) {
                         this.renderStatus(
                             "reconnecting",
                             "Live updates paused - reconnecting..."
@@ -89,7 +131,12 @@
 
         schedule() {
             this.clearTimer();
-            if (!this.enabled || this.destroyed || document.hidden) {
+            if (
+                !this.enabled
+                || this.destroyed
+                || document.hidden
+                || this.inactivityPaused
+            ) {
                 return;
             }
             this.timer = window.setTimeout(() => this.refreshNow(), this.intervalMs);
@@ -102,14 +149,146 @@
             }
         }
 
+        clearInactivityTimer() {
+            if (this.inactivityTimer !== null) {
+                window.clearTimeout(this.inactivityTimer);
+                this.inactivityTimer = null;
+            }
+        }
+
+        armInactivityTimer() {
+            this.clearInactivityTimer();
+            if (
+                !this.enabled
+                || this.destroyed
+                || document.hidden
+                || this.inactivityPaused
+                || this.monitorMode
+            ) {
+                return;
+            }
+            this.inactivityTimer = window.setTimeout(
+                this.onInactivityTimeout,
+                INACTIVITY_TIMEOUT_MS
+            );
+        }
+
+        onInactivityTimeout() {
+            this.inactivityTimer = null;
+            if (!this.enabled || this.destroyed || document.hidden || this.monitorMode) {
+                return;
+            }
+            this.inactivityPaused = true;
+            this.clearTimer();
+            this.renderInactiveStatus();
+        }
+
+        onUserActivity(event) {
+            if (event?.isTrusted === false || !this.enabled || document.hidden) {
+                return;
+            }
+            if (this.inactivityPaused) {
+                this.inactivityPaused = false;
+                this.renderStatus("active", "Live updates on");
+                this.armInactivityTimer();
+                this.refreshNow();
+                return;
+            }
+            this.armInactivityTimer();
+        }
+
+        setMonitorMode(enabled) {
+            this.monitorMode = Boolean(enabled);
+            this.updateMonitorControl();
+            if (this.monitorMode) {
+                this.clearInactivityTimer();
+                if (this.inactivityPaused) {
+                    this.inactivityPaused = false;
+                    this.renderStatus("active", "Live updates on");
+                    this.refreshNow();
+                }
+                return;
+            }
+            this.armInactivityTimer();
+        }
+
         onVisibilityChange() {
             if (document.hidden) {
                 this.clearTimer();
+                this.clearInactivityTimer();
                 return;
             }
             if (this.enabled) {
+                this.inactivityPaused = false;
+                this.renderStatus("active", "Live updates on");
+                this.armInactivityTimer();
                 this.refreshNow();
             }
+        }
+
+        buildMonitorControl() {
+            if (!this.statusElement?.parentNode) {
+                return;
+            }
+
+            let controls = this.statusElement.parentElement?.matches("[data-live-update-controls]")
+                ? this.statusElement.parentElement
+                : null;
+            if (!controls) {
+                controls = document.createElement("div");
+                controls.className = "live-update-controls";
+                controls.dataset.liveUpdateControls = "true";
+                this.statusElement.parentNode.insertBefore(controls, this.statusElement);
+                controls.appendChild(this.statusElement);
+            }
+
+            this.statusLabelElement = this.statusElement.querySelector(
+                "[data-live-update-label]"
+            );
+            if (!this.statusLabelElement) {
+                this.statusLabelElement = document.createElement("span");
+                this.statusLabelElement.dataset.liveUpdateLabel = "true";
+                this.statusLabelElement.textContent = this.statusElement.textContent.trim();
+                this.statusElement.textContent = "";
+                this.statusElement.appendChild(this.statusLabelElement);
+            }
+
+            this.monitorButton = document.createElement("button");
+            this.monitorButton.type = "button";
+            this.monitorButton.className = "live-update-monitor-toggle";
+            this.monitorButton.dataset.liveMonitorMode = "true";
+            this.monitorButton.setAttribute("aria-pressed", "false");
+            this.monitorButton.title = (
+                "Keep this foreground page live until it closes. Hidden tabs and server windows still pause updates."
+            );
+
+            const monitorLabel = document.createElement("span");
+            monitorLabel.textContent = "KEEP LIVE / MONITOR MODE";
+            this.monitorStateElement = document.createElement("strong");
+            this.monitorStateElement.className = "live-update-monitor-state";
+            this.monitorStateElement.textContent = "OFF";
+            this.monitorButton.append(monitorLabel, this.monitorStateElement);
+            this.monitorButton.addEventListener("click", () => {
+                this.setMonitorMode(!this.monitorMode);
+            });
+            controls.appendChild(this.monitorButton);
+            this.updateMonitorControl();
+        }
+
+        updateMonitorControl() {
+            if (!this.monitorButton) {
+                return;
+            }
+            this.monitorButton.disabled = !this.enabled;
+            this.monitorButton.setAttribute("aria-pressed", String(this.monitorMode));
+            this.monitorButton.dataset.monitorModeActive = String(this.monitorMode);
+            if (this.monitorStateElement) {
+                this.monitorStateElement.textContent = this.monitorMode ? "ON" : "OFF";
+            }
+        }
+
+        renderInactiveStatus() {
+            this.renderStatus("inactive", "LIVE UPDATES PAUSED \u2014 INACTIVE");
         }
 
         renderStatus(state, label) {
@@ -117,13 +296,21 @@
                 return;
             }
             this.statusElement.dataset.liveUpdateState = state;
-            this.statusElement.textContent = label;
+            if (this.statusLabelElement) {
+                this.statusLabelElement.textContent = label;
+            } else {
+                this.statusElement.textContent = label;
+            }
         }
 
         destroy() {
             this.destroyed = true;
             this.clearTimer();
+            this.clearInactivityTimer();
             document.removeEventListener("visibilitychange", this.onVisibilityChange);
+            USER_ACTIVITY_EVENTS.forEach(([eventName, capture]) => {
+                document.removeEventListener(eventName, this.onUserActivity, capture);
+            });
         }
     }
 
@@ -544,6 +731,7 @@
 
     window.NeoLiveUpdates = Object.freeze({
         create: (options) => new LiveUpdateController(options),
+        inactivityTimeoutMs: INACTIVITY_TIMEOUT_MS,
         reconcileRows,
         bindConflictSafeForms,
         bindAlertTrays,
