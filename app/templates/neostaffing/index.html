@@ -19,6 +19,11 @@
             <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.attendance') }}">
                 <span>ATTENDANCE</span>
             </a>
+            {% if user_can("neostaffing.permissions.view") %}
+            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.permissions') }}">
+                <span>PERMISSIONS</span>
+            </a>
+            {% endif %}
         </nav>
 
         {% if attendance_shortcut.is_management %}

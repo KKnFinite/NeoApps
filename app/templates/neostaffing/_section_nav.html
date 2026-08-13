@@ -4,4 +4,7 @@
     <a href="{{ url_for('neostaffing.org_chart') }}" {% if request.endpoint in ("neostaffing.org_chart", "neostaffing.hierarchy") %}aria-current="page"{% endif %}>Org Chart</a>
     <a href="{{ url_for('neostaffing.reports') }}" {% if request.endpoint == "neostaffing.reports" %}aria-current="page"{% endif %}>Reports</a>
     <a href="{{ url_for('neostaffing.attendance') }}" {% if request.endpoint in ("neostaffing.attendance", "neostaffing.people_attendance") %}aria-current="page"{% endif %}>Attendance</a>
+    {% if user_can("neostaffing.permissions.view") %}
+    <a href="{{ url_for('neostaffing.permissions') }}" {% if request.endpoint == "neostaffing.permissions" %}aria-current="page"{% endif %}>Permissions</a>
+    {% endif %}
 </aside>

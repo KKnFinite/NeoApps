@@ -5,11 +5,16 @@ from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
-from app.models import StaffingLeadershipAssignment, StaffingPerson, StaffingUnit
+from app.models import (
+    PermissionRule,
+    StaffingLeadershipAssignment,
+    StaffingPerson,
+    StaffingUnit,
+)
 from app.neostaffing import bp
 from app.services.access_control import get_user_app_role, user_can_access_app, user_has_app_access
 from app.services import neostaffing as staffing_service
-from app.services.permission_rules import user_can
+from app.services.permission_rules import ensure_default_permission_rules, user_can
 
 
 BOARD_VIEW_PERMISSION = "neostaffing.board.view"
@@ -24,6 +29,35 @@ REPORTS_VIEW_PERMISSION = "neostaffing.reports.view"
 MANAGEMENT_ASSIGN_PERMISSION = "neostaffing.management.assign"
 HIERARCHY_VIEW_PERMISSION = "neostaffing.hierarchy.view"
 PLANNED_STAFFING_EDIT_PERMISSION = "neostaffing.planned_staffing.edit"
+PERMISSIONS_VIEW_PERMISSION = "neostaffing.permissions.view"
+PERMISSIONS_EDIT_PERMISSION = "neostaffing.permissions.edit"
+ROLE_CHOICES = ("watcher", "operator", "simulator", "master", "grandmaster")
+
+NEOSTAFFING_PERMISSION_LABELS = {
+    "neostaffing.board.view": "View Board",
+    "neostaffing.seniority.view": "View Seniority",
+    "neostaffing.people.view": "View People",
+    "neostaffing.people.edit": "Edit People",
+    "neostaffing.people.bulk_actions": "People Bulk Actions",
+    "neostaffing.attendance.take": "Take Attendance",
+    "neostaffing.org_chart.view": "View Org Chart",
+    "neostaffing.org_chart.edit_structure": "Edit Org Chart Structure",
+    "neostaffing.reports.view": "View Reports",
+    "neostaffing.permissions.view": "View Permissions",
+    "neostaffing.permissions.edit": "Edit Permissions",
+    "neostaffing.management.assign": "Assign Management",
+    "neostaffing.app_management.view": "View App Management",
+    "neostaffing.hierarchy.view": "View Hierarchy",
+    "neostaffing.hierarchy.edit": "Edit Hierarchy",
+    "neostaffing.planned_staffing.view": "View Planned Staffing",
+    "neostaffing.planned_staffing.edit": "Edit Planned Staffing",
+    "neostaffing.people_management.view": "View People Management",
+    "neostaffing.people_management.edit": "Edit People Management",
+    "neostaffing.work_assignments.view": "View Work Assignments",
+    "neostaffing.work_assignments.edit": "Edit Work Assignments",
+    "neostaffing.management_assignments.view": "View Management Assignments",
+    "neostaffing.management_assignments.edit": "Edit Management Assignments",
+}
 
 
 def neostaffing_app_required(minimum_role="watcher", permission_key=None):
@@ -262,6 +296,59 @@ def reports():
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
         employee_status_labels=staffing_service.EMPLOYEE_STATUS_LABELS,
         attendance_status_labels=staffing_service.ATTENDANCE_STATUS_LABELS,
+    )
+
+
+@bp.route("/permissions", methods=["GET", "POST"])
+@neostaffing_app_required(permission_key=PERMISSIONS_VIEW_PERMISSION)
+def permissions():
+    ensure_default_permission_rules()
+    app_role = get_user_app_role(current_user, "neostaffing")
+    can_edit = app_role == "grandmaster" and user_can(PERMISSIONS_EDIT_PERMISSION)
+
+    if request.method == "POST":
+        if not can_edit:
+            flash("Only a NeoStaffing Grandmaster can save permission settings.", "error")
+            return redirect(url_for("neostaffing.permissions"))
+        try:
+            _apply_neostaffing_permission_rule_form()
+            db.session.commit()
+        except ValueError as error:
+            db.session.rollback()
+            flash(str(error), "error")
+        else:
+            flash("NeoStaffing permission settings updated.", "success")
+            return redirect(url_for("neostaffing.permissions"))
+
+    rules = PermissionRule.query.filter(
+        PermissionRule.permission_key.like("neostaffing.%")
+    ).order_by(PermissionRule.permission_key.asc()).all()
+    rule_by_key = {rule.permission_key: rule for rule in rules}
+    ordered_keys = [
+        key for key in NEOSTAFFING_PERMISSION_LABELS if key in rule_by_key
+    ]
+    ordered_keys.extend(
+        sorted(key for key in rule_by_key if key not in NEOSTAFFING_PERMISSION_LABELS)
+    )
+    capabilities = [
+        {
+            "label": NEOSTAFFING_PERMISSION_LABELS.get(
+                key,
+                key.removeprefix("neostaffing.")
+                .replace("_", " ")
+                .replace(".", " ")
+                .title(),
+            ),
+            "rule": rule_by_key[key],
+        }
+        for key in ordered_keys
+    ]
+    return render_template(
+        "neostaffing/permissions.html",
+        app_role=app_role,
+        can_edit_permissions=can_edit,
+        capabilities=capabilities,
+        role_choices=ROLE_CHOICES,
     )
 
 
@@ -594,6 +681,21 @@ def _mutate(callback, success_message, redirect_endpoint, redirect_values=None):
     else:
         flash(success_message, "success")
     return redirect(url_for(redirect_endpoint, **(redirect_values or {})))
+
+
+def _apply_neostaffing_permission_rule_form():
+    for rule_id in request.form.getlist("rule_ids"):
+        try:
+            rule = db.session.get(PermissionRule, int(rule_id))
+        except (TypeError, ValueError):
+            raise ValueError("Unsupported NeoStaffing permission selected.")
+        if not rule or not rule.permission_key.startswith("neostaffing."):
+            raise ValueError("Unsupported NeoStaffing permission selected.")
+
+        minimum_role = request.form.get(f"minimum_role_{rule.id}", "").strip().lower()
+        if minimum_role not in ROLE_CHOICES:
+            raise ValueError("Unsupported minimum role selected.")
+        rule.minimum_role = minimum_role
 
 
 def _org_chart_return_values(default_unit_id=None):

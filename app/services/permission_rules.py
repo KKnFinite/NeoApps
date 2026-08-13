@@ -421,6 +421,16 @@ DEFAULT_PERMISSION_RULES = (
         "View NeoStaffing Reports.",
     ),
     (
+        "neostaffing.permissions.view",
+        "master",
+        "View NeoStaffing permission settings.",
+    ),
+    (
+        "neostaffing.permissions.edit",
+        "grandmaster",
+        "Save NeoStaffing minimum-role permission settings.",
+    ),
+    (
         "neostaffing.management.assign",
         "simulator",
         "Assign or remove NeoStaffing management leadership scopes.",
@@ -1057,6 +1067,16 @@ PERMISSION_RULE_ITEMS = (
         "NeoStaffing staffing, seniority, and attendance reports.",
         {
             "view": "neostaffing.reports.view",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.permissions",
+        "Permissions",
+        "NeoStaffing capability minimum-role settings.",
+        {
+            "view": "neostaffing.permissions.view",
+            "edit": "neostaffing.permissions.edit",
         },
     ),
     (
