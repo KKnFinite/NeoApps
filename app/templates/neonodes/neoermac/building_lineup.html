@@ -23,6 +23,23 @@
 </label>
 {%- endmacro %}
 
+{% macro belt_side(row, side, destination_choices, can_edit, pull_time_lookup) -%}
+<section class="neoermac-belt-side neoermac-belt-side--{{ side.side }}" data-belt-side="{{ side.side }}" data-supervising-door="{{ side.door }}" aria-label="{{ side.label }} side faces {{ side.door }}">
+    <header class="neoermac-belt-side-heading">
+        <strong>{{ side.label }}</strong>
+        <span>FACES {{ side.door }}</span>
+    </header>
+    <div class="neoermac-belt-destination-row" data-belt-destination-position="{{ side.side }}">
+        {% for slot in side.slots %}
+        {% set selected_value = row|attr(slot.field) if slot.field else "" %}
+        {% call destination_select(row, slot, selected_value, destination_choices, can_edit) %}
+            {{ pull_times_display(selected_value, pull_time_lookup.get(selected_value, {})) }}
+        {% endcall %}
+        {% endfor %}
+    </div>
+</section>
+{%- endmacro %}
+
 {% block title %}BUILDING LINEUP | NeoErmac{% endblock %}
 
 {% block content %}
@@ -42,42 +59,30 @@
     <form class="neoermac-lineup-form" method="post" data-lineup-autosave-url="{{ url_for('neoermac.building_lineup_destination_autosave') }}">
         <div class="neoermac-runout-list">
             {% for row in rows %}
-            {% if loop.first %}
-            <div class="neoermac-sequence-door">{{ row.door_start }}</div>
-            {% endif %}
-            <article class="neoermac-runout-card neoermac-belt-group">
+            <article class="neoermac-runout-card neoermac-belt-group" data-door-pair="{{ row.belt_group_label }}">
+                <header class="neoermac-sequence-door neoermac-door-pair-boundary neoermac-door-pair-boundary--top" data-door-position="top" data-facing-side="east" data-supervising-door="{{ row.door_start }}">
+                    <span>{{ row.door_start }}</span>
+                </header>
                 <div class="neoermac-belt-grid-scroll">
                     <div class="neoermac-runout-slots neoermac-belt-grid" aria-label="{{ row.belt_group_label }} belt assignments">
                         {% for block in row.belt_blocks %}
-                        <div class="neoermac-belt-block neoermac-belt-block--{{ block.color_key }}" data-mobile-destination-slot="{{ block.slot_number }}" data-belt-color="{{ block.color_key }}">
-                            <div class="neoermac-belt-name">
-                                <span>BELT {{ block.belt_number }}</span>
-                                <strong>{{ block.label }}</strong>
-                            </div>
+                        <div class="neoermac-belt-block neoermac-belt-block--{{ block.color_key }}" data-mobile-destination-slot="{{ block.slot_number }}" data-physical-belt="{{ block.belt_number }}" data-belt-color="{{ block.color_key }}">
                             <div class="neoermac-belt-destination-stack" aria-label="{{ block.label }} destinations">
-                                {% for side in block.sides %}
-                                <section class="neoermac-belt-side" data-belt-side="{{ side.side }}" data-supervising-door="{{ side.door }}" aria-label="{{ side.label }} side faces {{ side.door }}">
-                                    <header class="neoermac-belt-side-heading">
-                                        <strong>{{ side.label }}</strong>
-                                        <span>FACES {{ side.door }}</span>
-                                    </header>
-                                    <div class="neoermac-belt-destination-row" data-belt-destination-position="{{ side.side }}">
-                                        {% for slot in side.slots %}
-                                        {% set selected_value = row|attr(slot.field) if slot.field else "" %}
-                                        {% call destination_select(row, slot, selected_value, destination_choices, can_edit) %}
-                                            {{ pull_times_display(selected_value, pull_time_lookup.get(selected_value, {})) }}
-                                        {% endcall %}
-                                        {% endfor %}
-                                    </div>
-                                </section>
-                                {% endfor %}
+                                {{ belt_side(row, block.sides[0], destination_choices, can_edit, pull_time_lookup) }}
+                                <div class="neoermac-belt-name" data-belt-axis>
+                                    <span>BELT {{ block.belt_number }}</span>
+                                    <strong>{{ block.label }}</strong>
+                                </div>
+                                {{ belt_side(row, block.sides[1], destination_choices, can_edit, pull_time_lookup) }}
                             </div>
                         </div>
                         {% endfor %}
                     </div>
                 </div>
+                <footer class="neoermac-sequence-door neoermac-door-pair-boundary neoermac-door-pair-boundary--bottom" data-door-position="bottom" data-facing-side="west" data-supervising-door="{{ row.door_end }}">
+                    <span>{{ row.door_end }}</span>
+                </footer>
             </article>
-            <div class="neoermac-sequence-door">{{ row.door_end }}</div>
             {% endfor %}
         </div>
 

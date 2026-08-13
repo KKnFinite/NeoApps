@@ -2673,7 +2673,14 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"1ST MIX", response.data)
         self.assertNotIn(b"2ND MIX", response.data)
         self.assertEqual(response.data.count(b"neoermac-belt-group"), 12)
-        self.assertEqual(response.data.count(b"neoermac-sequence-door"), 13)
+        self.assertEqual(response.data.count(b"data-door-pair="), 12)
+        self.assertEqual(response.data.count(b"neoermac-sequence-door"), 24)
+        self.assertEqual(response.data.count(b'data-door-position="top"'), 12)
+        self.assertEqual(response.data.count(b'data-door-position="bottom"'), 12)
+        self.assertEqual(response.data.count(b"data-physical-belt="), 24)
+        self.assertEqual(response.data.count(b"data-belt-axis"), 24)
+        self.assertEqual(response.data.count(b'data-belt-side="east"'), 24)
+        self.assertEqual(response.data.count(b'data-belt-side="west"'), 24)
         self.assertIn(b"neoermac-belt-block", response.data)
         self.assertIn(b"neoermac-belt-destination-stack", response.data)
         self.assertIn(b"neoermac-belt-destination-card", response.data)
@@ -2718,6 +2725,45 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b'<span class="neoermac-kicker"', response.data)
         self.assertIn(b"View Only", response.data)
         self.assertNotIn(b"SAVE BUILDING LINEUP", response.data)
+
+        html = response.data.decode()
+        first_pair = html.split('data-door-pair="D1-D4"', 1)[1].split(
+            "</article>",
+            1,
+        )[0]
+        first_belt = first_pair.split('data-physical-belt="1"', 1)[1].split(
+            'data-physical-belt="2"',
+            1,
+        )[0]
+        self.assertEqual(first_pair.count('data-door-position="top"'), 1)
+        self.assertEqual(first_pair.count('data-door-position="bottom"'), 1)
+        self.assertEqual(first_pair.count("data-physical-belt="), 2)
+        self.assertEqual(first_pair.count("data-lineup-assignment-slot="), 8)
+        self.assertLess(
+            first_pair.index('data-door-position="top"'),
+            first_pair.index('data-physical-belt="1"'),
+        )
+        self.assertLess(
+            first_pair.index('data-physical-belt="2"'),
+            first_pair.index('data-door-position="bottom"'),
+        )
+        self.assertLess(
+            first_belt.index('data-belt-side="east"'),
+            first_belt.index("data-belt-axis"),
+        )
+        self.assertLess(
+            first_belt.index("data-belt-axis"),
+            first_belt.index('data-belt-side="west"'),
+        )
+        self.assertEqual(first_belt.count("data-lineup-assignment-slot="), 4)
+        self.assertIn(
+            'data-belt-side="east" data-supervising-door="D1"',
+            first_belt,
+        )
+        self.assertIn(
+            'data-belt-side="west" data-supervising-door="D4"',
+            first_belt,
+        )
 
     def test_building_lineup_displays_planned_pull_times_for_assigned_destination(self):
         self._add_master_departure(
@@ -2852,7 +2898,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("02:05", second_card)
         self.assertIn("02:35", second_card)
 
-    def test_building_lineup_mobile_stacked_destination_pairs_include_pull_times(self):
+    def test_building_lineup_mobile_preserves_physical_orientation_and_scrolls(self):
         self._add_master_departure("UPS213", "SDF")
         self._add_master_departure("UPS214", "ONT")
         self._assign_lineup_destination("green_runout", "east_destination_1", "SDF")
@@ -2887,6 +2933,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn("neoermac-mobile-belt-topline", html)
         self.assertIn('data-mobile-destination-slot="1"', html)
         self.assertIn('data-mobile-destination-slot="2"', html)
+        self.assertIn('data-door-pair="D1-D4"', html)
+        self.assertIn('data-door-position="top" data-facing-side="east"', html)
+        self.assertIn('data-door-position="bottom" data-facing-side="west"', html)
         self.assertIn("neoermac-belt-destination-stack", html)
         self.assertGreaterEqual(html.count("neoermac-belt-destination-card"), 4)
         self.assertIn("neoermac-slot-pull-times", left_pair)
@@ -2897,19 +2946,35 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("02:35", right_pair)
         self.assertNotIn("neoermac-mobile-slot-belt-name", html)
         self.assertIn(
-            ".neoermac-belt-block .neoermac-belt-name {\n"
-            "        display: grid;",
+            ".neoermac-lineup-shell .neoermac-runout-list {\n"
+            "        display: flex;",
             css,
         )
+        self.assertIn("overflow-x: auto;", css)
+        self.assertIn("scroll-snap-type: x proximity;", css)
+        self.assertIn("flex: 0 0 clamp(460px, 128vw, 520px);", css)
         self.assertIn(
-            ".neoermac-belt-block .neoermac-belt-side > "
-            ".neoermac-belt-destination-row {\n"
-            "        display: grid;",
+            ".neoermac-lineup-shell .neoermac-belt-group "
+            ".neoermac-belt-grid {\n"
+            "        grid-template-columns: repeat(2, minmax(0, 1fr));",
             css,
         )
-        self.assertIn(
-            "grid-template-columns: repeat(2, minmax(0, 1fr));",
-            css,
+
+        first_pair = html.split('data-door-pair="D1-D4"', 1)[1].split(
+            "</article>",
+            1,
+        )[0]
+        first_belt = first_pair.split('data-physical-belt="1"', 1)[1].split(
+            'data-physical-belt="2"',
+            1,
+        )[0]
+        self.assertLess(
+            first_belt.index('data-belt-side="east"'),
+            first_belt.index("data-belt-axis"),
+        )
+        self.assertLess(
+            first_belt.index("data-belt-axis"),
+            first_belt.index('data-belt-side="west"'),
         )
 
     def test_building_lineup_missing_pull_times_show_clean_blanks(self):
