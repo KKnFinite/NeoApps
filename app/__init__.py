@@ -522,6 +522,18 @@ def register_request_guards(app):
         ):
             return None
 
+        from app.services.operational_request_policy import (
+            is_lightweight_live_state_request,
+        )
+
+        if is_lightweight_live_state_request(
+            request.endpoint,
+            request.method,
+            request.args,
+        ):
+            g.is_lightweight_live_state_request = True
+            return None
+
         from app.services.access_control import get_current_gateway
         from app.services.operation_lifecycle import ensure_operational_sort_operations
 

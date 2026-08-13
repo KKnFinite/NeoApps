@@ -1,6 +1,7 @@
 from datetime import date, datetime, time, timedelta
 import json
 import unittest
+from unittest.mock import patch
 
 from app import create_app
 from app.extensions import db
@@ -158,6 +159,39 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(refresh["auto_refresh_enabled"])
         self.assertEqual(refresh["reason"], "historical_sort")
+
+    def test_planning_live_state_skips_global_lifecycle_maintenance(self):
+        with (
+            patch(
+                "app.services.operation_lifecycle.ensure_operational_sort_operations"
+            ) as lifecycle,
+            patch(
+                "app.services.unmatched_review_alerts.expire_unmatched_review_alerts"
+            ) as alert_expiration,
+        ):
+            response = self.client.get(self._state_url("arrival"))
+
+        self.assertEqual(response.status_code, 200)
+        lifecycle.assert_not_called()
+        alert_expiration.assert_not_called()
+
+    def test_normal_planning_page_keeps_global_lifecycle_maintenance(self):
+        with (
+            patch(
+                "app.services.operation_lifecycle.ensure_operational_sort_operations"
+            ) as lifecycle,
+            patch(
+                "app.services.unmatched_review_alerts.expire_unmatched_review_alerts",
+                return_value=False,
+            ) as alert_expiration,
+        ):
+            response = self.client.get(
+                f"/motherbrain/operations/{self.operation.id}/alp/arrival"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        lifecycle.assert_called_once_with(self.gateway)
+        alert_expiration.assert_called_once_with(self.gateway)
 
     def test_stale_mission_save_returns_structured_field_conflict(self):
         mission = self._mission(

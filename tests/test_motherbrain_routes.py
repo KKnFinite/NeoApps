@@ -12965,7 +12965,44 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("tails", payload)
         self.assertIn("slots", payload)
         self.assertIn("tail_cards", payload["fragments"])
-        context_mock.assert_called_once_with(self.rfd_gateway, operation=operation)
+        context_mock.assert_called_once_with(
+            self.rfd_gateway,
+            operation=operation,
+            sync_physical_alerts=False,
+        )
+
+    def test_parking_plan_live_state_does_not_synchronize_alert_records(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        self._parking_assignment(operation, "N457UP", "A01")
+        db.session.commit()
+
+        with patch(
+            "app.services.parking_plan.sync_parking_physical_alerts"
+        ) as alert_sync:
+            response = self.client.get(
+                f"/motherbrain/parking-plan/{operation.id}/state"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        alert_sync.assert_not_called()
+
+    def test_parking_plan_page_still_synchronizes_alert_records(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        self._parking_assignment(operation, "N457UP", "A01")
+        db.session.commit()
+
+        with patch(
+            "app.services.parking_plan.sync_parking_physical_alerts",
+            return_value={"changed": False, "active_keys": []},
+        ) as alert_sync:
+            response = self.client.get(
+                f"/motherbrain/parking-plan/{operation.id}"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        alert_sync.assert_called_once()
 
     def test_parking_plan_revision_tracks_all_persisted_refresh_inputs(self):
         operation = self._parking_operation()

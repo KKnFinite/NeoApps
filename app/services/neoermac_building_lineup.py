@@ -86,7 +86,7 @@ def get_outbound_door_options():
     return OUTBOUND_DOOR_OPTIONS
 
 
-def get_building_lineup_rows(gateway):
+def get_building_lineup_rows(gateway, *, initialize=True):
     existing_rows = {
         row.runout_key: row
         for row in NeoErmacBuildingLineup.query.filter_by(gateway_id=gateway.id).all()
@@ -102,13 +102,15 @@ def get_building_lineup_rows(gateway):
                 runout_key=runout_key,
                 runout_name=runout_name,
             )
-            db.session.add(row)
-        else:
+            if initialize:
+                db.session.add(row)
+        elif initialize:
             row.runout_name = runout_name
         apply_belt_display_metadata(row, start_door, end_door, belt_names)
         rows.append(row)
 
-    db.session.flush()
+    if initialize:
+        db.session.flush()
     return rows
 
 
@@ -209,19 +211,22 @@ def get_building_lineup_doors_by_destination(gateway):
     }
 
 
-def get_building_lineup_assignments(gateway, include_blank=False):
+def get_building_lineup_assignments(gateway, include_blank=False, *, initialize=True):
     assignments = []
-    for row in get_building_lineup_rows(gateway):
+    for row in get_building_lineup_rows(gateway, initialize=initialize):
         assignments.extend(
             building_lineup_slot_descriptors(row, include_blank=include_blank)
         )
     return tuple(assignments)
 
 
-def get_building_lineup_destinations_for_door(gateway, door):
+def get_building_lineup_destinations_for_door(gateway, door, *, initialize=True):
     door = str(door or "").strip().upper()
     destinations = {}
-    for assignment in get_building_lineup_assignments(gateway):
+    for assignment in get_building_lineup_assignments(
+        gateway,
+        initialize=initialize,
+    ):
         if assignment["supervising_door"] != door:
             continue
         labels = destinations.setdefault(assignment["destination"], [])

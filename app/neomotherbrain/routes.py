@@ -1095,7 +1095,11 @@ def parking_plan_live_state_endpoint(operation_id):
         response.headers["Cache-Control"] = "no-store"
         return response
 
-    context = parking_plan_context(gateway, operation=operation)
+    context = parking_plan_context(
+        gateway,
+        operation=operation,
+        sync_physical_alerts=False,
+    )
     live_context = _parking_plan_live_context(
         gateway,
         context,
@@ -1103,9 +1107,6 @@ def parking_plan_live_state_endpoint(operation_id):
         live_update_status=live_update_status,
     )
     state = live_context["parking_live_state"]
-    if context.get("parking_physical_alert_sync", {}).get("changed"):
-        db.session.commit()
-
     changed = client_revision != state["revision"]
     payload = {
         "ok": True,

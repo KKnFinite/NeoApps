@@ -448,7 +448,6 @@ def discharge_state():
     gateway = get_current_gateway()
     state = discharge_state_payload(gateway)
     state["refresh"] = neosektor_refresh_status(gateway)
-    db.session.commit()
     return jsonify({"ok": True, "state": state})
 
 

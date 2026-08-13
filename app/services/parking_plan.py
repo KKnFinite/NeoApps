@@ -100,7 +100,7 @@ def parking_plan_landing_context(gateway):
     }
 
 
-def parking_plan_context(gateway, operation=None):
+def parking_plan_context(gateway, operation=None, *, sync_physical_alerts=True):
     operation = operation or current_active_sort_operation(gateway)
     if not operation:
         return {
@@ -136,7 +136,11 @@ def parking_plan_context(gateway, operation=None):
         "has_conflicts"
     ]
     parking_status["is_clean"] = not parking_status["has_warnings"]
-    alert_sync = sync_parking_physical_alerts(gateway, operation, physical_validation)
+    alert_sync = (
+        sync_parking_physical_alerts(gateway, operation, physical_validation)
+        if sync_physical_alerts
+        else {"changed": False, "active_keys": [], "skipped": True}
+    )
     summary = _summary_for_rows(tail_rows)
     summary["conflict_count"] = parking_status["conflict_count"]
 

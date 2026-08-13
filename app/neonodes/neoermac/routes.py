@@ -360,21 +360,11 @@ def door_view_state():
             operation=operation,
             refresh_status=refresh_status,
             revision=revision,
+            initialize_lineup=False,
         )
-        # Full construction may seed missing lineup rows. Return a revision for
-        # the state actually delivered, not the pre-build database snapshot.
-        db.session.flush()
-        revision = door_view_poll_revision(
-            gateway,
-            selected_door,
-            current_user.id,
-            operation=operation,
-        )
-        state["revision"] = revision
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
-    db.session.commit()
     return jsonify(
         {
             "ok": True,

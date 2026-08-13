@@ -120,6 +120,25 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn(b"motherbrain-header-nav", response.data)
         self.assertNotIn(b"data-neosektor-internal-menu", response.data)
 
+    def test_discharge_live_state_skips_global_lifecycle_and_does_not_commit(self):
+        self._login_approved_user(role="operator")
+
+        with (
+            patch(
+                "app.services.operation_lifecycle.ensure_operational_sort_operations"
+            ) as lifecycle,
+            patch(
+                "app.services.unmatched_review_alerts.expire_unmatched_review_alerts"
+            ) as alert_expiration,
+            patch("app.neonodes.neosektor.routes.db.session.commit") as commit,
+        ):
+            response = self.client.get("/neosektor/discharge/state")
+
+        self.assertEqual(response.status_code, 200)
+        lifecycle.assert_not_called()
+        alert_expiration.assert_not_called()
+        commit.assert_not_called()
+
     def test_neosektor_desktop_dashboard_uses_compact_tiles_without_sidebar_context_card(self):
         self._login_approved_user(role="operator")
 

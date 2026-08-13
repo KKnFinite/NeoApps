@@ -2637,6 +2637,26 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotEqual(after_pull["revision"], payload["revision"])
         self.assertTrue(after_pull["state"]["destinations"][0]["no_pull"]["pure"])
 
+    def test_door_view_state_does_not_seed_missing_lineup_rows(self):
+        NeoErmacBuildingLineup.query.delete()
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view/state?door=D34")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(NeoErmacBuildingLineup.query.count(), 0)
+
+    def test_door_view_page_still_initializes_missing_lineup_rows(self):
+        NeoErmacBuildingLineup.query.delete()
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view?door=D34")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreater(NeoErmacBuildingLineup.query.count(), 0)
+
     def test_door_view_changed_state_bulk_loads_door_pulls_once(self):
         from app.services.neoermac_door_view import door_view_uld_state
 
@@ -3436,6 +3456,47 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("refresh", payload)
         full_context.assert_not_called()
         self.assertIn(b'pollUrl.searchParams.set("revision", currentRevision)', page.data)
+
+    def test_view_outbound_only_skips_lifecycle_for_revision_poll(self):
+        self._add_operation_departure("UPS501", "SDF", tail="N501UP")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        with (
+            patch(
+                "app.services.operation_lifecycle.ensure_operational_sort_operations"
+            ) as lifecycle,
+            patch(
+                "app.services.unmatched_review_alerts.expire_unmatched_review_alerts",
+                return_value=False,
+            ) as alert_expiration,
+        ):
+            page = self.client.get("/neoermac/view-outbound")
+
+        self.assertEqual(page.status_code, 200)
+        lifecycle.assert_called_once_with(self.gateway)
+        alert_expiration.assert_called_once_with(self.gateway)
+        revision = re.search(
+            rb'data-outbound-revision="([a-f0-9]+)"',
+            page.data,
+        ).group(1).decode()
+
+        with (
+            patch(
+                "app.services.operation_lifecycle.ensure_operational_sort_operations"
+            ) as lifecycle,
+            patch(
+                "app.services.unmatched_review_alerts.expire_unmatched_review_alerts"
+            ) as alert_expiration,
+        ):
+            poll = self.client.get(
+                "/neoermac/view-outbound?revision=" + revision,
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+
+        self.assertEqual(poll.status_code, 200)
+        lifecycle.assert_not_called()
+        alert_expiration.assert_not_called()
 
     def test_view_outbound_changed_revision_returns_updated_html(self):
         from app.services.neoermac_building_lineup import get_building_lineup_rows

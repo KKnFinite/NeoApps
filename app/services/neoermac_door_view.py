@@ -328,6 +328,7 @@ def door_view_uld_state(
     operation=_OPERATION_UNSET,
     refresh_status=None,
     revision=None,
+    initialize_lineup=True,
 ):
     selected_door = normalize_door(selected_door)
     if not selected_door:
@@ -350,6 +351,7 @@ def door_view_uld_state(
         selected_door,
         operation,
         door_pulls=door_pulls,
+        initialize_lineup=initialize_lineup,
     )
     state = door_uld_state_payload(gateway, selected_door, operation=operation)
     workspace = uld_workspace_state_payload(
@@ -374,6 +376,7 @@ def door_view_uld_state(
         supervised_doors,
         operation=operation,
         door_pulls=door_pulls,
+        initialize_lineup=initialize_lineup,
     )
     return state
 
@@ -398,6 +401,7 @@ def door_tab_pull_alerts(
     supervised_doors,
     operation=None,
     door_pulls=_DOOR_PULL_LOOKUP_UNSET,
+    initialize_lineup=True,
 ):
     """Summarize unresolved pull urgency for supervised Door View tabs."""
     available_doors = set(get_door_options(gateway))
@@ -414,7 +418,10 @@ def door_tab_pull_alerts(
         return result
 
     destinations_by_door = {door: set() for door in doors}
-    for assignment in get_building_lineup_assignments(gateway):
+    for assignment in get_building_lineup_assignments(
+        gateway,
+        initialize=initialize_lineup,
+    ):
         door = assignment["supervising_door"]
         if door in destinations_by_door and assignment["destination"]:
             destinations_by_door[door].add(assignment["destination"])
@@ -662,8 +669,13 @@ def _destination_cards_for_door(
     selected_door,
     operation,
     door_pulls=_DOOR_PULL_LOOKUP_UNSET,
+    initialize_lineup=True,
 ):
-    destination_slots = _destination_slots_for_door(gateway, selected_door)
+    destination_slots = _destination_slots_for_door(
+        gateway,
+        selected_door,
+        initialize_lineup=initialize_lineup,
+    )
     missions = _missions_by_destination(gateway, operation)
     parking_by_tail = _parking_assignments_by_tail(operation)
     arrivals_by_tail = arrival_presence_by_tail(operation)
@@ -792,12 +804,13 @@ def _effective_pull_sort_key(operation, planned_time):
     return (0, int((planned_local - start_local).total_seconds()))
 
 
-def _destination_slots_for_door(gateway, selected_door):
+def _destination_slots_for_door(gateway, selected_door, *, initialize_lineup=True):
     return dict(
         sorted(
             get_building_lineup_destinations_for_door(
                 gateway,
                 selected_door,
+                initialize=initialize_lineup,
             ).items()
         )
     )
