@@ -12918,11 +12918,114 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("refresh", payload)
         self.assertIn("tail_cards", payload["fragments"])
 
-        unchanged = self.client.get(
-            f"/motherbrain/parking-plan/{operation.id}/state?revision={expected_revision}"
-        ).get_json()
+        with patch("app.neomotherbrain.routes.parking_plan_context") as context_mock:
+            unchanged_response = self.client.get(
+                f"/motherbrain/parking-plan/{operation.id}/state?revision={expected_revision}"
+            )
+        unchanged = unchanged_response.get_json()
+        self.assertEqual(unchanged_response.status_code, 200)
         self.assertFalse(unchanged["changed"])
+        self.assertEqual(unchanged["revision"], expected_revision)
+        self.assertIn("refresh", unchanged)
+        self.assertIn("can_edit", unchanged)
+        self.assertNotIn("operation", unchanged)
+        self.assertNotIn("summary", unchanged)
+        self.assertNotIn("conflicts", unchanged)
+        self.assertNotIn("tails", unchanged)
+        self.assertNotIn("slots", unchanged)
         self.assertNotIn("fragments", unchanged)
+        context_mock.assert_not_called()
+
+    def test_parking_plan_live_state_change_runs_full_payload_pipeline(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        assignment = self._parking_assignment(operation, "N457UP", "A01")
+        db.session.commit()
+        original_revision = parking_plan_revision(operation)
+
+        assignment.position_code = "A02"
+        db.session.commit()
+
+        with patch(
+            "app.neomotherbrain.routes.parking_plan_context",
+            wraps=parking_plan_context,
+        ) as context_mock:
+            response = self.client.get(
+                f"/motherbrain/parking-plan/{operation.id}/state"
+                f"?revision={original_revision}"
+            )
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["changed"])
+        self.assertNotEqual(payload["revision"], original_revision)
+        self.assertIn("operation", payload)
+        self.assertIn("summary", payload)
+        self.assertIn("conflicts", payload)
+        self.assertIn("tails", payload)
+        self.assertIn("slots", payload)
+        self.assertIn("tail_cards", payload["fragments"])
+        context_mock.assert_called_once_with(self.rfd_gateway, operation=operation)
+
+    def test_parking_plan_revision_tracks_all_persisted_refresh_inputs(self):
+        operation = self._parking_operation()
+        arrival, _departure = self._parking_pair(
+            operation,
+            "N457UP",
+            destination="LAX",
+        )
+        assignment = self._parking_assignment(operation, "N457UP", "A01")
+        tail_state = SortDateTailState.query.filter_by(
+            sort_date=operation.sort_date,
+            gateway_code=operation.gateway_code,
+            sort_name=operation.sort_name,
+            tail_number="N457UP",
+        ).one()
+        parking_settings = MotherBrainParkingSettings(
+            gateway_id=self.rfd_gateway.id,
+            gateway_code=self.rfd_gateway.code,
+        )
+        parking_rule = self._parking_rule(
+            BLOCKED_PARKING_POSITION,
+            "position",
+            "B01",
+            "B",
+        )
+        timeline_settings = SortTimelineSettings.query.filter_by(
+            gateway_id=self.rfd_gateway.id
+        ).one()
+        db.session.add(parking_settings)
+        db.session.commit()
+
+        revision = parking_plan_revision(operation)
+
+        def assert_revision_changes(entity, field_name, value):
+            nonlocal revision
+            setattr(entity, field_name, value)
+            db.session.commit()
+            next_revision = parking_plan_revision(operation)
+            self.assertNotEqual(next_revision, revision, field_name)
+            revision = next_revision
+
+        assert_revision_changes(operation, "window_minutes", 7)
+        assert_revision_changes(assignment, "position_code", "A02")
+        assert_revision_changes(tail_state, "deice_status", "required")
+        assert_revision_changes(
+            arrival,
+            "eta_datetime_utc",
+            datetime(2026, 6, 19, 0, 5),
+        )
+        assert_revision_changes(parking_rule, "active", False)
+        assert_revision_changes(
+            parking_settings,
+            "prevent_a300_in_position_5",
+            False,
+        )
+        assert_revision_changes(timeline_settings, "taxi_to_ramp_minutes", 15)
+
+        db.session.delete(assignment)
+        db.session.commit()
+        self.assertNotEqual(parking_plan_revision(operation), revision)
 
     def test_parking_plan_stale_source_move_returns_structured_conflict(self):
         operation = self._parking_operation()

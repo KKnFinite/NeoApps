@@ -2,7 +2,7 @@ import hashlib
 import json
 from datetime import date, datetime, time
 
-from sqlalchemy import func
+from sqlalchemy import func, literal, select, union_all
 
 from app.extensions import db
 from app.models import (
@@ -11,6 +11,7 @@ from app.models import (
     SortDateMission,
     SortDateParkingAssignment,
     SortDateTailState,
+    SortTimelineSettings,
 )
 from app.services.live_collaboration import entity_version
 from app.services.parking_plan import PARKING_LANES, PARKING_RAMP_GROUPS
@@ -33,7 +34,14 @@ class ParkingStateConflict(Exception):
         super().__init__(message)
 
 
-def parking_plan_live_state(operation, *, tail_rows, summary, parking_status):
+def parking_plan_live_state(
+    operation,
+    *,
+    tail_rows,
+    summary,
+    parking_status,
+    revision=None,
+):
     """Build compact, stable parking state for browser reconciliation."""
     assignments = (
         SortDateParkingAssignment.query.filter_by(
@@ -138,7 +146,7 @@ def parking_plan_live_state(operation, *, tail_rows, summary, parking_status):
                 slots_by_id[slot_id] = slot
 
     conflicts = _safe_conflicts(parking_status)
-    revision = parking_plan_revision(operation)
+    revision = revision if revision is not None else parking_plan_revision(operation)
     return {
         "revision": revision,
         "operation": {
@@ -281,36 +289,71 @@ def optimizer_revision_conflict(operation, expected_revision):
 
 
 def parking_plan_revision(operation):
-    assignments = (
-        SortDateParkingAssignment.query.filter_by(sort_date_operation_id=operation.id)
-        .order_by(SortDateParkingAssignment.id.asc())
-        .all()
+    """Return a compact fingerprint for every persisted Parking Plan input."""
+    aggregate_queries = (
+        _revision_aggregate_query(
+            "assignments",
+            SortDateParkingAssignment,
+            SortDateParkingAssignment.sort_date_operation_id == operation.id,
+        ),
+        _revision_aggregate_query(
+            "tail_states",
+            SortDateTailState,
+            SortDateTailState.sort_date == operation.sort_date,
+            SortDateTailState.gateway_code == operation.gateway_code,
+            SortDateTailState.sort_name == operation.sort_name,
+        ),
+        _revision_aggregate_query(
+            "missions",
+            SortDateMission,
+            SortDateMission.sort_date_operation_id == operation.id,
+        ),
+        _revision_aggregate_query(
+            "rules",
+            MotherBrainParkingRule,
+            MotherBrainParkingRule.gateway_id == operation.gateway_id,
+        ),
+        _revision_aggregate_query(
+            "parking_settings",
+            MotherBrainParkingSettings,
+            MotherBrainParkingSettings.gateway_id == operation.gateway_id,
+        ),
+        _revision_aggregate_query(
+            "timeline_settings",
+            SortTimelineSettings,
+            SortTimelineSettings.gateway_id == operation.gateway_id,
+        ),
     )
-    tail_states = (
-        SortDateTailState.query.filter_by(
-            sort_date=operation.sort_date,
-            gateway_code=operation.gateway_code,
-            sort_name=operation.sort_name,
-        )
-        .order_by(SortDateTailState.id.asc())
-        .all()
-    )
-    missions = (
-        SortDateMission.query.filter_by(sort_date_operation_id=operation.id)
-        .order_by(SortDateMission.id.asc())
-        .all()
+    aggregate_rows = sorted(
+        db.session.execute(union_all(*aggregate_queries)).all(),
+        key=lambda row: row.source,
     )
     return _digest(
         {
             "operation_id": operation.id,
             "operation_version": entity_version(operation),
-            "assignments": [_assignment_revision_values(row) for row in assignments],
-            "tail_states": [_tail_state_revision_values(row) for row in tail_states],
-            "missions": [_mission_revision_values(row) for row in missions],
-            "rules": _parking_rule_revision_values(operation.gateway_id),
-            "settings": _parking_settings_revision_values(operation.gateway_id),
+            "inputs": [
+                {
+                    "source": row.source,
+                    "row_count": int(row.row_count or 0),
+                    "max_id": int(row.max_id or 0),
+                    "id_sum": int(row.id_sum or 0),
+                    "latest_updated_at": _value_token(row.latest_updated_at),
+                }
+                for row in aggregate_rows
+            ],
         }
     )
+
+
+def _revision_aggregate_query(source, model, *criteria):
+    return select(
+        literal(source).label("source"),
+        func.count(model.id).label("row_count"),
+        func.max(model.id).label("max_id"),
+        func.coalesce(func.sum(model.id), 0).label("id_sum"),
+        func.max(model.updated_at).label("latest_updated_at"),
+    ).where(*criteria)
 
 
 def _assignment_for_tail_locked(operation, tail_number):
@@ -384,41 +427,6 @@ def _mission_revision_values(row):
         "eta": _value_token(row.eta_datetime_utc),
         "arrival_status": row.arrival_status or "",
         "departure_status": row.departure_status or "",
-        "updated_at": _value_token(row.updated_at),
-    }
-
-
-def _parking_rule_revision_values(gateway_id):
-    if not gateway_id:
-        return []
-    return [
-        {
-            "id": row.id,
-            "active": bool(row.active),
-            "updated_at": _value_token(row.updated_at),
-        }
-        for row in MotherBrainParkingRule.query.filter_by(gateway_id=gateway_id)
-        .order_by(MotherBrainParkingRule.id.asc())
-        .all()
-    ]
-
-
-def _parking_settings_revision_values(gateway_id):
-    if not gateway_id:
-        return None
-    row = MotherBrainParkingSettings.query.filter_by(gateway_id=gateway_id).first()
-    if not row:
-        return None
-    return {
-        "id": row.id,
-        "include_remote": bool(row.include_remote_default),
-        "include_throat": bool(row.include_throat_default),
-        "deice_spacing": row.deice_spacing_threshold_minutes,
-        "preferred_max": row.preferred_max_per_ramp,
-        "inbound_spacing": row.inbound_same_ramp_spacing_minutes,
-        "prevent_767_a300": bool(row.prevent_767_adjacent_to_a300),
-        "force_767_4_8": bool(row.force_767_to_position_4_8),
-        "prevent_a300_5": bool(row.prevent_a300_in_position_5),
         "updated_at": _value_token(row.updated_at),
     }
 

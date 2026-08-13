@@ -131,6 +131,7 @@ from app.services.parking_plan_collaboration import (
     ParkingStateConflict,
     optimizer_revision_conflict,
     parking_plan_live_state,
+    parking_plan_revision,
     parking_snapshot_from_form,
     validate_parking_move_snapshot,
     validate_parking_source_snapshot,
@@ -994,13 +995,36 @@ def parking_plan_live_state_endpoint(operation_id):
     if denied:
         return denied
     operation = _parking_plan_operation_or_404(gateway, operation_id)
+    client_revision = str(request.args.get("revision") or "").strip()
+    current_revision = parking_plan_revision(operation)
+    live_update_status = node_auto_refresh_status(
+        gateway,
+        operation=operation,
+    )
+    if client_revision and client_revision == current_revision:
+        response = jsonify(
+            {
+                "ok": True,
+                "changed": False,
+                "revision": current_revision,
+                "refresh": live_update_status,
+                "can_edit": user_can(PARKING_PLAN_EDIT_PERMISSION),
+            }
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     context = parking_plan_context(gateway, operation=operation)
-    live_context = _parking_plan_live_context(gateway, context)
+    live_context = _parking_plan_live_context(
+        gateway,
+        context,
+        revision=current_revision,
+        live_update_status=live_update_status,
+    )
     state = live_context["parking_live_state"]
     if context.get("parking_physical_alert_sync", {}).get("changed"):
         db.session.commit()
 
-    client_revision = str(request.args.get("revision") or "").strip()
     changed = client_revision != state["revision"]
     payload = {
         "ok": True,
@@ -1338,20 +1362,24 @@ def _parking_plan_operation_for_action(gateway, operation_id=None):
     return current_active_sort_operation(gateway)
 
 
-def _parking_plan_live_context(gateway, context):
+def _parking_plan_live_context(
+    gateway,
+    context,
+    revision=None,
+    live_update_status=None,
+):
     operation = context["operation"]
     state = parking_plan_live_state(
         operation,
         tail_rows=context["tail_rows"],
         summary=context["summary"],
         parking_status=context["parking_status"],
+        revision=revision,
     )
     return {
         "parking_live_state": state,
-        "live_update_status": node_auto_refresh_status(
-            gateway,
-            operation=operation,
-        ),
+        "live_update_status": live_update_status
+        or node_auto_refresh_status(gateway, operation=operation),
     }
 
 
