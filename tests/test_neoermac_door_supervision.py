@@ -236,8 +236,8 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
         self.assertIn(b"D13", page.data)
         self.assertIn(b"SETUP", page.data)
         self.assertLess(
-            rendered.index(b"data-uld-workspace"),
             rendered.index(b"OUTBOUND PULLS"),
+            rendered.index(b"data-uld-workspace"),
         )
 
     def test_uld_workspace_combines_supervised_activity_and_own_unsupervised_activity(self):
@@ -380,7 +380,8 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", css)
         self.assertIn("max-width: 100%;", css)
         self.assertIn(".neoermac-door-shell {", css)
-        self.assertIn("overflow-x: hidden;", css)
+        self.assertIn(".neoermac-door-fixed-controls {", css)
+        self.assertIn("position: sticky;", css)
 
     def _add_operation(self, sort_date):
         operation = SortDateOperation(

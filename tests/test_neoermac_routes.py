@@ -750,8 +750,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertLess(row_html.index(b"N123UP"), row_html.index(b"Scheduled"))
         self.assertNotIn(b'class="neoermac-door-flight"', response.data)
         self.assertLess(response.data.index(b"N123UP"), response.data.index(b"ONT"))
+        self.assertIn(b"data-door-fixed-controls", response.data)
+        self.assertIn(b"data-door-pull-content", response.data)
         self.assertIn(b"neoermac-door-support-stack", response.data)
-        self.assertLess(response.data.index(b"neoermac-door-support-stack"), response.data.index(b"OUTBOUND PULLS"))
+        self.assertLess(response.data.index(b"data-door-fixed-controls"), response.data.index(b"OUTBOUND PULLS"))
+        self.assertLess(response.data.index(b"OUTBOUND PULLS"), response.data.index(b"data-uld-workspace"))
+        self.assertLess(response.data.index(b"REQUEST ULDS"), response.data.index(b"ACTIVE REQUESTS"))
+        self.assertLess(response.data.index(b"ACTIVE REQUESTS"), response.data.index(b"ON THE WAY"))
         self.assertIn(b"REQUEST ULDS", response.data)
         self.assertIn(b"No tugs assigned yet.", response.data)
         self.assertIn(b"No relevant on-the-way events.", response.data)
@@ -2198,6 +2203,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"neoermac-none-toggle neoermac-large-checkbox-toggle", response.data)
         self.assertIn(b'class="neoermac-label-mobile">NO</span>', response.data)
         self.assertNotIn(b'class="neoermac-label-mobile">NONE</span>', response.data)
+        self.assertIn(b"data-door-fixed-controls", response.data)
+        self.assertIn(b"data-operation-refresh-banner", response.data)
+        self.assertIn(b"data-door-supervision", response.data)
+        self.assertIn(b"data-door-supervision-open", response.data)
         self.assertEqual(response.data.count(b"neoermac-uld-type-label"), 3)
         self.assertIn(b'<span class="neoermac-uld-type-label">A2</span>', response.data)
         self.assertIn(b'<span class="neoermac-uld-type-label">A1</span>', response.data)
@@ -2217,6 +2226,21 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("font-size: 16px", css)
         self.assertIn("font-size: 0.74rem", css)
         self.assertIn("font-size: 0.84rem", css)
+        door_shell_block = css.split(".neoermac-door-shell {", 1)[1].split("}", 1)[0]
+        self.assertIn("border: 0;", door_shell_block)
+        self.assertIn("border-radius: 0;", door_shell_block)
+        self.assertIn("background: transparent;", door_shell_block)
+        self.assertIn("box-shadow: none;", door_shell_block)
+        self.assertIn(
+            "body.blueprint-neoermac.mobile-app-chrome .neoermac-door-fixed-controls {",
+            css,
+        )
+        sticky_controls_block = css.split(
+            "body.blueprint-neoermac.mobile-app-chrome .neoermac-door-fixed-controls {",
+            1,
+        )[1].split("}", 1)[0]
+        self.assertIn("position: sticky;", sticky_controls_block)
+        self.assertIn("max-width: 100%;", sticky_controls_block)
 
     def test_door_view_request_inputs_remain_clean_after_submission(self):
         self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
