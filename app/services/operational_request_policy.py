@@ -6,6 +6,7 @@ from __future__ import annotations
 LIGHTWEIGHT_LIVE_STATE_ENDPOINTS = frozenset(
     {
         "neoermac.door_view_state",
+        "neoermac.upcoming_pulls_state",
         "neomotherbrain.parking_plan_live_state_endpoint",
         "neomotherbrain.planning_live_state",
         "neosektor.discharge_state",

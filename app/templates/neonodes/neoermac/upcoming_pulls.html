@@ -4,17 +4,103 @@
 {% block title %}Upcoming Pulls | NeoErmac{% endblock %}
 
 {% block content %}
-<section class="neoermac-shell neoermac-dashboard-shell neoermac-upcoming-shell" aria-label="NeoErmac upcoming pulls">
+<section
+    class="neoermac-shell neoermac-dashboard-shell neoermac-upcoming-shell"
+    aria-label="NeoErmac upcoming pulls"
+    data-neoermac-upcoming-live
+    data-state-url="{{ url_for('neoermac.upcoming_pulls_state') }}"
+    data-upcoming-revision="{{ upcoming_pulls_revision }}"
+    data-refresh-active="{{ 'true' if dashboard_context.refresh_status.auto_refresh_enabled else 'false' }}"
+>
     <div class="neoermac-hero neoermac-upcoming-hero mobile-shell-duplicate-title">
         <h1>UPCOMING PULLS</h1>
     </div>
 
     {% set operation_refresh_status = dashboard_context.refresh_status %}
     {% set operation_refresh_class = "neoermac-refresh-paused" %}
-    {% include "neonodes/_operation_refresh_reload.html" %}
+    {% set operation_refresh_hook = "neoermac-upcoming-refresh-paused" %}
+    {% include "neonodes/_operation_refresh_banner.html" %}
 
-    <section class="neoermac-dashboard-panel neoermac-upcoming-panel" aria-label="NeoErmac current sort dashboard">
+    <section
+        class="neoermac-dashboard-panel neoermac-upcoming-panel"
+        aria-label="NeoErmac current sort dashboard"
+        data-upcoming-pulls-board-host
+    >
         {% include "neonodes/neoermac/_upcoming_pulls_board.html" %}
     </section>
 </section>
+{% if dashboard_context.refresh_status.auto_refresh_enabled %}
+<script data-upcoming-pulls-live-updates>
+(() => {
+    const root = document.querySelector("[data-neoermac-upcoming-live]");
+    if (!root || root.dataset.refreshActive !== "true") {
+        return;
+    }
+    const boardHost = root.querySelector("[data-upcoming-pulls-board-host]");
+    if (!boardHost) {
+        return;
+    }
+
+    let currentRevision = root.dataset.upcomingRevision || "";
+    let controller = null;
+    const initialStatus = {{ dashboard_context.refresh_status|tojson }};
+
+    const applyRefreshStatus = (status) => {
+        const refresh = status || {};
+        const enabled = refresh.auto_refresh_enabled !== false;
+        const banner = root.querySelector("[data-operation-refresh-banner]");
+        if (banner) {
+            if (!enabled && refresh.message) {
+                banner.replaceChildren(document.createTextNode(refresh.message));
+                if (refresh.operation_label && refresh.window_label) {
+                    const detail = document.createElement("span");
+                    detail.textContent = `${refresh.operation_label} \u00b7 ${refresh.window_label}`;
+                    banner.appendChild(detail);
+                }
+            }
+            banner.hidden = enabled;
+        }
+        root.dataset.refreshActive = enabled ? "true" : "false";
+        controller.setServerStatus(refresh);
+    };
+
+    const poll = async () => {
+        const pollUrl = new URL(root.dataset.stateUrl, window.location.origin);
+        pollUrl.searchParams.set("revision", currentRevision);
+        const response = await fetch(pollUrl, {
+            cache: "no-store",
+            credentials: "same-origin",
+            headers: {"Accept": "application/json"},
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (payload.reload_required) {
+            throw new Error(payload.error || "Reload Upcoming Pulls to resume live updates.");
+        }
+        if (!response.ok || !payload.ok) {
+            throw new Error(payload.error || "Upcoming Pulls live refresh failed.");
+        }
+
+        currentRevision = payload.revision || currentRevision;
+        applyRefreshStatus(payload.refresh);
+        if (payload.changed === false) {
+            return;
+        }
+
+        const parsed = new DOMParser().parseFromString(payload.board_html || "", "text/html");
+        const nextBoard = parsed.querySelector("[data-upcoming-pulls-board]");
+        if (!nextBoard) {
+            throw new Error("Upcoming Pulls board response was incomplete.");
+        }
+        boardHost.replaceChildren(nextBoard);
+    };
+
+    controller = window.NeoLiveUpdates.create({
+        intervalMs: {{ live_screen_refresh_interval_ms }},
+        statusElement: root.querySelector("[data-live-update-status]"),
+        poll,
+    });
+    controller.setServerStatus(initialStatus);
+})();
+</script>
+{% endif %}
 {% endblock %}

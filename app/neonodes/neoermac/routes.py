@@ -45,7 +45,12 @@ from app.services.neoermac_door_supervision import (
     save_door_supervision,
     supervised_doors_for_user,
 )
-from app.services.neoermac_dashboard import neoermac_dashboard_context
+from app.services.neoermac_dashboard import (
+    current_upcoming_pulls_operation,
+    neoermac_dashboard_context,
+    upcoming_pulls_refresh_status,
+    upcoming_pulls_revision,
+)
 from app.services.neoermac_view_outbound import (
     current_view_outbound_operation,
     view_outbound_context,
@@ -106,14 +111,83 @@ def upcoming_pulls():
         return redirect(url_for("neoermac.index"))
 
     gateway = get_current_gateway()
-    dashboard_context = neoermac_dashboard_context(gateway)
+    operation = current_upcoming_pulls_operation(gateway)
+    refresh_status = upcoming_pulls_refresh_status(gateway, operation=operation)
+    dashboard_context = neoermac_dashboard_context(
+        gateway,
+        operation=operation,
+        refresh_status=refresh_status,
+    )
+    revision = upcoming_pulls_revision(gateway, operation=operation)
     db.session.commit()
     return render_template(
         "neonodes/neoermac/upcoming_pulls.html",
         gateway=gateway,
         dashboard_context=dashboard_context,
+        upcoming_pulls_revision=revision,
         menu_items=NEOERMAC_PAGES,
     )
+
+
+@bp.route("/upcoming-pulls/state")
+@gateway_node_required("ermac")
+def upcoming_pulls_state():
+    gateway = get_current_gateway()
+    access = permission_access(UPCOMING_PULLS_VIEW_PERMISSION)
+    if not access["can_view"]:
+        return jsonify({"ok": False, "error": "Access denied."}), 403
+
+    operation = current_upcoming_pulls_operation(gateway)
+    refresh_status = upcoming_pulls_refresh_status(gateway, operation=operation)
+    client_revision = str(request.args.get("revision") or "").strip()
+    if not client_revision:
+        response = jsonify(
+            {
+                "ok": False,
+                "changed": False,
+                "refresh": refresh_status,
+                "error": "Upcoming Pulls live state revision is required. Reload the page.",
+                "reload_required": True,
+            }
+        )
+        response.status_code = 428
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    revision = upcoming_pulls_revision(gateway, operation=operation)
+    if client_revision == revision:
+        response = jsonify(
+            {
+                "ok": True,
+                "changed": False,
+                "revision": revision,
+                "refresh": refresh_status,
+            }
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    dashboard_context = neoermac_dashboard_context(
+        gateway,
+        operation=operation,
+        refresh_status=refresh_status,
+        initialize_lineup=False,
+    )
+    response = jsonify(
+        {
+            "ok": True,
+            "changed": True,
+            "revision": revision,
+            "refresh": refresh_status,
+            "board_html": current_app.jinja_env.get_template(
+                "neonodes/neoermac/_upcoming_pulls_board.html"
+            ).render(
+                dashboard_context=dashboard_context,
+            ),
+        }
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @bp.route("/building-lineup", methods=["GET", "POST"])

@@ -1,6 +1,12 @@
-from sqlalchemy import or_
+import hashlib
+import json
+from datetime import datetime
 
+from sqlalchemy import func, literal, or_, select, union_all
+
+from app.extensions import db
 from app.models import (
+    NeoErmacBuildingLineup,
     NeoErmacDoorPull,
     SortDateMission,
     SortDateOperation,
@@ -18,20 +24,32 @@ from app.services.sort_date_operations import mission_display_timing_data
 SIDE_LIMIT = 5
 EAST_MAX_DOOR = 17
 WEST_MIN_DOOR = 21
+_OPERATION_UNSET = object()
 
 
-def neoermac_dashboard_context(gateway):
-    operation = _current_operation(gateway)
+def neoermac_dashboard_context(
+    gateway,
+    *,
+    operation=_OPERATION_UNSET,
+    refresh_status=None,
+    initialize_lineup=True,
+):
+    if operation is _OPERATION_UNSET:
+        operation = _current_operation(gateway)
     if not operation:
         return {
             "operation": None,
             "has_current_sort": False,
-            "refresh_status": sort_window_auto_refresh_status(gateway),
+            "refresh_status": refresh_status
+            or sort_window_auto_refresh_status(gateway),
             "east": [],
             "west": [],
         }
 
-    assignments_by_destination = _lineup_assignments_by_destination(gateway)
+    assignments_by_destination = _lineup_assignments_by_destination(
+        gateway,
+        initialize=initialize_lineup,
+    )
     door_pulls_by_destination = _door_pulls_by_destination(gateway, operation)
     missions = _departure_missions(operation)
     parking_by_tail = _parking_assignments_by_tail(operation)
@@ -83,17 +101,118 @@ def neoermac_dashboard_context(gateway):
     return {
         "operation": operation,
         "has_current_sort": True,
-        "refresh_status": sort_window_auto_refresh_status(gateway),
+        "refresh_status": refresh_status
+        or sort_window_auto_refresh_status(gateway, operation=operation),
         "east": rows["east"],
         "west": rows["west"],
     }
 
 
-def _lineup_assignments_by_destination(gateway):
+def current_upcoming_pulls_operation(gateway):
+    """Resolve the operation without constructing Upcoming Pulls board state."""
+    return _current_operation(gateway)
+
+
+def upcoming_pulls_refresh_status(gateway, *, operation=None):
+    """Resolve current-board status without re-querying the operation set."""
+    status = sort_window_auto_refresh_status(gateway, operation=operation)
+    if operation and status["reason"] == "historical_sort":
+        # Upcoming Pulls has no historical-operation selector. Its latest board
+        # has always described this state as outside the physical Sort window.
+        status = {
+            **status,
+            "reason": "outside_sort_window",
+            "message": "Live updates off - outside Sort window",
+            "live_status_label": "Live updates off - outside Sort window",
+        }
+    return status
+
+
+def upcoming_pulls_revision(gateway, *, operation=_OPERATION_UNSET):
+    """Return a compact fingerprint for persisted Upcoming Pulls inputs."""
+    if operation is _OPERATION_UNSET:
+        operation = _current_operation(gateway)
+
+    operation_id = operation.id if operation else None
+    operation_criterion = lambda model: (
+        model.sort_date_operation_id == operation_id
+        if operation_id is not None
+        else model.sort_date_operation_id.is_(None)
+    )
+    aggregate_queries = (
+        _revision_aggregate(
+            "lineup",
+            NeoErmacBuildingLineup,
+            NeoErmacBuildingLineup.updated_at,
+            NeoErmacBuildingLineup.gateway_id == gateway.id,
+        ),
+        _revision_aggregate(
+            "departure_missions",
+            SortDateMission,
+            SortDateMission.updated_at,
+            operation_criterion(SortDateMission),
+            SortDateMission.mission_type == "departure",
+        ),
+        _revision_aggregate(
+            "door_pulls",
+            NeoErmacDoorPull,
+            NeoErmacDoorPull.updated_at,
+            NeoErmacDoorPull.gateway_id == gateway.id,
+            operation_criterion(NeoErmacDoorPull),
+        ),
+        _revision_aggregate(
+            "parking",
+            SortDateParkingAssignment,
+            SortDateParkingAssignment.updated_at,
+            operation_criterion(SortDateParkingAssignment),
+        ),
+    )
+    rows = sorted(
+        db.session.execute(union_all(*aggregate_queries)).all(),
+        key=lambda row: row.source,
+    )
+    payload = {
+        "gateway_id": gateway.id,
+        "operation_id": operation_id,
+        "operation_updated_at": _revision_value(
+            getattr(operation, "updated_at", None)
+        ),
+        "inputs": [
+            {
+                "source": row.source,
+                "row_count": int(row.row_count or 0),
+                "max_id": int(row.max_id or 0),
+                "id_sum": int(row.id_sum or 0),
+                "latest_updated_at": _revision_value(row.latest_updated_at),
+            }
+            for row in rows
+        ],
+    }
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _revision_aggregate(source, model, timestamp_column, *criteria):
+    return select(
+        literal(source).label("source"),
+        func.count(model.id).label("row_count"),
+        func.max(model.id).label("max_id"),
+        func.coalesce(func.sum(model.id), 0).label("id_sum"),
+        func.max(timestamp_column).label("latest_updated_at"),
+    ).where(*criteria)
+
+
+def _revision_value(value):
+    if isinstance(value, datetime):
+        return value.isoformat(timespec="microseconds")
+    return str(value or "")
+
+
+def _lineup_assignments_by_destination(gateway, *, initialize=True):
     assignments_by_destination = {}
     assignment_index = {}
 
-    for slot in get_building_lineup_assignments(gateway):
+    for slot in get_building_lineup_assignments(gateway, initialize=initialize):
         destination = slot["destination"]
         primary_door = slot["supervising_door"]
         side = _side_for_door(primary_door)

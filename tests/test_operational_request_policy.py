@@ -10,6 +10,7 @@ class OperationalRequestPolicyTest(unittest.TestCase):
     def test_explicit_live_state_endpoints_are_lightweight_for_reads_only(self):
         expected = {
             "neoermac.door_view_state",
+            "neoermac.upcoming_pulls_state",
             "neomotherbrain.parking_plan_live_state_endpoint",
             "neomotherbrain.planning_live_state",
             "neosektor.discharge_state",
@@ -38,6 +39,11 @@ class OperationalRequestPolicyTest(unittest.TestCase):
                 "GET",
                 {"revision": "abc123"},
             )
+        )
+
+    def test_upcoming_pulls_page_remains_a_normal_lifecycle_request(self):
+        self.assertFalse(
+            is_lightweight_live_state_request("neoermac.upcoming_pulls", "GET")
         )
 
     def test_unlisted_operational_get_is_not_lightweight(self):

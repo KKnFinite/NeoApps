@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from sqlalchemy import event, text
+from sqlalchemy.orm import Session
 
 from app import create_app
 from app.extensions import db
@@ -206,6 +207,255 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"neoermac-dashboard-menu", response.data)
         self.assertIn(b'href="/neoermac"', response.data)
 
+    def test_upcoming_pulls_live_state_returns_minimal_unchanged_payload(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026, 6, 12, 1, 0
+        )
+        self._assign_lineup_destination("runout_4", "east_destination_1", "BOS")
+        self._add_operation_departure("UPS701", "BOS")
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        self._login_approved_user(role="operator")
+        page = self.client.get("/neoermac/upcoming-pulls")
+        revision = self._upcoming_revision(page)
+
+        with patch(
+            "app.neonodes.neoermac.routes.neoermac_dashboard_context"
+        ) as build_context:
+            response = self.client.get(
+                f"/neoermac/upcoming-pulls/state?revision={revision}"
+            )
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["changed"])
+        self.assertEqual(payload["revision"], revision)
+        self.assertTrue(payload["refresh"]["auto_refresh_enabled"])
+        self.assertNotIn("board_html", payload)
+        self.assertLess(len(response.data), 1000)
+        build_context.assert_not_called()
+
+    def test_upcoming_pulls_changed_state_returns_only_board_fragment(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026, 6, 12, 1, 0
+        )
+        self._assign_lineup_destination("runout_4", "east_destination_1", "BOS")
+        mission = self._add_operation_departure(
+            "UPS701",
+            "BOS",
+            pure_pull_time_local=time(1, 10),
+        )
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        self._login_approved_user(role="operator")
+        page = self.client.get("/neoermac/upcoming-pulls")
+        revision = self._upcoming_revision(page)
+
+        mission.pure_pull_time_local = time(1, 33)
+        mission.updated_at = datetime(2026, 6, 12, 1, 0, 1)
+        db.session.commit()
+        response = self.client.get(
+            f"/neoermac/upcoming-pulls/state?revision={revision}"
+        )
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["changed"])
+        self.assertNotEqual(payload["revision"], revision)
+        self.assertIn("data-upcoming-pulls-board", payload["board_html"])
+        self.assertIn("01:33", payload["board_html"])
+        self.assertNotIn("<!doctype html", payload["board_html"].lower())
+        self.assertNotIn("data-node-desktop-shell", payload["board_html"])
+
+    def test_upcoming_pulls_revisionless_state_is_cheap_reload_required(self):
+        self._add_operation_departure("UPS701", "BOS")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        with patch(
+            "app.neonodes.neoermac.routes.upcoming_pulls_revision"
+        ) as build_revision, patch(
+            "app.neonodes.neoermac.routes.neoermac_dashboard_context"
+        ) as build_context:
+            response = self.client.get("/neoermac/upcoming-pulls/state")
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 428)
+        self.assertFalse(payload["changed"])
+        self.assertTrue(payload["reload_required"])
+        self.assertNotIn("board_html", payload)
+        build_revision.assert_not_called()
+        build_context.assert_not_called()
+
+    def test_upcoming_pulls_changed_state_does_not_seed_missing_lineup_rows(self):
+        NeoErmacBuildingLineup.query.delete()
+        self._add_operation_departure("UPS701", "BOS")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get(
+            "/neoermac/upcoming-pulls/state?revision=stale-client-revision"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["changed"])
+        self.assertEqual(NeoErmacBuildingLineup.query.count(), 0)
+
+    def test_upcoming_pulls_state_keeps_view_permission_enforced(self):
+        self._add_operation_departure("UPS701", "BOS")
+        rule = PermissionRule.query.filter_by(
+            permission_key="neoermac.upcoming_pulls.view"
+        ).one()
+        rule.minimum_role = "grandmaster"
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get(
+            "/neoermac/upcoming-pulls/state?revision=stale-client-revision"
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "Access denied.")
+
+    def test_upcoming_pulls_revision_tracks_visible_board_inputs(self):
+        from app.services.neoermac_dashboard import upcoming_pulls_revision
+
+        self._assign_lineup_destination("runout_4", "east_destination_1", "BOS")
+        mission = self._add_operation_departure(
+            "UPS701",
+            "BOS",
+            tail="N701UP",
+            parking="D13",
+        )
+        db.session.commit()
+        operation = db.session.get(SortDateOperation, mission.sort_date_operation_id)
+        revision = upcoming_pulls_revision(self.gateway, operation=operation)
+
+        mission.assigned_tail_number = "N702UP"
+        mission.updated_at = datetime(2026, 6, 12, 1, 0, 1)
+        db.session.commit()
+        mission_revision = upcoming_pulls_revision(self.gateway, operation=operation)
+        self.assertNotEqual(mission_revision, revision)
+
+        parking = SortDateParkingAssignment.query.filter_by(
+            sort_date_operation_id=operation.id
+        ).first()
+        parking.position_code = "D17"
+        parking.updated_at = datetime(2026, 6, 12, 1, 0, 2)
+        db.session.commit()
+        parking_revision = upcoming_pulls_revision(self.gateway, operation=operation)
+        self.assertNotEqual(parking_revision, mission_revision)
+
+        lineup = NeoErmacBuildingLineup.query.filter_by(
+            gateway_id=self.gateway.id,
+            runout_key="runout_4",
+        ).one()
+        lineup.east_destination_1 = "SDF"
+        lineup.updated_at = datetime(2026, 6, 12, 1, 0, 3)
+        db.session.commit()
+        lineup_revision = upcoming_pulls_revision(self.gateway, operation=operation)
+        self.assertNotEqual(lineup_revision, parking_revision)
+
+        db.session.add(
+            NeoErmacDoorPull(
+                gateway_id=self.gateway.id,
+                sort_date_operation_id=operation.id,
+                door="D13",
+                destination="BOS",
+                no_pure_pull=True,
+                updated_at=datetime(2026, 6, 12, 1, 0, 4),
+            )
+        )
+        db.session.commit()
+        pull_revision = upcoming_pulls_revision(self.gateway, operation=operation)
+        self.assertNotEqual(pull_revision, lineup_revision)
+
+    def test_upcoming_pulls_state_skips_lifecycle_but_page_does_not(self):
+        self._add_operation_departure("UPS701", "BOS")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        with patch(
+            "app.services.operation_lifecycle.ensure_operational_sort_operations",
+            return_value={},
+        ) as ensure_lifecycle, patch(
+            "app.services.unmatched_review_alerts.expire_unmatched_review_alerts",
+            return_value=False,
+        ) as expire_alerts:
+            page = self.client.get("/neoermac/upcoming-pulls")
+            self.assertEqual(page.status_code, 200)
+            ensure_lifecycle.assert_called_once()
+            expire_alerts.assert_called_once()
+            ensure_lifecycle.reset_mock()
+            expire_alerts.reset_mock()
+
+            revision = self._upcoming_revision(page)
+            state = self.client.get(
+                f"/neoermac/upcoming-pulls/state?revision={revision}"
+            )
+
+            self.assertEqual(state.status_code, 200)
+            ensure_lifecycle.assert_not_called()
+            expire_alerts.assert_not_called()
+
+    def test_upcoming_pulls_unchanged_state_has_no_writes_or_commit(self):
+        self._assign_lineup_destination("runout_4", "east_destination_1", "BOS")
+        self._add_operation_departure("UPS701", "BOS")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+        page = self.client.get("/neoermac/upcoming-pulls")
+        revision = self._upcoming_revision(page)
+        statements = []
+        commits = [0]
+
+        def capture_statement(_conn, _cursor, statement, _params, _context, _many):
+            statements.append(" ".join(statement.lower().split()))
+
+        def count_commit(_session):
+            commits[0] += 1
+
+        event.listen(db.engine, "before_cursor_execute", capture_statement)
+        event.listen(Session, "after_commit", count_commit)
+        try:
+            response = self.client.get(
+                f"/neoermac/upcoming-pulls/state?revision={revision}"
+            )
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture_statement)
+            event.remove(Session, "after_commit", count_commit)
+
+        writes = [
+            statement
+            for statement in statements
+            if statement.startswith(("insert", "update", "delete"))
+        ]
+        selects = [statement for statement in statements if statement.startswith("select")]
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.get_json()["changed"])
+        self.assertEqual(writes, [])
+        self.assertEqual(commits[0], 0)
+        self.assertLess(len(selects), 20)
+
+    def test_upcoming_pulls_state_keeps_outside_window_status_authoritative(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026, 6, 11, 10, 0
+        )
+        self._add_operation_departure("UPS701", "BOS")
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        self._login_approved_user(role="operator")
+        page = self.client.get("/neoermac/upcoming-pulls")
+        revision = self._upcoming_revision(page)
+
+        response = self.client.get(
+            f"/neoermac/upcoming-pulls/state?revision={revision}"
+        )
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(payload["changed"])
+        self.assertFalse(payload["refresh"]["auto_refresh_enabled"])
+        self.assertEqual(payload["refresh"]["reason"], "outside_sort_window")
+
     def test_neoermac_auto_refresh_is_limited_to_live_operation_pages(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 12, 1, 0)
         self._add_operation_departure("UPS701", "BOS", tail="N701UP", parking="D13")
@@ -223,16 +473,15 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"neoermac-refresh-paused", landing_response.data)
         self.assertNotIn(b"window.NeoLiveUpdates.create", landing_response.data)
 
-        reload_pages = ("/neoermac/upcoming-pulls",)
-        for path in reload_pages:
-            with self.subTest(path=path):
-                response = self.client.get(path)
-                self.assertEqual(response.status_code, 200)
-                self.assertIn(b"data-operation-refresh-reload", response.data)
-                self.assertIn(b'data-refresh-active="true"', response.data)
-                self.assertIn(b"window.NeoLiveUpdates.create", response.data)
-                self.assertIn(b"intervalMs: 5000", response.data)
-                self.assertIn(b"immediate: false", response.data)
+        upcoming_response = self.client.get("/neoermac/upcoming-pulls")
+        self.assertEqual(upcoming_response.status_code, 200)
+        self.assertIn(b"data-neoermac-upcoming-live", upcoming_response.data)
+        self.assertIn(b'data-state-url="/neoermac/upcoming-pulls/state"', upcoming_response.data)
+        self.assertIn(b'data-refresh-active="true"', upcoming_response.data)
+        self.assertIn(b"window.NeoLiveUpdates.create", upcoming_response.data)
+        self.assertIn(b"intervalMs: 5000", upcoming_response.data)
+        self.assertNotIn(b"data-operation-refresh-reload", upcoming_response.data)
+        self.assertNotIn(b"window.location.reload()", upcoming_response.data)
 
         outbound_response = self.client.get("/neoermac/view-outbound")
         self.assertEqual(outbound_response.status_code, 200)
@@ -397,7 +646,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         for path, hook in (
             ("/neoermac/door-view?door=D34", b"data-neoermac-refresh-paused"),
             ("/neoermac/view-outbound", b"data-neoermac-outbound-refresh-paused"),
-            ("/neoermac/upcoming-pulls", b"data-operation-refresh-reload"),
+            ("/neoermac/upcoming-pulls", b"data-neoermac-upcoming-refresh-paused"),
         ):
             with self.subTest(path=path):
                 response = self.client.get(path)
@@ -3943,6 +4192,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         return (
             "/neoermac",
             "/neoermac/upcoming-pulls",
+            "/neoermac/upcoming-pulls/state",
             "/neoermac/building-lineup",
             "/neoermac/outbound",
             "/neoermac/view-outbound",
@@ -3984,6 +4234,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
         else:
             end = response.data.index(b"</section>", start)
         return response.data[start:end]
+
+    def _upcoming_revision(self, response):
+        match = re.search(rb'data-upcoming-revision="([a-f0-9]{64})"', response.data)
+        self.assertIsNotNone(match)
+        return match.group(1).decode()
 
 
 if __name__ == "__main__":

@@ -208,7 +208,7 @@ class LiveScreenRefreshTest(unittest.TestCase):
             "app/templates/neonodes/neosektor/discharge.html",
             "app/templates/neonodes/neoermac/view_outbound.html",
             "app/templates/neonodes/neoermac/door_view.html",
-            "app/templates/neonodes/_operation_refresh_reload.html",
+            "app/templates/neonodes/neoermac/upcoming_pulls.html",
         )
         for template_path in templates:
             with self.subTest(template=template_path):
@@ -260,7 +260,7 @@ class LiveScreenRefreshTest(unittest.TestCase):
         consumers = (
             "app/templates/neomotherbrain/_planning_live_updates.html",
             "app/static/js/parking_plan_live.js",
-            "app/templates/neonodes/_operation_refresh_reload.html",
+            "app/templates/neonodes/neoermac/upcoming_pulls.html",
             "app/templates/neonodes/neoermac/door_view.html",
             "app/templates/neonodes/neoermac/view_outbound.html",
             "app/templates/neonodes/neosektor/live_counts.html",
