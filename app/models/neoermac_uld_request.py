@@ -11,7 +11,8 @@ class NeoErmacUldRequest(db.Model):
             "sort_date_operation_id",
             "door",
             "setup_needed",
-            name="uq_neoermac_uld_requests_gateway_operation_door_setup",
+            "requested_by_user_id",
+            name="uq_neoermac_uld_request_scope_requester",
         ),
         db.CheckConstraint("a2_count >= 0", name="ck_neoermac_uld_requests_a2_nonnegative"),
         db.CheckConstraint("a1_count >= 0", name="ck_neoermac_uld_requests_a1_nonnegative"),
@@ -31,6 +32,12 @@ class NeoErmacUldRequest(db.Model):
     a1_count = db.Column(db.Integer, nullable=False, default=0)
     amp_count = db.Column(db.Integer, nullable=False, default=0)
     setup_needed = db.Column(db.Boolean, nullable=False, default=False)
+    requested_by_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
@@ -41,3 +48,4 @@ class NeoErmacUldRequest(db.Model):
 
     gateway = db.relationship("Gateway")
     sort_date_operation = db.relationship("SortDateOperation")
+    requested_by_user = db.relationship("User", foreign_keys=[requested_by_user_id])

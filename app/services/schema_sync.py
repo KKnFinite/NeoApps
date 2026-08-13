@@ -138,9 +138,11 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     },
     "neoermac_uld_requests": {
         "sort_date_operation_id": "INTEGER",
+        "requested_by_user_id": "INTEGER",
     },
     "neosektor_uld_on_the_way_events": {
         "sort_date_operation_id": "INTEGER",
+        "requested_by_user_id": "INTEGER",
     },
 }
 
@@ -252,9 +254,11 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "neoermac_uld_requests": {
         "sort_date_operation_id": "INTEGER",
+        "requested_by_user_id": "INTEGER",
     },
     "neosektor_uld_on_the_way_events": {
         "sort_date_operation_id": "INTEGER",
+        "requested_by_user_id": "INTEGER",
     },
 }
 
@@ -893,14 +897,23 @@ def _sync_uld_request_unique_constraint_sqlite(inspector, table_names):
         tuple(constraint.get("column_names") or ())
         for constraint in inspector.get_unique_constraints(table_name)
     }
-    if ("gateway_id", "sort_date_operation_id", "door", "setup_needed") in unique_sets:
+    if (
+        "gateway_id",
+        "sort_date_operation_id",
+        "door",
+        "setup_needed",
+        "requested_by_user_id",
+    ) in unique_sets:
         return
 
     from app.models import NeoErmacUldRequest
 
     db.session.execute(text(f"ALTER TABLE {table_name} RENAME TO {legacy_table}"))
     _drop_uld_request_sqlite_indexes()
-    NeoErmacUldRequest.__table__.create(bind=db.engine, checkfirst=True)
+    NeoErmacUldRequest.__table__.create(
+        bind=db.session.connection(),
+        checkfirst=True,
+    )
     _copy_uld_request_legacy_rows()
     db.session.execute(text(f"DROP TABLE {legacy_table}"))
 
@@ -909,7 +922,10 @@ def _restore_uld_request_sqlite_table_from_legacy(table_name, legacy_table):
     from app.models import NeoErmacUldRequest
 
     _drop_uld_request_sqlite_indexes()
-    NeoErmacUldRequest.__table__.create(bind=db.engine, checkfirst=True)
+    NeoErmacUldRequest.__table__.create(
+        bind=db.session.connection(),
+        checkfirst=True,
+    )
     _copy_uld_request_legacy_rows()
     db.session.execute(text(f"DROP TABLE {legacy_table}"))
 
@@ -920,12 +936,20 @@ def _drop_uld_request_sqlite_indexes():
     db.session.execute(
         text("DROP INDEX IF EXISTS ix_neoermac_uld_requests_sort_date_operation_id")
     )
+    db.session.execute(
+        text("DROP INDEX IF EXISTS ix_neoermac_uld_requests_requested_by_user_id")
+    )
 
 
 def _copy_uld_request_legacy_rows():
     _ensure_sqlite_column(
         "neoermac_uld_requests_legacy",
         "sort_date_operation_id",
+        "INTEGER",
+    )
+    _ensure_sqlite_column(
+        "neoermac_uld_requests_legacy",
+        "requested_by_user_id",
         "INTEGER",
     )
     db.session.execute(
@@ -940,6 +964,7 @@ def _copy_uld_request_legacy_rows():
                 a1_count,
                 amp_count,
                 setup_needed,
+                requested_by_user_id,
                 created_at,
                 updated_at
             )
@@ -952,6 +977,7 @@ def _copy_uld_request_legacy_rows():
                 a1_count,
                 amp_count,
                 setup_needed,
+                requested_by_user_id,
                 created_at,
                 updated_at
             FROM neoermac_uld_requests_legacy
@@ -989,17 +1015,29 @@ def _sync_uld_request_unique_constraint_postgres(table_names):
     )
     db.session.execute(
         text(
+            "ALTER TABLE neoermac_uld_requests DROP CONSTRAINT IF EXISTS "
+            "uq_neoermac_uld_requests_gateway_operation_door_setup"
+        )
+    )
+    db.session.execute(
+        text(
             """
             DO $$
             BEGIN
                 IF NOT EXISTS (
                     SELECT 1
                     FROM pg_constraint
-                    WHERE conname = 'uq_neoermac_uld_requests_gateway_operation_door_setup'
+                    WHERE conname = 'uq_neoermac_uld_request_scope_requester'
                 ) THEN
                     ALTER TABLE neoermac_uld_requests
-                    ADD CONSTRAINT uq_neoermac_uld_requests_gateway_operation_door_setup
-                    UNIQUE (gateway_id, sort_date_operation_id, door, setup_needed);
+                    ADD CONSTRAINT uq_neoermac_uld_request_scope_requester
+                    UNIQUE (
+                        gateway_id,
+                        sort_date_operation_id,
+                        door,
+                        setup_needed,
+                        requested_by_user_id
+                    );
                 END IF;
             END
             $$;

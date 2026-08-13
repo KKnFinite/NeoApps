@@ -30,7 +30,9 @@ from app.services.neoermac_door_view import (
     door_tab_pull_alerts,
     door_view_context,
     door_view_uld_state,
+    door_view_uld_workspace,
     edit_door_uld_request,
+    normalize_door,
     save_door_pulls,
     save_single_door_pull,
     save_uld_request,
@@ -196,7 +198,11 @@ def view_outbound():
 def door_view():
     gateway = get_current_gateway()
     access = permission_access(DOOR_VIEW_VIEW_PERMISSION, DOOR_VIEW_EDIT_PERMISSION)
-    selected_door = request.values.get("door", "")
+    selected_door = (
+        request.args.get("door", "")
+        or request.form.get("active_door", "")
+        or request.form.get("door", "")
+    )
 
     if request.method == "POST":
         if not access["can_edit"]:
@@ -215,13 +221,21 @@ def door_view():
                 )
                 flash("DOOR PULLS SAVED.", "success")
             elif action == "save_uld_request":
-                save_uld_request(gateway, selected_door, request.form)
+                request_door = request.form.get("request_door", selected_door)
+                save_uld_request(
+                    gateway,
+                    request_door,
+                    request.form,
+                    requested_by_user_id=current_user.id,
+                )
                 flash("ULD REQUEST UPDATED.", "success")
             elif action == "edit_uld_request":
-                edit_door_uld_request(gateway, selected_door, request.form)
+                request_door = request.form.get("request_door", selected_door)
+                edit_door_uld_request(gateway, request_door, request.form)
                 flash("ULD REQUEST EDITED.", "success")
             elif action == "delete_uld_request":
-                delete_door_uld_request(gateway, selected_door, request.form)
+                request_door = request.form.get("request_door", selected_door)
+                delete_door_uld_request(gateway, request_door, request.form)
                 flash("ULD REQUEST CANCELLED.", "success")
             else:
                 raise ValueError("Unknown Door View action.")
@@ -231,7 +245,9 @@ def door_view():
             return _door_view_response(gateway, access, selected_door, status_code=400)
 
         db.session.commit()
-        return redirect(url_for("neoermac.door_view", door=selected_door))
+        if selected_door:
+            return redirect(url_for("neoermac.door_view", door=selected_door))
+        return redirect(url_for("neoermac.door_view"))
 
     if not access["can_view"]:
         flash("Access denied.", "error")
@@ -282,10 +298,15 @@ def door_view_state():
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
     try:
+        selected_door = request.args.get("door", "")
         state = door_view_uld_state(
             gateway,
-            request.args.get("door", ""),
-            supervised_doors=_current_user_supervised_doors(gateway),
+            selected_door,
+            supervised_doors=_uld_workspace_doors(
+                _current_user_supervised_doors(gateway),
+                selected_door,
+            ),
+            requested_by_user_id=current_user.id,
         )
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
@@ -307,7 +328,10 @@ def door_view_pull_autosave():
     destination = request.form.get("destination", "")
     pull_key = request.form.get("pull_key", "")
     try:
-        supervised_doors = _current_user_supervised_doors(gateway)
+        supervised_doors = _uld_workspace_doors(
+            _current_user_supervised_doors(gateway),
+            selected_door,
+        )
         card = save_single_door_pull(
             gateway,
             selected_door,
@@ -321,6 +345,7 @@ def door_view_pull_autosave():
             gateway,
             selected_door,
             supervised_doors=supervised_doors,
+            requested_by_user_id=current_user.id,
         )
         db.session.commit()
     except ValueError as exc:
@@ -434,6 +459,19 @@ def _door_view_response(gateway, access, selected_door, status_code=200):
         supervision["selected_doors"],
         operation=context["operation"],
     )
+    workspace_doors = _uld_workspace_doors(
+        supervision["selected_doors"],
+        active_door,
+    )
+    workspace = door_view_uld_workspace(
+        gateway,
+        workspace_doors,
+        current_user.id,
+        operation=context["operation"],
+    )
+    context["uld_workspace"] = workspace
+    context["uld_requests"] = workspace["requests"]
+    context["on_the_way_events"] = workspace["on_the_way_events"]
     response = make_response(
         render_template(
             "neonodes/neoermac/door_view.html",
@@ -450,3 +488,12 @@ def _door_view_response(gateway, access, selected_door, status_code=200):
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
+
+def _uld_workspace_doors(supervised_doors, active_door):
+    """Keep a directly opened door relevant even before supervision persists."""
+    doors = list(supervised_doors or ())
+    normalized_active = normalize_door(active_door)
+    if normalized_active and normalized_active not in doors:
+        doors.append(normalized_active)
+    return doors

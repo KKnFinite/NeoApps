@@ -754,7 +754,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertLess(response.data.index(b"neoermac-door-support-stack"), response.data.index(b"OUTBOUND PULLS"))
         self.assertIn(b"REQUEST ULDS", response.data)
         self.assertIn(b"No tugs assigned yet.", response.data)
-        self.assertIn(b"No active on-the-way events.", response.data)
+        self.assertIn(b"No relevant on-the-way events.", response.data)
 
     def test_door_view_outbound_destination_cards_have_prominent_scan_markup(self):
         self._assign_lineup_destination("runout_10", "west_destination_1", "CID")
@@ -2345,7 +2345,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(initial_response.status_code, 200)
         self.assertNotIn(b"A2 <strong>9</strong>", initial_response.data)
-        self.assertIn(b"No active ULD requests for D34.", initial_response.data)
+        self.assertIn(b"No relevant active ULD requests.", initial_response.data)
         self.assertEqual(create_response.status_code, 302)
         self.assertEqual(len(requests), 2)
         self.assertEqual(requests[0].sort_date_operation_id, old_operation.id)

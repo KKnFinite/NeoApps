@@ -41,6 +41,7 @@ from app.services.uld_requests import (
     delete_uld_request,
     door_uld_state_payload,
     edit_uld_request,
+    uld_workspace_state_payload,
     update_uld_request_from_form,
 )
 
@@ -253,7 +254,12 @@ def _pull_write_doors(gateway, selected_door, destination, supervised_doors):
     )
 
 
-def save_uld_request(gateway, selected_door, form_data):
+def save_uld_request(
+    gateway,
+    selected_door,
+    form_data,
+    requested_by_user_id=None,
+):
     selected_door = normalize_door(selected_door)
     if not selected_door:
         raise ValueError("Select a door.")
@@ -265,6 +271,7 @@ def save_uld_request(gateway, selected_door, form_data):
         selected_door,
         form_data,
         operation=_current_operation(gateway),
+        requested_by_user_id=requested_by_user_id,
     )
 
 
@@ -304,7 +311,12 @@ def delete_door_uld_request(gateway, selected_door, form_data):
     )
 
 
-def door_view_uld_state(gateway, selected_door, supervised_doors=()):
+def door_view_uld_state(
+    gateway,
+    selected_door,
+    supervised_doors=(),
+    requested_by_user_id=None,
+):
     selected_door = normalize_door(selected_door)
     if not selected_door:
         raise ValueError("Select a door.")
@@ -314,6 +326,15 @@ def door_view_uld_state(gateway, selected_door, supervised_doors=()):
     operation = _current_operation(gateway)
     destinations = _destination_cards_for_door(gateway, selected_door, operation)
     state = door_uld_state_payload(gateway, selected_door, operation=operation)
+    workspace = uld_workspace_state_payload(
+        gateway,
+        supervised_doors,
+        requested_by_user_id,
+        operation=operation,
+    )
+    state["uld_workspace"] = workspace
+    state["requests"] = workspace["requests"]
+    state["on_the_way_events"] = workspace["on_the_way_events"]
     state["refresh"] = neoermac_refresh_status(gateway)
     state["destinations"] = [
         _door_card_state_payload(card, order_index=index)
@@ -326,6 +347,20 @@ def door_view_uld_state(gateway, selected_door, supervised_doors=()):
         operation=operation,
     )
     return state
+
+
+def door_view_uld_workspace(
+    gateway,
+    supervised_doors,
+    requested_by_user_id,
+    operation=None,
+):
+    return uld_workspace_state_payload(
+        gateway,
+        supervised_doors,
+        requested_by_user_id,
+        operation=operation or _current_operation(gateway),
+    )
 
 
 def door_tab_pull_alerts(gateway, active_door, supervised_doors, operation=None):

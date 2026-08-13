@@ -1,6 +1,6 @@
 import json
 import unittest
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 from app import create_app
@@ -11,7 +11,9 @@ from app.models import (
     NeoErmacBuildingLineup,
     NeoErmacDoorPull,
     NeoErmacDoorSupervision,
+    NeoErmacUldRequest,
     NeoNode,
+    NeoSektorUldOnTheWayEvent,
     SortDateMission,
     SortDateOperation,
     User,
@@ -196,6 +198,165 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
         self.assertTrue(response.get_json()["ok"])
         saved = NeoErmacDoorPull.query.filter_by(door="D34", destination="SDF").one()
         self.assertEqual(saved.actual_pure_pull_time_local, time(1, 44))
+
+    def test_uld_request_can_target_unsupervised_door_without_changing_active_tab(self):
+        self.client.get("/neoermac/door-view?door=D1")
+
+        response = self.client.post(
+            "/neoermac/door-view?door=D1",
+            data={
+                "active_door": "D1",
+                "request_door": "D13",
+                "action": "save_uld_request",
+                "uld_a2_count": "2",
+                "uld_a1_count": "1",
+                "uld_amp_count": "0",
+                "setup_needed": "on",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.location.endswith("/neoermac/door-view?door=D1"))
+        request_record = NeoErmacUldRequest.query.one()
+        self.assertEqual(request_record.door, "D13")
+        self.assertEqual(request_record.requested_by_user_id, self.user.id)
+        self.assertTrue(request_record.setup_needed)
+        supervision = NeoErmacDoorSupervision.query.one()
+        self.assertEqual(json.loads(supervision.selected_doors_json), ["D1"])
+        self.assertEqual(supervision.active_door, "D1")
+
+        page = self.client.get("/neoermac/door-view?door=D1")
+        rendered = page.data.split(
+            b'const root = document.querySelector("[data-door-view]");',
+            1,
+        )[0]
+        self.assertIn(b'name="request_door"', rendered)
+        self.assertIn(b'data-uld-door-link="D13"', page.data)
+        self.assertIn(b"D13", page.data)
+        self.assertIn(b"SETUP", page.data)
+        self.assertLess(
+            rendered.index(b"data-uld-workspace"),
+            rendered.index(b"OUTBOUND PULLS"),
+        )
+
+    def test_uld_workspace_combines_supervised_activity_and_own_unsupervised_activity(self):
+        self.client.post(
+            "/neoermac/door-view/supervision",
+            data={"doors": ["D1", "D4"], "active_door": "D1"},
+        )
+        other_user = self._add_user("workspace-other")
+        now = datetime.utcnow()
+        requests = [
+            NeoErmacUldRequest(
+                gateway_id=self.gateway.id,
+                sort_date_operation_id=self.operation.id,
+                door="D4",
+                a2_count=2,
+                requested_by_user_id=other_user.id,
+            ),
+            NeoErmacUldRequest(
+                gateway_id=self.gateway.id,
+                sort_date_operation_id=self.operation.id,
+                door="D13",
+                a1_count=1,
+                requested_by_user_id=self.user.id,
+            ),
+            NeoErmacUldRequest(
+                gateway_id=self.gateway.id,
+                sort_date_operation_id=self.operation.id,
+                door="D17",
+                amp_count=3,
+                requested_by_user_id=other_user.id,
+            ),
+        ]
+        events = [
+            NeoSektorUldOnTheWayEvent(
+                gateway_id=self.gateway.id,
+                sort_date_operation_id=self.operation.id,
+                door="D4",
+                uld_type="A2",
+                quantity=2,
+                requested_by_user_id=other_user.id,
+                sent_at_utc=now,
+                expires_at_utc=now + timedelta(minutes=5),
+            ),
+            NeoSektorUldOnTheWayEvent(
+                gateway_id=self.gateway.id,
+                sort_date_operation_id=self.operation.id,
+                door="D13",
+                uld_type="A1",
+                quantity=1,
+                requested_by_user_id=self.user.id,
+                sent_at_utc=now,
+                expires_at_utc=now + timedelta(minutes=5),
+            ),
+            NeoSektorUldOnTheWayEvent(
+                gateway_id=self.gateway.id,
+                sort_date_operation_id=self.operation.id,
+                door="D17",
+                uld_type="AMP",
+                quantity=3,
+                requested_by_user_id=other_user.id,
+                sent_at_utc=now,
+                expires_at_utc=now + timedelta(minutes=5),
+            ),
+        ]
+        db.session.add_all([*requests, *events])
+        db.session.commit()
+
+        first_state = self.client.get(
+            "/neoermac/door-view/state?door=D1"
+        ).get_json()["state"]["uld_workspace"]
+        first_request_doors = [row["door"] for row in first_state["requests"]]
+        first_event_doors = [row["door"] for row in first_state["on_the_way_events"]]
+        self.assertEqual(first_request_doors, ["D4", "D13"])
+        self.assertEqual(first_event_doors, ["D4", "D13"])
+
+        self.client.get("/neoermac/door-view?door=D4")
+        second_state = self.client.get(
+            "/neoermac/door-view/state?door=D4"
+        ).get_json()["state"]["uld_workspace"]
+        self.assertEqual(
+            [row["id"] for row in second_state["requests"]],
+            [row["id"] for row in first_state["requests"]],
+        )
+        self.assertEqual(
+            [row["id"] for row in second_state["on_the_way_events"]],
+            [row["id"] for row in first_state["on_the_way_events"]],
+        )
+
+    def test_uld_door_links_activate_supervised_or_add_unsupervised_door(self):
+        self.client.post(
+            "/neoermac/door-view/supervision",
+            data={"doors": ["D1", "D4"], "active_door": "D1"},
+        )
+        db.session.add(
+            NeoErmacUldRequest(
+                gateway_id=self.gateway.id,
+                sort_date_operation_id=self.operation.id,
+                door="D13",
+                a2_count=1,
+                requested_by_user_id=self.user.id,
+            )
+        )
+        db.session.commit()
+
+        page = self.client.get("/neoermac/door-view?door=D1")
+        self.assertIn(b'href="/neoermac/door-view?door=D13"', page.data)
+
+        supervised = self.client.get("/neoermac/door-view?door=D4")
+        self.assertEqual(supervised.status_code, 200)
+        record = NeoErmacDoorSupervision.query.one()
+        self.assertEqual(json.loads(record.selected_doors_json), ["D1", "D4"])
+        self.assertEqual(record.active_door, "D4")
+
+        added = self.client.get("/neoermac/door-view?door=D13")
+        self.assertEqual(added.status_code, 200)
+        db.session.refresh(record)
+        self.assertEqual(json.loads(record.selected_doors_json), ["D1", "D4", "D13"])
+        self.assertEqual(record.active_door, "D13")
+        self.assertIn(b'data-door-tab="D13"', added.data)
 
     def test_mobile_tabs_scroll_inside_the_viewport(self):
         css = Path("app/static/css/base.css").read_text()
