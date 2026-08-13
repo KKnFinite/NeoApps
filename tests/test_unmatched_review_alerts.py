@@ -362,6 +362,7 @@ class UnmatchedReviewAlertsTest(unittest.TestCase):
         )
         live = self.client.get(
             f"/motherbrain/operations/{self.operation.id}/planning/arrival/state"
+            "?revision=stale"
         )
 
         self.assertEqual(queue.status_code, 200)

@@ -7,6 +7,7 @@
     root.dataset.planningLiveBound = "true";
 
     const stateUrl = root.dataset.stateUrl;
+    let currentRevision = root.dataset.planningRevision || "";
     const statusElement = root.querySelector("[data-live-update-status]");
     const initialStatus = {{ live_update_status|tojson }};
     let controller = null;
@@ -29,7 +30,9 @@
     };
 
     const poll = async () => {
-        const response = await fetch(stateUrl, {
+        const pollUrl = new URL(stateUrl, window.location.href);
+        pollUrl.searchParams.set("revision", currentRevision);
+        const response = await fetch(pollUrl, {
             cache: "no-store",
             credentials: "same-origin",
             headers: {"Accept": "application/json"},
@@ -42,6 +45,10 @@
             throw new Error(payload.error || "Planning live refresh failed.");
         }
         controller.setServerStatus(payload.refresh || {});
+        currentRevision = payload.revision || currentRevision;
+        if (payload.changed === false) {
+            return;
+        }
         reconcile(payload);
     };
 

@@ -10,6 +10,8 @@ from app.models import (
     Gateway,
     SortDateMission,
     SortDateOperation,
+    SortDateParkingAssignment,
+    SortDateTailState,
     SortTimelineSettings,
     SortTimelineSortSetting,
     User,
@@ -17,6 +19,7 @@ from app.models import (
 from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.live_collaboration import entity_version
 from app.services.password_policy import set_user_password
+from app.services.planning_collaboration import planning_state_revision
 
 
 class MotherBrainLiveCollaborationTest(unittest.TestCase):
@@ -115,6 +118,16 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
                 self.assertIn(b"data-live-rows=\"review\"", response.data)
                 self.assertIn(b"data-live-rows=\"missions\"", response.data)
                 self.assertIn(b"window.NeoLiveUpdates.reconcileRows", response.data)
+                self.assertIn(b"data-planning-revision=", response.data)
+                self.assertRegex(
+                    response.get_data(as_text=True),
+                    r'data-planning-revision="[0-9a-f]{32}"',
+                )
+                self.assertIn(
+                    b'pollUrl.searchParams.set("revision", currentRevision)',
+                    response.data,
+                )
+                self.assertIn(b"payload.changed === false", response.data)
                 self.assertIn(b"intervalMs: 5000", response.data)
                 self.assertNotIn(b"window.location.reload()", response.data)
 
@@ -123,14 +136,17 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
         db.session.add(mission)
         db.session.commit()
 
-        first = self.client.get(self._state_url("arrival"))
+        first = self.client.get(self._state_url("arrival", revision="stale"))
         first_row = first.get_json()["rows"]["missions"][0]
         first_version = first_row["version"]
+        first_revision = first.get_json()["revision"]
 
         mission.assigned_tail_number = "N910UP"
         mission.updated_at = mission.updated_at + timedelta(seconds=1)
         db.session.commit()
-        second = self.client.get(self._state_url("arrival"))
+        second = self.client.get(
+            self._state_url("arrival", revision=first_revision)
+        )
         second_payload = second.get_json()
         second_row = second_payload["rows"]["missions"][0]
 
@@ -151,14 +167,40 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
         db.session.add(historical)
         db.session.commit()
 
+        revision = planning_state_revision(historical, "arrival", self.user)
         response = self.client.get(
             f"/motherbrain/operations/{historical.id}/planning/arrival/state"
+            f"?revision={revision}"
         )
         refresh = response.get_json()["refresh"]
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(refresh["auto_refresh_enabled"])
         self.assertEqual(refresh["reason"], "historical_sort")
+
+    def test_unchanged_planning_poll_keeps_outside_window_status_authoritative(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026,
+            8,
+            10,
+            19,
+            0,
+        )
+        revision = planning_state_revision(
+            self.operation,
+            "departure",
+            self.user,
+        )
+
+        response = self.client.get(
+            self._state_url("departure", revision=revision)
+        )
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(payload["changed"])
+        self.assertFalse(payload["refresh"]["auto_refresh_enabled"])
+        self.assertEqual(payload["refresh"]["reason"], "before_ops_window")
 
     def test_planning_live_state_skips_global_lifecycle_maintenance(self):
         with (
@@ -169,11 +211,154 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
                 "app.services.unmatched_review_alerts.expire_unmatched_review_alerts"
             ) as alert_expiration,
         ):
-            response = self.client.get(self._state_url("arrival"))
+            response = self.client.get(
+                self._state_url(
+                    "arrival",
+                    revision=planning_state_revision(
+                        self.operation,
+                        "arrival",
+                        self.user,
+                    ),
+                )
+            )
 
         self.assertEqual(response.status_code, 200)
         lifecycle.assert_not_called()
         alert_expiration.assert_not_called()
+
+    def test_unchanged_arrival_and_departure_revisions_skip_expensive_context(self):
+        for mission_type in ("arrival", "departure"):
+            with self.subTest(mission_type=mission_type):
+                revision = planning_state_revision(
+                    self.operation,
+                    mission_type,
+                    self.user,
+                )
+                with patch(
+                    "app.neomotherbrain.routes._planning_live_collections"
+                ) as collections:
+                    response = self.client.get(
+                        self._state_url(mission_type, revision=revision)
+                    )
+
+                payload = response.get_json()
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(payload["ok"])
+                self.assertFalse(payload["changed"])
+                self.assertEqual(payload["revision"], revision)
+                self.assertNotIn("rows", payload)
+                self.assertNotIn("fragments", payload)
+                collections.assert_not_called()
+
+    def test_revisionless_stale_client_is_rejected_without_expensive_context(self):
+        with (
+            patch(
+                "app.neomotherbrain.routes._planning_live_collections"
+            ) as collections,
+            patch(
+                "app.neomotherbrain.routes.planning_state_revision"
+            ) as revision,
+        ):
+            response = self.client.get(self._state_url("arrival"))
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 428)
+        self.assertFalse(payload["changed"])
+        self.assertTrue(payload["reload_required"])
+        self.assertIn("refresh", payload)
+        collections.assert_not_called()
+        revision.assert_not_called()
+
+    def test_planning_revision_poll_still_requires_authentication_and_node_role(self):
+        anonymous = self.app.test_client()
+        with patch(
+            "app.neomotherbrain.routes.planning_state_revision"
+        ) as revision:
+            response = anonymous.get(
+                self._state_url("arrival", revision="known")
+            )
+        self.assertEqual(response.status_code, 302)
+        revision.assert_not_called()
+
+        watcher = User(username="live-watcher", role="watcher")
+        set_user_password(watcher, "TestPassword123!")
+        db.session.add(watcher)
+        db.session.flush()
+        backfill_default_gateway_node_roles(watcher, role="watcher")
+        db.session.commit()
+        anonymous.post(
+            "/login",
+            data={"username": watcher.username, "password": "TestPassword123!"},
+        )
+        with patch(
+            "app.neomotherbrain.routes.planning_state_revision"
+        ) as revision:
+            response = anonymous.get(
+                self._state_url("departure", revision="known")
+            )
+        self.assertEqual(response.status_code, 302)
+        revision.assert_not_called()
+
+    def test_planning_revision_tracks_mission_review_parking_and_tail_state(self):
+        revision = planning_state_revision(
+            self.operation,
+            "arrival",
+            self.user,
+        )
+
+        mission = self._mission("arrival", "UPS0910", origin="SDF")
+        db.session.add(mission)
+        db.session.commit()
+        revision = self._assert_revision_changed(revision, "arrival")
+
+        mission.assigned_tail_number = "N910UP"
+        mission.updated_at = mission.updated_at + timedelta(seconds=1)
+        db.session.commit()
+        revision = self._assert_revision_changed(revision, "arrival")
+
+        db.session.add(
+            FlightApiReviewItem(
+                sort_date_operation_id=self.operation.id,
+                gateway_id=self.gateway.id,
+                gateway_code=self.gateway.code,
+                sort_date=self.operation.sort_date,
+                sort_name=self.operation.sort_name,
+                mission_type="arrival",
+                review_key="api:arrival:ups0948",
+                review_status="pending",
+                flight_number="UPS0948",
+                origin="SDF",
+                destination="RFD",
+            )
+        )
+        db.session.commit()
+        revision = self._assert_revision_changed(revision, "arrival")
+
+        db.session.add(
+            SortDateParkingAssignment(
+                sort_date_operation_id=self.operation.id,
+                tail_number="N910UP",
+                ramp_code="A",
+                position_code="A01",
+                lane_number=1,
+            )
+        )
+        db.session.commit()
+        revision = self._assert_revision_changed(revision, "arrival")
+
+        db.session.add(
+            SortDateTailState(
+                sort_date=self.operation.sort_date,
+                gateway_code=self.gateway.code,
+                sort_name=self.operation.sort_name,
+                tail_number="N910UP",
+                aircraft_type_source="unknown",
+                operational_status="normal",
+                deice_status="unknown",
+            )
+        )
+        db.session.commit()
+        self._assert_revision_changed(revision, "arrival")
 
     def test_normal_planning_page_keeps_global_lifecycle_maintenance(self):
         with (
@@ -397,11 +582,23 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
         self.assertEqual(response.get_json()["conflict"]["type"], "item_changed")
         self.assertEqual(SortDateMission.query.count(), 0)
 
-    def _state_url(self, mission_type):
-        return (
+    def _state_url(self, mission_type, revision=None):
+        url = (
             f"/motherbrain/operations/{self.operation.id}/planning/"
             f"{mission_type}/state"
         )
+        if revision is not None:
+            url += f"?revision={revision}"
+        return url
+
+    def _assert_revision_changed(self, previous, mission_type):
+        current = planning_state_revision(
+            self.operation,
+            mission_type,
+            self.user,
+        )
+        self.assertNotEqual(current, previous)
+        return current
 
     def _edit_url(self, mission):
         return (

@@ -137,6 +137,7 @@ from app.services.parking_plan_collaboration import (
     validate_parking_move_snapshot,
     validate_parking_source_snapshot,
 )
+from app.services.planning_collaboration import planning_state_revision
 from app.services.operation_lifecycle import ensure_operational_sort_operations
 from app.services.live_collaboration import (
     changed_field_conflicts,
@@ -2437,6 +2438,11 @@ def alp_import(operation_id, mission_type):
             gateway,
             operation=operation,
         ),
+        planning_revision=planning_state_revision(
+            operation,
+            mission_type,
+            current_user,
+        ),
     )
 
 
@@ -2452,6 +2458,38 @@ def planning_live_state(operation_id, mission_type):
     if denied:
         return denied
 
+    refresh = node_auto_refresh_status(gateway, operation=operation)
+    client_revision = str(request.args.get("revision") or "").strip()
+    if not client_revision:
+        response = jsonify(
+            {
+                "ok": False,
+                "changed": False,
+                "refresh": refresh,
+                "error": "Planning live state revision is required. Reload the page.",
+                "reload_required": True,
+            }
+        )
+        response.status_code = 428
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    current_revision = planning_state_revision(
+        operation,
+        mission_type,
+        current_user,
+    )
+    if client_revision == current_revision:
+        response = jsonify(
+            {
+                "ok": True,
+                "changed": False,
+                "revision": current_revision,
+                "refresh": refresh,
+            }
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     collections = _planning_live_collections(operation, mission_type)
     label = "Arrival" if mission_type == "arrival" else "Departure"
     fragment_context = {
@@ -2464,10 +2502,11 @@ def planning_live_state(operation_id, mission_type):
         "can_edit": _planning_can_edit(mission_type),
         "wave_options": WAVE_OPTIONS,
     }
-    refresh = node_auto_refresh_status(gateway, operation=operation)
     response = jsonify(
         {
             "ok": True,
+            "changed": True,
+            "revision": current_revision,
             "operation_id": operation.id,
             "mission_type": mission_type,
             "refresh": refresh,

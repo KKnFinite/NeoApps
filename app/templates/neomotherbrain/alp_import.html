@@ -8,6 +8,7 @@
     class="panel centered-command-page manage-sort-sidebar-page planning-page planning-page-{{ mission_type }}"
     data-planning-live-root
     data-state-url="{{ url_for('neomotherbrain.planning_live_state', operation_id=operation.id, mission_type=mission_type) }}"
+    data-planning-revision="{{ planning_revision }}"
     data-refresh-active="{{ 'true' if live_update_status.auto_refresh_enabled else 'false' }}"
 >
     {% if can_edit and mission_type == "departure" %}
