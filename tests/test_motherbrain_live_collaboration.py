@@ -1,13 +1,18 @@
+from collections import Counter
+from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 import json
 import unittest
 from unittest.mock import patch
+
+from sqlalchemy import event
 
 from app import create_app
 from app.extensions import db
 from app.models import (
     FlightApiReviewItem,
     Gateway,
+    SortDateCrewAssignment,
     SortDateMission,
     SortDateOperation,
     SortDateParkingAssignment,
@@ -17,6 +22,7 @@ from app.models import (
     User,
 )
 from app.services.access_control import backfill_default_gateway_node_roles
+from app.services.alp_preview_state import save_alp_preview_state
 from app.services.live_collaboration import entity_version
 from app.services.password_policy import set_user_password
 from app.services.planning_collaboration import planning_state_revision
@@ -249,6 +255,272 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
                 self.assertNotIn("rows", payload)
                 self.assertNotIn("fragments", payload)
                 collections.assert_not_called()
+
+    def test_unchanged_planning_poll_remains_two_selects(self):
+        for mission_type in ("arrival", "departure"):
+            with self.subTest(mission_type=mission_type):
+                revision = planning_state_revision(
+                    self.operation,
+                    mission_type,
+                    self.user,
+                )
+                with self._capture_sql() as capture:
+                    response = self.client.get(
+                        self._state_url(mission_type, revision=revision)
+                    )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertFalse(response.get_json()["changed"])
+                self.assertEqual(capture["kinds"]["SELECT"], 2)
+                self.assertEqual(capture["writes"], [])
+                self.assertEqual(capture["commits"], 0)
+
+    def test_changed_planning_poll_reuses_shared_collections(self):
+        for mission_type in ("arrival", "departure"):
+            for index in range(6):
+                tail = f"N{mission_type[0].upper()}{index:03d}UP"
+                flight_number = (
+                    f"UPS{1000 + index}"
+                    if mission_type == "arrival"
+                    else f"UPS{800 + index}"
+                )
+                mission = self._mission(
+                    mission_type,
+                    flight_number,
+                    assigned_tail_number=tail,
+                    origin=(f"A{index:02d}" if mission_type == "arrival" else "RFD"),
+                    destination=(
+                        "RFD" if mission_type == "arrival" else f"D{index:02d}"
+                    ),
+                )
+                db.session.add(mission)
+                db.session.flush()
+                db.session.add(
+                    SortDateCrewAssignment(
+                        sort_date_mission_id=mission.id,
+                        aircraft_section="topside",
+                        required=True,
+                    )
+                )
+                if index % 2 == 0:
+                    db.session.add(
+                        SortDateParkingAssignment(
+                            sort_date_operation_id=self.operation.id,
+                            tail_number=tail,
+                            ramp_code="A",
+                            position_code=(
+                                f"A{index + 1:02d}"
+                                if mission_type == "arrival"
+                                else f"B{index + 1:02d}"
+                            ),
+                            lane_number=1,
+                        )
+                    )
+                if index % 2 == 1:
+                    db.session.add(
+                        SortDateTailState(
+                            sort_date=self.operation.sort_date,
+                            gateway_code=self.gateway.code,
+                            sort_name=self.operation.sort_name,
+                            tail_number=tail,
+                            parking_position=f"REMOTE {index}",
+                            aircraft_type_source="unknown",
+                            operational_status="normal",
+                            deice_status="unknown",
+                        )
+                    )
+
+            for index in range(3):
+                db.session.add(
+                    FlightApiReviewItem(
+                        sort_date_operation_id=self.operation.id,
+                        gateway_id=self.gateway.id,
+                        gateway_code=self.gateway.code,
+                        sort_date=self.operation.sort_date,
+                        sort_name=self.operation.sort_name,
+                        mission_type=mission_type,
+                        review_key=f"shared:{mission_type}:{index}",
+                        review_status="pending",
+                        flight_number=f"UPS{3000 + index}",
+                        origin="SDF" if mission_type == "arrival" else "RFD",
+                        destination="RFD" if mission_type == "arrival" else "SDF",
+                        revised_time_utc=datetime(2026, 8, 11, 3, index),
+                        tail_number=f"NR{index:03d}UP",
+                        raw_payload="{}",
+                    )
+                )
+
+        db.session.add_all(
+            [
+                SortDateParkingAssignment(
+                    sort_date_operation_id=self.operation.id,
+                    tail_number="NPARKUP",
+                    ramp_code="A",
+                    position_code="C01",
+                    lane_number=1,
+                ),
+                SortDateTailState(
+                    sort_date=self.operation.sort_date,
+                    gateway_code=self.gateway.code,
+                    sort_name=self.operation.sort_name,
+                    tail_number="NSTATEUP",
+                    aircraft_type_source="unknown",
+                    operational_status="normal",
+                    deice_status="unknown",
+                ),
+                FlightApiReviewItem(
+                    sort_date_operation_id=self.operation.id,
+                    gateway_id=self.gateway.id,
+                    gateway_code=self.gateway.code,
+                    sort_date=self.operation.sort_date,
+                    sort_name=self.operation.sort_name,
+                    mission_type="departure",
+                    review_key="shared:departure:hot",
+                    review_status="pending",
+                    flight_number="UPS9329",
+                    origin="RFD",
+                    destination="SDF",
+                    revised_time_utc=datetime(2026, 8, 11, 4, 0),
+                    tail_number="ND000UP",
+                    raw_payload=json.dumps(
+                        {
+                            "source": "ALP",
+                            "line_number": 32,
+                            "reason": "No current operation mission match.",
+                        }
+                    ),
+                ),
+            ]
+        )
+        db.session.commit()
+
+        for mission_type in ("arrival", "departure"):
+            with self.subTest(mission_type=mission_type):
+                state_url = self._state_url(mission_type, revision="stale")
+                self.client.get(state_url)
+                with self._capture_sql() as capture:
+                    response = self.client.get(state_url)
+
+                payload = response.get_json()
+                selects = capture["selects"]
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(payload["changed"])
+                self.assertLessEqual(len(selects), 12)
+                self.assertEqual(capture["writes"], [])
+                self.assertEqual(capture["commits"], 0)
+                self.assertEqual(
+                    self._select_count(selects, "sort_date_crew_assignments"),
+                    1,
+                )
+                self.assertLessEqual(
+                    self._select_count(selects, "sort_date_missions"),
+                    2,
+                )
+                self.assertLessEqual(
+                    self._select_count(selects, "flight_api_review_items"),
+                    2,
+                )
+                self.assertLessEqual(
+                    self._select_count(selects, "sort_date_parking_assignments"),
+                    2,
+                )
+                self.assertLessEqual(
+                    self._select_count(selects, "sort_date_tail_states"),
+                    2,
+                )
+                self.assertFalse(
+                    any(
+                        "motherbrain_google_integration_settings" in statement.lower()
+                        for statement in selects
+                    )
+                )
+
+                if mission_type == "departure":
+                    self.assertNotIn("UPS9329", payload["fragments"]["review"])
+                    self.assertIn("NPARKUP", payload["fragments"]["mobile_missions"])
+                    self.assertIn("NSTATEUP", payload["fragments"]["mobile_missions"])
+
+    def test_changed_planning_crew_query_count_is_bounded_as_missions_grow(self):
+        crew_query_counts = []
+        total_select_counts = []
+        for target_count in (1, 9):
+            existing_count = SortDateMission.query.filter_by(
+                sort_date_operation_id=self.operation.id,
+                mission_type="arrival",
+            ).count()
+            for index in range(existing_count, target_count):
+                mission = self._mission(
+                    "arrival",
+                    f"UPS{1200 + index}",
+                    assigned_tail_number=f"NS{index:03d}UP",
+                )
+                db.session.add(mission)
+                db.session.flush()
+                db.session.add(
+                    SortDateCrewAssignment(
+                        sort_date_mission_id=mission.id,
+                        aircraft_section="topside",
+                        required=True,
+                    )
+                )
+            db.session.commit()
+
+            with self._capture_sql() as capture:
+                response = self.client.get(
+                    self._state_url("arrival", revision="stale")
+                )
+            self.assertEqual(response.status_code, 200)
+            crew_query_counts.append(
+                self._select_count(
+                    capture["selects"],
+                    "sort_date_crew_assignments",
+                )
+            )
+            total_select_counts.append(len(capture["selects"]))
+
+        self.assertEqual(crew_query_counts, [1, 1])
+        self.assertEqual(total_select_counts[0], total_select_counts[1])
+
+    def test_changed_departure_preview_bulk_suppresses_hot_rows(self):
+        mission = self._mission(
+            "departure",
+            "UPS1382",
+            assigned_tail_number="N409UP",
+            destination="MEM",
+        )
+        db.session.add(mission)
+        db.session.flush()
+        save_alp_preview_state(
+            self.operation,
+            "departure",
+            "\n".join(
+                [
+                    "11-AUG-2026\tUPS999\tSDF\tN999UP\tA01\tScheduled\t07:24 (S)",
+                    "11-AUG-2026\tUPS998\tDFW\tN998UP\tA01\tScheduled\t07:30 (S)",
+                    "11-AUG-2026\tUPS9329\tRFD\tN409UP\tA01\tScheduled\t07:35 (S)",
+                ]
+            ),
+            self.user,
+        )
+        db.session.commit()
+
+        state_url = self._state_url("departure", revision="stale")
+        self.client.get(state_url)
+        with self._capture_sql() as capture:
+            response = self.client.get(state_url)
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["changed"])
+        self.assertIn("UPS0999", payload["fragments"]["review"])
+        self.assertIn("UPS0998", payload["fragments"]["review"])
+        self.assertNotIn("UPS9329", payload["fragments"]["review"])
+        self.assertLessEqual(
+            self._select_count(capture["selects"], "sort_date_missions"),
+            2,
+        )
+        self.assertEqual(capture["writes"], [])
+        self.assertEqual(capture["commits"], 0)
 
     def test_revisionless_stale_client_is_rejected_without_expensive_context(self):
         with (
@@ -658,6 +930,51 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
         values = self._original_mission_values(mission)
         values.update(overrides)
         return values
+
+    @contextmanager
+    def _capture_sql(self):
+        capture = {
+            "statements": [],
+            "selects": [],
+            "writes": [],
+            "kinds": Counter(),
+            "commits": 0,
+        }
+        engine = db.engine
+
+        def before_cursor_execute(
+            _connection,
+            _cursor,
+            statement,
+            _parameters,
+            _context,
+            _executemany,
+        ):
+            normalized = " ".join(statement.split())
+            kind = normalized.split(" ", 1)[0].upper()
+            capture["statements"].append(normalized)
+            capture["kinds"][kind] += 1
+            if kind == "SELECT":
+                capture["selects"].append(normalized)
+            elif kind in {"INSERT", "UPDATE", "DELETE"}:
+                capture["writes"].append(normalized)
+
+        def on_commit(_connection):
+            capture["commits"] += 1
+
+        event.listen(engine, "before_cursor_execute", before_cursor_execute)
+        event.listen(engine, "commit", on_commit)
+        try:
+            yield capture
+        finally:
+            event.remove(engine, "before_cursor_execute", before_cursor_execute)
+            event.remove(engine, "commit", on_commit)
+
+    @staticmethod
+    def _select_count(statements, table_name):
+        return sum(
+            1 for statement in statements if table_name in statement.lower()
+        )
 
 
 if __name__ == "__main__":

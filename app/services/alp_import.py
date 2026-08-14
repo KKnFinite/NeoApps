@@ -37,14 +37,28 @@ def alp_flight_key(value):
         return None
 
 
-def preview_alp_paste(operation, mission_type, paste_text, timezone_name=ALP_TIMEZONE):
+def preview_alp_paste(
+    operation,
+    mission_type,
+    paste_text,
+    timezone_name=ALP_TIMEZONE,
+    *,
+    missions=None,
+    departure_missions=None,
+):
     mission_type = _validate_mission_type(mission_type)
     parsed_rows = _parse_alp_rows(paste_text or "", timezone_name=timezone_name)
     valid_rows = [row for row in parsed_rows if not row.get("error")]
     key_counts = Counter(row["flight_key"] for row in valid_rows if row.get("flight_key"))
     duplicate_keys = {key for key, count in key_counts.items() if count > 1}
 
-    missions = _missions_for_operation(operation, mission_type)
+    if missions is None:
+        missions = _missions_for_operation(operation, mission_type)
+    normal_outbound_keys_by_tail = None
+    if departure_missions is not None:
+        normal_outbound_keys_by_tail = _normal_outbound_keys_by_tail(
+            departure_missions
+        )
     missions_by_key = _missions_by_key(missions)
     matched_rows = []
     unmatched_rows = []
@@ -67,7 +81,11 @@ def preview_alp_paste(operation, mission_type, paste_text, timezone_name=ALP_TIM
                 {**row, "reason": "Multiple current operation missions share this flight."}
             )
         else:
-            if _should_suppress_hot_positioning_row(operation, row):
+            if _should_suppress_hot_positioning_row(
+                operation,
+                row,
+                normal_outbound_keys_by_tail=normal_outbound_keys_by_tail,
+            ):
                 suppressed_hot_rows.append(
                     {
                         **row,
@@ -264,14 +282,35 @@ def _missions_by_key(missions):
     return grouped
 
 
-def _should_suppress_hot_positioning_row(operation, row):
+def _should_suppress_hot_positioning_row(
+    operation,
+    row,
+    normal_outbound_keys_by_tail=None,
+):
     if not _is_9xxx_flight(row.get("flight_number")):
         return False
     tail = str(row.get("tail_number") or "").strip().upper()
     if not tail:
         return False
     row_key = row.get("flight_key") or alp_flight_key(row.get("flight_number"))
+    if normal_outbound_keys_by_tail is not None:
+        return any(
+            mission_key != row_key and not mission_key.startswith("9")
+            for mission_key in normal_outbound_keys_by_tail.get(tail, ())
+        )
     return bool(_normal_outbound_for_tail(operation, tail, excluded_flight_key=row_key))
+
+
+def _normal_outbound_keys_by_tail(missions):
+    keys_by_tail = defaultdict(set)
+    for mission in missions:
+        if getattr(mission, "mission_type", None) != "departure":
+            continue
+        tail = str(getattr(mission, "assigned_tail_number", "") or "").strip().upper()
+        mission_key = alp_flight_key(getattr(mission, "flight_number", None))
+        if tail and mission_key:
+            keys_by_tail[tail].add(mission_key)
+    return keys_by_tail
 
 
 def _normal_outbound_for_tail(operation, tail_number, excluded_flight_key=None):

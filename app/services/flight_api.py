@@ -2322,22 +2322,40 @@ def build_api_added_mission(operation, normalized):
     return mission
 
 
-def pending_review_items_for_operation(operation):
+def pending_review_items_for_operation(operation, missions=None, items=None):
     if not operation:
         return []
-    items = (
-        FlightApiReviewItem.query.filter_by(
-            sort_date_operation_id=operation.id,
-            review_status="pending",
+    if items is None:
+        items = (
+            FlightApiReviewItem.query.filter_by(
+                sort_date_operation_id=operation.id,
+                review_status="pending",
+            )
+            .order_by(
+                FlightApiReviewItem.mission_type.asc(),
+                FlightApiReviewItem.revised_time_utc.asc(),
+                FlightApiReviewItem.id.asc(),
+            )
+            .all()
         )
-        .order_by(
-            FlightApiReviewItem.mission_type.asc(),
-            FlightApiReviewItem.revised_time_utc.asc(),
-            FlightApiReviewItem.id.asc(),
+    else:
+        items = sorted(
+            (
+                item
+                for item in items
+                if item.sort_date_operation_id == operation.id
+                and item.review_status == "pending"
+            ),
+            key=lambda item: (
+                item.mission_type or "",
+                item.revised_time_utc or datetime.min,
+                item.id or 0,
+            ),
         )
-        .all()
-    )
-    missions = SortDateMission.query.filter_by(sort_date_operation_id=operation.id).all()
+    if missions is None:
+        missions = SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id
+        ).all()
     for item in items:
         item.review_reason = review_reason_for_item(item, missions)
         item.normalized_cores_tried = normalized_cores_display(

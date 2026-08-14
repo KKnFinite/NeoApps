@@ -18,6 +18,7 @@ from flask import (
 from flask_login import current_user, login_required
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 
 from app.auth.decorators import gateway_node_required
 from app.auth.permissions import can_manage_system
@@ -181,6 +182,7 @@ from app.services.google_motherbrain_live_poll_execution import (
 from app.services.google_motherbrain_live_poll_health import (
     google_motherbrain_live_poll_health,
 )
+from app.services.my_alerts import my_alert_context
 from app.services.neosektor_sheets_compat import (
     NeoSektorGoogleError,
     change_neosektor_integration_mode,
@@ -2519,10 +2521,11 @@ def planning_live_state(operation_id, mission_type):
         "label": label,
         "planning_rows": collections["planning_rows"],
         "mission_rows": collections["mission_rows"],
-        "tail_swap_options": _tail_swap_options_for_operation(operation),
+        "tail_swap_options": collections["tail_swap_options"],
         "can_edit": _planning_can_edit(mission_type),
         "wave_options": WAVE_OPTIONS,
     }
+    fragments = _render_planning_live_fragments(operation, fragment_context)
     response = jsonify(
         {
             "ok": True,
@@ -2535,21 +2538,7 @@ def planning_live_state(operation_id, mission_type):
                 "review": _planning_review_state_rows(collections["planning_rows"]),
                 "missions": _planning_mission_state_rows(collections["mission_rows"]),
             },
-            "fragments": {
-                "review": render_template(
-                    "neomotherbrain/_planning_review_rows.html",
-                    **fragment_context,
-                ),
-                "missions": render_template(
-                    "neomotherbrain/_planning_mission_rows.html",
-                    **fragment_context,
-                ),
-                "mobile_missions": render_template(
-                    "neomotherbrain/_planning_mobile_mission_rows.html",
-                    **fragment_context,
-                ),
-                "alert_tray": render_template("_my_alert_tray.html"),
-            },
+            "fragments": fragments,
         }
     )
     response.headers["Cache-Control"] = "no-store"
@@ -3424,6 +3413,40 @@ def _planning_can_run(mission_type):
 
 
 def _planning_live_collections(operation, mission_type):
+    all_missions = (
+        SortDateMission.query.options(
+            selectinload(SortDateMission.crew_assignments)
+        )
+        .filter_by(sort_date_operation_id=operation.id)
+        .order_by(
+            SortDateMission.mission_type.asc(),
+            SortDateMission.planned_datetime_utc.asc(),
+            SortDateMission.id.asc(),
+        )
+        .all()
+    )
+    missions = sorted(
+        (
+            mission
+            for mission in all_missions
+            if mission.mission_type == mission_type
+        ),
+        key=mission_board_sort_key,
+    )
+    departure_missions = [
+        mission for mission in all_missions if mission.mission_type == "departure"
+    ]
+    review_items = (
+        FlightApiReviewItem.query.filter_by(
+            sort_date_operation_id=operation.id,
+            mission_type=mission_type,
+        )
+        .order_by(FlightApiReviewItem.id.asc())
+        .all()
+    )
+    review_items_by_key = {
+        item.review_key: item for item in review_items if item.review_key
+    }
     preview_state = get_alp_preview_state(
         operation,
         mission_type,
@@ -3435,12 +3458,15 @@ def _planning_live_collections(operation, mission_type):
             operation,
             mission_type,
             preview_state.paste_text,
+            missions=missions,
+            departure_missions=departure_missions,
         )
 
-    settings = ensure_sort_timeline_settings(operation.gateway)
+    settings = SortTimelineSettings.query.filter_by(
+        gateway_id=operation.gateway_id
+    ).first()
     parking_assignments = _parking_assignments_for_operation(operation)
     tail_states = _tail_states_for_operation(operation)
-    missions = _missions_for_operation(operation, mission_type)
     if mission_type == "arrival":
         mission_rows = [
             _arrival_row(
@@ -3449,6 +3475,7 @@ def _planning_live_collections(operation, mission_type):
                 parking_assignments,
                 include_parking_context=True,
                 tail_states=tail_states,
+                taxi_minutes=taxi_to_ramp_minutes(settings),
             )
             for mission in missions
         ]
@@ -3468,12 +3495,51 @@ def _planning_live_collections(operation, mission_type):
         mission_type,
         preview=preview,
         settings=settings,
+        all_missions=all_missions,
+        review_items=review_items,
+        review_items_by_key=review_items_by_key,
     )
-    _decorate_planning_review_rows(operation, planning_rows)
+    _decorate_planning_review_rows(
+        operation,
+        planning_rows,
+        review_items_by_key=review_items_by_key,
+    )
     return {
         "planning_rows": planning_rows,
         "mission_rows": mission_rows,
+        "tail_swap_options": _tail_swap_options_for_operation(
+            operation,
+            missions=all_missions,
+            parking_assignments=parking_assignments.values(),
+            tail_states=tail_states.values(),
+        ),
     }
+
+
+def _render_planning_live_fragments(operation, fragment_context):
+    templates = {
+        "review": "neomotherbrain/_planning_review_rows.html",
+        "missions": "neomotherbrain/_planning_mission_rows.html",
+        "mobile_missions": "neomotherbrain/_planning_mobile_mission_rows.html",
+    }
+    fragments = {
+        name: current_app.jinja_env.get_template(template_name).render(
+            **fragment_context
+        )
+        for name, template_name in templates.items()
+    }
+    fragments["alert_tray"] = current_app.jinja_env.get_template(
+        "_my_alert_tray.html"
+    ).render(
+        my_alert_tray=my_alert_context(
+            can_view_permission=user_can,
+            gateway=operation.gateway,
+            operation=operation,
+            include_motherbrain=True,
+            current_user_id=current_user.id,
+        )
+    )
+    return fragments
 
 
 def _planning_json_requested():
@@ -3649,15 +3715,28 @@ def _mission_original_values_from_request():
     return values if isinstance(values, dict) else {}
 
 
-def _decorate_planning_review_rows(operation, rows):
+def _decorate_planning_review_rows(
+    operation,
+    rows,
+    review_items_by_key=None,
+):
     for row in rows:
         item = row.get("item")
         if item is None and row.get("review_key"):
-            item = FlightApiReviewItem.query.filter_by(
-                sort_date_operation_id=operation.id,
-                review_key=row["review_key"],
-                review_status="pending",
-            ).first()
+            if review_items_by_key is None:
+                item = FlightApiReviewItem.query.filter_by(
+                    sort_date_operation_id=operation.id,
+                    review_key=row["review_key"],
+                    review_status="pending",
+                ).first()
+            else:
+                candidate = review_items_by_key.get(row["review_key"])
+                item = (
+                    candidate
+                    if candidate is not None
+                    and candidate.review_status == "pending"
+                    else None
+                )
             if item is not None:
                 row["item"] = item
         if item is not None:
@@ -3726,36 +3805,90 @@ def _iso_value(value):
     return value.isoformat() if value is not None else None
 
 
-def _planning_review_rows(operation, mission_type, preview=None, settings=None):
+def _planning_review_rows(
+    operation,
+    mission_type,
+    preview=None,
+    settings=None,
+    all_missions=None,
+    review_items=None,
+    review_items_by_key=None,
+):
     rows = []
     persisted_keys = set()
+    if all_missions is None:
+        all_missions = SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id
+        ).all()
     pending_items = [
         item
-        for item in pending_review_items_for_operation(operation)
+        for item in pending_review_items_for_operation(
+            operation,
+            missions=all_missions,
+            items=review_items,
+        )
         if item.mission_type == mission_type
     ]
+    wave_lookup = _planning_wave_lookup(all_missions)
+    normal_outbound_keys_by_tail = _planning_normal_outbound_keys_by_tail(
+        all_missions
+    )
     for item in pending_items:
-        if _planning_item_is_suppressed_hot_duplicate(operation, item):
+        if _planning_item_is_suppressed_hot_duplicate(
+            operation,
+            item,
+            normal_outbound_keys_by_tail=normal_outbound_keys_by_tail,
+        ):
             continue
-        rows.append(_review_item_planning_row(operation, item, settings))
+        rows.append(
+            _review_item_planning_row(
+                operation,
+                item,
+                settings,
+                missions=all_missions,
+                wave_lookup=wave_lookup,
+            )
+        )
         persisted_keys.add(item.review_key)
 
     if preview:
-        for row in _alp_planning_rows_from_preview(operation, mission_type, preview):
+        for row in _alp_planning_rows_from_preview(
+            operation,
+            mission_type,
+            preview,
+            missions=all_missions,
+            review_items_by_key=review_items_by_key,
+            wave_lookup=wave_lookup,
+        ):
             if row["review_key"] not in persisted_keys:
                 rows.append(row)
     return sorted(rows, key=_planning_row_sort_key)
 
 
-def _alp_planning_rows_from_preview(operation, mission_type, preview):
+def _alp_planning_rows_from_preview(
+    operation,
+    mission_type,
+    preview,
+    missions=None,
+    review_items_by_key=None,
+    wave_lookup=None,
+):
     rows = []
     for row in preview.get("unmatched_rows", []):
         review_key = _alp_planning_review_key(operation, mission_type, row)
-        reason_detail = _alp_planning_mismatch_detail(operation, mission_type, row)
-        existing = FlightApiReviewItem.query.filter_by(
-            sort_date_operation_id=operation.id,
-            review_key=review_key,
-        ).first()
+        reason_detail = _alp_planning_mismatch_detail(
+            operation,
+            mission_type,
+            row,
+            missions=missions,
+        )
+        if review_items_by_key is None:
+            existing = FlightApiReviewItem.query.filter_by(
+                sort_date_operation_id=operation.id,
+                review_key=review_key,
+            ).first()
+        else:
+            existing = review_items_by_key.get(review_key)
         if existing and existing.review_status in {"ignored", "accepted"}:
             continue
         rows.append(
@@ -3779,6 +3912,8 @@ def _alp_planning_rows_from_preview(operation, mission_type, preview):
                     operation,
                     mission_type,
                     row.get("normalized_flight_number") or row.get("flight_number"),
+                    missions=missions,
+                    wave_lookup=wave_lookup,
                 ),
                 "item": existing if existing and existing.review_status == "pending" else None,
             }
@@ -3786,7 +3921,13 @@ def _alp_planning_rows_from_preview(operation, mission_type, preview):
     return rows
 
 
-def _api_planning_row(operation, item, settings):
+def _api_planning_row(
+    operation,
+    item,
+    settings,
+    missions=None,
+    wave_lookup=None,
+):
     operational_time = flight_api_operational_time_utc(item, settings)
     return {
         "source": "API",
@@ -3804,25 +3945,51 @@ def _api_planning_row(operation, item, settings):
         "reason_detail": flight_api_review_reason_detail(
             item,
             operation,
-            SortDateMission.query.filter_by(sort_date_operation_id=operation.id).all(),
+            missions,
         ),
         "review_key": item.review_key,
         "inferred_wave": _planning_inferred_wave(
             operation,
             item.mission_type,
             item.flight_number,
+            missions=missions,
+            wave_lookup=wave_lookup,
         ),
     }
 
 
-def _review_item_planning_row(operation, item, settings):
+def _review_item_planning_row(
+    operation,
+    item,
+    settings,
+    missions=None,
+    wave_lookup=None,
+):
     payload = _planning_review_payload(item)
     if str(payload.get("source") or "").strip().upper() == "ALP":
-        return _alp_planning_row_from_item(operation, item, payload)
-    return _api_planning_row(operation, item, settings)
+        return _alp_planning_row_from_item(
+            operation,
+            item,
+            payload,
+            missions=missions,
+            wave_lookup=wave_lookup,
+        )
+    return _api_planning_row(
+        operation,
+        item,
+        settings,
+        missions=missions,
+        wave_lookup=wave_lookup,
+    )
 
 
-def _alp_planning_row_from_item(operation, item, payload):
+def _alp_planning_row_from_item(
+    operation,
+    item,
+    payload,
+    missions=None,
+    wave_lookup=None,
+):
     airport = (item.origin if item.mission_type == "arrival" else item.destination) or ""
     line_number = payload.get("line_number") or ""
     reference = f"LINE {line_number}" if line_number else f"ALP #{item.id}"
@@ -3846,6 +4013,8 @@ def _alp_planning_row_from_item(operation, item, payload):
             operation,
             item.mission_type,
             item.flight_number,
+            missions=missions,
+            wave_lookup=wave_lookup,
         ),
         "item": item,
     }
@@ -3859,7 +4028,11 @@ def _planning_review_payload(item):
     return payload if isinstance(payload, dict) else {}
 
 
-def _planning_item_is_suppressed_hot_duplicate(operation, item):
+def _planning_item_is_suppressed_hot_duplicate(
+    operation,
+    item,
+    normal_outbound_keys_by_tail=None,
+):
     payload = _planning_review_payload(item)
     source = str(payload.get("source") or getattr(item, "api_status", "") or "").strip().upper()
     if source != "ALP":
@@ -3870,6 +4043,11 @@ def _planning_item_is_suppressed_hot_duplicate(operation, item):
     tail = str(getattr(item, "tail_number", "") or "").strip().upper()
     if not tail:
         return False
+    if normal_outbound_keys_by_tail is not None:
+        return any(
+            mission_key != flight_key and not mission_key.startswith("9")
+            for mission_key in normal_outbound_keys_by_tail.get(tail, ())
+        )
     normal_outbound = (
         SortDateMission.query.filter_by(
             sort_date_operation_id=operation.id,
@@ -3897,14 +4075,24 @@ def _planning_row_sort_key(row):
     )
 
 
-def _alp_planning_mismatch_detail(operation, mission_type, row):
+def _alp_planning_mismatch_detail(
+    operation,
+    mission_type,
+    row,
+    missions=None,
+):
     reason = str(row.get("reason") or "").strip().lower()
     if reason not in {
         "no current operation mission match.",
         "multiple current operation missions share this flight.",
     }:
         return ""
-    candidates = _alp_planning_candidate_missions(operation, mission_type, row)
+    candidates = _alp_planning_candidate_missions(
+        operation,
+        mission_type,
+        row,
+        missions=missions,
+    )
     if not candidates:
         return ""
     if reason == "multiple current operation missions share this flight.":
@@ -3929,18 +4117,43 @@ def _alp_planning_mismatch_detail(operation, mission_type, row):
     )
 
 
-def _alp_planning_candidate_missions(operation, mission_type, row):
+def _alp_planning_candidate_missions(
+    operation,
+    mission_type,
+    row,
+    missions=None,
+):
     airport = str(row.get("airport") or "").strip().upper()
-    query = SortDateMission.query.filter_by(
-        sort_date_operation_id=operation.id,
-        mission_type=mission_type,
-    )
-    if airport:
-        if mission_type == "arrival":
-            query = query.filter(func.upper(SortDateMission.origin) == airport)
-        else:
-            query = query.filter(func.upper(SortDateMission.destination) == airport)
-    candidates = query.all()
+    if missions is None:
+        query = SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id,
+            mission_type=mission_type,
+        )
+        if airport:
+            if mission_type == "arrival":
+                query = query.filter(func.upper(SortDateMission.origin) == airport)
+            else:
+                query = query.filter(func.upper(SortDateMission.destination) == airport)
+        candidates = query.all()
+    else:
+        candidates = [
+            mission
+            for mission in missions
+            if mission.sort_date_operation_id == operation.id
+            and mission.mission_type == mission_type
+            and (
+                not airport
+                or str(
+                    (
+                        mission.origin
+                        if mission_type == "arrival"
+                        else mission.destination
+                    )
+                    or ""
+                ).strip().upper()
+                == airport
+            )
+        ]
     row_key = alp_flight_key(row.get("flight_number"))
     exact = [
         mission
@@ -4039,21 +4252,59 @@ def _clear_pending_alp_planning_rows(operation, mission_type):
     )
 
 
-def _planning_inferred_wave(operation, mission_type, flight_number):
+def _planning_inferred_wave(
+    operation,
+    mission_type,
+    flight_number,
+    missions=None,
+    wave_lookup=None,
+):
     flight_key = alp_flight_key(flight_number)
     if not flight_key:
         return ""
 
-    waves = {
-        normalize_wave(mission.wave)
-        for mission in SortDateMission.query.filter_by(
-            sort_date_operation_id=operation.id,
-            mission_type=mission_type,
-        ).all()
-        if alp_flight_key(mission.flight_number) == flight_key
-    }
+    if wave_lookup is not None:
+        waves = set(wave_lookup.get((mission_type, flight_key), ()))
+    else:
+        if missions is None:
+            missions = SortDateMission.query.filter_by(
+                sort_date_operation_id=operation.id,
+                mission_type=mission_type,
+            ).all()
+        waves = {
+            normalize_wave(mission.wave)
+            for mission in missions
+            if mission.mission_type == mission_type
+            and alp_flight_key(mission.flight_number) == flight_key
+        }
     waves.discard(None)
-    return waves.pop() if len(waves) == 1 else ""
+    return next(iter(waves)) if len(waves) == 1 else ""
+
+
+def _planning_wave_lookup(missions):
+    if missions is None:
+        return None
+    lookup = {}
+    for mission in missions:
+        flight_key = alp_flight_key(mission.flight_number)
+        wave = normalize_wave(mission.wave)
+        if flight_key and wave:
+            lookup.setdefault((mission.mission_type, flight_key), set()).add(wave)
+    return lookup
+
+
+def _planning_normal_outbound_keys_by_tail(missions):
+    if missions is None:
+        return None
+    lookup = {}
+    for mission in missions:
+        if mission.mission_type != "departure":
+            continue
+        tail = str(mission.assigned_tail_number or "").strip().upper()
+        flight_key = alp_flight_key(mission.flight_number)
+        if tail and flight_key:
+            lookup.setdefault(tail, set()).add(flight_key)
+    return lookup
 
 
 def _planning_wave_from_form(required=False):
@@ -5324,13 +5575,22 @@ def _arrival_row(
     parking_assignments=None,
     include_parking_context=False,
     tail_states=None,
+    taxi_minutes=None,
 ):
-    arrival_display = _arrival_board_display(mission, operation)
+    arrival_display = _arrival_board_display(
+        mission,
+        operation,
+        taxi_minutes=taxi_minutes,
+    )
     eta_delta_minutes = _arrival_eta_delta_minutes(mission, arrival_display)
     row = {
         "mission": mission,
         "is_cancelled": _is_cancelled_mission(mission),
-        "parking_position": _parking_position_for_mission(mission, parking_assignments),
+        "parking_position": _parking_position_for_mission(
+            mission,
+            parking_assignments,
+            tail_states=tail_states,
+        ),
         "eta_time": arrival_display["time"],
         "eta_time_note": arrival_display["time_note"],
         "eta_delta_minutes": eta_delta_minutes,
@@ -5360,7 +5620,11 @@ def _departure_row(
         "is_cancelled": _is_cancelled_mission(mission),
         "needs_replacement_tail": _mission_needs_replacement_tail(mission),
         "timing": mission_display_timing_data(mission, operation),
-        "parking_position": _parking_position_for_mission(mission, parking_assignments),
+        "parking_position": _parking_position_for_mission(
+            mission,
+            parking_assignments,
+            tail_states=tail_states,
+        ),
         "crew_covered": is_mission_crew_covered(mission.crew_assignments),
     }
     if include_parking_context:
@@ -5392,7 +5656,11 @@ def _mission_list_row(mission, operation, parking_assignments=None):
     }
 
 
-def _arrival_eta_display_time(mission, operation=None):
+def _arrival_eta_display_time(
+    mission,
+    operation=None,
+    taxi_minutes=None,
+):
     if mission.eta_datetime_utc:
         timezone_name = (
             getattr(mission, "timezone", None)
@@ -5401,7 +5669,10 @@ def _arrival_eta_display_time(mission, operation=None):
         eta_datetime_utc = mission.eta_datetime_utc
         if _arrival_eta_uses_taxi_offset(mission):
             eta_datetime_utc = eta_datetime_utc + timedelta(
-                minutes=_arrival_board_taxi_minutes(operation)
+                minutes=_arrival_board_taxi_minutes(
+                    operation,
+                    taxi_minutes=taxi_minutes,
+                )
             )
         return flight_api_utc_to_local_naive(eta_datetime_utc, timezone_name)
     return mission.planned_datetime_local
@@ -5411,7 +5682,11 @@ def _arrival_eta_uses_taxi_offset(mission):
     return (getattr(mission, "eta_source", "") or "").strip().lower() == "api"
 
 
-def _arrival_board_display(mission, operation=None):
+def _arrival_board_display(
+    mission,
+    operation=None,
+    taxi_minutes=None,
+):
     timezone_name = (
         getattr(mission, "timezone", None)
         or _gateway_timezone(getattr(operation, "gateway", None))
@@ -5419,20 +5694,33 @@ def _arrival_board_display(mission, operation=None):
     manual_status = (mission.arrival_status or "").strip().lower()
     if manual_status == CANCELLED_MISSION_STATUS:
         return {
-            "time": _arrival_eta_display_time(mission, operation),
+            "time": _arrival_eta_display_time(
+                mission,
+                operation,
+                taxi_minutes=taxi_minutes,
+            ),
             "time_note": "",
             "status_label": "CANCELLED",
         }
 
     if manual_status in {"arrived", "unloaded"}:
         return {
-            "time": _arrival_manual_time(mission, operation, timezone_name),
+            "time": _arrival_manual_time(
+                mission,
+                operation,
+                timezone_name,
+                taxi_minutes=taxi_minutes,
+            ),
             "time_note": "",
             "status_label": _status_label(manual_status),
         }
 
     if mission.api_runway_time_utc:
-        parking_time = _arrival_assumed_arrived_time_utc(mission, operation)
+        parking_time = _arrival_assumed_arrived_time_utc(
+            mission,
+            operation,
+            taxi_minutes=taxi_minutes,
+        )
         return {
             "time": _arrival_local_time(parking_time, timezone_name),
             "time_note": "",
@@ -5442,7 +5730,11 @@ def _arrival_board_display(mission, operation=None):
     raw_status = (getattr(mission, "api_status_raw", None) or "").strip().lower()
     if "arrived" in raw_status:
         return {
-            "time": _arrival_eta_display_time(mission, operation),
+            "time": _arrival_eta_display_time(
+                mission,
+                operation,
+                taxi_minutes=taxi_minutes,
+            ),
             "time_note": "",
             "status_label": "Arrived",
         }
@@ -5456,17 +5748,28 @@ def _arrival_board_display(mission, operation=None):
         status_label = "Expected"
 
     return {
-        "time": _arrival_eta_display_time(mission, operation),
+        "time": _arrival_eta_display_time(
+            mission,
+            operation,
+            taxi_minutes=taxi_minutes,
+        ),
         "time_note": "",
         "status_label": status_label,
     }
 
 
-def _arrival_assumed_arrived_time_utc(mission, operation=None):
+def _arrival_assumed_arrived_time_utc(
+    mission,
+    operation=None,
+    taxi_minutes=None,
+):
     if not getattr(mission, "api_runway_time_utc", None):
         return None
     return mission.api_runway_time_utc + timedelta(
-        minutes=_arrival_board_taxi_minutes(operation)
+        minutes=_arrival_board_taxi_minutes(
+            operation,
+            taxi_minutes=taxi_minutes,
+        )
     )
 
 
@@ -5521,14 +5824,23 @@ def _nearest_operational_datetime(value, reference):
     return min(candidates, key=lambda candidate: abs(candidate - reference))
 
 
-def _arrival_manual_time(mission, operation=None, timezone_name=None):
+def _arrival_manual_time(
+    mission,
+    operation=None,
+    timezone_name=None,
+    taxi_minutes=None,
+):
     timezone_name = timezone_name or (
         getattr(mission, "timezone", None)
         or _gateway_timezone(getattr(operation, "gateway", None))
     )
     if mission.actual_block_in_datetime_utc:
         return _arrival_local_time(mission.actual_block_in_datetime_utc, timezone_name)
-    return _arrival_eta_display_time(mission, operation)
+    return _arrival_eta_display_time(
+        mission,
+        operation,
+        taxi_minutes=taxi_minutes,
+    )
 
 
 def _arrival_local_time(value, timezone_name):
@@ -5549,7 +5861,9 @@ def _coerce_utc_naive(value):
     return value
 
 
-def _arrival_board_taxi_minutes(operation=None):
+def _arrival_board_taxi_minutes(operation=None, taxi_minutes=None):
+    if taxi_minutes is not None:
+        return int(taxi_minutes)
     gateway = getattr(operation, "gateway", None)
     if not gateway:
         return taxi_to_ramp_minutes(None)
@@ -5627,23 +5941,36 @@ def _tail_swap_conflict_label(mission):
     return flight
 
 
-def _tail_swap_options_for_operation(operation):
+def _tail_swap_options_for_operation(
+    operation,
+    missions=None,
+    parking_assignments=None,
+    tail_states=None,
+):
     tails = set()
-    for mission in SortDateMission.query.filter_by(sort_date_operation_id=operation.id):
+    if missions is None:
+        missions = SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id
+        ).all()
+    if parking_assignments is None:
+        parking_assignments = SortDateParkingAssignment.query.filter_by(
+            sort_date_operation_id=operation.id
+        ).all()
+    if tail_states is None:
+        tail_states = SortDateTailState.query.filter_by(
+            sort_date=operation.sort_date,
+            gateway_code=operation.gateway_code,
+            sort_name=operation.sort_name,
+        ).all()
+    for mission in missions:
         tail = (mission.assigned_tail_number or "").strip().upper()
         if tail:
             tails.add(tail)
-    for assignment in SortDateParkingAssignment.query.filter_by(
-        sort_date_operation_id=operation.id
-    ):
+    for assignment in parking_assignments:
         tail = (assignment.tail_number or "").strip().upper()
         if tail:
             tails.add(tail)
-    for state in SortDateTailState.query.filter_by(
-        sort_date=operation.sort_date,
-        gateway_code=operation.gateway_code,
-        sort_name=operation.sort_name,
-    ):
+    for state in tail_states:
         tail = (state.tail_number or "").strip().upper()
         if tail:
             tails.add(tail)
@@ -5664,7 +5991,11 @@ def _parking_assignments_for_operation(operation):
     }
 
 
-def _parking_position_for_mission(mission, parking_assignments=None):
+def _parking_position_for_mission(
+    mission,
+    parking_assignments=None,
+    tail_states=None,
+):
     tail_number = (mission.assigned_tail_number or "").strip().upper()
     if not tail_number:
         return None
@@ -5677,7 +6008,11 @@ def _parking_position_for_mission(mission, parking_assignments=None):
     if assignment and assignment.position_code:
         return assignment.position_code
 
-    tail_state = _tail_state_for_mission(mission)
+    tail_state = (
+        tail_states.get(tail_number)
+        if tail_states is not None
+        else _tail_state_for_mission(mission)
+    )
     return tail_state.parking_position if tail_state else None
 
 
@@ -5702,14 +6037,16 @@ def _planning_parking_context_for_mission(
         parking_assignments = _parking_assignments_for_operation(
             mission.sort_date_operation_id
         )
-    tail_states = tail_states or {}
+    tail_states_supplied = tail_states is not None
+    if tail_states is None:
+        tail_states = {}
     assignment = parking_assignments.get(tail_number)
     position = None
     if assignment and assignment.position_code:
         position = assignment.position_code
 
     tail_state = tail_states.get(tail_number)
-    if tail_state is None:
+    if tail_state is None and not tail_states_supplied:
         tail_state = _tail_state_for_mission(mission)
     if not position and tail_state and tail_state.parking_position:
         position = tail_state.parking_position
