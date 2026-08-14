@@ -26,6 +26,7 @@ from app.services.alp_preview_state import save_alp_preview_state
 from app.services.live_collaboration import entity_version
 from app.services.password_policy import set_user_password
 from app.services.planning_collaboration import planning_state_revision
+from app.services.sort_timeline import ensure_sort_timeline_settings
 
 
 class MotherBrainLiveCollaborationTest(unittest.TestCase):
@@ -480,6 +481,119 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
 
         self.assertEqual(crew_query_counts, [1, 1])
         self.assertEqual(total_select_counts[0], total_select_counts[1])
+
+    def test_initial_planning_pages_reuse_shared_collections(self):
+        ensure_sort_timeline_settings(self.gateway)
+        for mission_type in ("arrival", "departure"):
+            for index in range(6):
+                tail = f"NI{mission_type[0].upper()}{index:02d}UP"
+                mission = self._mission(
+                    mission_type,
+                    f"UPS{1600 + index}",
+                    assigned_tail_number=tail,
+                    origin=(f"A{index:02d}" if mission_type == "arrival" else "RFD"),
+                    destination=(
+                        "RFD" if mission_type == "arrival" else f"D{index:02d}"
+                    ),
+                )
+                db.session.add(mission)
+                db.session.flush()
+                db.session.add(
+                    SortDateCrewAssignment(
+                        sort_date_mission_id=mission.id,
+                        aircraft_section="topside",
+                        required=True,
+                    )
+                )
+                if index % 2 == 0:
+                    ramp_code = "A" if mission_type == "arrival" else "B"
+                    db.session.add(
+                        SortDateParkingAssignment(
+                            sort_date_operation_id=self.operation.id,
+                            tail_number=tail,
+                            ramp_code=ramp_code,
+                            position_code=f"{ramp_code}{index + 1:02d}",
+                            lane_number=1,
+                        )
+                    )
+                else:
+                    db.session.add(
+                        SortDateTailState(
+                            sort_date=self.operation.sort_date,
+                            gateway_code=self.gateway.code,
+                            sort_name=self.operation.sort_name,
+                            tail_number=tail,
+                            parking_position=f"REMOTE {mission_type[0].upper()}{index}",
+                            aircraft_type="757",
+                            aircraft_type_source="manual",
+                            operational_status="normal",
+                            deice_status="unknown",
+                        )
+                    )
+            db.session.add(
+                FlightApiReviewItem(
+                    sort_date_operation_id=self.operation.id,
+                    gateway_id=self.gateway.id,
+                    gateway_code=self.gateway.code,
+                    sort_date=self.operation.sort_date,
+                    sort_name=self.operation.sort_name,
+                    mission_type=mission_type,
+                    review_key=f"initial:{mission_type}",
+                    review_status="pending",
+                    flight_number="UPS3000",
+                    origin="SDF" if mission_type == "arrival" else "RFD",
+                    destination="RFD" if mission_type == "arrival" else "SDF",
+                    revised_time_utc=datetime(2026, 8, 11, 3, 0),
+                    tail_number=f"NR{mission_type[0].upper()}00UP",
+                    raw_payload="{}",
+                )
+            )
+        db.session.add(
+            SortDateTailState(
+                sort_date=self.operation.sort_date,
+                gateway_code=self.gateway.code,
+                sort_name=self.operation.sort_name,
+                tail_number="NSPAREUP",
+                parking_position="R01",
+                aircraft_type="757",
+                aircraft_type_source="manual",
+                operational_status="spare",
+                deice_status="unknown",
+            )
+        )
+        db.session.commit()
+        db.session.expire_all()
+
+        for mission_type in ("arrival", "departure"):
+            with self.subTest(mission_type=mission_type):
+                with self._capture_sql() as capture:
+                    response = self.client.get(
+                        f"/motherbrain/operations/{self.operation.id}/alp/{mission_type}"
+                    )
+
+                selects = capture["selects"]
+                self.assertEqual(response.status_code, 200)
+                self.assertLessEqual(len(selects), 33)
+                self.assertEqual(
+                    self._select_count(selects, "sort_date_crew_assignments"),
+                    1,
+                )
+                self.assertLessEqual(
+                    self._select_count(selects, "sort_date_missions"),
+                    2,
+                )
+                self.assertLessEqual(
+                    self._select_count(selects, "sort_date_parking_assignments"),
+                    2,
+                )
+                self.assertLessEqual(
+                    self._select_count(selects, "sort_date_tail_states"),
+                    2,
+                )
+                self.assertEqual(capture["writes"], [])
+                self.assertEqual(capture["commits"], 0)
+                if mission_type == "departure":
+                    self.assertIn(b"NSPAREUP", response.data)
 
     def test_changed_departure_preview_bulk_suppresses_hot_rows(self):
         mission = self._mission(

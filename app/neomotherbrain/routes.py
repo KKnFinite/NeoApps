@@ -2435,55 +2435,22 @@ def alp_import(operation_id, mission_type):
                 paste_text = preview_state.paste_text
                 preview = preview_alp_paste(operation, mission_type, paste_text)
                 preview_is_active = True
-    elif preview_state:
-        preview = preview_alp_paste(operation, mission_type, paste_text)
-
     settings = ensure_sort_timeline_settings(gateway)
-    parking_assignments = _parking_assignments_for_operation(operation)
-    tail_states = _tail_states_for_operation(operation)
-    missions = _missions_for_operation(operation, mission_type)
-    if mission_type == "arrival":
-        mission_rows = [
-            _arrival_row(
-                mission,
-                operation,
-                parking_assignments,
-                include_parking_context=True,
-                tail_states=tail_states,
-            )
-            for mission in missions
-        ]
-    else:
-        mission_rows = [
-            _departure_row(
-                mission,
-                operation,
-                parking_assignments,
-                include_parking_context=True,
-                tail_states=tail_states,
-            )
-            for mission in missions
-        ]
-    planning_rows = _planning_review_rows(
+    collections = _planning_live_collections(
         operation,
         mission_type,
         preview=preview,
+        preview_state=preview_state,
+        load_preview_state=False,
         settings=settings,
+        include_page_support=True,
     )
-    _decorate_planning_review_rows(operation, planning_rows)
+    preview = collections["preview"]
+    planning_rows = collections["planning_rows"]
     _apply_alp_row_action_error(
         planning_rows,
         _consume_alp_row_action_error(operation, mission_type),
     )
-    spare_rows = []
-    arrival_spare_candidates = []
-    if mission_type == "departure":
-        spare_rows = spare_rows_for_operation(gateway, operation)
-        arrival_spare_candidates = _arrival_spare_candidate_rows(
-            operation,
-            parking_assignments=parking_assignments,
-            tail_states=tail_states,
-        )
     return render_template(
         "neomotherbrain/alp_import.html",
         operation=operation,
@@ -2494,15 +2461,15 @@ def alp_import(operation_id, mission_type):
         preview=preview,
         preview_is_active=preview_is_active,
         planning_rows=planning_rows,
-        mission_rows=mission_rows,
-        tail_swap_options=_tail_swap_options_for_operation(operation),
+        mission_rows=collections["mission_rows"],
+        tail_swap_options=collections["tail_swap_options"],
         can_edit=_planning_can_edit(mission_type),
         sort_timeline_settings=settings,
         flight_api_operational_time=flight_api_operational_time_utc,
         format_flight_api_time=format_flight_api_local_time,
         wave_options=WAVE_OPTIONS,
-        spare_rows=spare_rows,
-        arrival_spare_candidates=arrival_spare_candidates,
+        spare_rows=collections["spare_rows"],
+        arrival_spare_candidates=collections["arrival_spare_candidates"],
         parking_positions=PARKING_RAMP_GROUPS,
         standalone_spare_aircraft_type_options=STANDALONE_SPARE_AIRCRAFT_TYPE_OPTIONS,
         live_update_status=node_auto_refresh_status(
@@ -3460,7 +3427,16 @@ def _planning_can_run(mission_type):
     return user_can(_planning_run_permission(mission_type))
 
 
-def _planning_live_collections(operation, mission_type):
+def _planning_live_collections(
+    operation,
+    mission_type,
+    *,
+    preview=None,
+    preview_state=None,
+    load_preview_state=True,
+    settings=None,
+    include_page_support=False,
+):
     all_missions = (
         SortDateMission.query.options(
             selectinload(SortDateMission.crew_assignments)
@@ -3495,13 +3471,13 @@ def _planning_live_collections(operation, mission_type):
     review_items_by_key = {
         item.review_key: item for item in review_items if item.review_key
     }
-    preview_state = get_alp_preview_state(
-        operation,
-        mission_type,
-        current_user,
-    )
-    preview = None
-    if preview_state:
+    if load_preview_state:
+        preview_state = get_alp_preview_state(
+            operation,
+            mission_type,
+            current_user,
+        )
+    if preview is None and preview_state:
         preview = preview_alp_paste(
             operation,
             mission_type,
@@ -3510,9 +3486,10 @@ def _planning_live_collections(operation, mission_type):
             departure_missions=departure_missions,
         )
 
-    settings = SortTimelineSettings.query.filter_by(
-        gateway_id=operation.gateway_id
-    ).first()
+    if settings is None:
+        settings = SortTimelineSettings.query.filter_by(
+            gateway_id=operation.gateway_id
+        ).first()
     parking_assignments = _parking_assignments_for_operation(operation)
     tail_states = _tail_states_for_operation(operation)
     if mission_type == "arrival":
@@ -3552,7 +3529,13 @@ def _planning_live_collections(operation, mission_type):
         planning_rows,
         review_items_by_key=review_items_by_key,
     )
-    return {
+    collections = {
+        "preview": preview,
+        "settings": settings,
+        "all_missions": all_missions,
+        "missions": missions,
+        "parking_assignments": parking_assignments,
+        "tail_states": tail_states,
         "planning_rows": planning_rows,
         "mission_rows": mission_rows,
         "tail_swap_options": _tail_swap_options_for_operation(
@@ -3561,7 +3544,30 @@ def _planning_live_collections(operation, mission_type):
             parking_assignments=parking_assignments.values(),
             tail_states=tail_states.values(),
         ),
+        "spare_rows": [],
+        "arrival_spare_candidates": [],
     }
+    if include_page_support and mission_type == "departure":
+        parking_bundle = ParkingPlanOperationalStateBundle(
+            gateway=operation.gateway,
+            operation=operation,
+            assignments=list(parking_assignments.values()),
+            tail_states=list(tail_states.values()),
+            missions=all_missions,
+            timeline_settings=settings,
+        )
+        collections["spare_rows"] = spare_rows_for_operation(
+            operation.gateway,
+            operation,
+            bundle=parking_bundle,
+        )
+        collections["arrival_spare_candidates"] = _arrival_spare_candidate_rows(
+            operation,
+            parking_assignments=parking_assignments,
+            tail_states=tail_states,
+            all_missions=all_missions,
+        )
+    return collections
 
 
 def _render_planning_live_fragments(operation, fragment_context):
@@ -6129,26 +6135,50 @@ def _arrival_spare_candidate_rows(
     operation,
     parking_assignments=None,
     tail_states=None,
+    all_missions=None,
 ):
     if not operation:
         return []
 
-    active_departure_tails = _active_departure_tails_for_operation(operation)
+    if tail_states is None:
+        tail_states = _tail_states_for_operation(operation)
+    active_departure_tails = _active_departure_tails_for_operation(
+        operation,
+        missions=all_missions,
+    )
     spare_tails = {
         tail_number
-        for tail_number, tail_state in (tail_states or _tail_states_for_operation(operation)).items()
+        for tail_number, tail_state in tail_states.items()
         if str(getattr(tail_state, "operational_status", "") or "").strip().lower()
         == "spare"
     }
-    arrivals = (
-        SortDateMission.query.filter(
-            SortDateMission.sort_date_operation_id == operation.id,
-            SortDateMission.mission_type == "arrival",
-            SortDateMission.assigned_tail_number.isnot(None),
+    if all_missions is None:
+        arrivals = (
+            SortDateMission.query.filter(
+                SortDateMission.sort_date_operation_id == operation.id,
+                SortDateMission.mission_type == "arrival",
+                SortDateMission.assigned_tail_number.isnot(None),
+            )
+            .order_by(
+                SortDateMission.planned_datetime_utc.asc(),
+                SortDateMission.id.asc(),
+            )
+            .all()
         )
-        .order_by(SortDateMission.planned_datetime_utc.asc(), SortDateMission.id.asc())
-        .all()
-    )
+    else:
+        arrivals = sorted(
+            (
+                mission
+                for mission in all_missions
+                if mission.sort_date_operation_id == operation.id
+                and mission.mission_type == "arrival"
+                and mission.assigned_tail_number
+            ),
+            key=lambda mission: (
+                mission.planned_datetime_utc or datetime.max,
+                mission.id or 0,
+            ),
+        )
     rows = []
     for mission in arrivals:
         if _is_cancelled_mission(mission):
@@ -6163,24 +6193,31 @@ def _arrival_spare_candidate_rows(
             include_parking_context=True,
             tail_states=tail_states,
         )
-        row["aircraft_type"] = _aircraft_type_for_tail(operation, tail_number)
+        row["aircraft_type"] = _aircraft_type_from_tail_state_or_number(
+            tail_states.get(tail_number),
+            tail_number,
+        )
         rows.append(row)
     return rows
 
 
-def _active_departure_tails_for_operation(operation):
-    missions = (
-        SortDateMission.query.filter(
-            SortDateMission.sort_date_operation_id == operation.id,
-            SortDateMission.mission_type == "departure",
-            SortDateMission.assigned_tail_number.isnot(None),
+def _active_departure_tails_for_operation(operation, missions=None):
+    if missions is None:
+        missions = (
+            SortDateMission.query.filter(
+                SortDateMission.sort_date_operation_id == operation.id,
+                SortDateMission.mission_type == "departure",
+                SortDateMission.assigned_tail_number.isnot(None),
+            )
+            .all()
         )
-        .all()
-    )
     return {
         (mission.assigned_tail_number or "").strip().upper()
         for mission in missions
-        if mission.assigned_tail_number and not _is_cancelled_mission(mission)
+        if mission.sort_date_operation_id == operation.id
+        and mission.mission_type == "departure"
+        and mission.assigned_tail_number
+        and not _is_cancelled_mission(mission)
     }
 
 

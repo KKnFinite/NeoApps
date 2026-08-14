@@ -1005,8 +1005,12 @@ def remove_standalone_spare(operation, tail_number):
     return tail_number
 
 
-def spare_rows_for_operation(gateway, operation):
-    return [row for row in tail_rows_for_operation(gateway, operation) if row["is_spare"]]
+def spare_rows_for_operation(gateway, operation, *, bundle=None):
+    return [
+        row
+        for row in tail_rows_for_operation(gateway, operation, bundle=bundle)
+        if row["is_spare"]
+    ]
 
 
 def normalize_tail_operational_status(value):
