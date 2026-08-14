@@ -143,6 +143,7 @@ from app.services.parking_plan_collaboration import (
 )
 from app.services.planning_collaboration import planning_state_revision
 from app.services.operation_lifecycle import ensure_operational_sort_operations
+from app.services.operation_scope import operation_by_id
 from app.services.live_collaboration import (
     changed_field_conflicts,
     entity_version,
@@ -1432,7 +1433,7 @@ def update_parking_plan_tail_status(operation_id=None):
 
 
 def _parking_plan_operation_or_404(gateway, operation_id):
-    operation = db.session.get(SortDateOperation, operation_id)
+    operation = operation_by_id(operation_id)
     if (
         not operation
         or operation.gateway_code != gateway.code
@@ -3272,10 +3273,10 @@ def tail_swap_mission(operation_id, mission_id):
 
 def _operation_or_404(operation_id):
     gateway = get_current_gateway()
-    return SortDateOperation.query.filter_by(
-        id=operation_id,
-        gateway_code=gateway.code,
-    ).first_or_404()
+    operation = operation_by_id(operation_id)
+    if not operation or operation.gateway_code != gateway.code:
+        abort(404)
+    return operation
 
 
 def _render_new_operation_form(form):

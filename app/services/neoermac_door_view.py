@@ -14,7 +14,6 @@ from app.models import (
     NeoSektorUldOnTheWayEvent,
     SortDateGoogleMissionLink,
     SortDateMission,
-    SortDateOperation,
     SortDateParkingAssignment,
 )
 from app.services.neoermac_building_lineup import (
@@ -30,6 +29,7 @@ from app.services.gateway_matrix import (
     sort_lookup_window_for_operation,
 )
 from app.services.node_refresh import sort_window_auto_refresh_status
+from app.services.operation_scope import current_unarchived_operation
 from app.services.neoermac_tail_presence import (
     arrival_presence_by_tail,
     departure_tail_presence,
@@ -477,8 +477,12 @@ def door_tab_pull_alerts(
     return result
 
 
-def neoermac_refresh_status(gateway, now=None):
-    return sort_window_auto_refresh_status(gateway, now=now)
+def neoermac_refresh_status(gateway, operation=None, now=None):
+    return sort_window_auto_refresh_status(
+        gateway,
+        operation=operation,
+        now=now,
+    )
 
 
 def current_door_view_operation(gateway):
@@ -839,21 +843,7 @@ def _parking_for_mission(mission, parking_by_tail):
 
 
 def _current_operation(gateway):
-    return (
-        SortDateOperation.query.filter(
-            SortDateOperation.archived_at_utc.is_(None),
-            or_(
-                SortDateOperation.gateway_id == gateway.id,
-                SortDateOperation.gateway_code == gateway.code,
-            ),
-        )
-        .order_by(
-            SortDateOperation.sort_date.desc(),
-            SortDateOperation.generated_at_utc.desc(),
-            SortDateOperation.id.desc(),
-        )
-        .first()
-    )
+    return current_unarchived_operation(gateway)
 
 
 def _missions_by_destination(gateway, operation):

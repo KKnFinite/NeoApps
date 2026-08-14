@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import func, literal, or_, select, union_all
+from sqlalchemy import func, literal, select, union_all
 
 from app.extensions import db
 from app.models import (
@@ -11,7 +11,6 @@ from app.models import (
     NeoErmacDoorPull,
     SortDateGoogleMissionLink,
     SortDateMission,
-    SortDateOperation,
     SortDateParkingAssignment,
     SortTimelineSettings,
     SortTimelineSortSetting,
@@ -25,6 +24,7 @@ from app.services.neoermac_building_lineup import (
     normalize_destination,
 )
 from app.services.node_refresh import sort_window_auto_refresh_status
+from app.services.operation_scope import current_unarchived_operation
 from app.services.neoermac_tail_presence import (
     arrival_presence_by_tail,
     departure_tail_presence,
@@ -110,8 +110,8 @@ def current_view_outbound_operation(gateway):
     return _current_operation(gateway)
 
 
-def view_outbound_refresh_status(gateway):
-    return sort_window_auto_refresh_status(gateway)
+def view_outbound_refresh_status(gateway, operation=None):
+    return sort_window_auto_refresh_status(gateway, operation=operation)
 
 
 def view_outbound_revision(gateway, *, operation=_OPERATION_UNSET, now=None):
@@ -388,21 +388,7 @@ def _departure_missions(operation):
 
 
 def _current_operation(gateway):
-    return (
-        SortDateOperation.query.filter(
-            SortDateOperation.archived_at_utc.is_(None),
-            or_(
-                SortDateOperation.gateway_id == gateway.id,
-                SortDateOperation.gateway_code == gateway.code,
-            ),
-        )
-        .order_by(
-            SortDateOperation.sort_date.desc(),
-            SortDateOperation.generated_at_utc.desc(),
-            SortDateOperation.id.desc(),
-        )
-        .first()
-    )
+    return current_unarchived_operation(gateway)
 
 
 def _adjusted_pull_value(timing_data, pull_key):

@@ -2,10 +2,14 @@ from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import current_app
+from sqlalchemy import and_
 
 from app.extensions import db
 from app.models import GatewaySortMatrix, SortDateOperation, SortTimelineSortSetting
-from app.services.request_cache import request_cached
+from app.services.operational_request_policy import (
+    current_request_is_lightweight_live_state,
+)
+from app.services.request_cache import request_cached, set_request_cached
 from app.services.sort_date_operations import generate_sort_date_operation_from_master
 
 
@@ -172,14 +176,50 @@ def current_operations_for_gateway(gateway, now=None):
     local_now = current_gateway_local_datetime(gateway, now=now)
     current_date = local_now.date()
     previous_date = current_date - timedelta(days=1)
-    operations = (
-        SortDateOperation.query.filter(
-            SortDateOperation.gateway_code == gateway.code,
-            SortDateOperation.archived_at_utc.is_(None),
-            SortDateOperation.sort_date.in_((current_date, previous_date)),
+
+    def resolve_operations():
+        if not current_request_is_lightweight_live_state():
+            return (
+                SortDateOperation.query.filter(
+                    SortDateOperation.gateway_code == gateway.code,
+                    SortDateOperation.archived_at_utc.is_(None),
+                    SortDateOperation.sort_date.in_((current_date, previous_date)),
+                )
+                .all()
+            )
+
+        rows = (
+            db.session.query(SortDateOperation, SortTimelineSortSetting)
+            .outerjoin(
+                SortTimelineSortSetting,
+                and_(
+                    SortTimelineSortSetting.gateway_id == gateway.id,
+                    SortTimelineSortSetting.sort_name == SortDateOperation.sort_name,
+                ),
+            )
+            .filter(
+                SortDateOperation.gateway_code == gateway.code,
+                SortDateOperation.archived_at_utc.is_(None),
+                SortDateOperation.sort_date.in_((current_date, previous_date)),
+            )
+            .all()
         )
-        .all()
-    )
+        for operation, setting in rows:
+            set_request_cached(
+                "sort_timeline_sort_setting",
+                (gateway.id, operation.sort_name.strip().lower()),
+                setting,
+            )
+        return [operation for operation, _setting in rows]
+
+    if current_request_is_lightweight_live_state():
+        operations = request_cached(
+            "gateway.current_operations",
+            (gateway.id, gateway.code, current_date),
+            resolve_operations,
+        )
+    else:
+        operations = resolve_operations()
     visible_operations = [
         operation
         for operation in operations

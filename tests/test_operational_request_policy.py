@@ -3,6 +3,7 @@ import unittest
 from app.services.operational_request_policy import (
     LIGHTWEIGHT_LIVE_STATE_ENDPOINTS,
     is_lightweight_live_state_request,
+    lightweight_live_state_scope_spec,
 )
 
 
@@ -55,6 +56,27 @@ class OperationalRequestPolicyTest(unittest.TestCase):
             is_lightweight_live_state_request(
                 "neomotherbrain.parking_plan_operation",
                 "GET",
+            )
+        )
+
+    def test_scope_spec_maps_only_approved_live_endpoints(self):
+        parking = lightweight_live_state_scope_spec(
+            "neomotherbrain.parking_plan_live_state_endpoint",
+            {"operation_id": 42},
+        )
+        door = lightweight_live_state_scope_spec("neoermac.door_view_state")
+        sektor = lightweight_live_state_scope_spec("neosektor.live_counts_state")
+
+        self.assertEqual(parking["node_code"], "motherbrain")
+        self.assertEqual(parking["operation_id"], 42)
+        self.assertFalse(parking["include_current_ermac_operation"])
+        self.assertEqual(door["node_code"], "ermac")
+        self.assertTrue(door["include_current_ermac_operation"])
+        self.assertEqual(sektor["node_code"], "sektor")
+        self.assertIsNone(sektor["operation_id"])
+        self.assertIsNone(
+            lightweight_live_state_scope_spec(
+                "neomotherbrain.parking_plan_operation"
             )
         )
 

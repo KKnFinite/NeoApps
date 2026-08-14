@@ -268,7 +268,7 @@ def view_outbound():
 
     operation = current_view_outbound_operation(gateway)
     revision = view_outbound_revision(gateway, operation=operation)
-    refresh_status = view_outbound_refresh_status(gateway)
+    refresh_status = view_outbound_refresh_status(gateway, operation=operation)
     client_revision = str(request.args.get("revision") or "").strip()
     if client_revision and client_revision == revision:
         return jsonify(
@@ -407,7 +407,7 @@ def door_view_state():
             current_user.id,
             operation=operation,
         )
-        refresh_status = neoermac_refresh_status(gateway)
+        refresh_status = neoermac_refresh_status(gateway, operation=operation)
         client_revision = str(request.args.get("revision") or "").strip()
         if client_revision and client_revision == revision:
             return jsonify(

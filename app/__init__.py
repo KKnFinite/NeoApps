@@ -557,6 +557,7 @@ def register_request_guards(app):
 
         from app.services.operational_request_policy import (
             is_lightweight_live_state_request,
+            lightweight_live_state_scope_spec,
         )
 
         if is_lightweight_live_state_request(
@@ -565,6 +566,26 @@ def register_request_guards(app):
             request.args,
         ):
             g.is_lightweight_live_state_request = True
+            scope_spec = lightweight_live_state_scope_spec(
+                request.endpoint,
+                request.view_args,
+            )
+            if scope_spec:
+                from app.services.access_control import (
+                    prime_lightweight_live_request_scope,
+                )
+
+                scope = prime_lightweight_live_request_scope(
+                    current_user,
+                    **scope_spec,
+                )
+                if scope is not None and scope.gateway is None:
+                    return jsonify(
+                        {
+                            "ok": False,
+                            "error": "Gateway is unavailable.",
+                        }
+                    ), 404
             return None
 
         from app.services.access_control import get_current_gateway

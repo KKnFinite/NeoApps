@@ -2,14 +2,13 @@ import hashlib
 import json
 from datetime import datetime
 
-from sqlalchemy import func, literal, or_, select, union_all
+from sqlalchemy import func, literal, select, union_all
 
 from app.extensions import db
 from app.models import (
     NeoErmacBuildingLineup,
     NeoErmacDoorPull,
     SortDateMission,
-    SortDateOperation,
     SortDateParkingAssignment,
 )
 from app.services.neoermac_building_lineup import (
@@ -18,6 +17,7 @@ from app.services.neoermac_building_lineup import (
 )
 from app.services.neoermac_door_view import PULL_FIELDS
 from app.services.node_refresh import sort_window_auto_refresh_status
+from app.services.operation_scope import current_unarchived_operation
 from app.services.sort_date_operations import mission_display_timing_data
 
 
@@ -289,21 +289,7 @@ def _parking_assignments_by_tail(operation):
 
 
 def _current_operation(gateway):
-    return (
-        SortDateOperation.query.filter(
-            SortDateOperation.archived_at_utc.is_(None),
-            or_(
-                SortDateOperation.gateway_id == gateway.id,
-                SortDateOperation.gateway_code == gateway.code,
-            ),
-        )
-        .order_by(
-            SortDateOperation.sort_date.desc(),
-            SortDateOperation.generated_at_utc.desc(),
-            SortDateOperation.id.desc(),
-        )
-        .first()
-    )
+    return current_unarchived_operation(gateway)
 
 
 def _planned_pull_time(mission, operation, pull_key):

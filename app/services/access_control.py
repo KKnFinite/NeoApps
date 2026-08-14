@@ -1,11 +1,26 @@
 from datetime import datetime
 from types import SimpleNamespace
 
-from flask import current_app, g, has_request_context
+from flask import current_app
+from sqlalchemy import and_, or_, select
+from sqlalchemy.orm import aliased
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.extensions import db
-from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess
+from app.models import (
+    Gateway,
+    GatewayMembership,
+    GatewayNodeRole,
+    NeoNode,
+    PortalAppAccess,
+    SortDateOperation,
+    SortTimelineSortSetting,
+)
 from app.models.user import ROLE_LEVELS
+from app.services.operation_scope import (
+    CURRENT_OPERATION_NAMESPACE,
+    OPERATION_BY_ID_NAMESPACE,
+)
 from app.services.request_cache import (
     MISSING,
     clear_request_cache,
@@ -177,6 +192,196 @@ def get_default_gateway():
 
 def get_current_gateway():
     return get_default_gateway()
+
+
+def prime_lightweight_live_request_scope(
+    user,
+    node_code,
+    *,
+    operation_id=None,
+    include_current_ermac_operation=False,
+):
+    """Resolve and seed shared live-request access facts in one projection."""
+    if not _is_authenticated_user(user):
+        return None
+
+    gateway_code = _default_gateway_code()
+    node_code = _normalize_node_code(node_code)
+    normalized_operation_id = None
+    if operation_id is not None:
+        try:
+            normalized_operation_id = int(operation_id)
+        except (TypeError, ValueError):
+            normalized_operation_id = None
+
+    query = (
+        db.session.query(
+            Gateway,
+            GatewayMembership,
+            PortalAppAccess,
+            NeoNode,
+            GatewayNodeRole,
+        )
+        .outerjoin(
+            GatewayMembership,
+            and_(
+                GatewayMembership.gateway_id == Gateway.id,
+                GatewayMembership.user_id == user.id,
+                Gateway.is_active.is_(True),
+            ),
+        )
+        .outerjoin(
+            PortalAppAccess,
+            and_(
+                PortalAppAccess.user_id == user.id,
+                PortalAppAccess.app_code == "neogateway",
+            ),
+        )
+        .outerjoin(
+            NeoNode,
+            and_(
+                NeoNode.code == node_code,
+                NeoNode.is_active.is_(True),
+            ),
+        )
+        .outerjoin(
+            GatewayNodeRole,
+            and_(
+                GatewayNodeRole.gateway_membership_id == GatewayMembership.id,
+                GatewayNodeRole.node_id == NeoNode.id,
+                GatewayNodeRole.is_active.is_(True),
+            ),
+        )
+    )
+
+    include_operation = bool(
+        normalized_operation_id is not None or include_current_ermac_operation
+    )
+    if include_operation:
+        if normalized_operation_id is not None:
+            operation_join = SortDateOperation.id == normalized_operation_id
+        else:
+            operation_candidate = aliased(SortDateOperation)
+            current_operation_id = (
+                select(operation_candidate.id)
+                .where(
+                    operation_candidate.archived_at_utc.is_(None),
+                    or_(
+                        operation_candidate.gateway_id == Gateway.id,
+                        operation_candidate.gateway_code == Gateway.code,
+                    ),
+                )
+                .order_by(
+                    operation_candidate.sort_date.desc(),
+                    operation_candidate.generated_at_utc.desc(),
+                    operation_candidate.id.desc(),
+                )
+                .limit(1)
+                .correlate(Gateway)
+                .scalar_subquery()
+            )
+            operation_join = SortDateOperation.id == current_operation_id
+
+        query = (
+            query.add_entity(SortDateOperation)
+            .outerjoin(SortDateOperation, operation_join)
+            .add_entity(SortTimelineSortSetting)
+            .outerjoin(
+                SortTimelineSortSetting,
+                and_(
+                    SortTimelineSortSetting.gateway_id == Gateway.id,
+                    SortTimelineSortSetting.sort_name
+                    == SortDateOperation.sort_name,
+                ),
+            )
+        )
+
+    row = query.filter(Gateway.code == gateway_code).first()
+    if row is None:
+        set_request_cached("access.default_gateway", gateway_code, None)
+        return SimpleNamespace(
+            gateway=None,
+            membership=None,
+            app_access=None,
+            node=None,
+            node_role=None,
+            operation=None,
+            sort_setting=None,
+        )
+
+    gateway, membership, app_access, node, node_role = row[:5]
+    operation = row[5] if include_operation else None
+    sort_setting = row[6] if include_operation else None
+
+    if membership is not None:
+        set_committed_value(membership, "gateway", gateway)
+    if operation is not None and operation.gateway_id == gateway.id:
+        set_committed_value(operation, "gateway", gateway)
+
+    if app_access is None:
+        app_access = _legacy_neogateway_app_access(user, membership)
+
+    resolved_node_role = None
+    if (
+        _membership_is_approved_active(membership)
+        and _app_access_is_approved_active(app_access)
+        and node is not None
+    ):
+        if node_role is not None:
+            resolved_node_role = node_role.role
+        elif app_access.role in ROLE_LEVELS:
+            resolved_node_role = app_access.role
+        else:
+            resolved_node_role = "watcher"
+
+    set_request_cached("access.default_gateway", gateway_code, gateway)
+    set_request_cached(
+        "access.gateway_membership",
+        (user.id, gateway_code),
+        membership,
+    )
+    set_request_cached(
+        "access.app_access",
+        (user.id, "neogateway"),
+        app_access,
+    )
+    set_request_cached("access.active_node", node_code, node)
+    set_request_cached(
+        "access.node_role",
+        (user.id, gateway_code, node_code),
+        resolved_node_role,
+    )
+
+    if include_operation:
+        if normalized_operation_id is not None:
+            set_request_cached(
+                OPERATION_BY_ID_NAMESPACE,
+                normalized_operation_id,
+                operation,
+            )
+        else:
+            set_request_cached(
+                CURRENT_OPERATION_NAMESPACE,
+                (gateway.id, gateway.code),
+                operation,
+            )
+        if operation is not None:
+            set_request_cached(
+                "sort_timeline_sort_setting",
+                (gateway.id, operation.sort_name.strip().lower()),
+                sort_setting,
+            )
+
+    scope = SimpleNamespace(
+        gateway=gateway,
+        membership=membership,
+        app_access=app_access,
+        node=node,
+        node_role=resolved_node_role,
+        operation=operation,
+        sort_setting=sort_setting,
+    )
+    return scope
 
 
 def ensure_default_gateway_and_nodes():
@@ -462,15 +667,7 @@ def get_user_app_access(user, app_code):
 
         if _is_lightweight_live_state_request():
             membership = get_user_gateway_membership(user, _default_gateway_code())
-            if not _membership_is_approved_active(membership):
-                return None
-            return SimpleNamespace(
-                user_id=user.id,
-                app_code="neogateway",
-                status=membership.status,
-                role=_role_from_gateway_membership(user, membership),
-                is_active=membership.is_active,
-            )
+            return _legacy_neogateway_app_access(user, membership)
 
         return _sync_neogateway_app_access_from_gateway_membership(user)
 
@@ -594,6 +791,18 @@ def _role_from_gateway_membership(user, membership):
     return user.role if user.role in ROLE_LEVELS else "watcher"
 
 
+def _legacy_neogateway_app_access(user, membership):
+    if not _membership_is_approved_active(membership):
+        return None
+    return SimpleNamespace(
+        user_id=user.id,
+        app_code="neogateway",
+        status=membership.status,
+        role=_role_from_gateway_membership(user, membership),
+        is_active=membership.is_active,
+    )
+
+
 def _neogateway_seed_role_for_user(user):
     access = get_user_app_access(user, "neogateway")
     if access and access.status == "approved" and access.is_active and access.role in ROLE_LEVELS:
@@ -635,10 +844,11 @@ def _is_real_user(user):
 
 
 def _is_lightweight_live_state_request():
-    return bool(
-        has_request_context()
-        and getattr(g, "is_lightweight_live_state_request", False)
+    from app.services.operational_request_policy import (
+        current_request_is_lightweight_live_state,
     )
+
+    return current_request_is_lightweight_live_state()
 
 
 def _membership_is_approved_active(membership):
