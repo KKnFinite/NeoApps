@@ -439,7 +439,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
     def test_upcoming_pulls_state_keeps_outside_window_status_authoritative(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
-            2026, 6, 11, 10, 0
+            2026, 6, 11, 21, 0
         )
         self._add_operation_departure("UPS701", "BOS")
         self._set_sort_window("night", time(22, 0), time(4, 0))
@@ -599,7 +599,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         outbound_template = Path(
             "app/templates/neonodes/neoermac/view_outbound.html"
         ).read_text()
-        self.assertIn('newRoot.dataset.refreshReason || "outside_sort_window"', outbound_template)
+        self.assertIn("applyRefreshStatus(payload.refresh)", outbound_template)
         self.assertIn("currentBanner.hidden = refreshEnabled", outbound_template)
 
     def test_neoermac_live_views_stop_at_sort_end(self):
@@ -3800,7 +3800,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         with patch("app.neonodes.neoermac.routes.view_outbound_context") as full_context:
             response = self.client.get(
-                "/neoermac/view-outbound?revision=" + revision,
+                "/neoermac/view-outbound/state?revision=" + revision,
                 headers={"X-Requested-With": "XMLHttpRequest"},
             )
 
@@ -3812,8 +3812,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("refresh", payload)
         full_context.assert_not_called()
         self.assertIn(b'pollUrl.searchParams.set("revision", currentRevision)', page.data)
+        self.assertIn(b'data-refresh-url="/neoermac/view-outbound/state"', page.data)
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
 
-    def test_view_outbound_only_skips_lifecycle_for_revision_poll(self):
+    def test_view_outbound_only_skips_lifecycle_for_state_request(self):
         self._add_operation_departure("UPS501", "SDF", tail="N501UP")
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -3846,7 +3848,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             ) as alert_expiration,
         ):
             poll = self.client.get(
-                "/neoermac/view-outbound?revision=" + revision,
+                "/neoermac/view-outbound/state?revision=" + revision,
                 headers={"X-Requested-With": "XMLHttpRequest"},
             )
 
@@ -3854,7 +3856,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         lifecycle.assert_not_called()
         alert_expiration.assert_not_called()
 
-    def test_view_outbound_changed_revision_returns_updated_html(self):
+    def test_view_outbound_changed_revision_returns_content_fragment(self):
         from app.services.neoermac_building_lineup import get_building_lineup_rows
 
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
@@ -3879,18 +3881,149 @@ class NeoErmacRoutesTest(unittest.TestCase):
         mission.departure_status = "loading"
         db.session.commit()
         response = self.client.get(
-            "/neoermac/view-outbound?revision=" + revision,
+            "/neoermac/view-outbound/state?revision=" + revision,
             headers={"X-Requested-With": "XMLHttpRequest"},
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.content_type.startswith("text/html"))
-        self.assertIn(b"LOADING", response.data)
-        changed_revision = re.search(
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["changed"])
+        self.assertNotEqual(payload["revision"], revision)
+        self.assertIn("LOADING", payload["content_html"])
+        self.assertIn("data-neoermac-outbound-table", payload["content_html"])
+        self.assertIn("data-neoermac-outbound-mobile-list", payload["content_html"])
+        self.assertNotIn("<html", payload["content_html"].lower())
+        self.assertNotIn("data-neoermac-outbound-refresh", payload["content_html"])
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+
+    def test_view_outbound_revisionless_state_request_is_cheap(self):
+        self._add_operation_departure("UPS501", "SDF", tail="N501UP")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        with (
+            patch("app.neonodes.neoermac.routes.view_outbound_revision") as revision,
+            patch("app.neonodes.neoermac.routes.view_outbound_context") as context,
+        ):
+            response = self.client.get("/neoermac/view-outbound/state")
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 428)
+        self.assertFalse(payload["changed"])
+        self.assertTrue(payload["reload_required"])
+        self.assertNotIn("content_html", payload)
+        revision.assert_not_called()
+        context.assert_not_called()
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+
+    def test_view_outbound_state_keeps_view_permission_enforced(self):
+        rule = PermissionRule.query.filter_by(
+            permission_key="neoermac.view_outbound.view"
+        ).one()
+        rule.minimum_role = "grandmaster"
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get(
+            "/neoermac/view-outbound/state?revision=stale-client-revision"
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "Access denied.")
+
+    def test_view_outbound_state_reports_sort_window_shutdown(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026, 6, 11, 10, 0
+        )
+        self._add_operation_departure("UPS501", "SDF", tail="N501UP")
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        self._login_approved_user(role="operator")
+        page = self.client.get("/neoermac/view-outbound")
+        revision = re.search(
             rb'data-outbound-revision="([a-f0-9]+)"',
-            response.data,
+            page.data,
         ).group(1).decode()
-        self.assertNotEqual(changed_revision, revision)
+
+        response = self.client.get(
+            "/neoermac/view-outbound/state?revision=" + revision
+        )
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(payload["changed"])
+        self.assertFalse(payload["refresh"]["auto_refresh_enabled"])
+        self.assertEqual(payload["refresh"]["reason"], "historical_sort")
+
+    def test_view_outbound_state_is_read_only_and_bounded(self):
+        from app.services.neoermac_building_lineup import get_building_lineup_rows
+
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026, 6, 11, 1, 0, 30
+        )
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
+        get_building_lineup_rows(self.gateway)
+        self._add_operation_departure("UPS501", "SDF", tail="N501UP")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+        statements = []
+        commits = [0]
+
+        def capture_statement(_conn, _cursor, statement, _params, _context, _many):
+            statements.append(" ".join(statement.lower().split()))
+
+        def count_commit(_session):
+            commits[0] += 1
+
+        event.listen(db.engine, "before_cursor_execute", capture_statement)
+        event.listen(Session, "after_commit", count_commit)
+        try:
+            response = self.client.get(
+                "/neoermac/view-outbound/state?revision=stale-client-revision"
+            )
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture_statement)
+            event.remove(Session, "after_commit", count_commit)
+
+        selects = [row for row in statements if row.startswith("select")]
+        writes = [
+            row
+            for row in statements
+            if row.startswith(("insert", "update", "delete"))
+        ]
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["changed"])
+        self.assertLessEqual(len(selects), 10)
+        self.assertEqual(writes, [])
+        self.assertEqual(commits[0], 0)
+
+    def test_view_outbound_state_does_not_seed_missing_lineup_rows(self):
+        NeoErmacBuildingLineup.query.delete()
+        self._add_operation_departure("UPS501", "SDF", tail="N501UP")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get(
+            "/neoermac/view-outbound/state?revision=stale-client-revision"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["changed"])
+        self.assertEqual(NeoErmacBuildingLineup.query.count(), 0)
+
+    def test_view_outbound_client_replaces_only_fragment_without_dom_parser(self):
+        source = Path(
+            "app/templates/neonodes/neoermac/view_outbound.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('content.innerHTML = payload.content_html || ""', source)
+        self.assertIn("const payload = await response.json()", source)
+        self.assertIn(
+            '{% include "neonodes/neoermac/_view_outbound_content.html" %}',
+            source,
+        )
+        self.assertNotIn("DOMParser", source)
+        self.assertNotIn("response.text()", source)
 
     def test_view_outbound_revision_tracks_assumed_arrival_transition(self):
         from app.services.neoermac_view_outbound import view_outbound_revision
@@ -4303,6 +4436,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "/neoermac/building-lineup",
             "/neoermac/outbound",
             "/neoermac/view-outbound",
+            "/neoermac/view-outbound/state",
             "/neoermac/door-view",
             "/neoermac/tug-assignments",
         )

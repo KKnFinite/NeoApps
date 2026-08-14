@@ -267,24 +267,13 @@ def view_outbound():
         return redirect(url_for("neoermac.index"))
 
     operation = current_view_outbound_operation(gateway)
-    revision = view_outbound_revision(gateway, operation=operation)
     refresh_status = view_outbound_refresh_status(gateway, operation=operation)
-    client_revision = str(request.args.get("revision") or "").strip()
-    if client_revision and client_revision == revision:
-        return jsonify(
-            {
-                "ok": True,
-                "changed": False,
-                "revision": revision,
-                "refresh": refresh_status,
-            }
-        )
-
     context = view_outbound_context(
         gateway,
         operation=operation,
         refresh_status=refresh_status,
     )
+    revision = view_outbound_revision(gateway, operation=operation)
     return render_template(
         "neonodes/neoermac/view_outbound.html",
         gateway=gateway,
@@ -292,6 +281,68 @@ def view_outbound():
         outbound_revision=revision,
         **context,
     )
+
+
+@bp.route("/view-outbound/state")
+@gateway_node_required("ermac")
+def view_outbound_state():
+    gateway = get_current_gateway()
+    access = permission_access(VIEW_OUTBOUND_VIEW_PERMISSION)
+    if not access["can_view"]:
+        response = jsonify({"ok": False, "error": "Access denied."})
+        response.status_code = 403
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    operation = current_view_outbound_operation(gateway)
+    refresh_status = view_outbound_refresh_status(gateway, operation=operation)
+    client_revision = str(request.args.get("revision") or "").strip()
+    if not client_revision:
+        response = jsonify(
+            {
+                "ok": False,
+                "changed": False,
+                "refresh": refresh_status,
+                "error": "View Outbound live state revision is required. Reload the page.",
+                "reload_required": True,
+            }
+        )
+        response.status_code = 428
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    revision = view_outbound_revision(gateway, operation=operation)
+    if client_revision == revision:
+        response = jsonify(
+            {
+                "ok": True,
+                "changed": False,
+                "revision": revision,
+                "refresh": refresh_status,
+            }
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    context = view_outbound_context(
+        gateway,
+        operation=operation,
+        refresh_status=refresh_status,
+        initialize_lineup=False,
+    )
+    response = jsonify(
+        {
+            "ok": True,
+            "changed": True,
+            "revision": revision,
+            "refresh": refresh_status,
+            "content_html": current_app.jinja_env.get_template(
+                "neonodes/neoermac/_view_outbound_content.html"
+            ).render(rows=context["rows"]),
+        }
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @bp.route("/door-view", methods=["GET", "POST"])

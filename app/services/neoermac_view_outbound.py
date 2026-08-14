@@ -52,10 +52,14 @@ def view_outbound_context(
     *,
     operation=_OPERATION_UNSET,
     refresh_status=None,
+    initialize_lineup=True,
 ):
     if operation is _OPERATION_UNSET:
         operation = _current_operation(gateway)
-    assignments_by_destination = _lineup_assignments_by_destination(gateway)
+    assignments_by_destination = _lineup_assignments_by_destination(
+        gateway,
+        initialize=initialize_lineup,
+    )
     pulls_by_destination = _door_pulls_by_destination(gateway, operation)
     parking_by_tail = _parking_assignments_by_tail(operation)
     arrivals_by_tail = arrival_presence_by_tail(operation)
@@ -311,9 +315,9 @@ def _row_for_destination(
     }
 
 
-def _lineup_assignments_by_destination(gateway):
+def _lineup_assignments_by_destination(gateway, *, initialize=True):
     assignments_by_destination = {}
-    for slot in get_building_lineup_assignments(gateway):
+    for slot in get_building_lineup_assignments(gateway, initialize=initialize):
         assignments_by_destination.setdefault(slot["destination"], []).append(
             {
                 "door": slot["supervising_door"],

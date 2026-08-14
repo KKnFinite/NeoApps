@@ -12,6 +12,7 @@ class OperationalRequestPolicyTest(unittest.TestCase):
         expected = {
             "neoermac.door_view_state",
             "neoermac.upcoming_pulls_state",
+            "neoermac.view_outbound_state",
             "neomotherbrain.parking_plan_live_state_endpoint",
             "neomotherbrain.planning_live_state",
             "neosektor.ballmat_state",
@@ -31,18 +32,27 @@ class OperationalRequestPolicyTest(unittest.TestCase):
                     is_lightweight_live_state_request(endpoint, "POST")
                 )
 
-    def test_view_outbound_is_lightweight_only_for_revision_poll(self):
-        endpoint = "neoermac.view_outbound"
-
-        self.assertFalse(is_lightweight_live_state_request(endpoint, "GET"))
+    def test_view_outbound_state_is_lightweight_but_page_is_not(self):
         self.assertFalse(
-            is_lightweight_live_state_request(endpoint, "GET", {"revision": ""})
+            is_lightweight_live_state_request("neoermac.view_outbound", "GET")
+        )
+        self.assertFalse(
+            is_lightweight_live_state_request(
+                "neoermac.view_outbound",
+                "GET",
+                {"revision": "legacy"},
+            )
         )
         self.assertTrue(
             is_lightweight_live_state_request(
-                endpoint,
+                "neoermac.view_outbound_state",
                 "GET",
-                {"revision": "abc123"},
+            )
+        )
+        self.assertFalse(
+            is_lightweight_live_state_request(
+                "neoermac.view_outbound_state",
+                "POST",
             )
         )
 
@@ -65,6 +75,9 @@ class OperationalRequestPolicyTest(unittest.TestCase):
             {"operation_id": 42},
         )
         door = lightweight_live_state_scope_spec("neoermac.door_view_state")
+        outbound = lightweight_live_state_scope_spec(
+            "neoermac.view_outbound_state"
+        )
         sektor = lightweight_live_state_scope_spec("neosektor.live_counts_state")
 
         self.assertEqual(parking["node_code"], "motherbrain")
@@ -72,6 +85,8 @@ class OperationalRequestPolicyTest(unittest.TestCase):
         self.assertFalse(parking["include_current_ermac_operation"])
         self.assertEqual(door["node_code"], "ermac")
         self.assertTrue(door["include_current_ermac_operation"])
+        self.assertEqual(outbound["node_code"], "ermac")
+        self.assertTrue(outbound["include_current_ermac_operation"])
         self.assertEqual(sektor["node_code"], "sektor")
         self.assertIsNone(sektor["operation_id"])
         self.assertIsNone(

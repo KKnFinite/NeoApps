@@ -9,6 +9,7 @@ LIGHTWEIGHT_LIVE_STATE_ENDPOINTS = frozenset(
     {
         "neoermac.door_view_state",
         "neoermac.upcoming_pulls_state",
+        "neoermac.view_outbound_state",
         "neomotherbrain.parking_plan_live_state_endpoint",
         "neomotherbrain.planning_live_state",
         "neosektor.ballmat_state",
@@ -22,7 +23,7 @@ LIGHTWEIGHT_LIVE_STATE_ENDPOINTS = frozenset(
 LIGHTWEIGHT_LIVE_STATE_NODE_CODES = {
     "neoermac.door_view_state": "ermac",
     "neoermac.upcoming_pulls_state": "ermac",
-    "neoermac.view_outbound": "ermac",
+    "neoermac.view_outbound_state": "ermac",
     "neomotherbrain.parking_plan_live_state_endpoint": "motherbrain",
     "neomotherbrain.planning_live_state": "motherbrain",
     "neosektor.ballmat_state": "sektor",
@@ -43,22 +44,12 @@ CURRENT_ERMAC_OPERATION_ENDPOINTS = frozenset(
     {
         "neoermac.door_view_state",
         "neoermac.upcoming_pulls_state",
-        "neoermac.view_outbound",
+        "neoermac.view_outbound_state",
     }
 )
 
 # NeoSektor state routes use virtual defaults and pure calculations. Required
 # row initialization remains on normal page/setup and write paths.
-
-# View Outbound serves both its normal page and revision-based live polling from
-# one endpoint. Only a request carrying a client revision is a reconciliation
-# request; an ordinary page load must keep the full lifecycle path.
-REVISION_LIVE_STATE_ENDPOINTS = frozenset(
-    {
-        "neoermac.view_outbound",
-    }
-)
-
 
 def is_lightweight_live_state_request(endpoint, method, args=None):
     """Return whether a matched request may skip global lifecycle maintenance."""
@@ -66,9 +57,7 @@ def is_lightweight_live_state_request(endpoint, method, args=None):
         return False
     if endpoint in LIGHTWEIGHT_LIVE_STATE_ENDPOINTS:
         return True
-    if endpoint not in REVISION_LIVE_STATE_ENDPOINTS:
-        return False
-    return bool(str((args or {}).get("revision") or "").strip())
+    return False
 
 
 def lightweight_live_state_scope_spec(endpoint, view_args=None):
