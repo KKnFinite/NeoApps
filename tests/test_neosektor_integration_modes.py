@@ -20,6 +20,7 @@ from app.services.access_control import (
 )
 from app.services.neosektor_live_counts import (
     apply_standalone_compat_values,
+    driver_routing_state_payload,
     update_tunnel_driver_offset,
 )
 from app.services.neosektor_live_refresh import (
@@ -597,6 +598,230 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
         self.assertEqual(state.status_code, 200)
         self.assertEqual(edit.status_code, 200)
         worksheet.assert_not_called()
+
+    def test_neo_only_ballmat_write_reuses_one_operational_bundle(self):
+        self._set_mode(NEO_ONLY)
+        apply_standalone_compat_values(self.gateway, _complete_sheet_values())
+        db.session.commit()
+        self._login("simulator")
+
+        with patch(
+            "app.services.neosektor_sheets_compat._get_worksheet"
+        ) as worksheet:
+            response, metrics = self._capture_post_metrics(
+                "/neosektor/ballmat/update?side=east",
+                {
+                    "side": "east",
+                    "waves": {
+                        "first": {"count": 11, "status": "Full"},
+                        "second": {"count": 6, "status": "Moderate"},
+                    },
+                    "open_bays": 3,
+                    "bay_statuses": {
+                        "Bay 1": "Full",
+                        "Bay 2": "Moderate",
+                    },
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(metrics["selects"], 16)
+        self.assertEqual(metrics["inserts"], 0)
+        self.assertEqual(metrics["commits"], 1)
+        self.assertEqual(
+            metrics["table_selects"],
+            {
+                "neosektor_operational_settings": 1,
+                "neosektor_sort_states": 1,
+                "neosektor_wave_states": 1,
+                "neosektor_ballmat_wave_counts": 1,
+                "neosektor_ballmat_counts": 1,
+                "neosektor_open_bay_states": 1,
+                "neosektor_bay_statuses": 1,
+                "neosektor_driver_route_settings": 0,
+            },
+        )
+        worksheet.assert_not_called()
+
+    def test_mirror_write_commits_neo_before_changed_cells_only(self):
+        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
+        apply_standalone_compat_values(self.gateway, _complete_sheet_values())
+        db.session.commit()
+        self._login("simulator")
+        worksheet = _FakeWorksheet()
+        order = []
+        original_update = worksheet.update_acell
+
+        def ordered_update(cell, value):
+            order.append(("google", cell))
+            original_update(cell, value)
+
+        worksheet.update_acell = ordered_update
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            response, metrics = self._capture_post_metrics(
+                "/neosektor/ballmat/update?side=east",
+                {
+                    "side": "east",
+                    "waves": {"first": {"count": 11}},
+                    "open_bays": 3,
+                    "bay_statuses": {"Bay 1": "Moderate"},
+                },
+                commit_order=order,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(metrics["selects"], 17)
+        self.assertEqual(metrics["commits"], 1)
+        self.assertEqual(
+            worksheet.updates,
+            [("B2", 11), ("B4", 3), ("B6", "Moderate")],
+        )
+        self.assertEqual(order[0], ("commit", None))
+        self.assertTrue(all(kind == "google" for kind, _cell in order[1:]))
+
+    def test_google_primary_write_skips_neo_mirror_and_duplicate_rows(self):
+        self._set_mode(GOOGLE_PRIMARY)
+        self._login("simulator")
+        worksheet = _FakeWorksheet()
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+            patch(
+                "app.neonodes.neosektor.routes.mirror_neosektor_operational_values"
+            ) as mirror,
+        ):
+            google_primary_operational_values(self.gateway)
+            worksheet.batch_reads.clear()
+            response, metrics = self._capture_post_metrics(
+                "/neosektor/ballmat/update?side=east",
+                {
+                    "side": "east",
+                    "waves": {"first": {"count": 9}},
+                    "open_bays": 3,
+                    "bay_statuses": {"Bay 1": "Moderate"},
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(metrics["selects"], 12)
+        self.assertEqual(metrics["commits"], 1)
+        self.assertEqual(worksheet.batch_reads, [])
+        self.assertEqual(
+            worksheet.updates,
+            [("B2", 9), ("B4", 3), ("B6", "Moderate")],
+        )
+        mirror.assert_not_called()
+        self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 0)
+        self.assertEqual(NeoSektorOpenBayState.query.count(), 0)
+        self.assertEqual(NeoSektorBayStatus.query.count(), 0)
+
+    def test_tunnel_writes_reuse_one_operational_bundle(self):
+        self._set_mode(NEO_ONLY)
+        apply_standalone_compat_values(self.gateway, _complete_sheet_values())
+        driver_routing_state_payload(self.gateway)
+        db.session.commit()
+        self._login("simulator")
+
+        actions = (
+            (
+                "/neosektor/tunnel-conductor/ballmat",
+                {
+                    "side": "east",
+                    "waves": {"first": {"count": 8}},
+                    "open_bays": 2,
+                    "bay_statuses": {"Bay 1": "Moderate"},
+                },
+            ),
+            (
+                "/neosektor/tunnel-conductor/wave",
+                {"wave": "first", "delta": 1},
+            ),
+            (
+                "/neosektor/tunnel-conductor/offset",
+                {"west_offset": 4},
+            ),
+            (
+                "/neosektor/tunnel-conductor/settings",
+                {
+                    "first_modifier": 52,
+                    "second_modifier": 31,
+                    "down_timer_minutes": 22,
+                },
+            ),
+        )
+        for url, payload in actions:
+            with self.subTest(url=url):
+                response, metrics = self._capture_post_metrics(url, payload)
+                self.assertEqual(response.status_code, 200)
+                self.assertLessEqual(metrics["selects"], 17)
+                self.assertEqual(metrics["commits"], 1)
+                self.assertTrue(
+                    all(count == 1 for count in metrics["table_selects"].values())
+                )
+
+    def _capture_post_metrics(self, url, payload, *, commit_order=None):
+        statements = []
+        commits = []
+
+        def capture_statement(_conn, _cursor, statement, _params, _context, _many):
+            statements.append(statement)
+
+        def capture_commit(_session):
+            commits.append(True)
+            if commit_order is not None:
+                commit_order.append(("commit", None))
+
+        engine = db.engine
+        event.listen(engine, "before_cursor_execute", capture_statement)
+        event.listen(Session, "after_commit", capture_commit)
+        try:
+            response = self.client.post(url, json=payload)
+        finally:
+            event.remove(engine, "before_cursor_execute", capture_statement)
+            event.remove(Session, "after_commit", capture_commit)
+
+        kinds = {
+            kind: sum(
+                statement.lstrip().split(None, 1)[0].upper() == kind
+                for statement in statements
+            )
+            for kind in ("SELECT", "INSERT", "UPDATE", "DELETE")
+        }
+        select_sql = [
+            statement.lower()
+            for statement in statements
+            if statement.lstrip().upper().startswith("SELECT")
+        ]
+        tables = (
+            "neosektor_operational_settings",
+            "neosektor_sort_states",
+            "neosektor_wave_states",
+            "neosektor_ballmat_wave_counts",
+            "neosektor_ballmat_counts",
+            "neosektor_open_bay_states",
+            "neosektor_bay_statuses",
+            "neosektor_driver_route_settings",
+        )
+        return response, {
+            "selects": kinds["SELECT"],
+            "inserts": kinds["INSERT"],
+            "updates": kinds["UPDATE"],
+            "deletes": kinds["DELETE"],
+            "commits": len(commits),
+            "table_selects": {
+                table: sum(table in statement for statement in select_sql)
+                for table in tables
+            },
+        }
 
     def _set_mode(self, mode):
         settings = NeoSektorOperationalSetting.query.filter_by(

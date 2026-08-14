@@ -6,6 +6,7 @@ from app.models import SortDateOperation
 from app.neonodes.neosektor import bp
 from app.services.access_control import get_current_gateway
 from app.services.neosektor_live_counts import (
+    NeoSektorOperationalStateBundle,
     TUNNEL_CONDUCTOR_EDIT_PERMISSION,
     TUNNEL_CONDUCTOR_VIEW_PERMISSION,
     adjust_tunnel_wave_arrivals,
@@ -28,8 +29,9 @@ from app.services.neosektor_live_refresh import (
     neosektor_state_revision,
 )
 from app.services.neosektor_sheets_compat import (
+    NEO_PRIMARY_GOOGLE_MIRROR,
     NeoSektorGoogleError,
-    mirror_neosektor_sheet_update,
+    mirror_neosektor_operational_values,
     neosektor_integration_status,
 )
 from app.services.permission_rules import user_can
@@ -254,12 +256,16 @@ def tunnel_conductor_wave():
     payload = request.get_json(silent=True) or request.form
     try:
         gateway = get_current_gateway()
-        before_state = driver_routing_state_payload(gateway)
+        bundle, before_values, warning_pending = _neosektor_write_bundle(
+            gateway,
+            include_routing=True,
+        )
         state = adjust_tunnel_wave_arrivals(
             gateway,
             payload.get("wave"),
             payload.get("delta"),
             value=payload.get("value") if "value" in payload else None,
+            bundle=bundle,
         )
     except NeoSektorGoogleError as exc:
         db.session.rollback()
@@ -267,7 +273,11 @@ def tunnel_conductor_wave():
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
-    _commit_neosektor_update_and_mirror(before_state, state)
+    _commit_neosektor_update_and_mirror(
+        bundle,
+        before_values,
+        warning_pending,
+    )
     return jsonify({"ok": True, "state": state})
 
 
@@ -283,9 +293,16 @@ def tunnel_conductor_offset():
 
     payload = request.get_json(silent=True) or request.form
     gateway = get_current_gateway()
-    before_state = driver_routing_state_payload(gateway)
-    state = update_tunnel_driver_offset(gateway, payload)
-    _commit_neosektor_update_and_mirror(before_state, state)
+    bundle, before_values, warning_pending = _neosektor_write_bundle(
+        gateway,
+        include_routing=True,
+    )
+    state = update_tunnel_driver_offset(gateway, payload, bundle=bundle)
+    _commit_neosektor_update_and_mirror(
+        bundle,
+        before_values,
+        warning_pending,
+    )
     return jsonify({"ok": True, "state": state})
 
 
@@ -301,9 +318,20 @@ def tunnel_conductor_settings():
 
     payload = request.get_json(silent=True) or request.form
     gateway = get_current_gateway()
-    before_state = driver_routing_state_payload(gateway)
-    state = update_neosektor_operational_settings(gateway, payload)
-    _commit_neosektor_update_and_mirror(before_state, state)
+    bundle, before_values, warning_pending = _neosektor_write_bundle(
+        gateway,
+        include_routing=True,
+    )
+    state = update_neosektor_operational_settings(
+        gateway,
+        payload,
+        bundle=bundle,
+    )
+    _commit_neosektor_update_and_mirror(
+        bundle,
+        before_values,
+        warning_pending,
+    )
     return jsonify({"ok": True, "state": state})
 
 
@@ -324,16 +352,28 @@ def tunnel_conductor_ballmat():
 
     try:
         gateway = get_current_gateway()
-        before_state = driver_routing_state_payload(gateway)
-        update_ballmat_side(gateway, side, payload)
-        state = driver_routing_state_payload(gateway)
+        bundle, before_values, warning_pending = _neosektor_write_bundle(
+            gateway,
+            include_routing=True,
+        )
+        state = update_ballmat_side(
+            gateway,
+            side,
+            payload,
+            bundle=bundle,
+            include_routing_state=True,
+        )
     except NeoSektorGoogleError as exc:
         db.session.rollback()
         return jsonify({"ok": False, "error": str(exc)}), 502
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
-    _commit_neosektor_update_and_mirror(before_state, state)
+    _commit_neosektor_update_and_mirror(
+        bundle,
+        before_values,
+        warning_pending,
+    )
     return jsonify({"ok": True, "state": state})
 
 
@@ -411,8 +451,13 @@ def ballmat_update():
     payload = request.get_json(silent=True) or request.form.to_dict(flat=False)
     try:
         gateway = get_current_gateway()
-        before_state = driver_routing_state_payload(gateway)
-        state = update_ballmat_side(gateway, selected_side, payload)
+        bundle, before_values, warning_pending = _neosektor_write_bundle(gateway)
+        state = update_ballmat_side(
+            gateway,
+            selected_side,
+            payload,
+            bundle=bundle,
+        )
     except NeoSektorGoogleError as exc:
         db.session.rollback()
         return jsonify({"ok": False, "error": str(exc)}), 502
@@ -420,7 +465,11 @@ def ballmat_update():
         return jsonify({"ok": False, "error": str(exc)}), 403
 
     session["neosektor_ballmat_side"] = selected_side
-    _commit_neosektor_update_and_mirror(before_state, state)
+    _commit_neosektor_update_and_mirror(
+        bundle,
+        before_values,
+        warning_pending,
+    )
     return jsonify({"ok": True, "state": state})
 
 
@@ -841,11 +890,40 @@ def _settings_response(gateway, access, status_code=200):
     return response, status_code
 
 
-def _commit_neosektor_update_and_mirror(before_state, after_state):
-    """Commit Neo state first, then mirror only when Mode 2 owns the values."""
-    db.session.commit()
-    mirror_neosektor_sheet_update(
-        before_state,
-        after_state,
-        gateway=get_current_gateway(),
+def _neosektor_write_bundle(gateway, *, include_routing=False):
+    bundle = NeoSektorOperationalStateBundle.load(
+        gateway,
+        include_routing=include_routing,
     )
+    if bundle.integration_mode != NEO_PRIMARY_GOOGLE_MIRROR:
+        return bundle, None, False
+
+    settings = bundle.operational_settings
+    warning_pending = bool(
+        settings.google_mirror_sync_needed
+        or settings.google_mirror_last_error
+    )
+    return bundle, bundle.operational_cell_values(), warning_pending
+
+
+def _commit_neosektor_update_and_mirror(
+    bundle,
+    before_values,
+    warning_pending,
+):
+    """Commit Neo first, then mirror only Mode 2's changed cell values."""
+    after_values = (
+        bundle.operational_cell_values()
+        if before_values is not None
+        else None
+    )
+    db.session.commit()
+    if before_values is not None:
+        mirror_neosektor_operational_values(
+            before_values,
+            after_values,
+            gateway=bundle.gateway,
+            integration_mode=bundle.integration_mode,
+            settings=bundle.operational_settings,
+            warning_pending=warning_pending,
+        )

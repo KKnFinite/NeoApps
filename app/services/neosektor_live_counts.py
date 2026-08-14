@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
@@ -55,6 +56,358 @@ TUNNEL_CONDUCTOR_VIEW_PERMISSION = "neosektor.conductor.view"
 TUNNEL_CONDUCTOR_EDIT_PERMISSION = "neosektor.tunnel_conductor.edit"
 
 
+@dataclass
+class NeoSektorOperationalStateBundle:
+    """One coherent set of NeoSektor operational rows for a request."""
+
+    gateway: object
+    sort_date: date
+    sort_name: str
+    initialize: bool
+    refresh_status: dict | None
+    operational_settings: object
+    integration_mode: str
+    sort_state: object
+    ballmat_wave_counts: list
+    waves: list
+    ballmats: list
+    open_bays: list
+    bay_statuses: list
+    timer_rows: list
+    google_cells: dict | None = None
+    driver_routes: list | None = None
+    routing_sort_state: object | None = None
+
+    @classmethod
+    def load(
+        cls,
+        gateway,
+        sort_date=None,
+        sort_name=None,
+        *,
+        initialize=True,
+        refresh_status=None,
+        include_routing=False,
+    ):
+        sort_date = sort_date or date.today()
+        sort_name = normalize_sort_name(sort_name)
+        settings = _operational_settings_for_state(
+            gateway,
+            initialize=initialize,
+        )
+        integration_mode = _neosektor_integration_mode(
+            gateway,
+            settings=settings,
+        )
+
+        if integration_mode == "google_primary":
+            from app.services.neosektor_sheets_compat import (
+                google_primary_operational_values,
+                google_primary_wave_timer_starts,
+            )
+
+            cells = google_primary_operational_values(gateway)
+            if initialize:
+                sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
+                timer_rows = _get_or_create_waves(sort_state)
+            else:
+                sort_state = _copy_sort_state(None, gateway, sort_date, sort_name)
+                timer_starts = google_primary_wave_timer_starts(gateway)
+                timer_rows = [
+                    SimpleNamespace(
+                        wave_name=wave_name,
+                        all_up_started_at=timer_starts.get(wave_name),
+                    )
+                    for _wave_key, wave_name in DEFAULT_WAVES
+                ]
+            bundle = cls(
+                gateway=gateway,
+                sort_date=sort_date,
+                sort_name=sort_name,
+                initialize=initialize,
+                refresh_status=refresh_status,
+                operational_settings=settings,
+                integration_mode=integration_mode,
+                sort_state=sort_state,
+                ballmat_wave_counts=[],
+                waves=[],
+                ballmats=[],
+                open_bays=[],
+                bay_statuses=[],
+                timer_rows=timer_rows,
+                google_cells=dict(cells),
+            )
+        else:
+            if initialize:
+                sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
+                ballmat_wave_counts = _get_or_create_ballmat_wave_counts(sort_state)
+                waves = _get_or_create_waves(sort_state)
+                ballmats = _get_or_create_ballmats(sort_state)
+                open_bays = _get_or_create_open_bays(sort_state)
+                bay_statuses = _get_or_create_bay_statuses(sort_state)
+            else:
+                (
+                    sort_state,
+                    ballmat_wave_counts,
+                    waves,
+                    ballmats,
+                    open_bays,
+                    bay_statuses,
+                ) = _read_only_ballmat_components(gateway, sort_date, sort_name)
+            bundle = cls(
+                gateway=gateway,
+                sort_date=sort_date,
+                sort_name=sort_name,
+                initialize=initialize,
+                refresh_status=refresh_status,
+                operational_settings=settings,
+                integration_mode=integration_mode,
+                sort_state=sort_state,
+                ballmat_wave_counts=ballmat_wave_counts,
+                waves=waves,
+                ballmats=ballmats,
+                open_bays=open_bays,
+                bay_statuses=bay_statuses,
+                timer_rows=waves,
+            )
+
+        if include_routing:
+            bundle.ensure_driver_routes()
+        return bundle
+
+    def ensure_driver_routes(self):
+        if self.driver_routes is not None:
+            return self.driver_routes
+        if self.initialize:
+            self.routing_sort_state = self.sort_state
+            self.driver_routes = _get_or_create_driver_routes(self.sort_state)
+        else:
+            self.routing_sort_state, self.driver_routes = (
+                _read_only_sort_and_driver_routes(
+                    self.gateway,
+                    self.sort_date,
+                    self.sort_name,
+                )
+            )
+        return self.driver_routes
+
+    def resolved_refresh_status(self):
+        if self.refresh_status is None:
+            self.refresh_status = neosektor_refresh_status(self.gateway)
+        return self.refresh_status
+
+    def apply_google_updates(self, updates):
+        if self.google_cells is not None:
+            self.google_cells.update(updates)
+
+    def operational_cell_values(self):
+        if self.integration_mode == "google_primary":
+            return dict(self.google_cells or {})
+
+        wave_counts = {
+            (row.side, row.wave_name): max(row.count or 0, 0)
+            for row in self.ballmat_wave_counts
+        }
+        waves = {
+            row.wave_name: max(row.planned_count or 0, 0)
+            for row in self.waves
+        }
+        open_bays = {
+            row.side: max(row.open_count or 0, 0)
+            for row in self.open_bays
+        }
+        bays = {row.bay_name: _status(row.status) for row in self.bay_statuses}
+        return {
+            "B2": wave_counts[("EAST", "1ST WAVE")],
+            "C2": wave_counts[("WEST", "1ST WAVE")],
+            "D2": waves["1ST WAVE"],
+            "B3": wave_counts[("EAST", "2ND WAVE")],
+            "C3": wave_counts[("WEST", "2ND WAVE")],
+            "D3": waves["2ND WAVE"],
+            "B4": open_bays["EAST"],
+            "C4": open_bays["WEST"],
+            "B6": bays["Bay 1"],
+            "B8": bays["Bay 2"],
+            "B10": bays["Bay 3"],
+            "C6": bays["Bay 4"],
+            "C8": bays["Bay 5"],
+        }
+
+    def ballmat_state_payload(self):
+        if self.integration_mode == "google_primary":
+            (
+                wave_counts,
+                waves,
+                ballmats,
+                open_bays,
+                bay_statuses,
+            ) = self._google_ballmat_components()
+            planned_total = max(self.google_cells["D2"], 0) + max(
+                self.google_cells["D3"], 0
+            )
+            unloaded_total = sum(max(row.count or 0, 0) for row in wave_counts)
+        else:
+            wave_counts = self.ballmat_wave_counts
+            waves = self.waves
+            ballmats = self.ballmats
+            open_bays = self.open_bays
+            bay_statuses = self.bay_statuses
+            _sync_ballmat_rollups(
+                self.sort_state,
+                wave_counts,
+                waves,
+                ballmats,
+            )
+            planned_total = max(0, self.sort_state.planned_total or 0)
+            unloaded_total = max(0, self.sort_state.unloaded_total or 0)
+
+        sides = _side_state_views(
+            wave_counts,
+            ballmats,
+            open_bays,
+            bay_statuses,
+        )
+        wave_views = _wave_views(
+            waves,
+            sides,
+            self.operational_settings,
+            timer_rows=self.timer_rows,
+            persist_timer=self.initialize,
+        )
+        if self.initialize:
+            db.session.flush()
+
+        return {
+            "summary": {
+                "sort_date": self.sort_date.isoformat(),
+                "sort_name": self.sort_name.upper(),
+                "active_wave": self.sort_state.active_wave,
+                "planned_total": planned_total,
+                "unloaded_total": unloaded_total,
+                "left_to_unload": max(planned_total - unloaded_total, 0),
+                "completion_percent": _completion_percent(
+                    planned_total,
+                    unloaded_total,
+                ),
+            },
+            "sides": sides,
+            "waves": wave_views,
+            "operational_settings": _operational_settings_view(
+                self.operational_settings
+            ),
+            "integration": _neosektor_integration_status(
+                self.gateway,
+                settings=self.operational_settings,
+            ),
+            "refresh": self.resolved_refresh_status(),
+        }
+
+    def driver_routing_state_payload(self):
+        state = self.ballmat_state_payload()
+        driver_routes = self.ensure_driver_routes()
+        routing = _driver_routing_calculation(
+            self.routing_sort_state or self.sort_state,
+            state["sides"],
+            driver_routes,
+        )
+        _sync_driver_route_values(driver_routes, routing)
+        if self.initialize:
+            db.session.flush()
+        state["routing"] = routing
+        state["driver_routes"] = [
+            _driver_route_view(row) for row in driver_routes
+        ]
+        return state
+
+    def _google_ballmat_components(self):
+        cells = self.google_cells
+        wave_cell_map = {
+            ("EAST", "1ST WAVE"): "B2",
+            ("WEST", "1ST WAVE"): "C2",
+            ("EAST", "2ND WAVE"): "B3",
+            ("WEST", "2ND WAVE"): "C3",
+        }
+        wave_counts = []
+        display_order = 0
+        for _side_key, side_label, _manager_label in DEFAULT_BALLMAT_SIDES:
+            for _wave_key, wave_name in DEFAULT_WAVES:
+                display_order += 1
+                count = cells[wave_cell_map[(side_label, wave_name)]]
+                wave_counts.append(
+                    SimpleNamespace(
+                        side=side_label,
+                        wave_name=wave_name,
+                        count=count,
+                        status="Light" if count else "Empty",
+                        display_order=display_order,
+                    )
+                )
+
+        ballmats = []
+        for _side_key, side_label, _manager_label in DEFAULT_BALLMAT_SIDES:
+            matching = [row for row in wave_counts if row.side == side_label]
+            total = sum(row.count for row in matching)
+            ballmats.append(
+                SimpleNamespace(
+                    side=side_label,
+                    count=total,
+                    status=_aggregate_status(matching, total),
+                )
+            )
+        open_bays = [
+            SimpleNamespace(side="EAST", open_count=cells["B4"]),
+            SimpleNamespace(side="WEST", open_count=cells["C4"]),
+        ]
+        bay_statuses = [
+            SimpleNamespace(
+                side="EAST",
+                bay_name="Bay 1",
+                status=cells["B6"],
+                display_order=1,
+            ),
+            SimpleNamespace(
+                side="EAST",
+                bay_name="Bay 2",
+                status=cells["B8"],
+                display_order=2,
+            ),
+            SimpleNamespace(
+                side="EAST",
+                bay_name="Bay 3",
+                status=cells["B10"],
+                display_order=3,
+            ),
+            SimpleNamespace(
+                side="WEST",
+                bay_name="Bay 4",
+                status=cells["C6"],
+                display_order=4,
+            ),
+            SimpleNamespace(
+                side="WEST",
+                bay_name="Bay 5",
+                status=cells["C8"],
+                display_order=5,
+            ),
+        ]
+        waves = []
+        for index, (_wave_key, wave_name) in enumerate(DEFAULT_WAVES, start=1):
+            matching = [row for row in wave_counts if row.wave_name == wave_name]
+            unloaded = sum(row.count for row in matching)
+            waves.append(
+                SimpleNamespace(
+                    wave_name=wave_name,
+                    planned_count=cells[
+                        "D2" if wave_name == "1ST WAVE" else "D3"
+                    ],
+                    unloaded_count=unloaded,
+                    status=_aggregate_status(matching, unloaded),
+                    display_order=index,
+                )
+            )
+        return wave_counts, waves, ballmats, open_bays, bay_statuses
+
+
 def live_counts_context(gateway, sort_date=None, sort_name=None):
     state = ballmat_state_payload(gateway, sort_date, sort_name)
     return {
@@ -88,215 +441,16 @@ def ballmat_state_payload(
     *,
     initialize=True,
     refresh_status=None,
+    bundle=None,
 ):
-    operational_settings = _operational_settings_for_state(
+    bundle = bundle or NeoSektorOperationalStateBundle.load(
         gateway,
+        sort_date,
+        sort_name,
         initialize=initialize,
+        refresh_status=refresh_status,
     )
-    integration_mode = _neosektor_integration_mode(
-        gateway,
-        settings=operational_settings,
-    )
-    if integration_mode == "google_primary":
-        return _google_primary_ballmat_state_payload(
-            gateway,
-            sort_date,
-            sort_name,
-            initialize=initialize,
-            operational_settings=operational_settings,
-            refresh_status=refresh_status,
-        )
-
-    sort_date = sort_date or date.today()
-    sort_name = normalize_sort_name(sort_name)
-    if initialize:
-        sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
-        ballmat_wave_counts = _get_or_create_ballmat_wave_counts(sort_state)
-        waves = _get_or_create_waves(sort_state)
-        ballmats = _get_or_create_ballmats(sort_state)
-        open_bays = _get_or_create_open_bays(sort_state)
-        bay_statuses = _get_or_create_bay_statuses(sort_state)
-    else:
-        (
-            sort_state,
-            ballmat_wave_counts,
-            waves,
-            ballmats,
-            open_bays,
-            bay_statuses,
-        ) = _read_only_ballmat_components(gateway, sort_date, sort_name)
-    _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats)
-    side_views = _side_state_views(
-        ballmat_wave_counts,
-        ballmats,
-        open_bays,
-        bay_statuses,
-    )
-    wave_views = _wave_views(
-        waves,
-        side_views,
-        operational_settings,
-        persist_timer=initialize,
-    )
-    if initialize:
-        db.session.flush()
-
-    planned_total = max(0, sort_state.planned_total or 0)
-    unloaded_total = max(0, sort_state.unloaded_total or 0)
-
-    return {
-        "summary": {
-            "sort_date": sort_state.sort_date.isoformat(),
-            "sort_name": sort_state.sort_name.upper(),
-            "active_wave": sort_state.active_wave,
-            "planned_total": planned_total,
-            "unloaded_total": unloaded_total,
-            "left_to_unload": max(planned_total - unloaded_total, 0),
-            "completion_percent": _completion_percent(planned_total, unloaded_total),
-        },
-        "sides": side_views,
-        "waves": wave_views,
-        "operational_settings": _operational_settings_view(operational_settings),
-        "integration": _neosektor_integration_status(
-            gateway,
-            settings=operational_settings,
-        ),
-        "refresh": refresh_status or neosektor_refresh_status(gateway),
-    }
-
-
-def _google_primary_ballmat_state_payload(
-    gateway,
-    sort_date=None,
-    sort_name=None,
-    *,
-    initialize=True,
-    operational_settings=None,
-    refresh_status=None,
-):
-    """Compose live operational state from Google without persisting it."""
-    sort_date = sort_date or date.today()
-    sort_name = normalize_sort_name(sort_name)
-    from app.services.neosektor_sheets_compat import (
-        google_primary_operational_values,
-        google_primary_wave_timer_starts,
-    )
-
-    cells = google_primary_operational_values(gateway)
-    if initialize:
-        sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
-        timer_rows = _get_or_create_waves(sort_state)
-    else:
-        sort_state = _copy_sort_state(None, gateway, sort_date, sort_name)
-        timer_starts = google_primary_wave_timer_starts(gateway)
-        timer_rows = [
-            SimpleNamespace(
-                wave_name=wave_name,
-                all_up_started_at=timer_starts.get(wave_name),
-            )
-            for _wave_key, wave_name in DEFAULT_WAVES
-        ]
-    operational_settings = operational_settings or _operational_settings_for_state(
-        gateway,
-        initialize=initialize,
-    )
-
-    wave_count_rows = []
-    wave_cell_map = {
-        ("EAST", "1ST WAVE"): "B2",
-        ("WEST", "1ST WAVE"): "C2",
-        ("EAST", "2ND WAVE"): "B3",
-        ("WEST", "2ND WAVE"): "C3",
-    }
-    display_order = 0
-    for _side_key, side_label, _manager_label in DEFAULT_BALLMAT_SIDES:
-        for _wave_key, wave_name in DEFAULT_WAVES:
-            display_order += 1
-            count = cells[wave_cell_map[(side_label, wave_name)]]
-            wave_count_rows.append(
-                SimpleNamespace(
-                    side=side_label,
-                    wave_name=wave_name,
-                    count=count,
-                    status="Light" if count else "Empty",
-                    display_order=display_order,
-                )
-            )
-
-    ballmats = []
-    for _side_key, side_label, _manager_label in DEFAULT_BALLMAT_SIDES:
-        matching = [row for row in wave_count_rows if row.side == side_label]
-        total = sum(row.count for row in matching)
-        ballmats.append(
-            SimpleNamespace(
-                side=side_label,
-                count=total,
-                status=_aggregate_status(matching, total),
-            )
-        )
-
-    open_bays = [
-        SimpleNamespace(side="EAST", open_count=cells["B4"]),
-        SimpleNamespace(side="WEST", open_count=cells["C4"]),
-    ]
-    bay_statuses = [
-        SimpleNamespace(side="EAST", bay_name="Bay 1", status=cells["B6"], display_order=1),
-        SimpleNamespace(side="EAST", bay_name="Bay 2", status=cells["B8"], display_order=2),
-        SimpleNamespace(side="EAST", bay_name="Bay 3", status=cells["B10"], display_order=3),
-        SimpleNamespace(side="WEST", bay_name="Bay 4", status=cells["C6"], display_order=4),
-        SimpleNamespace(side="WEST", bay_name="Bay 5", status=cells["C8"], display_order=5),
-    ]
-    transient_waves = []
-    for index, (_wave_key, wave_name) in enumerate(DEFAULT_WAVES, start=1):
-        planned_cell = "D2" if wave_name == "1ST WAVE" else "D3"
-        matching = [row for row in wave_count_rows if row.wave_name == wave_name]
-        unloaded = sum(row.count for row in matching)
-        transient_waves.append(
-            SimpleNamespace(
-                wave_name=wave_name,
-                planned_count=cells[planned_cell],
-                unloaded_count=unloaded,
-                status=_aggregate_status(matching, unloaded),
-                display_order=index,
-            )
-        )
-
-    sides = _side_state_views(
-        wave_count_rows,
-        ballmats,
-        open_bays,
-        bay_statuses,
-    )
-    waves = _wave_views(
-        transient_waves,
-        sides,
-        operational_settings,
-        timer_rows=timer_rows,
-        persist_timer=initialize,
-    )
-    planned_total = cells["D2"] + cells["D3"]
-    unloaded_total = sum(row.count for row in wave_count_rows)
-    if initialize:
-        db.session.flush()
-    return {
-        "summary": {
-            "sort_date": sort_date.isoformat(),
-            "sort_name": sort_name.upper(),
-            "active_wave": sort_state.active_wave,
-            "planned_total": planned_total,
-            "unloaded_total": unloaded_total,
-            "left_to_unload": max(planned_total - unloaded_total, 0),
-            "completion_percent": _completion_percent(planned_total, unloaded_total),
-        },
-        "sides": sides,
-        "waves": waves,
-        "operational_settings": _operational_settings_view(operational_settings),
-        "integration": _neosektor_integration_status(
-            gateway,
-            settings=operational_settings,
-        ),
-        "refresh": refresh_status or neosektor_refresh_status(gateway),
-    }
+    return bundle.ballmat_state_payload()
 
 
 def _google_ballmat_updates(selected_side, payload):
@@ -349,37 +503,48 @@ def neosektor_refresh_status(gateway, now=None):
     return node_auto_refresh_status(gateway, now=now)
 
 
-def update_ballmat_side(gateway, selected_side, payload, sort_date=None, sort_name=None):
+def update_ballmat_side(
+    gateway,
+    selected_side,
+    payload,
+    sort_date=None,
+    sort_name=None,
+    *,
+    bundle=None,
+    include_routing_state=False,
+):
     selected_side = normalize_ballmat_side(selected_side)
     target_side = normalize_ballmat_side((payload or {}).get("side"))
     if not selected_side or not target_side or selected_side != target_side:
         raise ValueError("Selected side does not match update side.")
 
-    if _neosektor_integration_mode(gateway) == "google_primary":
+    bundle = bundle or NeoSektorOperationalStateBundle.load(
+        gateway,
+        sort_date,
+        sort_name,
+    )
+    if bundle.integration_mode == "google_primary":
         updates = _google_ballmat_updates(selected_side, payload)
         if updates:
             from app.services.neosektor_sheets_compat import (
                 write_google_primary_operational_values,
             )
 
-            write_google_primary_operational_values(gateway, updates)
-        return ballmat_state_payload(gateway, sort_date, sort_name)
-
-    sort_date = sort_date or date.today()
-    sort_name = normalize_sort_name(sort_name)
-    sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
-
-    ballmat_wave_counts = _get_or_create_ballmat_wave_counts(sort_state)
-    waves = _get_or_create_waves(sort_state)
-    ballmats = _get_or_create_ballmats(sort_state)
-    open_bays = _get_or_create_open_bays(sort_state)
-    bay_statuses = _get_or_create_bay_statuses(sort_state)
+            write_google_primary_operational_values(
+                gateway,
+                updates,
+                integration_mode=bundle.integration_mode,
+            )
+            bundle.apply_google_updates(updates)
+        if include_routing_state:
+            return bundle.driver_routing_state_payload()
+        return bundle.ballmat_state_payload()
 
     side_label = side_display_label(selected_side)
     wave_payload = (payload or {}).get("waves") or {}
     rows_by_wave = {
         row.wave_name: row
-        for row in ballmat_wave_counts
+        for row in bundle.ballmat_wave_counts
         if row.side == side_label
     }
     for wave_key, wave_name in DEFAULT_WAVES:
@@ -391,7 +556,9 @@ def update_ballmat_side(gateway, selected_side, payload, sort_date=None, sort_na
         )
         row.status = _status((wave_payload.get(wave_key) or {}).get("status") or row.status)
 
-    open_bay_row = next(row for row in open_bays if row.side == side_label)
+    open_bay_row = next(
+        row for row in bundle.open_bays if row.side == side_label
+    )
     open_bay_row.open_count = _clean_count(
         (payload or {}).get("open_bays"),
         default=open_bay_row.open_count,
@@ -399,13 +566,13 @@ def update_ballmat_side(gateway, selected_side, payload, sort_date=None, sort_na
     )
 
     bay_payload = (payload or {}).get("bay_statuses") or {}
-    for bay in bay_statuses:
+    for bay in bundle.bay_statuses:
         if bay.side == side_label and bay.bay_name in bay_payload:
             bay.status = _status(bay_payload[bay.bay_name])
 
-    _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats)
-    db.session.flush()
-    return ballmat_state_payload(gateway, sort_date, sort_name)
+    if include_routing_state:
+        return bundle.driver_routing_state_payload()
+    return bundle.ballmat_state_payload()
 
 
 def tunnel_conductor_context(gateway, sort_date=None, sort_name=None):
@@ -428,52 +595,71 @@ def driver_routing_state_payload(
     *,
     initialize=True,
     refresh_status=None,
+    bundle=None,
 ):
-    sort_date = sort_date or date.today()
-    sort_name = normalize_sort_name(sort_name)
-    state = ballmat_state_payload(
+    bundle = bundle or NeoSektorOperationalStateBundle.load(
         gateway,
         sort_date,
         sort_name,
         initialize=initialize,
         refresh_status=refresh_status,
+        include_routing=True,
     )
-    if initialize:
-        sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
-        driver_routes = _get_or_create_driver_routes(sort_state)
-    else:
-        sort_state, driver_routes = _read_only_sort_and_driver_routes(
-            gateway,
-            sort_date,
-            sort_name,
-        )
-    routing = _driver_routing_calculation(sort_state, state["sides"], driver_routes)
-    _sync_driver_route_values(driver_routes, routing)
-    if initialize:
-        db.session.flush()
-
-    state["routing"] = routing
-    state["driver_routes"] = [_driver_route_view(row) for row in driver_routes]
-    return state
+    return bundle.driver_routing_state_payload()
 
 
-def update_driver_routing_settings(gateway, payload, sort_date=None, sort_name=None):
-    sort_date = sort_date or date.today()
-    sort_name = normalize_sort_name(sort_name)
-    sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
-    driver_routes = _get_or_create_driver_routes(sort_state)
+def update_driver_routing_settings(
+    gateway,
+    payload,
+    sort_date=None,
+    sort_name=None,
+    *,
+    bundle=None,
+):
+    bundle = bundle or NeoSektorOperationalStateBundle.load(
+        gateway,
+        sort_date,
+        sort_name,
+        include_routing=True,
+    )
+    driver_routes = bundle.ensure_driver_routes()
     offset_row = _driver_route_by_name(driver_routes, DRIVER_ROUTE_WEST_OFFSET_NAME)
     offset_row.route_value = str(_clean_offset((payload or {}).get("west_offset")))
-    db.session.flush()
-    return driver_routing_state_payload(gateway, sort_date, sort_name)
+    return bundle.driver_routing_state_payload()
 
 
-def update_tunnel_driver_offset(gateway, payload, sort_date=None, sort_name=None):
-    return update_driver_routing_settings(gateway, payload, sort_date, sort_name)
+def update_tunnel_driver_offset(
+    gateway,
+    payload,
+    sort_date=None,
+    sort_name=None,
+    *,
+    bundle=None,
+):
+    return update_driver_routing_settings(
+        gateway,
+        payload,
+        sort_date,
+        sort_name,
+        bundle=bundle,
+    )
 
 
-def update_neosektor_operational_settings(gateway, payload, sort_date=None, sort_name=None):
-    settings = get_or_create_operational_settings(gateway)
+def update_neosektor_operational_settings(
+    gateway,
+    payload,
+    sort_date=None,
+    sort_name=None,
+    *,
+    bundle=None,
+):
+    bundle = bundle or NeoSektorOperationalStateBundle.load(
+        gateway,
+        sort_date,
+        sort_name,
+        include_routing=True,
+    )
+    settings = bundle.operational_settings
     settings.first_wave_unload_modifier = _clean_count(
         (payload or {}).get("first_modifier"),
         default=settings.first_wave_unload_modifier,
@@ -490,8 +676,7 @@ def update_neosektor_operational_settings(gateway, payload, sort_date=None, sort
         minimum=1,
         maximum=ALL_UP_TO_DOWN_MINUTES_MAX,
     )
-    db.session.flush()
-    return driver_routing_state_payload(gateway, sort_date, sort_name)
+    return bundle.driver_routing_state_payload()
 
 
 def apply_standalone_compat_values(
@@ -551,16 +736,29 @@ def apply_standalone_compat_values(
     return changed
 
 
-def adjust_tunnel_wave_arrivals(gateway, wave, delta=None, value=None, sort_date=None, sort_name=None):
+def adjust_tunnel_wave_arrivals(
+    gateway,
+    wave,
+    delta=None,
+    value=None,
+    sort_date=None,
+    sort_name=None,
+    *,
+    bundle=None,
+):
     _wave_key, wave_name = normalize_wave_key(wave)
     if not wave_name:
         raise ValueError("Invalid wave.")
 
-    if _neosektor_integration_mode(gateway) == "google_primary":
-        state = ballmat_state_payload(gateway, sort_date, sort_name)
-        current_value = next(
-            row["planned"] for row in state["waves"] if row["name"] == wave_name
-        )
+    bundle = bundle or NeoSektorOperationalStateBundle.load(
+        gateway,
+        sort_date,
+        sort_name,
+        include_routing=True,
+    )
+    if bundle.integration_mode == "google_primary":
+        target_cell = "D2" if wave_name == "1ST WAVE" else "D3"
+        current_value = bundle.google_cells[target_cell]
         if value is not None:
             next_value = _clean_count(
                 value,
@@ -578,16 +776,13 @@ def adjust_tunnel_wave_arrivals(gateway, wave, delta=None, value=None, sort_date
 
         write_google_primary_operational_values(
             gateway,
-            {"D2" if wave_name == "1ST WAVE" else "D3": next_value},
+            {target_cell: next_value},
+            integration_mode=bundle.integration_mode,
         )
-        return driver_routing_state_payload(gateway, sort_date, sort_name)
+        bundle.apply_google_updates({target_cell: next_value})
+        return bundle.driver_routing_state_payload()
 
-    sort_date = sort_date or date.today()
-    sort_name = normalize_sort_name(sort_name)
-    sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
-    waves = _get_or_create_waves(sort_state)
-
-    target_row = next(row for row in waves if row.wave_name == wave_name)
+    target_row = next(row for row in bundle.waves if row.wave_name == wave_name)
     if value is not None:
         target_row.planned_count = _clean_count(
             value,
@@ -599,8 +794,7 @@ def adjust_tunnel_wave_arrivals(gateway, wave, delta=None, value=None, sort_date
             max((target_row.planned_count or 0) + _clean_delta(delta), 0),
             LEFT_TO_ARRIVE_MAX,
         )
-    db.session.flush()
-    return driver_routing_state_payload(gateway, sort_date, sort_name)
+    return bundle.driver_routing_state_payload()
 
 
 def get_or_create_sort_state(gateway, sort_date, sort_name):

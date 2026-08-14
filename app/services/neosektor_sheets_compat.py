@@ -214,9 +214,19 @@ def google_primary_wave_timer_starts(gateway):
         return dict(cached.get("wave_all_up_started_at") or {})
 
 
-def write_google_primary_operational_values(gateway, updates):
+def write_google_primary_operational_values(
+    gateway,
+    updates,
+    *,
+    integration_mode=None,
+):
     """Write Mode 1 operational edits directly to Google or fail visibly."""
-    if neosektor_integration_mode(gateway) != GOOGLE_PRIMARY:
+    mode = (
+        _normalized_mode(integration_mode)
+        if integration_mode is not None
+        else neosektor_integration_mode(gateway)
+    )
+    if mode != GOOGLE_PRIMARY:
         raise NeoSektorGoogleError("NeoSektor is not in GOOGLE PRIMARY mode.")
     normalized = normalize_operational_cell_values(updates, require_complete=False)
     _write_google_operational_values(gateway, normalized)
@@ -231,12 +241,34 @@ def mirror_neosektor_sheet_update(
     force=False,
 ):
     """Mirror authoritative Neon operational values after the Neo commit."""
+    return mirror_neosektor_operational_values(
+        _sheet_values_from_state(before_state),
+        _sheet_values_from_state(after_state),
+        gateway=gateway,
+        force=force,
+    )
+
+
+def mirror_neosektor_operational_values(
+    before_values,
+    after_values,
+    gateway=None,
+    *,
+    force=False,
+    integration_mode=None,
+    settings=None,
+    warning_pending=None,
+):
+    """Mirror compact cell snapshots after the authoritative Neo commit."""
     gateway = _resolve_gateway(gateway)
-    if not gateway or neosektor_integration_mode(gateway) != NEO_PRIMARY_GOOGLE_MIRROR:
+    mode = (
+        _normalized_mode(integration_mode)
+        if integration_mode is not None
+        else neosektor_integration_mode(gateway, settings=settings)
+    )
+    if not gateway or mode != NEO_PRIMARY_GOOGLE_MIRROR:
         return {"status": "skipped", "updated": 0}
 
-    before_values = _sheet_values_from_state(before_state)
-    after_values = _sheet_values_from_state(after_state)
     updates = {
         cell: after_values[cell]
         for cell in SHEET_CELL_ORDER
@@ -248,10 +280,14 @@ def mirror_neosektor_sheet_update(
     try:
         _write_google_operational_values(gateway, updates)
     except Exception as error:
-        _record_mirror_failure(gateway, error)
+        _record_mirror_failure(gateway, error, settings=settings)
         return {"status": "error", "updated": 0}
 
-    _record_mirror_success(gateway)
+    _record_mirror_success(
+        gateway,
+        settings=settings,
+        warning_pending=warning_pending,
+    )
     return {"status": "mirrored", "updated": len(updates)}
 
 
@@ -372,8 +408,8 @@ def _write_google_operational_values(gateway, updates):
     _merge_cached_google_values(gateway.id, updates)
 
 
-def _record_mirror_failure(gateway, error):
-    settings = ensure_neosektor_integration_setting(gateway)
+def _record_mirror_failure(gateway, error, *, settings=None):
+    settings = settings or ensure_neosektor_integration_setting(gateway)
     settings.google_mirror_sync_needed = True
     settings.google_mirror_last_error = "Google mirror failed. Retry is required."
     settings.google_mirror_failed_at_utc = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -381,9 +417,19 @@ def _record_mirror_failure(gateway, error):
     _log_safe_warning("mirror", error)
 
 
-def _record_mirror_success(gateway):
-    settings = ensure_neosektor_integration_setting(gateway)
-    if not settings.google_mirror_sync_needed and not settings.google_mirror_last_error:
+def _record_mirror_success(
+    gateway,
+    *,
+    settings=None,
+    warning_pending=None,
+):
+    if warning_pending is False:
+        return
+    settings = settings or ensure_neosektor_integration_setting(gateway)
+    if warning_pending is None and (
+        not settings.google_mirror_sync_needed
+        and not settings.google_mirror_last_error
+    ):
         return
     _clear_mirror_warning(settings)
     db.session.commit()
