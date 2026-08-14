@@ -41,10 +41,14 @@ from app.services.flight_rules import (
     is_mission_crew_covered,
 )
 from app.services.flight_api import (
+    FLIGHT_API_AUTO_POLL_CLIENT_HEADER,
+    FLIGHT_API_AUTO_POLL_CLIENT_VERSION,
     FlightApiConfigurationError,
     accept_review_item,
     acquire_flight_api_auto_poll_lock,
     api_polling_window_snapshot,
+    coordinate_flight_api_auto_poll_status,
+    flight_api_auto_poll_preflight,
     flight_api_auto_poll_status,
     flight_api_last_poll_review,
     flight_api_operational_time_utc,
@@ -650,6 +654,8 @@ def flight_api_test():
         replay_payload=replay_payload,
         auto_poll_status=auto_poll_status,
         can_trigger_auto_poll=user_can(FLIGHT_API_AUTO_POLL_TRIGGER_PERMISSION),
+        flight_api_auto_poll_client_header=FLIGHT_API_AUTO_POLL_CLIENT_HEADER,
+        flight_api_auto_poll_client_version=FLIGHT_API_AUTO_POLL_CLIENT_VERSION,
         sort_timeline_settings=settings,
         flight_api_operational_time=flight_api_operational_time_utc,
         flight_api_provider_time=flight_api_provider_time_utc,
@@ -668,15 +674,16 @@ def flight_api_auto_poll_check():
                 "eligible": False,
                 "skipped": True,
                 "reason": "Access denied.",
+                "poll_action": "stop",
+                "terminal": True,
+                "continue_polling": False,
             }
         ), 403
 
     gateway = get_current_gateway()
-    _auto_generate_today_sorts(gateway)
-    db.session.commit()
-    status = flight_api_auto_poll_status(gateway)
+    status = flight_api_auto_poll_preflight(gateway)
     operation = status.get("operation")
-    if not status.get("eligible"):
+    if status.get("poll_action") != "execute":
         return jsonify(_flight_api_auto_poll_payload(gateway, status, skipped=True))
 
     lock_token = acquire_flight_api_auto_poll_lock(operation)
@@ -684,6 +691,7 @@ def flight_api_auto_poll_check():
         db.session.rollback()
         status["eligible"] = False
         status["reason"] = "poll already in progress"
+        coordinate_flight_api_auto_poll_status(status, action="continue")
         return jsonify(_flight_api_auto_poll_payload(gateway, status, skipped=True))
 
     db.session.commit()
@@ -696,7 +704,7 @@ def flight_api_auto_poll_check():
         operation = db.session.get(SortDateOperation, operation.id)
         release_flight_api_auto_poll_lock(operation, lock_token)
         db.session.commit()
-        status = flight_api_auto_poll_status(gateway, operation=operation)
+        status = flight_api_auto_poll_preflight(gateway)
         payload = _flight_api_auto_poll_payload(
             gateway,
             status,
@@ -708,7 +716,7 @@ def flight_api_auto_poll_check():
         )
         return jsonify(payload), 500
 
-    refreshed_status = flight_api_auto_poll_status(gateway, operation=operation)
+    refreshed_status = flight_api_auto_poll_preflight(gateway)
     return jsonify(
         _flight_api_auto_poll_payload(
             gateway,
@@ -1567,6 +1575,14 @@ def _flight_api_auto_poll_payload(
         "provider_status": import_result.get("provider_status_code"),
         "safe_error_text": message if provider_error else "",
         "attempted": bool(import_result.get("attempted")),
+        "poll_action": status.get("poll_action") or "stop",
+        "terminal": bool(status.get("terminal")),
+        "continue_polling": bool(status.get("continue_polling")),
+        "wait_until": _flight_api_json_time(
+            status.get("next_check_at_utc"),
+            gateway,
+        ),
+        "next_check_seconds": status.get("next_check_seconds"),
     }
 
 
@@ -1585,7 +1601,9 @@ def _flight_api_auto_poll_timer_context(gateway, operation=None):
     if not user_can(FLIGHT_API_AUTO_POLL_TRIGGER_PERMISSION):
         return {"flight_api_auto_poll_timer": None}
 
-    status = flight_api_auto_poll_status(gateway, operation=operation)
+    status = coordinate_flight_api_auto_poll_status(
+        flight_api_auto_poll_status(gateway, operation=operation)
+    )
     operation = status.get("operation")
     inactive_reasons = {
         "no current sort operation",
@@ -1602,6 +1620,8 @@ def _flight_api_auto_poll_timer_context(gateway, operation=None):
     return {
         "flight_api_auto_poll_timer": {
             "endpoint": url_for("neomotherbrain.flight_api_auto_poll_check"),
+            "client_header": FLIGHT_API_AUTO_POLL_CLIENT_HEADER,
+            "client_version": FLIGHT_API_AUTO_POLL_CLIENT_VERSION,
             "initial_status": _flight_api_auto_poll_payload(
                 gateway,
                 status,

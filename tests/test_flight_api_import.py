@@ -7,6 +7,9 @@ import unittest
 from urllib.error import HTTPError
 from urllib.parse import parse_qsl, urlparse
 
+from sqlalchemy import event
+from sqlalchemy.orm import Session
+
 from app import create_app
 from app.extensions import db
 from app.models import (
@@ -41,6 +44,7 @@ from app.services.flight_api import (
     RapidApiFlightClient,
     accept_review_item,
     current_sort_operation,
+    flight_api_auto_poll_preflight,
     flight_api_auto_poll_status,
     flight_api_last_poll_review,
     flight_api_operational_time_utc,
@@ -118,6 +122,11 @@ class FlightApiImportTest(unittest.TestCase):
         db.session.commit()
 
     def tearDown(self):
+        if hasattr(self, "_auto_poll_original_api_key"):
+            if self._auto_poll_original_api_key is None:
+                os.environ.pop("AERODATABOX_API_KEY", None)
+            else:
+                os.environ["AERODATABOX_API_KEY"] = self._auto_poll_original_api_key
         db.session.remove()
         db.drop_all()
         self.context.pop()
@@ -499,6 +508,143 @@ class FlightApiImportTest(unittest.TestCase):
         self.assertEqual(status["actual_interval_minutes"], 10)
         self.assertEqual(status["next_eligible_time_utc"], datetime(2026, 6, 1, 19, 0))
         self.assertEqual(status["operation_id"], self.operation.id)
+
+    def test_auto_poll_preflight_waits_until_exact_polling_window_start(self):
+        self._configure_api_ready_sort()
+
+        status = flight_api_auto_poll_preflight(
+            self.gateway,
+            now=datetime(2026, 6, 1, 12, 30, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(status["reason"], "before API Polling Window")
+        self.assertEqual(status["poll_action"], "wait")
+        self.assertFalse(status["terminal"])
+        self.assertTrue(status["continue_polling"])
+        self.assertEqual(status["next_check_at_utc"], datetime(2026, 6, 1, 13, 0))
+        self.assertEqual(status["next_check_seconds"], 30 * 60)
+
+    def test_auto_poll_preflight_stops_after_polling_window(self):
+        self._configure_api_ready_sort()
+
+        status = flight_api_auto_poll_preflight(
+            self.gateway,
+            now=datetime(2026, 6, 1, 22, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(status["reason"], "outside API Polling Window")
+        self.assertEqual(status["poll_action"], "stop")
+        self.assertTrue(status["terminal"])
+        self.assertFalse(status["continue_polling"])
+        self.assertIsNone(status["next_check_seconds"])
+
+    def test_auto_poll_preflight_waits_until_stored_next_eligible_time(self):
+        self._configure_api_ready_sort()
+        self.operation.flight_api_next_auto_poll_eligible_at_utc = datetime(
+            2026,
+            6,
+            1,
+            19,
+            5,
+        )
+        db.session.commit()
+
+        status = flight_api_auto_poll_preflight(
+            self.gateway,
+            now=datetime(2026, 6, 1, 19, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(status["reason"], "waiting for auto poll interval")
+        self.assertEqual(status["poll_action"], "wait")
+        self.assertEqual(status["next_check_at_utc"], datetime(2026, 6, 1, 19, 5))
+        self.assertEqual(status["next_check_seconds"], 5 * 60)
+
+    def test_auto_poll_preflight_stops_when_no_current_operation_exists(self):
+        self._configure_api_ready_sort()
+        self.operation.archived_at_utc = datetime(2026, 6, 1, 0, 0)
+        db.session.commit()
+
+        status = flight_api_auto_poll_preflight(
+            self.gateway,
+            now=datetime(2026, 6, 1, 19, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(status["reason"], "no current sort operation")
+        self.assertEqual(status["poll_action"], "stop")
+        self.assertTrue(status["terminal"])
+        self.assertFalse(status["continue_polling"])
+
+    def test_auto_poll_preflight_due_preserves_execution_contract(self):
+        self._configure_api_ready_sort()
+
+        status = flight_api_auto_poll_preflight(
+            self.gateway,
+            now=datetime(2026, 6, 1, 19, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertTrue(status["eligible"])
+        self.assertEqual(status["poll_action"], "execute")
+        self.assertFalse(status["terminal"])
+        self.assertTrue(status["continue_polling"])
+        self.assertEqual(status["next_check_seconds"], 0)
+
+    def test_auto_poll_due_preflight_does_not_initialize_or_commit_rows(self):
+        self._configure_api_ready_sort()
+        verbs = []
+        commits = []
+
+        def capture_statement(_conn, _cursor, statement, _params, _context, _many):
+            verbs.append(statement.lstrip().split(None, 1)[0].upper())
+
+        def capture_commit(_session):
+            commits.append(True)
+
+        event.listen(db.engine, "before_cursor_execute", capture_statement)
+        event.listen(Session, "after_commit", capture_commit)
+        try:
+            status = flight_api_auto_poll_preflight(
+                self.gateway,
+                now=datetime(2026, 6, 1, 19, 0, tzinfo=timezone.utc),
+            )
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture_statement)
+            event.remove(Session, "after_commit", capture_commit)
+
+        self.assertEqual(status["poll_action"], "execute")
+        self.assertFalse(any(verb in {"INSERT", "UPDATE", "DELETE"} for verb in verbs))
+        self.assertEqual(commits, [])
+
+    def test_auto_poll_preflight_disabled_schedule_is_terminal(self):
+        self._configure_api_ready_sort()
+        db.session.query(GatewaySortMatrix).delete()
+        db.session.commit()
+
+        status = flight_api_auto_poll_preflight(
+            self.gateway,
+            now=datetime(2026, 6, 1, 19, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(status["reason"], "API polling disabled for this sort/day")
+        self.assertEqual(status["poll_action"], "stop")
+        self.assertTrue(status["terminal"])
+        self.assertFalse(status["continue_polling"])
+
+    def test_auto_poll_preflight_missing_configuration_is_terminal(self):
+        db.session.delete(self.settings)
+        db.session.commit()
+
+        status = flight_api_auto_poll_preflight(
+            self.gateway,
+            now=datetime(2026, 6, 1, 19, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(
+            status["reason"],
+            "Flight API polling configuration unavailable",
+        )
+        self.assertEqual(status["poll_action"], "stop")
+        self.assertTrue(status["terminal"])
+        self.assertFalse(status["continue_polling"])
 
     def test_auto_poll_minimum_interval_blocks_until_enough_time_passes(self):
         self._configure_api_ready_sort(minimum_interval=15)
@@ -2941,6 +3087,9 @@ class FlightApiImportTest(unittest.TestCase):
         poll_end=time(16, 0),
         minimum_interval=10,
     ):
+        if not hasattr(self, "_auto_poll_original_api_key"):
+            self._auto_poll_original_api_key = os.environ.get("AERODATABOX_API_KEY")
+        os.environ["AERODATABOX_API_KEY"] = "TEST-AUTO-POLL-KEY"
         self.operation.sort_name = sort_name
         self.settings.provider_enabled = True
         self.settings.monthly_api_units = 600
@@ -3166,6 +3315,11 @@ class FlightApiTestPageTest(unittest.TestCase):
         )
 
     def tearDown(self):
+        if hasattr(self, "_auto_poll_original_api_key"):
+            if self._auto_poll_original_api_key is None:
+                os.environ.pop("AERODATABOX_API_KEY", None)
+            else:
+                os.environ["AERODATABOX_API_KEY"] = self._auto_poll_original_api_key
         db.session.remove()
         db.drop_all()
         self.context.pop()
@@ -3184,6 +3338,50 @@ class FlightApiTestPageTest(unittest.TestCase):
         )
         return user
 
+    def _auto_poll_check(self):
+        return self.client.post(
+            "/motherbrain/flight-api-auto-poll/check",
+            headers={
+                flight_api_service.FLIGHT_API_AUTO_POLL_CLIENT_HEADER: (
+                    flight_api_service.FLIGHT_API_AUTO_POLL_CLIENT_VERSION
+                )
+            },
+        )
+
+    def _configure_auto_poll_test_key(self):
+        if not hasattr(self, "_auto_poll_original_api_key"):
+            self._auto_poll_original_api_key = os.environ.get("AERODATABOX_API_KEY")
+        os.environ["AERODATABOX_API_KEY"] = "TEST-AUTO-POLL-KEY"
+
+    def _measure_auto_poll_check(self, include_protocol=True):
+        statements = []
+        commits = []
+
+        def capture_statement(_conn, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement.lstrip().split(None, 1)[0].upper())
+
+        def capture_commit(_session):
+            commits.append(True)
+
+        event.listen(db.engine, "before_cursor_execute", capture_statement)
+        event.listen(Session, "after_commit", capture_commit)
+        try:
+            if include_protocol:
+                response = self._auto_poll_check()
+            else:
+                response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture_statement)
+            event.remove(Session, "after_commit", capture_commit)
+        return response, {
+            "selects": statements.count("SELECT"),
+            "writes": sum(
+                statements.count(operation)
+                for operation in ("INSERT", "UPDATE", "DELETE")
+            ),
+            "commits": len(commits),
+        }
+
     def _setup_auto_poll_operation(
         self,
         provider_enabled=True,
@@ -3194,6 +3392,7 @@ class FlightApiTestPageTest(unittest.TestCase):
         poll_end=time(23, 59),
         minimum_interval=10,
     ):
+        self._configure_auto_poll_test_key()
         local_now = current_gateway_local_datetime(self.gateway)
         sort_date = local_now.date()
         day_name = sort_date.strftime("%A").lower()
@@ -3317,6 +3516,11 @@ class FlightApiTestPageTest(unittest.TestCase):
             "suppressed_review",
             "provider_status",
             "safe_error_text",
+            "poll_action",
+            "terminal",
+            "continue_polling",
+            "wait_until",
+            "next_check_seconds",
         }
         self.assertTrue(expected_keys.issubset(payload.keys()))
 
@@ -3407,6 +3611,8 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn(b"flight-api-auto-poll-widget", manage_api_response.data)
         self.assertIn(b"data-flight-api-auto-poll-timer", manage_api_response.data)
         self.assertIn(b"/motherbrain/flight-api-auto-poll/check", manage_api_response.data)
+        self.assertIn(b"data-client-header", manage_api_response.data)
+        self.assertIn(b"data-client-version", manage_api_response.data)
         self.assertIn(b"AUTO POLL", manage_api_response.data)
 
         for response in passive_or_plain_responses:
@@ -3477,9 +3683,25 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIn("window.setTimeout(runCheck", template)
         self.assertNotIn("setInterval", template)
         self.assertIn("const MIN_DELAY_MS = 60000", template)
-        self.assertIn("document.visibilityState === \"hidden\"", template)
+        self.assertIn("document.hidden", template)
         self.assertIn("visibilitychange", template)
         self.assertIn("localStorage", template)
+
+    def test_auto_poll_timer_uses_server_contract_and_pauses_when_inactive(self):
+        template = Path(
+            "app/templates/neomotherbrain/_flight_api_auto_poll_timer.html"
+        ).read_text()
+
+        self.assertIn("data-client-header", template)
+        self.assertIn("data-client-version", template)
+        self.assertIn("payload?.poll_action", template)
+        self.assertIn("payload?.terminal", template)
+        self.assertIn("payload?.next_check_seconds", template)
+        self.assertNotIn("shouldStopForReason", template)
+        self.assertIn("window.NeoLiveUpdates?.inactivityTimeoutMs", template)
+        self.assertIn("AUTO POLL PAUSED - INACTIVE", template)
+        self.assertIn("USER_ACTIVITY_EVENTS", template)
+        self.assertIn("clearTimer();", template)
 
     def test_no_flight_api_background_scheduler_was_added(self):
         paths = [
@@ -4095,7 +4317,7 @@ class FlightApiTestPageTest(unittest.TestCase):
     def test_flight_api_auto_poll_endpoint_requires_trigger_permission(self):
         self._login_motherbrain_role("auto_poll_operator", "operator")
 
-        response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+        response = self._auto_poll_check()
 
         self.assertEqual(response.status_code, 403)
         payload = response.get_json()
@@ -4103,8 +4325,24 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertTrue(payload["skipped"])
         self.assertEqual(payload["reason"], "Access denied.")
 
+    def test_current_auto_poll_client_still_requires_authentication(self):
+        self.client.post("/logout")
+
+        response = self._auto_poll_check()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login", response.headers["Location"])
+
+    def test_stale_auto_poll_client_is_rejected_before_database_access(self):
+        response, counts = self._measure_auto_poll_check(include_protocol=False)
+
+        self.assertEqual(response.status_code, 410)
+        self.assertEqual(response.get_json()["poll_action"], "stop")
+        self.assertTrue(response.get_json()["terminal"])
+        self.assertEqual(counts, {"selects": 0, "writes": 0, "commits": 0})
+
     def test_flight_api_auto_poll_not_eligible_does_not_call_provider(self):
-        operation, settings = self._setup_auto_poll_operation(provider_enabled=False)
+        _operation, _settings = self._setup_auto_poll_operation(provider_enabled=False)
         calls = []
 
         def fail_urlopen(_request, _timeout):
@@ -4112,12 +4350,17 @@ class FlightApiTestPageTest(unittest.TestCase):
             raise AssertionError("Provider should not be called when disabled")
 
         original_urlopen = flight_api_service.urlopen
+        original_operation_lookup = flight_api_service._current_auto_poll_operation
         flight_api_service.urlopen = fail_urlopen
+        flight_api_service._current_auto_poll_operation = lambda *_args, **_kwargs: self.fail(
+            "Disabled-provider checks must stop before operation resolution"
+        )
         self._login_motherbrain_role("auto_disabled_simulator", "simulator")
         try:
-            response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+            response, counts = self._measure_auto_poll_check()
         finally:
             flight_api_service.urlopen = original_urlopen
+            flight_api_service._current_auto_poll_operation = original_operation_lookup
 
         payload = response.get_json()
         self._assert_auto_poll_payload_shape(payload)
@@ -4125,9 +4368,50 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertFalse(payload["eligible"])
         self.assertTrue(payload["skipped"])
         self.assertEqual(payload["reason"], "provider disabled")
-        self.assertEqual(payload["current_operation_id"], operation.id)
+        self.assertIsNone(payload["current_operation_id"])
+        self.assertEqual(payload["poll_action"], "stop")
+        self.assertTrue(payload["terminal"])
+        self.assertFalse(payload["continue_polling"])
         self.assertEqual(calls, [])
         self.assertEqual(SortTimelineUsageCounter.query.count(), 0)
+        self.assertEqual(counts["writes"], 0)
+        self.assertEqual(counts["commits"], 0)
+
+    def test_auto_poll_no_operation_is_terminal_and_read_only(self):
+        self._configure_auto_poll_test_key()
+        settings = ensure_sort_timeline_settings(self.gateway)
+        settings.provider_enabled = True
+        db.session.commit()
+        self._login_motherbrain_role("auto_no_operation_simulator", "simulator")
+
+        response, counts = self._measure_auto_poll_check()
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["reason"], "no current sort operation")
+        self.assertEqual(payload["poll_action"], "stop")
+        self.assertTrue(payload["terminal"])
+        self.assertFalse(payload["continue_polling"])
+        self.assertEqual(counts["writes"], 0)
+        self.assertEqual(counts["commits"], 0)
+
+    def test_auto_poll_missing_provider_configuration_is_terminal_and_read_only(self):
+        self._setup_auto_poll_operation()
+        os.environ.pop("AERODATABOX_API_KEY", None)
+
+        response, counts = self._measure_auto_poll_check()
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            payload["reason"],
+            "Flight API provider configuration unavailable",
+        )
+        self.assertEqual(payload["poll_action"], "stop")
+        self.assertTrue(payload["terminal"])
+        self.assertFalse(payload["continue_polling"])
+        self.assertEqual(counts["writes"], 0)
+        self.assertEqual(counts["commits"], 0)
 
     def test_flight_api_auto_poll_eligible_calls_provider_once_and_returns_counts(self):
         operation, _settings = self._setup_auto_poll_operation()
@@ -4155,7 +4439,7 @@ class FlightApiTestPageTest(unittest.TestCase):
         os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
         self._login_motherbrain_role("auto_success_simulator", "simulator")
         try:
-            response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+            response = self._auto_poll_check()
         finally:
             flight_api_service.urlopen = original_urlopen
             if previous is None:
@@ -4182,6 +4466,9 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertIsNotNone(result["last_attempted_poll"])
         self.assertIsNotNone(result["last_successful_poll"])
         self.assertIsNotNone(result["next_auto_poll_eligible_at"])
+        self.assertEqual(result["poll_action"], "wait")
+        self.assertFalse(result["terminal"])
+        self.assertGreaterEqual(result["next_check_seconds"], 60)
         self.assertEqual(operation.flight_api_last_poll_status, "success")
         self.assertIsNone(operation.flight_api_auto_poll_in_progress_at_utc)
         self.assertNotIn(b"SUPER-SECRET-RAPIDAPI-KEY", response.data)
@@ -4199,7 +4486,7 @@ class FlightApiTestPageTest(unittest.TestCase):
         )
         self._login_motherbrain_role("auto_window_simulator", "simulator")
         try:
-            response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+            response = self._auto_poll_check()
         finally:
             neomotherbrain_routes.run_flight_api_import = original_run_import
 
@@ -4208,6 +4495,14 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertFalse(payload["eligible"])
         self.assertTrue(payload["skipped"])
         self.assertIn(payload["reason"], {"before API Polling Window", "outside API Polling Window"})
+        if payload["reason"] == "before API Polling Window":
+            self.assertEqual(payload["poll_action"], "wait")
+            self.assertFalse(payload["terminal"])
+            self.assertGreaterEqual(payload["next_check_seconds"], 60)
+        else:
+            self.assertEqual(payload["poll_action"], "stop")
+            self.assertTrue(payload["terminal"])
+            self.assertFalse(payload["continue_polling"])
 
     def test_flight_api_auto_poll_minimum_interval_not_elapsed_returns_not_eligible(self):
         operation, _settings = self._setup_auto_poll_operation(minimum_interval=30)
@@ -4219,7 +4514,7 @@ class FlightApiTestPageTest(unittest.TestCase):
         )
         self._login_motherbrain_role("auto_interval_simulator", "simulator")
         try:
-            response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+            response = self._auto_poll_check()
         finally:
             neomotherbrain_routes.run_flight_api_import = original_run_import
 
@@ -4229,6 +4524,9 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertTrue(payload["skipped"])
         self.assertEqual(payload["reason"], "waiting for auto poll interval")
         self.assertIsNotNone(payload["next_auto_poll_eligible_at"])
+        self.assertEqual(payload["poll_action"], "wait")
+        self.assertFalse(payload["terminal"])
+        self.assertGreaterEqual(payload["next_check_seconds"], 60)
 
     def test_flight_api_auto_poll_monthly_units_exhausted_returns_not_eligible(self):
         self._setup_auto_poll_operation()
@@ -4249,7 +4547,7 @@ class FlightApiTestPageTest(unittest.TestCase):
         )
         self._login_motherbrain_role("auto_budget_simulator", "simulator")
         try:
-            response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+            response = self._auto_poll_check()
         finally:
             neomotherbrain_routes.run_flight_api_import = original_run_import
 
@@ -4270,7 +4568,7 @@ class FlightApiTestPageTest(unittest.TestCase):
         )
         self._login_motherbrain_role("auto_lock_simulator", "simulator")
         try:
-            response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+            response = self._auto_poll_check()
         finally:
             neomotherbrain_routes.run_flight_api_import = original_run_import
 
@@ -4279,6 +4577,8 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertFalse(payload["eligible"])
         self.assertTrue(payload["skipped"])
         self.assertEqual(payload["reason"], "poll already in progress")
+        self.assertEqual(payload["poll_action"], "continue")
+        self.assertEqual(payload["next_check_seconds"], 60)
         db.session.refresh(operation)
         self.assertEqual(operation.flight_api_auto_poll_lock_token, "active-lock")
 
@@ -4297,8 +4597,8 @@ class FlightApiTestPageTest(unittest.TestCase):
         flight_api_service.urlopen = fake_urlopen
         self._login_motherbrain_role("auto_failure_simulator", "simulator")
         try:
-            first = self.client.post("/motherbrain/flight-api-auto-poll/check")
-            second = self.client.post("/motherbrain/flight-api-auto-poll/check")
+            first = self._auto_poll_check()
+            second = self._auto_poll_check()
         finally:
             flight_api_service.urlopen = original_urlopen
             if previous is None:
@@ -4317,6 +4617,8 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertFalse(first_payload["skipped"])
         self.assertEqual(first_payload["provider_status"], 429)
         self.assertIn("429", first_payload["safe_error_text"])
+        self.assertEqual(first_payload["poll_action"], "wait")
+        self.assertFalse(first_payload["terminal"])
         self.assertEqual(operation.flight_api_last_poll_status, "failed")
         self.assertIsNotNone(operation.flight_api_last_attempted_poll_at_utc)
         self.assertIsNotNone(operation.flight_api_last_failed_poll_at_utc)
@@ -4362,7 +4664,7 @@ class FlightApiTestPageTest(unittest.TestCase):
         os.environ["AERODATABOX_API_KEY"] = "SUPER-SECRET-RAPIDAPI-KEY"
         self._login_motherbrain_role("auto_manual_truth_simulator", "simulator")
         try:
-            response = self.client.post("/motherbrain/flight-api-auto-poll/check")
+            response = self._auto_poll_check()
         finally:
             flight_api_service.urlopen = original_urlopen
             if previous is None:

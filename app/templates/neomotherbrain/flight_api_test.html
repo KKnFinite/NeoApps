@@ -97,6 +97,8 @@
                 type="button"
                 data-auto-poll-trigger
                 data-endpoint="{{ url_for('neomotherbrain.flight_api_auto_poll_check') }}"
+                data-client-header="{{ flight_api_auto_poll_client_header }}"
+                data-client-version="{{ flight_api_auto_poll_client_version }}"
                 {% if not selected_operation %}disabled{% endif %}
             >TEST AUTO POLL TRIGGER ONCE</button>
             {% else %}
@@ -937,13 +939,15 @@
         const originalText = trigger.textContent;
         trigger.textContent = "TESTING...";
         try {
+            const headers = new Headers({
+                "Accept": "application/json",
+                "X-Requested-With": "XMLHttpRequest",
+            });
+            headers.set(trigger.dataset.clientHeader, trigger.dataset.clientVersion);
             const response = await fetch(trigger.dataset.endpoint, {
                 method: "POST",
                 credentials: "same-origin",
-                headers: {
-                    "Accept": "application/json",
-                    "X-Requested-With": "XMLHttpRequest",
-                },
+                headers,
             });
             const payload = await response.json();
             renderPayload(payload, response.ok);

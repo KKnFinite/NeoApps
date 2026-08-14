@@ -8,23 +8,33 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.extensions import db
 from app.models import (
     FlightApiReviewItem,
+    GatewaySortMatrix,
     SortDateMission,
     SortDateOperation,
+    SortTimelineApiParticipation,
     SortTimelineSettings,
 )
-from app.services.gateway_matrix import current_operations_for_gateway, gateway_timezone
+from app.services.gateway_matrix import (
+    SORT_ORDER,
+    current_operations_for_gateway,
+    gateway_timezone,
+)
 from app.services.sort_date_operations import (
     create_default_crew_assignments_for_mission,
     ensure_tail_state_for_mission,
 )
 from app.services.sort_timeline import (
     api_schedule_for_gateway,
+    api_schedule_for_gateway_read_only,
     ensure_sort_timeline_settings,
+    month_budget_preview,
+    month_variances_for_gateway_read_only,
     record_sort_timeline_api_attempt,
     sort_settings_by_name,
     sort_timeline_context,
@@ -39,6 +49,9 @@ from app.services.unmatched_review_alerts import (
 AIRPORT_CODE = "RFD"
 DEFAULT_API_KEY_ENV_VAR = "AERODATABOX_API_KEY"
 AUTO_POLL_LOCK_STALE_AFTER_MINUTES = 30
+FLIGHT_API_AUTO_POLL_CLIENT_HEADER = "X-Neo-Flight-Api-Auto-Poll-Client"
+FLIGHT_API_AUTO_POLL_CLIENT_VERSION = "20260813-1"
+FLIGHT_API_AUTO_POLL_RETRY_SECONDS = 60
 RAPIDAPI_HOST = "aerodatabox.p.rapidapi.com"
 RAPIDAPI_USER_AGENT = "NeoGateway/1.0"
 RAPIDAPI_ACCEPT = "application/json"
@@ -876,11 +889,27 @@ def current_sort_operation(gateway, sort_date=None, sort_name=None):
     )
 
 
-def flight_api_auto_poll_status(gateway, operation=None, now=None):
-    settings = ensure_sort_timeline_settings(gateway)
+def flight_api_auto_poll_status(
+    gateway,
+    operation=None,
+    now=None,
+    settings=None,
+    read_only=False,
+):
+    settings = settings or (
+        SortTimelineSettings.query.filter_by(gateway_id=gateway.id).first()
+        if read_only
+        else ensure_sort_timeline_settings(gateway)
+    )
     now_utc = _utc_naive(now)
     timezone_name = gateway_timezone(gateway)
     local_now = _utc_to_local_naive(now_utc, timezone_name)
+    if not settings:
+        status = _base_auto_poll_status(gateway, operation, None, now_utc, local_now)
+        return _auto_poll_not_eligible(
+            status,
+            "Flight API polling configuration unavailable",
+        )
     operation = operation or current_sort_operation(gateway)
     status = _base_auto_poll_status(gateway, operation, settings, now_utc, local_now)
 
@@ -890,7 +919,11 @@ def flight_api_auto_poll_status(gateway, operation=None, now=None):
         return _auto_poll_not_eligible(status, "no current sort operation")
     if not _operation_is_active_for_local_time(operation, settings, local_now):
         return _auto_poll_not_eligible(status, "operation is not current active operation")
-    api_schedule_enabled = _api_enabled_for_operation_day(gateway, operation)
+    api_schedule_enabled = (
+        _api_enabled_for_operation_day_read_only(gateway, operation)
+        if read_only
+        else _api_enabled_for_operation_day(gateway, operation)
+    )
     status["api_schedule_enabled"] = api_schedule_enabled
     if not api_schedule_enabled:
         return _auto_poll_not_eligible(status, "API polling disabled for this sort/day")
@@ -910,7 +943,13 @@ def flight_api_auto_poll_status(gateway, operation=None, now=None):
     if local_now > polling_end_local:
         return _auto_poll_not_eligible(status, "outside API Polling Window")
 
-    budget_summary = _auto_poll_budget_summary(gateway, operation, settings, now_utc)
+    budget_summary = _auto_poll_budget_summary(
+        gateway,
+        operation,
+        settings,
+        now_utc,
+        read_only=read_only,
+    )
     status.update(budget_summary)
 
     if int(status["polls_remaining"] or 0) <= 0 or int(status["units_remaining"] or 0) <= 0:
@@ -934,6 +973,152 @@ def flight_api_auto_poll_status(gateway, operation=None, now=None):
 
     status["eligible"] = True
     status["reason"] = "eligible"
+    return status
+
+
+def flight_api_auto_poll_preflight(gateway, now=None):
+    """Resolve cheap browser-poll eligibility before any lifecycle or DB write."""
+    now_utc = _utc_naive(now)
+    timezone_name = gateway_timezone(gateway)
+    local_now = _utc_to_local_naive(now_utc, timezone_name)
+    settings = SortTimelineSettings.query.filter_by(gateway_id=gateway.id).first()
+    if not settings:
+        status = _base_auto_poll_status(gateway, None, None, now_utc, local_now)
+        return coordinate_flight_api_auto_poll_status(
+            _auto_poll_not_eligible(status, "Flight API polling configuration unavailable"),
+            action="stop",
+            now=now_utc,
+        )
+
+    status = _base_auto_poll_status(gateway, None, settings, now_utc, local_now)
+    if not settings.provider_enabled:
+        return coordinate_flight_api_auto_poll_status(
+            _auto_poll_not_eligible(status, "provider disabled"),
+            action="stop",
+            now=now_utc,
+        )
+    api_key, _key_diagnostics = normalize_api_key(
+        os.environ.get(DEFAULT_API_KEY_ENV_VAR)
+    )
+    if not api_key:
+        return coordinate_flight_api_auto_poll_status(
+            _auto_poll_not_eligible(
+                status,
+                "Flight API provider configuration unavailable",
+            ),
+            action="stop",
+            now=now_utc,
+        )
+
+    operation = _current_auto_poll_operation(gateway, settings, local_now)
+    status = _base_auto_poll_status(gateway, operation, settings, now_utc, local_now)
+    if not operation:
+        return coordinate_flight_api_auto_poll_status(
+            _auto_poll_not_eligible(status, "no current sort operation"),
+            action="stop",
+            now=now_utc,
+        )
+    if not _operation_is_active_for_local_time(operation, settings, local_now):
+        return coordinate_flight_api_auto_poll_status(
+            _auto_poll_not_eligible(status, "operation is not current active operation"),
+            action="stop",
+            now=now_utc,
+        )
+
+    api_schedule_enabled = _api_enabled_for_operation_day_read_only(gateway, operation)
+    status["api_schedule_enabled"] = api_schedule_enabled
+    if not api_schedule_enabled:
+        return coordinate_flight_api_auto_poll_status(
+            _auto_poll_not_eligible(status, "API polling disabled for this sort/day"),
+            action="stop",
+            now=now_utc,
+        )
+
+    polling_start_local, polling_end_local = api_polling_window_for_operation(
+        operation,
+        settings,
+    )
+    polling_start_utc = _local_datetime_to_utc_naive(polling_start_local, timezone_name)
+    polling_end_utc = _local_datetime_to_utc_naive(polling_end_local, timezone_name)
+    status.update(
+        {
+            "polling_window_start_utc": polling_start_utc,
+            "polling_window_end_utc": polling_end_utc,
+            "polling_window_start_local": polling_start_local,
+            "polling_window_end_local": polling_end_local,
+        }
+    )
+    if local_now < polling_start_local:
+        status["next_eligible_time_utc"] = polling_start_utc
+        status["next_eligible_time_local"] = polling_start_local
+        return coordinate_flight_api_auto_poll_status(
+            _auto_poll_not_eligible(status, "before API Polling Window"),
+            action="wait",
+            now=now_utc,
+        )
+    if local_now > polling_end_local:
+        return coordinate_flight_api_auto_poll_status(
+            _auto_poll_not_eligible(status, "outside API Polling Window"),
+            action="stop",
+            now=now_utc,
+        )
+
+    stored_next_eligible = operation.flight_api_next_auto_poll_eligible_at_utc
+    if stored_next_eligible and now_utc < _utc_naive(stored_next_eligible):
+        status["next_eligible_time_utc"] = _utc_naive(stored_next_eligible)
+        status["next_eligible_time_local"] = _utc_to_local_naive(
+            stored_next_eligible,
+            timezone_name,
+        )
+        return coordinate_flight_api_auto_poll_status(
+            _auto_poll_not_eligible(status, "waiting for auto poll interval"),
+            action="wait",
+            now=now_utc,
+        )
+
+    # Budget and dynamic interval construction are needed only when a poll may
+    # actually be due. The terminal/waiting paths above remain read-only.
+    status = flight_api_auto_poll_status(
+        gateway,
+        operation=operation,
+        now=now_utc,
+        settings=settings,
+        read_only=True,
+    )
+    return coordinate_flight_api_auto_poll_status(status, now=now_utc)
+
+
+def coordinate_flight_api_auto_poll_status(status, action=None, now=None):
+    """Attach the explicit browser scheduling contract to an auto-poll status."""
+    now_utc = _utc_naive(now)
+    reason = str(status.get("reason") or "")
+    if action is None:
+        if status.get("eligible"):
+            action = "execute"
+        elif reason in {"before API Polling Window", "waiting for auto poll interval"}:
+            action = "wait"
+        elif reason == "poll already in progress":
+            action = "continue"
+        else:
+            action = "stop"
+
+    wait_until = status.get("next_eligible_time_utc") if action == "wait" else None
+    next_check_seconds = None
+    if wait_until:
+        next_check_seconds = max(
+            FLIGHT_API_AUTO_POLL_RETRY_SECONDS,
+            int((_utc_naive(wait_until) - now_utc).total_seconds()),
+        )
+    elif action == "continue":
+        next_check_seconds = FLIGHT_API_AUTO_POLL_RETRY_SECONDS
+    elif action == "execute":
+        next_check_seconds = 0
+
+    status["poll_action"] = action
+    status["terminal"] = action == "stop"
+    status["continue_polling"] = action != "stop"
+    status["next_check_at_utc"] = _utc_naive(wait_until) if wait_until else None
+    status["next_check_seconds"] = next_check_seconds
     return status
 
 
@@ -998,8 +1183,8 @@ def acquire_flight_api_auto_poll_lock(operation, now=None):
     if not updated_count:
         return None
 
-    operation.flight_api_auto_poll_in_progress_at_utc = now_utc
-    operation.flight_api_auto_poll_lock_token = lock_token
+    set_committed_value(operation, "flight_api_auto_poll_in_progress_at_utc", now_utc)
+    set_committed_value(operation, "flight_api_auto_poll_lock_token", lock_token)
     return lock_token
 
 
@@ -1018,8 +1203,8 @@ def release_flight_api_auto_poll_lock(operation, lock_token=None):
     )
     db.session.flush()
     if updated_count:
-        operation.flight_api_auto_poll_in_progress_at_utc = None
-        operation.flight_api_auto_poll_lock_token = ""
+        set_committed_value(operation, "flight_api_auto_poll_in_progress_at_utc", None)
+        set_committed_value(operation, "flight_api_auto_poll_lock_token", "")
     return bool(updated_count)
 
 
@@ -1028,7 +1213,7 @@ def _base_auto_poll_status(gateway, operation, settings, now_utc, local_now):
     status = {
         "eligible": False,
         "reason": "",
-        "provider_enabled": bool(settings.provider_enabled),
+        "provider_enabled": bool(getattr(settings, "provider_enabled", False)),
         "api_schedule_enabled": False,
         "now_utc": now_utc,
         "now_local": local_now,
@@ -1084,15 +1269,32 @@ def _auto_poll_not_eligible(status, reason):
     return status
 
 
-def _auto_poll_budget_summary(gateway, operation, settings, now_utc):
+def _auto_poll_budget_summary(gateway, operation, settings, now_utc, read_only=False):
     local_now = _utc_to_local_naive(now_utc, gateway_timezone(gateway))
-    context = sort_timeline_context(
-        gateway,
-        local_now.strftime("%Y-%m"),
-        now=now_utc.replace(tzinfo=timezone.utc),
-    )
-    summary = context["summary"]
-    sort_preview = context["preview_by_sort"].get(operation.sort_name, {})
+    if read_only:
+        month_start = date(local_now.year, local_now.month, 1)
+        summary = month_budget_preview(
+            settings,
+            api_schedule_for_gateway_read_only(gateway),
+            month_variances_for_gateway_read_only(gateway),
+            month_start,
+            gateway,
+            now=now_utc.replace(tzinfo=timezone.utc),
+            include_usage=True,
+        )
+        preview_by_sort = {
+            preview["sort_name"]: preview
+            for preview in summary["sort_previews"]
+        }
+    else:
+        context = sort_timeline_context(
+            gateway,
+            local_now.strftime("%Y-%m"),
+            now=now_utc.replace(tzinfo=timezone.utc),
+        )
+        summary = context["summary"]
+        preview_by_sort = context["preview_by_sort"]
+    sort_preview = preview_by_sort.get(operation.sort_name, {})
     actual_interval = sort_preview.get("actual_auto_poll_interval_minutes")
     if actual_interval is None:
         actual_interval = summary.get("actual_auto_poll_interval_minutes")
@@ -1121,6 +1323,69 @@ def _next_auto_poll_eligible_utc(operation, now_utc, polling_start_utc, actual_i
     if now_utc >= polling_start_utc:
         return now_utc
     return polling_start_utc
+
+
+def _current_auto_poll_operation(gateway, settings, local_now):
+    current_date = local_now.date()
+    previous_date = current_date - timedelta(days=1)
+    operations = (
+        SortDateOperation.query.filter(
+            SortDateOperation.gateway_code == gateway.code,
+            SortDateOperation.archived_at_utc.is_(None),
+            SortDateOperation.sort_date.in_((current_date, previous_date)),
+        )
+        .all()
+    )
+    if not operations:
+        return None
+
+    active_by_id = {
+        operation.id: _operation_is_active_for_local_time(operation, settings, local_now)
+        for operation in operations
+    }
+    visible = [
+        operation
+        for operation in operations
+        if operation.sort_date == current_date or active_by_id[operation.id]
+    ]
+    return next(
+        iter(
+            sorted(
+                visible,
+                key=lambda operation: (
+                    0 if active_by_id[operation.id] else 1,
+                    operation.sort_date,
+                    SORT_ORDER.get(operation.sort_name, len(SORT_ORDER)),
+                ),
+            )
+        ),
+        None,
+    )
+
+
+def _api_enabled_for_operation_day_read_only(gateway, operation):
+    operation_day = operation.sort_date.strftime("%A").lower()
+    row = (
+        db.session.query(
+            GatewaySortMatrix.is_active,
+            SortTimelineApiParticipation.is_enabled,
+        )
+        .outerjoin(
+            SortTimelineApiParticipation,
+            and_(
+                SortTimelineApiParticipation.gateway_id == GatewaySortMatrix.gateway_id,
+                SortTimelineApiParticipation.day_of_week == GatewaySortMatrix.day_of_week,
+                SortTimelineApiParticipation.sort_name == GatewaySortMatrix.sort_name,
+            ),
+        )
+        .filter(
+            GatewaySortMatrix.gateway_id == gateway.id,
+            GatewaySortMatrix.day_of_week == operation_day,
+            GatewaySortMatrix.sort_name == operation.sort_name,
+        )
+        .first()
+    )
+    return bool(row and row[0] and (row[1] is None or row[1]))
 
 
 def _operation_is_active_for_local_time(operation, settings, local_now):

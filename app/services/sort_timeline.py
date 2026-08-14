@@ -166,9 +166,34 @@ def api_schedule_for_gateway(gateway):
         if entry.day_of_week in DAY_VALUES and entry.sort_name in SORT_VALUES
     }
     ensure_api_participation(gateway, active_cells)
-    participation_rows = {
+    participation_rows = SortTimelineApiParticipation.query.filter_by(
+        gateway_id=gateway.id
+    ).all()
+    return _api_schedule_from_rows(active_entries, participation_rows)
+
+
+def api_schedule_for_gateway_read_only(gateway):
+    """Return the effective API schedule without creating default rows."""
+    active_entries = (
+        GatewaySortMatrix.query.filter_by(gateway_id=gateway.id, is_active=True)
+        .order_by(GatewaySortMatrix.sort_name.asc(), GatewaySortMatrix.day_of_week.asc())
+        .all()
+    )
+    participation_rows = SortTimelineApiParticipation.query.filter_by(
+        gateway_id=gateway.id
+    ).all()
+    return _api_schedule_from_rows(active_entries, participation_rows)
+
+
+def _api_schedule_from_rows(active_entries, participation_rows):
+    active_cells = {
+        (entry.day_of_week, entry.sort_name)
+        for entry in active_entries
+        if entry.day_of_week in DAY_VALUES and entry.sort_name in SORT_VALUES
+    }
+    participation_by_cell = {
         (row.day_of_week, row.sort_name): row
-        for row in SortTimelineApiParticipation.query.filter_by(gateway_id=gateway.id).all()
+        for row in participation_rows
     }
     configured_sorts = []
     enabled_cells = set()
@@ -179,7 +204,7 @@ def api_schedule_for_gateway(gateway):
             if (day, sort_name) not in active_cells:
                 continue
 
-            participation = participation_rows.get((day, sort_name))
+            participation = participation_by_cell.get((day, sort_name))
             is_enabled = bool(participation.is_enabled) if participation else True
             configured_cells.add((day, sort_name))
             if is_enabled:
@@ -557,6 +582,16 @@ def month_variances_for_gateway(gateway):
             row.gateway_code = gateway.code
             values[row.month_number] = int(row.variance or 0)
     db.session.flush()
+    return values
+
+
+def month_variances_for_gateway_read_only(gateway):
+    """Return configured month variances without creating or normalizing rows."""
+    rows = SortTimelineMonthVariance.query.filter_by(gateway_id=gateway.id).all()
+    values = {month_number: 0 for month_number, _month_label in MONTH_OPTIONS}
+    for row in rows:
+        if 1 <= row.month_number <= 12:
+            values[row.month_number] = int(row.variance or 0)
     return values
 
 

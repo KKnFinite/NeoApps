@@ -5,6 +5,8 @@
     aria-label="Flight API auto poll status"
     data-flight-api-auto-poll-timer
     data-endpoint="{{ flight_api_auto_poll_timer.endpoint }}"
+    data-client-header="{{ flight_api_auto_poll_timer.client_header }}"
+    data-client-version="{{ flight_api_auto_poll_timer.client_version }}"
     data-initial-status='{{ timer_status|tojson }}'
     {% if not auto_poll_visible %}hidden aria-hidden="true"{% endif %}
 >
@@ -39,10 +41,25 @@
     const MIN_DELAY_MS = 60000;
     const FALLBACK_DELAY_MS = 60000;
     const LONG_DELAY_MS = 900000;
-    const HIDDEN_DELAY_MS = 300000;
+    const MAX_DELAY_MS = 24 * 60 * 60 * 1000;
+    const INACTIVITY_TIMEOUT_MS = (
+        window.NeoLiveUpdates?.inactivityTimeoutMs || (10 * 60 * 1000)
+    );
+    const USER_ACTIVITY_EVENTS = [
+        "pointerdown",
+        "mousedown",
+        "touchstart",
+        "keydown",
+        "scroll",
+        "input",
+        "change",
+    ];
     const TAB_CHECK_KEY = "neoapps:flight-api-auto-poll:last-check";
     let timerId = null;
+    let inactivityTimerId = null;
     let backoffDelayMs = FALLBACK_DELAY_MS;
+    let inactivityPaused = false;
+    let stopped = false;
 
     const stateField = widget.querySelector("[data-flight-api-auto-poll-state]");
     const detailField = widget.querySelector("[data-flight-api-auto-poll-detail]");
@@ -78,7 +95,12 @@
     };
 
     const nextDelayFromPayload = (payload, fallbackDelayMs = FALLBACK_DELAY_MS) => {
-        const next = payload && payload.next_auto_poll_eligible_at && payload.next_auto_poll_eligible_at.utc;
+        const seconds = Number(payload?.next_check_seconds);
+        if (Number.isFinite(seconds) && seconds > 0) {
+            return Math.min(MAX_DELAY_MS, Math.max(MIN_DELAY_MS, seconds * 1000));
+        }
+        const next = payload?.wait_until?.utc
+            || payload?.next_auto_poll_eligible_at?.utc;
         if (!next) {
             return fallbackDelayMs;
         }
@@ -86,14 +108,30 @@
         if (!Number.isFinite(parsed)) {
             return fallbackDelayMs;
         }
-        return Math.max(MIN_DELAY_MS, parsed - Date.now());
+        return Math.min(MAX_DELAY_MS, Math.max(MIN_DELAY_MS, parsed - Date.now()));
     };
 
-    const shouldStopForReason = (reason) => {
-        const text = String(reason || "").toLowerCase();
-        return text.includes("operation is not current active operation")
-            || text.includes("outside ops")
-            || text.includes("node online");
+    const clearTimer = () => {
+        window.clearTimeout(timerId);
+        timerId = null;
+    };
+
+    const clearInactivityTimer = () => {
+        window.clearTimeout(inactivityTimerId);
+        inactivityTimerId = null;
+    };
+
+    const armInactivityTimer = () => {
+        clearInactivityTimer();
+        if (stopped || inactivityPaused || document.hidden) {
+            return;
+        }
+        inactivityTimerId = window.setTimeout(() => {
+            inactivityTimerId = null;
+            inactivityPaused = true;
+            clearTimer();
+            setStatus("PAUSED", "AUTO POLL PAUSED - INACTIVE", parseInitialStatus());
+        }, INACTIVITY_TIMEOUT_MS);
     };
 
     const safeStoredLastCheck = () => {
@@ -111,9 +149,9 @@
     };
 
     const scheduleCheck = (delayMs, allowImmediate = false) => {
-        window.clearTimeout(timerId);
-        if (document.visibilityState === "hidden") {
-            delayMs = Math.max(delayMs, HIDDEN_DELAY_MS);
+        clearTimer();
+        if (stopped || inactivityPaused || document.hidden) {
+            return;
         }
         const lastCheck = safeStoredLastCheck();
         const tabDelay = Math.max(0, MIN_DELAY_MS - (Date.now() - lastCheck));
@@ -122,52 +160,68 @@
         timerId = window.setTimeout(runCheck, safeDelay);
     };
 
+    const stopDriver = (payload = {}) => {
+        stopped = true;
+        clearTimer();
+        clearInactivityTimer();
+        setStatus("STOPPED", payload.reason || "Auto poll driver stopped.", payload);
+    };
+
+    const scheduleFromContract = (payload, allowImmediate = false) => {
+        const action = String(payload?.poll_action || "stop");
+        if (payload?.terminal === true || payload?.continue_polling === false || action === "stop") {
+            stopDriver(payload);
+            return;
+        }
+        if (action === "execute") {
+            scheduleCheck(0, true);
+            return;
+        }
+        scheduleCheck(nextDelayFromPayload(payload), allowImmediate);
+    };
+
     const runCheck = async () => {
-        if (document.visibilityState === "hidden") {
-            setStatus("WAITING", "Page hidden; auto poll check slowed.", parseInitialStatus());
-            scheduleCheck(HIDDEN_DELAY_MS);
+        if (stopped || inactivityPaused || document.hidden) {
             return;
         }
 
         markCheckStarted();
         setStatus("READY", "Checking server eligibility.", parseInitialStatus());
         try {
+            const headers = new Headers({
+                "Accept": "application/json",
+                "X-Requested-With": "XMLHttpRequest",
+            });
+            headers.set(widget.dataset.clientHeader, widget.dataset.clientVersion);
             const response = await fetch(widget.dataset.endpoint, {
                 method: "POST",
                 credentials: "same-origin",
-                headers: {
-                    "Accept": "application/json",
-                    "X-Requested-With": "XMLHttpRequest",
-                },
+                headers,
             });
-            const payload = await response.json();
+            const payload = await response.json().catch(() => null);
+            if (!payload || [400, 401, 403, 410].includes(response.status)) {
+                stopDriver(payload || {reason: "Auto poll authorization ended."});
+                return;
+            }
             backoffDelayMs = FALLBACK_DELAY_MS;
             if (payload.ok === false || payload.safe_error_text) {
                 setStatus("ERROR", payload.safe_error_text || payload.reason || "Provider poll failed safely.", payload);
-                scheduleCheck(nextDelayFromPayload(payload));
+                scheduleFromContract(payload);
                 return;
             }
             if (payload.eligible && !payload.skipped && payload.attempted) {
                 setStatus("POLLED", "One eligible provider poll completed.", payload);
-                scheduleCheck(nextDelayFromPayload(payload));
+                scheduleFromContract(payload);
                 return;
             }
             if (payload.skipped || !payload.eligible) {
                 const reason = payload.reason || "Not eligible yet.";
                 setStatus("SKIPPED", reason, payload);
-                if (shouldStopForReason(reason)) {
-                    return;
-                }
-                if (String(reason).toLowerCase().includes("outside api polling window")) {
-                    const outsideDelay = nextDelayFromPayload(payload, LONG_DELAY_MS);
-                    scheduleCheck(outsideDelay <= MIN_DELAY_MS ? LONG_DELAY_MS : outsideDelay);
-                    return;
-                }
-                scheduleCheck(nextDelayFromPayload(payload));
+                scheduleFromContract(payload);
                 return;
             }
             setStatus("WAITING", payload.reason || "Waiting for next eligibility check.", payload);
-            scheduleCheck(nextDelayFromPayload(payload));
+            scheduleFromContract(payload);
         } catch (_error) {
             setStatus("ERROR", "Network error; retrying later.", parseInitialStatus());
             backoffDelayMs = Math.min(Math.max(backoffDelayMs * 2, MIN_DELAY_MS), LONG_DELAY_MS);
@@ -177,11 +231,35 @@
 
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") {
-            scheduleCheck(MIN_DELAY_MS);
+            if (!stopped) {
+                inactivityPaused = false;
+                armInactivityTimer();
+                scheduleCheck(MIN_DELAY_MS);
+            }
         } else {
-            window.clearTimeout(timerId);
+            clearTimer();
+            clearInactivityTimer();
             setStatus("WAITING", "Page hidden; auto poll check paused.", parseInitialStatus());
         }
+    });
+
+    const onUserActivity = (event) => {
+        if (event?.isTrusted === false || stopped || document.hidden) {
+            return;
+        }
+        if (inactivityPaused) {
+            inactivityPaused = false;
+            armInactivityTimer();
+            scheduleCheck(0, true);
+            return;
+        }
+        armInactivityTimer();
+    };
+    USER_ACTIVITY_EVENTS.forEach((eventName) => {
+        document.addEventListener(eventName, onUserActivity, {
+            capture: true,
+            passive: ["pointerdown", "mousedown", "touchstart", "scroll"].includes(eventName),
+        });
     });
 
     const initial = parseInitialStatus();
@@ -190,6 +268,7 @@
         initial.reason || "Server eligibility check pending.",
         initial,
     );
-    scheduleCheck(initial.eligible ? 0 : nextDelayFromPayload(initial), initial.eligible);
+    armInactivityTimer();
+    scheduleFromContract(initial, initial.poll_action === "execute");
 })();
 </script>

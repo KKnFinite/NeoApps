@@ -454,6 +454,39 @@ def register_template_helpers(app):
 
 def register_request_guards(app):
     @app.before_request
+    def retire_legacy_flight_api_auto_poll_client():
+        """Reject obsolete browser drivers before authentication or Neon access."""
+        if (
+            request.method != "POST"
+            or request.endpoint != "neomotherbrain.flight_api_auto_poll_check"
+        ):
+            return None
+
+        from app.services.flight_api import (
+            FLIGHT_API_AUTO_POLL_CLIENT_HEADER,
+            FLIGHT_API_AUTO_POLL_CLIENT_VERSION,
+        )
+
+        if request.headers.get(FLIGHT_API_AUTO_POLL_CLIENT_HEADER) == (
+            FLIGHT_API_AUTO_POLL_CLIENT_VERSION
+        ):
+            return None
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "eligible": False,
+                    "skipped": True,
+                    "reason": "stale client",
+                    "poll_action": "stop",
+                    "terminal": True,
+                    "continue_polling": False,
+                }
+            ),
+            410,
+        )
+
+    @app.before_request
     def retire_legacy_google_live_poll_heartbeat():
         """Keep pre-deploy heartbeat tabs from touching authentication or Neon."""
         if (
