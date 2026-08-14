@@ -1,4 +1,5 @@
 from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -60,6 +61,7 @@ TAIL_STATUS_LABELS = {
     TAIL_STATUS_QT: "QT",
     TAIL_STATUS_OOS: "OOS",
 }
+_TIMELINE_SETTINGS_UNSET = object()
 
 
 class ParkingPlanError(ValueError):
@@ -74,6 +76,207 @@ class ParkingLaneOccupied(ParkingPlanError):
 
 class ParkingRuleConflict(ParkingPlanError):
     pass
+
+
+@dataclass
+class ParkingPlanOperationalStateBundle:
+    """Request-local Parking Plan collections and their stable indexes."""
+
+    gateway: object
+    operation: SortDateOperation
+    assignments: list = field(default_factory=list)
+    tail_states: list = field(default_factory=list)
+    missions: list = field(default_factory=list)
+    timeline_settings: object = None
+    assignments_by_tail: dict = field(init=False, default_factory=dict)
+    assignments_by_slot: dict = field(init=False, default_factory=dict)
+    tail_states_by_tail: dict = field(init=False, default_factory=dict)
+    missions_by_tail: dict = field(init=False, default_factory=dict)
+    _tail_rows: object = field(init=False, default=None)
+
+    def __post_init__(self):
+        self.reindex()
+
+    @classmethod
+    def load(
+        cls,
+        gateway,
+        operation,
+        *,
+        include_assignments=True,
+        include_tail_states=True,
+        include_missions=True,
+        include_timeline=True,
+    ):
+        assignments = []
+        if include_assignments:
+            assignments = (
+                SortDateParkingAssignment.query.filter_by(
+                    sort_date_operation_id=operation.id,
+                )
+                .order_by(SortDateParkingAssignment.id.asc())
+                .all()
+            )
+        tail_states = []
+        if include_tail_states:
+            tail_states = (
+                SortDateTailState.query.filter_by(
+                    sort_date=operation.sort_date,
+                    gateway_code=operation.gateway_code,
+                    sort_name=operation.sort_name,
+                )
+                .order_by(SortDateTailState.id.asc())
+                .all()
+            )
+        missions = []
+        if include_missions:
+            missions = (
+                SortDateMission.query.filter_by(sort_date_operation_id=operation.id)
+                .filter(SortDateMission.assigned_tail_number.isnot(None))
+                .order_by(
+                    SortDateMission.planned_datetime_utc.asc(),
+                    SortDateMission.id.asc(),
+                )
+                .all()
+            )
+        timeline_settings = None
+        if include_timeline:
+            timeline_settings = SortTimelineSettings.query.filter_by(
+                gateway_id=gateway.id,
+            ).first()
+        return cls(
+            gateway=gateway,
+            operation=operation,
+            assignments=assignments,
+            tail_states=tail_states,
+            missions=missions,
+            timeline_settings=timeline_settings,
+        )
+
+    def reindex(self):
+        self.assignments_by_tail = {}
+        self.assignments_by_slot = {}
+        for assignment in self.assignments:
+            tail = _normalize_tail(getattr(assignment, "tail_number", ""))
+            if tail:
+                self.assignments_by_tail[tail] = assignment
+            slot = self._slot_key(assignment)
+            if slot:
+                self.assignments_by_slot[slot] = assignment
+
+        self.tail_states_by_tail = {
+            tail: state
+            for state in self.tail_states
+            if (tail := _normalize_tail(getattr(state, "tail_number", "")))
+        }
+        self.missions_by_tail = {}
+        for mission in self.missions:
+            tail = _normalize_tail(getattr(mission, "assigned_tail_number", ""))
+            if tail:
+                self.missions_by_tail.setdefault(tail, []).append(mission)
+        self._tail_rows = None
+
+    def seed_assignment(self, assignment):
+        if assignment is None:
+            return None
+        if assignment not in self.assignments:
+            self.assignments.append(assignment)
+            self.reindex()
+        return assignment
+
+    def assignment_for_tail(self, tail_number, *, create=False):
+        tail = _normalize_tail(tail_number)
+        assignment = self.assignments_by_tail.get(tail)
+        if assignment is None and create:
+            assignment = SortDateParkingAssignment(
+                sort_date_operation_id=self.operation.id,
+                tail_number=tail,
+            )
+            db.session.add(assignment)
+            self.assignments.append(assignment)
+            self.assignments_by_tail[tail] = assignment
+            self._tail_rows = None
+        return assignment
+
+    def assignment_for_slot(self, ramp_code, position_code, lane_number):
+        return self.assignments_by_slot.get(
+            (
+                _normalize_ramp_code(ramp_code),
+                _normalize_position_code(position_code),
+                _normalize_lane(lane_number),
+            )
+        )
+
+    def tail_state_for_tail(self, tail_number, *, create=False):
+        tail = _normalize_tail(tail_number)
+        tail_state = self.tail_states_by_tail.get(tail)
+        if tail_state is None and create:
+            tail_state = SortDateTailState(
+                sort_date=self.operation.sort_date,
+                gateway_code=self.operation.gateway_code,
+                sort_name=self.operation.sort_name,
+                tail_number=tail,
+                aircraft_type_source="unknown",
+                operational_status=TAIL_STATUS_NORMAL,
+                is_out_of_service=False,
+            )
+            db.session.add(tail_state)
+            self.tail_states.append(tail_state)
+            self.tail_states_by_tail[tail] = tail_state
+            self._tail_rows = None
+        return tail_state
+
+    def current_tail_assets(self):
+        mission_tails = set(self.missions_by_tail)
+        parked_tails = {
+            tail
+            for tail, assignment in self.assignments_by_tail.items()
+            if getattr(assignment, "position_code", None)
+        }
+        spare_tails = {
+            tail
+            for tail, state in self.tail_states_by_tail.items()
+            if normalize_tail_operational_status(
+                getattr(state, "operational_status", None)
+            )
+            == TAIL_STATUS_SPARE
+        }
+        return mission_tails | parked_tails | spare_tails
+
+    def active_mission_for_tail(self, tail_number, mission_type):
+        return next(
+            (
+                mission
+                for mission in self.missions_by_tail.get(
+                    _normalize_tail(tail_number), ()
+                )
+                if mission.mission_type == mission_type
+                and not _mission_is_cancelled(mission)
+            ),
+            None,
+        )
+
+    def tail_rows(self):
+        if self._tail_rows is None:
+            self._tail_rows = _tail_rows_from_bundle(self)
+        return self._tail_rows
+
+    def invalidate_derived(self):
+        self.reindex()
+
+    @staticmethod
+    def _slot_key(assignment):
+        ramp = _normalize_ramp_code(getattr(assignment, "ramp_code", ""))
+        position = _normalize_position_code(
+            getattr(assignment, "position_code", "")
+        )
+        try:
+            lane = int(getattr(assignment, "lane_number", None))
+        except (TypeError, ValueError):
+            return None
+        if not ramp or not position or lane not in PARKING_LANES:
+            return None
+        return ramp, position, lane
 
 
 def parking_plan_landing_context(gateway):
@@ -100,7 +303,13 @@ def parking_plan_landing_context(gateway):
     }
 
 
-def parking_plan_context(gateway, operation=None, *, sync_physical_alerts=True):
+def parking_plan_context(
+    gateway,
+    operation=None,
+    *,
+    sync_physical_alerts=True,
+    bundle=None,
+):
     operation = operation or current_active_sort_operation(gateway)
     if not operation:
         return {
@@ -112,10 +321,9 @@ def parking_plan_context(gateway, operation=None, *, sync_physical_alerts=True):
             "positions": PARKING_RAMP_GROUPS,
         }
 
-    tail_rows = tail_rows_for_operation(gateway, operation)
-    assignments = SortDateParkingAssignment.query.filter_by(
-        sort_date_operation_id=operation.id
-    ).all()
+    bundle = bundle or ParkingPlanOperationalStateBundle.load(gateway, operation)
+    tail_rows = tail_rows_for_operation(gateway, operation, bundle=bundle)
+    assignments = bundle.assignments
     assignment_by_tail = {row["tail"]: row["assignment"] for row in tail_rows}
     _apply_departure_order(tail_rows)
     ramp_groups = _ramp_groups_for_rows(tail_rows, assignment_by_tail)
@@ -125,7 +333,11 @@ def parking_plan_context(gateway, operation=None, *, sync_physical_alerts=True):
         if not row["assigned_position"]
     ]
     parking_status = parking_status_for_rows(tail_rows, assignments)
-    physical_validation = parking_physical_validation_context(operation, tail_rows=tail_rows)
+    physical_validation = parking_physical_validation_context(
+        operation,
+        tail_rows=tail_rows,
+        assignments=assignments,
+    )
     parking_status["physical_conflicts"] = physical_validation["conflicts"]
     parking_status["physical_conflict_count"] = physical_validation["conflict_count"]
     parking_status["conflict_count"] += physical_validation["conflict_count"]
@@ -209,27 +421,18 @@ def current_active_sort_operation(gateway):
     return None
 
 
-def tail_rows_for_operation(gateway, operation):
-    assignment_rows = SortDateParkingAssignment.query.filter_by(
-        sort_date_operation_id=operation.id
-    ).all()
-    assignments = {assignment.tail_number: assignment for assignment in assignment_rows}
-    tail_states = {
-        state.tail_number.strip().upper(): state
-        for state in SortDateTailState.query.filter_by(
-            sort_date=operation.sort_date,
-            gateway_code=operation.gateway_code,
-            sort_name=operation.sort_name,
-        ).all()
-        if state.tail_number
-    }
+def tail_rows_for_operation(gateway, operation, *, bundle=None):
+    bundle = bundle or ParkingPlanOperationalStateBundle.load(gateway, operation)
+    return bundle.tail_rows()
+
+
+def _tail_rows_from_bundle(bundle):
+    gateway = bundle.gateway
+    assignment_rows = bundle.assignments
+    assignments = bundle.assignments_by_tail
+    tail_states = bundle.tail_states_by_tail
     grouped = {}
-    missions = (
-        SortDateMission.query.filter_by(sort_date_operation_id=operation.id)
-        .filter(SortDateMission.assigned_tail_number.isnot(None))
-        .order_by(SortDateMission.planned_datetime_utc.asc(), SortDateMission.id.asc())
-        .all()
-    )
+    missions = bundle.missions
 
     for mission in missions:
         tail = _normalize_tail(mission.assigned_tail_number)
@@ -257,7 +460,10 @@ def tail_rows_for_operation(gateway, operation):
             grouped.setdefault(tail, {"arrivals": [], "departures": []})
 
     rows = []
-    taxi_minutes = _taxi_to_ramp_minutes(gateway)
+    taxi_minutes = _taxi_to_ramp_minutes(
+        gateway,
+        settings=bundle.timeline_settings,
+    )
     timezone_name = gateway_timezone(gateway)
     for tail, mission_group in sorted(grouped.items()):
         arrival = _first_mission(mission_group["arrivals"])
@@ -383,6 +589,9 @@ def assign_tail_to_lane(
     is_hot=None,
     note=None,
     confirm_rule_override=False,
+    bundle=None,
+    source_assignment=None,
+    target_assignment=None,
 ):
     tail_number = _normalize_tail(tail_number)
     ramp_code = _normalize_ramp_code(ramp_code)
@@ -392,11 +601,28 @@ def assign_tail_to_lane(
         raise ParkingPlanError("Select a tail before assigning parking.")
     _validate_position(ramp_code, position_code)
 
-    if tail_number not in _current_operation_tail_assets(operation):
+    bundle = bundle or ParkingPlanOperationalStateBundle.load(
+        operation.gateway,
+        operation,
+    )
+    bundle.seed_assignment(source_assignment)
+    bundle.seed_assignment(target_assignment)
+
+    if tail_number not in bundle.current_tail_assets():
         raise ParkingPlanError(f"{tail_number or 'Tail'} is not in the current sort.")
 
-    assignment = _assignment_for_tail(operation, tail_number, create=True)
-    occupied = _assignment_for_lane(operation, ramp_code, position_code, lane_number)
+    assignment = (
+        source_assignment
+        if source_assignment is not None
+        else bundle.assignment_for_tail(tail_number, create=True)
+    )
+    if assignment is None:
+        assignment = bundle.assignment_for_tail(tail_number, create=True)
+    occupied = (
+        target_assignment
+        if target_assignment is not None
+        else bundle.assignment_for_slot(ramp_code, position_code, lane_number)
+    )
     if occupied and occupied.tail_number != tail_number:
         if not replace_occupied:
             raise ParkingLaneOccupied(occupied.tail_number)
@@ -412,12 +638,17 @@ def assign_tail_to_lane(
         ramp_code,
         position_code,
         lane_number=lane_number,
-        tail_rows=tail_rows_for_operation(operation.gateway, operation),
+        tail_rows=tail_rows_for_operation(
+            operation.gateway,
+            operation,
+            bundle=bundle,
+        ),
         excluded_tail_numbers=(
             _normalize_tail(occupied.tail_number)
             if occupied and occupied.tail_number != tail_number and replace_occupied
             else "",
         ),
+        assignments=bundle.assignments,
     )
     if conflict and not confirm_rule_override:
         raise ParkingRuleConflict(conflict.message)
@@ -431,18 +662,43 @@ def assign_tail_to_lane(
             tail_number,
             TAIL_STATUS_HOT if is_hot else TAIL_STATUS_NORMAL,
             user=user,
+            bundle=bundle,
         )
         assignment.is_hot = False
     if note is not None:
         assignment.note = str(note or "").strip()
     assignment.assigned_by_user_id = getattr(user, "id", None)
     assignment.assigned_at = _utc_now()
-    promote_secondary_parking_slots(operation, user=user)
+    promote_secondary_parking_slots(
+        operation,
+        user=user,
+        assignments=bundle.assignments,
+    )
+    bundle.invalidate_derived()
     return assignment
 
 
-def unassign_tail(operation, tail_number, user=None):
-    assignment = _assignment_for_tail(operation, tail_number)
+def unassign_tail(
+    operation,
+    tail_number,
+    user=None,
+    *,
+    bundle=None,
+    source_assignment=None,
+):
+    bundle = bundle or ParkingPlanOperationalStateBundle.load(
+        operation.gateway,
+        operation,
+        include_tail_states=False,
+        include_missions=False,
+        include_timeline=False,
+    )
+    bundle.seed_assignment(source_assignment)
+    assignment = (
+        source_assignment
+        if source_assignment is not None
+        else bundle.assignment_for_tail(tail_number)
+    )
     if not assignment:
         return None
     assignment.ramp_code = None
@@ -450,7 +706,12 @@ def unassign_tail(operation, tail_number, user=None):
     assignment.lane_number = None
     assignment.assigned_by_user_id = getattr(user, "id", None)
     assignment.assigned_at = _utc_now()
-    promote_secondary_parking_slots(operation, user=user)
+    promote_secondary_parking_slots(
+        operation,
+        user=user,
+        assignments=bundle.assignments,
+    )
+    bundle.invalidate_derived()
     return assignment
 
 
@@ -475,25 +736,41 @@ def clear_parking_assignments(operation, user=None):
     return len(assigned)
 
 
-def promote_secondary_parking_slots(operation, user=None):
+def promote_secondary_parking_slots(operation, user=None, *, assignments=None):
     """Promote lone Slot 2 occupants into Slot 1 at the same position."""
     db.session.flush()
-    assignments = (
-        SortDateParkingAssignment.query.filter_by(
-            sort_date_operation_id=operation.id,
+    if assignments is None:
+        assignments = (
+            SortDateParkingAssignment.query.filter_by(
+                sort_date_operation_id=operation.id,
+            )
+            .filter(
+                SortDateParkingAssignment.position_code.isnot(None),
+                SortDateParkingAssignment.lane_number.in_(PARKING_LANES),
+            )
+            .order_by(
+                SortDateParkingAssignment.ramp_code.asc(),
+                SortDateParkingAssignment.position_code.asc(),
+                SortDateParkingAssignment.lane_number.asc(),
+                SortDateParkingAssignment.id.asc(),
+            )
+            .all()
         )
-        .filter(
-            SortDateParkingAssignment.position_code.isnot(None),
-            SortDateParkingAssignment.lane_number.in_(PARKING_LANES),
+    else:
+        assignments = sorted(
+            (
+                assignment
+                for assignment in assignments
+                if getattr(assignment, "position_code", None)
+                and getattr(assignment, "lane_number", None) in PARKING_LANES
+            ),
+            key=lambda assignment: (
+                _normalize_ramp_code(assignment.ramp_code),
+                _normalize_position_code(assignment.position_code),
+                assignment.lane_number,
+                assignment.id or 0,
+            ),
         )
-        .order_by(
-            SortDateParkingAssignment.ramp_code.asc(),
-            SortDateParkingAssignment.position_code.asc(),
-            SortDateParkingAssignment.lane_number.asc(),
-            SortDateParkingAssignment.id.asc(),
-        )
-        .all()
-    )
     lanes_by_position = {}
     for assignment in assignments:
         position_key = (
@@ -523,55 +800,89 @@ def promote_secondary_parking_slots(operation, user=None):
     return promoted
 
 
-def set_tail_hot(operation, tail_number, is_hot, user=None, note=None):
+def set_tail_hot(
+    operation,
+    tail_number,
+    is_hot,
+    user=None,
+    note=None,
+    *,
+    bundle=None,
+):
     tail_number = _normalize_tail(tail_number)
-    if tail_number not in _current_operation_tail_assets(operation):
+    bundle = bundle or ParkingPlanOperationalStateBundle.load(
+        operation.gateway,
+        operation,
+        include_timeline=False,
+    )
+    if tail_number not in bundle.current_tail_assets():
         raise ParkingPlanError(f"{tail_number or 'Tail'} is not in the current sort.")
-    assignment = _assignment_for_tail(operation, tail_number, create=note is not None)
+    assignment = bundle.assignment_for_tail(tail_number, create=note is not None)
     if is_hot is not None:
         set_tail_operational_status(
             operation,
             tail_number,
             TAIL_STATUS_HOT if is_hot else TAIL_STATUS_NORMAL,
             user=user,
+            bundle=bundle,
         )
         if assignment:
             assignment.is_hot = False
     if note is not None:
-        assignment = assignment or _assignment_for_tail(operation, tail_number, create=True)
+        assignment = assignment or bundle.assignment_for_tail(tail_number, create=True)
         assignment.note = str(note or "").strip()
     if assignment:
         assignment.assigned_by_user_id = getattr(user, "id", None)
         assignment.assigned_at = _utc_now()
     db.session.flush()
-    return _tail_state_for_operation(operation, tail_number, create=True)
+    return bundle.tail_state_for_tail(tail_number, create=True)
 
 
-def set_tail_out_of_service(operation, tail_number, is_out_of_service, user=None):
+def set_tail_out_of_service(
+    operation,
+    tail_number,
+    is_out_of_service,
+    user=None,
+    *,
+    bundle=None,
+):
     return set_tail_operational_status(
         operation,
         tail_number,
         TAIL_STATUS_OOS if is_out_of_service else TAIL_STATUS_NORMAL,
         user=user,
+        bundle=bundle,
     )
 
 
-def set_tail_operational_status(operation, tail_number, operational_status, user=None):
+def set_tail_operational_status(
+    operation,
+    tail_number,
+    operational_status,
+    user=None,
+    *,
+    bundle=None,
+):
     tail_number = _normalize_tail(tail_number)
-    if tail_number not in _current_operation_tail_assets(operation):
+    bundle = bundle or ParkingPlanOperationalStateBundle.load(
+        operation.gateway,
+        operation,
+        include_timeline=False,
+    )
+    if tail_number not in bundle.current_tail_assets():
         raise ParkingPlanError(f"{tail_number or 'Tail'} is not in the current sort.")
 
     normalized_status = normalize_tail_operational_status(operational_status)
-    if normalized_status == TAIL_STATUS_SPARE and _active_departure_for_tail(
-        operation,
-        tail_number,
+    if (
+        normalized_status == TAIL_STATUS_SPARE
+        and bundle.active_mission_for_tail(tail_number, "departure")
     ):
         raise ParkingPlanError("A tail with a departure mission cannot be marked SPARE.")
 
-    tail_state = _tail_state_for_operation(operation, tail_number, create=True)
+    tail_state = bundle.tail_state_for_tail(tail_number, create=True)
     tail_state.operational_status = normalized_status
     tail_state.is_out_of_service = tail_state.operational_status == TAIL_STATUS_OOS
-    assignment = _assignment_for_tail(operation, tail_number)
+    assignment = bundle.assignment_for_tail(tail_number)
     if assignment:
         assignment.is_hot = False
         assignment.assigned_by_user_id = getattr(user, "id", None)
@@ -1349,8 +1660,9 @@ def _is_quick_turn(aircraft_type, ground_minutes):
     return bool(threshold is not None and ground_minutes <= threshold)
 
 
-def _taxi_to_ramp_minutes(gateway):
-    settings = SortTimelineSettings.query.filter_by(gateway_id=gateway.id).first()
+def _taxi_to_ramp_minutes(gateway, *, settings=_TIMELINE_SETTINGS_UNSET):
+    if settings is _TIMELINE_SETTINGS_UNSET:
+        settings = SortTimelineSettings.query.filter_by(gateway_id=gateway.id).first()
     if not settings:
         return 10
     try:

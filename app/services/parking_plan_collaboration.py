@@ -41,36 +41,43 @@ def parking_plan_live_state(
     summary,
     parking_status,
     revision=None,
+    bundle=None,
 ):
     """Build compact, stable parking state for browser reconciliation."""
-    assignments = (
-        SortDateParkingAssignment.query.filter_by(
-            sort_date_operation_id=operation.id,
+    if bundle is None:
+        assignments = (
+            SortDateParkingAssignment.query.filter_by(
+                sort_date_operation_id=operation.id,
+            )
+            .order_by(SortDateParkingAssignment.id.asc())
+            .all()
         )
-        .order_by(SortDateParkingAssignment.id.asc())
-        .all()
-    )
-    assignments_by_tail = {
-        _normalize_tail(row.tail_number): row
-        for row in assignments
-        if _normalize_tail(row.tail_number)
-    }
-    tail_states = {
-        _normalize_tail(row.tail_number): row
-        for row in SortDateTailState.query.filter_by(
-            sort_date=operation.sort_date,
-            gateway_code=operation.gateway_code,
-            sort_name=operation.sort_name,
-        ).all()
-        if _normalize_tail(row.tail_number)
-    }
+        assignments_by_tail = {
+            _normalize_tail(row.tail_number): row
+            for row in assignments
+            if _normalize_tail(row.tail_number)
+        }
+        tail_states = {
+            _normalize_tail(row.tail_number): row
+            for row in SortDateTailState.query.filter_by(
+                sort_date=operation.sort_date,
+                gateway_code=operation.gateway_code,
+                sort_name=operation.sort_name,
+            ).all()
+            if _normalize_tail(row.tail_number)
+        }
+        missions = (
+            SortDateMission.query.filter_by(sort_date_operation_id=operation.id)
+            .filter(SortDateMission.assigned_tail_number.isnot(None))
+            .order_by(SortDateMission.id.asc())
+            .all()
+        )
+    else:
+        assignments = bundle.assignments
+        assignments_by_tail = bundle.assignments_by_tail
+        tail_states = bundle.tail_states_by_tail
+        missions = sorted(bundle.missions, key=lambda row: row.id or 0)
     missions_by_tail = {}
-    missions = (
-        SortDateMission.query.filter_by(sort_date_operation_id=operation.id)
-        .filter(SortDateMission.assigned_tail_number.isnot(None))
-        .order_by(SortDateMission.id.asc())
-        .all()
-    )
     for mission in missions:
         tail = _normalize_tail(mission.assigned_tail_number)
         if tail:

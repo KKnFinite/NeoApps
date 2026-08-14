@@ -4,10 +4,12 @@ from pathlib import Path
 import re
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from flask import g
-from sqlalchemy import text
+from sqlalchemy import event, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app import create_app
 from app.extensions import db
@@ -12969,6 +12971,64 @@ class MotherBrainRoutesTest(unittest.TestCase):
             self.rfd_gateway,
             operation=operation,
             sync_physical_alerts=False,
+            bundle=ANY,
+        )
+
+    def test_parking_plan_changed_state_reuses_operational_collections(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        self._parking_assignment(operation, "N457UP", "A01")
+        db.session.commit()
+
+        response, statements, commits = self._capture_request_sql(
+            lambda: self.client.get(
+                f"/motherbrain/parking-plan/{operation.id}/state?revision=stale"
+            )
+        )
+        selects = [statement for statement in statements if statement.startswith("select")]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["changed"])
+        self.assertLessEqual(len(selects), 15)
+        self.assertEqual(commits, 0)
+        self.assertLessEqual(
+            sum("sort_date_parking_assignments" in statement for statement in selects),
+            2,
+        )
+        self.assertLessEqual(
+            sum("sort_date_tail_states" in statement for statement in selects),
+            2,
+        )
+        self.assertLessEqual(
+            sum("sort_date_missions" in statement for statement in selects),
+            2,
+        )
+
+    def test_parking_plan_assignment_reuses_locked_and_loaded_state(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        response, statements, commits = self._capture_request_sql(
+            lambda: self.client.post(
+                f"/motherbrain/parking-plan/{operation.id}/assign",
+                data={
+                    "tail_number": "N457UP",
+                    "ramp_code": "A",
+                    "position_code": "A01",
+                    "lane_number": "1",
+                },
+                headers={"Accept": "application/json"},
+            )
+        )
+        selects = [statement for statement in statements if statement.startswith("select")]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(len(selects), 14)
+        self.assertEqual(commits, 1)
+        self.assertEqual(
+            sum("sort_date_parking_assignments" in statement for statement in selects),
+            3,
         )
 
     def test_parking_plan_live_state_does_not_synchronize_alert_records(self):
@@ -13133,6 +13193,31 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(occupied.tail_number, "N349UP")
         self.assertEqual(occupied.position_code, "A01")
         self.assertIsNone(self._parking_assignment_for_tail(operation, "N457UP"))
+
+    def test_parking_plan_integrity_race_returns_structured_conflict(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        with patch(
+            "app.neomotherbrain.routes.assign_tail_to_lane",
+            side_effect=IntegrityError("insert", {}, Exception("unique race")),
+        ):
+            response = self.client.post(
+                f"/motherbrain/parking-plan/{operation.id}/assign",
+                data={
+                    "tail_number": "N457UP",
+                    "ramp_code": "A",
+                    "position_code": "A01",
+                    "lane_number": "1",
+                },
+                headers={"Accept": "application/json"},
+            )
+
+        self.assertEqual(response.status_code, 409)
+        payload = response.get_json()
+        self.assertEqual(payload["conflict"]["reason"], "concurrent_write")
+        self.assertTrue(payload["refresh_required"])
 
     def test_parking_plan_known_occupied_destination_keeps_confirmation_path(self):
         operation = self._parking_operation()
@@ -14517,6 +14602,32 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.session.add(operation)
         db.session.flush()
         return operation
+
+    def _capture_request_sql(self, request_callable):
+        statements = []
+        commit_count = [0]
+
+        def capture_statement(
+            _connection,
+            _cursor,
+            statement,
+            _parameters,
+            _context,
+            _executemany,
+        ):
+            statements.append(" ".join(statement.strip().lower().split()))
+
+        def capture_commit(_session):
+            commit_count[0] += 1
+
+        event.listen(db.engine, "before_cursor_execute", capture_statement)
+        event.listen(Session, "after_commit", capture_commit)
+        try:
+            response = request_callable()
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture_statement)
+            event.remove(Session, "after_commit", capture_commit)
+        return response, statements, commit_count[0]
 
     def _parking_pair(
         self,

@@ -43,8 +43,12 @@ class ParkingPhysicalConflict:
     blocking_eta: str = ""
 
 
-def parking_physical_validation_context(operation, tail_rows=None):
-    conflicts = validate_parking_physical_rules(operation, tail_rows=tail_rows)
+def parking_physical_validation_context(operation, tail_rows=None, assignments=None):
+    conflicts = validate_parking_physical_rules(
+        operation,
+        tail_rows=tail_rows,
+        assignments=assignments,
+    )
     return {
         "conflicts": [conflict.__dict__ for conflict in conflicts],
         "conflict_count": len(conflicts),
@@ -133,15 +137,21 @@ def validate_configurable_parking_placement(
     lane_number=1,
     tail_rows=None,
     excluded_tail_numbers=None,
+    assignments=None,
 ):
     """Return the first enabled configurable-rule conflict for a proposed manual placement."""
     tail = _normalize_tail(tail_number)
     position = _normalize_position(position_code)
     excluded_tails = {_normalize_tail(item) for item in (excluded_tail_numbers or ())}
     excluded_tails.add(tail)
+    active_assignments = (
+        _active_assignments(operation)
+        if assignments is None
+        else _active_assignments_from_preview(assignments)
+    )
     assignments = [
         assignment
-        for assignment in _active_assignments(operation)
+        for assignment in active_assignments
         if _normalize_tail(getattr(assignment, "tail_number", "")) not in excluded_tails
     ]
     assignments.append(

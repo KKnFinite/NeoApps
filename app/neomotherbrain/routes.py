@@ -113,6 +113,7 @@ from app.services.parking_plan import (
     PARKING_RAMP_GROUPS,
     STANDALONE_SPARE_AIRCRAFT_TYPE_OPTIONS,
     ParkingLaneOccupied,
+    ParkingPlanOperationalStateBundle,
     ParkingPlanError,
     ParkingRuleConflict,
     assign_tail_to_lane,
@@ -941,8 +942,9 @@ def parking_plan_operation(operation_id):
     if denied:
         return denied
     operation = _parking_plan_operation_or_404(gateway, operation_id)
-    context = parking_plan_context(gateway, operation=operation)
-    live_context = _parking_plan_live_context(gateway, context)
+    bundle = ParkingPlanOperationalStateBundle.load(gateway, operation)
+    context = parking_plan_context(gateway, operation=operation, bundle=bundle)
+    live_context = _parking_plan_live_context(gateway, context, bundle=bundle)
     if context.get("parking_physical_alert_sync", {}).get("changed"):
         db.session.commit()
     return render_template(
@@ -974,8 +976,9 @@ def optimize_parking_plan(operation_id):
 
     include_remote = request.form.get("include_remote") == "1"
     include_throat = request.form.get("include_throat") == "1"
-    context = parking_plan_context(gateway, operation=operation)
-    live_context = _parking_plan_live_context(gateway, context)
+    bundle = ParkingPlanOperationalStateBundle.load(gateway, operation)
+    context = parking_plan_context(gateway, operation=operation, bundle=bundle)
+    live_context = _parking_plan_live_context(gateway, context, bundle=bundle)
     try:
         optimizer_preview = parking_optimizer_preview(
             gateway,
@@ -1107,16 +1110,19 @@ def parking_plan_live_state_endpoint(operation_id):
         response.headers["Cache-Control"] = "no-store"
         return response
 
+    bundle = ParkingPlanOperationalStateBundle.load(gateway, operation)
     context = parking_plan_context(
         gateway,
         operation=operation,
         sync_physical_alerts=False,
+        bundle=bundle,
     )
     live_context = _parking_plan_live_context(
         gateway,
         context,
         revision=current_revision,
         live_update_status=live_update_status,
+        bundle=bundle,
     )
     state = live_context["parking_live_state"]
     changed = client_revision != state["revision"]
@@ -1212,9 +1218,10 @@ def assign_parking_plan_tail(operation_id=None):
             "Select a sort operation before assigning parking.",
             status=400,
         )
+    selected_operation_id = operation.id
 
     try:
-        validate_parking_move_snapshot(
+        source_assignment, target_assignment = validate_parking_move_snapshot(
             operation,
             tail_number=request.form.get("tail_number"),
             ramp_code=request.form.get("ramp_code"),
@@ -1222,6 +1229,7 @@ def assign_parking_plan_tail(operation_id=None):
             lane_number=request.form.get("lane_number"),
             expected=parking_snapshot_from_form(request.form),
         )
+        bundle = ParkingPlanOperationalStateBundle.load(gateway, operation)
         assignment = assign_tail_to_lane(
             operation,
             request.form.get("tail_number"),
@@ -1235,6 +1243,13 @@ def assign_parking_plan_tail(operation_id=None):
             else None,
             note=request.form.get("note") if "note" in request.form else None,
             confirm_rule_override=request.form.get("confirm_rule_override") == "1",
+            bundle=bundle,
+            source_assignment=source_assignment,
+            target_assignment=target_assignment,
+        )
+        success_message = (
+            f"{assignment.tail_number} assigned to "
+            f"{assignment.position_code} Slot {assignment.lane_number}."
         )
         db.session.commit()
     except ParkingStateConflict as error:
@@ -1284,8 +1299,8 @@ def assign_parking_plan_tail(operation_id=None):
 
     return _parking_plan_response(
         True,
-        f"{assignment.tail_number} assigned to {assignment.position_code} Slot {assignment.lane_number}.",
-        operation_id=operation.id,
+        success_message,
+        operation_id=selected_operation_id,
     )
 
 
@@ -1304,14 +1319,28 @@ def unassign_parking_plan_tail(operation_id=None):
             status=400,
         )
 
+    selected_operation_id = operation.id
     tail_number = request.form.get("tail_number")
     try:
-        validate_parking_source_snapshot(
+        source_assignment = validate_parking_source_snapshot(
             operation,
             tail_number=tail_number,
             expected=parking_snapshot_from_form(request.form),
         )
-        unassign_tail(operation, tail_number, user=current_user)
+        bundle = ParkingPlanOperationalStateBundle.load(
+            gateway,
+            operation,
+            include_tail_states=False,
+            include_missions=False,
+            include_timeline=False,
+        )
+        unassign_tail(
+            operation,
+            tail_number,
+            user=current_user,
+            bundle=bundle,
+            source_assignment=source_assignment,
+        )
         db.session.commit()
     except ParkingStateConflict as error:
         db.session.rollback()
@@ -1325,7 +1354,7 @@ def unassign_parking_plan_tail(operation_id=None):
     return _parking_plan_response(
         True,
         f"{str(tail_number or '').strip().upper()} unassigned.",
-        operation_id=operation.id,
+        operation_id=selected_operation_id,
     )
 
 
@@ -1368,7 +1397,13 @@ def update_parking_plan_hot(operation_id=None):
             status=400,
         )
 
+    selected_operation_id = operation.id
     try:
+        bundle = ParkingPlanOperationalStateBundle.load(
+            gateway,
+            operation,
+            include_timeline=False,
+        )
         tail_state = set_tail_hot(
             operation,
             request.form.get("tail_number"),
@@ -1377,17 +1412,19 @@ def update_parking_plan_hot(operation_id=None):
             else None,
             user=current_user,
             note=request.form.get("note") if "note" in request.form else None,
+            bundle=bundle,
         )
+        state = tail_operational_status_label(tail_state.operational_status) or "NORMAL"
+        success_message = f"{tail_state.tail_number} marked {state}."
         db.session.commit()
     except ParkingPlanError as error:
         db.session.rollback()
         return _parking_plan_response(False, str(error), status=400)
 
-    state = tail_operational_status_label(tail_state.operational_status) or "NORMAL"
     return _parking_plan_response(
         True,
-        f"{tail_state.tail_number} marked {state}.",
-        operation_id=operation.id,
+        success_message,
+        operation_id=selected_operation_id,
     )
 
 
@@ -1406,13 +1443,20 @@ def update_parking_plan_tail_status(operation_id=None):
             status=400,
         )
 
+    selected_operation_id = operation.id
     try:
+        bundle = ParkingPlanOperationalStateBundle.load(
+            gateway,
+            operation,
+            include_timeline=False,
+        )
         if "operational_status" in request.form:
             tail_state = set_tail_operational_status(
                 operation,
                 request.form.get("tail_number"),
                 request.form.get("operational_status"),
                 user=current_user,
+                bundle=bundle,
             )
         else:
             tail_state = set_tail_out_of_service(
@@ -1420,17 +1464,19 @@ def update_parking_plan_tail_status(operation_id=None):
                 request.form.get("tail_number"),
                 _truthy_form_value(request.form.get("is_out_of_service")),
                 user=current_user,
+                bundle=bundle,
             )
+        state = tail_operational_status_label(tail_state.operational_status) or "NORMAL"
+        success_message = f"{tail_state.tail_number} marked {state}."
         db.session.commit()
     except ParkingPlanError as error:
         db.session.rollback()
         return _parking_plan_response(False, str(error), status=400)
 
-    state = tail_operational_status_label(tail_state.operational_status) or "NORMAL"
     return _parking_plan_response(
         True,
-        f"{tail_state.tail_number} marked {state}.",
-        operation_id=operation.id,
+        success_message,
+        operation_id=selected_operation_id,
     )
 
 
@@ -1461,6 +1507,7 @@ def _parking_plan_live_context(
     context,
     revision=None,
     live_update_status=None,
+    bundle=None,
 ):
     operation = context["operation"]
     state = parking_plan_live_state(
@@ -1469,6 +1516,7 @@ def _parking_plan_live_context(
         summary=context["summary"],
         parking_status=context["parking_status"],
         revision=revision,
+        bundle=bundle,
     )
     return {
         "parking_live_state": state,
