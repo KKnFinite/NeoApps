@@ -188,6 +188,13 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
 
         self.assertEqual(payload["door_tab_alerts"]["D1"]["state"], "")
         self.assertEqual(payload["door_tab_alerts"]["D4"]["state"], "due_now")
+        self.assertGreaterEqual(len(payload["door_tab_alerts"]["D4"]["pulls"]), 1)
+        self.assertTrue(
+            all(
+                pull["due_now_epoch_ms"] is not None
+                for pull in payload["door_tab_alerts"]["D4"]["pulls"]
+            )
+        )
         self.assertIn(
             b'class="neoermac-door-tab is-pull-due-now"',
             page.data,

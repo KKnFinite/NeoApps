@@ -229,6 +229,12 @@
                             data-pull-key="{{ pull.key }}"
                             data-pull-alert-state="{{ pull_alert.state }}"
                             data-pull-alert-key="{{ pull_alert.key }}"
+                            data-pull-accounted="{{ 'true' if pull_alert.accounted else 'false' }}"
+                            data-pull-due-soon-epoch-ms="{{ pull_alert.due_soon_epoch_ms if pull_alert.due_soon_epoch_ms is not none else '' }}"
+                            data-pull-due-now-epoch-ms="{{ pull_alert.due_now_epoch_ms if pull_alert.due_now_epoch_ms is not none else '' }}"
+                            data-pull-late-epoch-ms="{{ pull_alert.late_epoch_ms if pull_alert.late_epoch_ms is not none else '' }}"
+                            data-pull-window-start-epoch-ms="{{ pull_alert.window_start_epoch_ms if pull_alert.window_start_epoch_ms is not none else '' }}"
+                            data-pull-window-end-epoch-ms="{{ pull_alert.window_end_epoch_ms if pull_alert.window_end_epoch_ms is not none else '' }}"
                         >
                             <div class="neoermac-door-planned">
                                 {% set show_base_window = card.window_minutes is not none and card.window_minutes != 0 and card.base_planned[pull.key] and card.base_planned[pull.key] != card.planned[pull.key] %}
@@ -441,6 +447,7 @@
 </script>
 
 {% if selected_door %}
+<script src="{{ url_for('static', filename='js/door_view_alert_clock.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 <script>
 (() => {
     const root = document.querySelector("[data-door-view]");
@@ -457,16 +464,23 @@
     const pullKeys = ["pure", "mix"];
     const pullAlertClasses = ["is-pull-due-soon", "is-pull-due-now", "is-pull-late"];
     const initialDoorTabAlerts = {{ (door_tab_alerts|default({}))|tojson }};
+    const alertClockApi = window.NeoErmacDoorAlertClock;
+    let currentDoorTabAlerts = initialDoorTabAlerts;
+    let alertClock = null;
     let refreshController = null;
 
-    const applyDoorTabAlerts = (doorTabAlerts) => {
+    const renderDoorTabAlerts = (nowMs = Date.now()) => {
         document.querySelectorAll("[data-door-tab]").forEach((tab) => {
             const door = tab.dataset.doorTab || "";
             const isActive = tab.classList.contains("is-active");
-            const alert = isActive ? {} : (doorTabAlerts?.[door] || {});
-            const state = alert.state === "late"
-                ? "late"
-                : (alert.state === "due_now" ? "due_now" : "");
+            const alert = isActive ? {} : (currentDoorTabAlerts?.[door] || {});
+            const state = isActive
+                ? ""
+                : (
+                    alertClockApi
+                        ? alertClockApi.doorTabAlertState(alert, nowMs)
+                        : (alert.state || "")
+                );
 
             tab.classList.remove("is-pull-due-now", "is-pull-late");
             if (state === "late") {
@@ -484,7 +498,63 @@
         });
     };
 
+    const applyDoorTabAlerts = (doorTabAlerts) => {
+        currentDoorTabAlerts = doorTabAlerts || {};
+        renderDoorTabAlerts();
+        alertClock?.refresh();
+    };
+
     window.neoErmacApplyDoorTabAlerts = applyDoorTabAlerts;
+
+    const setEpochDataset = (row, property, value) => {
+        if (value === null || value === undefined || value === "") {
+            delete row.dataset[property];
+            return;
+        }
+        row.dataset[property] = String(value);
+    };
+
+    const applyPullAlertTiming = (row, alert) => {
+        const timing = alert || {};
+        row.dataset.pullAccounted = timing.accounted === true ? "true" : "false";
+        row.dataset.pullAlertKey = timing.key || "";
+        setEpochDataset(row, "pullDueSoonEpochMs", timing.due_soon_epoch_ms);
+        setEpochDataset(row, "pullDueNowEpochMs", timing.due_now_epoch_ms);
+        setEpochDataset(row, "pullLateEpochMs", timing.late_epoch_ms);
+        setEpochDataset(row, "pullWindowStartEpochMs", timing.window_start_epoch_ms);
+        setEpochDataset(row, "pullWindowEndEpochMs", timing.window_end_epoch_ms);
+    };
+
+    const pullTimingFromRow = (row) => ({
+        accounted: row.dataset.pullAccounted === "true",
+        due_soon_epoch_ms: row.dataset.pullDueSoonEpochMs,
+        due_now_epoch_ms: row.dataset.pullDueNowEpochMs,
+        late_epoch_ms: row.dataset.pullLateEpochMs,
+        window_start_epoch_ms: row.dataset.pullWindowStartEpochMs,
+        window_end_epoch_ms: row.dataset.pullWindowEndEpochMs,
+    });
+
+    const renderPullAlert = (row, alert) => {
+        const presentation = alert || {};
+        row.classList.remove(...pullAlertClasses);
+        if (presentation.css_class) {
+            row.classList.add(presentation.css_class);
+        }
+        row.dataset.pullAlertState = presentation.state || "";
+
+        let badge = row.querySelector("[data-pull-alert-badge]");
+        if (presentation.label) {
+            if (!badge) {
+                badge = document.createElement("span");
+                badge.className = "neoermac-pull-alert-badge";
+                badge.dataset.pullAlertBadge = "";
+                row.querySelector(".neoermac-door-planned")?.appendChild(badge);
+            }
+            badge.textContent = presentation.label;
+        } else if (badge) {
+            badge.remove();
+        }
+    };
 
     const applyPullAlerts = (card, pullAlerts) => {
         if (!card) {
@@ -493,29 +563,38 @@
         card.querySelectorAll(".neoermac-door-pull-row[data-pull-key]").forEach((row) => {
             const pullKey = row.dataset.pullKey || "";
             const alert = pullAlerts?.[pullKey] || {};
-            row.classList.remove(...pullAlertClasses);
-            if (alert.css_class) {
-                row.classList.add(alert.css_class);
-            }
-            row.dataset.pullAlertState = alert.state || "";
-            row.dataset.pullAlertKey = alert.key || "";
-
-            let badge = row.querySelector("[data-pull-alert-badge]");
-            if (alert.label) {
-                if (!badge) {
-                    badge = document.createElement("span");
-                    badge.className = "neoermac-pull-alert-badge";
-                    badge.dataset.pullAlertBadge = "";
-                    row.querySelector(".neoermac-door-planned")?.appendChild(badge);
-                }
-                badge.textContent = alert.label;
-            } else if (badge) {
-                badge.remove();
-            }
+            applyPullAlertTiming(row, alert);
+            renderPullAlert(
+                row,
+                alertClockApi?.pullAlertState(alert, Date.now()) || alert,
+            );
         });
+        alertClock?.refresh();
     };
 
     window.neoErmacApplyPullAlerts = applyPullAlerts;
+
+    const collectAlertTimings = () => {
+        const timings = Array.from(
+            root.querySelectorAll(".neoermac-door-pull-row[data-pull-key]")
+        ).map(pullTimingFromRow);
+        Object.values(currentDoorTabAlerts || {}).forEach((doorAlert) => {
+            if (Array.isArray(doorAlert?.pulls)) {
+                timings.push(...doorAlert.pulls);
+            }
+        });
+        return timings;
+    };
+
+    const renderClockAlerts = (nowMs) => {
+        root.querySelectorAll(".neoermac-door-pull-row[data-pull-key]").forEach((row) => {
+            renderPullAlert(
+                row,
+                alertClockApi?.pullAlertState(pullTimingFromRow(row), nowMs) || {},
+            );
+        });
+        renderDoorTabAlerts(nowMs);
+    };
 
     const findPullControl = (card, selector, pullKey) => Array.from(
         card.querySelectorAll(selector)
@@ -872,6 +951,10 @@
     };
 
     applyDoorTabAlerts(initialDoorTabAlerts);
+    alertClock = alertClockApi?.create({
+        getTimings: collectAlertTimings,
+        render: renderClockAlerts,
+    }) || null;
     setRefreshStatus(initialRefreshStatus);
 })();
 </script>

@@ -3,6 +3,7 @@ import unittest
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import event, text
 from sqlalchemy.orm import Session
@@ -1597,6 +1598,58 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 pure_alert = payload["state"]["destinations"][0]["pull_alerts"]["pure"]
                 self.assertEqual(pure_alert["state"], expected_state)
 
+    def test_door_view_pull_alerts_include_gateway_epoch_thresholds(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026,
+            6,
+            12,
+            1,
+            54,
+            59,
+        )
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
+        self._add_operation_departure(
+            "UPS401",
+            "SDF",
+            pure_pull_time_local=time(2, 0),
+            mix_pull_time_local=time(2, 30),
+        )
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response = self.client.get("/neoermac/door-view/state?door=D34")
+        pure_alert = response.get_json()["state"]["destinations"][0]["pull_alerts"]["pure"]
+        zone = ZoneInfo("America/Chicago")
+        epoch_ms = lambda value: int(value.replace(tzinfo=zone).timestamp() * 1000)
+
+        self.assertFalse(pure_alert["accounted"])
+        self.assertEqual(
+            pure_alert["due_soon_epoch_ms"],
+            epoch_ms(datetime(2026, 6, 12, 1, 55)),
+        )
+        self.assertEqual(
+            pure_alert["due_now_epoch_ms"],
+            epoch_ms(datetime(2026, 6, 12, 2, 0)),
+        )
+        self.assertEqual(
+            pure_alert["late_epoch_ms"],
+            epoch_ms(datetime(2026, 6, 12, 2, 5)),
+        )
+        self.assertEqual(
+            pure_alert["window_start_epoch_ms"],
+            epoch_ms(datetime(2026, 6, 11, 22, 0)),
+        )
+        self.assertEqual(
+            pure_alert["window_end_epoch_ms"],
+            epoch_ms(datetime(2026, 6, 12, 4, 0)),
+        )
+
+        page = self.client.get("/neoermac/door-view?door=D34")
+        self.assertIn(b"door_view_alert_clock.js", page.data)
+        self.assertIn(b"data-pull-due-now-epoch-ms=", page.data)
+        self.assertIn(b"data-pull-window-end-epoch-ms=", page.data)
+
     def test_door_view_pull_urgency_is_independent_and_resolves_per_pull(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
             2026,
@@ -2845,6 +2898,60 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("refresh", payload)
         self.assertNotIn("state", payload)
         full_state.assert_not_called()
+
+    def test_door_view_revision_is_stable_across_pull_alert_minute_boundaries(self):
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
+        mission = self._add_operation_departure(
+            "UPS948",
+            "SDF",
+            pure_pull_time_local=time(2, 0),
+            mix_pull_time_local=time(2, 30),
+        )
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026,
+            6,
+            12,
+            1,
+            54,
+            59,
+        )
+        initial = self.client.get("/neoermac/door-view/state?door=D34").get_json()
+        revision = initial["revision"]
+
+        for local_now in (
+            datetime(2026, 6, 12, 1, 55),
+            datetime(2026, 6, 12, 2, 0),
+            datetime(2026, 6, 12, 2, 5),
+        ):
+            with self.subTest(local_now=local_now):
+                self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = local_now
+                with patch("app.neonodes.neoermac.routes.door_view_uld_state") as full_state:
+                    response = self.client.get(
+                        "/neoermac/door-view/state?door=D34&revision=" + revision
+                    )
+                payload = response.get_json()
+                self.assertFalse(payload["changed"])
+                self.assertEqual(payload["revision"], revision)
+                full_state.assert_not_called()
+
+        mission.pure_pull_time_local = time(2, 10)
+        db.session.commit()
+        changed = self.client.get(
+            "/neoermac/door-view/state?door=D34&revision=" + revision
+        ).get_json()
+        self.assertTrue(changed["changed"])
+        self.assertNotEqual(changed["revision"], revision)
+        self.assertEqual(
+            changed["state"]["destinations"][0]["pull_alerts"]["pure"]["due_now_epoch_ms"],
+            int(
+                datetime(2026, 6, 12, 2, 10, tzinfo=ZoneInfo("America/Chicago")).timestamp()
+                * 1000
+            ),
+        )
 
     def test_door_view_state_revision_change_runs_full_payload(self):
         self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")

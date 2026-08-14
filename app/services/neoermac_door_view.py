@@ -1,6 +1,7 @@
 import hashlib
 import json
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import func, literal, or_, select, union_all
 
@@ -25,6 +26,7 @@ from app.services.neoermac_building_lineup import (
 )
 from app.services.gateway_matrix import (
     current_gateway_local_datetime,
+    gateway_timezone,
     operation_is_active_at,
     sort_lookup_window_for_operation,
 )
@@ -435,6 +437,7 @@ def door_tab_pull_alerts(
         if door == active_door:
             continue
         tab_state = ""
+        tab_pulls = []
         for destination in destinations_by_door[door]:
             mission = missions.get(destination)
             master = masters.get(destination)
@@ -465,6 +468,11 @@ def door_tab_pull_alerts(
                 actual,
                 no_pull,
             )
+            tab_pulls.extend(
+                alert
+                for alert in pull_alerts.values()
+                if alert.get("due_now_epoch_ms") is not None
+            )
             states = {alert["state"] for alert in pull_alerts.values()}
             if "late" in states:
                 tab_state = "late"
@@ -472,7 +480,7 @@ def door_tab_pull_alerts(
             if "due_now" in states:
                 tab_state = "due_now"
 
-        result[door] = _door_tab_alert(tab_state)
+        result[door] = _door_tab_alert(tab_state, pulls=tab_pulls)
 
     return result
 
@@ -505,7 +513,6 @@ def door_view_poll_revision(
     if operation is _OPERATION_UNSET:
         operation = _current_operation(gateway)
 
-    now_local = current_gateway_local_datetime(gateway, now=now)
     now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
     operation_id = operation.id if operation else None
     operation_criteria = lambda model: (
@@ -588,8 +595,6 @@ def door_view_poll_revision(
         ),
         "selected_door": selected_door,
         "requested_by_user_id": requested_by_user_id,
-        # Pull urgency changes at minute boundaries even without a database write.
-        "local_minute": now_local.replace(second=0, microsecond=0).isoformat(),
         "inputs": [
             {
                 "source": row.source,
@@ -999,25 +1004,31 @@ def _pull_alerts_for_card(
         return alerts
 
     local_now = current_gateway_local_datetime(gateway)
-    if not operation_is_active_at(operation, local_now, gateway):
-        return alerts
-
     start_local, end_local = sort_lookup_window_for_operation(operation, gateway)
+    operation_is_active = operation_is_active_at(operation, local_now, gateway)
     for field in PULL_FIELDS:
         pull_key = field["key"]
+        accounted = bool(no_pull.get(pull_key) or actual.get(pull_key))
+        alerts[pull_key]["accounted"] = accounted
         planned_time = planned_times.get(pull_key)
         planned_local = _pull_planned_datetime(operation, start_local, end_local, planned_time)
         if not planned_local:
             continue
 
-        alerts[pull_key]["key"] = _pull_alert_key(
-            operation,
-            selected_door,
-            destination,
-            pull_key,
-            planned_local,
+        alerts[pull_key].update(
+            _pull_alert_timing(
+                gateway,
+                operation,
+                selected_door,
+                destination,
+                pull_key,
+                planned_local,
+                start_local,
+                end_local,
+                accounted,
+            )
         )
-        if no_pull.get(pull_key) or actual.get(pull_key):
+        if accounted or not operation_is_active:
             continue
 
         seconds_until = (planned_local - local_now).total_seconds()
@@ -1058,6 +1069,12 @@ def _empty_pull_alert():
         "label": "",
         "key": "",
         "minutes": None,
+        "accounted": False,
+        "due_soon_epoch_ms": None,
+        "due_now_epoch_ms": None,
+        "late_epoch_ms": None,
+        "window_start_epoch_ms": None,
+        "window_end_epoch_ms": None,
     }
 
 
@@ -1065,20 +1082,67 @@ def _empty_door_tab_alert():
     return _door_tab_alert("")
 
 
-def _door_tab_alert(state):
+def _door_tab_alert(state, pulls=()):
+    pulls = list(pulls or ())
     if state == "late":
         return {
             "state": "late",
             "css_class": "is-pull-late",
             "label": "Late pull",
+            "pulls": pulls,
         }
     if state == "due_now":
         return {
             "state": "due_now",
             "css_class": "is-pull-due-now",
             "label": "Pull now",
+            "pulls": pulls,
         }
-    return {"state": "", "css_class": "", "label": ""}
+    return {"state": "", "css_class": "", "label": "", "pulls": pulls}
+
+
+def _pull_alert_timing(
+    gateway,
+    operation,
+    selected_door,
+    destination,
+    pull_key,
+    planned_local,
+    start_local,
+    end_local,
+    accounted,
+):
+    return {
+        "key": _pull_alert_key(
+            operation,
+            selected_door,
+            destination,
+            pull_key,
+            planned_local,
+        ),
+        "accounted": bool(accounted),
+        "due_soon_epoch_ms": _gateway_local_epoch_ms(
+            gateway,
+            planned_local - timedelta(minutes=PULL_DUE_WARNING_MINUTES),
+        ),
+        "due_now_epoch_ms": _gateway_local_epoch_ms(gateway, planned_local),
+        "late_epoch_ms": _gateway_local_epoch_ms(
+            gateway,
+            planned_local + timedelta(minutes=PULL_DUE_WARNING_MINUTES),
+        ),
+        "window_start_epoch_ms": _gateway_local_epoch_ms(gateway, start_local),
+        "window_end_epoch_ms": _gateway_local_epoch_ms(gateway, end_local),
+    }
+
+
+def _gateway_local_epoch_ms(gateway, value):
+    if value is None:
+        return None
+    try:
+        zone = ZoneInfo(gateway_timezone(gateway))
+    except ZoneInfoNotFoundError:
+        zone = ZoneInfo("America/Chicago")
+    return int(value.replace(tzinfo=zone).timestamp() * 1000)
 
 
 def _pull_planned_datetime(operation, start_local, end_local, planned_time):
