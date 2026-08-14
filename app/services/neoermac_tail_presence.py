@@ -23,17 +23,27 @@ _EVIDENCE_PRIORITY = {
 }
 
 
-def arrival_presence_by_tail(operation, now=None):
+def arrival_presence_by_tail(
+    operation,
+    now=None,
+    *,
+    arrivals=None,
+    google_links=None,
+):
     """Build current-operation arrival presence without caching tail assignments."""
     if not operation:
         return {}
 
     now_utc = _utc_naive(now) or datetime.now(timezone.utc).replace(tzinfo=None)
-    arrivals = SortDateMission.query.filter_by(
-        sort_date_operation_id=operation.id,
-        mission_type="arrival",
-    ).all()
-    links_by_mission_id = _google_arrival_links_by_mission_id(operation)
+    if arrivals is None:
+        arrivals = SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id,
+            mission_type="arrival",
+        ).all()
+    links_by_mission_id = _google_arrival_links_by_mission_id(
+        operation,
+        google_links=google_links,
+    )
     presence = {}
     for arrival in arrivals:
         tail = normalize_tail_number(arrival.assigned_tail_number)
@@ -142,11 +152,13 @@ def _arrival_presence_evidence(arrival, tail, google_links, now_utc):
     }
 
 
-def _google_arrival_links_by_mission_id(operation):
-    links = SortDateGoogleMissionLink.query.filter_by(
-        sort_date_operation_id=operation.id,
-        mission_type="arrival",
-    ).all()
+def _google_arrival_links_by_mission_id(operation, *, google_links=None):
+    links = google_links
+    if links is None:
+        links = SortDateGoogleMissionLink.query.filter_by(
+            sort_date_operation_id=operation.id,
+            mission_type="arrival",
+        ).all()
     by_mission_id = {}
     for link in links:
         if link.sort_date_mission_id is not None:

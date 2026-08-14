@@ -1868,6 +1868,68 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertFalse(saved.no_pure_pull)
         self.assertEqual(mission.actual_pure_pull_time_local, time(14, 5))
 
+    def test_door_view_pull_autosave_reuses_one_operational_bundle(self):
+        self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
+        self._add_operation_departure("UPS302", "SDF")
+        db.session.commit()
+        self._login_approved_user(role="operator")
+        page = self.client.get("/neoermac/door-view?door=D34")
+        self.assertEqual(page.status_code, 200)
+        db.session.expire_all()
+        statements = []
+        commits = [0]
+
+        def capture_statement(_conn, _cursor, statement, _params, _context, _many):
+            statements.append(" ".join(statement.lower().split()))
+
+        def count_commit(_session):
+            commits[0] += 1
+
+        event.listen(db.engine, "before_cursor_execute", capture_statement)
+        event.listen(Session, "after_commit", count_commit)
+        try:
+            response = self.client.post(
+                "/neoermac/door-view/pull-autosave",
+                data={
+                    "door": "D34",
+                    "destination": "SDF",
+                    "pull_key": "pure",
+                    "actual_pull": "14:05",
+                    "no_pull": "0",
+                },
+            )
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture_statement)
+            event.remove(Session, "after_commit", count_commit)
+
+        selects = [row for row in statements if row.startswith("select")]
+        writes = [
+            row
+            for row in statements
+            if row.startswith(("insert", "update", "delete"))
+        ]
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(len(selects), 20)
+        self.assertEqual(len(selects), len(set(selects)))
+        self.assertEqual(commits[0], 1)
+        self.assertEqual(sum(row.startswith("insert") for row in writes), 1)
+        self.assertEqual(sum(row.startswith("update") for row in writes), 1)
+        for table_name in (
+            "neoermac_building_lineups",
+            "sort_date_missions",
+            "master_flight_schedules",
+            "sort_date_parking_assignments",
+            "sort_date_google_mission_links",
+            "neoermac_door_pulls",
+            "neoermac_uld_requests",
+            "neosektor_uld_on_the_way_events",
+        ):
+            with self.subTest(table_name=table_name):
+                self.assertEqual(
+                    sum(f"from {table_name}" in row for row in selects),
+                    1,
+                )
+
     def test_door_view_pull_autosave_succeeds_outside_ops_with_departed_mission(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
             2026,
@@ -3037,7 +3099,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         def capture_statement(_conn, _cursor, statement, _params, _context, _many):
             normalized = " ".join(statement.lower().split())
-            if "from neoermac_door_pulls" in normalized:
+            if normalized.startswith("select"):
                 statements.append(normalized)
 
         event.listen(db.engine, "before_cursor_execute", capture_statement)
@@ -3051,7 +3113,21 @@ class NeoErmacRoutesTest(unittest.TestCase):
             event.remove(db.engine, "before_cursor_execute", capture_statement)
 
         self.assertEqual(len(state["destinations"]), 2)
-        self.assertEqual(len(statements), 1)
+        for table_name in (
+            "neoermac_building_lineups",
+            "sort_date_missions",
+            "master_flight_schedules",
+            "sort_date_parking_assignments",
+            "sort_date_google_mission_links",
+            "neoermac_door_pulls",
+            "neoermac_uld_requests",
+            "neosektor_uld_on_the_way_events",
+        ):
+            with self.subTest(table_name=table_name):
+                self.assertEqual(
+                    sum(f"from {table_name}" in row for row in statements),
+                    1,
+                )
 
     def test_door_view_displays_active_on_the_way_events(self):
         sent_at = datetime.utcnow()

@@ -38,6 +38,10 @@ def recompute_current_sort_door_pull_aggregates(
     gateway,
     operation=None,
     destinations=None,
+    *,
+    doors_by_destination=None,
+    missions_by_destination=None,
+    pulls_by_destination_and_door=None,
 ):
     operation = operation or _current_operation(gateway)
     if not operation:
@@ -48,8 +52,10 @@ def recompute_current_sort_door_pull_aggregates(
         for destination in (destinations or ())
         if normalize_destination(destination)
     }
-    doors_by_destination = get_building_lineup_doors_by_destination(gateway)
-    missions_by_destination = _departure_missions_by_destination(operation)
+    if doors_by_destination is None:
+        doors_by_destination = get_building_lineup_doors_by_destination(gateway)
+    if missions_by_destination is None:
+        missions_by_destination = _departure_missions_by_destination(operation)
     if requested_destinations:
         missions_by_destination = {
             destination: mission
@@ -57,10 +63,11 @@ def recompute_current_sort_door_pull_aggregates(
             if destination in requested_destinations
         }
 
-    pulls_by_destination_and_door = _door_pulls_by_destination_and_door(
-        gateway,
-        operation,
-    )
+    if pulls_by_destination_and_door is None:
+        pulls_by_destination_and_door = _door_pulls_by_destination_and_door(
+            gateway,
+            operation,
+        )
     results = {}
     for destination, mission in missions_by_destination.items():
         results[destination] = _recompute_mission(

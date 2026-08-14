@@ -14,6 +14,7 @@ ULD_REQUEST_FIELDS = {
     "AMP": "amp_count",
 }
 ON_THE_WAY_MINUTES = 5
+_PRELOADED_UNSET = object()
 
 
 def current_uld_operation(gateway):
@@ -236,13 +237,52 @@ def active_discharge_request_views(gateway, now=None, operation=None):
     ]
 
 
-def door_uld_state_payload(gateway, door, now=None, operation=None):
+def door_uld_state_payload(
+    gateway,
+    door,
+    now=None,
+    operation=None,
+    *,
+    request_records=_PRELOADED_UNSET,
+    event_records=_PRELOADED_UNSET,
+):
     normalized_door = normalize_door(door)
     if not normalized_door:
         raise ValueError("Select a door.")
 
     operation = _resolve_operation(gateway, operation)
-    request_records = active_uld_requests_for_door(gateway, normalized_door, operation)
+    if request_records is _PRELOADED_UNSET:
+        request_records = active_uld_requests_for_door(
+            gateway,
+            normalized_door,
+            operation,
+        )
+    else:
+        request_records = [
+            record
+            for record in request_records
+            if record.door == normalized_door and request_has_counts(record)
+        ]
+        request_records.sort(
+            key=lambda record: (
+                not bool(record.setup_needed),
+                record.updated_at or record.created_at or datetime.min,
+                record.id or 0,
+            )
+        )
+    if event_records is _PRELOADED_UNSET:
+        event_views = active_on_the_way_event_views(
+            gateway,
+            normalized_door,
+            now,
+            operation=operation,
+        )
+    else:
+        event_views = [
+            _event_view(gateway, event)
+            for event in event_records
+            if event.door == normalized_door
+        ]
     return {
         "door": normalized_door,
         "operation_id": operation.id if operation else None,
@@ -251,15 +291,7 @@ def door_uld_state_payload(gateway, door, now=None, operation=None):
             _single_request_counts_payload(gateway, request_record)
             for request_record in request_records
         ],
-        "on_the_way_events": [
-            _event_payload(event)
-            for event in active_on_the_way_event_views(
-                gateway,
-                normalized_door,
-                now,
-                operation=operation,
-            )
-        ],
+        "on_the_way_events": [_event_payload(event) for event in event_views],
     }
 
 
@@ -269,6 +301,9 @@ def uld_workspace_state_payload(
     requested_by_user_id,
     now=None,
     operation=None,
+    *,
+    request_records=_PRELOADED_UNSET,
+    event_records=_PRELOADED_UNSET,
 ):
     """Return ULD activity relevant to one user's persistent Door View workspace."""
     operation = _resolve_operation(gateway, operation)
@@ -278,9 +313,11 @@ def uld_workspace_state_payload(
         if normalize_door(door)
     }
 
+    if request_records is _PRELOADED_UNSET:
+        request_records = _request_query(gateway, operation).all()
     request_records = [
         record
-        for record in _request_query(gateway, operation).all()
+        for record in request_records
         if request_has_counts(record)
         and (
             record.door in supervised
@@ -299,13 +336,15 @@ def uld_workspace_state_payload(
         )
     )
 
-    events = [
-        event
-        for event in active_on_the_way_events(
+    if event_records is _PRELOADED_UNSET:
+        event_records = active_on_the_way_events(
             gateway,
             now=now,
             operation=operation,
         )
+    events = [
+        event
+        for event in event_records
         if event.door in supervised
         or (
             requested_by_user_id is not None

@@ -195,9 +195,11 @@ def save_building_lineup(gateway, form_data):
     return rows
 
 
-def get_building_lineup_doors_by_destination(gateway):
+def get_building_lineup_doors_by_destination(gateway, *, assignments=None):
     doors_by_destination = {}
-    for assignment in get_building_lineup_assignments(gateway):
+    if assignments is None:
+        assignments = get_building_lineup_assignments(gateway)
+    for assignment in assignments:
         destination = assignment["destination"]
         door = assignment["supervising_door"]
         assigned_doors = doors_by_destination.setdefault(destination, [])
@@ -220,13 +222,21 @@ def get_building_lineup_assignments(gateway, include_blank=False, *, initialize=
     return tuple(assignments)
 
 
-def get_building_lineup_destinations_for_door(gateway, door, *, initialize=True):
+def get_building_lineup_destinations_for_door(
+    gateway,
+    door,
+    *,
+    initialize=True,
+    assignments=None,
+):
     door = str(door or "").strip().upper()
     destinations = {}
-    for assignment in get_building_lineup_assignments(
-        gateway,
-        initialize=initialize,
-    ):
+    if assignments is None:
+        assignments = get_building_lineup_assignments(
+            gateway,
+            initialize=initialize,
+        )
+    for assignment in assignments:
         if assignment["supervising_door"] != door:
             continue
         labels = destinations.setdefault(assignment["destination"], [])
@@ -235,14 +245,21 @@ def get_building_lineup_destinations_for_door(gateway, door, *, initialize=True)
     return destinations
 
 
-def get_linked_building_lineup_doors(gateway, door, destination):
+def get_linked_building_lineup_doors(
+    gateway,
+    door,
+    destination,
+    *,
+    assignments=None,
+):
     """Return doors facing the same physical belt and destination."""
     door = str(door or "").strip().upper()
     destination = normalize_destination(destination)
     if not door or not destination:
         return ()
 
-    assignments = get_building_lineup_assignments(gateway)
+    if assignments is None:
+        assignments = get_building_lineup_assignments(gateway)
     source_assignments = [
         assignment
         for assignment in assignments

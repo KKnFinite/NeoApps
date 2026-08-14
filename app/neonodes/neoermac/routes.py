@@ -30,6 +30,7 @@ from app.services.neoermac_door_view import (
     delete_door_uld_request,
     door_tab_pull_alerts,
     door_view_context,
+    door_view_operational_state,
     door_view_poll_revision,
     door_view_uld_state,
     door_view_uld_workspace,
@@ -420,11 +421,11 @@ def door_view_supervision():
         flash("Access denied.", "error")
         return redirect(url_for("neoermac.index"))
 
-    base_context = door_view_context(gateway)
+    operation = current_door_view_operation(gateway)
     try:
         supervision = save_door_supervision(
             current_user,
-            base_context["operation"],
+            operation,
             request.form.getlist("doors"),
             get_outbound_door_options(),
             active_door=request.form.get("active_door", ""),
@@ -477,6 +478,11 @@ def door_view_state():
             ),
             selected_door,
         )
+        bundle = door_view_operational_state(
+            gateway,
+            operation=operation,
+            initialize_lineup=False,
+        )
         state = door_view_uld_state(
             gateway,
             selected_door,
@@ -486,6 +492,7 @@ def door_view_state():
             refresh_status=refresh_status,
             revision=revision,
             initialize_lineup=False,
+            bundle=bundle,
         )
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
@@ -513,9 +520,15 @@ def door_view_pull_autosave():
     destination = request.form.get("destination", "")
     pull_key = request.form.get("pull_key", "")
     try:
+        operation = current_door_view_operation(gateway)
         supervised_doors = _uld_workspace_doors(
-            _current_user_supervised_doors(gateway),
+            _current_user_supervised_doors(gateway, operation=operation),
             selected_door,
+        )
+        bundle = door_view_operational_state(
+            gateway,
+            operation=operation,
+            initialize_lineup=True,
         )
         card = save_single_door_pull(
             gateway,
@@ -525,12 +538,16 @@ def door_view_pull_autosave():
             request.form.get("actual_pull", ""),
             request.form.get("no_pull") == "1",
             supervised_doors=supervised_doors,
+            operation=operation,
+            bundle=bundle,
         )
         state = door_view_uld_state(
             gateway,
             selected_door,
             supervised_doors=supervised_doors,
             requested_by_user_id=current_user.id,
+            operation=operation,
+            bundle=bundle,
         )
         db.session.commit()
     except ValueError as exc:
@@ -566,8 +583,8 @@ def door_view_pull_autosave():
     return jsonify({"ok": True, "card": card, "state": state})
 
 
-def _current_user_supervised_doors(gateway):
-    operation = door_view_context(gateway)["operation"]
+def _current_user_supervised_doors(gateway, operation=None):
+    operation = operation or current_door_view_operation(gateway)
     return supervised_doors_for_user(
         current_user,
         operation,
@@ -628,21 +645,30 @@ def _building_lineup_response(gateway, access, rows=None, status_code=200):
 
 def _door_view_response(gateway, access, selected_door, status_code=200):
     canonical_door_options = get_outbound_door_options()
-    context = door_view_context(gateway, selected_door)
+    operation = current_door_view_operation(gateway)
     supervision = door_supervision_for_user(
         current_user,
-        context["operation"],
+        operation,
         canonical_door_options,
         requested_door=selected_door,
     )
     active_door = supervision["active_door"]
-    if active_door != context["selected_door"]:
-        context = door_view_context(gateway, active_door)
+    bundle = (
+        door_view_operational_state(
+            gateway,
+            operation=operation,
+            initialize_lineup=True,
+        )
+        if active_door
+        else None
+    )
+    context = door_view_context(gateway, active_door, bundle=bundle)
     context["door_tab_alerts"] = door_tab_pull_alerts(
         gateway,
         active_door,
         supervision["selected_doors"],
-        operation=context["operation"],
+        operation=operation,
+        bundle=bundle,
     )
     workspace_doors = _uld_workspace_doors(
         supervision["selected_doors"],
@@ -652,7 +678,8 @@ def _door_view_response(gateway, access, selected_door, status_code=200):
         gateway,
         workspace_doors,
         current_user.id,
-        operation=context["operation"],
+        operation=operation,
+        bundle=bundle,
     )
     context["uld_workspace"] = workspace
     context["uld_requests"] = workspace["requests"]
@@ -662,7 +689,7 @@ def _door_view_response(gateway, access, selected_door, status_code=200):
             gateway,
             active_door,
             current_user.id,
-            operation=context["operation"],
+            operation=operation,
         )
         if active_door
         else ""

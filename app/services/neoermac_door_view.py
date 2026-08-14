@@ -1,5 +1,6 @@
 import hashlib
 import json
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -20,6 +21,7 @@ from app.models import (
 from app.services.neoermac_building_lineup import (
     get_building_lineup_assignments,
     get_building_lineup_destinations_for_door,
+    get_building_lineup_doors_by_destination,
     get_linked_building_lineup_doors,
     get_outbound_door_options,
     normalize_destination,
@@ -58,6 +60,7 @@ from app.services.uld_requests import (
 PULL_DUE_WARNING_MINUTES = 5
 _OPERATION_UNSET = object()
 _DOOR_PULL_LOOKUP_UNSET = object()
+_BUNDLE_UNSET = object()
 
 PULL_FIELDS = (
     {
@@ -82,20 +85,228 @@ PULL_FIELDS = (
     },
 )
 
-def door_view_context(gateway, selected_door=None):
+
+@dataclass
+class DoorViewOperationalStateBundle:
+    """One coherent, request-local snapshot used by Door View builders."""
+
+    gateway: object
+    operation: object
+    lineup_assignments: tuple
+    missions: tuple
+    door_pulls: list
+    destinations_by_door: dict = field(init=False)
+    doors_by_destination: dict = field(init=False)
+    departure_missions_by_destination: dict = field(init=False)
+    arrival_missions: tuple = field(init=False)
+    door_pulls_by_door_destination: dict = field(init=False)
+    door_pulls_by_destination_and_door: dict = field(init=False)
+    _masters_by_destination: object = field(default=_BUNDLE_UNSET, init=False)
+    _parking_by_tail: object = field(default=_BUNDLE_UNSET, init=False)
+    _arrivals_by_tail: object = field(default=_BUNDLE_UNSET, init=False)
+    _uld_requests: object = field(default=_BUNDLE_UNSET, init=False)
+    _uld_events: object = field(default=_BUNDLE_UNSET, init=False)
+
+    def __post_init__(self):
+        door_options = get_outbound_door_options()
+        self.destinations_by_door = {
+            door: dict(
+                sorted(
+                    get_building_lineup_destinations_for_door(
+                        self.gateway,
+                        door,
+                        assignments=self.lineup_assignments,
+                    ).items()
+                )
+            )
+            for door in door_options
+        }
+        self.doors_by_destination = get_building_lineup_doors_by_destination(
+            self.gateway,
+            assignments=self.lineup_assignments,
+        )
+        self.departure_missions_by_destination = {}
+        arrivals = []
+        for mission in self.missions:
+            if mission.mission_type == "arrival":
+                arrivals.append(mission)
+                continue
+            if mission.mission_type != "departure":
+                continue
+            destination = normalize_destination(mission.destination)
+            if (
+                destination
+                and destination not in self.departure_missions_by_destination
+            ):
+                self.departure_missions_by_destination[destination] = mission
+        self.arrival_missions = tuple(arrivals)
+        self.door_pulls_by_door_destination = {}
+        self.door_pulls_by_destination_and_door = {}
+        for record in self.door_pulls:
+            self.register_door_pull(record)
+
+    @classmethod
+    def load(cls, gateway, operation, *, initialize_lineup):
+        assignments = get_building_lineup_assignments(
+            gateway,
+            initialize=initialize_lineup,
+        )
+        missions = ()
+        door_pulls = []
+        if operation:
+            missions = tuple(
+                SortDateMission.query.filter_by(
+                    sort_date_operation_id=operation.id,
+                )
+                .order_by(
+                    SortDateMission.planned_datetime_utc.asc(),
+                    SortDateMission.id.asc(),
+                )
+                .all()
+            )
+            door_pulls = (
+                NeoErmacDoorPull.query.filter_by(
+                    gateway_id=gateway.id,
+                    sort_date_operation_id=operation.id,
+                )
+                .order_by(
+                    NeoErmacDoorPull.updated_at.desc(),
+                    NeoErmacDoorPull.id.desc(),
+                )
+                .all()
+            )
+        return cls(
+            gateway=gateway,
+            operation=operation,
+            lineup_assignments=tuple(assignments),
+            missions=tuple(missions),
+            door_pulls=list(door_pulls),
+        )
+
+    def register_door_pull(self, record):
+        door = normalize_door(record.door)
+        destination = normalize_destination(record.destination)
+        if not door or not destination:
+            return
+        self.door_pulls_by_door_destination.setdefault(
+            (door, destination),
+            record,
+        )
+        self.door_pulls_by_destination_and_door.setdefault(
+            (destination, door),
+            record,
+        )
+        if record not in self.door_pulls:
+            self.door_pulls.append(record)
+
+    @property
+    def masters_by_destination(self):
+        if self._masters_by_destination is _BUNDLE_UNSET:
+            self._masters_by_destination = _master_departures_by_destination(
+                self.gateway
+            )
+        return self._masters_by_destination
+
+    @property
+    def parking_by_tail(self):
+        if self._parking_by_tail is _BUNDLE_UNSET:
+            self._parking_by_tail = _parking_assignments_by_tail(self.operation)
+        return self._parking_by_tail
+
+    @property
+    def arrivals_by_tail(self):
+        if self._arrivals_by_tail is _BUNDLE_UNSET:
+            google_links = []
+            if self.operation:
+                google_links = SortDateGoogleMissionLink.query.filter_by(
+                    sort_date_operation_id=self.operation.id,
+                    mission_type="arrival",
+                ).all()
+            self._arrivals_by_tail = arrival_presence_by_tail(
+                self.operation,
+                arrivals=self.arrival_missions,
+                google_links=google_links,
+            )
+        return self._arrivals_by_tail
+
+    @property
+    def uld_requests(self):
+        if self._uld_requests is _BUNDLE_UNSET:
+            query = NeoErmacUldRequest.query.filter_by(gateway_id=self.gateway.id)
+            if self.operation:
+                query = query.filter_by(sort_date_operation_id=self.operation.id)
+            else:
+                query = query.filter(
+                    NeoErmacUldRequest.sort_date_operation_id.is_(None)
+                )
+            self._uld_requests = query.all()
+        return self._uld_requests
+
+    @property
+    def uld_events(self):
+        if self._uld_events is _BUNDLE_UNSET:
+            query = NeoSektorUldOnTheWayEvent.query.filter(
+                NeoSektorUldOnTheWayEvent.gateway_id == self.gateway.id,
+                NeoSektorUldOnTheWayEvent.expires_at_utc
+                > datetime.now(timezone.utc).replace(tzinfo=None),
+            )
+            if self.operation:
+                query = query.filter(
+                    NeoSektorUldOnTheWayEvent.sort_date_operation_id
+                    == self.operation.id
+                )
+            else:
+                query = query.filter(
+                    NeoSektorUldOnTheWayEvent.sort_date_operation_id.is_(None)
+                )
+            self._uld_events = query.order_by(
+                NeoSektorUldOnTheWayEvent.sent_at_utc.asc(),
+                NeoSektorUldOnTheWayEvent.id.asc(),
+            ).all()
+        return self._uld_events
+
+
+def door_view_operational_state(
+    gateway,
+    *,
+    operation=_OPERATION_UNSET,
+    initialize_lineup=True,
+):
+    if operation is _OPERATION_UNSET:
+        operation = _current_operation(gateway)
+    return DoorViewOperationalStateBundle.load(
+        gateway,
+        operation,
+        initialize_lineup=initialize_lineup,
+    )
+
+
+def door_view_context(gateway, selected_door=None, *, bundle=None):
     selected_door = normalize_door(selected_door)
     door_options = get_door_options(gateway)
     if selected_door not in door_options:
         selected_door = None
 
-    operation = _current_operation(gateway)
+    operation = (
+        bundle.operation if bundle is not None else _current_operation(gateway)
+    )
     destinations = []
     uld_request = None
     uld_requests = []
     if selected_door:
-        destinations = _destination_cards_for_door(gateway, selected_door, operation)
-        uld_request = _uld_request_for_door(gateway, selected_door, operation)
-        uld_requests = active_uld_requests_for_door(gateway, selected_door, operation)
+        destinations = _destination_cards_for_door(
+            gateway,
+            selected_door,
+            operation,
+            bundle=bundle,
+        )
+        if bundle is None:
+            uld_request = _uld_request_for_door(gateway, selected_door, operation)
+            uld_requests = active_uld_requests_for_door(
+                gateway,
+                selected_door,
+                operation,
+            )
 
     return {
         "door_options": door_options,
@@ -106,11 +317,11 @@ def door_view_context(gateway, selected_door=None):
         "uld_request": uld_request,
         "uld_requests": uld_requests,
         "operation": operation,
-        "refresh_status": neoermac_refresh_status(gateway),
+        "refresh_status": neoermac_refresh_status(gateway, operation=operation),
         "tugs": [],
         "on_the_way_events": (
             active_on_the_way_event_views(gateway, selected_door, operation=operation)
-            if selected_door
+            if selected_door and bundle is None
             else []
         ),
     }
@@ -121,9 +332,13 @@ def save_door_pulls(gateway, selected_door, form_data, supervised_doors=()):
     if not selected_door:
         raise ValueError("Select a door.")
 
-    context = door_view_context(gateway, selected_door)
-    allowed_destinations = {card["destination"] for card in context["destinations"]}
-    operation = context["operation"]
+    operation = _current_operation(gateway)
+    bundle = door_view_operational_state(
+        gateway,
+        operation=operation,
+        initialize_lineup=True,
+    )
+    allowed_destinations = set(bundle.destinations_by_door.get(selected_door, {}))
 
     row_count = _int_value(form_data.get("destination_count"), default=0)
     changed_destinations = set()
@@ -152,6 +367,7 @@ def save_door_pulls(gateway, selected_door, form_data, supervised_doors=()):
                 actual_value,
                 no_pull,
                 supervised_doors,
+                bundle=bundle,
             )
         changed_destinations.add(destination)
 
@@ -160,6 +376,9 @@ def save_door_pulls(gateway, selected_door, form_data, supervised_doors=()):
         gateway,
         operation=operation,
         destinations=changed_destinations,
+        doors_by_destination=bundle.doors_by_destination,
+        missions_by_destination=bundle.departure_missions_by_destination,
+        pulls_by_destination_and_door=bundle.door_pulls_by_destination_and_door,
     )
     db.session.flush()
 
@@ -172,6 +391,9 @@ def save_single_door_pull(
     actual_value,
     no_pull,
     supervised_doors=(),
+    *,
+    operation=_OPERATION_UNSET,
+    bundle=None,
 ):
     selected_door = normalize_door(selected_door)
     if not selected_door:
@@ -187,9 +409,17 @@ def save_single_door_pull(
     if not field:
         raise ValueError("Select a valid pull type.")
 
-    operation = _current_operation(gateway)
-    door_cards = _destination_cards_for_door(gateway, selected_door, operation)
-    allowed_destinations = {card["destination"] for card in door_cards}
+    if operation is _OPERATION_UNSET:
+        operation = (
+            bundle.operation if bundle is not None else _current_operation(gateway)
+        )
+    if bundle is None:
+        bundle = door_view_operational_state(
+            gateway,
+            operation=operation,
+            initialize_lineup=True,
+        )
+    allowed_destinations = set(bundle.destinations_by_door.get(selected_door, {}))
     if destination not in allowed_destinations:
         raise ValueError(f"{destination} is not assigned to {selected_door}.")
 
@@ -204,15 +434,25 @@ def save_single_door_pull(
         parsed_actual,
         no_pull,
         supervised_doors,
+        bundle=bundle,
     )
     db.session.flush()
     recompute_current_sort_door_pull_aggregates(
         gateway,
         operation=operation,
         destinations=(destination,),
+        doors_by_destination=bundle.doors_by_destination,
+        missions_by_destination=bundle.departure_missions_by_destination,
+        pulls_by_destination_and_door=bundle.door_pulls_by_destination_and_door,
     )
     db.session.flush()
-    return _pull_card_payload(gateway, selected_door, destination, operation)
+    return _pull_card_payload(
+        gateway,
+        selected_door,
+        destination,
+        operation,
+        bundle=bundle,
+    )
 
 
 def _apply_pull_value(
@@ -224,12 +464,15 @@ def _apply_pull_value(
     actual_value,
     no_pull,
     supervised_doors,
+    *,
+    bundle=None,
 ):
     for target_door in _pull_write_doors(
         gateway,
         selected_door,
         destination,
         supervised_doors,
+        bundle=bundle,
     ):
         record = _door_pull_record(
             gateway,
@@ -237,12 +480,20 @@ def _apply_pull_value(
             destination,
             operation,
             create=True,
+            bundle=bundle,
         )
         setattr(record, field["no_attr"], bool(no_pull))
         setattr(record, field["actual_attr"], None if no_pull else actual_value)
 
 
-def _pull_write_doors(gateway, selected_door, destination, supervised_doors):
+def _pull_write_doors(
+    gateway,
+    selected_door,
+    destination,
+    supervised_doors,
+    *,
+    bundle=None,
+):
     supervised = {
         normalize_door(door)
         for door in (supervised_doors or ())
@@ -256,6 +507,9 @@ def _pull_write_doors(gateway, selected_door, destination, supervised_doors):
             gateway,
             selected_door,
             destination,
+            assignments=(
+                bundle.lineup_assignments if bundle is not None else None
+            ),
         )
     )
     return (selected_door,) + tuple(
@@ -331,6 +585,7 @@ def door_view_uld_state(
     refresh_status=None,
     revision=None,
     initialize_lineup=True,
+    bundle=None,
 ):
     selected_door = normalize_door(selected_door)
     if not selected_door:
@@ -339,28 +594,37 @@ def door_view_uld_state(
         raise ValueError(f"{selected_door} is not available.")
 
     if operation is _OPERATION_UNSET:
-        operation = _current_operation(gateway)
-    workspace_doors = list(supervised_doors or ())
-    if selected_door not in workspace_doors:
-        workspace_doors.append(selected_door)
-    door_pulls = _door_pulls_by_door_destination(
-        gateway,
-        operation,
-        workspace_doors,
-    )
+        operation = (
+            bundle.operation if bundle is not None else _current_operation(gateway)
+        )
+    if bundle is None:
+        bundle = door_view_operational_state(
+            gateway,
+            operation=operation,
+            initialize_lineup=initialize_lineup,
+        )
     destinations = _destination_cards_for_door(
         gateway,
         selected_door,
         operation,
-        door_pulls=door_pulls,
+        door_pulls=bundle.door_pulls_by_door_destination,
         initialize_lineup=initialize_lineup,
+        bundle=bundle,
     )
-    state = door_uld_state_payload(gateway, selected_door, operation=operation)
+    state = door_uld_state_payload(
+        gateway,
+        selected_door,
+        operation=operation,
+        request_records=bundle.uld_requests,
+        event_records=bundle.uld_events,
+    )
     workspace = uld_workspace_state_payload(
         gateway,
         supervised_doors,
         requested_by_user_id,
         operation=operation,
+        request_records=bundle.uld_requests,
+        event_records=bundle.uld_events,
     )
     state["uld_workspace"] = workspace
     state["requests"] = workspace["requests"]
@@ -377,8 +641,9 @@ def door_view_uld_state(
         selected_door,
         supervised_doors,
         operation=operation,
-        door_pulls=door_pulls,
+        door_pulls=bundle.door_pulls_by_door_destination,
         initialize_lineup=initialize_lineup,
+        bundle=bundle,
     )
     return state
 
@@ -388,12 +653,21 @@ def door_view_uld_workspace(
     supervised_doors,
     requested_by_user_id,
     operation=None,
+    *,
+    bundle=None,
 ):
+    preloaded = {}
+    if bundle is not None:
+        preloaded = {
+            "request_records": bundle.uld_requests,
+            "event_records": bundle.uld_events,
+        }
     return uld_workspace_state_payload(
         gateway,
         supervised_doors,
         requested_by_user_id,
         operation=operation or _current_operation(gateway),
+        **preloaded,
     )
 
 
@@ -404,6 +678,7 @@ def door_tab_pull_alerts(
     operation=None,
     door_pulls=_DOOR_PULL_LOOKUP_UNSET,
     initialize_lineup=True,
+    bundle=None,
 ):
     """Summarize unresolved pull urgency for supervised Door View tabs."""
     available_doors = set(get_door_options(gateway))
@@ -415,23 +690,25 @@ def door_tab_pull_alerts(
             doors.append(door)
 
     result = {door: _empty_door_tab_alert() for door in doors}
-    operation = operation or _current_operation(gateway)
+    operation = operation or (
+        bundle.operation if bundle is not None else _current_operation(gateway)
+    )
     if not operation or not doors:
         return result
 
-    destinations_by_door = {door: set() for door in doors}
-    for assignment in get_building_lineup_assignments(
-        gateway,
-        initialize=initialize_lineup,
-    ):
-        door = assignment["supervising_door"]
-        if door in destinations_by_door and assignment["destination"]:
-            destinations_by_door[door].add(assignment["destination"])
-
-    missions = _missions_by_destination(gateway, operation)
-    masters = _master_departures_by_destination(gateway)
+    if bundle is None:
+        bundle = door_view_operational_state(
+            gateway,
+            operation=operation,
+            initialize_lineup=initialize_lineup,
+        )
+    destinations_by_door = {
+        door: set(bundle.destinations_by_door.get(door, {})) for door in doors
+    }
+    missions = bundle.departure_missions_by_destination
+    masters = bundle.masters_by_destination
     if door_pulls is _DOOR_PULL_LOOKUP_UNSET:
-        door_pulls = _door_pulls_by_door_destination(gateway, operation, doors)
+        door_pulls = bundle.door_pulls_by_door_destination
 
     for door in doors:
         if door == active_door:
@@ -626,9 +903,21 @@ def _revision_value(value):
     return str(value or "")
 
 
-def _pull_card_payload(gateway, selected_door, destination, operation):
+def _pull_card_payload(
+    gateway,
+    selected_door,
+    destination,
+    operation,
+    *,
+    bundle=None,
+):
     for index, card in enumerate(
-        _destination_cards_for_door(gateway, selected_door, operation)
+        _destination_cards_for_door(
+            gateway,
+            selected_door,
+            operation,
+            bundle=bundle,
+        )
     ):
         if card["destination"] == destination:
             return _door_card_state_payload(card, order_index=index)
@@ -679,22 +968,21 @@ def _destination_cards_for_door(
     operation,
     door_pulls=_DOOR_PULL_LOOKUP_UNSET,
     initialize_lineup=True,
+    bundle=None,
 ):
-    destination_slots = _destination_slots_for_door(
-        gateway,
-        selected_door,
-        initialize_lineup=initialize_lineup,
-    )
-    missions = _missions_by_destination(gateway, operation)
-    parking_by_tail = _parking_assignments_by_tail(operation)
-    arrivals_by_tail = arrival_presence_by_tail(operation)
-    masters = _master_departures_by_destination(gateway)
-    if door_pulls is _DOOR_PULL_LOOKUP_UNSET:
-        door_pulls = _door_pulls_by_door_destination(
+    if bundle is None:
+        bundle = door_view_operational_state(
             gateway,
-            operation,
-            (selected_door,),
+            operation=operation,
+            initialize_lineup=initialize_lineup,
         )
+    destination_slots = bundle.destinations_by_door.get(selected_door, {})
+    missions = bundle.departure_missions_by_destination
+    parking_by_tail = bundle.parking_by_tail
+    arrivals_by_tail = bundle.arrivals_by_tail
+    masters = bundle.masters_by_destination
+    if door_pulls is _DOOR_PULL_LOOKUP_UNSET:
+        door_pulls = bundle.door_pulls_by_door_destination
     cards = []
 
     for destination, slot_labels in destination_slots.items():
@@ -768,6 +1056,7 @@ def _destination_cards_for_door(
                     planned_times["pure"],
                     pulls_complete,
                     operation,
+                    gateway,
                 ),
             }
         )
@@ -784,16 +1073,17 @@ def _door_card_sort_key(
     effective_pure_pull_time,
     pulls_complete,
     operation,
+    gateway,
 ):
     return (
         1 if pulls_complete else 0,
-        *_effective_pull_sort_key(operation, effective_pure_pull_time),
+        *_effective_pull_sort_key(operation, effective_pure_pull_time, gateway),
         normalize_destination(destination),
         str(flight_number or "").strip().upper(),
     )
 
 
-def _effective_pull_sort_key(operation, planned_time):
+def _effective_pull_sort_key(operation, planned_time, gateway=None):
     if not planned_time:
         return (1, 0)
 
@@ -805,24 +1095,12 @@ def _effective_pull_sort_key(operation, planned_time):
 
     start_local, _end_local = sort_lookup_window_for_operation(
         operation,
-        operation.gateway,
+        gateway or operation.gateway,
     )
     planned_local = datetime.combine(operation.sort_date, planned_time)
     if planned_local < start_local:
         planned_local += timedelta(days=1)
     return (0, int((planned_local - start_local).total_seconds()))
-
-
-def _destination_slots_for_door(gateway, selected_door, *, initialize_lineup=True):
-    return dict(
-        sorted(
-            get_building_lineup_destinations_for_door(
-                gateway,
-                selected_door,
-                initialize=initialize_lineup,
-            ).items()
-        )
-    )
 
 
 def _parking_assignments_by_tail(operation):
@@ -851,26 +1129,6 @@ def _current_operation(gateway):
     return current_unarchived_operation(gateway)
 
 
-def _missions_by_destination(gateway, operation):
-    if not operation:
-        return {}
-
-    missions = (
-        SortDateMission.query.filter_by(
-            sort_date_operation_id=operation.id,
-            mission_type="departure",
-        )
-        .order_by(SortDateMission.planned_datetime_utc.asc(), SortDateMission.id.asc())
-        .all()
-    )
-    result = {}
-    for mission in missions:
-        destination = normalize_destination(mission.destination)
-        if destination and destination not in result:
-            result[destination] = mission
-    return result
-
-
 def _master_departures_by_destination(gateway):
     masters = (
         MasterFlightSchedule.query.filter(
@@ -892,7 +1150,29 @@ def _master_departures_by_destination(gateway):
     return result
 
 
-def _door_pull_record(gateway, selected_door, destination, operation, create=False):
+def _door_pull_record(
+    gateway,
+    selected_door,
+    destination,
+    operation,
+    create=False,
+    *,
+    bundle=None,
+):
+    if bundle is not None:
+        key = (normalize_door(selected_door), normalize_destination(destination))
+        record = bundle.door_pulls_by_door_destination.get(key)
+        if record is None and create:
+            record = NeoErmacDoorPull(
+                gateway_id=gateway.id,
+                sort_date_operation_id=operation.id if operation else None,
+                door=selected_door,
+                destination=destination,
+            )
+            db.session.add(record)
+            bundle.register_door_pull(record)
+        return record
+
     query = NeoErmacDoorPull.query.filter_by(
         gateway_id=gateway.id,
         door=selected_door,
@@ -913,26 +1193,6 @@ def _door_pull_record(gateway, selected_door, destination, operation, create=Fal
         )
         db.session.add(record)
     return record
-
-
-def _door_pulls_by_door_destination(gateway, operation, doors):
-    """Load DoorPull rows once for the changed-state workspace."""
-    if not operation:
-        return {}
-    normalized_doors = {
-        normalize_door(door) for door in doors or () if normalize_door(door)
-    }
-    if not normalized_doors:
-        return {}
-    records = NeoErmacDoorPull.query.filter(
-        NeoErmacDoorPull.gateway_id == gateway.id,
-        NeoErmacDoorPull.sort_date_operation_id == operation.id,
-        NeoErmacDoorPull.door.in_(normalized_doors),
-    ).all()
-    return {
-        (normalize_door(record.door), normalize_destination(record.destination)): record
-        for record in records
-    }
 
 
 def _uld_request_for_door(gateway, selected_door, operation):
