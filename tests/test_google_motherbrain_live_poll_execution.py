@@ -4,6 +4,9 @@ import unittest
 from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import event
+from sqlalchemy.orm import Session
+
 from app import create_app
 from app.extensions import db
 from app.models import (
@@ -482,6 +485,116 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         self.assertEqual(not_due["status"], "not_due")
         reader.assert_not_called()
 
+    def test_in_progress_peek_exits_before_lifecycle_or_commit(self):
+        self._enable()
+        operation = self._ensure_operation()
+        acquire_google_motherbrain_live_poll_lease(operation, now=self.NOW)
+
+        result, statements, commits = self._execute_with_sql_counts(
+            now=self.NOW + timedelta(seconds=10),
+        )
+
+        self.assertEqual(result["status"], "in_progress")
+        self.assertEqual(commits, 0)
+        self.assertTrue(all(statement == "SELECT" for statement in statements))
+        self.assertLessEqual(statements.count("SELECT"), 4)
+
+    def test_not_due_peek_exits_before_lifecycle_or_commit(self):
+        self._enable()
+        operation = self._ensure_operation()
+        acquired = acquire_google_motherbrain_live_poll_lease(
+            operation,
+            now=self.NOW,
+        )
+        complete_google_motherbrain_live_poll_success(acquired.lease, now=self.NOW)
+
+        result, statements, commits = self._execute_with_sql_counts(
+            now=self.NOW + timedelta(seconds=10),
+        )
+
+        self.assertEqual(result["status"], "not_due")
+        self.assertEqual(commits, 0)
+        self.assertTrue(all(statement == "SELECT" for statement in statements))
+        self.assertLessEqual(statements.count("SELECT"), 4)
+
+    def test_no_state_continues_through_lifecycle_and_authoritative_acquisition(self):
+        self._enable()
+        reader = Mock(return_value={"inbound_rows": [], "outbound_rows": []})
+
+        with patch(
+            "app.services.google_motherbrain_live_poll_execution."
+            "ensure_operational_sort_operations",
+            wraps=ensure_operational_sort_operations,
+        ) as lifecycle, patch(
+            "app.services.google_motherbrain_live_poll_execution."
+            "acquire_google_motherbrain_live_poll_lease",
+            wraps=acquire_google_motherbrain_live_poll_lease,
+        ) as acquire:
+            result = execute_google_motherbrain_live_poll(
+                self.gateway,
+                now=self.NOW,
+                reader=reader,
+            )
+
+        self.assertEqual(result["status"], "success")
+        lifecycle.assert_called_once()
+        acquire.assert_called_once()
+        reader.assert_called_once_with()
+        self.assertEqual(SortDateOperation.query.count(), 1)
+        self.assertEqual(MotherBrainGoogleLivePollState.query.count(), 1)
+
+    def test_due_peek_still_uses_authoritative_lease_acquisition(self):
+        self._enable()
+        operation = self._ensure_operation()
+        db.session.add(
+            MotherBrainGoogleLivePollState(
+                gateway_id=self.gateway.id,
+                sort_name="night",
+                sort_date=operation.sort_date,
+                last_attempt_at_utc=self.NOW - timedelta(minutes=2),
+            )
+        )
+        db.session.commit()
+        reader = Mock(return_value={"inbound_rows": [], "outbound_rows": []})
+
+        with patch(
+            "app.services.google_motherbrain_live_poll_execution."
+            "acquire_google_motherbrain_live_poll_lease",
+            wraps=acquire_google_motherbrain_live_poll_lease,
+        ) as acquire:
+            result = execute_google_motherbrain_live_poll(
+                self.gateway,
+                now=self.NOW,
+                reader=reader,
+            )
+
+        self.assertEqual(result["status"], "success")
+        acquire.assert_called_once_with(operation, now=self.NOW)
+        reader.assert_called_once_with()
+
+    def test_due_path_reuses_preflight_timeline_and_matrix_facts(self):
+        self._enable()
+        reader = Mock(return_value={"inbound_rows": [], "outbound_rows": []})
+
+        with patch(
+            "app.services.operation_lifecycle._sort_settings_for_gateway"
+        ) as load_sort_settings, patch(
+            "app.services.operation_lifecycle.active_sorts_for_gateway_date",
+            return_value=[],
+        ) as load_active_sorts:
+            result = execute_google_motherbrain_live_poll(
+                self.gateway,
+                now=self.NOW,
+                reader=reader,
+            )
+
+        self.assertEqual(result["status"], "success")
+        load_sort_settings.assert_not_called()
+        load_active_sorts.assert_called_once_with(
+            self.gateway,
+            self.NOW.date() - timedelta(days=1),
+        )
+
     def test_fetch_or_application_failure_rolls_back_and_marks_failure(self):
         self._enable()
 
@@ -759,6 +872,42 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
             sort_name="night",
             sort_date=operation.sort_date,
         ).one()
+
+    def _execute_with_sql_counts(self, *, now):
+        statements = []
+        commits = []
+        db.session.refresh(self.gateway)
+
+        def capture_statement(_conn, _cursor, statement, *_args):
+            statements.append(statement.lstrip().split(None, 1)[0].upper())
+
+        def capture_commit(_session):
+            commits.append(True)
+
+        reader = Mock()
+        event.listen(db.engine, "before_cursor_execute", capture_statement)
+        event.listen(Session, "after_commit", capture_commit)
+        try:
+            with patch(
+                "app.services.google_motherbrain_live_poll_execution."
+                "ensure_operational_sort_operations"
+            ) as lifecycle, patch(
+                "app.services.google_motherbrain_live_poll_execution."
+                "acquire_google_motherbrain_live_poll_lease"
+            ) as acquire:
+                result = execute_google_motherbrain_live_poll(
+                    self.gateway,
+                    now=now,
+                    reader=reader,
+                )
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture_statement)
+            event.remove(Session, "after_commit", capture_commit)
+
+        lifecycle.assert_not_called()
+        acquire.assert_not_called()
+        reader.assert_not_called()
+        return result, statements, len(commits)
 
     @staticmethod
     def _login(client, user):

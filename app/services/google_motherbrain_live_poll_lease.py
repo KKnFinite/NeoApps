@@ -38,6 +38,37 @@ class GoogleLivePollLeaseResult:
         return self.status == "acquired"
 
 
+@dataclass(frozen=True)
+class GoogleLivePollStatePeekResult:
+    status: str
+
+
+def peek_google_motherbrain_live_poll_state(
+    gateway_id,
+    sort_name,
+    sort_date,
+    now=None,
+):
+    """Read coordination state without creating or acquiring anything."""
+    state = (
+        db.session.query(
+            MotherBrainGoogleLivePollState.last_attempt_at_utc,
+            MotherBrainGoogleLivePollState.lease_expires_at_utc,
+            MotherBrainGoogleLivePollState.lease_token,
+        )
+        .filter(
+            MotherBrainGoogleLivePollState.gateway_id == gateway_id,
+            MotherBrainGoogleLivePollState.sort_name
+            == str(sort_name or "").strip().lower(),
+            MotherBrainGoogleLivePollState.sort_date == sort_date,
+        )
+        .one_or_none()
+    )
+    return GoogleLivePollStatePeekResult(
+        _poll_state_status(state, _utc_naive(now))
+    )
+
+
 def acquire_google_motherbrain_live_poll_lease(operation, now=None):
     """Acquire the one-minute polling lease for an operation when it is due.
 
@@ -51,10 +82,9 @@ def acquire_google_motherbrain_live_poll_lease(operation, now=None):
 
     now_utc = _utc_naive(now)
     state = _find_or_create_state(operation)
-    if _lease_is_valid(state, now_utc):
-        return GoogleLivePollLeaseResult("in_progress")
-    if not _attempt_is_due(state, now_utc):
-        return GoogleLivePollLeaseResult("not_due")
+    state_status = _poll_state_status(state, now_utc)
+    if state_status != "due":
+        return GoogleLivePollLeaseResult(state_status)
 
     token = secrets.token_urlsafe(32)
     due_before = now_utc - GOOGLE_LIVE_POLL_INTERVAL
@@ -183,6 +213,16 @@ def _attempt_is_due(state, now_utc):
     if not state.last_attempt_at_utc:
         return True
     return state.last_attempt_at_utc <= now_utc - GOOGLE_LIVE_POLL_INTERVAL
+
+
+def _poll_state_status(state, now_utc):
+    if state is None:
+        return "no_state"
+    if _lease_is_valid(state, now_utc):
+        return "in_progress"
+    if not _attempt_is_due(state, now_utc):
+        return "not_due"
+    return "due"
 
 
 def _lease_is_valid(state, now_utc):

@@ -12,13 +12,25 @@ from app.services.gateway_matrix import (
 from app.services.sort_date_operations import generate_sort_date_operation_from_master
 
 
-def ensure_operational_sort_operations(gateway, now=None):
+def ensure_operational_sort_operations(
+    gateway,
+    now=None,
+    *,
+    local_now=None,
+    sort_settings=None,
+    active_sorts_by_date=None,
+):
     """Ensure operations whose configured planning lifecycle windows are active."""
-    local_now = current_gateway_local_datetime(gateway, now=now)
+    local_now = local_now or current_gateway_local_datetime(gateway, now=now)
     if not gateway or not gateway.is_active:
         return _empty_result(local_now)
 
-    eligible_windows = _eligible_operation_windows(gateway, local_now)
+    eligible_windows = _eligible_operation_windows(
+        gateway,
+        local_now,
+        sort_settings=sort_settings,
+        active_sorts_by_date=active_sorts_by_date,
+    )
     created_operations = []
     existing_operations = []
     errors = []
@@ -73,12 +85,26 @@ def _empty_result(local_now):
     }
 
 
-def _eligible_operation_windows(gateway, local_now):
-    sort_settings = _sort_settings_for_gateway(gateway)
+def _eligible_operation_windows(
+    gateway,
+    local_now,
+    *,
+    sort_settings=None,
+    active_sorts_by_date=None,
+):
+    sort_settings = (
+        sort_settings
+        if sort_settings is not None
+        else _sort_settings_for_gateway(gateway)
+    )
+    active_sorts_by_date = active_sorts_by_date or {}
     eligible = []
 
     for sort_date in (local_now.date() - timedelta(days=1), local_now.date()):
-        for sort_name in active_sorts_for_gateway_date(gateway, sort_date):
+        active_sorts = active_sorts_by_date.get(sort_date)
+        if active_sorts is None:
+            active_sorts = active_sorts_for_gateway_date(gateway, sort_date)
+        for sort_name in active_sorts:
             sort_setting = sort_settings.get(sort_name)
             window = _configured_lifecycle_window(sort_setting, sort_date)
             if not window:

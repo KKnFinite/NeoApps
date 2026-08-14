@@ -23,6 +23,7 @@ from app.services.google_motherbrain_live_poll_lease import (
     acquire_google_motherbrain_live_poll_lease,
     complete_google_motherbrain_live_poll_failure,
     complete_google_motherbrain_live_poll_success,
+    peek_google_motherbrain_live_poll_state,
 )
 from app.services.google_motherbrain_live_polling import (
     google_motherbrain_live_polling_enabled,
@@ -54,13 +55,28 @@ def execute_google_motherbrain_live_poll(
     if preflight["status"] != "eligible":
         return {"status": preflight["status"]}
 
-    lifecycle = ensure_operational_sort_operations(gateway, now=now)
+    coordination = peek_google_motherbrain_live_poll_state(
+        gateway.id,
+        GOOGLE_MOTHERBRAIN_SORT_NAME,
+        preflight["sort_date"],
+        now=now,
+    )
+    if coordination.status in {"not_due", "in_progress"}:
+        return {"status": coordination.status}
+
+    lifecycle = ensure_operational_sort_operations(
+        gateway,
+        now=now,
+        local_now=preflight["local_now"],
+        sort_settings=preflight["sort_settings"],
+        active_sorts_by_date=preflight["active_sorts_by_date"],
+    )
     if lifecycle["errors"]:
         db.session.rollback()
         return {"status": "lifecycle_error"}
 
-    # Lifecycle-created operations must be durable before another worker can lease them.
-    db.session.commit()
+    # The lifecycle generator commits newly created operations itself. Avoid an
+    # additional empty transaction before the authoritative lease acquisition.
     operation = _polling_window_operation(
         gateway,
         lifecycle,
@@ -136,10 +152,13 @@ def google_motherbrain_live_poll_preflight(gateway, now=None):
     ):
         return {"status": "disabled", "sort_date": None}
 
-    sort_setting = SortTimelineSortSetting.query.filter_by(
-        gateway_id=gateway.id,
-        sort_name=GOOGLE_MOTHERBRAIN_SORT_NAME,
-    ).first()
+    sort_settings = {
+        str(setting.sort_name or "").strip().lower(): setting
+        for setting in SortTimelineSortSetting.query.filter_by(
+            gateway_id=gateway.id,
+        ).all()
+    }
+    sort_setting = sort_settings.get(GOOGLE_MOTHERBRAIN_SORT_NAME)
     if not sort_setting:
         return {"status": "outside_window", "sort_date": None}
 
@@ -147,12 +166,19 @@ def google_motherbrain_live_poll_preflight(gateway, now=None):
     for sort_date in (local_now.date() - timedelta(days=1), local_now.date()):
         start_local, end_local = _physical_sort_window(sort_date, sort_setting)
         if start_local and end_local and start_local <= local_now < end_local:
-            if GOOGLE_MOTHERBRAIN_SORT_NAME not in active_sorts_for_gateway_date(
+            active_sorts = active_sorts_for_gateway_date(
                 gateway,
                 sort_date,
-            ):
+            )
+            if GOOGLE_MOTHERBRAIN_SORT_NAME not in active_sorts:
                 return {"status": "outside_window", "sort_date": None}
-            return {"status": "eligible", "sort_date": sort_date}
+            return {
+                "status": "eligible",
+                "sort_date": sort_date,
+                "local_now": local_now,
+                "sort_settings": sort_settings,
+                "active_sorts_by_date": {sort_date: active_sorts},
+            }
 
     return {"status": "outside_window", "sort_date": None}
 
@@ -196,6 +222,19 @@ def _polling_window_operation(
         return None
 
     if candidate_sort_date is not None:
+        for window in lifecycle.get("eligible", ()):
+            operation = window.get("operation")
+            operation_was_created = operation in lifecycle.get("created", ())
+            if (
+                window.get("sort_date") == candidate_sort_date
+                and window.get("sort_name") == GOOGLE_MOTHERBRAIN_SORT_NAME
+                and operation is not None
+                and (
+                    operation_was_created
+                    or operation.archived_at_utc is None
+                )
+            ):
+                return operation
         return (
             SortDateOperation.query.filter(
                 SortDateOperation.gateway_code == gateway.code,

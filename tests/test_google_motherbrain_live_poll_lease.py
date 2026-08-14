@@ -1,7 +1,8 @@
 from datetime import date, datetime, timedelta
 import unittest
 
-from sqlalchemy import inspect, text
+from sqlalchemy import event, inspect, text
+from sqlalchemy.orm import Session
 
 from app import create_app
 from app.extensions import db
@@ -14,6 +15,7 @@ from app.services.google_motherbrain_live_poll_lease import (
     acquire_google_motherbrain_live_poll_lease,
     complete_google_motherbrain_live_poll_failure,
     complete_google_motherbrain_live_poll_success,
+    peek_google_motherbrain_live_poll_state,
 )
 from app.services.google_motherbrain_live_polling import (
     set_google_motherbrain_live_polling_enabled,
@@ -53,6 +55,82 @@ class GoogleMotherBrainLivePollLeaseTest(unittest.TestCase):
         self.assertEqual(result.status, "disabled")
         self.assertIsNone(result.lease)
         self.assertEqual(MotherBrainGoogleLivePollState.query.count(), 0)
+
+    def test_read_only_peek_reports_no_state_without_creating_or_committing(self):
+        statements = []
+        commits = []
+        gateway_id = self.gateway.id
+        sort_date = self.operation.sort_date
+
+        def capture_statement(_conn, _cursor, statement, *_args):
+            statements.append(statement.lstrip().split(None, 1)[0].upper())
+
+        def capture_commit(_session):
+            commits.append(True)
+
+        event.listen(db.engine, "before_cursor_execute", capture_statement)
+        event.listen(Session, "after_commit", capture_commit)
+        try:
+            result = peek_google_motherbrain_live_poll_state(
+                gateway_id,
+                "night",
+                sort_date,
+                now=self.now,
+            )
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture_statement)
+            event.remove(Session, "after_commit", capture_commit)
+
+        self.assertEqual(result.status, "no_state")
+        self.assertEqual(statements, ["SELECT"])
+        self.assertEqual(commits, [])
+        self.assertEqual(MotherBrainGoogleLivePollState.query.count(), 0)
+
+    def test_read_only_peek_matches_due_and_lease_timing_rules(self):
+        state = MotherBrainGoogleLivePollState(
+            gateway_id=self.gateway.id,
+            sort_name="night",
+            sort_date=self.operation.sort_date,
+            last_attempt_at_utc=self.now,
+        )
+        db.session.add(state)
+        db.session.commit()
+
+        self.assertEqual(
+            peek_google_motherbrain_live_poll_state(
+                self.gateway.id,
+                "NIGHT",
+                self.operation.sort_date,
+                now=self.now + timedelta(seconds=59),
+            ).status,
+            "not_due",
+        )
+
+        state.lease_token = "other-worker"
+        state.lease_expires_at_utc = self.now + timedelta(minutes=2)
+        db.session.commit()
+        self.assertEqual(
+            peek_google_motherbrain_live_poll_state(
+                self.gateway.id,
+                "night",
+                self.operation.sort_date,
+                now=self.now + timedelta(minutes=1),
+            ).status,
+            "in_progress",
+        )
+
+        state.lease_expires_at_utc = self.now - timedelta(seconds=1)
+        state.last_attempt_at_utc = self.now - timedelta(minutes=2)
+        db.session.commit()
+        self.assertEqual(
+            peek_google_motherbrain_live_poll_state(
+                self.gateway.id,
+                "night",
+                self.operation.sort_date,
+                now=self.now,
+            ).status,
+            "due",
+        )
 
     def test_first_due_worker_wins_and_second_worker_reports_in_progress(self):
         self._enable(self.gateway, "night")
