@@ -86,6 +86,11 @@
                 </div>
             </div>
 
+            <nav class="neostaffing-tree-context-actions" aria-label="Org Chart view">
+                <a href="{{ url_for('neostaffing.org_chart', unit_id=selected.id if selected else none) }}" aria-current="page">Operational</a>
+                <a href="{{ url_for('neostaffing.org_chart', view='management') }}">Management</a>
+            </nav>
+
             <nav class="neostaffing-breadcrumb" aria-label="Org chart breadcrumb">
                 <a href="{{ url_for('neostaffing.org_chart') }}">All Sorts</a>
                 {% for unit in org_chart.breadcrumb %}

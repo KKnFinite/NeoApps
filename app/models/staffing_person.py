@@ -69,6 +69,16 @@ class StaffingPerson(db.Model):
         back_populates="person",
         cascade="all, delete-orphan",
     )
+    reporting_relationships = db.relationship(
+        "StaffingReportingRelationship",
+        foreign_keys="StaffingReportingRelationship.person_id",
+        back_populates="person",
+    )
+    direct_report_relationships = db.relationship(
+        "StaffingReportingRelationship",
+        foreign_keys="StaffingReportingRelationship.reports_to_person_id",
+        back_populates="reports_to_person",
+    )
     daily_attendance_records = db.relationship(
         "StaffingDailyAttendance",
         back_populates="person",

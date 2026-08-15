@@ -50,6 +50,7 @@ from app.models.sort_date_tail_state import SortDateTailState
 from app.models.staffing_leadership_assignment import StaffingLeadershipAssignment
 from app.models.staffing_daily_attendance import StaffingDailyAttendance
 from app.models.staffing_person import StaffingPerson
+from app.models.staffing_reporting_relationship import StaffingReportingRelationship
 from app.models.staffing_unit import StaffingUnit
 from app.models.staffing_work_assignment import StaffingWorkAssignment
 from app.models.sort_timeline_settings import (
@@ -105,6 +106,7 @@ __all__ = [
     "SortDateParkingAssignment",
     "SortDateTailState",
     "StaffingPerson",
+    "StaffingReportingRelationship",
     "StaffingUnit",
     "StaffingWorkAssignment",
     "StaffingLeadershipAssignment",

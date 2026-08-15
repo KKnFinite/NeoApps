@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import re
 
 from flask import current_app
@@ -11,6 +11,7 @@ from app.models import (
     Gateway,
     StaffingLeadershipAssignment,
     StaffingPerson,
+    StaffingReportingRelationship,
     SortDateOperation,
     StaffingUnit,
     StaffingWorkAssignment,
@@ -90,6 +91,25 @@ PEOPLE_DEFAULT_PAGE_SIZE = 100
 PEOPLE_MAX_PAGE_SIZE = 250
 ATTENDANCE_OPERATION_SORT_NAME = "night"
 ATTENDANCE_OPERATION_MISSING_MESSAGE = "NIGHT SORT HAS NOT BEEN CREATED YET."
+REPORTING_TARGET_CLASSIFICATION = {
+    "part_time_supervisor": "full_time_supervisor",
+    "full_time_specialist": "full_time_supervisor",
+    "full_time_supervisor": "manager",
+    "manager": "division_manager",
+}
+REPORTING_HISTORY_RETENTION_DAYS = 30
+DIRECT_REPORTING_EDITOR_CLASSIFICATIONS = {
+    "full_time_supervisor",
+    "manager",
+    "division_manager",
+}
+MANAGEMENT_TREE_CLASSIFICATION_ORDER = {
+    "division_manager": 0,
+    "manager": 1,
+    "full_time_supervisor": 2,
+    "part_time_supervisor": 3,
+    "full_time_specialist": 4,
+}
 
 
 def classification_choices():
@@ -171,6 +191,7 @@ def update_person(person, values, is_new=False):
             raise ValueError("Employee ID already exists.")
 
     old_classification = None if is_new else person.classification
+    old_active = None if is_new else person.active
     person.employee_id = employee_id
     person.first_name = first_name
     person.last_name = last_name
@@ -182,15 +203,35 @@ def update_person(person, values, is_new=False):
 
     if old_classification and old_classification != classification:
         remove_invalid_assignments_for_person(person)
+    if person.id and (
+        old_classification != classification or old_active != active
+    ):
+        end_invalid_reporting_relationships_for_person(person)
 
     return person
 
 
 def delete_person(person):
+    reporting_count = StaffingReportingRelationship.query.filter(
+        or_(
+            StaffingReportingRelationship.person_id == person.id,
+            StaffingReportingRelationship.reports_to_person_id == person.id,
+        )
+    ).count()
+    if reporting_count:
+        raise ValueError(
+            "This person has Reports To history and cannot be deleted. Deactivate the person instead."
+        )
     StaffingWorkAssignment.query.filter_by(person_id=person.id).delete()
     StaffingLeadershipAssignment.query.filter_by(person_id=person.id).delete()
     db.session.delete(person)
     db.session.flush()
+
+
+def toggle_person_active(person):
+    person.active = not person.active
+    end_invalid_reporting_relationships_for_person(person)
+    return person
 
 
 def create_unit(values):
@@ -362,6 +403,188 @@ def remove_invalid_assignments_for_person(person):
     db.session.flush()
     if person in db.session:
         db.session.expire(person, ["leadership_assignments"])
+
+
+def reporting_relationship_revision(relationship):
+    if not relationship:
+        return "none"
+    updated_at = relationship.updated_at or relationship.created_at
+    timestamp = updated_at.isoformat(timespec="microseconds") if updated_at else ""
+    return f"{relationship.id}:{timestamp}"
+
+
+def validate_reporting_relationship(person, reports_to_person):
+    if not person or not person.active:
+        raise ValueError("The selected management person is not active.")
+    if person.classification == "division_manager":
+        raise ValueError("Division Managers do not have a Reports To assignment.")
+    required_classification = REPORTING_TARGET_CLASSIFICATION.get(person.classification)
+    if not required_classification:
+        raise ValueError("This classification does not have a management Reports To assignment.")
+    if not reports_to_person or not reports_to_person.active:
+        raise ValueError("Select an active Reports To person.")
+    if person.id == reports_to_person.id:
+        raise ValueError("A person cannot report to themselves.")
+    if reports_to_person.classification != required_classification:
+        required_label = CLASSIFICATION_LABELS[required_classification]
+        raise ValueError(
+            f"{CLASSIFICATION_LABELS[person.classification]} must report to a {required_label}."
+        )
+    return True
+
+
+def update_reporting_relationship(
+    person_id,
+    reports_to_person_id,
+    expected_revision,
+    effective_date=None,
+):
+    try:
+        subject_id = int(person_id)
+        target_id = int(reports_to_person_id)
+    except (TypeError, ValueError):
+        raise ValueError("Select a valid Reports To person.")
+    if not str(expected_revision or "").strip():
+        raise ValueError("Reporting relationship version is required. Reload Management View.")
+
+    people = (
+        StaffingPerson.query.filter(StaffingPerson.id.in_({subject_id, target_id}))
+        .order_by(StaffingPerson.id)
+        .with_for_update()
+        .all()
+    )
+    people_by_id = {person.id: person for person in people}
+    person = people_by_id.get(subject_id)
+    reports_to_person = people_by_id.get(target_id)
+    if not person:
+        raise ValueError("The selected management person was not found.")
+    validate_reporting_relationship(person, reports_to_person)
+
+    active_relationships = (
+        StaffingReportingRelationship.query.filter_by(
+            person_id=person.id,
+            active=True,
+        )
+        .order_by(StaffingReportingRelationship.id)
+        .with_for_update()
+        .all()
+    )
+    if len(active_relationships) > 1:
+        raise ValueError("Multiple active Reports To records require configuration repair.")
+    current_relationship = active_relationships[0] if active_relationships else None
+    current_revision = reporting_relationship_revision(current_relationship)
+    if str(expected_revision).strip() != current_revision:
+        raise ValueError(
+            "Reports To changed while you were editing. Latest Management View has been loaded."
+        )
+
+    as_of = effective_date or date.today()
+    purged = purge_expired_reporting_relationship_history(as_of)
+    if (
+        current_relationship
+        and current_relationship.reports_to_person_id == reports_to_person.id
+    ):
+        return {
+            "relationship": current_relationship,
+            "changed": bool(purged),
+            "purged": purged,
+        }
+
+    now = datetime.utcnow()
+    if current_relationship:
+        current_relationship.active = False
+        current_relationship.effective_end = as_of
+        current_relationship.updated_at = now
+
+    relationship = StaffingReportingRelationship(
+        person_id=person.id,
+        reports_to_person_id=reports_to_person.id,
+        active=True,
+        effective_start=as_of,
+        effective_end=None,
+        created_at=now,
+        updated_at=now,
+    )
+    db.session.add(relationship)
+    db.session.flush()
+    return {
+        "relationship": relationship,
+        "changed": True,
+        "purged": purged,
+    }
+
+
+def purge_expired_reporting_relationship_history(as_of=None):
+    cutoff = (as_of or date.today()) - timedelta(
+        days=REPORTING_HISTORY_RETENTION_DAYS
+    )
+    expired_rows = StaffingReportingRelationship.query.filter(
+        StaffingReportingRelationship.active.is_(False),
+        StaffingReportingRelationship.effective_end < cutoff,
+    ).all()
+    for relationship in expired_rows:
+        db.session.delete(relationship)
+    return len(expired_rows)
+
+
+def end_invalid_reporting_relationships_for_person(person, as_of=None):
+    if not person.id:
+        return 0
+    ended_on = as_of or date.today()
+    relationships = StaffingReportingRelationship.query.filter(
+        StaffingReportingRelationship.active.is_(True),
+        or_(
+            StaffingReportingRelationship.person_id == person.id,
+            StaffingReportingRelationship.reports_to_person_id == person.id,
+        ),
+    ).all()
+    related_ids = {
+        related_id
+        for relationship in relationships
+        for related_id in (
+            relationship.person_id,
+            relationship.reports_to_person_id,
+        )
+    }
+    people_by_id = {
+        row.id: row
+        for row in StaffingPerson.query.filter(StaffingPerson.id.in_(related_ids or {-1})).all()
+    }
+    changed = 0
+    now = datetime.utcnow()
+    for relationship in relationships:
+        subject = people_by_id.get(relationship.person_id)
+        supervisor = people_by_id.get(relationship.reports_to_person_id)
+        if _reporting_tiers_are_valid(subject, supervisor):
+            continue
+        relationship.active = False
+        relationship.effective_end = ended_on
+        relationship.updated_at = now
+        changed += 1
+    purge_expired_reporting_relationship_history(ended_on)
+    if changed:
+        db.session.flush()
+    return changed
+
+
+def can_user_directly_edit_reporting_relationship(user, app_role):
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "role", None) == "grandmaster" or app_role == "grandmaster":
+        return True
+    if app_role == "watcher":
+        return False
+    employee_id = str(getattr(user, "employee_id", "") or "").strip()
+    if not employee_id:
+        return False
+    person = StaffingPerson.query.filter(
+        StaffingPerson.active.is_(True),
+        func.lower(StaffingPerson.employee_id) == employee_id.lower(),
+    ).first()
+    return bool(
+        person
+        and person.classification in DIRECT_REPORTING_EDITOR_CLASSIFICATIONS
+    )
 
 
 def default_leadership_level_for(person, unit):
@@ -1190,6 +1413,299 @@ def org_chart_context(selected_unit_id=None):
         "departments": units_by_type("department"),
         "parent_units": selectable_parent_units("work_area"),
     }
+
+
+def management_org_chart_context(selected_person_id=None):
+    people = (
+        StaffingPerson.query.filter(
+            StaffingPerson.active.is_(True),
+            StaffingPerson.classification.in_(MANAGEMENT_CLASSIFICATIONS),
+        )
+        .order_by(
+            StaffingPerson.last_name,
+            StaffingPerson.first_name,
+            StaffingPerson.employee_id,
+        )
+        .all()
+    )
+    person_ids = {person.id for person in people}
+    people_by_id = {person.id: person for person in people}
+    relationships = StaffingReportingRelationship.query.filter(
+        StaffingReportingRelationship.active.is_(True),
+        StaffingReportingRelationship.person_id.in_(person_ids or {-1}),
+    ).all()
+    leadership_assignments = StaffingLeadershipAssignment.query.filter(
+        StaffingLeadershipAssignment.active.is_(True),
+        StaffingLeadershipAssignment.person_id.in_(person_ids or {-1}),
+    ).all()
+    units = StaffingUnit.query.order_by(
+        StaffingUnit.display_order,
+        StaffingUnit.name,
+        StaffingUnit.id,
+    ).all()
+    units_by_id = {unit.id: unit for unit in units}
+    unit_paths = {
+        unit.id: _unit_path_from_map(unit, units_by_id)
+        for unit in units
+    }
+
+    assignments_by_person = {}
+    for assignment in leadership_assignments:
+        unit = units_by_id.get(assignment.unit_id)
+        if not unit:
+            continue
+        assignments_by_person.setdefault(assignment.person_id, []).append(assignment)
+    for assignments in assignments_by_person.values():
+        assignments.sort(
+            key=lambda row: (
+                unit_paths.get(row.unit_id, "").lower(),
+                row.leadership_level,
+                row.id,
+            )
+        )
+
+    relationship_by_person = {}
+    for relationship in relationships:
+        person = people_by_id.get(relationship.person_id)
+        reports_to_person = people_by_id.get(relationship.reports_to_person_id)
+        if not _reporting_tiers_are_valid(person, reports_to_person):
+            continue
+        relationship_by_person[person.id] = relationship
+
+    children_by_supervisor = {}
+    for person_id, relationship in relationship_by_person.items():
+        children_by_supervisor.setdefault(
+            relationship.reports_to_person_id,
+            [],
+        ).append(person_id)
+    for child_ids in children_by_supervisor.values():
+        child_ids.sort(key=lambda row_id: _management_person_sort_key(people_by_id[row_id]))
+
+    def build_tree(person, ancestors=None):
+        ancestors = set(ancestors or ())
+        if person.id in ancestors:
+            return {"person": person, "children": [], "mismatch": True}
+        next_ancestors = ancestors | {person.id}
+        relationship = relationship_by_person.get(person.id)
+        alignment = None
+        if relationship:
+            alignment = _operational_reporting_alignment(
+                person.id,
+                relationship.reports_to_person_id,
+                people_by_id,
+                assignments_by_person,
+                units_by_id,
+            )
+        return {
+            "person": person,
+            "children": [
+                build_tree(people_by_id[child_id], next_ancestors)
+                for child_id in children_by_supervisor.get(person.id, [])
+            ],
+            "mismatch": alignment is False,
+        }
+
+    division_managers = sorted(
+        (
+            person
+            for person in people
+            if person.classification == "division_manager"
+        ),
+        key=_management_person_sort_key,
+    )
+    unassigned_people = sorted(
+        (
+            person
+            for person in people
+            if person.classification in REPORTING_TARGET_CLASSIFICATION
+            and person.id not in relationship_by_person
+        ),
+        key=_management_person_sort_key,
+    )
+    tree = [build_tree(person) for person in division_managers]
+    unassigned_tree = [build_tree(person) for person in unassigned_people]
+
+    selected_person = None
+    try:
+        selected_person = people_by_id.get(int(selected_person_id))
+    except (TypeError, ValueError):
+        selected_person = None
+
+    selected_detail = None
+    if selected_person:
+        relationship = relationship_by_person.get(selected_person.id)
+        reports_to_person = (
+            people_by_id.get(relationship.reports_to_person_id)
+            if relationship
+            else None
+        )
+        alignment = None
+        if reports_to_person:
+            alignment = _operational_reporting_alignment(
+                selected_person.id,
+                reports_to_person.id,
+                people_by_id,
+                assignments_by_person,
+                units_by_id,
+            )
+        target_classification = REPORTING_TARGET_CLASSIFICATION.get(
+            selected_person.classification
+        )
+        candidates = []
+        if target_classification:
+            for candidate in people:
+                if candidate.classification != target_classification:
+                    continue
+                suggested = _operational_reporting_alignment(
+                    selected_person.id,
+                    candidate.id,
+                    people_by_id,
+                    assignments_by_person,
+                    units_by_id,
+                )
+                candidates.append(
+                    {
+                        "person": candidate,
+                        "suggested": suggested is True,
+                    }
+                )
+            candidates.sort(
+                key=lambda row: (
+                    not row["suggested"],
+                    _management_person_sort_key(row["person"]),
+                )
+            )
+
+        selected_detail = {
+            "person": selected_person,
+            "relationship": relationship,
+            "relationship_revision": reporting_relationship_revision(relationship),
+            "reports_to_person": reports_to_person,
+            "operational_assignments": [
+                {
+                    "assignment": assignment,
+                    "unit": units_by_id[assignment.unit_id],
+                    "path": unit_paths[assignment.unit_id],
+                }
+                for assignment in assignments_by_person.get(selected_person.id, [])
+                if assignment.unit_id in units_by_id
+            ],
+            "mismatch": alignment is False,
+            "comparison_available": alignment is not None,
+            "target_classification": target_classification,
+            "candidates": candidates,
+        }
+
+    return {
+        "tree": tree,
+        "unassigned_tree": unassigned_tree,
+        "unassigned_count": len(unassigned_people),
+        "selected_person": selected_person,
+        "selected_detail": selected_detail,
+        "people_count": len(people),
+    }
+
+
+def _reporting_tiers_are_valid(person, reports_to_person):
+    if not person or not reports_to_person or not person.active or not reports_to_person.active:
+        return False
+    return (
+        REPORTING_TARGET_CLASSIFICATION.get(person.classification)
+        == reports_to_person.classification
+        and person.id != reports_to_person.id
+    )
+
+
+def _management_person_sort_key(person):
+    return (
+        MANAGEMENT_TREE_CLASSIFICATION_ORDER.get(person.classification, 99),
+        person.last_name.lower(),
+        person.first_name.lower(),
+        person.employee_id.lower(),
+        person.id,
+    )
+
+
+def _unit_path_from_map(unit, units_by_id):
+    names = []
+    visited = set()
+    current = unit
+    while current and current.id not in visited:
+        visited.add(current.id)
+        names.append(current.name)
+        current = units_by_id.get(current.parent_id)
+    return " / ".join(reversed(names))
+
+
+def _operational_reporting_alignment(
+    person_id,
+    reports_to_person_id,
+    people_by_id,
+    assignments_by_person,
+    units_by_id,
+):
+    person = people_by_id.get(person_id)
+    reports_to_person = people_by_id.get(reports_to_person_id)
+    if not _reporting_tiers_are_valid(person, reports_to_person):
+        return False
+    person_assignments = assignments_by_person.get(person_id, [])
+    supervisor_assignments = assignments_by_person.get(reports_to_person_id, [])
+    if not person_assignments or not supervisor_assignments:
+        return None
+
+    person_units = [
+        units_by_id.get(assignment.unit_id)
+        for assignment in person_assignments
+        if units_by_id.get(assignment.unit_id)
+    ]
+    supervisor_units = [
+        units_by_id.get(assignment.unit_id)
+        for assignment in supervisor_assignments
+        if units_by_id.get(assignment.unit_id)
+    ]
+    if person.classification == "part_time_supervisor":
+        expected_department_ids = {
+            unit.parent_id
+            for unit in person_units
+            if unit.unit_type == "work_area"
+            and units_by_id.get(unit.parent_id)
+            and units_by_id[unit.parent_id].unit_type == "department"
+        }
+        return any(
+            unit.unit_type == "department" and unit.id in expected_department_ids
+            for unit in supervisor_units
+        )
+    if person.classification == "full_time_specialist":
+        for specialist_unit in person_units:
+            for supervisor_unit in supervisor_units:
+                if supervisor_unit.unit_type != "department":
+                    continue
+                if specialist_unit.unit_type == "department" and specialist_unit.id == supervisor_unit.id:
+                    return True
+                if specialist_unit.unit_type == "operation" and supervisor_unit.parent_id == specialist_unit.id:
+                    return True
+        return False
+    if person.classification == "full_time_supervisor":
+        expected_operation_ids = {
+            unit.parent_id
+            for unit in person_units
+            if unit.unit_type == "department"
+        }
+        return any(
+            unit.unit_type == "operation" and unit.id in expected_operation_ids
+            for unit in supervisor_units
+        )
+    if person.classification == "manager":
+        expected_sort_ids = {
+            unit.parent_id
+            for unit in person_units
+            if unit.unit_type == "operation"
+        }
+        return any(
+            unit.unit_type == "sort" and unit.id in expected_sort_ids
+            for unit in supervisor_units
+        )
+    return None
 
 
 def unit_breadcrumb(unit):

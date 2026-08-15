@@ -427,6 +427,32 @@ def hierarchy():
 
 
 def _render_org_chart():
+    view = request.args.get("view", "").strip().lower()
+    if view == "management":
+        app_role = get_user_app_role(current_user, "neostaffing")
+        can_direct_edit = bool(
+            user_can(MANAGEMENT_ASSIGN_PERMISSION)
+            and staffing_service.can_user_directly_edit_reporting_relationship(
+                current_user,
+                app_role,
+            )
+        )
+        return render_template(
+            "neostaffing/org_chart_management.html",
+            app_role=app_role,
+            can_manage_app=user_can_access_app(
+                current_user,
+                "neostaffing",
+                minimum_role="master",
+            ),
+            can_direct_edit=can_direct_edit,
+            management=staffing_service.management_org_chart_context(
+                request.args.get("person_id", "").strip()
+            ),
+            classification_labels=staffing_service.CLASSIFICATION_LABELS,
+            employee_status_labels=staffing_service.EMPLOYEE_STATUS_LABELS,
+        )
+
     context = staffing_service.org_chart_context(request.args.get("unit_id", "").strip())
     return render_template(
         "neostaffing/org_chart.html",
@@ -446,6 +472,49 @@ def _render_org_chart():
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
         unit_path=staffing_service.unit_path,
         linked_user_for_person=staffing_service.linked_user_for_person,
+    )
+
+
+@bp.route(
+    "/app-management/reporting/<int:person_id>/update",
+    methods=["POST"],
+)
+@neostaffing_app_required(permission_key=MANAGEMENT_ASSIGN_PERMISSION)
+def update_reporting_relationship(person_id):
+    app_role = get_user_app_role(current_user, "neostaffing")
+    if not staffing_service.can_user_directly_edit_reporting_relationship(
+        current_user,
+        app_role,
+    ):
+        flash(
+            "Direct Reports To changes require an eligible FT Supervisor, Manager, Division Manager, or Grandmaster.",
+            "error",
+        )
+        return redirect(
+            url_for(
+                "neostaffing.org_chart",
+                view="management",
+                person_id=person_id,
+            )
+        )
+    try:
+        staffing_service.update_reporting_relationship(
+            person_id,
+            request.form.get("reports_to_person_id"),
+            request.form.get("expected_revision"),
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Reports To updated.", "success")
+    return redirect(
+        url_for(
+            "neostaffing.org_chart",
+            view="management",
+            person_id=person_id,
+        )
     )
 
 
@@ -570,11 +639,11 @@ def update_person(person_id):
 @neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def toggle_person_active(person_id):
     person = _get_person(person_id)
-
-    def toggle():
-        person.active = not person.active
-
-    return _mutate_to_people(toggle, "Person status updated.", person_id)
+    return _mutate_to_people(
+        lambda: staffing_service.toggle_person_active(person),
+        "Person status updated.",
+        person_id,
+    )
 
 
 @bp.route("/app-management/people/<int:person_id>/delete", methods=["POST"])

@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}NeoStaffing Management Org Chart{% endblock %}
+
+{% macro render_people(nodes, selected_person) %}
+    <ul class="neostaffing-tree-list neostaffing-tree-editor-list">
+        {% for row in nodes %}
+        {% set person = row.person %}
+        <li>
+            <details class="neostaffing-tree-branch{% if selected_person and selected_person.id == person.id %} is-selected{% endif %}" open>
+                <summary class="neostaffing-tree-summary">
+                    <span class="neostaffing-tree-toggle" aria-hidden="true"></span>
+                    <a class="neostaffing-tree-node" href="{{ url_for('neostaffing.org_chart', view='management', person_id=person.id) }}" {% if selected_person and selected_person.id == person.id %}aria-current="page"{% endif %}>
+                        <span>{{ classification_labels[person.classification] }}</span>
+                        <strong>{{ person.full_name }}</strong>
+                        <small>{{ person.employee_id }}</small>
+                    </a>
+                    {% if row.mismatch %}
+                    <span class="neostaffing-tree-action-chip">STRUCTURE MISMATCH</span>
+                    {% endif %}
+                </summary>
+                {% if row.children %}
+                {{ render_people(row.children, selected_person) }}
+                {% endif %}
+            </details>
+        </li>
+        {% endfor %}
+    </ul>
+{% endmacro %}
+
+{% block content %}
+{% set selected = management.selected_person %}
+{% set detail = management.selected_detail %}
+<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="staffing-management-org-title">
+    <div class="neostaffing-dashboard-shell">
+        {% include "neostaffing/_section_nav.html" %}
+        <div class="neostaffing-dashboard-main">
+            <div class="neostaffing-hero neostaffing-hero-compact">
+                <div class="neostaffing-hero-copy mobile-shell-duplicate-title">
+                    <h1 id="staffing-management-org-title">Org Chart</h1>
+                </div>
+            </div>
+
+            <nav class="neostaffing-tree-context-actions" aria-label="Org Chart view">
+                <a href="{{ url_for('neostaffing.org_chart') }}">Operational</a>
+                <a href="{{ url_for('neostaffing.org_chart', view='management', person_id=selected.id if selected else none) }}" aria-current="page">Management</a>
+            </nav>
+
+            <section class="neostaffing-tree-editor" aria-label="NeoStaffing management reporting hierarchy">
+                <article class="neostaffing-data-card neostaffing-tree-panel">
+                    <div class="neostaffing-panel-heading">
+                        <h2>MANAGEMENT TREE</h2>
+                        <span class="neostaffing-tree-action-chip">{{ management.people_count }} PEOPLE</span>
+                    </div>
+                    {% if management.tree %}
+                    {{ render_people(management.tree, selected) }}
+                    {% else %}
+                    <p class="muted">No active Division Manager has been added.</p>
+                    {% endif %}
+
+                    <div class="neostaffing-panel-heading">
+                        <h2>UNASSIGNED MANAGEMENT</h2>
+                        <span class="neostaffing-tree-action-chip">{{ management.unassigned_count }}</span>
+                    </div>
+                    {% if management.unassigned_tree %}
+                    {{ render_people(management.unassigned_tree, selected) }}
+                    {% else %}
+                    <p class="muted">All active management people are assigned.</p>
+                    {% endif %}
+                </article>
+
+                <aside class="neostaffing-data-card neostaffing-tree-detail{% if not detail %} is-empty{% endif %}" aria-label="Management person detail"{% if not detail %} data-org-chart-workspace-empty{% endif %}>
+                    {% if detail %}
+                    <div class="neostaffing-panel-heading">
+                        <h2>DETAIL</h2>
+                        <span class="neostaffing-tree-action-chip">{{ employee_status_labels[detail.person.employee_status] }}</span>
+                    </div>
+                    <div class="neostaffing-tree-detail-title">
+                        <span>{{ classification_labels[detail.person.classification] }}</span>
+                        <strong>{{ detail.person.full_name }}</strong>
+                        <em>{{ detail.person.employee_id }}</em>
+                    </div>
+
+                    <section class="neostaffing-tree-management-summary" aria-label="Reports To">
+                        <h3>REPORTS TO</h3>
+                        {% if detail.reports_to_person %}
+                        <ul class="neostaffing-detail-list">
+                            <li>
+                                <strong>{{ detail.reports_to_person.full_name }}</strong>
+                                <span>{{ detail.reports_to_person.employee_id }} / {{ classification_labels[detail.reports_to_person.classification] }}</span>
+                            </li>
+                        </ul>
+                        {% elif detail.person.classification == "division_manager" %}
+                        <p class="neostaffing-tree-management-empty">Division Manager / no Reports To required.</p>
+                        {% else %}
+                        <p class="neostaffing-tree-management-empty">Unassigned Management</p>
+                        {% endif %}
+                    </section>
+
+                    <section class="neostaffing-tree-management-summary" aria-label="Operational assignments">
+                        <h3>OPERATIONAL ASSIGNMENTS</h3>
+                        {% if detail.operational_assignments %}
+                        <ul class="neostaffing-detail-list">
+                            {% for row in detail.operational_assignments %}
+                            <li>
+                                <strong>{{ row.path }}</strong>
+                                <span>{{ row.assignment.leadership_level|replace('_', ' ')|title }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="neostaffing-tree-management-empty">No active operational assignments.</p>
+                        {% endif %}
+                    </section>
+
+                    {% if detail.mismatch %}
+                    <p class="flash flash-warning" role="status">Operational assignments and Reports To differ. This is allowed.</p>
+                    {% elif detail.reports_to_person and not detail.comparison_available %}
+                    <p class="muted">Operational comparison is unavailable until both people have operational assignments.</p>
+                    {% endif %}
+
+                    {% if can_direct_edit and detail.target_classification %}
+                    <section class="neostaffing-tree-control-section">
+                        <h2>CHANGE REPORTS TO</h2>
+                        <form class="operation-form" method="post" action="{{ url_for('neostaffing.update_reporting_relationship', person_id=detail.person.id) }}">
+                            <input type="hidden" name="expected_revision" value="{{ detail.relationship_revision }}">
+                            <label>
+                                <span>{{ classification_labels[detail.target_classification] }}</span>
+                                <select name="reports_to_person_id" required>
+                                    <option value="">Select Reports To</option>
+                                    {% for candidate in detail.candidates %}
+                                    <option value="{{ candidate.person.id }}" {% if detail.reports_to_person and detail.reports_to_person.id == candidate.person.id %}selected{% endif %}>{{ candidate.person.employee_id }} - {{ candidate.person.full_name }}{% if candidate.suggested %} / Operational Match{% endif %}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            <button type="submit" {% if not detail.candidates %}disabled{% endif %}>SAVE REPORTS TO</button>
+                        </form>
+                        <p class="muted">Operational matches are suggestions only and never change Reports To automatically.</p>
+                    </section>
+                    {% elif detail.target_classification %}
+                    <p class="muted">Reports To is read-only for your current NeoStaffing access.</p>
+                    {% endif %}
+                    {% else %}
+                    <p class="muted">Select a management person to view reporting and operational details.</p>
+                    {% endif %}
+                </aside>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}
