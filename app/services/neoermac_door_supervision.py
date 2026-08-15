@@ -20,7 +20,7 @@ def door_supervision_for_user(
         requested = ""
 
     if not operation or not getattr(user, "is_authenticated", False):
-        return _payload([], requested or None, operation)
+        return _payload([], requested or None, operation, changed=False)
 
     record = _record_for(user.id, operation.id)
     selected = _selected_doors(record, available)
@@ -49,7 +49,7 @@ def door_supervision_for_user(
         db.session.add(record)
         db.session.flush()
 
-    return _payload(selected, active or None, operation)
+    return _payload(selected, active or None, operation, changed=changed)
 
 
 def save_door_supervision(
@@ -86,7 +86,7 @@ def save_door_supervision(
     record.active_door = active or None
     db.session.add(record)
     db.session.flush()
-    return _payload(selected, active or None, operation)
+    return _payload(selected, active or None, operation, changed=True)
 
 
 def supervised_doors_for_user(user, operation, available_doors):
@@ -130,9 +130,10 @@ def _sort_doors(values, available):
     return [door for door in available if door in selected]
 
 
-def _payload(selected_doors, active_door, operation):
+def _payload(selected_doors, active_door, operation, *, changed):
     return {
         "selected_doors": list(selected_doors),
         "active_door": active_door,
         "operation_id": operation.id if operation else None,
+        "persistent_state_changed": changed,
     }

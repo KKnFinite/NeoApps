@@ -13,6 +13,7 @@ from app.models import (
 )
 from app.services.neoermac_building_lineup import (
     get_building_lineup_assignments,
+    load_building_lineup_rows,
     normalize_destination,
 )
 from app.services.neoermac_door_view import PULL_FIELDS
@@ -46,9 +47,14 @@ def neoermac_dashboard_context(
             "west": [],
         }
 
+    lineup_load = load_building_lineup_rows(
+        gateway,
+        initialize=initialize_lineup,
+    )
     assignments_by_destination = _lineup_assignments_by_destination(
         gateway,
         initialize=initialize_lineup,
+        lineup_rows=lineup_load.rows,
     )
     door_pulls_by_destination = _door_pulls_by_destination(gateway, operation)
     missions = _departure_missions(operation)
@@ -105,6 +111,7 @@ def neoermac_dashboard_context(
         or sort_window_auto_refresh_status(gateway, operation=operation),
         "east": rows["east"],
         "west": rows["west"],
+        "_initialization_changed": lineup_load.persistent_state_changed,
     }
 
 
@@ -208,11 +215,20 @@ def _revision_value(value):
     return str(value or "")
 
 
-def _lineup_assignments_by_destination(gateway, *, initialize=True):
+def _lineup_assignments_by_destination(
+    gateway,
+    *,
+    initialize=True,
+    lineup_rows=None,
+):
     assignments_by_destination = {}
     assignment_index = {}
 
-    for slot in get_building_lineup_assignments(gateway, initialize=initialize):
+    for slot in get_building_lineup_assignments(
+        gateway,
+        initialize=initialize,
+        rows=lineup_rows,
+    ):
         destination = slot["destination"]
         primary_door = slot["supervising_door"]
         side = _side_for_door(primary_door)

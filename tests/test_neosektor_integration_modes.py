@@ -332,6 +332,71 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
 
         self.assertEqual(worksheet.batch_reads, [SHEET_CELL_ORDER])
 
+    def test_initialized_page_get_is_read_only_in_all_integration_modes(self):
+        self._login("simulator")
+        worksheet = _FakeWorksheet()
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            for mode in (
+                GOOGLE_PRIMARY,
+                NEO_PRIMARY_GOOGLE_MIRROR,
+                NEO_ONLY,
+            ):
+                with self.subTest(mode=mode):
+                    self._set_mode(mode)
+                    if mode != GOOGLE_PRIMARY:
+                        apply_standalone_compat_values(
+                            self.gateway,
+                            _complete_sheet_values(),
+                        )
+                        db.session.commit()
+                    clear_neosektor_google_cache(self.gateway)
+                    self.assertEqual(
+                        self.client.get("/neosektor/live-counts").status_code,
+                        200,
+                    )
+
+                    statements = {"writes": 0, "commits": 0}
+
+                    def track_statement(
+                        _conn,
+                        _cursor,
+                        statement,
+                        _params,
+                        _context,
+                        _many,
+                    ):
+                        if statement.lstrip().split(None, 1)[0].upper() in {
+                            "INSERT",
+                            "UPDATE",
+                            "DELETE",
+                        }:
+                            statements["writes"] += 1
+
+                    def track_commit(_session):
+                        statements["commits"] += 1
+
+                    event.listen(db.engine, "before_cursor_execute", track_statement)
+                    event.listen(Session, "after_commit", track_commit)
+                    try:
+                        response = self.client.get("/neosektor/live-counts")
+                    finally:
+                        event.remove(
+                            db.engine,
+                            "before_cursor_execute",
+                            track_statement,
+                        )
+                        event.remove(Session, "after_commit", track_commit)
+
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(statements["writes"], 0)
+                    self.assertEqual(statements["commits"], 0)
+
     def test_google_primary_writes_google_and_keeps_neo_settings_in_neon(self):
         self._login("simulator")
         worksheet = _FakeWorksheet()

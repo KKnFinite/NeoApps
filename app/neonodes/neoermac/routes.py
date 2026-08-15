@@ -13,7 +13,10 @@ from flask_login import current_user
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
 from app.neonodes.neoermac import bp
-from app.services.access_control import get_current_gateway
+from app.services.access_control import (
+    access_initialization_changed_this_request,
+    get_current_gateway,
+)
 from app.services.neoermac_building_lineup import (
     DESTINATION_FIELDS,
     get_building_lineup_rows,
@@ -21,6 +24,7 @@ from app.services.neoermac_building_lineup import (
     get_departure_destination_choices,
     get_departure_destination_pull_times,
     get_outbound_door_options,
+    load_building_lineup_rows,
     lineup_field_name,
     save_building_lineup,
     save_building_lineup_destination,
@@ -89,7 +93,8 @@ def index():
         return redirect(url_for("neomotherbrain.rfd_hub"))
 
     gateway = get_current_gateway()
-    db.session.commit()
+    if access_initialization_changed_this_request():
+        db.session.commit()
     return render_template(
         "neonodes/neoermac/index.html",
         gateway=gateway,
@@ -120,7 +125,11 @@ def upcoming_pulls():
         refresh_status=refresh_status,
     )
     revision = upcoming_pulls_revision(gateway, operation=operation)
-    db.session.commit()
+    if (
+        dashboard_context.pop("_initialization_changed", False)
+        or access_initialization_changed_this_request()
+    ):
+        db.session.commit()
     return render_template(
         "neonodes/neoermac/upcoming_pulls.html",
         gateway=gateway,
@@ -221,9 +230,13 @@ def building_lineup():
         flash("Access denied.", "error")
         return redirect(url_for("neoermac.index"))
 
-    rows = get_building_lineup_rows(gateway)
-    db.session.commit()
-    return _building_lineup_response(gateway, access, rows=rows)
+    lineup_load = load_building_lineup_rows(gateway)
+    if (
+        lineup_load.persistent_state_changed
+        or access_initialization_changed_this_request()
+    ):
+        db.session.commit()
+    return _building_lineup_response(gateway, access, rows=lineup_load.rows)
 
 
 @bp.route("/building-lineup/destination", methods=["POST"])
@@ -361,7 +374,13 @@ def door_view():
         if not access["can_edit"]:
             db.session.rollback()
             flash("Access denied.", "error")
-            return _door_view_response(gateway, access, selected_door, status_code=403)
+            response, _changed = _door_view_response(
+                gateway,
+                access,
+                selected_door,
+                status_code=403,
+            )
+            return response
 
         action = request.form.get("action")
         try:
@@ -395,7 +414,13 @@ def door_view():
         except ValueError as exc:
             db.session.rollback()
             flash(str(exc), "error")
-            return _door_view_response(gateway, access, selected_door, status_code=400)
+            response, _changed = _door_view_response(
+                gateway,
+                access,
+                selected_door,
+                status_code=400,
+            )
+            return response
 
         db.session.commit()
         if selected_door:
@@ -406,8 +431,16 @@ def door_view():
         flash("Access denied.", "error")
         return redirect(url_for("neoermac.index"))
 
-    response = _door_view_response(gateway, access, selected_door)
-    db.session.commit()
+    response, persistent_state_changed = _door_view_response(
+        gateway,
+        access,
+        selected_door,
+    )
+    if (
+        persistent_state_changed
+        or access_initialization_changed_this_request()
+    ):
+        db.session.commit()
     return response
 
 
@@ -662,6 +695,9 @@ def _door_view_response(gateway, access, selected_door, status_code=200):
         if active_door
         else None
     )
+    persistent_state_changed = supervision["persistent_state_changed"] or bool(
+        bundle and bundle.initialization_changed
+    )
     context = door_view_context(gateway, active_door, bundle=bundle)
     context["door_tab_alerts"] = door_tab_pull_alerts(
         gateway,
@@ -709,7 +745,7 @@ def _door_view_response(gateway, access, selected_door, status_code=200):
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
-    return response
+    return response, persistent_state_changed
 
 
 def _uld_workspace_doors(supervised_doors, active_door):

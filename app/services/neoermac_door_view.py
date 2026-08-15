@@ -24,6 +24,7 @@ from app.services.neoermac_building_lineup import (
     get_building_lineup_doors_by_destination,
     get_linked_building_lineup_doors,
     get_outbound_door_options,
+    load_building_lineup_rows,
     normalize_destination,
 )
 from app.services.gateway_matrix import (
@@ -95,6 +96,7 @@ class DoorViewOperationalStateBundle:
     lineup_assignments: tuple
     missions: tuple
     door_pulls: list
+    initialization_changed: bool = False
     destinations_by_door: dict = field(init=False)
     doors_by_destination: dict = field(init=False)
     departure_missions_by_destination: dict = field(init=False)
@@ -147,9 +149,14 @@ class DoorViewOperationalStateBundle:
 
     @classmethod
     def load(cls, gateway, operation, *, initialize_lineup):
+        lineup_load = load_building_lineup_rows(
+            gateway,
+            initialize=initialize_lineup,
+        )
         assignments = get_building_lineup_assignments(
             gateway,
             initialize=initialize_lineup,
+            rows=lineup_load.rows,
         )
         missions = ()
         door_pulls = []
@@ -181,6 +188,7 @@ class DoorViewOperationalStateBundle:
             lineup_assignments=tuple(assignments),
             missions=tuple(missions),
             door_pulls=list(door_pulls),
+            initialization_changed=lineup_load.persistent_state_changed,
         )
 
     def register_door_pull(self, record):

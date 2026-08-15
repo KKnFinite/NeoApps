@@ -2774,6 +2774,135 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(NeoSektorBayStatus.query.count(), 5)
         self.assertEqual(NeoSektorDriverRouteSetting.query.count(), 0)
 
+    def test_established_neosektor_gets_do_not_commit_or_repeat_access_queries(self):
+        self._login_approved_user(role="simulator")
+        paths = (
+            "/neosektor/live-counts",
+            "/neosektor/ebm",
+            "/neosektor/wbm",
+            "/neosektor/tunnel-conductor",
+            "/neosektor/driver-routing",
+            "/neosektor/discharge",
+        )
+        for path in paths:
+            self.assertEqual(self.client.get(path).status_code, 200)
+
+        for path in paths:
+            with self.subTest(path=path):
+                response, statements, commits, query_keys = self._capture_get_metrics(
+                    path
+                )
+                writes = [
+                    row
+                    for row in statements
+                    if row.startswith(("insert", "update", "delete"))
+                ]
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(writes, [])
+                self.assertEqual(commits, 0)
+                access_query_keys = [
+                    key
+                    for key in query_keys
+                    if any(
+                        table_name in key[0]
+                        for table_name in (
+                            "gateway_memberships",
+                            "portal_app_accesses",
+                            "gateway_node_roles",
+                        )
+                    )
+                ]
+                self.assertEqual(len(access_query_keys), len(set(access_query_keys)))
+
+    def test_neosektor_first_use_initialization_commits_once_and_is_durable(self):
+        NeoSektorOperationalSetting.query.delete()
+        db.session.commit()
+        self._login_approved_user(role="simulator")
+
+        with (
+            patch(
+                "app.services.neosektor_live_counts._neosektor_integration_mode",
+                return_value="neo_only",
+            ),
+            patch(
+                "app.services.neosektor_live_refresh._mode_from_settings",
+                return_value="neo_only",
+            ),
+        ):
+            response, statements, commits, _query_keys = self._capture_get_metrics(
+                "/neosektor/tunnel-conductor"
+            )
+        writes = [
+            row
+            for row in statements
+            if row.startswith(("insert", "update", "delete"))
+        ]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(len(writes), 1)
+        self.assertEqual(commits, 1)
+        self.assertEqual(NeoSektorOperationalSetting.query.count(), 1)
+        self.assertEqual(NeoSektorSortState.query.count(), 1)
+        self.assertEqual(NeoSektorWaveState.query.count(), 2)
+        self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 4)
+        self.assertEqual(NeoSektorBallmatCount.query.count(), 2)
+        self.assertEqual(NeoSektorOpenBayState.query.count(), 2)
+        self.assertEqual(NeoSektorBayStatus.query.count(), 5)
+        self.assertEqual(NeoSektorDriverRouteSetting.query.count(), 3)
+
+        with (
+            patch(
+                "app.services.neosektor_live_counts._neosektor_integration_mode",
+                return_value="neo_only",
+            ),
+            patch(
+                "app.services.neosektor_live_refresh._mode_from_settings",
+                return_value="neo_only",
+            ),
+        ):
+            warmed, warmed_statements, warmed_commits, _query_keys = (
+                self._capture_get_metrics("/neosektor/tunnel-conductor")
+            )
+        self.assertEqual(warmed.status_code, 200)
+        self.assertFalse(
+            any(
+                row.startswith(("insert", "update", "delete"))
+                for row in warmed_statements
+            )
+        )
+        self.assertEqual(warmed_commits, 0)
+
+    def test_established_neosektor_get_commits_access_initialization_once(self):
+        from app.services.neosektor_live_counts import ballmat_state_payload
+
+        ballmat_state_payload(self.gateway)
+        db.session.commit()
+        self._login_approved_user(role="watcher")
+
+        first, _statements, first_commits, _query_keys = self._capture_get_metrics(
+            "/neosektor/live-counts"
+        )
+        second, second_statements, second_commits, _query_keys = (
+            self._capture_get_metrics("/neosektor/live-counts")
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first_commits, 1)
+        self.assertEqual(
+            PortalAppAccess.query.filter_by(app_code="neogateway").count(),
+            1,
+        )
+        self.assertGreater(GatewayNodeRole.query.count(), 0)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second_commits, 0)
+        self.assertFalse(
+            any(
+                row.startswith(("insert", "update", "delete"))
+                for row in second_statements
+            )
+        )
+
     def test_live_counts_state_endpoint_is_available_to_watcher(self):
         self._login_approved_user(role="watcher")
 
@@ -3590,6 +3719,28 @@ class NeoSektorRoutesTest(unittest.TestCase):
             data={"email": user.email, "password": "TestPassword123!"},
             follow_redirects=False,
         )
+
+    def _capture_get_metrics(self, path):
+        statements = []
+        query_keys = []
+        commits = [0]
+
+        def capture_statement(_conn, _cursor, statement, params, _context, _many):
+            normalized = " ".join(statement.lower().split())
+            statements.append(normalized)
+            query_keys.append((normalized, repr(params)))
+
+        def count_commit(_session):
+            commits[0] += 1
+
+        event.listen(db.engine, "before_cursor_execute", capture_statement)
+        event.listen(Session, "after_commit", count_commit)
+        try:
+            response = self.client.get(path)
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture_statement)
+            event.remove(Session, "after_commit", count_commit)
+        return response, statements, commits[0], query_keys
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 from datetime import datetime
 from types import SimpleNamespace
 
-from flask import current_app
+from flask import current_app, g, has_request_context, request
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import set_committed_value
@@ -59,6 +59,7 @@ PORTAL_APPS = (
     },
 )
 PORTAL_APP_CODES = {app["code"] for app in PORTAL_APPS}
+_ACCESS_INITIALIZATION_CHANGED_ATTRIBUTE = "_neoapps_access_initialization_changed"
 
 DEFAULT_NEONODES = (
     ("motherbrain", "NeoMotherBrain", 10),
@@ -584,6 +585,7 @@ def seed_gateway_node_roles(membership, role="watcher", overwrite_existing=False
         ).all()
     }
 
+    changed = False
     for node in active_nodes:
         node_role = existing_roles.get(node.id)
         if not node_role:
@@ -595,13 +597,18 @@ def seed_gateway_node_roles(membership, role="watcher", overwrite_existing=False
                     is_active=True,
                 )
             )
+            changed = True
             continue
 
         if overwrite_existing or not node_role.is_active:
+            if node_role.role != role or not node_role.is_active:
+                changed = True
             node_role.role = role
             node_role.is_active = True
 
     db.session.flush()
+    if changed:
+        _mark_access_initialization_changed()
     clear_request_cache()
 
 
@@ -646,6 +653,7 @@ def ensure_user_app_access(user, app_code):
     )
     db.session.add(access)
     db.session.flush()
+    _mark_access_initialization_changed()
     clear_request_cache()
     return access
 
@@ -777,8 +785,25 @@ def _sync_neogateway_app_access_from_gateway_membership(user):
     )
     db.session.add(access)
     db.session.flush()
+    _mark_access_initialization_changed()
     clear_request_cache()
     return access
+
+
+def access_initialization_changed_this_request():
+    if not has_request_context():
+        return False
+    state = getattr(g, _ACCESS_INITIALIZATION_CHANGED_ATTRIBUTE, None)
+    return bool(state and state[0] is request._get_current_object() and state[1])
+
+
+def _mark_access_initialization_changed():
+    if has_request_context():
+        setattr(
+            g,
+            _ACCESS_INITIALIZATION_CHANGED_ATTRIBUTE,
+            (request._get_current_object(), True),
+        )
 
 
 def _role_from_gateway_membership(user, membership):

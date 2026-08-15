@@ -16,10 +16,12 @@ from app.models import (
     MasterFlightSchedule,
     NeoErmacBuildingLineup,
     NeoErmacDoorPull,
+    NeoErmacDoorSupervision,
     NeoErmacUldRequest,
     NeoNode,
     NeoSektorUldOnTheWayEvent,
     PermissionRule,
+    PortalAppAccess,
     SortDateMission,
     SortDateOperation,
     SortDateParkingAssignment,
@@ -436,6 +438,143 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(writes, [])
         self.assertEqual(commits[0], 0)
         self.assertLess(len(selects), 20)
+
+    def test_established_neoermac_gets_do_not_commit_or_repeat_access_queries(self):
+        from app.services.neoermac_building_lineup import get_building_lineup_rows
+
+        self._add_operation_departure("UPS701", "BOS")
+        get_building_lineup_rows(self.gateway)
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        paths = (
+            "/neoermac",
+            "/neoermac/upcoming-pulls",
+            "/neoermac/building-lineup",
+            "/neoermac/door-view?door=D34",
+        )
+        for path in paths:
+            self.assertEqual(self.client.get(path).status_code, 200)
+
+        for path in paths:
+            with self.subTest(path=path):
+                response, statements, commits, query_keys = self._capture_get_metrics(
+                    path
+                )
+                writes = [
+                    row
+                    for row in statements
+                    if row.startswith(("insert", "update", "delete"))
+                ]
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(writes, [])
+                self.assertEqual(commits, 0)
+                access_query_keys = [
+                    key
+                    for key in query_keys
+                    if any(
+                        table_name in key[0]
+                        for table_name in (
+                            "gateway_memberships",
+                            "portal_app_accesses",
+                            "gateway_node_roles",
+                        )
+                    )
+                ]
+                self.assertEqual(len(access_query_keys), len(set(access_query_keys)))
+
+    def test_building_lineup_first_use_commits_once_then_becomes_read_only(self):
+        NeoErmacBuildingLineup.query.delete()
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        response, statements, commits, _query_keys = self._capture_get_metrics(
+            "/neoermac/building-lineup"
+        )
+        writes = [
+            row
+            for row in statements
+            if row.startswith(("insert", "update", "delete"))
+        ]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(len(writes), 1)
+        self.assertEqual(commits, 1)
+        self.assertEqual(
+            NeoErmacBuildingLineup.query.filter_by(gateway_id=self.gateway.id).count(),
+            12,
+        )
+
+        warmed, warmed_statements, warmed_commits, _query_keys = self._capture_get_metrics(
+            "/neoermac/building-lineup"
+        )
+        self.assertEqual(warmed.status_code, 200)
+        self.assertFalse(
+            any(
+                row.startswith(("insert", "update", "delete"))
+                for row in warmed_statements
+            )
+        )
+        self.assertEqual(warmed_commits, 0)
+
+    def test_door_view_get_commits_only_when_navigation_changes_supervision(self):
+        from app.services.neoermac_building_lineup import get_building_lineup_rows
+
+        self._add_operation_departure("UPS701", "BOS")
+        get_building_lineup_rows(self.gateway)
+        db.session.commit()
+        self._login_approved_user(role="operator")
+
+        first, _statements, first_commits, _query_keys = self._capture_get_metrics(
+            "/neoermac/door-view?door=D34"
+        )
+        second, second_statements, second_commits, _query_keys = self._capture_get_metrics(
+            "/neoermac/door-view?door=D34"
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first_commits, 1)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second_commits, 0)
+        self.assertFalse(
+            any(
+                row.startswith(("insert", "update", "delete"))
+                for row in second_statements
+            )
+        )
+        supervision = NeoErmacDoorSupervision.query.one()
+        self.assertEqual(supervision.active_door, "D34")
+
+    def test_established_neoermac_get_commits_access_initialization_once(self):
+        from app.services.neoermac_building_lineup import get_building_lineup_rows
+
+        get_building_lineup_rows(self.gateway)
+        db.session.commit()
+        self._login_approved_user(role="watcher")
+
+        first, _statements, first_commits, _query_keys = self._capture_get_metrics(
+            "/neoermac"
+        )
+        second, second_statements, second_commits, _query_keys = (
+            self._capture_get_metrics("/neoermac")
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first_commits, 1)
+        self.assertEqual(
+            PortalAppAccess.query.filter_by(app_code="neogateway").count(),
+            1,
+        )
+        self.assertGreater(GatewayNodeRole.query.count(), 0)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second_commits, 0)
+        self.assertFalse(
+            any(
+                row.startswith(("insert", "update", "delete"))
+                for row in second_statements
+            )
+        )
 
     def test_upcoming_pulls_state_keeps_outside_window_status_authoritative(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
@@ -4556,6 +4695,28 @@ class NeoErmacRoutesTest(unittest.TestCase):
         match = re.search(rb'data-upcoming-revision="([a-f0-9]{64})"', response.data)
         self.assertIsNotNone(match)
         return match.group(1).decode()
+
+    def _capture_get_metrics(self, path):
+        statements = []
+        query_keys = []
+        commits = [0]
+
+        def capture_statement(_conn, _cursor, statement, params, _context, _many):
+            normalized = " ".join(statement.lower().split())
+            statements.append(normalized)
+            query_keys.append((normalized, repr(params)))
+
+        def count_commit(_session):
+            commits[0] += 1
+
+        event.listen(db.engine, "before_cursor_execute", capture_statement)
+        event.listen(Session, "after_commit", count_commit)
+        try:
+            response = self.client.get(path)
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture_statement)
+            event.remove(Session, "after_commit", count_commit)
+        return response, statements, commits[0], query_keys
 
 
 if __name__ == "__main__":

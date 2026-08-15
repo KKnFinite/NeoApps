@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
@@ -57,6 +57,14 @@ TUNNEL_CONDUCTOR_EDIT_PERMISSION = "neosektor.tunnel_conductor.edit"
 
 
 @dataclass
+class _PersistentStateChangeTracker:
+    changed: bool = False
+
+    def mark_changed(self):
+        self.changed = True
+
+
+@dataclass
 class NeoSektorOperationalStateBundle:
     """One coherent set of NeoSektor operational rows for a request."""
 
@@ -74,6 +82,7 @@ class NeoSektorOperationalStateBundle:
     open_bays: list
     bay_statuses: list
     timer_rows: list
+    _change_tracker: _PersistentStateChangeTracker = field(repr=False)
     google_cells: dict | None = None
     driver_routes: list | None = None
     routing_sort_state: object | None = None
@@ -91,9 +100,11 @@ class NeoSektorOperationalStateBundle:
     ):
         sort_date = sort_date or date.today()
         sort_name = normalize_sort_name(sort_name)
+        change_tracker = _PersistentStateChangeTracker()
         settings = _operational_settings_for_state(
             gateway,
             initialize=initialize,
+            change_tracker=change_tracker,
         )
         integration_mode = _neosektor_integration_mode(
             gateway,
@@ -108,8 +119,16 @@ class NeoSektorOperationalStateBundle:
 
             cells = google_primary_operational_values(gateway)
             if initialize:
-                sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
-                timer_rows = _get_or_create_waves(sort_state)
+                sort_state = get_or_create_sort_state(
+                    gateway,
+                    sort_date,
+                    sort_name,
+                    change_tracker=change_tracker,
+                )
+                timer_rows = _get_or_create_waves(
+                    sort_state,
+                    change_tracker=change_tracker,
+                )
             else:
                 sort_state = _copy_sort_state(None, gateway, sort_date, sort_name)
                 timer_starts = google_primary_wave_timer_starts(gateway)
@@ -135,16 +154,37 @@ class NeoSektorOperationalStateBundle:
                 open_bays=[],
                 bay_statuses=[],
                 timer_rows=timer_rows,
+                _change_tracker=change_tracker,
                 google_cells=dict(cells),
             )
         else:
             if initialize:
-                sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
-                ballmat_wave_counts = _get_or_create_ballmat_wave_counts(sort_state)
-                waves = _get_or_create_waves(sort_state)
-                ballmats = _get_or_create_ballmats(sort_state)
-                open_bays = _get_or_create_open_bays(sort_state)
-                bay_statuses = _get_or_create_bay_statuses(sort_state)
+                sort_state = get_or_create_sort_state(
+                    gateway,
+                    sort_date,
+                    sort_name,
+                    change_tracker=change_tracker,
+                )
+                ballmat_wave_counts = _get_or_create_ballmat_wave_counts(
+                    sort_state,
+                    change_tracker=change_tracker,
+                )
+                waves = _get_or_create_waves(
+                    sort_state,
+                    change_tracker=change_tracker,
+                )
+                ballmats = _get_or_create_ballmats(
+                    sort_state,
+                    change_tracker=change_tracker,
+                )
+                open_bays = _get_or_create_open_bays(
+                    sort_state,
+                    change_tracker=change_tracker,
+                )
+                bay_statuses = _get_or_create_bay_statuses(
+                    sort_state,
+                    change_tracker=change_tracker,
+                )
             else:
                 (
                     sort_state,
@@ -169,6 +209,7 @@ class NeoSektorOperationalStateBundle:
                 open_bays=open_bays,
                 bay_statuses=bay_statuses,
                 timer_rows=waves,
+                _change_tracker=change_tracker,
             )
 
         if include_routing:
@@ -180,7 +221,10 @@ class NeoSektorOperationalStateBundle:
             return self.driver_routes
         if self.initialize:
             self.routing_sort_state = self.sort_state
-            self.driver_routes = _get_or_create_driver_routes(self.sort_state)
+            self.driver_routes = _get_or_create_driver_routes(
+                self.sort_state,
+                change_tracker=self._change_tracker,
+            )
         else:
             self.routing_sort_state, self.driver_routes = (
                 _read_only_sort_and_driver_routes(
@@ -190,6 +234,10 @@ class NeoSektorOperationalStateBundle:
                 )
             )
         return self.driver_routes
+
+    @property
+    def persistent_state_changed(self):
+        return self._change_tracker.changed
 
     def resolved_refresh_status(self):
         if self.refresh_status is None:
@@ -257,6 +305,7 @@ class NeoSektorOperationalStateBundle:
                 wave_counts,
                 waves,
                 ballmats,
+                change_tracker=self._change_tracker,
             )
             planned_total = max(0, self.sort_state.planned_total or 0)
             unloaded_total = max(0, self.sort_state.unloaded_total or 0)
@@ -273,6 +322,7 @@ class NeoSektorOperationalStateBundle:
             self.operational_settings,
             timer_rows=self.timer_rows,
             persist_timer=self.initialize,
+            change_tracker=self._change_tracker,
         )
         if self.initialize:
             db.session.flush()
@@ -310,7 +360,11 @@ class NeoSektorOperationalStateBundle:
             state["sides"],
             driver_routes,
         )
-        _sync_driver_route_values(driver_routes, routing)
+        _sync_driver_route_values(
+            driver_routes,
+            routing,
+            change_tracker=self._change_tracker,
+        )
         if self.initialize:
             db.session.flush()
         state["routing"] = routing
@@ -408,8 +462,13 @@ class NeoSektorOperationalStateBundle:
         return wave_counts, waves, ballmats, open_bays, bay_statuses
 
 
-def live_counts_context(gateway, sort_date=None, sort_name=None):
-    state = ballmat_state_payload(gateway, sort_date, sort_name)
+def live_counts_context(gateway, sort_date=None, sort_name=None, *, bundle=None):
+    state = ballmat_state_payload(
+        gateway,
+        sort_date,
+        sort_name,
+        bundle=bundle,
+    )
     return {
         "status_labels": STATUS_LABELS,
         "summary": state["summary"],
@@ -421,9 +480,21 @@ def live_counts_context(gateway, sort_date=None, sort_name=None):
     }
 
 
-def ballmat_operations_context(gateway, selected_side, sort_date=None, sort_name=None):
+def ballmat_operations_context(
+    gateway,
+    selected_side,
+    sort_date=None,
+    sort_name=None,
+    *,
+    bundle=None,
+):
     selected_side = normalize_ballmat_side(selected_side) or "east"
-    state = ballmat_state_payload(gateway, sort_date, sort_name)
+    state = ballmat_state_payload(
+        gateway,
+        sort_date,
+        sort_name,
+        bundle=bundle,
+    )
 
     return {
         "selected_side": selected_side,
@@ -575,16 +646,38 @@ def update_ballmat_side(
     return bundle.ballmat_state_payload()
 
 
-def tunnel_conductor_context(gateway, sort_date=None, sort_name=None):
+def tunnel_conductor_context(
+    gateway,
+    sort_date=None,
+    sort_name=None,
+    *,
+    bundle=None,
+):
     return {
-        "state": driver_routing_state_payload(gateway, sort_date, sort_name),
+        "state": driver_routing_state_payload(
+            gateway,
+            sort_date,
+            sort_name,
+            bundle=bundle,
+        ),
         "status_labels": STATUS_LABELS,
     }
 
 
-def driver_routing_context(gateway, sort_date=None, sort_name=None):
+def driver_routing_context(
+    gateway,
+    sort_date=None,
+    sort_name=None,
+    *,
+    bundle=None,
+):
     return {
-        "state": driver_routing_state_payload(gateway, sort_date, sort_name),
+        "state": driver_routing_state_payload(
+            gateway,
+            sort_date,
+            sort_name,
+            bundle=bundle,
+        ),
     }
 
 
@@ -797,7 +890,13 @@ def adjust_tunnel_wave_arrivals(
     return bundle.driver_routing_state_payload()
 
 
-def get_or_create_sort_state(gateway, sort_date, sort_name):
+def get_or_create_sort_state(
+    gateway,
+    sort_date,
+    sort_name,
+    *,
+    change_tracker=None,
+):
     sort_state = NeoSektorSortState.query.filter_by(
         gateway_id=gateway.id,
         sort_date=sort_date,
@@ -814,11 +913,12 @@ def get_or_create_sort_state(gateway, sort_date, sort_name):
         active_wave=DEFAULT_ACTIVE_WAVE,
     )
     db.session.add(sort_state)
+    _mark_persistent_state_changed(change_tracker)
     db.session.flush()
     return sort_state
 
 
-def get_or_create_operational_settings(gateway):
+def get_or_create_operational_settings(gateway, *, change_tracker=None):
     settings = NeoSektorOperationalSetting.query.filter_by(
         gateway_id=gateway.id,
     ).first()
@@ -833,13 +933,22 @@ def get_or_create_operational_settings(gateway):
         all_up_to_down_minutes=DEFAULT_ALL_UP_TO_DOWN_MINUTES,
     )
     db.session.add(settings)
+    _mark_persistent_state_changed(change_tracker)
     db.session.flush()
     return settings
 
 
-def _operational_settings_for_state(gateway, *, initialize):
+def _operational_settings_for_state(
+    gateway,
+    *,
+    initialize,
+    change_tracker=None,
+):
     if initialize:
-        return get_or_create_operational_settings(gateway)
+        return get_or_create_operational_settings(
+            gateway,
+            change_tracker=change_tracker,
+        )
     settings = NeoSektorOperationalSetting.query.filter_by(
         gateway_id=gateway.id
     ).first()
@@ -1057,7 +1166,7 @@ def normalize_wave_key(value):
     return None, None
 
 
-def _get_or_create_waves(sort_state):
+def _get_or_create_waves(sort_state, *, change_tracker=None):
     existing = {
         row.wave_name: row
         for row in NeoSektorWaveState.query.filter_by(sort_state_id=sort_state.id).all()
@@ -1072,11 +1181,12 @@ def _get_or_create_waves(sort_state):
                 display_order=index,
             )
             db.session.add(row)
+            _mark_persistent_state_changed(change_tracker)
         rows.append(row)
     return sorted(rows, key=lambda row: row.display_order)
 
 
-def _get_or_create_ballmats(sort_state):
+def _get_or_create_ballmats(sort_state, *, change_tracker=None):
     existing = {
         row.side: row
         for row in NeoSektorBallmatCount.query.filter_by(sort_state_id=sort_state.id).all()
@@ -1087,11 +1197,12 @@ def _get_or_create_ballmats(sort_state):
         if row is None:
             row = NeoSektorBallmatCount(sort_state_id=sort_state.id, side=side_label)
             db.session.add(row)
+            _mark_persistent_state_changed(change_tracker)
         rows.append(row)
     return rows
 
 
-def _get_or_create_ballmat_wave_counts(sort_state):
+def _get_or_create_ballmat_wave_counts(sort_state, *, change_tracker=None):
     existing = {
         (row.side, row.wave_name): row
         for row in NeoSektorBallmatWaveCount.query.filter_by(
@@ -1112,11 +1223,12 @@ def _get_or_create_ballmat_wave_counts(sort_state):
                     display_order=display_order,
                 )
                 db.session.add(row)
+                _mark_persistent_state_changed(change_tracker)
             rows.append(row)
     return sorted(rows, key=lambda row: row.display_order)
 
 
-def _get_or_create_open_bays(sort_state):
+def _get_or_create_open_bays(sort_state, *, change_tracker=None):
     existing = {
         row.side: row
         for row in NeoSektorOpenBayState.query.filter_by(sort_state_id=sort_state.id).all()
@@ -1127,11 +1239,12 @@ def _get_or_create_open_bays(sort_state):
         if row is None:
             row = NeoSektorOpenBayState(sort_state_id=sort_state.id, side=side_label)
             db.session.add(row)
+            _mark_persistent_state_changed(change_tracker)
         rows.append(row)
     return rows
 
 
-def _get_or_create_bay_statuses(sort_state):
+def _get_or_create_bay_statuses(sort_state, *, change_tracker=None):
     existing = {
         row.bay_name: row
         for row in NeoSektorBayStatus.query.filter_by(sort_state_id=sort_state.id).all()
@@ -1147,11 +1260,12 @@ def _get_or_create_bay_statuses(sort_state):
                 display_order=index,
             )
             db.session.add(row)
+            _mark_persistent_state_changed(change_tracker)
         rows.append(row)
     return sorted(rows, key=lambda row: row.display_order)
 
 
-def _get_or_create_driver_routes(sort_state):
+def _get_or_create_driver_routes(sort_state, *, change_tracker=None):
     existing = {
         row.route_name: row
         for row in NeoSektorDriverRouteSetting.query.filter_by(
@@ -1169,6 +1283,7 @@ def _get_or_create_driver_routes(sort_state):
                 display_order=index,
             )
             db.session.add(row)
+            _mark_persistent_state_changed(change_tracker)
         rows.append(row)
     return sorted(rows, key=lambda row: row.display_order)
 
@@ -1201,6 +1316,7 @@ def _wave_views(
     now=None,
     timer_rows=None,
     persist_timer=True,
+    change_tracker=None,
 ):
     rows_by_name = {row.wave_name: row for row in waves}
     first_row = rows_by_name["1ST WAVE"]
@@ -1240,6 +1356,7 @@ def _wave_views(
         operational_settings,
         now,
         persist=persist_timer,
+        change_tracker=change_tracker,
     )
     if first_is_all_up and first_timer_done:
         first_left_to_unload = "DOWN"
@@ -1284,6 +1401,7 @@ def _wave_views(
         operational_settings,
         now,
         persist=persist_timer,
+        change_tracker=change_tracker,
     )
 
     if second_is_all_up and second_timer_done:
@@ -1330,6 +1448,7 @@ def _sync_wave_all_up_timer(
     now=None,
     *,
     persist=True,
+    change_tracker=None,
 ):
     if now is None:
         now = datetime.utcnow()
@@ -1340,6 +1459,7 @@ def _sync_wave_all_up_timer(
         if row.all_up_started_at is None:
             if persist:
                 row.all_up_started_at = now
+                _mark_persistent_state_changed(change_tracker)
             return False
         started_at = row.all_up_started_at
         if started_at.tzinfo is not None:
@@ -1349,6 +1469,7 @@ def _sync_wave_all_up_timer(
 
     if persist and row.all_up_started_at is not None:
         row.all_up_started_at = None
+        _mark_persistent_state_changed(change_tracker)
     return False
 
 
@@ -1544,15 +1665,29 @@ def _driver_route_offset(driver_routes):
     return _clean_offset(offset_row.route_value)
 
 
-def _sync_driver_route_values(driver_routes, routing):
-    _driver_route_by_name(driver_routes, DRIVER_ROUTE_FIRST_WAVE_NAME).route_value = (
-        routing["routes"]["first"]["target"]
+def _sync_driver_route_values(
+    driver_routes,
+    routing,
+    *,
+    change_tracker=None,
+):
+    _assign_if_changed(
+        _driver_route_by_name(driver_routes, DRIVER_ROUTE_FIRST_WAVE_NAME),
+        "route_value",
+        routing["routes"]["first"]["target"],
+        change_tracker=change_tracker,
     )
-    _driver_route_by_name(driver_routes, DRIVER_ROUTE_SECOND_WAVE_NAME).route_value = (
-        routing["routes"]["second"]["target"]
+    _assign_if_changed(
+        _driver_route_by_name(driver_routes, DRIVER_ROUTE_SECOND_WAVE_NAME),
+        "route_value",
+        routing["routes"]["second"]["target"],
+        change_tracker=change_tracker,
     )
-    _driver_route_by_name(driver_routes, DRIVER_ROUTE_WEST_OFFSET_NAME).route_value = str(
-        routing["west_offset"]
+    _assign_if_changed(
+        _driver_route_by_name(driver_routes, DRIVER_ROUTE_WEST_OFFSET_NAME),
+        "route_value",
+        str(routing["west_offset"]),
+        change_tracker=change_tracker,
     )
 
 
@@ -1612,7 +1747,14 @@ def _ballmat_wave_view(row):
     }
 
 
-def _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats):
+def _sync_ballmat_rollups(
+    sort_state,
+    ballmat_wave_counts,
+    waves,
+    ballmats,
+    *,
+    change_tracker=None,
+):
     wave_rows = {row.wave_name: row for row in waves}
     side_rows = {row.side: row for row in ballmats}
     total_unloaded = 0
@@ -1625,8 +1767,18 @@ def _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats):
         ]
         wave_total = sum(max(row.count or 0, 0) for row in matching_rows)
         wave_row = wave_rows[wave_name]
-        wave_row.unloaded_count = wave_total
-        wave_row.status = _aggregate_status(matching_rows, wave_total)
+        _assign_if_changed(
+            wave_row,
+            "unloaded_count",
+            wave_total,
+            change_tracker=change_tracker,
+        )
+        _assign_if_changed(
+            wave_row,
+            "status",
+            _aggregate_status(matching_rows, wave_total),
+            change_tracker=change_tracker,
+        )
 
     for _side_key, side_label, _manager_label in DEFAULT_BALLMAT_SIDES:
         matching_rows = [
@@ -1636,11 +1788,26 @@ def _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats):
         ]
         side_total = sum(max(row.count or 0, 0) for row in matching_rows)
         side_row = side_rows[side_label]
-        side_row.count = side_total
-        side_row.status = _aggregate_status(matching_rows, side_total)
+        _assign_if_changed(
+            side_row,
+            "count",
+            side_total,
+            change_tracker=change_tracker,
+        )
+        _assign_if_changed(
+            side_row,
+            "status",
+            _aggregate_status(matching_rows, side_total),
+            change_tracker=change_tracker,
+        )
         total_unloaded += side_total
 
-    sort_state.unloaded_total = total_unloaded
+    _assign_if_changed(
+        sort_state,
+        "unloaded_total",
+        total_unloaded,
+        change_tracker=change_tracker,
+    )
 
 
 def _aggregate_status(rows, total_count):
@@ -1712,11 +1879,23 @@ def _standalone_compat_status(value):
     return normalized if normalized in STATUS_LABELS else None
 
 
-def _assign_if_changed(row, attribute, value):
+def _assign_if_changed(
+    row,
+    attribute,
+    value,
+    *,
+    change_tracker=None,
+):
     if getattr(row, attribute) == value:
         return 0
     setattr(row, attribute, value)
+    _mark_persistent_state_changed(change_tracker)
     return 1
+
+
+def _mark_persistent_state_changed(change_tracker):
+    if change_tracker is not None:
+        change_tracker.mark_changed()
 
 
 def _status(value):

@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from sqlalchemy import or_
 
 from app.extensions import db
@@ -82,17 +84,28 @@ BELT_COLOR_KEYS = {
 DEFAULT_PULL_TIMES = {"pure": "--", "mix": "--"}
 
 
+@dataclass(frozen=True)
+class BuildingLineupLoadResult:
+    rows: list
+    persistent_state_changed: bool
+
+
 def get_outbound_door_options():
     return OUTBOUND_DOOR_OPTIONS
 
 
 def get_building_lineup_rows(gateway, *, initialize=True):
+    return load_building_lineup_rows(gateway, initialize=initialize).rows
+
+
+def load_building_lineup_rows(gateway, *, initialize=True):
     existing_rows = {
         row.runout_key: row
         for row in NeoErmacBuildingLineup.query.filter_by(gateway_id=gateway.id).all()
     }
 
     rows = []
+    persistent_state_changed = False
     for runout_key, start_door, end_door, belt_names in BUILDING_LINEUP_BELT_GROUPS:
         runout_name = f"{start_door}-{end_door} Belts"
         row = existing_rows.get(runout_key)
@@ -104,14 +117,19 @@ def get_building_lineup_rows(gateway, *, initialize=True):
             )
             if initialize:
                 db.session.add(row)
-        elif initialize:
+                persistent_state_changed = True
+        elif initialize and row.runout_name != runout_name:
             row.runout_name = runout_name
+            persistent_state_changed = True
         apply_belt_display_metadata(row, start_door, end_door, belt_names)
         rows.append(row)
 
-    if initialize:
+    if initialize and persistent_state_changed:
         db.session.flush()
-    return rows
+    return BuildingLineupLoadResult(
+        rows=rows,
+        persistent_state_changed=persistent_state_changed,
+    )
 
 
 def get_departure_destination_choices(gateway):
@@ -213,9 +231,17 @@ def get_building_lineup_doors_by_destination(gateway, *, assignments=None):
     }
 
 
-def get_building_lineup_assignments(gateway, include_blank=False, *, initialize=True):
+def get_building_lineup_assignments(
+    gateway,
+    include_blank=False,
+    *,
+    initialize=True,
+    rows=None,
+):
     assignments = []
-    for row in get_building_lineup_rows(gateway, initialize=initialize):
+    if rows is None:
+        rows = get_building_lineup_rows(gateway, initialize=initialize)
+    for row in rows:
         assignments.extend(
             building_lineup_slot_descriptors(row, include_blank=include_blank)
         )

@@ -4,7 +4,10 @@ from app.auth.decorators import gateway_node_required
 from app.extensions import db
 from app.models import SortDateOperation
 from app.neonodes.neosektor import bp
-from app.services.access_control import get_current_gateway
+from app.services.access_control import (
+    access_initialization_changed_this_request,
+    get_current_gateway,
+)
 from app.services.neosektor_live_counts import (
     NeoSektorOperationalStateBundle,
     TUNNEL_CONDUCTOR_EDIT_PERMISSION,
@@ -204,7 +207,11 @@ def tunnel_conductor():
 
     gateway = get_current_gateway()
     try:
-        context = tunnel_conductor_context(gateway)
+        bundle = NeoSektorOperationalStateBundle.load(
+            gateway,
+            include_routing=True,
+        )
+        context = tunnel_conductor_context(gateway, bundle=bundle)
     except NeoSektorGoogleError as exc:
         flash(str(exc), "error")
         return redirect(url_for("neosektor.index"))
@@ -212,7 +219,7 @@ def tunnel_conductor():
         gateway,
         ROUTING_STATE_SCOPE,
     )
-    db.session.commit()
+    _commit_neosektor_initialization_if_changed(bundle)
     return render_template(
         "neonodes/neosektor/tunnel_conductor.html",
         gateway=gateway,
@@ -405,7 +412,12 @@ def _render_ballmat_operations(selected_side):
     session["neosektor_ballmat_side"] = selected_side
     gateway = get_current_gateway()
     try:
-        context = ballmat_operations_context(gateway, selected_side)
+        bundle = NeoSektorOperationalStateBundle.load(gateway)
+        context = ballmat_operations_context(
+            gateway,
+            selected_side,
+            bundle=bundle,
+        )
     except NeoSektorGoogleError as exc:
         flash(str(exc), "error")
         return redirect(url_for("neosektor.index"))
@@ -413,7 +425,7 @@ def _render_ballmat_operations(selected_side):
         gateway,
         COUNT_STATE_SCOPE,
     )
-    db.session.commit()
+    _commit_neosektor_initialization_if_changed(bundle)
     return render_template(
         "neonodes/neosektor/ballmat.html",
         gateway=gateway,
@@ -498,7 +510,8 @@ def discharge():
         ),
         None,
     )
-    db.session.commit()
+    if access_initialization_changed_this_request():
+        db.session.commit()
     return render_template(
         "neonodes/neosektor/discharge.html",
         gateway=gateway,
@@ -590,7 +603,8 @@ def live_counts():
 
     gateway = get_current_gateway()
     try:
-        context = live_counts_context(gateway)
+        bundle = NeoSektorOperationalStateBundle.load(gateway)
+        context = live_counts_context(gateway, bundle=bundle)
     except NeoSektorGoogleError as exc:
         flash(str(exc), "error")
         return redirect(url_for("neosektor.index"))
@@ -598,7 +612,7 @@ def live_counts():
         gateway,
         COUNT_STATE_SCOPE,
     )
-    db.session.commit()
+    _commit_neosektor_initialization_if_changed(bundle)
     return render_template(
         "neonodes/neosektor/live_counts.html",
         gateway=gateway,
@@ -657,7 +671,11 @@ def driver_routing():
 
     gateway = get_current_gateway()
     try:
-        context = driver_routing_context(gateway)
+        bundle = NeoSektorOperationalStateBundle.load(
+            gateway,
+            include_routing=True,
+        )
+        context = driver_routing_context(gateway, bundle=bundle)
     except NeoSektorGoogleError as exc:
         flash(str(exc), "error")
         return redirect(url_for("neosektor.index"))
@@ -665,7 +683,7 @@ def driver_routing():
         gateway,
         ROUTING_STATE_SCOPE,
     )
-    db.session.commit()
+    _commit_neosektor_initialization_if_changed(bundle)
     return render_template(
         "neonodes/neosektor/driver_routing.html",
         gateway=gateway,
@@ -888,6 +906,14 @@ def _settings_response(gateway, access, status_code=200):
         integration_status=neosektor_integration_status(gateway),
     )
     return response, status_code
+
+
+def _commit_neosektor_initialization_if_changed(bundle):
+    if (
+        bundle.persistent_state_changed
+        or access_initialization_changed_this_request()
+    ):
+        db.session.commit()
 
 
 def _neosektor_write_bundle(gateway, *, include_routing=False):
