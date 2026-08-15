@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}NeoStaffing Management Review{% endblock %}
+
+{% block content %}
+<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="management-review-title">
+    <div class="neostaffing-dashboard-shell">
+        {% include "neostaffing/_section_nav.html" %}
+        <div class="neostaffing-dashboard-main">
+            <div class="neostaffing-hero neostaffing-hero-compact">
+                <div class="neostaffing-hero-copy mobile-shell-duplicate-title">
+                    <h1 id="management-review-title">Management Relationships Affected</h1>
+                </div>
+            </div>
+
+            <section class="neostaffing-data-card neostaffing-tree-detail" aria-label="Reports To review">
+                <div class="neostaffing-panel-heading">
+                    <h2>{{ "CONSOLIDATED REVIEW" if review.consolidated else "REPORTS TO REVIEW" }}</h2>
+                    <span class="neostaffing-tree-action-chip">{{ review.rows|length }} AFFECTED</span>
+                </div>
+                <p>{{ review.summary }}</p>
+                <p class="muted">Operational assignments and Reports To remain separate. Choose the reporting result explicitly for each person.</p>
+
+                <form class="operation-form" method="post" action="{{ url_for('neostaffing.apply_management_relationship_review') }}">
+                    <input type="hidden" name="review_revision" value="{{ review.revision }}">
+                    <input type="hidden" name="return_endpoint" value="{{ return_endpoint }}">
+                    {% for key, value in return_values.items() %}
+                    <input type="hidden" name="return_value_{{ key }}" value="{{ value }}">
+                    {% endfor %}
+                    {% for key, value in review.mutation_form.items() %}
+                    <input type="hidden" name="{{ key }}" value="{{ value }}">
+                    {% endfor %}
+
+                    <div class="neostaffing-record-grid">
+                        {% for row in review.rows %}
+                        <article class="neostaffing-record-card">
+                            <header class="neostaffing-record-header">
+                                <div>
+                                    <span>{{ row.person.employee_id }}</span>
+                                    <strong>{{ row.person.full_name }}</strong>
+                                </div>
+                                <em>{{ classification_labels[row.person.classification] }}</em>
+                            </header>
+                            <input type="hidden" name="affected_person_ids" value="{{ row.person.id }}">
+                            <input type="hidden" name="relationship_revision_{{ row.person.id }}" value="{{ row.relationship_revision }}">
+
+                            <dl class="neostaffing-summary-grid">
+                                <div>
+                                    <dt>Current Reports To</dt>
+                                    <dd>{{ row.current_reports_to.full_name if row.current_reports_to else "Unassigned" }}</dd>
+                                </div>
+                                <div>
+                                    <dt>Suggested Reports To</dt>
+                                    <dd>
+                                        {% if row.suggested_people %}
+                                            {{ row.suggested_people|map(attribute='full_name')|join(', ') }}
+                                        {% else %}
+                                            No active valid supervisor
+                                        {% endif %}
+                                    </dd>
+                                </div>
+                            </dl>
+
+                            {% if row.ambiguous %}
+                            <p class="muted">Multiple operational assignments or owners provide more than one valid suggestion. No supervisor will be selected automatically.</p>
+                            {% endif %}
+
+                            <fieldset>
+                                <legend>Reports To decision</legend>
+                                <label>
+                                    <input type="radio" name="relationship_action_{{ row.person.id }}" value="keep" checked>
+                                    Keep Current
+                                </label>
+                                {% for candidate in row.suggested_people %}
+                                <label>
+                                    <input type="radio" name="relationship_action_{{ row.person.id }}" value="target:{{ candidate.id }}">
+                                    Change to Suggested: {{ candidate.full_name }}
+                                </label>
+                                {% endfor %}
+                                {% if row.valid_candidates %}
+                                <label>
+                                    <input type="radio" name="relationship_action_{{ row.person.id }}" value="different">
+                                    Choose Different Valid Supervisor
+                                </label>
+                                <select name="different_reports_to_{{ row.person.id }}" aria-label="Different Reports To for {{ row.person.full_name }}">
+                                    <option value="">Select a valid supervisor</option>
+                                    {% for candidate in row.valid_candidates %}
+                                    <option value="{{ candidate.id }}">{{ candidate.employee_id }} - {{ candidate.full_name }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% endif %}
+                            </fieldset>
+                        </article>
+                        {% endfor %}
+                    </div>
+
+                    <div class="neostaffing-card-actions">
+                        <button type="submit">APPLY OPERATIONAL CHANGE</button>
+                        <a class="table-row-button" href="{{ cancel_url }}">CANCEL</a>
+                    </div>
+                </form>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

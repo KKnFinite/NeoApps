@@ -255,6 +255,18 @@ def create_unit(values):
 
 
 def update_unit(unit, values, is_new=False):
+    normalized = validated_unit_update_values(unit, values, is_new=is_new)
+
+    unit.unit_type = normalized["unit_type"]
+    unit.name = normalized["name"]
+    unit.parent = normalized["parent"]
+    unit.display_order = normalized["display_order"]
+    unit.active = normalized["active"]
+    unit.required_headcount = normalized["required_headcount"]
+    return unit
+
+
+def validated_unit_update_values(unit, values, is_new=False):
     unit_type = _normalize_choice(values.get("unit_type"), STAFFING_UNIT_TYPES, "unit type")
     name = _required_text(values.get("name"), "Unit name")
     parent = _resolve_parent(values.get("parent_id"), unit_type)
@@ -273,13 +285,15 @@ def update_unit(unit, values, is_new=False):
     if not is_new and parent and _unit_is_descendant(parent, unit):
         raise ValueError("A unit cannot move under one of its descendants.")
 
-    unit.unit_type = unit_type
-    unit.name = name
-    unit.parent = parent
-    unit.display_order = display_order
-    unit.active = active
-    unit.required_headcount = required_headcount
-    return unit
+    return {
+        "unit_type": unit_type,
+        "name": name,
+        "parent": parent,
+        "parent_id": parent.id if parent else None,
+        "display_order": display_order,
+        "active": active,
+        "required_headcount": required_headcount,
+    }
 
 
 def delete_unit(unit):
@@ -367,7 +381,7 @@ def bulk_update_work_area_assignments(person_ids, action, work_area=None):
 
 def create_leadership_assignment(person, unit, leadership_level=None):
     level = leadership_level or default_leadership_level_for(person, unit)
-    _validate_leadership_assignment(person, unit, level)
+    validate_leadership_assignment(person, unit, level)
 
     existing = StaffingLeadershipAssignment.query.filter_by(
         person_id=person.id,
@@ -390,6 +404,12 @@ def create_leadership_assignment(person, unit, leadership_level=None):
     db.session.add(assignment)
     db.session.flush()
     return assignment
+
+
+def validate_leadership_assignment(person, unit, leadership_level=None):
+    level = leadership_level or default_leadership_level_for(person, unit)
+    _validate_leadership_assignment(person, unit, level)
+    return level
 
 
 def delete_leadership_assignment(assignment):

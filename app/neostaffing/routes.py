@@ -15,6 +15,7 @@ from app.neostaffing import bp
 from app.services.access_control import get_user_app_role, user_can_access_app, user_has_app_access
 from app.services import neostaffing as staffing_service
 from app.services import neostaffing_change_requests as change_request_service
+from app.services import neostaffing_management_review as management_review_service
 from app.services.permission_rules import ensure_default_permission_rules, user_can
 
 
@@ -193,7 +194,10 @@ def people():
         can_manage_app=can_manage,
         can_edit_people=can_edit_people,
         can_bulk_people=can_bulk_people,
-        can_assign_management=user_can(MANAGEMENT_ASSIGN_PERMISSION),
+        can_assign_management=bool(
+            user_can(MANAGEMENT_ASSIGN_PERMISSION)
+            and _can_directly_change_management_relationships()
+        ),
         classification_choices=staffing_service.classification_choices(),
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
         employee_status_choices=staffing_service.employee_status_choices(),
@@ -610,7 +614,10 @@ def _render_org_chart():
         app_role=get_user_app_role(current_user, "neostaffing"),
         can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
         can_edit_structure=user_can(ORG_CHART_EDIT_STRUCTURE_PERMISSION),
-        can_assign_management=user_can(MANAGEMENT_ASSIGN_PERMISSION),
+        can_assign_management=bool(
+            user_can(MANAGEMENT_ASSIGN_PERMISSION)
+            and _can_directly_change_management_relationships()
+        ),
         org_chart=context,
         hierarchy=context["tree"],
         units=context["units"],
@@ -684,11 +691,33 @@ def create_unit():
 @neostaffing_app_required(permission_key=ORG_CHART_EDIT_STRUCTURE_PERMISSION)
 def update_unit(unit_id):
     unit = _get_unit(unit_id)
-    return _mutate(
-        lambda: staffing_service.update_unit(unit, request.form),
-        "Staffing unit updated.",
-        "neostaffing.org_chart",
-        _org_chart_return_values(unit.id),
+    try:
+        normalized = staffing_service.validated_unit_update_values(unit, request.form)
+        if normalized["parent_id"] != unit.parent_id:
+            mutation = management_review_service.unit_update_mutation(unit, normalized)
+            review = management_review_service.prepare_management_relationship_review(
+                mutation
+            )
+            if review["required"]:
+                if not _can_directly_change_management_relationships():
+                    raise ValueError(
+                        "Direct management relationship changes require an eligible FT Supervisor, "
+                        "Manager, Division Manager, or Grandmaster."
+                    )
+                return _render_management_relationship_review(
+                    review,
+                    "neostaffing.org_chart",
+                    _org_chart_return_values(unit.id),
+                )
+        staffing_service.update_unit(unit, request.form)
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Staffing unit updated.", "success")
+    return redirect(
+        url_for("neostaffing.org_chart", **_org_chart_return_values(unit.id))
     )
 
 
@@ -844,11 +873,143 @@ def management_assignments():
 @bp.route("/app-management/management-assignments", methods=["POST"])
 @neostaffing_app_required(permission_key=MANAGEMENT_ASSIGN_PERMISSION)
 def create_management_assignment():
+    redirect_endpoint, redirect_values = _management_assignment_return_target()
+    if not _can_directly_change_management_relationships():
+        flash(
+            "Direct management assignment changes require an eligible FT Supervisor, Manager, "
+            "Division Manager, or Grandmaster.",
+            "error",
+        )
+        return redirect(url_for(redirect_endpoint, **(redirect_values or {})))
+    try:
+        mutation = management_review_service.assignment_add_mutation(
+            request.form.get("person_id"),
+            request.form.get("unit_id"),
+            request.form.get("leadership_level"),
+        )
+        review = management_review_service.prepare_management_relationship_review(
+            mutation
+        )
+        if review["required"]:
+            return _render_management_relationship_review(
+                review,
+                redirect_endpoint,
+                redirect_values,
+            )
+        staffing_service.create_leadership_assignment(
+            _get_person(mutation["person_id"]),
+            _get_unit(mutation["unit_id"]),
+            mutation["leadership_level"],
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Management assignment added.", "success")
+    return redirect(url_for(redirect_endpoint, **(redirect_values or {})))
+
+
+@bp.route("/app-management/management-assignments/<int:assignment_id>/delete", methods=["POST"])
+@neostaffing_app_required(permission_key=MANAGEMENT_ASSIGN_PERMISSION)
+def delete_management_assignment(assignment_id):
+    assignment = db.session.get(StaffingLeadershipAssignment, assignment_id)
+    if not assignment:
+        flash("Management assignment was not found.", "error")
+        return redirect(url_for("neostaffing.management_assignments"))
     return_unit_id = request.form.get("return_unit_id", "").strip()
-    return_people = request.form.get("return_people", "").strip()
-    if return_people:
-        redirect_endpoint = "neostaffing.people"
-        redirect_values = {
+    redirect_endpoint = "neostaffing.org_chart" if return_unit_id else "neostaffing.management_assignments"
+    redirect_values = {"unit_id": return_unit_id} if return_unit_id else None
+    if not _can_directly_change_management_relationships():
+        flash(
+            "Direct management assignment changes require an eligible FT Supervisor, Manager, "
+            "Division Manager, or Grandmaster.",
+            "error",
+        )
+        return redirect(url_for(redirect_endpoint, **(redirect_values or {})))
+    try:
+        mutation = management_review_service.assignment_remove_mutation(assignment.id)
+        review = management_review_service.prepare_management_relationship_review(
+            mutation
+        )
+        if review["required"]:
+            return _render_management_relationship_review(
+                review,
+                redirect_endpoint,
+                redirect_values,
+            )
+        staffing_service.delete_leadership_assignment(assignment)
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Management assignment deactivated.", "success")
+    return redirect(url_for(redirect_endpoint, **(redirect_values or {})))
+
+
+@bp.route("/app-management/management-review/apply", methods=["POST"])
+@neostaffing_app_required(permission_key=ORG_CHART_VIEW_PERMISSION)
+def apply_management_relationship_review():
+    redirect_endpoint, redirect_values = _review_return_target()
+    try:
+        mutation = _review_mutation_from_form()
+        permission_key = (
+            ORG_CHART_EDIT_STRUCTURE_PERMISSION
+            if mutation["kind"] == "update_unit"
+            else MANAGEMENT_ASSIGN_PERMISSION
+        )
+        if not user_can(permission_key):
+            raise ValueError("You do not have permission to apply this operational change.")
+        if not _can_directly_change_management_relationships():
+            raise ValueError(
+                "Direct management relationship changes require an eligible FT Supervisor, "
+                "Manager, Division Manager, or Grandmaster."
+            )
+        management_review_service.apply_management_relationship_review(
+            mutation,
+            request.form.get("review_revision"),
+            _management_review_decisions(),
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Operational assignment and Reports To review applied.", "success")
+    return redirect(url_for(redirect_endpoint, **(redirect_values or {})))
+
+
+def _can_directly_change_management_relationships():
+    return bool(
+        staffing_service.can_user_directly_edit_reporting_relationship(
+            current_user,
+            get_user_app_role(current_user, "neostaffing"),
+        )
+    )
+
+
+def _render_management_relationship_review(
+    review,
+    return_endpoint,
+    return_values=None,
+):
+    return render_template(
+        "neostaffing/management_relationship_review.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
+        review=review,
+        return_endpoint=return_endpoint,
+        return_values=return_values or {},
+        cancel_url=url_for(return_endpoint, **(return_values or {})),
+        classification_labels=staffing_service.CLASSIFICATION_LABELS,
+        unit_type_labels=staffing_service.UNIT_TYPE_LABELS,
+    )
+
+
+def _management_assignment_return_target():
+    return_unit_id = request.form.get("return_unit_id", "").strip()
+    if request.form.get("return_people", "").strip():
+        return "neostaffing.people", {
             key: request.form.get(key, "").strip()
             for key in (
                 "sort_id",
@@ -865,37 +1026,89 @@ def create_management_assignment():
             )
             if request.form.get(key, "").strip()
         }
-    else:
-        redirect_endpoint = "neostaffing.org_chart" if return_unit_id else "neostaffing.management_assignments"
-        redirect_values = {"unit_id": return_unit_id} if return_unit_id else None
-    return _mutate(
-        lambda: staffing_service.create_leadership_assignment(
-            _get_person(request.form.get("person_id")),
-            _get_unit(request.form.get("unit_id")),
-            request.form.get("leadership_level") or None,
-        ),
-        "Management assignment added.",
-        redirect_endpoint,
-        redirect_values,
-    )
+    if return_unit_id:
+        return "neostaffing.org_chart", {"unit_id": return_unit_id}
+    return "neostaffing.management_assignments", {}
 
 
-@bp.route("/app-management/management-assignments/<int:assignment_id>/delete", methods=["POST"])
-@neostaffing_app_required(permission_key=MANAGEMENT_ASSIGN_PERMISSION)
-def delete_management_assignment(assignment_id):
-    assignment = db.session.get(StaffingLeadershipAssignment, assignment_id)
-    if not assignment:
-        flash("Management assignment was not found.", "error")
-        return redirect(url_for("neostaffing.management_assignments"))
-    return_unit_id = request.form.get("return_unit_id", "").strip()
-    redirect_endpoint = "neostaffing.org_chart" if return_unit_id else "neostaffing.management_assignments"
-    redirect_values = {"unit_id": return_unit_id} if return_unit_id else None
-    return _mutate(
-        lambda: staffing_service.delete_leadership_assignment(assignment),
-        "Management assignment deactivated.",
-        redirect_endpoint,
-        redirect_values,
-    )
+def _review_return_target():
+    endpoint = request.form.get("return_endpoint", "").strip()
+    allowed_keys = {
+        "neostaffing.people": {
+            "sort_id",
+            "operation_id",
+            "department_id",
+            "work_area_id",
+            "classification",
+            "employee_status",
+            "active",
+            "assignment_status",
+            "search",
+            "page",
+            "per_page",
+        },
+        "neostaffing.org_chart": {"unit_id"},
+        "neostaffing.management_assignments": set(),
+    }
+    if endpoint not in allowed_keys:
+        endpoint = "neostaffing.org_chart"
+    values = {
+        key.removeprefix("return_value_"): value.strip()
+        for key, value in request.form.items()
+        if key.startswith("return_value_")
+        and key.removeprefix("return_value_") in allowed_keys[endpoint]
+        and value.strip()
+    }
+    return endpoint, values
+
+
+def _review_mutation_from_form():
+    kind = request.form.get("kind", "").strip()
+    if kind == "add_assignment":
+        return management_review_service.assignment_add_mutation(
+            request.form.get("person_id"),
+            request.form.get("unit_id"),
+            request.form.get("leadership_level"),
+        )
+    if kind == "remove_assignment":
+        return management_review_service.assignment_remove_mutation(
+            request.form.get("assignment_id")
+        )
+    if kind != "update_unit":
+        raise ValueError("Unsupported management relationship review.")
+    unit = _get_unit(request.form.get("unit_id"))
+    normalized = staffing_service.validated_unit_update_values(unit, request.form)
+    return management_review_service.unit_update_mutation(unit, normalized)
+
+
+def _management_review_decisions():
+    decisions = {}
+    for raw_person_id in request.form.getlist("affected_person_ids"):
+        try:
+            person_id = int(raw_person_id)
+        except (TypeError, ValueError):
+            raise ValueError("Invalid management relationship review person.")
+        raw_action = request.form.get(f"relationship_action_{person_id}", "").strip()
+        target_id = None
+        if raw_action.startswith("target:"):
+            action = "change"
+            target_id = raw_action.partition(":")[2]
+        elif raw_action == "different":
+            action = "change"
+            target_id = request.form.get(f"different_reports_to_{person_id}")
+        elif raw_action == "keep":
+            action = "keep"
+        else:
+            raise ValueError("Choose a Reports To decision for every affected person.")
+        decisions[person_id] = {
+            "action": action,
+            "reports_to_person_id": target_id,
+            "expected_revision": request.form.get(
+                f"relationship_revision_{person_id}",
+                "",
+            ).strip(),
+        }
+    return decisions
 
 
 def _mutate(callback, success_message, redirect_endpoint, redirect_values=None):

@@ -13,6 +13,7 @@ from app.models import (
     StaffingDailyAttendance,
     StaffingLeadershipAssignment,
     StaffingPerson,
+    StaffingReportingRelationship,
     StaffingUnit,
     StaffingWorkAssignment,
     User,
@@ -285,6 +286,15 @@ class NeoStaffingRoutesTest(unittest.TestCase):
     def test_org_chart_uses_hierarchy_driven_visual_layout(self):
         user = self._user("staffing_dashboard_master")
         self._grant_app_access(user, "neostaffing", "master")
+        editor = StaffingPerson(
+            employee_id="10000",
+            first_name="Staffing",
+            last_name="Editor",
+            seniority_date=date(2018, 1, 1),
+            classification="full_time_supervisor",
+            active=True,
+        )
+        user.employee_id = editor.employee_id
         sort = StaffingUnit(unit_type="sort", name="Night Sort", display_order=1)
         operation = StaffingUnit(
             unit_type="operation",
@@ -313,7 +323,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             classification="part_time",
             active=True,
         )
-        db.session.add_all([sort, operation, department, work_area, person])
+        db.session.add_all([sort, operation, department, work_area, person, editor])
         db.session.flush()
         direct_work_area = staffing_service.create_unit(
             {
@@ -403,7 +413,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
     def test_org_chart_mutations_preserve_selected_unit_context(self):
         user = self._user("staffing_org_state_master")
         self._grant_app_access(user, "neostaffing", "master")
-        _sort, operation, _department, work_area = self._staffing_hierarchy()
+        sort, operation, _department, work_area = self._staffing_hierarchy()
         manager = staffing_service.create_person(
             {
                 "employee_id": "STATE200",
@@ -413,7 +423,41 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "classification": "manager",
             }
         )
-        self._link_user_for_person(manager, "staffing_org_state_manager")
+        user.employee_id = manager.employee_id
+        other_operation = StaffingUnit(
+            unit_type="operation",
+            name="Other State Operation",
+            parent=sort,
+        )
+        division_manager = staffing_service.create_person(
+            {
+                "employee_id": "STATE201",
+                "first_name": "State",
+                "last_name": "Division",
+                "seniority_date": "2016-01-01",
+                "classification": "division_manager",
+            }
+        )
+        db.session.add(other_operation)
+        db.session.flush()
+        db.session.add_all(
+            [
+                StaffingLeadershipAssignment(
+                    person=manager,
+                    unit=other_operation,
+                    leadership_level="operation",
+                ),
+                StaffingLeadershipAssignment(
+                    person=division_manager,
+                    unit=sort,
+                    leadership_level="sort",
+                ),
+                StaffingReportingRelationship(
+                    person=manager,
+                    reports_to_person=division_manager,
+                ),
+            ]
+        )
         db.session.commit()
         self._login(user.username)
 
@@ -725,6 +769,16 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "classification": "part_time_supervisor",
             }
         )
+        editor = staffing_service.create_person(
+            {
+                "employee_id": "MG101",
+                "first_name": "Full Time",
+                "last_name": "Editor",
+                "seniority_date": "2018-01-01",
+                "classification": "full_time_supervisor",
+            }
+        )
+        simulator.employee_id = editor.employee_id
         self._link_user_for_person(supervisor, "staffing_mg100")
         db.session.commit()
 
@@ -782,10 +836,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(db.session.get(StaffingPerson, person.id).last_name, "Updated")
         self.assertEqual(management_page.status_code, 302)
         self.assertEqual(management_page.location, "/neostaffing/org-chart")
-        self.assertEqual(management.status_code, 302)
+        self.assertEqual(management.status_code, 200)
+        self.assertIn(b"Management Relationships Affected", management.data)
         self.assertEqual(
             StaffingLeadershipAssignment.query.filter_by(person_id=supervisor.id, unit_id=work_area.id).count(),
-            1,
+            0,
         )
         self.assertEqual(blocked_structure.status_code, 302)
         self.assertEqual(blocked_structure.location, "/neostaffing")
@@ -1017,6 +1072,16 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "classification": "part_time_supervisor",
             }
         )
+        editor = staffing_service.create_person(
+            {
+                "employee_id": "OG201",
+                "first_name": "Org",
+                "last_name": "Editor",
+                "seniority_date": "2017-01-01",
+                "classification": "full_time_supervisor",
+            }
+        )
+        simulator.employee_id = editor.employee_id
         self._link_user_for_person(supervisor, "staffing_og200")
         db.session.commit()
 
@@ -1068,13 +1133,15 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Linked User", simulator_page.data)
         self.assertNotIn(b"STRUCTURE ACTIONS", simulator_page.data)
         self.assertNotIn(b"SAVE UNIT", simulator_page.data)
-        self.assertEqual(assigned.status_code, 302)
-        self.assertEqual(assigned.location, f"/neostaffing/org-chart?unit_id={work_area.id}")
-        assignment = StaffingLeadershipAssignment.query.filter_by(
-            person_id=supervisor.id,
-            unit_id=work_area.id,
-        ).one()
-        self.assertEqual(assignment.person, supervisor)
+        self.assertEqual(assigned.status_code, 200)
+        self.assertIn(b"Management Relationships Affected", assigned.data)
+        self.assertEqual(
+            StaffingLeadershipAssignment.query.filter_by(
+                person_id=supervisor.id,
+                unit_id=work_area.id,
+            ).count(),
+            0,
+        )
         self.assertEqual(blocked_structure.status_code, 302)
         self.assertEqual(blocked_structure.location, "/neostaffing")
         self.assertIsNone(StaffingUnit.query.filter_by(name="Blocked Org Dept").first())
@@ -1083,7 +1150,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"STRUCTURE ACTIONS", master_page.data)
         self.assertIn(b"SAVE UNIT", master_page.data)
         self.assertIn(b"DEACTIVATE", master_page.data)
-        self.assertIn(b"MOVE", master_page.data)
+        self.assertIn(b"Move / Parent", master_page.data)
         self.assertEqual(created_structure.status_code, 302)
         self.assertIsNotNone(StaffingUnit.query.filter_by(name="Allowed Org Dept").first())
 
@@ -1235,6 +1302,16 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "classification": "manager",
             }
         )
+        editor = staffing_service.create_person(
+            {
+                "employee_id": "PD201",
+                "first_name": "People",
+                "last_name": "Editor",
+                "seniority_date": "2017-01-01",
+                "classification": "full_time_supervisor",
+            }
+        )
+        user.employee_id = editor.employee_id
         self._link_user_for_person(manager, "staffing_pd200")
         db.session.commit()
         self._login(user.username)
