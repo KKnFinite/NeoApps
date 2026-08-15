@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}NeoStaffing Requests{% endblock %}
+
+{% macro preserve_view(context, include_person=True) -%}
+    <input type="hidden" name="view" value="{{ context.filters.view }}">
+    <input type="hidden" name="queue" value="{{ context.filters.queue }}">
+    <input type="hidden" name="search" value="{{ context.filters.search }}">
+    {% if include_person and context.filters.person_id %}<input type="hidden" name="person_id" value="{{ context.filters.person_id }}">{% endif %}
+{%- endmacro %}
+
+{% block content %}
+{% set context = requests_context %}
+<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="neostaffing-requests-title">
+    <div class="neostaffing-dashboard-shell">
+        {% include "neostaffing/_section_nav.html" %}
+
+        <main class="neostaffing-dashboard-main">
+            <header class="neostaffing-dashboard-topbar">
+                <div class="mobile-shell-duplicate-title">
+                    <h1 id="neostaffing-requests-title">Requests</h1>
+                </div>
+            </header>
+
+            <nav class="action-row" aria-label="Request history view">
+                {% for value, label in (("active", "ACTIVE"), ("history", "HISTORY"), ("all", "ALL")) %}
+                <a class="action-button{% if context.filters.view != value %} action-button-secondary{% endif %}" href="{{ url_for('neostaffing.change_requests', view=value, queue=context.filters.queue, search=context.filters.search, person_id=context.filters.person_id) }}" {% if context.filters.view == value %}aria-current="page"{% endif %}>{{ label }}</a>
+                {% endfor %}
+            </nav>
+
+            <section class="neostaffing-data-card" aria-label="Approval queue filters">
+                <div class="neostaffing-panel-heading">
+                    <h2>APPROVAL QUEUE</h2>
+                    {% if context.unassigned_count %}<span class="neostaffing-status-pill is-yellow">{{ context.unassigned_count }} UNASSIGNED</span>{% endif %}
+                </div>
+                <div class="action-row">
+                    {% for value, label in (("routed", "ROUTED"), ("purview", "MY PURVIEW"), ("unassigned", "UNASSIGNED"), ("all", "ALL REQUESTS")) %}
+                    <a class="action-button{% if context.filters.queue != value %} action-button-secondary{% endif %}" href="{{ url_for('neostaffing.change_requests', view=context.filters.view, queue=value, search=context.filters.search, person_id=context.filters.person_id) }}" {% if context.filters.queue == value %}aria-current="page"{% endif %}>{{ label }}</a>
+                    {% endfor %}
+                </div>
+                <form class="operation-form neostaffing-filter-form" method="get">
+                    <input type="hidden" name="view" value="{{ context.filters.view }}">
+                    <input type="hidden" name="queue" value="{{ context.filters.queue }}">
+                    {% if context.filters.person_id %}<input type="hidden" name="person_id" value="{{ context.filters.person_id }}">{% endif %}
+                    <label><span>Find Request</span><input name="search" value="{{ context.filters.search }}" placeholder="Employee name, ID, or request number"></label>
+                    <button type="submit">SEARCH</button>
+                </form>
+            </section>
+
+            {% if context.can_submit %}
+            <section class="neostaffing-data-card" aria-labelledby="new-change-request-title">
+                <div class="neostaffing-panel-heading">
+                    <h2 id="new-change-request-title">NEW EMPLOYEE REQUEST</h2>
+                </div>
+                <form class="operation-form" method="get">
+                    <input type="hidden" name="view" value="{{ context.filters.view }}">
+                    <input type="hidden" name="queue" value="{{ context.filters.queue }}">
+                    <input type="hidden" name="search" value="{{ context.filters.search }}">
+                    <label><span>Employee</span>
+                        <select name="person_id" required>
+                            <option value="">Select employee</option>
+                            {% for person in context.candidates %}
+                            <option value="{{ person.id }}" {% if context.selected_person and context.selected_person.id == person.id %}selected{% endif %}>{{ person.full_name }} · {{ person.employee_id }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <button type="submit">LOAD EMPLOYEE</button>
+                </form>
+
+                {% if context.selected_person %}
+                <form class="operation-form" method="post" action="{{ url_for('neostaffing.submit_change_request') }}">
+                    {{ preserve_view(context, False) }}
+                    <input type="hidden" name="person_id" value="{{ context.selected_person.id }}">
+                    <div class="neostaffing-panel-heading">
+                        <div>
+                            <strong>{{ context.selected_person.full_name }}</strong>
+                            <span>{{ context.selected_person.employee_id }}</span>
+                        </div>
+                    </div>
+                    <label><span>First Name · Current: {{ context.selected_values.first_name }}</span><input name="requested_first_name" placeholder="No change"></label>
+                    <label><span>Last Name · Current: {{ context.selected_values.last_name }}</span><input name="requested_last_name" placeholder="No change"></label>
+                    <label><span>Seniority Date · Current: {{ context.selected_values.seniority_date }}</span><input type="date" name="requested_seniority_date"></label>
+                    <label><span>Employee Status · Current: {{ context.selected_values.employee_status|replace('_', ' ')|title }}</span>
+                        <select name="requested_employee_status">
+                            <option value="">No change</option>
+                            {% for value, label in context.employee_status_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <label><span>Classification · Current: {{ context.selected_values.classification|replace('_', ' ')|title }}</span>
+                        <select name="requested_classification">
+                            <option value="">No change</option>
+                            {% for value, label in context.classification_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <label><span>Work Area · Current: {{ context.selected_values.work_area.name if context.selected_values.work_area else "Unassigned" }}</span>
+                        <select name="requested_work_area_unit_id">
+                            <option value="">No change</option>
+                            <option value="__unassigned__">Unassigned</option>
+                            {% for work_area in context.work_areas %}<option value="{{ work_area.id }}">{{ work_area.name }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <label><span>Request Note</span><textarea name="request_note" rows="2"></textarea></label>
+                    <button type="submit">SUBMIT REQUEST</button>
+                </form>
+                {% endif %}
+            </section>
+            {% endif %}
+
+            <section aria-label="Employee change requests">
+                {% for row in context.rows %}
+                <article class="neostaffing-data-card" data-change-request-id="{{ row.request.id }}">
+                    <div class="neostaffing-panel-heading">
+                        <div>
+                            <h2>{{ row.person.full_name }} · {{ row.person.employee_id }}</h2>
+                            <span>REQUEST #{{ row.request.id }} · {{ row.request.submitted_at.strftime("%b %d, %Y %H:%M") }}</span>
+                        </div>
+                        {% if row.overdue %}<span class="neostaffing-status-pill is-red">OVERDUE</span>{% elif row.request.status == "pending" %}<span class="neostaffing-status-pill is-yellow">PENDING</span>{% else %}<span class="neostaffing-status-pill is-green">COMPLETED</span>{% endif %}
+                    </div>
+                    <p><strong>Submitted by:</strong> {{ row.submitter.display_name if row.submitter else "Unknown user" }}</p>
+                    <p><strong>Approval route:</strong>
+                        {% if row.routed_people %}{{ row.routed_people|map(attribute="full_name")|join(", ") }}{% else %}UNASSIGNED APPROVALS{% endif %}
+                    </p>
+                    {% if row.request.request_note %}<p><strong>Note:</strong> {{ row.request.request_note }}</p>{% endif %}
+
+                    <div class="table-shell">
+                        <table>
+                            <thead><tr><th>Field</th><th>Current</th><th>Requested</th><th>Status</th><th>Action</th></tr></thead>
+                            <tbody>
+                                {% for field in row.fields %}
+                                <tr data-change-request-item-id="{{ field.item.id }}">
+                                    <td><strong>{{ field.label }}</strong></td>
+                                    <td>{{ field.original }}</td>
+                                    <td>{{ field.requested }}</td>
+                                    <td>
+                                        <span class="neostaffing-status-pill{% if field.item.status == 'approved' %} is-green{% elif field.item.status in ('denied', 'superseded') %} is-red{% elif field.item.status == 'pending' %} is-yellow{% endif %}">{{ field.status_label }}</span>
+                                        {% if field.item.decision_reason %}<small>{{ field.item.decision_reason }}</small>{% endif %}
+                                    </td>
+                                    <td>
+                                        {% if field.can_approve %}
+                                        <form class="operation-form" method="post" action="{{ url_for('neostaffing.decide_change_request_item', item_id=field.item.id) }}">
+                                            {{ preserve_view(context) }}
+                                            <input type="hidden" name="expected_revision" value="{{ field.revision }}">
+                                            <label><span>Denial Reason</span><input name="reason"></label>
+                                            <div class="action-row">
+                                                <button type="submit" name="action" value="approve">APPROVE FIELD</button>
+                                                <button type="submit" name="action" value="deny">DENY FIELD</button>
+                                            </div>
+                                        </form>
+                                        {% endif %}
+                                        {% if field.can_withdraw %}
+                                        <form class="operation-form" method="post" action="{{ url_for('neostaffing.withdraw_change_request_item', item_id=field.item.id) }}">
+                                            {{ preserve_view(context) }}
+                                            <input type="hidden" name="expected_revision" value="{{ field.revision }}">
+                                            <label><span>Withdrawal Reason</span><input name="reason"></label>
+                                            <button type="submit">WITHDRAW FIELD</button>
+                                        </form>
+                                        {% endif %}
+                                        {% if field.can_reverse %}
+                                        <form class="operation-form" method="post" action="{{ url_for('neostaffing.reverse_change_request_item', item_id=field.item.id) }}">
+                                            {{ preserve_view(context) }}
+                                            <input type="hidden" name="expected_revision" value="{{ field.revision }}">
+                                            <label><span>Reversal Reason</span><input name="reason" required></label>
+                                            <button type="submit">REVERSE DECISION</button>
+                                        </form>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if row.can_bulk_approve %}
+                    <form class="operation-form" method="post" action="{{ url_for('neostaffing.decide_change_request_remaining', request_id=row.request.id) }}">
+                        {{ preserve_view(context) }}
+                        <label><span>Bulk Denial Reason</span><input name="reason"></label>
+                        <div class="action-row">
+                            <button type="submit" name="action" value="approve">APPROVE ALL PENDING</button>
+                            <button type="submit" name="action" value="deny">DENY ALL PENDING</button>
+                        </div>
+                    </form>
+                    {% endif %}
+                    {% if row.can_bulk_withdraw %}
+                    <form class="operation-form" method="post" action="{{ url_for('neostaffing.withdraw_change_request_remaining', request_id=row.request.id) }}">
+                        {{ preserve_view(context) }}
+                        <label><span>Withdrawal Reason</span><input name="reason"></label>
+                        <button type="submit">WITHDRAW REMAINING</button>
+                    </form>
+                    {% endif %}
+                </article>
+                {% else %}
+                <article class="neostaffing-data-card">
+                    <h2>NO REQUESTS</h2>
+                </article>
+                {% endfor %}
+            </section>
+        </main>
+    </div>
+</section>
+{% endblock %}

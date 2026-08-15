@@ -80,6 +80,9 @@ from app.services.neostaffing_attendance_schema import (
 from app.services.neostaffing_reporting_schema import (
     ensure_neostaffing_reporting_relationship_table,
 )
+from app.services.neostaffing_change_request_schema import (
+    ensure_neostaffing_change_request_tables,
+)
 from app.services.shell_metadata import resolve_shell_metadata
 from app.services.time_display import format_local_hhmm
 
@@ -116,6 +119,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     ensure_neoermac_uld_workspace_columns(app)
     ensure_neostaffing_attendance_columns(app)
     ensure_neostaffing_reporting_relationship_table(app)
+    ensure_neostaffing_change_request_tables(app)
 
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)

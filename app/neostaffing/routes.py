@@ -14,6 +14,7 @@ from app.models import (
 from app.neostaffing import bp
 from app.services.access_control import get_user_app_role, user_can_access_app, user_has_app_access
 from app.services import neostaffing as staffing_service
+from app.services import neostaffing_change_requests as change_request_service
 from app.services.permission_rules import ensure_default_permission_rules, user_can
 
 
@@ -28,6 +29,9 @@ ORG_CHART_EDIT_STRUCTURE_PERMISSION = "neostaffing.org_chart.edit_structure"
 REPORTS_VIEW_PERMISSION = "neostaffing.reports.view"
 VACATION_SELECTION_VIEW_PERMISSION = "neostaffing.vacation_selection.view"
 MANAGEMENT_ASSIGN_PERMISSION = "neostaffing.management.assign"
+CHANGE_REQUEST_VIEW_PERMISSION = "neostaffing.change_requests.view"
+CHANGE_REQUEST_SUBMIT_PERMISSION = "neostaffing.change_requests.submit"
+CHANGE_REQUEST_APPROVE_PERMISSION = "neostaffing.change_requests.approve"
 HIERARCHY_VIEW_PERMISSION = "neostaffing.hierarchy.view"
 PLANNED_STAFFING_EDIT_PERMISSION = "neostaffing.planned_staffing.edit"
 PERMISSIONS_VIEW_PERMISSION = "neostaffing.permissions.view"
@@ -59,6 +63,9 @@ NEOSTAFFING_PERMISSION_LABELS = {
     "neostaffing.work_assignments.edit": "Edit Work Assignments",
     "neostaffing.management_assignments.view": "View Management Assignments",
     "neostaffing.management_assignments.edit": "Edit Management Assignments",
+    "neostaffing.change_requests.view": "View Change Requests",
+    "neostaffing.change_requests.submit": "Submit Change Requests",
+    "neostaffing.change_requests.approve": "Approve Change Requests",
 }
 
 
@@ -211,6 +218,150 @@ def people_attendance():
     if request.method == "GET":
         return redirect(url_for("neostaffing.attendance", **request.args))
     return _handle_attendance()
+
+
+@bp.route("/requests")
+@neostaffing_app_required(permission_key=CHANGE_REQUEST_VIEW_PERMISSION)
+def change_requests():
+    cleanup = change_request_service.cleanup_change_request_retention()
+    if cleanup["changed"]:
+        db.session.commit()
+    context = change_request_service.change_request_context(
+        {
+            "view": request.args.get("view", "").strip(),
+            "queue": request.args.get("queue", "").strip(),
+            "search": request.args.get("search", "").strip(),
+            "person_id": request.args.get("person_id", "").strip(),
+        },
+        current_user,
+    )
+    return render_template(
+        "neostaffing/change_requests.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
+        requests_context=context,
+    )
+
+
+@bp.route("/requests/submit", methods=["POST"])
+@neostaffing_app_required(permission_key=CHANGE_REQUEST_SUBMIT_PERMISSION)
+def submit_change_request():
+    try:
+        change_request_service.cleanup_change_request_retention()
+        change_request = change_request_service.submit_change_request(
+            request.form,
+            current_user,
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        if change_request.status == "completed":
+            flash("Employee changes applied and recorded.", "success")
+        else:
+            flash("Employee change request submitted.", "success")
+    return redirect(_change_requests_return_url())
+
+
+@bp.route("/requests/items/<int:item_id>/decision", methods=["POST"])
+@neostaffing_app_required(permission_key=CHANGE_REQUEST_APPROVE_PERMISSION)
+def decide_change_request_item(item_id):
+    try:
+        change_request_service.cleanup_change_request_retention()
+        rows = change_request_service.decide_change_request_item(
+            item_id,
+            request.form.get("action"),
+            request.form.get("reason"),
+            current_user,
+            request.form.get("expected_revision"),
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        status = rows[0].status if rows else "updated"
+        flash(f"Request field {status}.", "success")
+    return redirect(_change_requests_return_url())
+
+
+@bp.route("/requests/<int:request_id>/decision", methods=["POST"])
+@neostaffing_app_required(permission_key=CHANGE_REQUEST_APPROVE_PERMISSION)
+def decide_change_request_remaining(request_id):
+    try:
+        change_request_service.cleanup_change_request_retention()
+        rows = change_request_service.decide_change_request_remaining(
+            request_id,
+            request.form.get("action"),
+            request.form.get("reason"),
+            current_user,
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash(f"Updated {len(rows)} Pending request fields.", "success")
+    return redirect(_change_requests_return_url())
+
+
+@bp.route("/requests/items/<int:item_id>/withdraw", methods=["POST"])
+@neostaffing_app_required(permission_key=CHANGE_REQUEST_SUBMIT_PERMISSION)
+def withdraw_change_request_item(item_id):
+    try:
+        change_request_service.cleanup_change_request_retention()
+        change_request_service.withdraw_change_request_item(
+            item_id,
+            request.form.get("reason"),
+            current_user,
+            request.form.get("expected_revision"),
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Request field withdrawn.", "success")
+    return redirect(_change_requests_return_url())
+
+
+@bp.route("/requests/<int:request_id>/withdraw", methods=["POST"])
+@neostaffing_app_required(permission_key=CHANGE_REQUEST_SUBMIT_PERMISSION)
+def withdraw_change_request_remaining(request_id):
+    try:
+        change_request_service.cleanup_change_request_retention()
+        count = change_request_service.withdraw_change_request_remaining(
+            request_id,
+            request.form.get("reason"),
+            current_user,
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash(f"Withdrew {count} remaining request fields.", "success")
+    return redirect(_change_requests_return_url())
+
+
+@bp.route("/requests/items/<int:item_id>/reverse", methods=["POST"])
+@neostaffing_app_required(permission_key=CHANGE_REQUEST_APPROVE_PERMISSION)
+def reverse_change_request_item(item_id):
+    try:
+        change_request_service.cleanup_change_request_retention()
+        change_request_service.reverse_change_request_item(
+            item_id,
+            request.form.get("reason"),
+            current_user,
+            request.form.get("expected_revision"),
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Request decision reversed to Pending.", "success")
+    return redirect(_change_requests_return_url())
 
 
 def _handle_attendance():
@@ -901,3 +1052,12 @@ def _people_return_url(person_id=None):
     if person_id:
         query["person_id"] = person_id
     return url_for("neostaffing.people", **query)
+
+
+def _change_requests_return_url():
+    query = {
+        key: request.form.get(key, "").strip()
+        for key in ("view", "queue", "search", "person_id")
+        if request.form.get(key, "").strip()
+    }
+    return url_for("neostaffing.change_requests", **query)

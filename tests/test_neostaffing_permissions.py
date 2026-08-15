@@ -148,6 +148,28 @@ class NeoStaffingPermissionsTest(unittest.TestCase):
         self.assertIn(b'<option value="operator" selected>', attendance_row)
         self.assertEqual(self._rule("neostaffing.attendance.take").minimum_role, "operator")
 
+    def test_change_request_permissions_have_configurable_safe_defaults(self):
+        user = self._user_with_access("staffing_request_rules", "grandmaster")
+        self._login(user)
+
+        response = self.client.get("/neostaffing/permissions")
+
+        self.assertIn(b"View Change Requests", response.data)
+        self.assertIn(b"Submit Change Requests", response.data)
+        self.assertIn(b"Approve Change Requests", response.data)
+        self.assertEqual(
+            self._rule("neostaffing.change_requests.view").minimum_role,
+            "watcher",
+        )
+        self.assertEqual(
+            self._rule("neostaffing.change_requests.submit").minimum_role,
+            "operator",
+        )
+        self.assertEqual(
+            self._rule("neostaffing.change_requests.approve").minimum_role,
+            "operator",
+        )
+
     def test_grandmaster_always_passes_configured_neostaffing_permission(self):
         user = self._user_with_access("staffing_unrestricted", "grandmaster")
         self._rule("neostaffing.board.view").minimum_role = "watcher"

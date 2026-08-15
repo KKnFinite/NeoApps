@@ -8,6 +8,7 @@ from sqlalchemy.orm import joinedload
 from app.extensions import db
 from app.models import (
     StaffingDailyAttendance,
+    StaffingChangeRequest,
     Gateway,
     StaffingLeadershipAssignment,
     StaffingPerson,
@@ -221,6 +222,17 @@ def delete_person(person):
     if reporting_count:
         raise ValueError(
             "This person has Reports To history and cannot be deleted. Deactivate the person instead."
+        )
+    change_request_count = StaffingChangeRequest.query.filter(
+        or_(
+            StaffingChangeRequest.person_id == person.id,
+            StaffingChangeRequest.submitted_by_person_id == person.id,
+        )
+    ).count()
+    if change_request_count:
+        raise ValueError(
+            "This person has employee change-request history and cannot be deleted. "
+            "Deactivate the person instead."
         )
     StaffingWorkAssignment.query.filter_by(person_id=person.id).delete()
     StaffingLeadershipAssignment.query.filter_by(person_id=person.id).delete()

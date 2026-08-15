@@ -407,6 +407,21 @@ DEFAULT_PERMISSION_RULES = (
         "Record or update NeoStaffing daily attendance.",
     ),
     (
+        "neostaffing.change_requests.view",
+        "watcher",
+        "View NeoStaffing employee change requests and history.",
+    ),
+    (
+        "neostaffing.change_requests.submit",
+        "operator",
+        "Submit or withdraw PT Supervisor employee change requests.",
+    ),
+    (
+        "neostaffing.change_requests.approve",
+        "operator",
+        "Approve, deny, or reverse NeoStaffing employee change requests when management classification permits.",
+    ),
+    (
         "neostaffing.org_chart.view",
         "watcher",
         "View the NeoStaffing Org Chart.",
@@ -1054,6 +1069,17 @@ PERMISSION_RULE_ITEMS = (
         {
             "view": "neostaffing.people.view",
             "edit": "neostaffing.attendance.take",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.change_requests",
+        "Change Requests",
+        "NeoStaffing PT Supervisor employee change requests and approval queue.",
+        {
+            "view": "neostaffing.change_requests.view",
+            "edit": "neostaffing.change_requests.approve",
+            "trigger": "neostaffing.change_requests.submit",
         },
     ),
     (

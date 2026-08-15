@@ -4,6 +4,9 @@
     <a href="{{ url_for('neostaffing.org_chart') }}" {% if request.endpoint in ("neostaffing.org_chart", "neostaffing.hierarchy") %}aria-current="page"{% endif %}>Org Chart</a>
     <a href="{{ url_for('neostaffing.reports') }}" {% if request.endpoint == "neostaffing.reports" %}aria-current="page"{% endif %}>Reports</a>
     <a href="{{ url_for('neostaffing.attendance') }}" {% if request.endpoint in ("neostaffing.attendance", "neostaffing.people_attendance") %}aria-current="page"{% endif %}>Attendance</a>
+    {% if user_can("neostaffing.change_requests.view") %}
+    <a href="{{ url_for('neostaffing.change_requests') }}" {% if request.endpoint == "neostaffing.change_requests" %}aria-current="page"{% endif %}>Requests</a>
+    {% endif %}
     {% if user_can("neostaffing.vacation_selection.view") %}
     <a href="{{ url_for('neostaffing.vacation_selection') }}" {% if request.endpoint == "neostaffing.vacation_selection" %}aria-current="page"{% endif %}>Vacation Selection</a>
     {% endif %}

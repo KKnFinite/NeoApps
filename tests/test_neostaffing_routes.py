@@ -69,7 +69,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"/static/images/icons/neostaffing/inapp/neostaffing-inapp-128.png", response.data)
         self.assertIn(b"neostaffing-header-title", response.data)
         self.assertIn(b"neo-brand-title__node--staffing", response.data)
-        self.assertEqual(response.data.count(b"neostaffing-menu-tile"), 5)
+        self.assertEqual(response.data.count(b"neostaffing-menu-tile"), 6)
         self.assertNotIn(b'href="/neostaffing/people/attendance" class="neostaffing-menu-tile"', response.data)
         self.assertNotIn(b"APP ROLE", response.data)
         self.assertNotIn(b"neostaffing-home-header", response.data)
