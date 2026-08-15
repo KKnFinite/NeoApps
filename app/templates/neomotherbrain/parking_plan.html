@@ -335,6 +335,14 @@
         {% endif %}
     </section>
 
+    {% if can_edit_parking_plan %}
+    <script type="application/json" data-parking-picker-bootstrap>{{ {
+        "all_tails": tail_rows | map(attribute="tail") | list,
+        "unassigned_tails": unassigned_tail_rows | map(attribute="tail") | list,
+    } | tojson }}</script>
+    <datalist id="parking-tail-picker" data-direct-slot-options></datalist>
+    {% endif %}
+
     <section class="parking-layout parking-layout-with-sidebar">
         <aside class="parking-left-rail" aria-label="Manage sort navigation and unparked tails">
             {% include "neomotherbrain/_manage_sort_sidebar.html" %}
@@ -573,24 +581,12 @@
                                             autocomplete="off"
                                             autocapitalize="characters"
                                             placeholder="{{ 'SELECT TAIL' if unassigned_tail_rows else 'NO UNPARKED TAILS' }}"
-                                            list="parking-tail-picker-{{ position.code }}-{{ lane.number }}"
+                                            list="parking-tail-picker"
                                             data-direct-slot-input
                                             {% if not unassigned_tail_rows %}disabled{% endif %}
                                         >
-                                        <datalist id="parking-tail-picker-{{ position.code }}-{{ lane.number }}" data-direct-slot-options>
-                                            {% for row in unassigned_tail_rows %}
-                                            <option value="{{ row.tail }}">{{ row.tail }}</option>
-                                            {% endfor %}
-                                        </datalist>
-                                        <select data-direct-slot-select aria-hidden="true" tabindex="-1">
-                                            <option value="">SELECT TAIL</option>
-                                            {% if unassigned_tail_rows %}
-                                                {% for row in unassigned_tail_rows %}
-                                                <option value="{{ row.tail }}">{{ row.tail }}</option>
-                                                {% endfor %}
-                                            {% else %}
-                                            <option value="" disabled>NO UNPARKED TAILS</option>
-                                            {% endif %}
+                                        <select data-direct-slot-select aria-hidden="true" tabindex="-1"{% if not unassigned_tail_rows %} disabled{% endif %}>
+                                            <option value="">{{ "SELECT TAIL" if unassigned_tail_rows else "NO UNPARKED TAILS" }}</option>
                                         </select>
                                 </div>
                                 <form
@@ -614,9 +610,6 @@
                                         <span>{{ "Swap Tail" if lane.row else "Change Tail" }}</span>
                                         <select name="tail_number" required>
                                             <option value="">SELECT TAIL</option>
-                                            {% for row in tail_rows %}
-                                            <option value="{{ row.tail }}" {% if lane.tail == row.tail %}selected{% endif %}>{{ row.tail }}</option>
-                                            {% endfor %}
                                         </select>
                                     </label>
                                     <button type="submit">{{ "Swap" if lane.row else "Change" }}</button>

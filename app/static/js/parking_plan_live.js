@@ -1,3 +1,111 @@
+((global) => {
+    "use strict";
+
+    const normalizeTail = (value) => String(value || "").trim().toUpperCase();
+    const uniqueTails = (values) => Array.from(new Set(
+        (values || []).map(normalizeTail).filter(Boolean)
+    ));
+    const normalizeState = (state = {}) => {
+        const allTails = uniqueTails(state.allTails || state.all_tails);
+        const knownTails = new Set(allTails);
+        const unassignedTails = uniqueTails(
+            state.unassignedTails || state.unassigned_tails
+        ).filter((tail) => knownTails.has(tail));
+        return {allTails, unassignedTails};
+    };
+    const fromLiveTails = (tails) => normalizeState({
+        allTails: (tails || []).map((row) => row.tail_number),
+        unassignedTails: (tails || [])
+            .filter((row) => row.source?.location === "unassigned")
+            .map((row) => row.tail_number),
+    });
+    const matchTail = (tails, rawValue) => {
+        const options = uniqueTails(tails);
+        const typed = normalizeTail(rawValue).replace(/\s+/g, "");
+        const prefixMatches = typed
+            ? options.filter((tail) => tail.startsWith(typed))
+            : [];
+        const partialMatches = typed
+            ? options.filter((tail) => tail.includes(typed))
+            : [];
+        return options.find((tail) => tail === typed)
+            || (prefixMatches.length === 1 ? prefixMatches[0] : "")
+            || (partialMatches.length === 1 ? partialMatches[0] : "")
+            || "";
+    };
+    const readBootstrap = (root) => {
+        const element = root?.querySelector("[data-parking-picker-bootstrap]");
+        if (!element) {
+            return normalizeState();
+        }
+        try {
+            return normalizeState(JSON.parse(element.textContent || "{}"));
+        } catch (_error) {
+            return normalizeState();
+        }
+    };
+    const makeOption = (documentRef, label, value, {disabled = false} = {}) => {
+        const option = documentRef.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        option.disabled = disabled;
+        return option;
+    };
+    const hydrate = (root, rawState, {canEdit = true} = {}) => {
+        const state = normalizeState(rawState);
+        const documentRef = root.ownerDocument || global.document;
+        const hasUnassigned = state.unassignedTails.length > 0;
+
+        root.querySelectorAll("[data-direct-slot-options]").forEach((list) => {
+            list.replaceChildren(...state.unassignedTails.map(
+                (tail) => makeOption(documentRef, tail, tail)
+            ));
+        });
+        root.querySelectorAll("[data-direct-slot-input]").forEach((input) => {
+            input.placeholder = hasUnassigned ? "SELECT TAIL" : "NO UNPARKED TAILS";
+            input.disabled = !canEdit || !hasUnassigned;
+        });
+        root.querySelectorAll("[data-direct-slot-select]").forEach((select) => {
+            const previous = normalizeTail(select.value);
+            const placeholder = hasUnassigned ? "SELECT TAIL" : "NO UNPARKED TAILS";
+            select.replaceChildren(
+                makeOption(documentRef, placeholder, ""),
+                ...state.unassignedTails.map(
+                    (tail) => makeOption(documentRef, tail, tail)
+                )
+            );
+            select.value = state.unassignedTails.includes(previous) ? previous : "";
+            select.disabled = !canEdit || !hasUnassigned;
+        });
+        root.querySelectorAll("[data-mobile-slot-tail-picker] select[name='tail_number']")
+            .forEach((select) => {
+                const previous = normalizeTail(select.value);
+                const occupied = normalizeTail(
+                    select.closest("[data-parking-lane]")?.dataset.occupiedTail
+                );
+                const selected = occupied || previous;
+                select.replaceChildren(
+                    makeOption(documentRef, "SELECT TAIL", ""),
+                    ...state.allTails.map((tail) => makeOption(documentRef, tail, tail))
+                );
+                select.value = state.allTails.includes(selected) ? selected : "";
+                if (!canEdit) {
+                    select.disabled = true;
+                }
+            });
+        return state;
+    };
+
+    global.NeoParkingPickerOptions = Object.freeze({
+        fromLiveTails,
+        hydrate,
+        matchTail,
+        normalizeState,
+        normalizeTail,
+        readBootstrap,
+    });
+})(window);
+
 (() => {
     "use strict";
 
@@ -36,7 +144,8 @@
         });
     }
 
-    const normalizeTail = (value) => String(value || "").trim().toUpperCase();
+    const pickerOptions = window.NeoParkingPickerOptions;
+    const normalizeTail = pickerOptions.normalizeTail;
     const normalizeTypedPosition = (value) => {
         const cleaned = String(value || "").trim().toUpperCase().replace(/\s+/g, "");
         const match = cleaned.match(/^([A-ER])0*(\d{1,2})$/);
@@ -166,31 +275,7 @@
     };
 
     const updatePickerOptions = (tails) => {
-        const allTails = (tails || []).map((row) => row.tail_number);
-        const unassigned = (tails || [])
-            .filter((row) => row.source?.location === "unassigned")
-            .map((row) => row.tail_number);
-        page.querySelectorAll("[data-direct-slot-options]").forEach((list) => {
-            list.replaceChildren(...unassigned.map((tail) => {
-                const option = document.createElement("option");
-                option.value = tail;
-                option.textContent = tail;
-                return option;
-            }));
-        });
-        page.querySelectorAll("[data-direct-slot-select]").forEach((select) => {
-            const previous = select.value;
-            select.replaceChildren(new Option("SELECT TAIL", ""));
-            unassigned.forEach((tail) => select.add(new Option(tail, tail)));
-            select.value = unassigned.includes(previous) ? previous : "";
-        });
-        page.querySelectorAll("[data-mobile-slot-tail-picker] select[name='tail_number']")
-            .forEach((select) => {
-                const previous = select.value;
-                select.replaceChildren(new Option("SELECT TAIL", ""));
-                allTails.forEach((tail) => select.add(new Option(tail, tail)));
-                select.value = allTails.includes(previous) ? previous : "";
-            });
+        pickerOptions.hydrate(page, pickerOptions.fromLiveTails(tails), {canEdit});
     };
 
     const updateSlot = (slot) => {
@@ -610,15 +695,7 @@
         lane.querySelector("[data-direct-slot-select]")?.options || []
     ).map((option) => normalizeTail(option.value)).filter(Boolean);
     const matchDirectPickerTail = (lane, rawValue) => {
-        const typed = normalizeTail(rawValue).replace(/\s+/g, "");
-        const options = tailOptionsForDirectPicker(lane);
-        return options.find((tail) => tail === typed)
-            || (typed && options.filter((tail) => tail.startsWith(typed)).length === 1
-                ? options.find((tail) => tail.startsWith(typed))
-                : "")
-            || (typed && options.filter((tail) => tail.includes(typed)).length === 1
-                ? options.find((tail) => tail.includes(typed))
-                : "");
+        return pickerOptions.matchTail(tailOptionsForDirectPicker(lane), rawValue);
     };
     const updateDirectPickerMatch = (input) => {
         const lane = input.closest("[data-parking-lane]");
@@ -880,6 +957,7 @@
         }
     });
 
+    pickerOptions.hydrate(page, pickerOptions.readBootstrap(page), {canEdit});
     bindLaneControls();
     bindTailCards();
 

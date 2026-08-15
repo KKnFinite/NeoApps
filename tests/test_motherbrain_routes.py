@@ -12581,8 +12581,24 @@ class MotherBrainRoutesTest(unittest.TestCase):
             self.assertIn(ramp_name, ramp_html)
         self.assertIn("parking-mobile-slot-change", a01_html)
         self.assertIn("data-mobile-slot-tail-picker", a01_html)
-        self.assertIn('<option value="N457UP" selected', a01_html)
-        self.assertIn('<option value="N349UP"', a01_html)
+        picker_match = re.search(
+            r'data-mobile-slot-tail-picker[\s\S]*?<select name="tail_number" required>'
+            r'([\s\S]*?)</select>',
+            a01_html,
+        )
+        self.assertIsNotNone(picker_match)
+        self.assertEqual(picker_match.group(1).count("<option"), 1)
+        self.assertNotIn('<option value="N457UP"', picker_match.group(1))
+        self.assertIn('data-occupied-tail="N457UP"', a01_html)
+        bootstrap_match = re.search(
+            r'<script type="application/json" data-parking-picker-bootstrap>'
+            r'([\s\S]*?)</script>',
+            html,
+        )
+        self.assertIsNotNone(bootstrap_match)
+        picker_state = json.loads(bootstrap_match.group(1))
+        self.assertEqual(picker_state["all_tails"], ["N349UP", "N457UP"])
+        self.assertEqual(picker_state["unassigned_tails"], ["N349UP"])
         self.assertIn("Swap Tail", a01_html)
         self.assertIn(">Swap</button>", a01_html)
         self.assertIn(
@@ -12643,7 +12659,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             css,
         )
 
-    def test_parking_plan_empty_slot_tail_picker_lists_unparked_tails(self):
+    def test_parking_plan_empty_slot_tail_picker_uses_shared_bootstrap_data(self):
         operation = self._parking_operation()
         self._parking_pair(operation, "N457UP", destination="LAX")
         self._parking_pair(operation, "N349UP", destination="ONT")
@@ -12660,15 +12676,54 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn('aria-label="Assign unparked tail to A01 Slot 1"', lane_html)
         self.assertIn("parking-direct-slot-assign", lane_html)
         self.assertIn("data-direct-slot-input", lane_html)
-        self.assertIn('list="parking-tail-picker-A01-1"', lane_html)
-        self.assertIn('data-direct-slot-options', lane_html)
+        self.assertIn('list="parking-tail-picker"', lane_html)
+        self.assertNotIn('data-direct-slot-options', lane_html)
         self.assertIn("data-direct-slot-select", lane_html)
-        self.assertIn('<option value="N457UP">N457UP</option>', lane_html)
-        self.assertIn('<option value="N349UP">N349UP</option>', lane_html)
+        self.assertNotIn('<option value="N457UP">N457UP</option>', lane_html)
+        self.assertNotIn('<option value="N349UP">N349UP</option>', lane_html)
+        self.assertEqual(html.count("data-direct-slot-options"), 1)
+        self.assertEqual(html.count('<datalist id="parking-tail-picker"'), 1)
+        bootstrap_match = re.search(
+            r'<script type="application/json" data-parking-picker-bootstrap>'
+            r'([\s\S]*?)</script>',
+            html,
+        )
+        self.assertIsNotNone(bootstrap_match)
+        picker_state = json.loads(bootstrap_match.group(1))
+        self.assertEqual(picker_state["all_tails"], ["N349UP", "N457UP"])
+        self.assertEqual(picker_state["unassigned_tails"], ["N349UP", "N457UP"])
+        self.assertIn("NeoParkingPickerOptions", client_source)
+        self.assertIn("readBootstrap", client_source)
         self.assertIn("matchDirectPickerTail", client_source)
         self.assertIn("tailOptionsForDirectPicker", client_source)
         self.assertIn("assignDirectPickerTail", client_source)
         self.assertIn("has-tail-picker-match", client_source)
+
+    def test_parking_plan_many_tails_does_not_repeat_picker_options_per_lane(self):
+        operation = self._parking_operation()
+        for index in range(48):
+            self._parking_pair(
+                operation,
+                f"N{index:03d}UP",
+                destination=f"D{index:02d}",
+            )
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+        mobile_picker_options = re.findall(
+            r'data-mobile-slot-tail-picker[\s\S]*?<select name="tail_number" required>'
+            r'([\s\S]*?)</select>',
+            html,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(html.count("data-direct-slot-options"), 1)
+        self.assertEqual(html.count("<datalist"), 1)
+        self.assertEqual(len(mobile_picker_options), 108)
+        self.assertTrue(all(options.count("<option") == 1 for options in mobile_picker_options))
+        self.assertLess(html.count("<option"), 500)
+        self.assertLess(len(response.data), 1_000_000)
 
     def test_parking_plan_desktop_visual_clarity_css_hooks_render(self):
         css = Path("app/static/css/base.css").read_text()
