@@ -12552,12 +12552,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
         )
         self.assertIn("parking-mobile-slot-change", html)
         self.assertIn("data-mobile-slot-tail-picker", html)
+        self.assertEqual(html.count("data-mobile-slot-tail-picker"), 1)
+        self.assertEqual(html.count("data-mobile-slot-editor-trigger"), 108)
         self.assertIn("SLOT 1", html)
         self.assertIn("SLOT 2", html)
         self.assertNotIn("LANE 1", html)
         self.assertIn("REPLACE SLOT 1", client_source)
         self.assertIn("USE SLOT 2", client_source)
-        self.assertIn("Change Tail", html)
+        self.assertIn("CHANGE TAIL", html)
         self.assertIn(">Change</button>", html)
 
     def test_mobile_parking_plan_renders_simple_ramp_cards_and_slot_picker(self):
@@ -12579,12 +12581,13 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("data-mobile-parking-ramp-cards", html)
         for ramp_name in ("ALPHA", "BRAVO", "CHARLIE", "DELTA", "ECHO", "REMOTE"):
             self.assertIn(ramp_name, ramp_html)
-        self.assertIn("parking-mobile-slot-change", a01_html)
-        self.assertIn("data-mobile-slot-tail-picker", a01_html)
+        self.assertIn("parking-mobile-slot-change-trigger", a01_html)
+        self.assertIn("data-mobile-slot-editor-trigger", a01_html)
+        self.assertNotIn("data-mobile-slot-tail-picker", a01_html)
         picker_match = re.search(
             r'data-mobile-slot-tail-picker[\s\S]*?<select name="tail_number" required>'
             r'([\s\S]*?)</select>',
-            a01_html,
+            html,
         )
         self.assertIsNotNone(picker_match)
         self.assertEqual(picker_match.group(1).count("<option"), 1)
@@ -12599,8 +12602,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         picker_state = json.loads(bootstrap_match.group(1))
         self.assertEqual(picker_state["all_tails"], ["N349UP", "N457UP"])
         self.assertEqual(picker_state["unassigned_tails"], ["N349UP"])
-        self.assertIn("Swap Tail", a01_html)
-        self.assertIn(">Swap</button>", a01_html)
+        self.assertIn("SWAP TAIL", a01_html)
+        self.assertIn("populateMobileEditor", Path("app/static/js/parking_plan_live.js").read_text())
         self.assertIn(
             "body.mobile-app-chrome.motherbrain-parking-plan-page .parking-optimizer-panel,\n"
             "    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-left-rail {\n"
@@ -12673,12 +12676,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
             1,
         )[0]
 
-        self.assertIn('aria-label="Assign unparked tail to A01 Slot 1"', lane_html)
-        self.assertIn("parking-direct-slot-assign", lane_html)
-        self.assertIn("data-direct-slot-input", lane_html)
-        self.assertIn('list="parking-tail-picker"', lane_html)
-        self.assertNotIn('data-direct-slot-options', lane_html)
-        self.assertIn("data-direct-slot-select", lane_html)
+        self.assertIn('aria-label="Change tail for A01 Slot 1"', lane_html)
+        self.assertIn("data-mobile-slot-editor-trigger", lane_html)
+        self.assertNotIn("parking-direct-slot-assign", lane_html)
+        self.assertNotIn("data-direct-slot-input", lane_html)
+        self.assertIn("parking-direct-slot-assign", html)
+        self.assertIn("data-reusable-direct-slot-editor", html)
+        self.assertIn('list="parking-tail-picker"', html)
+        self.assertIn("data-direct-slot-select", html)
         self.assertNotIn('<option value="N457UP">N457UP</option>', lane_html)
         self.assertNotIn('<option value="N349UP">N349UP</option>', lane_html)
         self.assertEqual(html.count("data-direct-slot-options"), 1)
@@ -12720,10 +12725,55 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(html.count("data-direct-slot-options"), 1)
         self.assertEqual(html.count("<datalist"), 1)
-        self.assertEqual(len(mobile_picker_options), 108)
+        self.assertEqual(len(mobile_picker_options), 1)
         self.assertTrue(all(options.count("<option") == 1 for options in mobile_picker_options))
+        self.assertEqual(html.count("data-reusable-direct-slot-editor"), 1)
+        self.assertEqual(html.count("data-reusable-mobile-slot-editor"), 1)
+        self.assertEqual(html.count("data-mobile-slot-editor-trigger"), 108)
         self.assertLess(html.count("<option"), 500)
-        self.assertLess(len(response.data), 1_000_000)
+        self.assertLess(len(response.data), 400_000)
+
+    def test_parking_plan_renders_single_reusable_lane_editors(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(html.count("data-parking-lane\n"), 108)
+        self.assertEqual(html.count("data-reusable-direct-slot-editor"), 1)
+        self.assertEqual(html.count("data-direct-slot-input"), 1)
+        self.assertEqual(html.count("data-reusable-mobile-slot-editor"), 1)
+        self.assertEqual(html.count("data-mobile-slot-tail-picker"), 1)
+        self.assertEqual(html.count('name="expected_target_version"'), 2)
+        self.assertEqual(html.count("data-mobile-slot-editor-trigger"), 108)
+
+    def test_parking_plan_all_assigned_uses_one_reusable_swap_editor(self):
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", destination="LAX")
+        self._parking_pair(operation, "N349UP", destination="ONT")
+        self._parking_assignment(operation, "N457UP", "A01")
+        self._parking_assignment(operation, "N349UP", "A02")
+        db.session.commit()
+
+        response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
+        html = response.data.decode()
+        bootstrap_match = re.search(
+            r'<script type="application/json" data-parking-picker-bootstrap>'
+            r'([\s\S]*?)</script>',
+            html,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(bootstrap_match)
+        self.assertEqual(json.loads(bootstrap_match.group(1))["unassigned_tails"], [])
+        self.assertEqual(html.count("data-reusable-direct-slot-editor"), 1)
+        self.assertEqual(html.count("data-reusable-mobile-slot-editor"), 1)
+        self.assertEqual(html.count("data-mobile-slot-tail-picker"), 1)
+        self.assertEqual(html.count("data-mobile-slot-editor-trigger"), 108)
+        self.assertEqual(html.count("SWAP TAIL"), 2)
 
     def test_parking_plan_desktop_visual_clarity_css_hooks_render(self):
         css = Path("app/static/css/base.css").read_text()
@@ -13349,6 +13399,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("deferredPayload = payload", source)
         self.assertIn("await reconcileLatest()", source)
         self.assertIn("currentPayloadMatchesSnapshot", source)
+        self.assertIn("openMobileSlotEditor", source)
+        self.assertIn("prepareMobileSlotEditor(lane, tail)", source)
+        self.assertIn("appendSnapshot(formData, source, target)", source)
+        self.assertIn("[data-mobile-slot-tail-picker]", source)
         self.assertIn("markOptimizerStale", source)
         self.assertIn("is-parking-live-updated", source)
         self.assertNotIn("window.location.reload", source)
@@ -13380,6 +13434,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"parking-mobile-assignment", page_response.data)
         self.assertNotIn(b"data-parking-typed-assign-form", page_response.data)
         self.assertNotIn(b"data-direct-slot-input", page_response.data)
+        self.assertNotIn(b"data-mobile-slot-editor-trigger", page_response.data)
         self.assertEqual(state_response.status_code, 200)
         self.assertFalse(state_response.get_json()["can_edit"])
         self.assertEqual(denied.status_code, 403)

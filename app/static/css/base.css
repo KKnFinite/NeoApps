@@ -8445,6 +8445,11 @@ h2 {
     min-width: 0;
 }
 
+.parking-reusable-control-host,
+.parking-mobile-slot-change-trigger {
+    display: none;
+}
+
 .parking-direct-slot-assign span {
     color: var(--muted);
     font-size: 0.52rem;
@@ -13597,7 +13602,8 @@ select::-ms-expand {
 }
 
 .planning-mobile-current-list,
-.parking-mobile-slot-change {
+.parking-mobile-slot-change,
+.parking-mobile-slot-change-trigger {
     display: none;
 }
 
@@ -15522,6 +15528,28 @@ select::-ms-expand {
         padding: 6px;
     }
 
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-mobile-slot-change-trigger {
+        display: block;
+        width: 100%;
+        min-height: 30px;
+        margin-top: 5px;
+        padding: 5px 7px;
+        border: 1px solid rgba(var(--node-rgb), 0.5);
+        border-radius: 5px;
+        background:
+            linear-gradient(180deg, rgba(var(--node-rgb), 0.34), rgba(0, 0, 0, 0.22)),
+            rgba(6, 7, 10, 0.9);
+        color: var(--steel);
+        font-size: 0.58rem;
+        font-weight: 900;
+        text-transform: uppercase;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-lane-slot-2.is-collapsed-slot:not(.is-expanded-slot) .parking-mobile-slot-change-trigger,
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-lane.is-mobile-slot-editing > .parking-mobile-slot-change-trigger {
+        display: none;
+    }
+
     body.mobile-app-chrome.motherbrain-parking-plan-page .parking-mobile-slot-change {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
@@ -15542,6 +15570,11 @@ select::-ms-expand {
         font-weight: 850;
         letter-spacing: 0.05em;
         text-transform: uppercase;
+    }
+
+    body.mobile-app-chrome.motherbrain-parking-plan-page .parking-mobile-slot-actions {
+        display: grid;
+        gap: 4px;
     }
 
     body.mobile-app-chrome.motherbrain-parking-plan-page .parking-mobile-slot-change select {

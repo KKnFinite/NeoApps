@@ -7,6 +7,7 @@
 <section
     class="parking-plan-page"
     data-parking-plan
+    data-operation-id="{{ operation.id if operation else '' }}"
     data-assign-url="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) if operation else '' }}"
     data-unassign-url="{{ url_for('neomotherbrain.unassign_parking_plan_tail', operation_id=operation.id) if operation else '' }}"
     data-state-url="{{ url_for('neomotherbrain.parking_plan_live_state_endpoint', operation_id=operation.id) if operation else '' }}"
@@ -341,6 +342,60 @@
         "unassigned_tails": unassigned_tail_rows | map(attribute="tail") | list,
     } | tojson }}</script>
     <datalist id="parking-tail-picker" data-direct-slot-options></datalist>
+    <div class="parking-reusable-control-host" data-parking-reusable-control-host>
+        <div
+            class="parking-direct-slot-assign"
+            data-reusable-direct-slot-editor
+            aria-label="Assign an unparked tail"
+            hidden
+        >
+            <span>ASSIGN TAIL</span>
+            <input
+                type="text"
+                inputmode="text"
+                autocomplete="off"
+                autocapitalize="characters"
+                placeholder="{{ 'SELECT TAIL' if unassigned_tail_rows else 'NO UNPARKED TAILS' }}"
+                list="parking-tail-picker"
+                data-direct-slot-input
+                {% if not unassigned_tail_rows %}disabled{% endif %}
+            >
+            <select data-direct-slot-select aria-hidden="true" tabindex="-1"{% if not unassigned_tail_rows %} disabled{% endif %}>
+                <option value="">{{ "SELECT TAIL" if unassigned_tail_rows else "NO UNPARKED TAILS" }}</option>
+            </select>
+        </div>
+        <form
+            id="parking-mobile-slot-editor"
+            class="parking-mobile-slot-change"
+            method="post"
+            action="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) }}"
+            data-mobile-slot-tail-picker
+            data-reusable-mobile-slot-editor
+            aria-label="Change parking tail"
+            hidden
+        >
+            <input type="hidden" name="operation_id" value="{{ operation.id }}">
+            <input type="hidden" name="ramp_code">
+            <input type="hidden" name="position_code">
+            <input type="hidden" name="lane_number">
+            <input type="hidden" name="replace_occupied" value="0">
+            <input type="hidden" name="parking_snapshot" value="1">
+            <input type="hidden" name="expected_source_location">
+            <input type="hidden" name="expected_source_version">
+            <input type="hidden" name="expected_target_tail">
+            <input type="hidden" name="expected_target_version">
+            <label>
+                <span data-mobile-slot-editor-label>Change Tail</span>
+                <select name="tail_number" required>
+                    <option value="">SELECT TAIL</option>
+                </select>
+            </label>
+            <div class="parking-mobile-slot-actions">
+                <button type="submit" data-mobile-slot-editor-submit>Change</button>
+                <button type="button" data-mobile-slot-editor-cancel>CANCEL</button>
+            </div>
+        </form>
+    </div>
     {% endif %}
 
     <section class="parking-layout parking-layout-with-sidebar">
@@ -573,47 +628,16 @@
                                 <span class="parking-empty-lane">DROP SLOT 1</span>
                                 {% endif %}
                                 {% if can_edit_parking_plan %}
-                                <div class="parking-direct-slot-assign" aria-label="Assign unparked tail to {{ position.code }} Slot {{ lane.number }}">
-                                        <span>ASSIGN TAIL</span>
-                                        <input
-                                            type="text"
-                                            inputmode="text"
-                                            autocomplete="off"
-                                            autocapitalize="characters"
-                                            placeholder="{{ 'SELECT TAIL' if unassigned_tail_rows else 'NO UNPARKED TAILS' }}"
-                                            list="parking-tail-picker"
-                                            data-direct-slot-input
-                                            {% if not unassigned_tail_rows %}disabled{% endif %}
-                                        >
-                                        <select data-direct-slot-select aria-hidden="true" tabindex="-1"{% if not unassigned_tail_rows %} disabled{% endif %}>
-                                            <option value="">{{ "SELECT TAIL" if unassigned_tail_rows else "NO UNPARKED TAILS" }}</option>
-                                        </select>
-                                </div>
-                                <form
-                                    class="parking-mobile-slot-change"
-                                    method="post"
-                                    action="{{ url_for('neomotherbrain.assign_parking_plan_tail', operation_id=operation.id) }}"
-                                    data-mobile-slot-tail-picker
-                                    aria-label="Change tail for {{ position.code }} Slot {{ lane.number }}"
+                                <button
+                                    class="parking-mobile-slot-change-trigger"
+                                    type="button"
+                                    data-mobile-slot-editor-trigger
+                                    aria-controls="parking-mobile-slot-editor"
+                                    aria-expanded="false"
+                                    aria-label="{{ 'Swap' if lane.row else 'Change' }} tail for {{ position.code }} Slot {{ lane.number }}"
                                 >
-                                    <input type="hidden" name="operation_id" value="{{ operation.id }}">
-                                    <input type="hidden" name="ramp_code" value="{{ ramp.code }}">
-                                    <input type="hidden" name="position_code" value="{{ position.code }}">
-                                    <input type="hidden" name="lane_number" value="{{ lane.number }}">
-                                    <input type="hidden" name="replace_occupied" value="{{ 1 if lane.row else 0 }}">
-                                    <input type="hidden" name="parking_snapshot" value="1">
-                                    <input type="hidden" name="expected_source_location">
-                                    <input type="hidden" name="expected_source_version">
-                                    <input type="hidden" name="expected_target_tail" value="{{ lane.tail or '' }}">
-                                    <input type="hidden" name="expected_target_version" value="{{ parking_slot_state.get('version', 'empty') }}">
-                                    <label>
-                                        <span>{{ "Swap Tail" if lane.row else "Change Tail" }}</span>
-                                        <select name="tail_number" required>
-                                            <option value="">SELECT TAIL</option>
-                                        </select>
-                                    </label>
-                                    <button type="submit">{{ "Swap" if lane.row else "Change" }}</button>
-                                </form>
+                                    {{ "SWAP TAIL" if lane.row else "CHANGE TAIL" }}
+                                </button>
                                 {% endif %}
                             </div>
                             {% endfor %}

@@ -95,6 +95,55 @@
             });
         return state;
     };
+    const mobileEditorState = (lane, selectedTail = null, source = {}) => {
+        const occupiedTail = normalizeTail(lane?.dataset.occupiedTail);
+        const tail = selectedTail === null
+            ? occupiedTail
+            : normalizeTail(selectedTail);
+        return {
+            rampCode: lane?.dataset.rampCode || "",
+            positionCode: lane?.dataset.positionCode || "",
+            laneNumber: lane?.dataset.laneNumber || "",
+            occupiedTail,
+            targetVersion: lane?.dataset.parkingSlotVersion || "empty",
+            replaceOccupied: occupiedTail ? "1" : "0",
+            selectedTail: tail,
+            sourceLocation: source.location || "",
+            sourceVersion: source.version || "",
+            operationId: source.operationId || "",
+            label: occupiedTail ? "Swap Tail" : "Change Tail",
+            action: occupiedTail ? "Swap" : "Change",
+        };
+    };
+    const populateMobileEditor = (form, lane, selectedTail = null, source = {}) => {
+        const state = mobileEditorState(lane, selectedTail, source);
+        const setValue = (name, value) => {
+            const control = form?.querySelector(`[name='${name}']`);
+            if (control) control.value = value;
+        };
+        setValue("operation_id", state.operationId);
+        setValue("ramp_code", state.rampCode);
+        setValue("position_code", state.positionCode);
+        setValue("lane_number", state.laneNumber);
+        setValue("replace_occupied", state.replaceOccupied);
+        setValue("parking_snapshot", "1");
+        setValue("expected_source_location", state.sourceLocation);
+        setValue("expected_source_version", state.sourceVersion);
+        setValue("expected_target_tail", state.occupiedTail);
+        setValue("expected_target_version", state.targetVersion);
+        setValue("tail_number", state.selectedTail);
+        const label = form?.querySelector("[data-mobile-slot-editor-label]");
+        const submit = form?.querySelector("[data-mobile-slot-editor-submit]");
+        if (label) label.textContent = state.label;
+        if (submit) submit.textContent = state.action;
+        if (form) {
+            form.setAttribute(
+                "aria-label",
+                `${state.label} for ${state.positionCode} Slot ${state.laneNumber}`
+            );
+        }
+        return state;
+    };
 
     global.NeoParkingPickerOptions = Object.freeze({
         fromLiveTails,
@@ -103,6 +152,10 @@
         normalizeState,
         normalizeTail,
         readBootstrap,
+    });
+    global.NeoParkingReusableControls = Object.freeze({
+        mobileEditorState,
+        populateMobileEditor,
     });
 })(window);
 
@@ -122,6 +175,9 @@
     const unassignedList = page.querySelector("[data-parking-unassigned-list]");
     const optimizerPanel = page.querySelector("[data-parking-optimizer-panel]");
     const optimizerApplyForm = page.querySelector(".parking-optimizer-apply-form");
+    const reusableControlHost = page.querySelector("[data-parking-reusable-control-host]");
+    const directSlotEditor = page.querySelector("[data-reusable-direct-slot-editor]");
+    const mobileSlotEditor = page.querySelector("[data-reusable-mobile-slot-editor]");
     const dragEnabled = canEdit
         && window.matchMedia("(min-width: 721px) and (pointer: fine)").matches;
     let currentRevision = page.dataset.parkingRevision || "";
@@ -145,6 +201,7 @@
     }
 
     const pickerOptions = window.NeoParkingPickerOptions;
+    const reusableControls = window.NeoParkingReusableControls;
     const normalizeTail = pickerOptions.normalizeTail;
     const normalizeTypedPosition = (value) => {
         const cleaned = String(value || "").trim().toUpperCase().replace(/\s+/g, "");
@@ -239,7 +296,8 @@
         const active = document.activeElement;
         return Boolean(active && page.contains(active) && active.closest(
             "[data-parking-typed-assign-form], .parking-mobile-assignment, "
-            + ".parking-direct-slot-assign, [data-tail-status-modal]"
+            + ".parking-direct-slot-assign, [data-mobile-slot-tail-picker], "
+            + "[data-tail-status-modal]"
         ));
     };
 
@@ -277,6 +335,18 @@
     const updatePickerOptions = (tails) => {
         pickerOptions.hydrate(page, pickerOptions.fromLiveTails(tails), {canEdit});
     };
+    const updateMobileSlotTrigger = (lane) => {
+        const trigger = lane?.querySelector("[data-mobile-slot-editor-trigger]");
+        if (!trigger) return;
+        const occupied = normalizeTail(lane.dataset.occupiedTail);
+        const action = occupied ? "SWAP TAIL" : "CHANGE TAIL";
+        trigger.textContent = action;
+        trigger.setAttribute(
+            "aria-label",
+            `${occupied ? "Swap" : "Change"} tail for ${lane.dataset.positionCode} `
+            + `Slot ${lane.dataset.slotNumber}`
+        );
+    };
 
     const updateSlot = (slot) => {
         const lane = page.querySelector(
@@ -306,7 +376,12 @@
             if (occupied) occupied.value = slot.occupant_tail || "";
             if (version) version.value = slot.version;
             if (replace) replace.value = slot.occupant_tail ? "1" : "0";
+            const label = mobileForm.querySelector("[data-mobile-slot-editor-label]");
+            const submit = mobileForm.querySelector("[data-mobile-slot-editor-submit]");
+            if (label) label.textContent = slot.occupant_tail ? "Swap Tail" : "Change Tail";
+            if (submit) submit.textContent = slot.occupant_tail ? "Swap" : "Change";
         }
+        updateMobileSlotTrigger(lane);
         if (changed) {
             markUpdated(lane);
         }
@@ -666,45 +741,50 @@
         }
     }
 
+    const directSlotInput = directSlotEditor?.querySelector("[data-direct-slot-input]");
+    const directSlotSelect = directSlotEditor?.querySelector("[data-direct-slot-select]");
     const closeDirectSlotSelectors = (exceptLane = null) => {
-        page.querySelectorAll(".parking-lane.is-direct-selecting").forEach((lane) => {
-            if (exceptLane === lane) return;
-            lane.classList.remove("is-direct-selecting", "has-tail-picker-match");
-            const input = lane.querySelector("[data-direct-slot-input]");
-            const select = lane.querySelector("[data-direct-slot-select]");
-            if (input) {
-                input.value = "";
-                input.dataset.matchedTail = "";
-                input.closest(".parking-direct-slot-assign")
-                    ?.removeAttribute("data-parking-dirty");
-            }
-            if (select) select.value = "";
-        });
+        const lane = directSlotEditor?.closest("[data-parking-lane]");
+        if (!lane || exceptLane === lane) return;
+        lane.classList.remove("is-direct-selecting", "has-tail-picker-match");
+        if (directSlotInput) {
+            directSlotInput.value = "";
+            directSlotInput.dataset.matchedTail = "";
+        }
+        if (directSlotSelect) directSlotSelect.value = "";
+        directSlotEditor.removeAttribute("data-parking-dirty");
+        directSlotEditor.hidden = true;
+        reusableControlHost?.appendChild(directSlotEditor);
         reconcileDeferred();
     };
     const openDirectSlotSelector = (lane) => {
-        const input = lane.querySelector("[data-direct-slot-input]");
-        const select = lane.querySelector("[data-direct-slot-select]");
-        if ((!input && !select) || lane.dataset.occupiedTail || !canEdit) return false;
+        if ((!directSlotInput && !directSlotSelect) || lane.dataset.occupiedTail || !canEdit) {
+            return false;
+        }
         closeDirectSlotSelectors(lane);
+        directSlotEditor.setAttribute(
+            "aria-label",
+            `Assign unparked tail to ${lane.dataset.positionCode} Slot ${lane.dataset.slotNumber}`
+        );
+        lane.appendChild(directSlotEditor);
+        directSlotEditor.hidden = false;
         lane.classList.add("is-direct-selecting");
-        window.setTimeout(() => (input || select).focus(), 0);
+        window.setTimeout(() => (directSlotInput || directSlotSelect).focus(), 0);
         return true;
     };
-    const tailOptionsForDirectPicker = (lane) => Array.from(
-        lane.querySelector("[data-direct-slot-select]")?.options || []
+    const tailOptionsForDirectPicker = () => Array.from(
+        directSlotSelect?.options || []
     ).map((option) => normalizeTail(option.value)).filter(Boolean);
-    const matchDirectPickerTail = (lane, rawValue) => {
-        return pickerOptions.matchTail(tailOptionsForDirectPicker(lane), rawValue);
+    const matchDirectPickerTail = (rawValue) => {
+        return pickerOptions.matchTail(tailOptionsForDirectPicker(), rawValue);
     };
     const updateDirectPickerMatch = (input) => {
         const lane = input.closest("[data-parking-lane]");
         if (!lane) return "";
         input.value = normalizeTail(input.value).replace(/\s+/g, "");
-        const match = matchDirectPickerTail(lane, input.value);
+        const match = matchDirectPickerTail(input.value);
         input.dataset.matchedTail = match;
-        const select = lane.querySelector("[data-direct-slot-select]");
-        if (select) select.value = match;
+        if (directSlotSelect) directSlotSelect.value = match;
         lane.classList.toggle("has-tail-picker-match", Boolean(match));
         return match;
     };
@@ -718,12 +798,108 @@
         }
         input.disabled = true;
         try {
-            await assignTailToLane(lane, tail);
+            const saved = await assignTailToLane(lane, tail);
+            if (saved) closeDirectSlotSelectors();
         } finally {
             input.disabled = false;
             input.closest(".parking-direct-slot-assign")?.removeAttribute("data-parking-dirty");
         }
     };
+
+    directSlotInput?.addEventListener("click", (event) => event.stopPropagation());
+    directSlotInput?.addEventListener("input", () => {
+        directSlotEditor?.setAttribute("data-parking-dirty", "true");
+        updateDirectPickerMatch(directSlotInput);
+    });
+    directSlotInput?.addEventListener("change", async () => {
+        const exact = tailOptionsForDirectPicker().find(
+            (tail) => tail === normalizeTail(directSlotInput.value)
+        );
+        updateDirectPickerMatch(directSlotInput);
+        if (exact) await assignDirectPickerTail(directSlotInput);
+    });
+    directSlotInput?.addEventListener("keydown", async (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        await assignDirectPickerTail(directSlotInput);
+    });
+    directSlotSelect?.addEventListener("click", (event) => event.stopPropagation());
+    directSlotSelect?.addEventListener("change", async () => {
+        const lane = directSlotEditor?.closest("[data-parking-lane]");
+        if (!lane || !directSlotSelect.value) return;
+        directSlotSelect.disabled = true;
+        try {
+            const saved = await assignTailToLane(lane, directSlotSelect.value);
+            if (saved) closeDirectSlotSelectors();
+        } finally {
+            directSlotSelect.disabled = false;
+        }
+    });
+
+    let mobileEditorLane = null;
+    const mobileEditorSelect = mobileSlotEditor?.querySelector("select[name='tail_number']");
+    const prepareMobileSlotEditor = (lane, selectedTail = null) => {
+        if (!mobileSlotEditor || !lane) return null;
+        const tail = selectedTail === null
+            ? normalizeTail(lane.dataset.occupiedTail)
+            : normalizeTail(selectedTail);
+        const source = tail ? sourceSnapshot(tail) : {};
+        source.operationId = page.dataset.operationId || "";
+        return reusableControls.populateMobileEditor(
+            mobileSlotEditor,
+            lane,
+            tail,
+            source
+        );
+    };
+    const closeMobileSlotEditor = () => {
+        if (!mobileSlotEditor) return;
+        const lane = mobileEditorLane || mobileSlotEditor.closest("[data-parking-lane]");
+        lane?.classList.remove("is-mobile-slot-editing");
+        lane?.querySelector("[data-mobile-slot-editor-trigger]")
+            ?.setAttribute("aria-expanded", "false");
+        mobileSlotEditor.removeAttribute("data-parking-dirty");
+        mobileSlotEditor.hidden = true;
+        reusableControlHost?.appendChild(mobileSlotEditor);
+        mobileEditorLane = null;
+        reconcileDeferred();
+    };
+    const openMobileSlotEditor = (lane) => {
+        if (!mobileSlotEditor || !lane || !canEdit) return false;
+        closeDirectSlotSelectors();
+        closeMobileSlotEditor();
+        mobileEditorLane = lane;
+        lane.appendChild(mobileSlotEditor);
+        mobileSlotEditor.hidden = false;
+        lane.classList.add("is-mobile-slot-editing");
+        lane.querySelector("[data-mobile-slot-editor-trigger]")
+            ?.setAttribute("aria-expanded", "true");
+        prepareMobileSlotEditor(lane);
+        window.setTimeout(() => mobileEditorSelect?.focus(), 0);
+        return true;
+    };
+
+    mobileEditorSelect?.addEventListener("input", () => {
+        mobileSlotEditor?.setAttribute("data-parking-dirty", "true");
+        if (mobileEditorLane) {
+            prepareMobileSlotEditor(mobileEditorLane, mobileEditorSelect.value);
+        }
+    });
+    mobileSlotEditor?.querySelector("[data-mobile-slot-editor-cancel]")
+        ?.addEventListener("click", async () => {
+            closeMobileSlotEditor();
+            await reconcileLatest();
+        });
+    mobileSlotEditor?.addEventListener("submit", async (event) => {
+        if (!canEdit) return;
+        event.preventDefault();
+        const lane = mobileEditorLane || mobileSlotEditor.closest("[data-parking-lane]");
+        const tail = normalizeTail(mobileEditorSelect?.value);
+        if (!lane || !tail) return;
+        prepareMobileSlotEditor(lane, tail);
+        const saved = await assignTailToLane(lane, tail);
+        if (saved) closeMobileSlotEditor();
+    });
 
     const bindTailCards = () => {
         page.querySelectorAll("[data-parking-tail]").forEach((card) => {
@@ -784,7 +960,10 @@
         page.querySelectorAll("[data-parking-lane]").forEach((lane) => {
             lane.addEventListener("click", async (event) => {
                 if (!canEdit) return;
-                if (event.target.closest("[data-direct-slot-input], [data-direct-slot-select]")) return;
+                if (event.target.closest(
+                    "[data-direct-slot-input], [data-direct-slot-select], "
+                    + "[data-mobile-slot-editor-trigger], [data-mobile-slot-tail-picker]"
+                )) return;
                 if (event.target.closest("[data-parking-tail]")) return;
                 if (
                     lane.dataset.slotCollapsed === "1"
@@ -817,36 +996,11 @@
                     || dragContext?.tail || "";
                 if (tail) await assignTailToLane(lane, tail);
             });
-            const input = lane.querySelector("[data-direct-slot-input]");
-            input?.addEventListener("click", (event) => event.stopPropagation());
-            input?.addEventListener("input", () => {
-                input.closest(".parking-direct-slot-assign")
-                    ?.setAttribute("data-parking-dirty", "true");
-                updateDirectPickerMatch(input);
-            });
-            input?.addEventListener("change", async () => {
-                const exact = tailOptionsForDirectPicker(lane).find(
-                    (tail) => tail === normalizeTail(input.value)
-                );
-                updateDirectPickerMatch(input);
-                if (exact) await assignDirectPickerTail(input);
-            });
-            input?.addEventListener("keydown", async (event) => {
-                if (event.key !== "Enter") return;
-                event.preventDefault();
-                await assignDirectPickerTail(input);
-            });
-            const select = lane.querySelector("[data-direct-slot-select]");
-            select?.addEventListener("click", (event) => event.stopPropagation());
-            select?.addEventListener("change", async () => {
-                if (!select.value) return;
-                select.disabled = true;
-                try {
-                    await assignTailToLane(lane, select.value);
-                } finally {
-                    select.disabled = false;
-                }
-            });
+            lane.querySelector("[data-mobile-slot-editor-trigger]")
+                ?.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    openMobileSlotEditor(lane);
+                });
         });
     };
 
@@ -884,15 +1038,6 @@
         updateChoices();
     }
 
-    page.querySelectorAll("[data-mobile-slot-tail-picker]").forEach((form) => {
-        form.addEventListener("submit", async (event) => {
-            if (!window.matchMedia("(max-width: 720px)").matches || !canEdit) return;
-            event.preventDefault();
-            const lane = form.closest("[data-parking-lane]");
-            const tail = form.querySelector("select[name='tail_number']")?.value || "";
-            if (lane && tail) await assignTailToLane(lane, tail);
-        });
-    });
     page.querySelector("[data-clear-selected-tail]")?.addEventListener("click", () => {
         setSelectedTail("");
         reconcileLatest();

@@ -22,6 +22,7 @@ class FakeElement {
         this.textContent = "";
         this.value = "";
         this.lane = null;
+        this.attributes = {};
     }
 
     closest(selector) {
@@ -30,6 +31,44 @@ class FakeElement {
 
     replaceChildren(...children) {
         this.children = children;
+    }
+
+    querySelector() {
+        return null;
+    }
+
+    setAttribute(name, value) {
+        this.attributes[name] = String(value);
+    }
+}
+
+class FakeForm extends FakeElement {
+    constructor(documentRef) {
+        super("form", documentRef);
+        this.controls = new Map();
+        [
+            "operation_id",
+            "ramp_code",
+            "position_code",
+            "lane_number",
+            "replace_occupied",
+            "parking_snapshot",
+            "expected_source_location",
+            "expected_source_version",
+            "expected_target_tail",
+            "expected_target_version",
+            "tail_number",
+        ].forEach((name) => this.controls.set(name, new FakeElement("input", documentRef)));
+        this.label = new FakeElement("span", documentRef);
+        this.submit = new FakeElement("button", documentRef);
+    }
+
+    querySelector(selector) {
+        const nameMatch = selector.match(/^\[name='([^']+)'\]$/);
+        if (nameMatch) return this.controls.get(nameMatch[1]) || null;
+        if (selector === "[data-mobile-slot-editor-label]") return this.label;
+        if (selector === "[data-mobile-slot-editor-submit]") return this.submit;
+        return null;
     }
 }
 
@@ -87,6 +126,7 @@ const createHarness = (bootstrapState) => {
     }, {filename: "parking_plan_live.js"});
     return {
         api: window.NeoParkingPickerOptions,
+        reusableApi: window.NeoParkingReusableControls,
         datalist,
         directInputs,
         directSelects,
@@ -164,4 +204,58 @@ test("all-assigned and read-only states keep unavailable controls disabled", () 
     assert.equal(harness.directSelects[0].disabled, true);
     assert.equal(harness.mobileSelects[0].disabled, true);
     assert.equal(harness.mobileSelects[0].value, "N100UP");
+});
+
+test("reusable mobile editor reads current lane and snapshot data each time it opens", () => {
+    const harness = createHarness({all_tails: [], unassigned_tails: []});
+    const form = new FakeForm(harness.root.ownerDocument);
+    const lane = new FakeElement("div", harness.root.ownerDocument);
+    lane.dataset.rampCode = "A";
+    lane.dataset.positionCode = "A01";
+    lane.dataset.laneNumber = "1";
+    lane.dataset.occupiedTail = "N100UP";
+    lane.dataset.parkingSlotVersion = "slot-v1";
+
+    harness.reusableApi.populateMobileEditor(
+        form,
+        lane,
+        null,
+        {location: "A01:1", version: "source-v1", operationId: "41"}
+    );
+
+    assert.equal(form.controls.get("operation_id").value, "41");
+    assert.equal(form.controls.get("ramp_code").value, "A");
+    assert.equal(form.controls.get("position_code").value, "A01");
+    assert.equal(form.controls.get("lane_number").value, "1");
+    assert.equal(form.controls.get("tail_number").value, "N100UP");
+    assert.equal(form.controls.get("replace_occupied").value, "1");
+    assert.equal(form.controls.get("expected_source_location").value, "A01:1");
+    assert.equal(form.controls.get("expected_source_version").value, "source-v1");
+    assert.equal(form.controls.get("expected_target_tail").value, "N100UP");
+    assert.equal(form.controls.get("expected_target_version").value, "slot-v1");
+    assert.equal(form.label.textContent, "Swap Tail");
+    assert.equal(form.submit.textContent, "Swap");
+
+    lane.dataset.rampCode = "B";
+    lane.dataset.positionCode = "B02";
+    lane.dataset.laneNumber = "2";
+    lane.dataset.occupiedTail = "N200UP";
+    lane.dataset.parkingSlotVersion = "slot-v2";
+    harness.reusableApi.populateMobileEditor(
+        form,
+        lane,
+        "N300UP",
+        {location: "unassigned", version: "missing", operationId: "42"}
+    );
+
+    assert.equal(form.controls.get("operation_id").value, "42");
+    assert.equal(form.controls.get("ramp_code").value, "B");
+    assert.equal(form.controls.get("position_code").value, "B02");
+    assert.equal(form.controls.get("lane_number").value, "2");
+    assert.equal(form.controls.get("tail_number").value, "N300UP");
+    assert.equal(form.controls.get("expected_source_location").value, "unassigned");
+    assert.equal(form.controls.get("expected_source_version").value, "missing");
+    assert.equal(form.controls.get("expected_target_tail").value, "N200UP");
+    assert.equal(form.controls.get("expected_target_version").value, "slot-v2");
+    assert.equal(form.attributes["aria-label"], "Swap Tail for B02 Slot 2");
 });
