@@ -9,6 +9,7 @@ from app.models import (
     GatewayMembership,
     PermissionRule,
     PortalAppAccess,
+    SortDateOperation,
     StaffingDailyAttendance,
     StaffingLeadershipAssignment,
     StaffingPerson,
@@ -167,6 +168,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             }
         )
         staffing_service.assign_work_area(person, work_area)
+        night_operation = self._current_night_operation()
         db.session.commit()
         self._login(user.username)
 
@@ -174,7 +176,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         attendance = self.client.post(
             "/neostaffing/attendance",
             data={
-                "attendance_date": "2026-07-03",
+                "sort_date_operation_id": str(night_operation.id),
                 "sort_id": str(sort.id),
                 "work_area_id": str(work_area.id),
                 f"status_{person.id}": "here",
@@ -203,6 +205,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             }
         )
         staffing_service.assign_work_area(person, work_area)
+        night_operation = self._current_night_operation()
         db.session.commit()
         self._login(user.username)
 
@@ -210,7 +213,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         blocked = self.client.post(
             "/neostaffing/attendance",
             data={
-                "attendance_date": "2026-07-03",
+                "sort_date_operation_id": str(night_operation.id),
                 "sort_id": str(sort.id),
                 "work_area_id": str(work_area.id),
                 f"status_{person.id}": "call_in",
@@ -223,7 +226,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"ALL HERE", page.data)
         self.assertNotIn(b"SAVE ATTENDANCE", page.data)
         self.assertEqual(blocked.status_code, 200)
-        self.assertIn(b"Taking NeoStaffing attendance requires Operator access.", blocked.data)
+        self.assertIn(b"You do not currently have Take Attendance permission.", blocked.data)
         self.assertEqual(StaffingDailyAttendance.query.filter_by(person_id=person.id).count(), 0)
 
     def test_landing_attendance_shortcut_resolves_one_or_multiple_scopes(self):
@@ -558,10 +561,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         staffing_service.assign_work_area(avery, work_area)
         staffing_service.assign_work_area(morgan, second_work_area)
         recorder = self._user("attendance_report_recorder")
+        night_operation = self._current_night_operation()
         db.session.flush()
         staffing_service.save_attendance(
             {
-                "attendance_date": "2026-07-03",
+                "sort_date_operation_id": str(night_operation.id),
                 "sort_id": str(sort.id),
                 f"status_{avery.id}": "call_in",
                 f"status_{morgan.id}": "here",
@@ -1564,10 +1568,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             }
         )
         staffing_service.assign_work_area(person, work_area)
+        night_operation = self._current_night_operation()
         db.session.commit()
         self._login(user.username)
 
-        page = self.client.get(f"/neostaffing/attendance?work_area_id={work_area.id}&attendance_date=2026-07-03")
+        page = self.client.get(f"/neostaffing/attendance?work_area_id={work_area.id}")
         self.assertEqual(page.status_code, 200)
         self.assertIn(f'<option value="{work_area.id}" selected>'.encode(), page.data)
         self.assertIn(b"AT100", page.data)
@@ -1575,7 +1580,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         first = self.client.post(
             "/neostaffing/attendance",
             data={
-                "attendance_date": "2026-07-03",
+                "sort_date_operation_id": str(night_operation.id),
                 "sort_id": str(sort.id),
                 "work_area_id": str(work_area.id),
                 f"status_{person.id}": "call_in",
@@ -1585,7 +1590,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         second = self.client.post(
             "/neostaffing/attendance",
             data={
-                "attendance_date": "2026-07-03",
+                "sort_date_operation_id": str(night_operation.id),
                 "sort_id": str(sort.id),
                 "work_area_id": str(work_area.id),
                 f"status_{person.id}": "here",
@@ -1627,6 +1632,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
         staffing_service.create_leadership_assignment(supervisor, work_area)
         staffing_service.assign_work_area(person, work_area)
+        self._current_night_operation()
         db.session.commit()
         self._login(user.username)
 
@@ -1663,9 +1669,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
         staffing_service.assign_work_area(nested_person, nested_work_area)
         staffing_service.assign_work_area(direct_person, direct_work_area)
+        night_operation = self._current_night_operation()
         staffing_service.save_attendance(
             {
-                "attendance_date": "2026-07-03",
+                "sort_date_operation_id": str(night_operation.id),
                 "sort_id": str(sort.id),
                 "operation_id": str(operation.id),
                 f"status_{nested_person.id}": "call_in",
@@ -1677,14 +1684,14 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self._login(user.username)
 
         page = self.client.get(
-            f"/neostaffing/attendance?operation_id={operation.id}&attendance_date=2026-07-03"
+            f"/neostaffing/attendance?operation_id={operation.id}"
         )
 
         self.assertEqual(page.status_code, 200)
         self.assertIn(b"AO100", page.data)
         self.assertIn(b"AO101", page.data)
         self.assertIn(b'option value="call_in" selected', page.data)
-        self.assertIn(b"Loaded People", page.data)
+        self.assertIn(b"Total Roster", page.data)
         self.assertIn(b"2", page.data)
 
     def test_attendance_all_here_updates_existing_records_and_counts(self):
@@ -1712,9 +1719,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
         staffing_service.assign_work_area(first_person, work_area)
         staffing_service.assign_work_area(second_person, work_area)
+        night_operation = self._current_night_operation()
         staffing_service.save_attendance(
             {
-                "attendance_date": "2026-07-03",
+                "sort_date_operation_id": str(night_operation.id),
                 "sort_id": str(sort.id),
                 "work_area_id": str(work_area.id),
                 f"status_{first_person.id}": "call_in",
@@ -1728,7 +1736,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         saved = self.client.post(
             "/neostaffing/attendance",
             data={
-                "attendance_date": "2026-07-03",
+                "sort_date_operation_id": str(night_operation.id),
                 "sort_id": str(sort.id),
                 "work_area_id": str(work_area.id),
                 "bulk_status": "here",
@@ -1824,6 +1832,25 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             {"unit_type": "work_area", "name": "EBM", "parent_id": department.id}
         )
         return sort, operation, department, work_area
+
+    def _current_night_operation(self, sort_date=date(2026, 7, 3)):
+        gateway = ensure_default_gateway_and_nodes()
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            sort_date.year,
+            sort_date.month,
+            sort_date.day,
+            21,
+            0,
+        )
+        operation = SortDateOperation(
+            gateway_id=gateway.id,
+            gateway_code=gateway.code,
+            sort_date=sort_date,
+            sort_name="night",
+        )
+        db.session.add(operation)
+        db.session.flush()
+        return operation
 
 
 if __name__ == "__main__":

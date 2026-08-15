@@ -125,6 +125,11 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "staffing_leadership_assignments": {
         "active": "BOOLEAN DEFAULT 1",
     },
+    "staffing_daily_attendance": {
+        "sort_date_operation_id": "INTEGER",
+        "department_unit_id": "INTEGER",
+        "operation_unit_id": "INTEGER",
+    },
     "sort_date_tail_states": {
         "operational_status": "VARCHAR(16) DEFAULT 'normal'",
         "is_out_of_service": "BOOLEAN DEFAULT 0",
@@ -244,6 +249,11 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "staffing_leadership_assignments": {
         "active": "BOOLEAN DEFAULT TRUE",
+    },
+    "staffing_daily_attendance": {
+        "sort_date_operation_id": "INTEGER",
+        "department_unit_id": "INTEGER",
+        "operation_unit_id": "INTEGER",
     },
     "sort_date_tail_states": {
         "operational_status": "VARCHAR(16) DEFAULT 'normal'",

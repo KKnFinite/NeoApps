@@ -9,8 +9,10 @@ from app.models import (
     StaffingPerson,
     StaffingUnit,
     StaffingWorkAssignment,
+    SortDateOperation,
     User,
 )
+from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services import neostaffing as staffing_service
 from app.services.password_policy import set_user_password
 
@@ -696,10 +698,11 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         set_user_password(user, "TestPassword123!")
         db.session.add(user)
         db.session.flush()
+        night_operation = self._current_night_operation()
 
         saved = staffing_service.save_attendance(
             {
-                "attendance_date": "2026-07-03",
+                "sort_date_operation_id": str(night_operation.id),
                 "sort_id": str(sort.id),
                 f"status_{employee.id}": "call_in",
                 f"note_{employee.id}": "Called supervisor",
@@ -708,7 +711,7 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         )
         second_saved = staffing_service.save_attendance(
             {
-                "attendance_date": "2026-07-03",
+                "sort_date_operation_id": str(night_operation.id),
                 "sort_id": str(sort.id),
                 f"status_{employee.id}": "here",
             },
@@ -797,6 +800,25 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
             {"unit_type": "work_area", "name": "EBM", "parent_id": department.id}
         )
         return sort, operation, department, work_area
+
+    def _current_night_operation(self, sort_date=date(2026, 7, 3)):
+        gateway = ensure_default_gateway_and_nodes()
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            sort_date.year,
+            sort_date.month,
+            sort_date.day,
+            21,
+            0,
+        )
+        operation = SortDateOperation(
+            gateway_id=gateway.id,
+            gateway_code=gateway.code,
+            sort_date=sort_date,
+            sort_name="night",
+        )
+        db.session.add(operation)
+        db.session.flush()
+        return operation
 
     def _person(self, employee_id, classification):
         person = staffing_service.create_person(

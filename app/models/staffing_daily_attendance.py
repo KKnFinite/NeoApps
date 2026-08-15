@@ -57,6 +57,24 @@ class StaffingDailyAttendance(db.Model):
         nullable=True,
         index=True,
     )
+    department_unit_id = db.Column(
+        db.Integer,
+        db.ForeignKey("staffing_units.id"),
+        nullable=True,
+        index=True,
+    )
+    operation_unit_id = db.Column(
+        db.Integer,
+        db.ForeignKey("staffing_units.id"),
+        nullable=True,
+        index=True,
+    )
+    sort_date_operation_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sort_date_operations.id"),
+        nullable=True,
+        index=True,
+    )
     status = db.Column(db.String(32), nullable=False, index=True)
     note = db.Column(db.Text, nullable=True)
     recorded_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
@@ -72,5 +90,8 @@ class StaffingDailyAttendance(db.Model):
     person = db.relationship("StaffingPerson", back_populates="daily_attendance_records")
     sort = db.relationship("StaffingUnit", foreign_keys=[sort_unit_id])
     work_area = db.relationship("StaffingUnit", foreign_keys=[work_area_unit_id])
+    department = db.relationship("StaffingUnit", foreign_keys=[department_unit_id])
+    operation = db.relationship("StaffingUnit", foreign_keys=[operation_unit_id])
+    sort_date_operation = db.relationship("SortDateOperation")
     recorded_by_user = db.relationship("User", foreign_keys=[recorded_by_user_id])
     updated_by_user = db.relationship("User", foreign_keys=[updated_by_user_id])

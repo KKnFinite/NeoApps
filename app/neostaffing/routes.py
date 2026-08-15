@@ -214,11 +214,10 @@ def people_attendance():
 
 
 def _handle_attendance():
-    management_context = staffing_service.management_attendance_context_for_user(current_user)
     can_edit = user_can(ATTENDANCE_TAKE_PERMISSION)
     if request.method == "POST":
         if not can_edit:
-            flash("Taking NeoStaffing attendance requires Operator access.", "error")
+            flash("You do not currently have Take Attendance permission.", "error")
             return redirect(url_for("neostaffing.attendance", **request.args))
         try:
             saved = staffing_service.save_attendance(request.form, current_user)
@@ -231,7 +230,6 @@ def _handle_attendance():
         return redirect(
             url_for(
                 "neostaffing.attendance",
-                attendance_date=request.form.get("attendance_date", ""),
                 sort_id=request.form.get("sort_id", ""),
                 operation_id=request.form.get("operation_id", ""),
                 department_id=request.form.get("department_id", ""),
@@ -240,7 +238,6 @@ def _handle_attendance():
         )
     context = staffing_service.attendance_context(
         {
-            "attendance_date": request.args.get("attendance_date", "").strip(),
             "sort_id": request.args.get("sort_id", "").strip(),
             "operation_id": request.args.get("operation_id", "").strip(),
             "department_id": request.args.get("department_id", "").strip(),

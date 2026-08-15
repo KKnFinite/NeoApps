@@ -1,12 +1,17 @@
 from datetime import date, datetime
+import re
 
-from sqlalchemy import func
+from flask import current_app
+from sqlalchemy import func, or_
+from sqlalchemy.orm import joinedload
 
 from app.extensions import db
 from app.models import (
     StaffingDailyAttendance,
+    Gateway,
     StaffingLeadershipAssignment,
     StaffingPerson,
+    SortDateOperation,
     StaffingUnit,
     StaffingWorkAssignment,
     User,
@@ -15,6 +20,7 @@ from app.models.staffing_leadership_assignment import STAFFING_LEADERSHIP_LEVELS
 from app.models.staffing_daily_attendance import STAFFING_DAILY_ATTENDANCE_STATUSES
 from app.models.staffing_person import STAFFING_CLASSIFICATIONS, STAFFING_EMPLOYEE_STATUSES
 from app.models.staffing_unit import STAFFING_UNIT_TYPES
+from app.services.gateway_matrix import current_operations_for_gateway
 
 
 CLASSIFICATION_LABELS = {
@@ -82,6 +88,8 @@ PARENT_TYPE_BY_UNIT_TYPE = {
 STAFFING_NEAR_TARGET_THRESHOLD = 0.8
 PEOPLE_DEFAULT_PAGE_SIZE = 100
 PEOPLE_MAX_PAGE_SIZE = 250
+ATTENDANCE_OPERATION_SORT_NAME = "night"
+ATTENDANCE_OPERATION_MISSING_MESSAGE = "NIGHT SORT HAS NOT BEEN CREATED YET."
 
 
 def classification_choices():
@@ -1257,110 +1265,536 @@ def _attendance_scope_key(unit):
 
 
 def attendance_context(filters=None, user=None):
-    filters = filters or {}
-    attendance_date = _parse_optional_date(filters.get("attendance_date")) or date.today()
-    filters = _with_default_management_scope(filters, user)
-    selected_scope = _resolve_attendance_scope(filters)
-    selected_sort = _resolve_attendance_sort(filters, selected_scope)
-    rows = []
-    assignments = _attendance_assignments_for_scope(selected_scope, selected_sort)
+    filters = dict(filters or {})
+    gateway = _attendance_gateway()
+    operation = current_night_attendance_operation(gateway)
+    if not operation:
+        return _empty_daily_attendance_context(
+            filters,
+            ATTENDANCE_OPERATION_MISSING_MESSAGE,
+        )
+
+    hierarchy = _daily_attendance_hierarchy()
+    try:
+        staffing_sort = _staffing_sort_for_operation(operation, hierarchy)
+        selected_scope = _daily_attendance_scope(
+            filters,
+            hierarchy,
+            staffing_sort,
+            user=user,
+        )
+    except ValueError as error:
+        return _empty_daily_attendance_context(
+            filters,
+            str(error),
+            operation=operation,
+            hierarchy=hierarchy,
+        )
+
+    assignments = _daily_attendance_assignments(
+        selected_scope,
+        staffing_sort,
+        hierarchy,
+    )
+    person_ids = [assignment.person_id for assignment in assignments]
     existing = {}
-    if selected_sort:
-        existing = {
-            record.person_id: record
-            for record in StaffingDailyAttendance.query.filter_by(
-                attendance_date=attendance_date,
-                sort_unit_id=selected_sort.id,
-            ).all()
-        }
+    if person_ids:
+        records = StaffingDailyAttendance.query.filter(
+            StaffingDailyAttendance.person_id.in_(person_ids),
+            StaffingDailyAttendance.attendance_date == operation.sort_date,
+            StaffingDailyAttendance.sort_unit_id == staffing_sort.id,
+            or_(
+                StaffingDailyAttendance.sort_date_operation_id == operation.id,
+                StaffingDailyAttendance.sort_date_operation_id.is_(None),
+            ),
+        ).all()
+        existing = {record.person_id: record for record in records}
+
+    rows = []
     for assignment in assignments:
+        work_area = hierarchy["by_id"].get(assignment.work_area_unit_id)
+        department, operation_unit, row_sort = _daily_attendance_placement(
+            work_area,
+            hierarchy,
+        )
         record = existing.get(assignment.person_id)
         rows.append(
             {
                 "person": assignment.person,
-                "work_area": assignment.work_area,
-                "sort": parent_chain_for_work_area(assignment.work_area)[2],
+                "work_area": work_area,
+                "department": department,
+                "operation": operation_unit,
+                "sort": row_sort,
                 "attendance": record,
-                "status": record.status if record else "here",
-                "note": record.note if record else "",
+                "status": record.status if record else "",
+                "note": (record.note or "") if record else "",
             }
         )
-    counts = {}
-    for row in rows:
-        counts[row["status"]] = counts.get(row["status"], 0) + 1
+
+    summary = _daily_attendance_summary(rows)
+    filters = _daily_attendance_filters(filters, staffing_sort, selected_scope)
     return {
-        "attendance_date": attendance_date,
-        "selected_sort": selected_sort,
+        "ready": True,
+        "message": "",
+        "sort_date_operation": operation,
+        "attendance_date": operation.sort_date,
+        "selected_sort": staffing_sort,
         "selected_scope": selected_scope,
         "rows": rows,
-        "counts": counts,
+        "counts": summary["status_counts"],
+        "summary": summary,
         "total_loaded": len(rows),
-        "sorts": units_by_type("sort"),
-        "operations": units_by_type("operation"),
-        "departments": units_by_type("department"),
-        "work_areas": work_area_units(),
+        "rollups": _daily_attendance_rollups(rows),
+        "scope_options": _daily_attendance_scope_options(hierarchy, staffing_sort),
         "status_choices": attendance_status_choices(),
-        "filters": {
-            "attendance_date": attendance_date.isoformat(),
-            "sort_id": str(selected_sort.id) if selected_sort else "",
-            "operation_id": filters.get("operation_id", ""),
-            "department_id": filters.get("department_id", ""),
-            "work_area_id": filters.get("work_area_id", ""),
-        },
+        "filters": filters,
     }
 
 
 def save_attendance(values, user):
-    attendance_date = _parse_date(values.get("attendance_date"), "Attendance date")
-    selected_scope = _resolve_attendance_scope(values)
-    sort = _resolve_attendance_sort(values, selected_scope)
-    if not sort:
-        raise ValueError("Select a Sort before saving attendance.")
+    gateway = _attendance_gateway()
+    current_operation = current_night_attendance_operation(gateway)
+    operation = _submitted_attendance_operation(values.get("sort_date_operation_id"))
+    if not current_operation or not operation or operation.id != current_operation.id:
+        raise ValueError("The selected Night Sort is no longer current. Reload Attendance.")
+
+    hierarchy = _daily_attendance_hierarchy()
+    staffing_sort = _staffing_sort_for_operation(operation, hierarchy)
+    selected_scope = _daily_attendance_scope(
+        values,
+        hierarchy,
+        staffing_sort,
+        strict=True,
+    )
+    assignments = _daily_attendance_assignments(
+        selected_scope,
+        staffing_sort,
+        hierarchy,
+    )
+    assignments_by_person = {assignment.person_id: assignment for assignment in assignments}
+    eligible_person_ids = set(assignments_by_person)
+    submitted_person_ids = _submitted_attendance_person_ids(values)
+    outside_scope_ids = submitted_person_ids - eligible_person_ids
+    if outside_scope_ids:
+        raise ValueError("Attendance includes an employee outside the selected scope.")
+
+    bulk_status = str(values.get("bulk_status") or "").strip()
+    person_ids = eligible_person_ids if bulk_status else submitted_person_ids
+    if bulk_status and bulk_status != "here":
+        raise ValueError("The attendance bulk action is invalid.")
+
+    existing = {}
+    if person_ids:
+        records = StaffingDailyAttendance.query.filter(
+            StaffingDailyAttendance.person_id.in_(person_ids),
+            StaffingDailyAttendance.attendance_date == operation.sort_date,
+            StaffingDailyAttendance.sort_unit_id == staffing_sort.id,
+            or_(
+                StaffingDailyAttendance.sort_date_operation_id == operation.id,
+                StaffingDailyAttendance.sort_date_operation_id.is_(None),
+            ),
+        ).all()
+        existing = {record.person_id: record for record in records}
+
     saved = 0
-    eligible_person_ids = {
-        assignment.person_id
-        for assignment in _attendance_assignments_for_scope(selected_scope, sort)
-    }
-    person_ids = set()
-    for key in values.keys():
-        if str(key).startswith("status_"):
-            try:
-                person_ids.add(int(str(key).split("_", 1)[1]))
-            except (TypeError, ValueError):
-                continue
-    person_ids &= eligible_person_ids
+    user_id = getattr(user, "id", None)
     for person_id in sorted(person_ids):
-        person = db.session.get(StaffingPerson, person_id)
-        if not person:
+        assignment = assignments_by_person[person_id]
+        status_value = "here" if bulk_status else str(
+            values.get(f"status_{person_id}") or ""
+        ).strip()
+        record = existing.get(person_id)
+        if not status_value:
+            if record:
+                db.session.delete(record)
+                saved += 1
             continue
-        status_value = values.get("bulk_status") or values.get(f"status_{person_id}") or "here"
+
         status = _normalize_choice(
             status_value,
             STAFFING_DAILY_ATTENDANCE_STATUSES,
             "attendance status",
         )
         note = _optional_text(values.get(f"note_{person_id}"))
-        work_area = _attendance_work_area_for_person(person)
-        record = StaffingDailyAttendance.query.filter_by(
-            person_id=person.id,
-            attendance_date=attendance_date,
-            sort_unit_id=sort.id,
-        ).first()
+        work_area = hierarchy["by_id"].get(assignment.work_area_unit_id)
+        department, operation_unit, _row_sort = _daily_attendance_placement(
+            work_area,
+            hierarchy,
+        )
         if not record:
             record = StaffingDailyAttendance(
-                person=person,
-                attendance_date=attendance_date,
-                sort_unit_id=sort.id,
-                recorded_by_user_id=getattr(user, "id", None),
+                person=assignment.person,
+                attendance_date=operation.sort_date,
+                sort_unit_id=staffing_sort.id,
+                sort_date_operation_id=operation.id,
+                work_area_unit_id=work_area.id if work_area else None,
+                department_unit_id=department.id if department else None,
+                operation_unit_id=operation_unit.id if operation_unit else None,
+                recorded_by_user_id=user_id,
             )
             db.session.add(record)
-        record.work_area_unit_id = work_area.id if work_area else None
+        else:
+            # Existing placement snapshots are historical facts. Only fill values
+            # absent from legacy rows; ordinary status edits never rewrite them.
+            legacy_record = record.sort_date_operation_id is None
+            if legacy_record:
+                record.sort_date_operation_id = operation.id
+                if record.work_area_unit_id is None and work_area:
+                    record.work_area_unit_id = work_area.id
+                if record.department_unit_id is None and department:
+                    record.department_unit_id = department.id
+                if record.operation_unit_id is None and operation_unit:
+                    record.operation_unit_id = operation_unit.id
         record.status = status
         record.note = note
-        record.updated_by_user_id = getattr(user, "id", None)
+        record.updated_by_user_id = user_id
         saved += 1
     db.session.flush()
     return saved
+
+
+def current_night_attendance_operation(gateway=None):
+    """Resolve the existing current Night operation without generating one."""
+    gateway = gateway or _attendance_gateway()
+    if not gateway:
+        return None
+    return next(
+        (
+            operation
+            for operation in current_operations_for_gateway(gateway)
+            if _normalize_staffing_sort_name(operation.sort_name)
+            == ATTENDANCE_OPERATION_SORT_NAME
+        ),
+        None,
+    )
+
+
+def _attendance_gateway():
+    gateway_code = current_app.config.get("DEFAULT_GATEWAY_CODE", "RFD").upper()
+    return Gateway.query.filter_by(code=gateway_code, is_active=True).first()
+
+
+def _submitted_attendance_operation(operation_id):
+    try:
+        normalized_id = int(operation_id)
+    except (TypeError, ValueError):
+        return None
+    return db.session.get(SortDateOperation, normalized_id)
+
+
+def _daily_attendance_hierarchy():
+    units = (
+        StaffingUnit.query.filter_by(active=True)
+        .order_by(
+            StaffingUnit.display_order,
+            StaffingUnit.unit_type,
+            StaffingUnit.name,
+            StaffingUnit.id,
+        )
+        .all()
+    )
+    by_id = {unit.id: unit for unit in units}
+    children_by_parent = {}
+    for unit in units:
+        children_by_parent.setdefault(unit.parent_id, []).append(unit)
+    return {
+        "units": units,
+        "by_id": by_id,
+        "children_by_parent": children_by_parent,
+    }
+
+
+def _staffing_sort_for_operation(operation, hierarchy):
+    operation_name = _normalize_staffing_sort_name(operation.sort_name)
+    matches = [
+        unit
+        for unit in hierarchy["units"]
+        if unit.unit_type == "sort"
+        and _normalize_staffing_sort_name(unit.name) == operation_name
+    ]
+    if not matches:
+        raise ValueError(
+            f'No active NeoStaffing Sort matches "{operation.sort_name}".'
+        )
+    if len(matches) > 1:
+        raise ValueError(
+            f'Multiple active NeoStaffing Sorts match "{operation.sort_name}".'
+        )
+    return matches[0]
+
+
+def _normalize_staffing_sort_name(value):
+    normalized = re.sub(r"\s+", " ", str(value or "").strip().lower())
+    if normalized.endswith(" sort"):
+        normalized = normalized[:-5].strip()
+    return normalized
+
+
+def _daily_attendance_scope(
+    filters,
+    hierarchy,
+    staffing_sort,
+    *,
+    user=None,
+    strict=False,
+):
+    selected = None
+    selected_key = None
+    for key, unit_type in (
+        ("work_area_id", "work_area"),
+        ("department_id", "department"),
+        ("operation_id", "operation"),
+        ("sort_id", "sort"),
+    ):
+        raw_value = str(filters.get(key) or "").strip()
+        if not raw_value:
+            continue
+        selected_key = key
+        try:
+            unit_id = int(raw_value)
+        except (TypeError, ValueError):
+            unit_id = None
+        candidate = hierarchy["by_id"].get(unit_id)
+        if not candidate or candidate.unit_type != unit_type:
+            raise ValueError("The selected attendance area is unavailable.")
+        selected = candidate
+        break
+
+    if selected is None and user is not None:
+        selected = _default_daily_attendance_scope(user, hierarchy, staffing_sort)
+    selected = selected or staffing_sort
+    if not _unit_belongs_to_staffing_sort(selected, staffing_sort, hierarchy):
+        message = "The selected attendance area does not belong to the current Night Sort."
+        if strict or selected_key:
+            raise ValueError(message)
+        selected = staffing_sort
+    return selected
+
+
+def _default_daily_attendance_scope(user, hierarchy, staffing_sort):
+    context = management_attendance_context_for_user(user)
+    for card in context.get("assignments") or []:
+        unit = hierarchy["by_id"].get(card["unit"].id)
+        if unit and _unit_belongs_to_staffing_sort(unit, staffing_sort, hierarchy):
+            return unit
+    return None
+
+
+def _unit_belongs_to_staffing_sort(unit, staffing_sort, hierarchy):
+    current = unit
+    visited = set()
+    while current and current.id not in visited:
+        if current.id == staffing_sort.id:
+            return True
+        visited.add(current.id)
+        current = hierarchy["by_id"].get(current.parent_id)
+    return False
+
+
+def _daily_attendance_work_area_ids(scope, hierarchy):
+    if scope.unit_type == "work_area":
+        return {scope.id}
+    work_area_ids = set()
+    pending = [scope.id]
+    while pending:
+        parent_id = pending.pop()
+        for child in hierarchy["children_by_parent"].get(parent_id, []):
+            if child.unit_type == "work_area":
+                work_area_ids.add(child.id)
+            else:
+                pending.append(child.id)
+    return work_area_ids
+
+
+def _daily_attendance_assignments(selected_scope, staffing_sort, hierarchy):
+    work_area_ids = _daily_attendance_work_area_ids(
+        selected_scope or staffing_sort,
+        hierarchy,
+    )
+    if not work_area_ids:
+        return []
+    return (
+        StaffingWorkAssignment.query.options(
+            joinedload(StaffingWorkAssignment.person),
+            joinedload(StaffingWorkAssignment.work_area),
+        )
+        .join(StaffingPerson)
+        .filter(
+            StaffingWorkAssignment.active.is_(True),
+            StaffingWorkAssignment.work_area_unit_id.in_(work_area_ids),
+            StaffingPerson.active.is_(True),
+            StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS),
+        )
+        .order_by(StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.id)
+        .all()
+    )
+
+
+def _daily_attendance_placement(work_area, hierarchy):
+    department = None
+    operation = None
+    staffing_sort = None
+    current = hierarchy["by_id"].get(work_area.parent_id) if work_area else None
+    if current and current.unit_type == "department":
+        department = current
+        current = hierarchy["by_id"].get(current.parent_id)
+    if current and current.unit_type == "operation":
+        operation = current
+        current = hierarchy["by_id"].get(current.parent_id)
+    if current and current.unit_type == "sort":
+        staffing_sort = current
+    return department, operation, staffing_sort
+
+
+def _submitted_attendance_person_ids(values):
+    person_ids = set()
+    for key in values.keys():
+        key = str(key)
+        if not key.startswith("status_"):
+            continue
+        try:
+            person_ids.add(int(key.split("_", 1)[1]))
+        except (TypeError, ValueError):
+            continue
+    return person_ids
+
+
+def _daily_attendance_summary(rows):
+    status_counts = {}
+    for row in rows:
+        if row["status"]:
+            status_counts[row["status"]] = status_counts.get(row["status"], 0) + 1
+    here = status_counts.get("here", 0)
+    absent = sum(
+        count for status, count in status_counts.items() if status != "here"
+    )
+    unmarked = len(rows) - here - absent
+    return {
+        "total_roster": len(rows),
+        "here": here,
+        "absent": absent,
+        "unmarked": unmarked,
+        "status_counts": status_counts,
+        "absence_breakdown": [
+            {
+                "status": status,
+                "label": ATTENDANCE_STATUS_LABELS[status],
+                "count": status_counts[status],
+            }
+            for status in STAFFING_DAILY_ATTENDANCE_STATUSES
+            if status != "here" and status_counts.get(status, 0)
+        ],
+    }
+
+
+def _daily_attendance_rollups(rows):
+    rollups = {"work_area": {}, "department": {}, "operation": {}}
+    for row in rows:
+        for key in rollups:
+            unit = row.get(key)
+            if not unit:
+                continue
+            metrics = rollups[key].setdefault(
+                unit.id,
+                {
+                    "unit": unit,
+                    "total_roster": 0,
+                    "here": 0,
+                    "absent": 0,
+                    "unmarked": 0,
+                },
+            )
+            metrics["total_roster"] += 1
+            if row["status"] == "here":
+                metrics["here"] += 1
+            elif row["status"]:
+                metrics["absent"] += 1
+            else:
+                metrics["unmarked"] += 1
+    return {
+        key: sorted(
+            values.values(),
+            key=lambda item: (
+                item["unit"].display_order,
+                item["unit"].name.lower(),
+                item["unit"].id,
+            ),
+        )
+        for key, values in rollups.items()
+    }
+
+
+def _daily_attendance_scope_options(hierarchy, staffing_sort):
+    options = {"sorts": [], "operations": [], "departments": [], "work_areas": []}
+    option_key_by_type = {
+        "sort": "sorts",
+        "operation": "operations",
+        "department": "departments",
+        "work_area": "work_areas",
+    }
+    for unit in hierarchy["units"]:
+        if not _unit_belongs_to_staffing_sort(unit, staffing_sort, hierarchy):
+            continue
+        options[option_key_by_type[unit.unit_type]].append(
+            {"id": unit.id, "label": _daily_attendance_unit_path(unit, hierarchy)}
+        )
+    return options
+
+
+def _daily_attendance_unit_path(unit, hierarchy):
+    names = []
+    current = unit
+    visited = set()
+    while current and current.id not in visited:
+        visited.add(current.id)
+        names.append(current.name)
+        current = hierarchy["by_id"].get(current.parent_id)
+    return " / ".join(reversed(names))
+
+
+def _daily_attendance_filters(filters, staffing_sort, selected_scope):
+    selected = {
+        "sort_id": "",
+        "operation_id": "",
+        "department_id": "",
+        "work_area_id": "",
+    }
+    key = _attendance_scope_key(selected_scope)
+    selected[key] = str(selected_scope.id)
+    selected["sort_id"] = str(staffing_sort.id)
+    return selected
+
+
+def _empty_daily_attendance_context(filters, message, operation=None, hierarchy=None):
+    empty_options = {"sorts": [], "operations": [], "departments": [], "work_areas": []}
+    return {
+        "ready": False,
+        "message": message,
+        "sort_date_operation": operation,
+        "attendance_date": operation.sort_date if operation else None,
+        "selected_sort": None,
+        "selected_scope": None,
+        "rows": [],
+        "counts": {},
+        "summary": {
+            "total_roster": 0,
+            "here": 0,
+            "absent": 0,
+            "unmarked": 0,
+            "status_counts": {},
+            "absence_breakdown": [],
+        },
+        "total_loaded": 0,
+        "rollups": {"work_area": [], "department": [], "operation": []},
+        "scope_options": empty_options,
+        "status_choices": attendance_status_choices(),
+        "filters": {
+            "sort_id": str(filters.get("sort_id") or ""),
+            "operation_id": str(filters.get("operation_id") or ""),
+            "department_id": str(filters.get("department_id") or ""),
+            "work_area_id": str(filters.get("work_area_id") or ""),
+        },
+    }
 
 
 def _attendance_assignments_for_scope(selected_scope, selected_sort):

@@ -16,55 +16,63 @@
 
             <section class="neostaffing-data-card">
                 <h2>ATTENDANCE SCOPE</h2>
+                {% if attendance.sort_date_operation %}
+                <p class="muted">
+                    {{ attendance.sort_date_operation.gateway_code }}
+                    {{ attendance.sort_date_operation.sort_name|upper }} SORT
+                    &middot; {{ attendance.attendance_date.strftime("%B %d, %Y")|upper }}
+                </p>
+                {% endif %}
+                {% if not attendance.ready %}
+                <p class="muted" role="status">{{ attendance.message }}</p>
+                {% else %}
                 <form class="operation-form neostaffing-filter-form" method="get">
-                    <label><span>Date</span><input type="date" name="attendance_date" value="{{ filters.attendance_date }}"></label>
                     <label><span>Sort</span>
                         <select name="sort_id">
-                            <option value="">Auto</option>
-                            {% for unit in attendance.sorts %}
-                            <option value="{{ unit.id }}" {% if filters.sort_id|string == unit.id|string %}selected{% endif %}>{{ unit.name }}</option>
+                            {% for unit in attendance.scope_options.sorts %}
+                            <option value="{{ unit.id }}" {% if filters.sort_id|string == unit.id|string %}selected{% endif %}>{{ unit.label }}</option>
                             {% endfor %}
                         </select>
                     </label>
                     <label><span>Operation</span>
                         <select name="operation_id">
                             <option value="">All</option>
-                            {% for unit in attendance.operations %}
-                            <option value="{{ unit.id }}" {% if filters.operation_id|string == unit.id|string %}selected{% endif %}>{{ unit_path(unit) }}</option>
+                            {% for unit in attendance.scope_options.operations %}
+                            <option value="{{ unit.id }}" {% if filters.operation_id|string == unit.id|string %}selected{% endif %}>{{ unit.label }}</option>
                             {% endfor %}
                         </select>
                     </label>
                     <label><span>Department</span>
                         <select name="department_id">
                             <option value="">All</option>
-                            {% for unit in attendance.departments %}
-                            <option value="{{ unit.id }}" {% if filters.department_id|string == unit.id|string %}selected{% endif %}>{{ unit_path(unit) }}</option>
+                            {% for unit in attendance.scope_options.departments %}
+                            <option value="{{ unit.id }}" {% if filters.department_id|string == unit.id|string %}selected{% endif %}>{{ unit.label }}</option>
                             {% endfor %}
                         </select>
                     </label>
                     <label><span>Work Area</span>
                         <select name="work_area_id">
                             <option value="">All</option>
-                            {% for unit in attendance.work_areas %}
-                            <option value="{{ unit.id }}" {% if filters.work_area_id|string == unit.id|string %}selected{% endif %}>{{ unit_path(unit) }}</option>
+                            {% for unit in attendance.scope_options.work_areas %}
+                            <option value="{{ unit.id }}" {% if filters.work_area_id|string == unit.id|string %}selected{% endif %}>{{ unit.label }}</option>
                             {% endfor %}
                         </select>
                     </label>
                     <button type="submit">LOAD</button>
                 </form>
+                {% endif %}
             </section>
 
+            {% if attendance.ready %}
             <section class="neostaffing-summary-strip" aria-label="Attendance counts">
-                <article><span>Loaded People</span><strong>{{ attendance.total_loaded }}</strong></article>
-                {% for value, label in attendance.status_choices %}
-                {% if attendance.counts.get(value, 0) %}
-                <article><span>{{ label }}</span><strong>{{ attendance.counts[value] }}</strong></article>
-                {% endif %}
-                {% endfor %}
+                <article><span>Total Roster</span><strong>{{ attendance.summary.total_roster }}</strong></article>
+                <article><span>Here</span><strong>{{ attendance.summary.here }}</strong></article>
+                <article><span>Absent</span><strong>{{ attendance.summary.absent }}</strong></article>
+                <article><span>Unmarked</span><strong>{{ attendance.summary.unmarked }}</strong></article>
             </section>
 
             <form class="neostaffing-data-card" method="post">
-                <input type="hidden" name="attendance_date" value="{{ filters.attendance_date }}">
+                <input type="hidden" name="sort_date_operation_id" value="{{ attendance.sort_date_operation.id }}">
                 <input type="hidden" name="sort_id" value="{{ filters.sort_id }}">
                 <input type="hidden" name="operation_id" value="{{ filters.operation_id }}">
                 <input type="hidden" name="department_id" value="{{ filters.department_id }}">
@@ -87,6 +95,7 @@
                             <em>{{ row.work_area.name if row.work_area else "Unassigned" }}</em>
                         </div>
                         <select name="status_{{ row.person.id }}" {% if not can_edit_attendance %}disabled{% endif %}>
+                            <option value="" {% if not row.status %}selected{% endif %}>Unmarked</option>
                             {% for value, label in attendance.status_choices %}
                             <option value="{{ value }}" {% if row.status == value %}selected{% endif %}>{{ label }}</option>
                             {% endfor %}
@@ -98,6 +107,40 @@
                     {% endfor %}
                 </div>
             </form>
+
+            {% if attendance.summary.absence_breakdown %}
+            <section class="neostaffing-data-card" aria-labelledby="attendance-breakdown-title">
+                <h2 id="attendance-breakdown-title">ABSENCE BREAKDOWN</h2>
+                <div class="neostaffing-summary-strip">
+                    {% for item in attendance.summary.absence_breakdown %}
+                    <article><span>{{ item.label }}</span><strong>{{ item.count }}</strong></article>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+
+            {% for rollup_key, rollup_label in (("work_area", "WORK AREA"), ("department", "DEPARTMENT"), ("operation", "OPERATION")) %}
+            {% set rollup_rows = attendance.rollups[rollup_key] %}
+            {% if rollup_rows %}
+            <section class="neostaffing-data-card neostaffing-rollup-section" aria-labelledby="attendance-{{ rollup_key }}-rollup-title">
+                <h2 id="attendance-{{ rollup_key }}-rollup-title">{{ rollup_label }} ROLLUP</h2>
+                <div class="neostaffing-rollup-grid">
+                    {% for rollup in rollup_rows %}
+                    <article class="neostaffing-rollup-card">
+                        <strong>{{ rollup.unit.name }}</strong>
+                        <dl>
+                            <div><dt>Roster</dt><dd>{{ rollup.total_roster }}</dd></div>
+                            <div><dt>Here</dt><dd>{{ rollup.here }}</dd></div>
+                            <div><dt>Absent</dt><dd>{{ rollup.absent }}</dd></div>
+                            <div><dt>Unmarked</dt><dd>{{ rollup.unmarked }}</dd></div>
+                        </dl>
+                    </article>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+            {% endfor %}
+            {% endif %}
         </div>
     </div>
 </section>

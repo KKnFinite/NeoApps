@@ -74,6 +74,9 @@ from app.services.neoermac_door_supervision_schema import (
 from app.services.neoermac_uld_workspace_schema import (
     ensure_neoermac_uld_workspace_columns,
 )
+from app.services.neostaffing_attendance_schema import (
+    ensure_neostaffing_attendance_columns,
+)
 from app.services.shell_metadata import resolve_shell_metadata
 from app.services.time_display import format_local_hhmm
 
@@ -108,6 +111,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     ensure_neoermac_building_lineup_columns(app)
     ensure_neoermac_door_supervision_table(app)
     ensure_neoermac_uld_workspace_columns(app)
+    ensure_neostaffing_attendance_columns(app)
 
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)
