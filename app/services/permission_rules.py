@@ -402,6 +402,11 @@ DEFAULT_PERMISSION_RULES = (
         "Bulk assign, move, or clear NeoStaffing People work-area assignments.",
     ),
     (
+        "neostaffing.bulk_change.use",
+        "operator",
+        "Stage and apply or submit coordinated NeoStaffing changes.",
+    ),
+    (
         "neostaffing.attendance.take",
         "operator",
         "Record or update NeoStaffing daily attendance.",
@@ -1069,6 +1074,15 @@ PERMISSION_RULE_ITEMS = (
         {
             "view": "neostaffing.people.view",
             "edit": "neostaffing.attendance.take",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.bulk_change",
+        "Bulk Change",
+        "Stage coordinated employee, management, reporting, and structural changes before one final action.",
+        {
+            "edit": "neostaffing.bulk_change.use",
         },
     ),
     (

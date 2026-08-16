@@ -15,6 +15,7 @@ from app.neostaffing import bp
 from app.services.access_control import get_user_app_role, user_can_access_app, user_has_app_access
 from app.services import neostaffing as staffing_service
 from app.services import neostaffing_change_requests as change_request_service
+from app.services import neostaffing_bulk_change as bulk_change_service
 from app.services import neostaffing_management_review as management_review_service
 from app.services.permission_rules import ensure_default_permission_rules, user_can
 
@@ -33,6 +34,7 @@ MANAGEMENT_ASSIGN_PERMISSION = "neostaffing.management.assign"
 CHANGE_REQUEST_VIEW_PERMISSION = "neostaffing.change_requests.view"
 CHANGE_REQUEST_SUBMIT_PERMISSION = "neostaffing.change_requests.submit"
 CHANGE_REQUEST_APPROVE_PERMISSION = "neostaffing.change_requests.approve"
+BULK_CHANGE_PERMISSION = "neostaffing.bulk_change.use"
 HIERARCHY_VIEW_PERMISSION = "neostaffing.hierarchy.view"
 PLANNED_STAFFING_EDIT_PERMISSION = "neostaffing.planned_staffing.edit"
 PERMISSIONS_VIEW_PERMISSION = "neostaffing.permissions.view"
@@ -67,6 +69,7 @@ NEOSTAFFING_PERMISSION_LABELS = {
     "neostaffing.change_requests.view": "View Change Requests",
     "neostaffing.change_requests.submit": "Submit Change Requests",
     "neostaffing.change_requests.approve": "Approve Change Requests",
+    "neostaffing.bulk_change.use": "Use Bulk Change",
 }
 
 
@@ -243,6 +246,83 @@ def change_requests():
         "neostaffing/change_requests.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
         requests_context=context,
+    )
+
+
+@bp.route("/bulk-change", methods=["GET", "POST"])
+@neostaffing_app_required(permission_key=BULK_CHANGE_PERMISSION)
+def bulk_change():
+    workspace = bulk_change_service.new_workspace(current_user)
+    token_valid = True
+    if request.method == "POST":
+        try:
+            workspace = bulk_change_service.decode_workspace(
+                request.form.get("workspace_token"),
+                current_user,
+            )
+        except ValueError as error:
+            flash(str(error), "error")
+            workspace = bulk_change_service.new_workspace(current_user)
+            token_valid = False
+
+        action = request.form.get("action", "").strip() if token_valid else ""
+        if action == "cancel":
+            flash("Bulk Change workspace discarded.", "success")
+            return redirect(url_for("neostaffing.bulk_change"))
+        if action == "apply":
+            try:
+                result = bulk_change_service.apply_workspace(workspace, current_user)
+                db.session.commit()
+            except (ValueError, IntegrityError) as error:
+                db.session.rollback()
+                flash(str(getattr(error, "orig", None) or error), "error")
+            else:
+                flash(
+                    "Applied the complete Bulk Change package in one transaction "
+                    f"({result['people']} people updated).",
+                    "success",
+                )
+                return redirect(url_for("neostaffing.bulk_change"))
+        elif action == "submit":
+            try:
+                result = bulk_change_service.submit_workspace(workspace, current_user)
+                if result["requests"]:
+                    db.session.commit()
+            except (ValueError, IntegrityError) as error:
+                db.session.rollback()
+                flash(str(getattr(error, "orig", None) or error), "error")
+            else:
+                if result["requests"]:
+                    flash(
+                        f"Submitted {len(result['requests'])} employee request(s) for approval.",
+                        "success",
+                    )
+                for blocked in result["blocked"]:
+                    flash(blocked["reason"], "warning")
+                if result["unsupported"]:
+                    flash(
+                        "Unsupported management or structural items remain staged and were not applied.",
+                        "warning",
+                    )
+        elif action:
+            try:
+                bulk_change_service.stage_workspace_change(
+                    workspace,
+                    action,
+                    request.form,
+                    current_user,
+                )
+            except ValueError as error:
+                flash(str(error), "error")
+            else:
+                flash("Bulk Change workspace updated. Nothing is live yet.", "success")
+
+    context = bulk_change_service.bulk_change_context(workspace, current_user)
+    return render_template(
+        "neostaffing/bulk_change.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
+        bulk_change=context,
+        workspace_token=bulk_change_service.encode_workspace(workspace),
     )
 
 

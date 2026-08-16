@@ -482,6 +482,239 @@ def submit_change_request(values, user):
     return change_request
 
 
+def submit_bulk_change_requests(packages, user):
+    """Create separate employee requests in bounded queries.
+
+    Pending field conflicts are returned per field so one conflict does not block
+    otherwise valid staged employee changes.
+    """
+    if not can_submit_change_requests(user):
+        raise ValueError("You do not have authority to submit employee change requests.")
+    app_role = get_user_app_role(user, "neostaffing")
+    is_grandmaster = _is_grandmaster(user, app_role)
+    submitter_person = _staffing_person_for_user(user)
+    if not is_grandmaster and (
+        not submitter_person
+        or submitter_person.classification != "part_time_supervisor"
+    ):
+        raise ValueError("Only a PT Supervisor may submit these employee changes.")
+
+    normalized_packages = []
+    for package in packages or []:
+        try:
+            person_id = int(package.get("person_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        if person_id > 0:
+            normalized_packages.append(
+                {
+                    "person_id": person_id,
+                    "changes": dict(package.get("changes") or {}),
+                    "request_note": _optional_text(package.get("request_note")),
+                }
+            )
+    person_ids = {row["person_id"] for row in normalized_packages}
+    people = (
+        StaffingPerson.query.filter(StaffingPerson.id.in_(person_ids or {-1}))
+        .order_by(StaffingPerson.id)
+        .with_for_update()
+        .all()
+    )
+    people_by_id = {row.id: row for row in people}
+    assignments = (
+        StaffingWorkAssignment.query.filter(
+            StaffingWorkAssignment.person_id.in_(person_ids or {-1})
+        )
+        .order_by(StaffingWorkAssignment.id)
+        .with_for_update()
+        .all()
+    )
+    assignments_by_person = {row.person_id: row for row in assignments if row.active}
+    pending_items = (
+        StaffingChangeRequestItem.query.filter(
+            StaffingChangeRequestItem.person_id.in_(person_ids or {-1}),
+            StaffingChangeRequestItem.status == "pending",
+        )
+        .order_by(StaffingChangeRequestItem.id)
+        .with_for_update()
+        .all()
+    )
+    pending_fields_by_person = {}
+    for item in pending_items:
+        pending_fields_by_person.setdefault(item.person_id, set()).add(item.field_name)
+
+    units = StaffingUnit.query.order_by(StaffingUnit.id).all()
+    units_by_id = {row.id: row for row in units}
+    leadership = StaffingLeadershipAssignment.query.filter_by(active=True).all()
+    management_people = StaffingPerson.query.filter(
+        StaffingPerson.active.is_(True),
+        StaffingPerson.classification.in_(APPROVER_CLASSIFICATIONS | {"part_time_supervisor"}),
+    ).all()
+    management_by_id = {row.id: row for row in management_people}
+    if submitter_person:
+        management_by_id[submitter_person.id] = submitter_person
+    relationship = None
+    if submitter_person:
+        relationship = StaffingReportingRelationship.query.filter_by(
+            person_id=submitter_person.id,
+            active=True,
+        ).first()
+
+    owned_area_ids = {
+        row.unit_id
+        for row in leadership
+        if submitter_person
+        and row.person_id == submitter_person.id
+        and row.leadership_level == "work_area"
+    }
+    can_cross_area = bool(
+        is_grandmaster
+        or ROLE_LEVELS.get(app_role, 0) >= ROLE_LEVELS["simulator"]
+    )
+    now = datetime.utcnow()
+    requests = []
+    submitted_fields = []
+    blocked = []
+    for package in normalized_packages:
+        person = people_by_id.get(package["person_id"])
+        if (
+            not person
+            or not person.active
+            or person.classification not in NON_MANAGEMENT_CLASSIFICATIONS
+        ):
+            blocked.append(
+                {
+                    "person_id": package["person_id"],
+                    "field": None,
+                    "reason": "Only active non-management employees can use the current request workflow.",
+                }
+            )
+            continue
+        assignment = assignments_by_person.get(person.id)
+        if not can_cross_area and (
+            not assignment or assignment.work_area_unit_id not in owned_area_ids
+        ):
+            blocked.append(
+                {
+                    "person_id": person.id,
+                    "field": None,
+                    "reason": "This employee is outside your normal staffing area.",
+                }
+            )
+            continue
+
+        current_values = {
+            "first_name": person.first_name,
+            "last_name": person.last_name,
+            "seniority_date": person.seniority_date.isoformat(),
+            "employee_status": person.employee_status,
+            "classification": person.classification,
+            "work_area_unit_id": assignment.work_area_unit_id if assignment else None,
+        }
+        changed_values = {}
+        for field_name, raw_value in package["changes"].items():
+            if field_name not in CHANGE_REQUEST_FIELD_LABELS:
+                blocked.append(
+                    {
+                        "person_id": person.id,
+                        "field": field_name,
+                        "reason": "This field is not supported by the current request workflow.",
+                    }
+                )
+                continue
+            requested_value = _normalize_bulk_requested_value(
+                field_name,
+                raw_value,
+                units_by_id,
+            )
+            if requested_value == current_values[field_name]:
+                continue
+            if field_name in pending_fields_by_person.get(person.id, set()):
+                blocked.append(
+                    {
+                        "person_id": person.id,
+                        "field": field_name,
+                        "reason": (
+                            "A Pending request already exists for "
+                            f"{CHANGE_REQUEST_FIELD_LABELS[field_name]}."
+                        ),
+                    }
+                )
+                continue
+            changed_values[field_name] = requested_value
+        if not changed_values:
+            continue
+
+        source_area_id = assignment.work_area_unit_id if assignment else None
+        destination_area_id = (
+            changed_values.get("work_area_unit_id")
+            if "work_area_unit_id" in changed_values
+            else None
+        )
+        routed_ids = _route_approvers_from_loaded_rows(
+            source_area_id,
+            destination_area_id,
+            submitter_person,
+            units_by_id,
+            leadership,
+            management_by_id,
+            relationship,
+        )
+        change_request = StaffingChangeRequest(
+            person_id=person.id,
+            submitted_by_user_id=user.id,
+            submitted_by_person_id=submitter_person.id if submitter_person else None,
+            source_work_area_unit_id=source_area_id,
+            destination_work_area_unit_id=destination_area_id,
+            routed_approver_person_ids_json=json.dumps(routed_ids),
+            unassigned_approval=not bool(routed_ids),
+            request_note=package["request_note"],
+            status="pending",
+            submitted_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        db.session.add(change_request)
+        db.session.flush()
+        items = []
+        for field_name, requested_value in changed_values.items():
+            item = StaffingChangeRequestItem(
+                request_id=change_request.id,
+                person_id=person.id,
+                field_name=field_name,
+                original_value_json=_encode_value(current_values[field_name]),
+                requested_value_json=_encode_value(requested_value),
+                status="pending",
+                created_at=now,
+                updated_at=now,
+            )
+            db.session.add(item)
+            items.append(item)
+            submitted_fields.append(
+                {"person_id": person.id, "field": field_name}
+            )
+        db.session.flush()
+        for item in items:
+            _add_event(
+                change_request,
+                item,
+                user,
+                "submitted",
+                None,
+                "pending",
+                package["request_note"],
+            )
+        requests.append(change_request)
+        pending_fields_by_person.setdefault(person.id, set()).update(changed_values)
+
+    db.session.flush()
+    return {
+        "requests": requests,
+        "submitted_fields": submitted_fields,
+        "blocked": blocked,
+    }
+
+
 def decide_change_request_item(item_id, action, reason, user, expected_revision):
     _require_approver(user)
     request_id = db.session.query(StaffingChangeRequestItem.request_id).filter_by(
@@ -942,6 +1175,84 @@ def _route_approver_person_ids(source_area_id, destination_area_id, submitter_pe
         if relationship:
             approver_ids = [relationship.reports_to_person_id]
     return sorted(set(approver_ids))
+
+
+def _route_approvers_from_loaded_rows(
+    source_area_id,
+    destination_area_id,
+    submitter_person,
+    units_by_id,
+    leadership,
+    people_by_id,
+    submitter_relationship,
+):
+    area_ids = {
+        area_id
+        for area_id in (source_area_id, destination_area_id)
+        if area_id
+    }
+    department_ids = {
+        unit.parent_id
+        for area_id in area_ids
+        for unit in (units_by_id.get(area_id),)
+        if unit
+        and unit.parent_id
+        and units_by_id.get(unit.parent_id)
+        and units_by_id[unit.parent_id].unit_type == "department"
+    }
+    approver_ids = {
+        row.person_id
+        for row in leadership
+        if row.active
+        and row.unit_id in department_ids
+        and row.leadership_level == "department"
+        and people_by_id.get(row.person_id)
+        and people_by_id[row.person_id].active
+        and people_by_id[row.person_id].classification == "full_time_supervisor"
+    }
+    if not approver_ids and submitter_person and submitter_relationship:
+        target = people_by_id.get(submitter_relationship.reports_to_person_id)
+        if (
+            target
+            and target.active
+            and target.classification == "full_time_supervisor"
+        ):
+            approver_ids.add(target.id)
+    return sorted(approver_ids)
+
+
+def _normalize_bulk_requested_value(field_name, value, units_by_id):
+    if field_name == "first_name":
+        return _validate_name(value, "First name")
+    if field_name == "last_name":
+        return _validate_name(value, "Last name")
+    if field_name == "seniority_date":
+        try:
+            return date.fromisoformat(str(value or "").strip()).isoformat()
+        except ValueError as error:
+            raise ValueError("Seniority date must be a valid date.") from error
+    if field_name == "employee_status":
+        normalized = str(value or "").strip().lower()
+        if normalized not in STAFFING_EMPLOYEE_STATUSES:
+            raise ValueError("Choose a valid employee status.")
+        return normalized
+    if field_name == "classification":
+        normalized = str(value or "").strip().lower()
+        if normalized not in NON_MANAGEMENT_CLASSIFICATIONS:
+            raise ValueError("Only non-management classification changes are supported.")
+        return normalized
+    if field_name == "work_area_unit_id":
+        if value is None:
+            return None
+        try:
+            unit_id = int(value)
+        except (TypeError, ValueError):
+            raise ValueError("Select a valid Work Area.")
+        unit = units_by_id.get(unit_id)
+        if not unit or not unit.active or unit.unit_type != "work_area":
+            raise ValueError("Select an active Work Area.")
+        return unit.id
+    raise ValueError("Unsupported change-request field.")
 
 
 def _submission_candidates(
