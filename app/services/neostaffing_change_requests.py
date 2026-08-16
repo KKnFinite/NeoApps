@@ -11,6 +11,7 @@ from app.models import (
     StaffingChangeRequestEvent,
     StaffingChangeRequestItem,
     StaffingLeadershipAssignment,
+    StaffingNotification,
     StaffingPerson,
     StaffingReportingRelationship,
     StaffingUnit,
@@ -26,6 +27,7 @@ from app.services.neostaffing import (
     NON_MANAGEMENT_CLASSIFICATIONS,
 )
 from app.services.permission_rules import user_can
+from app.services import neostaffing_notifications as notification_service
 
 
 CHANGE_REQUEST_VIEW_PERMISSION = "neostaffing.change_requests.view"
@@ -478,6 +480,7 @@ def submit_change_request(values, user):
             None,
             user,
         )
+    notification_service.notify_new_requests([change_request])
     db.session.flush()
     return change_request
 
@@ -707,6 +710,7 @@ def submit_bulk_change_requests(packages, user):
         requests.append(change_request)
         pending_fields_by_person.setdefault(person.id, set()).update(changed_values)
 
+    notification_service.notify_new_requests(requests)
     db.session.flush()
     return {
         "requests": requests,
@@ -781,7 +785,16 @@ def withdraw_change_request_item(item_id, reason, user, expected_revision):
         "withdrawn",
         _optional_text(reason),
     )
-    _refresh_request_completion(change_request, all_items)
+    completed = _refresh_request_completion(change_request, all_items)
+    notification_service.notify_submitter_updates_batch(
+        [
+            {
+                "request": change_request,
+                "items": all_items,
+                "completed": completed,
+            }
+        ]
+    )
     db.session.flush()
     return item
 
@@ -804,7 +817,16 @@ def withdraw_change_request_remaining(request_id, reason, user):
             "withdrawn",
             _optional_text(reason),
         )
-    _refresh_request_completion(change_request, all_items)
+    completed = _refresh_request_completion(change_request, all_items)
+    notification_service.notify_submitter_updates_batch(
+        [
+            {
+                "request": change_request,
+                "items": all_items,
+                "completed": completed,
+            }
+        ]
+    )
     db.session.flush()
     return len(pending_items)
 
@@ -867,6 +889,16 @@ def reverse_change_request_item(item_id, reason, user, expected_revision):
     change_request.status = "pending"
     change_request.completed_at = None
     change_request.updated_at = datetime.utcnow()
+    notification_service.notify_submitter_updates_batch(
+        [
+            {
+                "request": change_request,
+                "items": all_items,
+                "reversed_item": locked_item,
+                "reversed_from": previous_status,
+            }
+        ]
+    )
     db.session.flush()
     return locked_item
 
@@ -880,15 +912,20 @@ def cleanup_change_request_retention(now=None):
     ).with_for_update().all()
     expired_ids = {row.id for row in expired_requests}
     expired_items = StaffingChangeRequestItem.query.filter(
-        StaffingChangeRequestItem.request_id.in_(expired_ids or {-1}),
-        StaffingChangeRequestItem.status == "pending",
+        StaffingChangeRequestItem.request_id.in_(expired_ids or {-1})
     ).with_for_update().all()
     items_by_request = {}
     for item in expired_items:
         items_by_request.setdefault(item.request_id, []).append(item)
+    notification_updates = []
     for change_request in expired_requests:
-        for item in items_by_request.get(change_request.id, []):
+        superseded_items = []
+        request_items = items_by_request.get(change_request.id, [])
+        for item in request_items:
+            if item.status != "pending":
+                continue
             _set_item_status(item, "superseded", None, "Request expired after 30 days.", now=now)
+            superseded_items.append(item)
             _add_event(
                 change_request,
                 item,
@@ -902,6 +939,19 @@ def cleanup_change_request_retention(now=None):
         change_request.status = "completed"
         change_request.completed_at = now
         change_request.updated_at = now
+        notification_updates.append(
+            {
+                "request": change_request,
+                "items": request_items,
+                "superseded_items": superseded_items,
+                "completed": True,
+            }
+        )
+
+    notification_service.notify_submitter_updates_batch(
+        notification_updates,
+        now=now,
+    )
 
     purge_rows = StaffingChangeRequest.query.filter(
         StaffingChangeRequest.status == "completed",
@@ -910,6 +960,9 @@ def cleanup_change_request_retention(now=None):
     ).all()
     purge_ids = {row.id for row in purge_rows}
     if purge_ids:
+        StaffingNotification.query.filter(
+            StaffingNotification.change_request_id.in_(purge_ids)
+        ).delete(synchronize_session=False)
         StaffingChangeRequestEvent.query.filter(
             StaffingChangeRequestEvent.request_id.in_(purge_ids)
         ).delete(synchronize_session=False)
@@ -945,6 +998,7 @@ def _decide_locked_items(
     if normalized_action == "deny":
         reason = _required_reason(reason, "A denial reason is required.")
     results = []
+    superseded_items = []
     for item in items:
         if item.status != "pending":
             continue
@@ -977,6 +1031,7 @@ def _decide_locked_items(
                 "superseded",
                 message,
             )
+            superseded_items.append(item)
         else:
             assignment = _apply_field_value(
                 person,
@@ -995,7 +1050,18 @@ def _decide_locked_items(
                 None,
             )
         results.append(item)
-    _refresh_request_completion(change_request, all_items or items)
+    request_items = all_items or items
+    completed = _refresh_request_completion(change_request, request_items)
+    notification_service.notify_submitter_updates_batch(
+        [
+            {
+                "request": change_request,
+                "items": request_items,
+                "superseded_items": superseded_items,
+                "completed": completed,
+            }
+        ]
+    )
     db.session.flush()
     return results
 
@@ -1023,6 +1089,7 @@ def _locked_request_state(request_id):
 
 def _refresh_request_completion(change_request, items):
     now = datetime.utcnow()
+    was_completed = change_request.status == "completed"
     if any(item.status == "pending" for item in items):
         change_request.status = "pending"
         change_request.completed_at = None
@@ -1030,6 +1097,7 @@ def _refresh_request_completion(change_request, items):
         change_request.status = "completed"
         change_request.completed_at = now
     change_request.updated_at = now
+    return bool(not was_completed and change_request.status == "completed")
 
 
 def _set_item_status(item, status, user, reason, now=None):

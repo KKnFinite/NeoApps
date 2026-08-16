@@ -27,6 +27,11 @@
             {% if user_can("neostaffing.change_requests.view") %}
             <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.change_requests') }}">
                 <span>REQUESTS</span>
+                {% if neostaffing_nav.actionable_requests %}<strong class="neostaffing-status-pill is-yellow" aria-label="{{ neostaffing_nav.actionable_requests }} actionable requests">{{ neostaffing_nav.actionable_requests }}</strong>{% endif %}
+            </a>
+            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.staffing_notifications') }}">
+                <span>NOTIFICATIONS</span>
+                {% if neostaffing_nav.unread_notifications %}<strong class="neostaffing-status-pill is-yellow" aria-label="{{ neostaffing_nav.unread_notifications }} unread notifications">{{ neostaffing_nav.unread_notifications }}</strong>{% endif %}
             </a>
             {% endif %}
             {% if user_can("neostaffing.vacation_selection.view") %}

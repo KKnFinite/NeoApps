@@ -8,7 +8,14 @@
     <a href="{{ url_for('neostaffing.staffing_groups') }}" {% if request.endpoint == "neostaffing.staffing_groups" %}aria-current="page"{% endif %}>Staffing Groups</a>
     {% endif %}
     {% if user_can("neostaffing.change_requests.view") %}
-    <a href="{{ url_for('neostaffing.change_requests') }}" {% if request.endpoint == "neostaffing.change_requests" %}aria-current="page"{% endif %}>Requests</a>
+    <a href="{{ url_for('neostaffing.change_requests') }}" {% if request.endpoint == "neostaffing.change_requests" %}aria-current="page"{% endif %}>
+        Requests
+        {% if neostaffing_nav.actionable_requests %}<strong class="neostaffing-status-pill is-yellow" aria-label="{{ neostaffing_nav.actionable_requests }} actionable requests">{{ neostaffing_nav.actionable_requests }}</strong>{% endif %}
+    </a>
+    <a href="{{ url_for('neostaffing.staffing_notifications') }}" {% if request.endpoint == "neostaffing.staffing_notifications" %}aria-current="page"{% endif %}>
+        Notifications
+        {% if neostaffing_nav.unread_notifications %}<strong class="neostaffing-status-pill is-yellow" aria-label="{{ neostaffing_nav.unread_notifications }} unread notifications">{{ neostaffing_nav.unread_notifications }}</strong>{% endif %}
+    </a>
     {% endif %}
     {% if user_can("neostaffing.bulk_change.use") %}
     <a href="{{ url_for('neostaffing.bulk_change') }}" {% if request.endpoint == "neostaffing.bulk_change" %}aria-current="page"{% endif %}>Bulk Change</a>

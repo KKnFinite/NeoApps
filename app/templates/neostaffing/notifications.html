@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}NeoStaffing Notifications{% endblock %}
+
+{% block content %}
+{% set context = notifications_context %}
+<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="neostaffing-notifications-title">
+    <div class="neostaffing-dashboard-shell">
+        {% include "neostaffing/_section_nav.html" %}
+
+        <main class="neostaffing-dashboard-main">
+            <header class="neostaffing-dashboard-topbar">
+                <div class="mobile-shell-duplicate-title">
+                    <h1 id="neostaffing-notifications-title">Notifications</h1>
+                </div>
+                {% if context.unread_count %}<span class="neostaffing-status-pill is-yellow">{{ context.unread_count }} UNREAD</span>{% endif %}
+            </header>
+
+            <section class="neostaffing-group-list" aria-label="NeoStaffing notification history">
+                {% for notification in context.notifications %}
+                <article class="neostaffing-data-card">
+                    <div class="neostaffing-panel-heading">
+                        <div>
+                            <h2>{{ context.type_labels.get(notification.notification_type, notification.notification_type|replace('_', ' ')|title) }}</h2>
+                            <span>{{ notification.created_at.strftime("%b %d, %Y %H:%M") }}</span>
+                        </div>
+                        {% if not notification.read_at %}<span class="neostaffing-status-pill is-yellow">UNREAD</span>{% endif %}
+                    </div>
+                    <p>{{ notification.message }}</p>
+                    {% if notification.change_request and notification.change_request.person %}
+                    <p><strong>{{ notification.change_request.person.full_name }}</strong> &middot; {{ notification.change_request.person.employee_id }} &middot; REQUEST #{{ notification.change_request_id }}</p>
+                    {% endif %}
+                    <div class="action-row">
+                        <form method="post" action="{{ url_for('neostaffing.open_staffing_notification', notification_id=notification.id) }}">
+                            <button type="submit">OPEN REQUEST</button>
+                        </form>
+                        {% if not notification.read_at %}
+                        <form method="post" action="{{ url_for('neostaffing.read_staffing_notification', notification_id=notification.id) }}">
+                            <button class="action-button-secondary" type="submit">MARK READ</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </article>
+                {% else %}
+                <section class="neostaffing-data-card neostaffing-empty-state" role="status">
+                    <h2>NO NOTIFICATIONS</h2>
+                    <p>NeoStaffing request activity from the last 14 days will appear here.</p>
+                </section>
+                {% endfor %}
+            </section>
+        </main>
+    </div>
+</section>
+{% endblock %}

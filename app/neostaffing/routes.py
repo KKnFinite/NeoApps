@@ -18,6 +18,7 @@ from app.services import neostaffing as staffing_service
 from app.services import neostaffing_change_requests as change_request_service
 from app.services import neostaffing_bulk_change as bulk_change_service
 from app.services import neostaffing_management_review as management_review_service
+from app.services import neostaffing_notifications as notification_service
 from app.services.permission_rules import ensure_default_permission_rules, user_can
 
 
@@ -76,6 +77,15 @@ NEOSTAFFING_PERMISSION_LABELS = {
     "neostaffing.change_requests.approve": "Approve Change Requests",
     "neostaffing.bulk_change.use": "Use Bulk Change",
 }
+
+
+@bp.context_processor
+def inject_neostaffing_navigation():
+    return {
+        "neostaffing_nav": notification_service.notification_navigation_state(
+            current_user
+        )
+    }
 
 
 def neostaffing_app_required(minimum_role="watcher", permission_key=None):
@@ -275,8 +285,8 @@ def staffing_groups():
 @bp.route("/requests")
 @neostaffing_app_required(permission_key=CHANGE_REQUEST_VIEW_PERMISSION)
 def change_requests():
-    cleanup = change_request_service.cleanup_change_request_retention()
-    if cleanup["changed"]:
+    maintenance = _maintain_change_request_activity()
+    if maintenance["changed"]:
         db.session.commit()
     context = change_request_service.change_request_context(
         {
@@ -291,6 +301,63 @@ def change_requests():
         "neostaffing/change_requests.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
         requests_context=context,
+    )
+
+
+@bp.route("/notifications")
+@neostaffing_app_required(permission_key=CHANGE_REQUEST_VIEW_PERMISSION)
+def staffing_notifications():
+    maintenance = _maintain_change_request_activity()
+    if maintenance["changed"]:
+        db.session.commit()
+    return render_template(
+        "neostaffing/notifications.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
+        notifications_context=notification_service.notification_context(
+            current_user
+        ),
+    )
+
+
+@bp.route("/notifications/<int:notification_id>/read", methods=["POST"])
+@neostaffing_app_required(permission_key=CHANGE_REQUEST_VIEW_PERMISSION)
+def read_staffing_notification(notification_id):
+    try:
+        maintenance = _maintain_change_request_activity()
+        _notification, changed = notification_service.mark_notification_read(
+            notification_id,
+            current_user,
+        )
+        if maintenance["changed"] or changed:
+            db.session.commit()
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), "error")
+    return redirect(url_for("neostaffing.staffing_notifications"))
+
+
+@bp.route("/notifications/<int:notification_id>/open", methods=["POST"])
+@neostaffing_app_required(permission_key=CHANGE_REQUEST_VIEW_PERMISSION)
+def open_staffing_notification(notification_id):
+    try:
+        maintenance = _maintain_change_request_activity()
+        notification, changed = notification_service.mark_notification_read(
+            notification_id,
+            current_user,
+        )
+        if maintenance["changed"] or changed:
+            db.session.commit()
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), "error")
+        return redirect(url_for("neostaffing.staffing_notifications"))
+    return redirect(
+        url_for(
+            "neostaffing.change_requests",
+            view="all",
+            queue="all",
+            search=str(notification.change_request_id),
+        )
     )
 
 
@@ -375,7 +442,7 @@ def bulk_change():
 @neostaffing_app_required(permission_key=CHANGE_REQUEST_SUBMIT_PERMISSION)
 def submit_change_request():
     try:
-        change_request_service.cleanup_change_request_retention()
+        _maintain_change_request_activity()
         change_request = change_request_service.submit_change_request(
             request.form,
             current_user,
@@ -396,7 +463,7 @@ def submit_change_request():
 @neostaffing_app_required(permission_key=CHANGE_REQUEST_APPROVE_PERMISSION)
 def decide_change_request_item(item_id):
     try:
-        change_request_service.cleanup_change_request_retention()
+        _maintain_change_request_activity()
         rows = change_request_service.decide_change_request_item(
             item_id,
             request.form.get("action"),
@@ -418,7 +485,7 @@ def decide_change_request_item(item_id):
 @neostaffing_app_required(permission_key=CHANGE_REQUEST_APPROVE_PERMISSION)
 def decide_change_request_remaining(request_id):
     try:
-        change_request_service.cleanup_change_request_retention()
+        _maintain_change_request_activity()
         rows = change_request_service.decide_change_request_remaining(
             request_id,
             request.form.get("action"),
@@ -438,7 +505,7 @@ def decide_change_request_remaining(request_id):
 @neostaffing_app_required(permission_key=CHANGE_REQUEST_SUBMIT_PERMISSION)
 def withdraw_change_request_item(item_id):
     try:
-        change_request_service.cleanup_change_request_retention()
+        _maintain_change_request_activity()
         change_request_service.withdraw_change_request_item(
             item_id,
             request.form.get("reason"),
@@ -458,7 +525,7 @@ def withdraw_change_request_item(item_id):
 @neostaffing_app_required(permission_key=CHANGE_REQUEST_SUBMIT_PERMISSION)
 def withdraw_change_request_remaining(request_id):
     try:
-        change_request_service.cleanup_change_request_retention()
+        _maintain_change_request_activity()
         count = change_request_service.withdraw_change_request_remaining(
             request_id,
             request.form.get("reason"),
@@ -477,7 +544,7 @@ def withdraw_change_request_remaining(request_id):
 @neostaffing_app_required(permission_key=CHANGE_REQUEST_APPROVE_PERMISSION)
 def reverse_change_request_item(item_id):
     try:
-        change_request_service.cleanup_change_request_retention()
+        _maintain_change_request_activity()
         change_request_service.reverse_change_request_item(
             item_id,
             request.form.get("reason"),
@@ -1392,6 +1459,18 @@ def _people_return_url(person_id=None):
     if person_id:
         query["person_id"] = person_id
     return url_for("neostaffing.people", **query)
+
+
+def _maintain_change_request_activity():
+    request_cleanup = change_request_service.cleanup_change_request_retention()
+    notification_cleanup = notification_service.maintain_notifications()
+    return {
+        "request_cleanup": request_cleanup,
+        "notification_cleanup": notification_cleanup,
+        "changed": bool(
+            request_cleanup["changed"] or notification_cleanup["changed"]
+        ),
+    }
 
 
 def _change_requests_return_url():
