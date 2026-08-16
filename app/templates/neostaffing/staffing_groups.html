@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}NeoStaffing Staffing Groups{% endblock %}
+
+{% block content %}
+<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="staffing-groups-title">
+    <div class="neostaffing-dashboard-shell">
+        {% include "neostaffing/_section_nav.html" %}
+        <div class="neostaffing-dashboard-main">
+            <div class="neostaffing-hero neostaffing-hero-compact">
+                <div class="neostaffing-hero-copy mobile-shell-duplicate-title">
+                    <h1 id="staffing-groups-title">Staffing Groups</h1>
+                </div>
+            </div>
+
+            <section class="neostaffing-data-card">
+                <div class="neostaffing-panel-heading">
+                    <h2>DAILY STAFFING TOTALS</h2>
+                    {% if staffing_groups.sort_date_operation %}
+                    <span>
+                        {{ staffing_groups.sort_date_operation.gateway_code }}
+                        {{ staffing_groups.sort_date_operation.sort_name|upper }}
+                        &middot; {{ staffing_groups.attendance_date.strftime("%B %d, %Y")|upper }}
+                    </span>
+                    {% endif %}
+                </div>
+                {% if not staffing_groups.ready %}
+                <p class="muted" role="status">{{ staffing_groups.message }}</p>
+                {% else %}
+                <p class="muted">Totals are calculated from the current Night roster and attendance. Group membership never changes the Org Chart.</p>
+                {% endif %}
+            </section>
+
+            {% if can_edit_staffing_groups %}
+            <section class="neostaffing-data-card" aria-labelledby="create-staffing-group-title">
+                <h2 id="create-staffing-group-title">CREATE STAFFING GROUP</h2>
+                <form method="post" class="neostaffing-group-form">
+                    <input type="hidden" name="action" value="create">
+                    <div class="neostaffing-group-form-header">
+                        <label><span>Name</span><input name="name" maxlength="140" required></label>
+                        <label><span>Status</span>
+                            <select name="active">
+                                <option value="1" selected>Active</option>
+                                <option value="0">Inactive</option>
+                            </select>
+                        </label>
+                    </div>
+                    <fieldset class="neostaffing-group-memberships">
+                        <legend>Departments and Operations</legend>
+                        {% for option in staffing_groups.membership_options %}
+                        <label>
+                            <input type="checkbox" name="staffing_unit_ids" value="{{ option.unit.id }}">
+                            <span>{{ option.label }}{% if not option.unit.active %} (Inactive){% endif %}</span>
+                        </label>
+                        {% else %}
+                        <p class="muted">No Departments or Operations are configured.</p>
+                        {% endfor %}
+                    </fieldset>
+                    <button class="action-button" type="submit">CREATE GROUP</button>
+                </form>
+            </section>
+            {% endif %}
+
+            <div class="neostaffing-group-list">
+                {% for row in staffing_groups.groups %}
+                <section class="neostaffing-data-card{% if not row.group.active %} is-inactive{% endif %}" aria-labelledby="staffing-group-{{ row.group.id }}-title">
+                    <div class="neostaffing-panel-heading">
+                        <h2 id="staffing-group-{{ row.group.id }}-title">{{ row.group.name }}</h2>
+                        <span>{{ "ACTIVE" if row.group.active else "INACTIVE" }}</span>
+                    </div>
+                    <dl class="neostaffing-group-totals" aria-label="{{ row.group.name }} totals">
+                        <div><dt>Total Roster</dt><dd>{{ row.total_roster }}</dd></div>
+                        <div><dt>Here</dt><dd>{{ row.here }}</dd></div>
+                        <div><dt>Absent</dt><dd>{{ row.absent }}</dd></div>
+                        <div><dt>Unmarked</dt><dd>{{ row.unmarked }}</dd></div>
+                    </dl>
+                    {% if can_edit_staffing_groups %}
+                    <form method="post" class="neostaffing-group-form">
+                        <input type="hidden" name="action" value="update">
+                        <input type="hidden" name="group_id" value="{{ row.group.id }}">
+                        <div class="neostaffing-group-form-header">
+                            <label><span>Name</span><input name="name" value="{{ row.group.name }}" maxlength="140" required></label>
+                            <label><span>Status</span>
+                                <select name="active">
+                                    <option value="1" {% if row.group.active %}selected{% endif %}>Active</option>
+                                    <option value="0" {% if not row.group.active %}selected{% endif %}>Inactive</option>
+                                </select>
+                            </label>
+                        </div>
+                        <fieldset class="neostaffing-group-memberships">
+                            <legend>Departments and Operations</legend>
+                            {% for option in staffing_groups.membership_options %}
+                            <label>
+                                <input type="checkbox" name="staffing_unit_ids" value="{{ option.unit.id }}" {% if option.unit.id in row.member_unit_ids %}checked{% endif %}>
+                                <span>{{ option.label }}{% if not option.unit.active %} (Inactive){% endif %}</span>
+                            </label>
+                            {% endfor %}
+                        </fieldset>
+                        <button class="action-button" type="submit">SAVE GROUP</button>
+                    </form>
+                    {% else %}
+                    <p class="muted">
+                        {% for membership in row.memberships %}
+                        {{ membership.label }}{% if not loop.last %} &middot; {% endif %}
+                        {% else %}
+                        No Departments or Operations selected.
+                        {% endfor %}
+                    </p>
+                    {% endif %}
+                </section>
+                {% else %}
+                <section class="neostaffing-data-card">
+                    <p class="muted">No Staffing Groups have been created.</p>
+                </section>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

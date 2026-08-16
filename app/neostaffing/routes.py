@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from app.extensions import db
 from app.models import (
     PermissionRule,
+    StaffingGroup,
     StaffingLeadershipAssignment,
     StaffingPerson,
     StaffingUnit,
@@ -26,6 +27,8 @@ PEOPLE_VIEW_PERMISSION = "neostaffing.people.view"
 PEOPLE_EDIT_PERMISSION = "neostaffing.people.edit"
 PEOPLE_BULK_ACTIONS_PERMISSION = "neostaffing.people.bulk_actions"
 ATTENDANCE_TAKE_PERMISSION = "neostaffing.attendance.take"
+STAFFING_GROUPS_VIEW_PERMISSION = "neostaffing.staffing_groups.view"
+STAFFING_GROUPS_EDIT_PERMISSION = "neostaffing.staffing_groups.edit"
 ORG_CHART_VIEW_PERMISSION = "neostaffing.org_chart.view"
 ORG_CHART_EDIT_STRUCTURE_PERMISSION = "neostaffing.org_chart.edit_structure"
 REPORTS_VIEW_PERMISSION = "neostaffing.reports.view"
@@ -48,6 +51,8 @@ NEOSTAFFING_PERMISSION_LABELS = {
     "neostaffing.people.edit": "Edit People",
     "neostaffing.people.bulk_actions": "People Bulk Actions",
     "neostaffing.attendance.take": "Take Attendance",
+    "neostaffing.staffing_groups.view": "View Staffing Groups",
+    "neostaffing.staffing_groups.edit": "Edit Staffing Groups",
     "neostaffing.org_chart.view": "View Org Chart",
     "neostaffing.org_chart.edit_structure": "Edit Org Chart Structure",
     "neostaffing.reports.view": "View Reports",
@@ -225,6 +230,46 @@ def people_attendance():
     if request.method == "GET":
         return redirect(url_for("neostaffing.attendance", **request.args))
     return _handle_attendance()
+
+
+@bp.route("/staffing-groups", methods=["GET", "POST"])
+@neostaffing_app_required(permission_key=STAFFING_GROUPS_VIEW_PERMISSION)
+def staffing_groups():
+    can_edit = user_can(STAFFING_GROUPS_EDIT_PERMISSION)
+    if request.method == "POST":
+        if not can_edit:
+            flash("You do not currently have Edit Staffing Groups permission.", "error")
+            return redirect(url_for("neostaffing.staffing_groups"))
+        try:
+            action = request.form.get("action", "").strip().lower()
+            if action == "create":
+                staffing_service.create_staffing_group(request.form)
+                success_message = "Staffing Group created."
+            elif action == "update":
+                group = db.session.get(StaffingGroup, request.form.get("group_id", type=int))
+                staffing_service.update_staffing_group(group, request.form)
+                success_message = "Staffing Group updated."
+            else:
+                raise ValueError("Choose a valid Staffing Group action.")
+            db.session.commit()
+        except (ValueError, IntegrityError) as error:
+            db.session.rollback()
+            flash(str(getattr(error, "orig", None) or error), "error")
+        else:
+            flash(success_message, "success")
+        return redirect(url_for("neostaffing.staffing_groups"))
+
+    return render_template(
+        "neostaffing/staffing_groups.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
+        can_manage_app=user_can_access_app(
+            current_user,
+            "neostaffing",
+            minimum_role="master",
+        ),
+        can_edit_staffing_groups=can_edit,
+        staffing_groups=staffing_service.staffing_groups_context(),
+    )
 
 
 @bp.route("/requests")
@@ -450,6 +495,7 @@ def reverse_change_request_item(item_id):
 
 def _handle_attendance():
     can_edit = user_can(ATTENDANCE_TAKE_PERMISSION)
+    can_view_staffing_groups = user_can(STAFFING_GROUPS_VIEW_PERMISSION)
     if request.method == "POST":
         if not can_edit:
             flash("You do not currently have Take Attendance permission.", "error")
@@ -479,6 +525,7 @@ def _handle_attendance():
             "work_area_id": request.args.get("work_area_id", "").strip(),
         },
         current_user,
+        include_staffing_groups=can_view_staffing_groups,
     )
     return render_template(
         "neostaffing/attendance.html",

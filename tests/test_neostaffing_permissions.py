@@ -170,6 +170,23 @@ class NeoStaffingPermissionsTest(unittest.TestCase):
             "operator",
         )
 
+    def test_staffing_group_permissions_have_configurable_defaults(self):
+        user = self._user_with_access("staffing_group_rules", "grandmaster")
+        self._login(user)
+
+        response = self.client.get("/neostaffing/permissions")
+
+        self.assertIn(b"View Staffing Groups", response.data)
+        self.assertIn(b"Edit Staffing Groups", response.data)
+        self.assertEqual(
+            self._rule("neostaffing.staffing_groups.view").minimum_role,
+            "operator",
+        )
+        self.assertEqual(
+            self._rule("neostaffing.staffing_groups.edit").minimum_role,
+            "master",
+        )
+
     def test_grandmaster_always_passes_configured_neostaffing_permission(self):
         user = self._user_with_access("staffing_unrestricted", "grandmaster")
         self._rule("neostaffing.board.view").minimum_role = "watcher"

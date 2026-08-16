@@ -10348,6 +10348,95 @@ body.blueprint-neostaffing {
     color: var(--neo-bright-silver);
 }
 
+.neostaffing-group-list,
+.neostaffing-group-form {
+    display: grid;
+    gap: 14px;
+}
+
+.neostaffing-group-list .neostaffing-data-card.is-inactive {
+    opacity: 0.68;
+}
+
+.neostaffing-group-form-header {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(150px, 1fr);
+    gap: 10px;
+}
+
+.neostaffing-group-memberships {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px 14px;
+    min-width: 0;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid rgba(var(--node-rgb), 0.24);
+    border-radius: 7px;
+}
+
+.neostaffing-group-memberships legend,
+.neostaffing-group-form label > span {
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.neostaffing-group-memberships label {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.neostaffing-group-form > .action-button {
+    justify-self: start;
+}
+
+.neostaffing-group-totals {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0;
+}
+
+.neostaffing-group-totals div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.neostaffing-group-totals dt,
+.neostaffing-group-totals dd {
+    margin: 0;
+}
+
+.neostaffing-group-totals dt {
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.neostaffing-group-totals dd {
+    color: var(--node-primary);
+    font-size: 1.1rem;
+    font-weight: 950;
+}
+
+@media (max-width: 760px) {
+    .neostaffing-group-form-header,
+    .neostaffing-group-memberships,
+    .neostaffing-group-totals {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 .neostaffing-compact-form,
 .neostaffing-filter-form,
 .neostaffing-people-form {

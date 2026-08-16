@@ -412,6 +412,16 @@ DEFAULT_PERMISSION_RULES = (
         "Record or update NeoStaffing daily attendance.",
     ),
     (
+        "neostaffing.staffing_groups.view",
+        "operator",
+        "View NeoStaffing Staffing Groups and current Daily Staffing totals.",
+    ),
+    (
+        "neostaffing.staffing_groups.edit",
+        "master",
+        "Create, rename, activate, deactivate, and change NeoStaffing Staffing Groups.",
+    ),
+    (
         "neostaffing.change_requests.view",
         "watcher",
         "View NeoStaffing employee change requests and history.",
@@ -1074,6 +1084,16 @@ PERMISSION_RULE_ITEMS = (
         {
             "view": "neostaffing.people.view",
             "edit": "neostaffing.attendance.take",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.staffing_groups",
+        "Staffing Groups",
+        "Reusable Department and Operation combinations for Daily Staffing totals.",
+        {
+            "view": "neostaffing.staffing_groups.view",
+            "edit": "neostaffing.staffing_groups.edit",
         },
     ),
     (

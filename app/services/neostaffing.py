@@ -10,6 +10,8 @@ from app.models import (
     StaffingDailyAttendance,
     StaffingChangeRequest,
     Gateway,
+    StaffingGroup,
+    StaffingGroupMembership,
     StaffingLeadershipAssignment,
     StaffingPerson,
     StaffingReportingRelationship,
@@ -1812,7 +1814,97 @@ def _attendance_scope_key(unit):
     return f"{unit.unit_type}_id"
 
 
-def attendance_context(filters=None, user=None):
+def create_staffing_group(values):
+    name = _validated_staffing_group_name(values.get("name"))
+    group = StaffingGroup(
+        name=name,
+        active=_parse_bool(values.get("active"), default=True),
+    )
+    db.session.add(group)
+    db.session.flush()
+    _replace_staffing_group_memberships(
+        group,
+        _submitted_staffing_group_unit_ids(values),
+    )
+    return group
+
+
+def update_staffing_group(group, values):
+    if not group:
+        raise ValueError("The selected Staffing Group was not found.")
+    group.name = _validated_staffing_group_name(values.get("name"), group.id)
+    group.active = _parse_bool(values.get("active"), default=False)
+    _replace_staffing_group_memberships(
+        group,
+        _submitted_staffing_group_unit_ids(values),
+    )
+    db.session.flush()
+    return group
+
+
+def staffing_groups_context():
+    all_hierarchy = _daily_attendance_hierarchy(include_inactive=True)
+    active_hierarchy = _staffing_hierarchy_from_units(
+        unit for unit in all_hierarchy["units"] if unit.active
+    )
+    definitions = _staffing_group_definitions(
+        all_hierarchy,
+        active_only=False,
+    )
+    operation = current_night_attendance_operation()
+    ready = False
+    message = ATTENDANCE_OPERATION_MISSING_MESSAGE
+    staffing_sort = None
+    roster_rows = []
+    if operation:
+        try:
+            staffing_sort = _staffing_sort_for_operation(operation, active_hierarchy)
+        except ValueError as error:
+            message = str(error)
+        else:
+            assignments = _daily_attendance_assignments(
+                staffing_sort,
+                staffing_sort,
+                active_hierarchy,
+            )
+            existing = _daily_attendance_records(
+                [assignment.person_id for assignment in assignments],
+                operation,
+                staffing_sort,
+            )
+            roster_rows = _daily_attendance_rows(
+                assignments,
+                existing,
+                active_hierarchy,
+            )
+            ready = True
+            message = ""
+
+    group_rows = _daily_staffing_group_rollups(
+        definitions,
+        roster_rows,
+        active_hierarchy,
+    )
+    membership_options = [
+        {
+            "unit": unit,
+            "label": _daily_attendance_unit_path(unit, all_hierarchy),
+        }
+        for unit in all_hierarchy["units"]
+        if unit.unit_type in {"department", "operation"}
+    ]
+    return {
+        "ready": ready,
+        "message": message,
+        "sort_date_operation": operation,
+        "attendance_date": operation.sort_date if operation else None,
+        "selected_sort": staffing_sort,
+        "groups": group_rows,
+        "membership_options": membership_options,
+    }
+
+
+def attendance_context(filters=None, user=None, include_staffing_groups=False):
     filters = dict(filters or {})
     gateway = _attendance_gateway()
     operation = current_night_attendance_operation(gateway)
@@ -1839,44 +1931,41 @@ def attendance_context(filters=None, user=None):
             hierarchy=hierarchy,
         )
 
-    assignments = _daily_attendance_assignments(
-        selected_scope,
+    assignment_scope = staffing_sort if include_staffing_groups else selected_scope
+    loaded_assignments = _daily_attendance_assignments(
+        assignment_scope,
         staffing_sort,
         hierarchy,
     )
-    person_ids = [assignment.person_id for assignment in assignments]
-    existing = {}
-    if person_ids:
-        records = StaffingDailyAttendance.query.filter(
-            StaffingDailyAttendance.person_id.in_(person_ids),
-            StaffingDailyAttendance.attendance_date == operation.sort_date,
-            StaffingDailyAttendance.sort_unit_id == staffing_sort.id,
-            or_(
-                StaffingDailyAttendance.sort_date_operation_id == operation.id,
-                StaffingDailyAttendance.sort_date_operation_id.is_(None),
-            ),
-        ).all()
-        existing = {record.person_id: record for record in records}
-
-    rows = []
-    for assignment in assignments:
-        work_area = hierarchy["by_id"].get(assignment.work_area_unit_id)
-        department, operation_unit, row_sort = _daily_attendance_placement(
-            work_area,
+    existing = _daily_attendance_records(
+        [assignment.person_id for assignment in loaded_assignments],
+        operation,
+        staffing_sort,
+    )
+    loaded_rows = _daily_attendance_rows(loaded_assignments, existing, hierarchy)
+    if include_staffing_groups and selected_scope.id != staffing_sort.id:
+        selected_work_area_ids = _daily_attendance_work_area_ids(
+            selected_scope,
             hierarchy,
         )
-        record = existing.get(assignment.person_id)
-        rows.append(
-            {
-                "person": assignment.person,
-                "work_area": work_area,
-                "department": department,
-                "operation": operation_unit,
-                "sort": row_sort,
-                "attendance": record,
-                "status": record.status if record else "",
-                "note": (record.note or "") if record else "",
-            }
+        rows = [
+            row
+            for row in loaded_rows
+            if row["work_area"] and row["work_area"].id in selected_work_area_ids
+        ]
+    else:
+        rows = loaded_rows
+
+    staffing_groups = []
+    if include_staffing_groups:
+        group_definitions = _staffing_group_definitions(
+            hierarchy,
+            active_only=True,
+        )
+        staffing_groups = _daily_staffing_group_rollups(
+            group_definitions,
+            loaded_rows,
+            hierarchy,
         )
 
     summary = _daily_attendance_summary(rows)
@@ -1893,6 +1982,7 @@ def attendance_context(filters=None, user=None):
         "summary": summary,
         "total_loaded": len(rows),
         "rollups": _daily_attendance_rollups(rows),
+        "staffing_groups": staffing_groups,
         "scope_options": _daily_attendance_scope_options(hierarchy, staffing_sort),
         "status_choices": attendance_status_choices(),
         "filters": filters,
@@ -2030,9 +2120,12 @@ def _submitted_attendance_operation(operation_id):
     return db.session.get(SortDateOperation, normalized_id)
 
 
-def _daily_attendance_hierarchy():
+def _daily_attendance_hierarchy(include_inactive=False):
+    query = StaffingUnit.query
+    if not include_inactive:
+        query = query.filter_by(active=True)
     units = (
-        StaffingUnit.query.filter_by(active=True)
+        query
         .order_by(
             StaffingUnit.display_order,
             StaffingUnit.unit_type,
@@ -2041,6 +2134,11 @@ def _daily_attendance_hierarchy():
         )
         .all()
     )
+    return _staffing_hierarchy_from_units(units)
+
+
+def _staffing_hierarchy_from_units(units):
+    units = list(units)
     by_id = {unit.id: unit for unit in units}
     children_by_parent = {}
     for unit in units:
@@ -2050,6 +2148,181 @@ def _daily_attendance_hierarchy():
         "by_id": by_id,
         "children_by_parent": children_by_parent,
     }
+
+
+def _validated_staffing_group_name(value, current_group_id=None):
+    name = _required_text(value, "Staffing Group name")
+    if len(name) > 140:
+        raise ValueError("Staffing Group name must be 140 characters or fewer.")
+    duplicate_query = StaffingGroup.query.filter(
+        func.lower(StaffingGroup.name) == name.lower()
+    )
+    if current_group_id is not None:
+        duplicate_query = duplicate_query.filter(StaffingGroup.id != current_group_id)
+    if duplicate_query.first():
+        raise ValueError("A Staffing Group with that name already exists.")
+    return name
+
+
+def _submitted_staffing_group_unit_ids(values):
+    raw_values = (
+        values.getlist("staffing_unit_ids")
+        if hasattr(values, "getlist")
+        else values.get("staffing_unit_ids", [])
+    )
+    if isinstance(raw_values, (str, int)):
+        raw_values = [raw_values]
+    unit_ids = set()
+    for raw_value in raw_values or []:
+        try:
+            unit_ids.add(int(raw_value))
+        except (TypeError, ValueError):
+            raise ValueError("Select valid Department or Operation members.")
+    return unit_ids
+
+
+def _replace_staffing_group_memberships(group, staffing_unit_ids):
+    units = []
+    if staffing_unit_ids:
+        units = StaffingUnit.query.filter(StaffingUnit.id.in_(staffing_unit_ids)).all()
+    units_by_id = {unit.id: unit for unit in units}
+    if set(units_by_id) != set(staffing_unit_ids):
+        raise ValueError("A selected Staffing Group unit is unavailable.")
+    if any(unit.unit_type not in {"department", "operation"} for unit in units):
+        raise ValueError("Staffing Groups may contain only Departments and Operations.")
+
+    existing = StaffingGroupMembership.query.filter_by(group_id=group.id).all()
+    existing_by_unit_id = {
+        membership.staffing_unit_id: membership for membership in existing
+    }
+    for unit_id, membership in existing_by_unit_id.items():
+        if unit_id not in staffing_unit_ids:
+            db.session.delete(membership)
+    for unit_id in sorted(staffing_unit_ids - set(existing_by_unit_id)):
+        db.session.add(
+            StaffingGroupMembership(
+                group_id=group.id,
+                staffing_unit_id=unit_id,
+            )
+        )
+    db.session.flush()
+
+
+def _staffing_group_definitions(hierarchy, active_only):
+    query = (
+        db.session.query(StaffingGroup, StaffingGroupMembership)
+        .outerjoin(
+            StaffingGroupMembership,
+            StaffingGroupMembership.group_id == StaffingGroup.id,
+        )
+    )
+    if active_only:
+        query = query.filter(StaffingGroup.active.is_(True))
+    records = query.order_by(
+        StaffingGroup.active.desc(),
+        func.lower(StaffingGroup.name),
+        StaffingGroup.id,
+        StaffingGroupMembership.id,
+    ).all()
+
+    definitions_by_id = {}
+    for group, membership in records:
+        definition = definitions_by_id.setdefault(
+            group.id,
+            {
+                "group": group,
+                "memberships": [],
+                "member_unit_ids": set(),
+            },
+        )
+        if not membership:
+            continue
+        unit = hierarchy["by_id"].get(membership.staffing_unit_id)
+        if not unit:
+            continue
+        definition["member_unit_ids"].add(unit.id)
+        definition["memberships"].append(
+            {
+                "membership": membership,
+                "unit": unit,
+                "label": _daily_attendance_unit_path(unit, hierarchy),
+            }
+        )
+    return list(definitions_by_id.values())
+
+
+def _daily_staffing_group_rollups(definitions, roster_rows, hierarchy):
+    rows_by_work_area_id = {}
+    for row in roster_rows:
+        work_area = row.get("work_area")
+        if work_area:
+            rows_by_work_area_id.setdefault(work_area.id, []).append(row)
+
+    rows_by_member_unit_id = {}
+    member_unit_ids = {
+        unit_id
+        for definition in definitions
+        for unit_id in definition["member_unit_ids"]
+    }
+    for unit_id in member_unit_ids:
+        unit = hierarchy["by_id"].get(unit_id)
+        if not unit or unit.unit_type not in {"department", "operation"}:
+            rows_by_member_unit_id[unit_id] = []
+            continue
+        rows_by_member_unit_id[unit_id] = [
+            row
+            for work_area_id in _daily_attendance_work_area_ids(unit, hierarchy)
+            for row in rows_by_work_area_id.get(work_area_id, [])
+        ]
+
+    rollups = []
+    for definition in definitions:
+        rows_by_person_id = {}
+        for unit_id in definition["member_unit_ids"]:
+            for row in rows_by_member_unit_id.get(unit_id, []):
+                rows_by_person_id[row["person"].id] = row
+        summary = _daily_attendance_summary(list(rows_by_person_id.values()))
+        rollups.append({**definition, **summary})
+    return rollups
+
+
+def _daily_attendance_records(person_ids, operation, staffing_sort):
+    if not person_ids:
+        return {}
+    records = StaffingDailyAttendance.query.filter(
+        StaffingDailyAttendance.person_id.in_(set(person_ids)),
+        StaffingDailyAttendance.attendance_date == operation.sort_date,
+        StaffingDailyAttendance.sort_unit_id == staffing_sort.id,
+        or_(
+            StaffingDailyAttendance.sort_date_operation_id == operation.id,
+            StaffingDailyAttendance.sort_date_operation_id.is_(None),
+        ),
+    ).all()
+    return {record.person_id: record for record in records}
+
+
+def _daily_attendance_rows(assignments, existing, hierarchy):
+    rows = []
+    for assignment in assignments:
+        work_area = hierarchy["by_id"].get(assignment.work_area_unit_id)
+        department, operation_unit, row_sort = _daily_attendance_placement(
+            work_area,
+            hierarchy,
+        )
+        record = existing.get(assignment.person_id)
+        rows.append(
+            {
+                "person": assignment.person,
+                "work_area": work_area,
+                "department": department,
+                "operation": operation_unit,
+                "sort": row_sort,
+                "attendance": record,
+                "status": record.status if record else "",
+                "note": (record.note or "") if record else "",
+            }
+        )
+    return rows
 
 
 def _staffing_sort_for_operation(operation, hierarchy):
@@ -2334,6 +2607,7 @@ def _empty_daily_attendance_context(filters, message, operation=None, hierarchy=
         },
         "total_loaded": 0,
         "rollups": {"work_area": [], "department": [], "operation": []},
+        "staffing_groups": [],
         "scope_options": empty_options,
         "status_choices": attendance_status_choices(),
         "filters": {

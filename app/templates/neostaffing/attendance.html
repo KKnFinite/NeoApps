@@ -71,6 +71,28 @@
                 <article><span>Unmarked</span><strong>{{ attendance.summary.unmarked }}</strong></article>
             </section>
 
+            {% if attendance.staffing_groups %}
+            <section class="neostaffing-rollup-section" aria-labelledby="attendance-staffing-groups-title">
+                <div class="neostaffing-panel-heading">
+                    <h2 id="attendance-staffing-groups-title">STAFFING GROUPS</h2>
+                    <a href="{{ url_for('neostaffing.staffing_groups') }}">VIEW GROUPS</a>
+                </div>
+                <div class="neostaffing-rollup-grid">
+                    {% for rollup in attendance.staffing_groups %}
+                    <article class="neostaffing-rollup-card">
+                        <strong>{{ rollup.group.name }}</strong>
+                        <dl>
+                            <div><dt>Roster</dt><dd>{{ rollup.total_roster }}</dd></div>
+                            <div><dt>Here</dt><dd>{{ rollup.here }}</dd></div>
+                            <div><dt>Absent</dt><dd>{{ rollup.absent }}</dd></div>
+                            <div><dt>Unmarked</dt><dd>{{ rollup.unmarked }}</dd></div>
+                        </dl>
+                    </article>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+
             <form class="neostaffing-data-card" method="post">
                 <input type="hidden" name="sort_date_operation_id" value="{{ attendance.sort_date_operation.id }}">
                 <input type="hidden" name="sort_id" value="{{ filters.sort_id }}">

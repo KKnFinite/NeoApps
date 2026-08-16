@@ -52,6 +52,8 @@ from app.models.staffing_change_request import StaffingChangeRequest
 from app.models.staffing_change_request_event import StaffingChangeRequestEvent
 from app.models.staffing_change_request_item import StaffingChangeRequestItem
 from app.models.staffing_daily_attendance import StaffingDailyAttendance
+from app.models.staffing_group import StaffingGroup
+from app.models.staffing_group_membership import StaffingGroupMembership
 from app.models.staffing_person import StaffingPerson
 from app.models.staffing_reporting_relationship import StaffingReportingRelationship
 from app.models.staffing_unit import StaffingUnit
@@ -117,6 +119,8 @@ __all__ = [
     "StaffingChangeRequestItem",
     "StaffingChangeRequestEvent",
     "StaffingDailyAttendance",
+    "StaffingGroup",
+    "StaffingGroupMembership",
     "SortTimelineSettings",
     "SortTimelineApiParticipation",
     "SortTimelineMonthVariance",
