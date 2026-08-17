@@ -3,7 +3,15 @@
 {% block title %}Fueler | NeoScorpion{% endblock %}
 
 {% block content %}
-<section class="neoscorpion-shell neoscorpion-screen neoscorpion-fueler-screen" aria-label="NeoScorpion Fueler">
+<section
+    class="neoscorpion-shell neoscorpion-screen neoscorpion-fueler-screen"
+    aria-label="NeoScorpion Fueler"
+    data-fuel-assignments-live
+    data-revision-url="{{ url_for('neoscorpion.fuel_assignments_revision') }}"
+    data-operation-id="{{ operation.id if operation else '' }}"
+    data-revision="{{ fuel_assignments_revision }}"
+    data-current-user-id="{{ current_user.id }}"
+>
     <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
         {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}
         {% include "neonodes/neoscorpion/_brand_title.html" %}
@@ -24,7 +32,8 @@
         {% else %}
         <div class="neoscorpion-fueler-cards">
             {% for row in rows %}
-            <article class="neoscorpion-fueler-card">
+            <article class="neoscorpion-fueler-card" data-fuel-assignment-id="{{ row.assignment.id }}">
+                <span class="neoscorpion-status-pill" data-new-assignment-marker role="status" hidden>NEW ASSIGNMENT</span>
                 <header>
                     <span>{{ row.destination }}</span>
                     <strong>{{ row.tail_number }}</strong>
@@ -78,4 +87,5 @@
         {% endif %}
     </section>
 </section>
+<script src="{{ url_for('static', filename='js/neoscorpion_fuel_assignments_live.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 {% endblock %}

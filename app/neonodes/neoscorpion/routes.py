@@ -1,4 +1,4 @@
-from flask import flash, redirect, render_template, request, url_for
+from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
 
@@ -11,6 +11,7 @@ from app.services.neoscorpion import (
     current_sort_operation,
     deactivate_truck,
     fuel_dispatch_context,
+    fuel_assignments_live_revision,
     fueler_context,
     history_context,
     save_dispatch_row,
@@ -178,6 +179,26 @@ def fueler():
         flash("Access denied.", "error")
         return redirect(url_for("neoscorpion.index"))
     return _fueler_response(gateway, access)
+
+
+@bp.get("/fuel-assignments/revision")
+@gateway_node_required("scorpion")
+def fuel_assignments_revision():
+    gateway = get_current_gateway()
+    access = permission_access(FUELER_VIEW_PERMISSION)
+    if not access["can_view"]:
+        response = jsonify({"ok": False, "error": "Access denied."})
+        response.headers["Cache-Control"] = "no-store"
+        return response, 403
+
+    response = jsonify(
+        {
+            "ok": True,
+            **fuel_assignments_live_revision(gateway),
+        }
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @bp.route("/truck-manager", methods=["GET", "POST"])

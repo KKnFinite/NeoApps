@@ -15,6 +15,7 @@ class OperationalRequestPolicyTest(unittest.TestCase):
             "neoermac.view_outbound_state",
             "neomotherbrain.parking_plan_live_state_endpoint",
             "neomotherbrain.planning_live_state",
+            "neoscorpion.fuel_assignments_revision",
             "neosektor.ballmat_state",
             "neosektor.discharge_state",
             "neosektor.driver_routing_state",
@@ -79,6 +80,9 @@ class OperationalRequestPolicyTest(unittest.TestCase):
             "neoermac.view_outbound_state"
         )
         sektor = lightweight_live_state_scope_spec("neosektor.live_counts_state")
+        scorpion = lightweight_live_state_scope_spec(
+            "neoscorpion.fuel_assignments_revision"
+        )
 
         self.assertEqual(parking["node_code"], "motherbrain")
         self.assertEqual(parking["operation_id"], 42)
@@ -89,6 +93,9 @@ class OperationalRequestPolicyTest(unittest.TestCase):
         self.assertTrue(outbound["include_current_ermac_operation"])
         self.assertEqual(sektor["node_code"], "sektor")
         self.assertIsNone(sektor["operation_id"])
+        self.assertEqual(scorpion["node_code"], "scorpion")
+        self.assertIsNone(scorpion["operation_id"])
+        self.assertFalse(scorpion["include_current_ermac_operation"])
         self.assertIsNone(
             lightweight_live_state_scope_spec(
                 "neomotherbrain.parking_plan_operation"

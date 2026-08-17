@@ -8,6 +8,7 @@ from sqlalchemy.orm import joinedload
 from app.extensions import db
 from app.models import (
     NeoScorpionFuelAssignment,
+    NeoScorpionSortAssetState,
     NeoScorpionSortFueler,
     NeoScorpionSortTruck,
     NeoScorpionFuelTruck,
@@ -127,6 +128,55 @@ def current_sort_operation(gateway):
     )
 
 
+def fuel_assignments_live_revision(gateway):
+    """Return the current sort/revision fingerprint without building screen state."""
+    row = (
+        db.session.query(
+            SortDateOperation.id.label("operation_id"),
+            db.func.coalesce(NeoScorpionSortAssetState.revision, 0).label("revision"),
+        )
+        .outerjoin(
+            NeoScorpionSortAssetState,
+            NeoScorpionSortAssetState.sort_date_operation_id == SortDateOperation.id,
+        )
+        .filter(
+            SortDateOperation.archived_at_utc.is_(None),
+            db.or_(
+                SortDateOperation.gateway_id == gateway.id,
+                SortDateOperation.gateway_code == gateway.code,
+            ),
+        )
+        .order_by(
+            SortDateOperation.sort_date.desc(),
+            SortDateOperation.generated_at_utc.desc(),
+            SortDateOperation.id.desc(),
+        )
+        .first()
+    )
+    if row is None:
+        return {
+            "current_operation": False,
+            "operation_id": None,
+            "revision": 0,
+        }
+    return {
+        "current_operation": True,
+        "operation_id": row.operation_id,
+        "revision": int(row.revision or 0),
+    }
+
+
+def _fuel_assignments_revision_for_operation(operation):
+    if operation is None:
+        return 0
+    revision = (
+        db.session.query(NeoScorpionSortAssetState.revision)
+        .filter(NeoScorpionSortAssetState.sort_date_operation_id == operation.id)
+        .scalar()
+    )
+    return int(revision or 0)
+
+
 def fuel_dispatch_context(gateway, *, include_asset_choices=False):
     operation = current_sort_operation(gateway)
     fuelers = _fueler_users()
@@ -167,6 +217,7 @@ def fueler_context(gateway, user):
         return {
             "operation": None,
             "rows": [],
+            "fuel_assignments_revision": 0,
             "settings": ensure_neoscorpion_settings(gateway),
             "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
         }
@@ -198,6 +249,7 @@ def fueler_context(gateway, user):
             estimated_fuel_status=CALCULATION_NOT_CONFIGURED_MESSAGE,
             assignments_by_mission=assignments_by_mission,
         ),
+        "fuel_assignments_revision": _fuel_assignments_revision_for_operation(operation),
         "settings": ensure_neoscorpion_settings(gateway),
         "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
     }
