@@ -342,6 +342,11 @@ DEFAULT_PERMISSION_RULES = (
         "Edit NeoScorpion dispatcher fuel assignments and mission fuel requirements.",
     ),
     (
+        "neoscorpion.fuel_assignments.view",
+        "operator",
+        "Be selected for NeoScorpion fuel assignments.",
+    ),
+    (
         "neoscorpion.fueler.view",
         "watcher",
         "View assigned NeoScorpion fueler work.",
@@ -1008,6 +1013,15 @@ PERMISSION_RULE_ITEMS = (
         {
             "view": "neoscorpion.fueler.view",
             "edit": "neoscorpion.fueler.edit",
+        },
+    ),
+    (
+        "scorpion",
+        "neoscorpion.fuel_assignments",
+        "Fuel Assignments",
+        "Eligibility for selection as a NeoScorpion fueler.",
+        {
+            "view": "neoscorpion.fuel_assignments.view",
         },
     ),
     (

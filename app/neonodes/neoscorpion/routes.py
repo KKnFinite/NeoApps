@@ -1,5 +1,6 @@
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user
+from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
@@ -7,6 +8,7 @@ from app.neonodes.neoscorpion import bp
 from app.services.access_control import get_current_gateway
 from app.services.neoscorpion import (
     CALCULATION_NOT_CONFIGURED_MESSAGE,
+    current_sort_operation,
     deactivate_truck,
     fuel_dispatch_context,
     fueler_context,
@@ -18,6 +20,17 @@ from app.services.neoscorpion import (
     settings_context,
     truck_manager_context,
     visible_neoscorpion_menu_items,
+)
+from app.services.neoscorpion_assets import (
+    complete_nightly_truck_top_off,
+    eligible_nightly_fueler_users,
+    mark_nightly_truck_topping_off,
+    remove_nightly_fueler,
+    remove_nightly_truck,
+    select_nightly_fueler,
+    select_nightly_truck,
+    set_nightly_fuel_island_count,
+    update_nightly_truck,
 )
 from app.services.permission_rules import permission_access, user_can
 
@@ -68,7 +81,10 @@ def index_slash():
 @gateway_node_required("scorpion")
 def fuel_dispatch():
     gateway = get_current_gateway()
-    access = permission_access(FUEL_DISPATCH_VIEW_PERMISSION, FUEL_DISPATCH_EDIT_PERMISSION)
+    access = permission_access(
+        FUEL_DISPATCH_VIEW_PERMISSION,
+        FUEL_DISPATCH_EDIT_PERMISSION,
+    )
     if request.method == "POST":
         if not access["can_edit"]:
             db.session.rollback()
@@ -88,6 +104,51 @@ def fuel_dispatch():
         flash("Access denied.", "error")
         return redirect(url_for("neoscorpion.index"))
     return _dispatch_response(gateway, access)
+
+
+@bp.post("/fuel-dispatch/assets")
+@gateway_node_required("scorpion")
+def manage_nightly_assets():
+    gateway = get_current_gateway()
+    access = permission_access(
+        FUEL_DISPATCH_VIEW_PERMISSION,
+        FUEL_DISPATCH_EDIT_PERMISSION,
+    )
+    if not access["can_view"]:
+        db.session.rollback()
+        flash("Access denied.", "error")
+        return redirect(url_for("neoscorpion.index"))
+    if not access["can_edit"]:
+        db.session.rollback()
+        flash("Access denied.", "error")
+        return _dispatch_response(gateway, access, status_code=403)
+
+    try:
+        operation = current_sort_operation(gateway)
+        if operation is None:
+            raise ValueError("No current sort operation is available.")
+        result = _apply_nightly_asset_action(gateway, operation, request.form)
+        if result.changed:
+            db.session.commit()
+            flash("TONIGHT'S ASSETS UPDATED.", "success")
+        else:
+            flash("NO NIGHTLY ASSET CHANGES.", "info")
+    except (IntegrityError, ValueError) as exc:
+        db.session.rollback()
+        message = (
+            str(exc)
+            if isinstance(exc, ValueError)
+            else "Nightly assets changed. Reload and try again."
+        )
+        flash(message, "error")
+
+    return redirect(
+        url_for(
+            "neoscorpion.fuel_dispatch",
+            assets="open",
+            _anchor="manage-tonights-assets",
+        )
+    )
 
 
 @bp.route("/fueler", methods=["GET", "POST"])
@@ -200,7 +261,11 @@ def _dispatch_response(gateway, access, status_code=200):
         gateway=gateway,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
-        **fuel_dispatch_context(gateway),
+        can_manage_assets=access["can_edit"],
+        **fuel_dispatch_context(
+            gateway,
+            include_asset_choices=access["can_edit"],
+        ),
     )
     return response, status_code
 
@@ -240,3 +305,63 @@ def _settings_response(gateway, access, status_code=200):
 
 def _visible_neoscorpion_internal_menu():
     return visible_neoscorpion_menu_items(user_can, request.endpoint)
+
+
+def _apply_nightly_asset_action(gateway, operation, form):
+    action = (form.get("action") or "").strip()
+    if action == "set_islands":
+        return set_nightly_fuel_island_count(operation, form.get("fuel_island_count"))
+    if action == "add_fueler":
+        user_id = _positive_form_id(form.get("user_id"), "fueler")
+        eligible_ids = {user.id for user in eligible_nightly_fueler_users(gateway)}
+        if user_id not in eligible_ids:
+            raise ValueError("Select an eligible NeoScorpion fueler.")
+        return select_nightly_fueler(operation, user_id)
+    if action == "remove_fueler":
+        return remove_nightly_fueler(
+            operation,
+            _positive_form_id(form.get("user_id"), "fueler"),
+        )
+    if action == "add_truck":
+        return select_nightly_truck(
+            operation,
+            _positive_form_id(form.get("fuel_truck_id"), "fuel truck"),
+            status=form.get("status"),
+            starting_gallons=form.get("starting_gallons"),
+            current_gallons=form.get("current_gallons"),
+        )
+    if action == "update_truck":
+        return update_nightly_truck(
+            operation,
+            _positive_form_id(form.get("fuel_truck_id"), "fuel truck"),
+            status=form.get("status"),
+            starting_gallons=form.get("starting_gallons"),
+            current_gallons=form.get("current_gallons"),
+        )
+    if action == "mark_topping_off":
+        return mark_nightly_truck_topping_off(
+            operation,
+            _positive_form_id(form.get("fuel_truck_id"), "fuel truck"),
+        )
+    if action == "complete_top_off":
+        return complete_nightly_truck_top_off(
+            operation,
+            _positive_form_id(form.get("fuel_truck_id"), "fuel truck"),
+            form.get("current_gallons"),
+        )
+    if action == "remove_truck":
+        return remove_nightly_truck(
+            operation,
+            _positive_form_id(form.get("fuel_truck_id"), "fuel truck"),
+        )
+    raise ValueError("Select a valid nightly asset action.")
+
+
+def _positive_form_id(value, label):
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"Select a valid {label}.")
+    if value <= 0:
+        raise ValueError(f"Select a valid {label}.")
+    return value

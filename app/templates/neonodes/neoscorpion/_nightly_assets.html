@@ -1,0 +1,211 @@
+<details
+    id="manage-tonights-assets"
+    class="neoscorpion-assets-workspace"
+    {% if request.args.get("assets") == "open" %}open{% endif %}
+>
+    <summary class="neoscorpion-assets-summary">
+        <span>MANAGE TONIGHT'S ASSETS</span>
+        <strong class="neoscorpion-status-pill neoscorpion-assets-readiness--{{ nightly_asset_readiness }}">
+            {{ nightly_asset_readiness_label }}
+        </strong>
+    </summary>
+
+    {% if not operation %}
+    <p class="neoscorpion-empty">A current SortDateOperation is required before tonight's assets can be selected.</p>
+    {% else %}
+    <div class="neoscorpion-assets-grid">
+        <section class="neoscorpion-assets-section" aria-labelledby="nightly-islands-title">
+            <header>
+                <div>
+                    <h2 id="nightly-islands-title">Fuel Islands Available Tonight</h2>
+                    <p>Configured only for this sort operation.</p>
+                </div>
+                <strong class="neoscorpion-assets-value">
+                    {% if nightly_asset_state and nightly_asset_state.fuel_island_count is not none %}
+                    {{ nightly_asset_state.fuel_island_count }}
+                    {% else %}
+                    NOT CONFIGURED
+                    {% endif %}
+                </strong>
+            </header>
+            {% if can_manage_assets %}
+            <form class="neoscorpion-assets-inline-form" method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
+                <input type="hidden" name="action" value="set_islands">
+                <label>
+                    Available Islands
+                    <select name="fuel_island_count">
+                        <option value="" {% if not nightly_asset_state or nightly_asset_state.fuel_island_count is none %}selected{% endif %}>Not configured</option>
+                        {% for count in range(5) %}
+                        <option value="{{ count }}" {% if nightly_asset_state and nightly_asset_state.fuel_island_count == count %}selected{% endif %}>{{ count }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <button class="action-button neoscorpion-save-button" type="submit">Save Islands</button>
+            </form>
+            {% endif %}
+        </section>
+
+        <section class="neoscorpion-assets-section" aria-labelledby="nightly-fuelers-title">
+            <header>
+                <div>
+                    <h2 id="nightly-fuelers-title">Nightly Fuelers</h2>
+                    <p>Selected only for this sort operation.</p>
+                </div>
+                <strong class="neoscorpion-assets-value">{{ nightly_fuelers|length }} SELECTED</strong>
+            </header>
+            {% if nightly_fuelers %}
+            <div class="neoscorpion-assets-rows">
+                {% for row in nightly_fuelers %}
+                <div class="neoscorpion-assets-row">
+                    <span>
+                        <strong>{{ row.user.display_name }}</strong>
+                        <small>{{ row.user.username }}{% if not row.user.is_active %} / INACTIVE{% endif %}</small>
+                    </span>
+                    {% if can_manage_assets %}
+                    <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
+                        <input type="hidden" name="action" value="remove_fueler">
+                        <input type="hidden" name="user_id" value="{{ row.user.id }}">
+                        <button class="action-button secondary" type="submit">Remove</button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="neoscorpion-empty">No nightly fuelers selected.</p>
+            {% endif %}
+
+            {% if can_manage_assets %}
+            <form class="neoscorpion-assets-inline-form" method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
+                <input type="hidden" name="action" value="add_fueler">
+                <label>
+                    Add Eligible Fueler
+                    <select name="user_id" required {% if not eligible_nightly_fuelers %}disabled{% endif %}>
+                        <option value="">Select fueler</option>
+                        {% for fueler in eligible_nightly_fuelers %}
+                        <option value="{{ fueler.id }}">{{ fueler.display_name }} / {{ fueler.username }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <button class="action-button neoscorpion-save-button" type="submit" {% if not eligible_nightly_fuelers %}disabled{% endif %}>Add Fueler</button>
+            </form>
+            {% endif %}
+        </section>
+
+        <section class="neoscorpion-assets-section neoscorpion-assets-section--wide" aria-labelledby="nightly-trucks-title">
+            <header>
+                <div>
+                    <h2 id="nightly-trucks-title">Nightly Trucks</h2>
+                    <p>Starting and current gallons belong to this sort only.</p>
+                </div>
+                <strong class="neoscorpion-assets-value">{{ nightly_trucks|length }} SELECTED</strong>
+            </header>
+
+            {% if nightly_trucks %}
+            <div class="neoscorpion-assets-trucks">
+                {% for row in nightly_trucks %}
+                <article class="neoscorpion-assets-truck">
+                    <header>
+                        <div>
+                            <strong>{{ row.truck.truck_number }}</strong>
+                            <small>{{ row.truck.description or 'Fuel truck' }}</small>
+                        </div>
+                        <span class="neoscorpion-status-pill">
+                            {% if row.selection.status == "unavailable_oos" %}Unavailable / OOS{% else %}{{ row.selection.status|replace("_", " ")|title }}{% endif %}
+                        </span>
+                    </header>
+                    <dl>
+                        <div><dt>Max Capacity</dt><dd>{{ row.truck.capacity_gallons if row.truck.capacity_gallons is not none else '-' }} gal</dd></div>
+                        <div><dt>Starting</dt><dd>{{ row.selection.starting_gallons if row.selection.starting_gallons is not none else '-' }} gal</dd></div>
+                        <div><dt>Current</dt><dd>{{ row.selection.current_gallons if row.selection.current_gallons is not none else '-' }} gal</dd></div>
+                    </dl>
+
+                    {% if can_manage_assets %}
+                    <form class="neoscorpion-assets-truck-form" method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
+                        <input type="hidden" name="action" value="update_truck">
+                        <input type="hidden" name="fuel_truck_id" value="{{ row.truck.id }}">
+                        <label>
+                            Status
+                            <select name="status">
+                                <option value="available" {% if row.selection.status == "available" %}selected{% endif %} {% if row.selection.status == "topping_off" %}disabled{% endif %}>Available</option>
+                                <option value="unavailable_oos" {% if row.selection.status == "unavailable_oos" %}selected{% endif %}>Unavailable / OOS</option>
+                                <option value="topping_off" {% if row.selection.status == "topping_off" %}selected{% endif %}>Topping Off</option>
+                            </select>
+                        </label>
+                        <label>
+                            Starting Gallons
+                            <input name="starting_gallons" value="{{ row.selection.starting_gallons if row.selection.starting_gallons is not none else '' }}" inputmode="numeric" min="0" {% if row.truck.capacity_gallons is not none %}max="{{ row.truck.capacity_gallons }}"{% endif %}>
+                        </label>
+                        <label>
+                            Current Gallons
+                            <input name="current_gallons" value="{{ row.selection.current_gallons if row.selection.current_gallons is not none else '' }}" inputmode="numeric" min="0" {% if row.truck.capacity_gallons is not none %}max="{{ row.truck.capacity_gallons }}"{% endif %}>
+                        </label>
+                        <button class="action-button neoscorpion-save-button" type="submit">Save Truck</button>
+                    </form>
+                    <div class="neoscorpion-assets-actions">
+                        {% if row.selection.status == "topping_off" %}
+                        <form class="neoscorpion-assets-complete-form" method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
+                            <input type="hidden" name="action" value="complete_top_off">
+                            <input type="hidden" name="fuel_truck_id" value="{{ row.truck.id }}">
+                            <label>
+                                New Current Gallons
+                                <input name="current_gallons" inputmode="numeric" min="0" {% if row.truck.capacity_gallons is not none %}max="{{ row.truck.capacity_gallons }}"{% endif %} required>
+                            </label>
+                            <button class="action-button" type="submit">Top Off Complete</button>
+                        </form>
+                        {% else %}
+                        <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
+                            <input type="hidden" name="action" value="mark_topping_off">
+                            <input type="hidden" name="fuel_truck_id" value="{{ row.truck.id }}">
+                            <button class="action-button secondary" type="submit">Topping Off</button>
+                        </form>
+                        {% endif %}
+                        <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
+                            <input type="hidden" name="action" value="remove_truck">
+                            <input type="hidden" name="fuel_truck_id" value="{{ row.truck.id }}">
+                            <button class="action-button secondary" type="submit">Remove Tonight</button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="neoscorpion-empty">No nightly trucks selected.</p>
+            {% endif %}
+
+            {% if can_manage_assets %}
+            <form class="neoscorpion-assets-add-truck" method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
+                <input type="hidden" name="action" value="add_truck">
+                <label>
+                    Add Persistent Truck
+                    <select name="fuel_truck_id" required {% if not available_nightly_trucks %}disabled{% endif %}>
+                        <option value="">Select truck</option>
+                        {% for truck in available_nightly_trucks %}
+                        <option value="{{ truck.id }}">{{ truck.truck_number }}{% if truck.capacity_gallons is not none %} / {{ truck.capacity_gallons }} gal max{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    Nightly Status
+                    <select name="status">
+                        <option value="available">Available</option>
+                        <option value="unavailable_oos">Unavailable / OOS</option>
+                        <option value="topping_off">Topping Off</option>
+                    </select>
+                </label>
+                <label>
+                    Starting Gallons
+                    <input name="starting_gallons" inputmode="numeric" min="0">
+                </label>
+                <label>
+                    Current Gallons
+                    <input name="current_gallons" inputmode="numeric" min="0">
+                </label>
+                <button class="action-button neoscorpion-save-button" type="submit" {% if not available_nightly_trucks %}disabled{% endif %}>Add Truck Tonight</button>
+            </form>
+            {% endif %}
+        </section>
+    </div>
+    {% endif %}
+</details>

@@ -23623,6 +23623,226 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     font-weight: 750;
 }
 
+.neoscorpion-assets-workspace {
+    border: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.3);
+    border-radius: 8px;
+    background: rgba(3, 4, 6, 0.54);
+}
+
+.neoscorpion-assets-summary {
+    display: flex;
+    min-height: 48px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    color: #fff3bd;
+    cursor: pointer;
+    font-size: 0.76rem;
+    font-weight: 900;
+    letter-spacing: 0;
+    list-style: none;
+}
+
+.neoscorpion-assets-summary::-webkit-details-marker {
+    display: none;
+}
+
+.neoscorpion-assets-summary::before {
+    content: "+";
+    display: inline-grid;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+    place-items: center;
+    border: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.4);
+    border-radius: 6px;
+}
+
+.neoscorpion-assets-workspace[open] > .neoscorpion-assets-summary::before {
+    content: "-";
+}
+
+.neoscorpion-assets-summary > span {
+    margin-right: auto;
+}
+
+.neoscorpion-assets-readiness--set {
+    border-color: rgba(77, 196, 120, 0.55);
+    color: #b9f6cf;
+}
+
+.neoscorpion-assets-readiness--partial {
+    color: #ffe79a;
+}
+
+.neoscorpion-assets-readiness--not_set {
+    color: var(--muted);
+}
+
+.neoscorpion-assets-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-top: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.18);
+}
+
+.neoscorpion-assets-section {
+    display: grid;
+    align-content: start;
+    gap: 12px;
+    min-width: 0;
+    padding: 14px;
+}
+
+.neoscorpion-assets-section + .neoscorpion-assets-section {
+    border-left: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.16);
+}
+
+.neoscorpion-assets-section--wide {
+    grid-column: 1 / -1;
+    border-top: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.16);
+    border-left: 0 !important;
+}
+
+.neoscorpion-assets-section > header,
+.neoscorpion-assets-truck > header {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.neoscorpion-assets-section h2 {
+    margin: 0;
+    color: var(--node-scorpion-primary);
+    font-size: 0.78rem;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+.neoscorpion-assets-section header p,
+.neoscorpion-assets-truck header small,
+.neoscorpion-assets-row small {
+    display: block;
+    margin: 3px 0 0;
+    color: var(--muted);
+    font-size: 0.7rem;
+}
+
+.neoscorpion-assets-value {
+    color: #ffffff;
+    font-size: 0.76rem;
+    white-space: nowrap;
+}
+
+.neoscorpion-assets-inline-form,
+.neoscorpion-assets-add-truck,
+.neoscorpion-assets-truck-form,
+.neoscorpion-assets-complete-form {
+    display: grid;
+    gap: 10px;
+    align-items: end;
+}
+
+.neoscorpion-assets-inline-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.neoscorpion-assets-add-truck,
+.neoscorpion-assets-truck-form {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.neoscorpion-assets-add-truck .action-button,
+.neoscorpion-assets-truck-form .action-button {
+    grid-column: 1 / -1;
+}
+
+.neoscorpion-assets-inline-form label,
+.neoscorpion-assets-add-truck label,
+.neoscorpion-assets-truck-form label,
+.neoscorpion-assets-complete-form label {
+    display: grid;
+    gap: 5px;
+    color: #ffe79a;
+    font-size: 0.68rem;
+    font-weight: 850;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+.neoscorpion-assets-inline-form select,
+.neoscorpion-assets-add-truck select,
+.neoscorpion-assets-add-truck input,
+.neoscorpion-assets-truck-form select,
+.neoscorpion-assets-truck-form input,
+.neoscorpion-assets-complete-form input {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid rgba(201, 208, 214, 0.2);
+    border-radius: 6px;
+    background: rgba(3, 4, 6, 0.82);
+    color: var(--text);
+}
+
+.neoscorpion-assets-rows,
+.neoscorpion-assets-trucks {
+    display: grid;
+    gap: 8px;
+}
+
+.neoscorpion-assets-row {
+    display: flex;
+    min-height: 42px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(201, 208, 214, 0.1);
+}
+
+.neoscorpion-assets-truck {
+    display: grid;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(201, 208, 214, 0.14);
+}
+
+.neoscorpion-assets-truck dl {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+}
+
+.neoscorpion-assets-truck dl div {
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.18);
+}
+
+.neoscorpion-assets-truck dt {
+    color: var(--muted);
+    font-size: 0.64rem;
+    text-transform: uppercase;
+}
+
+.neoscorpion-assets-truck dd {
+    margin: 3px 0 0;
+    color: #ffffff;
+    font-weight: 850;
+}
+
+.neoscorpion-assets-actions,
+.neoscorpion-assets-complete-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.neoscorpion-assets-complete-form label {
+    min-width: 180px;
+}
+
 .neoscorpion-fueler-cards,
 .neoscorpion-truck-list,
 .neoscorpion-history-list {
@@ -23757,6 +23977,31 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     .neoscorpion-truck-form,
     .neoscorpion-settings-form,
     .neoscorpion-history-row {
+        grid-template-columns: 1fr;
+    }
+
+    .neoscorpion-assets-grid,
+    .neoscorpion-assets-add-truck,
+    .neoscorpion-assets-truck-form {
+        grid-template-columns: 1fr;
+    }
+
+    .neoscorpion-assets-section + .neoscorpion-assets-section {
+        border-top: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.16);
+        border-left: 0;
+    }
+
+    .neoscorpion-assets-section--wide {
+        grid-column: auto;
+    }
+
+    .neoscorpion-assets-summary,
+    .neoscorpion-assets-inline-form,
+    .neoscorpion-assets-section > header {
+        align-items: stretch;
+    }
+
+    .neoscorpion-assets-inline-form {
         grid-template-columns: 1fr;
     }
 

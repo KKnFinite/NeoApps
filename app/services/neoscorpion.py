@@ -17,6 +17,7 @@ from app.models import (
     User,
 )
 from app.services.parking_aircraft import resolve_parking_aircraft_type_from_tail
+from app.services.neoscorpion_assets import nightly_asset_context
 from app.services.time_display import format_local_hhmm
 
 
@@ -113,26 +114,37 @@ def current_sort_operation(gateway):
     )
 
 
-def fuel_dispatch_context(gateway):
+def fuel_dispatch_context(gateway, *, include_asset_choices=False):
     operation = current_sort_operation(gateway)
+    fuelers = _fueler_users()
+    trucks = _fuel_trucks(gateway)
+    asset_context = nightly_asset_context(
+        gateway,
+        operation,
+        active_users=fuelers,
+        fuel_trucks=trucks,
+        include_choices=include_asset_choices,
+    )
     if not operation:
         return {
             "operation": None,
             "rows": [],
-            "fuelers": _fueler_users(),
-            "trucks": _fuel_trucks(gateway),
+            "fuelers": fuelers,
+            "trucks": trucks,
             "settings": ensure_neoscorpion_settings(gateway),
             "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
+            **asset_context,
         }
 
     missions = _departure_missions(operation)
     return {
         "operation": operation,
         "rows": _fuel_rows(operation, missions),
-        "fuelers": _fueler_users(),
-        "trucks": _fuel_trucks(gateway),
+        "fuelers": fuelers,
+        "trucks": trucks,
         "settings": ensure_neoscorpion_settings(gateway),
         "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
+        **asset_context,
     }
 
 

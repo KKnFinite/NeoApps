@@ -7,27 +7,221 @@ single outer commit, matching the application's existing service convention.
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
+from sqlalchemy import and_
+
 from app.extensions import db
 from app.models import (
+    GatewayMembership,
+    GatewayNodeRole,
+    NeoNode,
     NeoScorpionFuelTruck,
     NeoScorpionSortAssetState,
     NeoScorpionSortFueler,
     NeoScorpionSortTruck,
+    PortalAppAccess,
     SortDateOperation,
     User,
 )
+from app.models.user import ROLE_LEVELS
+from app.services.permission_rules import default_minimum_role, get_permission_rule
 
 
 NIGHTLY_TRUCK_STATUSES = frozenset(
     {"available", "unavailable_oos", "topping_off"}
 )
 _UNSET = object()
+FUEL_ASSIGNMENTS_PERMISSION = "neoscorpion.fuel_assignments.view"
 
 
 @dataclass(frozen=True)
 class NightlyAssetMutationResult:
     changed: bool
     revision: int
+
+
+def nightly_asset_context(
+    gateway,
+    operation,
+    *,
+    active_users,
+    fuel_trucks,
+    include_choices=False,
+):
+    """Build the current-operation asset workspace without creating state."""
+    if operation is None:
+        return _empty_nightly_asset_context()
+
+    state = NeoScorpionSortAssetState.query.filter_by(
+        sort_date_operation_id=operation.id,
+    ).first()
+    selected_fuelers = (
+        db.session.query(NeoScorpionSortFueler, User)
+        .join(User, User.id == NeoScorpionSortFueler.user_id)
+        .filter(NeoScorpionSortFueler.sort_date_operation_id == operation.id)
+        .order_by(User.last_name, User.first_name, User.username)
+        .all()
+    )
+    selected_truck_rows = (
+        NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=operation.id)
+        .order_by(NeoScorpionSortTruck.id)
+        .all()
+    )
+
+    truck_by_id = {truck.id: truck for truck in fuel_trucks}
+    nightly_fuelers = [
+        {"selection": selection, "user": user}
+        for selection, user in selected_fuelers
+    ]
+    nightly_trucks = [
+        {"selection": selection, "truck": truck_by_id[selection.fuel_truck_id]}
+        for selection in selected_truck_rows
+        if selection.fuel_truck_id in truck_by_id
+    ]
+    selected_fueler_ids = {row["user"].id for row in nightly_fuelers}
+    selected_truck_ids = {row["truck"].id for row in nightly_trucks}
+
+    eligible_fuelers = []
+    available_trucks = []
+    if include_choices:
+        eligible_fuelers = [
+            user
+            for user in eligible_nightly_fueler_users(
+                gateway,
+                active_users=active_users,
+            )
+            if user.id not in selected_fueler_ids
+        ]
+        available_trucks = [
+            truck
+            for truck in fuel_trucks
+            if truck.is_active and truck.id not in selected_truck_ids
+        ]
+
+    configured = bool(
+        (state is not None and state.fuel_island_count is not None)
+        or nightly_fuelers
+        or nightly_trucks
+    )
+    ready = bool(
+        state is not None
+        and state.fuel_island_count is not None
+        and nightly_fuelers
+        and any(
+            row["selection"].status == "available" for row in nightly_trucks
+        )
+    )
+    if ready:
+        readiness = "set"
+        readiness_label = "ASSETS SET"
+    elif configured:
+        readiness = "partial"
+        readiness_label = "ASSETS PARTIALLY SET"
+    else:
+        readiness = "not_set"
+        readiness_label = "ASSETS NOT SET"
+
+    return {
+        "nightly_asset_state": state,
+        "nightly_asset_revision": int(state.revision if state else 0),
+        "nightly_asset_readiness": readiness,
+        "nightly_asset_readiness_label": readiness_label,
+        "nightly_fuelers": nightly_fuelers,
+        "eligible_nightly_fuelers": eligible_fuelers,
+        "nightly_trucks": nightly_trucks,
+        "available_nightly_trucks": available_trucks,
+    }
+
+
+def eligible_nightly_fueler_users(gateway, *, active_users=None):
+    """Resolve Fuel Assignments access in two bounded collection queries."""
+    if active_users is None:
+        active_users = (
+            User.query.filter_by(is_active=True)
+            .order_by(User.last_name, User.first_name, User.username)
+            .all()
+        )
+    users_by_id = {user.id: user for user in active_users if user.is_active}
+    if not users_by_id:
+        return []
+
+    rule = get_permission_rule(FUEL_ASSIGNMENTS_PERMISSION)
+    minimum_role = (
+        rule.minimum_role
+        if rule is not None
+        else default_minimum_role(FUEL_ASSIGNMENTS_PERMISSION)
+    )
+    minimum_level = ROLE_LEVELS.get(minimum_role, 0)
+
+    facts = (
+        db.session.query(
+            GatewayMembership.user_id,
+            GatewayNodeRole.role.label("node_role"),
+            PortalAppAccess.id.label("app_access_id"),
+            PortalAppAccess.status.label("app_status"),
+            PortalAppAccess.is_active.label("app_is_active"),
+            PortalAppAccess.role.label("app_role"),
+        )
+        .select_from(GatewayMembership)
+        .join(
+            NeoNode,
+            and_(
+                NeoNode.code == "scorpion",
+                NeoNode.is_active.is_(True),
+            ),
+        )
+        .outerjoin(
+            GatewayNodeRole,
+            and_(
+                GatewayNodeRole.gateway_membership_id == GatewayMembership.id,
+                GatewayNodeRole.node_id == NeoNode.id,
+                GatewayNodeRole.is_active.is_(True),
+            ),
+        )
+        .outerjoin(
+            PortalAppAccess,
+            and_(
+                PortalAppAccess.user_id == GatewayMembership.user_id,
+                PortalAppAccess.app_code == "neogateway",
+            ),
+        )
+        .filter(
+            GatewayMembership.gateway_id == gateway.id,
+            GatewayMembership.status == "approved",
+            GatewayMembership.is_active.is_(True),
+            GatewayMembership.user_id.in_(users_by_id),
+        )
+        .all()
+    )
+
+    eligible_ids = set()
+    for fact in facts:
+        if fact.app_access_id is not None and not (
+            fact.app_status == "approved" and fact.app_is_active
+        ):
+            continue
+        fallback_role = (
+            fact.app_role
+            if fact.app_access_id is not None
+            else users_by_id[fact.user_id].role
+        )
+        effective_role = fact.node_role or fallback_role
+        if ROLE_LEVELS.get(effective_role, 0) >= minimum_level:
+            eligible_ids.add(fact.user_id)
+
+    return [user for user in active_users if user.id in eligible_ids]
+
+
+def _empty_nightly_asset_context():
+    return {
+        "nightly_asset_state": None,
+        "nightly_asset_revision": 0,
+        "nightly_asset_readiness": "not_set",
+        "nightly_asset_readiness_label": "ASSETS NOT SET",
+        "nightly_fuelers": [],
+        "eligible_nightly_fuelers": [],
+        "nightly_trucks": [],
+        "available_nightly_trucks": [],
+    }
 
 
 def set_nightly_fuel_island_count(operation, fuel_island_count):
