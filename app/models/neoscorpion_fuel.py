@@ -76,6 +76,124 @@ class NeoScorpionFuelTruck(db.Model):
     gateway = db.relationship("Gateway")
 
 
+class NeoScorpionSortAssetState(db.Model):
+    __tablename__ = "neoscorpion_sort_asset_states"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "sort_date_operation_id",
+            name="uq_neoscorpion_sort_asset_state_operation",
+        ),
+        db.CheckConstraint(
+            "fuel_island_count IS NULL OR fuel_island_count BETWEEN 0 AND 4",
+            name="ck_neoscorpion_sort_asset_state_island_count",
+        ),
+        db.CheckConstraint(
+            "revision >= 0",
+            name="ck_neoscorpion_sort_asset_state_revision_nonnegative",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    sort_date_operation_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sort_date_operations.id"),
+        nullable=False,
+    )
+    fuel_island_count = db.Column(db.Integer, nullable=True)
+    revision = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    sort_date_operation = db.relationship("SortDateOperation")
+
+
+class NeoScorpionSortFueler(db.Model):
+    __tablename__ = "neoscorpion_sort_fuelers"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "sort_date_operation_id",
+            "user_id",
+            name="uq_neoscorpion_sort_fueler_operation_user",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    sort_date_operation_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sort_date_operations.id"),
+        nullable=False,
+    )
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    sort_date_operation = db.relationship("SortDateOperation")
+    user = db.relationship("User")
+
+
+class NeoScorpionSortTruck(db.Model):
+    __tablename__ = "neoscorpion_sort_trucks"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "sort_date_operation_id",
+            "fuel_truck_id",
+            name="uq_neoscorpion_sort_truck_operation_truck",
+        ),
+        db.CheckConstraint(
+            "status IN ('available', 'unavailable_oos', 'topping_off')",
+            name="ck_neoscorpion_sort_truck_status",
+        ),
+        db.CheckConstraint(
+            "starting_gallons IS NULL OR starting_gallons >= 0",
+            name="ck_neoscorpion_sort_truck_starting_gallons_nonnegative",
+        ),
+        db.CheckConstraint(
+            "current_gallons IS NULL OR current_gallons >= 0",
+            name="ck_neoscorpion_sort_truck_current_gallons_nonnegative",
+        ),
+        db.CheckConstraint(
+            "status <> 'available' OR "
+            "(starting_gallons IS NOT NULL AND current_gallons IS NOT NULL)",
+            name="ck_neoscorpion_sort_truck_available_gallons",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    sort_date_operation_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sort_date_operations.id"),
+        nullable=False,
+    )
+    fuel_truck_id = db.Column(
+        db.Integer,
+        db.ForeignKey("neoscorpion_fuel_trucks.id"),
+        nullable=False,
+    )
+    status = db.Column(db.String(32), nullable=False)
+    starting_gallons = db.Column(db.Integer, nullable=True)
+    current_gallons = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    sort_date_operation = db.relationship("SortDateOperation")
+    fuel_truck = db.relationship("NeoScorpionFuelTruck")
+
+
 class NeoScorpionFuelAssignment(db.Model):
     __tablename__ = "neoscorpion_fuel_assignments"
     __table_args__ = (

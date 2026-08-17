@@ -35,6 +35,9 @@ from app.models.neoscorpion_fuel import (
     NeoScorpionFuelAssignment,
     NeoScorpionFuelTruck,
     NeoScorpionSettings,
+    NeoScorpionSortAssetState,
+    NeoScorpionSortFueler,
+    NeoScorpionSortTruck,
     NeoScorpionTailFuelState,
 )
 from app.models.neo_node import NeoNode
@@ -104,6 +107,9 @@ __all__ = [
     "NeoScorpionFuelAssignment",
     "NeoScorpionFuelTruck",
     "NeoScorpionSettings",
+    "NeoScorpionSortAssetState",
+    "NeoScorpionSortFueler",
+    "NeoScorpionSortTruck",
     "NeoScorpionTailFuelState",
     "MasterFlightSchedule",
     "SortDateOperation",
