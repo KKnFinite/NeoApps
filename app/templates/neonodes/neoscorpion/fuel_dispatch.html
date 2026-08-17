@@ -64,6 +64,8 @@
                         {% if can_edit %}
                         <form method="post">
                             <input type="hidden" name="mission_id" value="{{ row.mission.id }}">
+                            <input type="hidden" name="expected_assigned_fueler_user_id" value="{{ row.assignment.assigned_fueler_user_id if row.assignment and row.assignment.assigned_fueler_user_id else '' }}">
+                            <input type="hidden" name="expected_assigned_truck_id" value="{{ row.assignment.assigned_truck_id if row.assignment and row.assignment.assigned_truck_id else '' }}">
                             <td><input class="neoscorpion-inline-input" name="required_fuel" value="{{ row.required_fuel_display }}" inputmode="decimal" aria-label="Required Fuel for {{ row.mission.flight_number }}"></td>
                             <td><input class="neoscorpion-inline-input" name="inbound_fuel" value="{{ row.inbound_fuel_display }}" inputmode="decimal" aria-label="Inbound Fuel for {{ row.tail_number }}"></td>
                             <td>{{ row.fob_display or '-' }}</td>
@@ -72,7 +74,10 @@
                             <td>
                                 <select class="neoscorpion-inline-select" name="assigned_fueler_user_id" aria-label="Assigned fueler for {{ row.mission.flight_number }}">
                                     <option value="">Unassigned</option>
-                                    {% for fueler in fuelers %}
+                                    {% if row.assigned_fueler and row.assigned_fueler.id not in nightly_assignment_fueler_ids %}
+                                    <option value="{{ row.assigned_fueler.id }}" selected>{{ row.assigned_fueler.display_name }} (Current - unavailable)</option>
+                                    {% endif %}
+                                    {% for fueler in nightly_assignment_fuelers %}
                                     <option value="{{ fueler.id }}" {% if row.assigned_fueler and row.assigned_fueler.id == fueler.id %}selected{% endif %}>{{ fueler.display_name }}</option>
                                     {% endfor %}
                                 </select>
@@ -80,8 +85,11 @@
                             <td>
                                 <select class="neoscorpion-inline-select" name="assigned_truck_id" aria-label="Assigned fuel truck for {{ row.mission.flight_number }}">
                                     <option value="">Unassigned</option>
-                                    {% for truck in trucks %}
-                                    <option value="{{ truck.id }}" {% if row.assigned_truck and row.assigned_truck.id == truck.id %}selected{% endif %}>{{ truck.truck_number }}{% if truck.is_out_of_service %} OOS{% endif %}</option>
+                                    {% if row.assigned_truck and row.assigned_truck.id not in nightly_assignment_truck_ids %}
+                                    <option value="{{ row.assigned_truck.id }}" selected>{{ row.assigned_truck.truck_number }} (Current - unavailable)</option>
+                                    {% endif %}
+                                    {% for truck in nightly_assignment_trucks %}
+                                    <option value="{{ truck.id }}" {% if row.assigned_truck and row.assigned_truck.id == truck.id %}selected{% endif %}>{{ truck.truck_number }}</option>
                                     {% endfor %}
                                 </select>
                             </td>

@@ -82,19 +82,33 @@ def nightly_asset_context(
 
     eligible_fuelers = []
     available_trucks = []
+    assignment_fuelers = []
+    assignment_trucks = []
     if include_choices:
+        all_eligible_fuelers = eligible_nightly_fueler_users(
+            gateway,
+            active_users=active_users,
+        )
+        eligible_fueler_ids = {user.id for user in all_eligible_fuelers}
         eligible_fuelers = [
             user
-            for user in eligible_nightly_fueler_users(
-                gateway,
-                active_users=active_users,
-            )
+            for user in all_eligible_fuelers
             if user.id not in selected_fueler_ids
+        ]
+        assignment_fuelers = [
+            row["user"]
+            for row in nightly_fuelers
+            if row["user"].id in eligible_fueler_ids
         ]
         available_trucks = [
             truck
             for truck in fuel_trucks
             if truck.is_active and truck.id not in selected_truck_ids
+        ]
+        assignment_trucks = [
+            row["truck"]
+            for row in nightly_trucks
+            if row["selection"].status == "available"
         ]
 
     configured = bool(
@@ -129,6 +143,14 @@ def nightly_asset_context(
         "eligible_nightly_fuelers": eligible_fuelers,
         "nightly_trucks": nightly_trucks,
         "available_nightly_trucks": available_trucks,
+        "nightly_assignment_fuelers": assignment_fuelers,
+        "nightly_assignment_fueler_ids": {
+            user.id for user in assignment_fuelers
+        },
+        "nightly_assignment_trucks": assignment_trucks,
+        "nightly_assignment_truck_ids": {
+            truck.id for truck in assignment_trucks
+        },
     }
 
 
@@ -221,7 +243,21 @@ def _empty_nightly_asset_context():
         "eligible_nightly_fuelers": [],
         "nightly_trucks": [],
         "available_nightly_trucks": [],
+        "nightly_assignment_fuelers": [],
+        "nightly_assignment_fueler_ids": set(),
+        "nightly_assignment_trucks": [],
+        "nightly_assignment_truck_ids": set(),
     }
+
+
+def lock_nightly_asset_scope_for_mutation(operation):
+    """Serialize one operation's child mutations with its revision state."""
+    return _lock_operation_and_state(operation)
+
+
+def record_nightly_operational_change(state, operation_id):
+    """Advance the shared nightly revision inside the caller's transaction."""
+    return _record_change(state, operation_id)
 
 
 def set_nightly_fuel_island_count(operation, fuel_island_count):

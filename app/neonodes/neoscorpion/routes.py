@@ -38,7 +38,7 @@ from app.services.permission_rules import permission_access, user_can
 FUEL_DISPATCH_VIEW_PERMISSION = "neoscorpion.fuel_dispatch.view"
 FUEL_DISPATCH_EDIT_PERMISSION = "neoscorpion.fuel_dispatch.edit"
 NEOSCORPION_DASHBOARD_VIEW_PERMISSION = "neoscorpion.dashboard.view"
-FUELER_VIEW_PERMISSION = "neoscorpion.fueler.view"
+FUELER_VIEW_PERMISSION = "neoscorpion.fuel_assignments.view"
 FUELER_EDIT_PERMISSION = "neoscorpion.fueler.edit"
 TRUCK_MANAGER_VIEW_PERMISSION = "neoscorpion.truck_manager.view"
 TRUCK_MANAGER_EDIT_PERMISSION = "neoscorpion.truck_manager.edit"
@@ -91,13 +91,16 @@ def fuel_dispatch():
             flash("Access denied.", "error")
             return _dispatch_response(gateway, access, status_code=403)
         try:
-            save_dispatch_row(gateway, request.form)
+            result = save_dispatch_row(gateway, request.form)
         except ValueError as exc:
             db.session.rollback()
             flash(str(exc), "error")
             return _dispatch_response(gateway, access, status_code=400)
-        db.session.commit()
-        flash("FUEL DISPATCH UPDATED.", "success")
+        if result.changed:
+            db.session.commit()
+            flash("FUEL DISPATCH UPDATED.", "success")
+        else:
+            flash("NO FUEL DISPATCH CHANGES.", "info")
         return redirect(url_for("neoscorpion.fuel_dispatch"))
 
     if not access["can_view"]:
