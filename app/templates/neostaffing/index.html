@@ -34,6 +34,11 @@
                 {% if neostaffing_nav.unread_notifications %}<strong class="neostaffing-status-pill is-yellow" aria-label="{{ neostaffing_nav.unread_notifications }} unread notifications">{{ neostaffing_nav.unread_notifications }}</strong>{% endif %}
             </a>
             {% endif %}
+            {% if user_can("neostaffing.bulk_change.use") %}
+            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.bulk_change') }}">
+                <span>BULK CHANGE</span>
+            </a>
+            {% endif %}
             {% if user_can("neostaffing.vacation_selection.view") %}
             <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.vacation_selection') }}">
                 <span>VACATION SELECTION</span>

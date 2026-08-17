@@ -68,12 +68,13 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b'href="/neostaffing/staffing-groups"', response.data)
         self.assertIn(b'href="/neostaffing/requests"', response.data)
         self.assertIn(b'href="/neostaffing/notifications"', response.data)
+        self.assertIn(b'href="/neostaffing/bulk-change"', response.data)
         self.assertIn(b'href="/neostaffing/vacation-selection"', response.data)
         self.assertIn(b"neo-brand--apps", response.data)
         self.assertIn(b"/static/images/icons/neostaffing/inapp/neostaffing-inapp-128.png", response.data)
         self.assertIn(b"neostaffing-header-title", response.data)
         self.assertIn(b"neo-brand-title__node--staffing", response.data)
-        self.assertEqual(response.data.count(b"neostaffing-menu-tile"), 8)
+        self.assertEqual(response.data.count(b"neostaffing-menu-tile"), 9)
         self.assertNotIn(b'href="/neostaffing/people/attendance" class="neostaffing-menu-tile"', response.data)
         self.assertNotIn(b"APP ROLE", response.data)
         self.assertNotIn(b"neostaffing-home-header", response.data)
@@ -248,8 +249,6 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             }
         )
         one_scope_user = self._link_user_for_person(supervisor, "staffing_one_scope")
-        one_scope_user.is_management = True
-        one_scope_user.management_level = "part_time_supervisor"
         self._grant_app_access(one_scope_user, "neostaffing", "operator")
         staffing_service.create_leadership_assignment(supervisor, work_area)
         db.session.commit()
@@ -1688,8 +1687,6 @@ class NeoStaffingRoutesTest(unittest.TestCase):
     def test_attendance_defaults_to_logged_in_management_scope(self):
         user = self._user("staffing_attendance_scope_user")
         user.employee_id = "MS100"
-        user.is_management = True
-        user.management_level = "part_time_supervisor"
         self._grant_app_access(user, "neostaffing", "operator")
         _sort, _operation, _department, work_area = self._staffing_hierarchy()
         supervisor = staffing_service.create_person(

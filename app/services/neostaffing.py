@@ -1754,11 +1754,11 @@ def unit_breadcrumb(unit):
 
 
 def management_attendance_context_for_user(user):
-    is_management = bool(getattr(user, "is_management", False))
+    account_is_management = bool(getattr(user, "is_management", False))
     employee_id = str(getattr(user, "employee_id", "") or "").strip()
-    if not is_management:
-        return {"is_management": False, "person": None, "assignments": [], "message": ""}
     if not employee_id:
+        if not account_is_management:
+            return {"is_management": False, "person": None, "assignments": [], "message": ""}
         return {
             "is_management": True,
             "person": None,
@@ -1768,6 +1768,14 @@ def management_attendance_context_for_user(user):
     person = StaffingPerson.query.filter(
         func.lower(StaffingPerson.employee_id) == employee_id.lower()
     ).first()
+    staffing_is_management = bool(
+        person
+        and person.active
+        and person.classification in MANAGEMENT_CLASSIFICATIONS
+    )
+    is_management = account_is_management or staffing_is_management
+    if not is_management:
+        return {"is_management": False, "person": person, "assignments": [], "message": ""}
     if not person:
         return {
             "is_management": True,

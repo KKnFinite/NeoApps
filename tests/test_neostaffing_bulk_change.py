@@ -137,8 +137,16 @@ class NeoStaffingBulkChangeTest(unittest.TestCase):
             self.client.get("/neostaffing/bulk-change", follow_redirects=False).status_code,
             302,
         )
+        self.assertNotIn(
+            b'href="/neostaffing/bulk-change"',
+            self.client.get("/neostaffing").data,
+        )
         self._login(self.pt_simulator_user)
         self.assertEqual(self.client.get("/neostaffing/bulk-change").status_code, 200)
+        self.assertIn(
+            b'href="/neostaffing/bulk-change"',
+            self.client.get("/neostaffing").data,
+        )
         self._login(self.watcher_user)
         self.assertEqual(
             self.client.get("/neostaffing/bulk-change", follow_redirects=False).status_code,
