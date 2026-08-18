@@ -151,15 +151,15 @@ def _ensure_check_constraints(connection):
         definition = connection.execute(
             text(
                 """
-                SELECT pg_get_constraintdef(constraint.oid)
-                FROM pg_constraint AS constraint
+                SELECT pg_get_constraintdef(constraint_row.oid)
+                FROM pg_constraint AS constraint_row
                 JOIN pg_class AS relation
-                  ON relation.oid = constraint.conrelid
+                  ON relation.oid = constraint_row.conrelid
                 JOIN pg_namespace AS namespace
                   ON namespace.oid = relation.relnamespace
                 WHERE relation.relname = :table_name
                   AND namespace.nspname = current_schema()
-                  AND constraint.conname = :constraint_name
+                  AND constraint_row.conname = :constraint_name
                 """
             ),
             {

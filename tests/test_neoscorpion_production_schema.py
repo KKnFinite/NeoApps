@@ -158,6 +158,11 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
         constraint_statements = "\n".join(
             str(call.args[0]) for call in connection.execute.call_args_list
         )
+        self.assertIn(
+            "FROM pg_constraint AS constraint_row",
+            constraint_statements,
+        )
+        self.assertNotIn("AS constraint\n", constraint_statements)
         self.assertNotIn(
             "DROP CONSTRAINT IF EXISTS "
             "ck_neoscorpion_fuel_assignment_operational_status",
