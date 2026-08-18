@@ -160,12 +160,21 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "applied_apu_rate_thousand_lbs_per_hour": "NUMERIC(8, 4)",
         "off_at_utc": "DATETIME",
         "off_by_user_id": "INTEGER",
+        "truck_segment_started_at_utc": "DATETIME",
+        "ended_early_at_utc": "DATETIME",
+        "ended_early_by_user_id": "INTEGER",
+        "ended_early_reason": "TEXT",
     },
     "neoscorpion_fuel_assignments": {
         "fuel_on_board_at_utc": "DATETIME",
         "fuel_on_board_by_user_id": "INTEGER",
         "completed_at_utc": "DATETIME",
         "completed_by_user_id": "INTEGER",
+        "confirmed_tail_number": "VARCHAR(32)",
+        "operational_status": "VARCHAR(32) NOT NULL DEFAULT 'active'",
+        "hold_reason": "TEXT",
+        "hold_at_utc": "DATETIME",
+        "hold_by_user_id": "INTEGER",
     },
 }
 
@@ -299,12 +308,21 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "applied_apu_rate_thousand_lbs_per_hour": "NUMERIC(8, 4)",
         "off_at_utc": "TIMESTAMP",
         "off_by_user_id": "INTEGER",
+        "truck_segment_started_at_utc": "TIMESTAMP",
+        "ended_early_at_utc": "TIMESTAMP",
+        "ended_early_by_user_id": "INTEGER",
+        "ended_early_reason": "TEXT",
     },
     "neoscorpion_fuel_assignments": {
         "fuel_on_board_at_utc": "TIMESTAMP",
         "fuel_on_board_by_user_id": "INTEGER",
         "completed_at_utc": "TIMESTAMP",
         "completed_by_user_id": "INTEGER",
+        "confirmed_tail_number": "VARCHAR(32)",
+        "operational_status": "VARCHAR(32) NOT NULL DEFAULT 'active'",
+        "hold_reason": "TEXT",
+        "hold_at_utc": "TIMESTAMP",
+        "hold_by_user_id": "INTEGER",
     },
 }
 
@@ -358,7 +376,15 @@ def sync_local_sqlite_schema(app):
     _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names)
     _create_google_mission_link_table()
     _create_google_live_poll_state_table()
-    if _sync_sort_date_tail_state_status_constraints_sqlite(inspector, table_names):
+    rebuilt_constraint_table = _sync_sort_date_tail_state_status_constraints_sqlite(
+        inspector,
+        table_names,
+    )
+    rebuilt_constraint_table = (
+        _sync_neoscorpion_fuel_audit_actions_sqlite(inspector, table_names)
+        or rebuilt_constraint_table
+    )
+    if rebuilt_constraint_table:
         db.session.commit()
         inspector = inspect(db.engine)
         table_names = set(inspector.get_table_names())
@@ -419,6 +445,7 @@ def sync_database_schema(app):
     _create_google_mission_link_table()
     _create_google_live_poll_state_table()
     _sync_sort_date_tail_state_status_constraints_postgres(table_names)
+    _sync_neoscorpion_fuel_audit_actions_postgres(table_names)
     _sync_uld_request_unique_constraint_postgres(table_names)
     _backfill_motherbrain_parking_rule_defaults(table_names, table_columns)
     if migrate_existing_approved_users:
@@ -907,6 +934,102 @@ def _sync_sort_date_tail_state_status_constraints_postgres(table_names):
                     'spare',
                     'qt',
                     'oos'
+                )
+            )
+            """
+        )
+    )
+
+
+def _sync_neoscorpion_fuel_audit_actions_sqlite(inspector, table_names):
+    table_name = "neoscorpion_fuel_audit_entries"
+    legacy_table = "neoscorpion_fuel_audit_entries_action_legacy"
+    if table_name not in table_names:
+        return False
+    create_sql = db.session.execute(
+        text(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'neoscorpion_fuel_audit_entries'"
+        )
+    ).scalar() or ""
+    if "'end_early'" in create_sql and "'auto_hold'" in create_sql:
+        return False
+
+    all_tables = set(inspector.get_table_names())
+    if legacy_table in all_tables:
+        db.session.execute(text(f"DROP TABLE {legacy_table}"))
+    from app.models import NeoScorpionFuelAuditEntry
+
+    db.session.execute(text("PRAGMA legacy_alter_table=ON"))
+    db.session.execute(text(f"ALTER TABLE {table_name} RENAME TO {legacy_table}"))
+    _drop_sqlite_indexes_for_table(legacy_table)
+    NeoScorpionFuelAuditEntry.__table__.create(
+        bind=db.session.connection(),
+        checkfirst=False,
+    )
+    legacy_columns = {
+        row[1]
+        for row in db.session.execute(text(f"PRAGMA table_info({legacy_table})")).all()
+    }
+    copy_columns = [
+        column.name
+        for column in NeoScorpionFuelAuditEntry.__table__.columns
+        if column.name in legacy_columns
+    ]
+    quoted_columns = ", ".join(
+        _quote_sqlite_identifier(column) for column in copy_columns
+    )
+    db.session.execute(
+        text(
+            f"INSERT INTO {table_name} ({quoted_columns}) "
+            f"SELECT {quoted_columns} FROM {legacy_table}"
+        )
+    )
+    db.session.execute(text(f"DROP TABLE {legacy_table}"))
+    db.session.execute(text("PRAGMA legacy_alter_table=OFF"))
+    return True
+
+
+def _sync_neoscorpion_fuel_audit_actions_postgres(table_names):
+    if "neoscorpion_fuel_audit_entries" not in table_names:
+        return
+    constraint_definition = db.session.execute(
+        text(
+            """
+            SELECT pg_get_constraintdef(oid)
+            FROM pg_constraint
+            WHERE conname = 'ck_neoscorpion_fuel_audit_entry_action'
+              AND conrelid = 'neoscorpion_fuel_audit_entries'::regclass
+            """
+        )
+    ).scalar()
+    if (
+        constraint_definition
+        and "auto_hold" in constraint_definition
+        and "end_early" in constraint_definition
+    ):
+        return
+    db.session.execute(
+        text(
+            "ALTER TABLE neoscorpion_fuel_audit_entries "
+            "DROP CONSTRAINT IF EXISTS ck_neoscorpion_fuel_audit_entry_action"
+        )
+    )
+    db.session.execute(
+        text(
+            """
+            ALTER TABLE neoscorpion_fuel_audit_entries
+            ADD CONSTRAINT ck_neoscorpion_fuel_audit_entry_action
+            CHECK (
+                action IN (
+                    'reopen_off',
+                    'correct_actual',
+                    'auto_hold',
+                    'resume_hold',
+                    'swap_fueler',
+                    'swap_truck',
+                    'confirm_tail',
+                    'end_early'
                 )
             )
             """

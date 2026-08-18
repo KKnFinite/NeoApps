@@ -28,6 +28,7 @@ from app.models import (
 from app.services.parking_aircraft import resolve_parking_aircraft_type_from_tail
 from app.services.neoscorpion_assets import (
     eligible_nightly_fueler_users,
+    hold_active_assignments_for_truck,
     lock_nightly_asset_scope_for_mutation,
     nightly_asset_context,
     record_nightly_operational_change,
@@ -312,6 +313,17 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
     fuel_work_states = _fuel_work_states_by_assignment_tail(
         assignments_by_mission.values()
     )
+    fueling_event_work_state_ids = {
+        work_state_id
+        for (work_state_id,) in db.session.query(
+            NeoScorpionFuelingEvent.fuel_work_state_id
+        )
+        .filter(
+            NeoScorpionFuelingEvent.sort_date_operation_id == operation.id
+        )
+        .distinct()
+        .all()
+    }
     nightly_truck_states_by_truck_id = {
         row["selection"].fuel_truck_id: row["selection"]
         for row in asset_context["nightly_trucks"]
@@ -325,6 +337,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
             assignments_by_mission=assignments_by_mission,
             fuel_work_states_by_assignment_tail=fuel_work_states,
             nightly_truck_states_by_truck_id=nightly_truck_states_by_truck_id,
+            fueling_event_work_state_ids=fueling_event_work_state_ids,
         ),
         "fuelers": fuelers,
         "trucks": trucks,
@@ -498,6 +511,16 @@ class FuelCorrectionResult:
 
 
 @dataclass(frozen=True)
+class FuelInterruptionResult:
+    changed: bool
+    revision: int
+    assignment: NeoScorpionFuelAssignment
+    fuel_work_state: NeoScorpionFuelWorkState | None
+    fueling_event: NeoScorpionFuelingEvent | None = None
+    audit_entries: tuple[NeoScorpionFuelAuditEntry, ...] = ()
+
+
+@dataclass(frozen=True)
 class AircraftFuelSettingsSaveResult:
     changed: bool
 
@@ -549,6 +572,21 @@ def save_dispatch_row(gateway, form):
     requested_fueler_id = _int_or_none(form.get("assigned_fueler_user_id"))
     requested_truck_id = _int_or_none(form.get("assigned_truck_id"))
 
+    resource_change_requested = bool(
+        requested_fueler_id != current_fueler_id
+        or requested_truck_id != current_truck_id
+    )
+    if assignment is not None and resource_change_requested:
+        confirmed_tail = _effective_confirmed_tail(assignment, mission)
+        fuel_work_state = _locked_fuel_work_state_for_tail(
+            assignment,
+            confirmed_tail,
+        )
+        if _fuel_work_has_begun(fuel_work_state, assignment):
+            raise ValueError(
+                "Fuel work has begun. Use the dedicated FUELER SWAP or TRUCK SWAP action."
+            )
+
     if requested_fueler_id != current_fueler_id and requested_fueler_id is not None:
         _validate_nightly_fueler_assignment(
             gateway,
@@ -596,6 +634,7 @@ def save_dispatch_row(gateway, form):
             sort_date_mission_id=mission.id,
             calculation_status="not_configured",
             review_status="pending",
+            confirmed_tail_number=_normalize_tail(mission.assigned_tail_number),
         )
         db.session.add(assignment)
         changed = True
@@ -610,6 +649,15 @@ def save_dispatch_row(gateway, form):
     )
     load_planning_note = (form.get("load_planning_note") or "").strip()
     assignment_changed = assignment_created
+    if (
+        assignment.confirmed_tail_number is None
+        and (requested_fueler_id is not None or requested_truck_id is not None)
+    ):
+        assignment.confirmed_tail_number = _normalize_tail(
+            mission.assigned_tail_number
+        )
+        changed = True
+        assignment_changed = True
     for field_name, value in (
         ("assigned_fueler_user_id", requested_fueler_id),
         ("assigned_truck_id", requested_truck_id),
@@ -685,6 +733,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
         .with_for_update()
         .first()
     )
+    _validate_fueler_work_access(assignment, mission, fuel_work_state)
     if fuel_work_state is not None and fuel_work_state.off_at_utc is not None:
         raise ValueError(
             "Fuel work is OFF. A dispatcher must REOPEN OFF before editing."
@@ -929,6 +978,7 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None):
         .with_for_update()
         .first()
     )
+    _validate_fueler_work_access(assignment, mission, fuel_work_state)
     if fuel_work_state is None:
         raise ValueError("Complete Actual fuel and confirm APU before OFF.")
     if fuel_work_state.off_at_utc is not None:
@@ -1009,6 +1059,10 @@ def complete_fuel_on_board(gateway, user, assignment_id, *, now_utc=None):
             assignment=assignment,
             mission=mission,
         )
+    if assignment.operational_status == "hold_review":
+        raise ValueError(
+            "HOLD / REVIEW REQUIRED must be resolved before Fuel On Board."
+        )
     if assignment.assigned_fueler_user_id is None:
         raise ValueError("Assign a fueler before Fuel On Board.")
     if assignment.assigned_truck_id is not None:
@@ -1019,6 +1073,8 @@ def complete_fuel_on_board(gateway, user, assignment_id, *, now_utc=None):
     tail_number = _normalize_tail(mission.assigned_tail_number)
     if not tail_number:
         raise ValueError("Fuel assignment does not have a tail number.")
+    if _effective_confirmed_tail(assignment, mission) != tail_number:
+        raise ValueError("Confirm the current mission tail before Fuel On Board.")
     fuel_work_state = (
         NeoScorpionFuelWorkState.query.filter_by(
             fuel_assignment_id=assignment.id,
@@ -1031,6 +1087,8 @@ def complete_fuel_on_board(gateway, user, assignment_id, *, now_utc=None):
         raise ValueError(
             "Complete Actual fuel and confirm APU before Fuel On Board."
         )
+    if fuel_work_state.ended_early_at_utc is not None:
+        raise ValueError("Ended Early fuel work cannot use Fuel On Board.")
     tank_states = (
         NeoScorpionFuelTankState.query.filter_by(
             fuel_work_state_id=fuel_work_state.id,
@@ -1120,10 +1178,15 @@ def complete_fueled_assignment(gateway, user, assignment_id, *, now_utc=None):
         )
     if assignment.review_status == "complete" or mission.fuel_status == "complete":
         raise ValueError("REVIEW REQUIRED: completion audit is missing.")
+    if assignment.operational_status == "hold_review":
+        raise ValueError("HOLD / REVIEW REQUIRED must be resolved before COMPLETE.")
 
     tail_number = _normalize_tail(mission.assigned_tail_number)
     if not tail_number:
         raise ValueError("Fuel assignment does not have a tail number.")
+    confirmed_tail = _effective_confirmed_tail(assignment, mission)
+    if confirmed_tail != tail_number:
+        raise ValueError("Confirm the current mission tail before COMPLETE.")
     fuel_work_state = (
         NeoScorpionFuelWorkState.query.filter_by(
             fuel_assignment_id=assignment.id,
@@ -1134,6 +1197,8 @@ def complete_fueled_assignment(gateway, user, assignment_id, *, now_utc=None):
     )
     if fuel_work_state is None or fuel_work_state.off_at_utc is None:
         raise ValueError("Fueler must MARK OFF before dispatcher COMPLETE.")
+    if fuel_work_state.ended_early_at_utc is not None:
+        raise ValueError("Ended Early fuel work cannot use normal COMPLETE.")
 
     tank_states = (
         NeoScorpionFuelTankState.query.filter_by(
@@ -1158,66 +1223,38 @@ def complete_fueled_assignment(gateway, user, assignment_id, *, now_utc=None):
     if neo_fuel_lbs is None:
         raise ValueError("Complete Actual fuel and confirm APU before COMPLETE.")
 
-    movement_status = classify_fuel_movement(
-        assignment,
-        fuel_work_state,
-        tank_states=tank_states,
-    )
-    if movement_status == "unknown":
-        raise ValueError("Fuel movement cannot yet be determined.")
-
     existing_events = (
         NeoScorpionFuelingEvent.query.filter_by(
             fuel_work_state_id=fuel_work_state.id,
         )
         .with_for_update()
+        .order_by(NeoScorpionFuelingEvent.sequence_number)
         .all()
     )
+    if existing_events and fuel_work_state.truck_segment_started_at_utc is None:
+        raise ValueError("REVIEW REQUIRED: an unexpected fueling event already exists.")
+    movement_status = classify_fuel_movement(
+        assignment,
+        fuel_work_state,
+        tank_states=tank_states,
+    )
+    if movement_status == "unknown" and not existing_events:
+        raise ValueError("Fuel movement cannot yet be determined.")
     if existing_events:
-        raise ValueError("REVIEW REQUIRED: a fueling event already exists.")
+        movement_status = "moved"
 
     fueling_event = None
-    if movement_status == "moved":
-        if assignment.assigned_truck_id is None:
-            raise ValueError("Assign the truck used before COMPLETE.")
-        transfer_gallons = assignment.transfer_fuel_gallons
-        if transfer_gallons is None or transfer_gallons <= 0:
-            raise ValueError("Enter a positive T/F before COMPLETE.")
-        truck_row = (
-            db.session.query(NeoScorpionSortTruck, NeoScorpionFuelTruck)
-            .join(
-                NeoScorpionFuelTruck,
-                NeoScorpionFuelTruck.id == NeoScorpionSortTruck.fuel_truck_id,
-            )
-            .filter(
-                NeoScorpionSortTruck.sort_date_operation_id == operation.id,
-                NeoScorpionSortTruck.fuel_truck_id == assignment.assigned_truck_id,
-                NeoScorpionFuelTruck.gateway_id == gateway.id,
-            )
-            .with_for_update()
-            .first()
+    if existing_events and assignment.transfer_fuel_gallons in (None, 0):
+        fueling_event = None
+    elif movement_status == "moved":
+        fueling_event = _close_current_truck_segment(
+            gateway,
+            operation,
+            assignment,
+            fuel_work_state,
+            existing_events,
+            fuel_work_state.off_at_utc,
         )
-        if truck_row is None:
-            raise ValueError("The assigned truck is missing from tonight's assets.")
-        nightly_truck, fuel_truck = truck_row
-        if nightly_truck.current_gallons is None:
-            raise ValueError("The assigned truck's current gallons are unknown.")
-        if transfer_gallons > nightly_truck.current_gallons:
-            raise ValueError("T/F exceeds the assigned truck's current gallons.")
-
-        fueling_event = NeoScorpionFuelingEvent(
-            sort_date_operation_id=operation.id,
-            fuel_assignment_id=assignment.id,
-            fuel_work_state_id=fuel_work_state.id,
-            tail_number=tail_number,
-            fuel_truck_id=fuel_truck.id,
-            sequence_number=1,
-            started_at_utc=fuel_work_state.on_at_utc,
-            ended_at_utc=fuel_work_state.off_at_utc,
-            transfer_fuel_gallons=transfer_gallons,
-        )
-        db.session.add(fueling_event)
-        nightly_truck.current_gallons -= transfer_gallons
 
     assignment.completed_at_utc = now_utc
     assignment.completed_by_user_id = user.id
@@ -1307,6 +1344,8 @@ def correct_fuel_actuals(gateway, user, form, *, now_utc=None):
     fuel_work_state = _locked_current_fuel_work_state(assignment, mission)
     if fuel_work_state is None:
         raise ValueError("No current-tail fuel work exists to correct.")
+    if fuel_work_state.ended_early_at_utc is not None:
+        raise ValueError("Ended Early fuel work cannot be corrected through this path.")
     if (
         NeoScorpionFuelingEvent.query.filter_by(
             fuel_work_state_id=fuel_work_state.id
@@ -1419,6 +1458,392 @@ def correct_fuel_actuals(gateway, user, form, *, now_utc=None):
     )
 
 
+def resume_held_fuel_assignment(gateway, user, assignment_id, *, now_utc=None):
+    operation = current_sort_operation(gateway)
+    if not operation:
+        raise ValueError("No current sort operation is available for RESUME.")
+    now_utc = now_utc or datetime.utcnow()
+    operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
+    assignment, mission = _locked_current_fuel_assignment(
+        operation,
+        assignment_id,
+        action_label="RESUME",
+    )
+    _validate_precompletion_assignment(assignment, mission, "RESUME")
+    fuel_work_state = _locked_fuel_work_state_for_tail(
+        assignment,
+        _effective_confirmed_tail(assignment, mission),
+    )
+    if assignment.operational_status != "hold_review":
+        return FuelInterruptionResult(
+            False,
+            int(asset_state.revision if asset_state else 0),
+            assignment,
+            fuel_work_state,
+        )
+    blocker = _assignment_resume_blocker(
+        gateway,
+        operation,
+        assignment,
+        mission,
+        fuel_work_state,
+    )
+    if blocker:
+        raise ValueError(f"HOLD remains: {blocker}")
+
+    audit = _new_fuel_audit(
+        operation,
+        assignment,
+        user,
+        "resume_hold",
+        "operational_status",
+        "hold_review",
+        "active",
+        "Dispatcher resumed the assignment after revalidation.",
+        fuel_work_state=fuel_work_state,
+        now_utc=now_utc,
+    )
+    _clear_assignment_hold(assignment)
+    asset_state = record_nightly_operational_change(asset_state, operation.id)
+    db.session.flush()
+    return FuelInterruptionResult(
+        True,
+        int(asset_state.revision),
+        assignment,
+        fuel_work_state,
+        audit_entries=(audit,),
+    )
+
+
+def swap_assignment_fueler(
+    gateway,
+    user,
+    assignment_id,
+    replacement_user_id,
+    *,
+    now_utc=None,
+):
+    operation = current_sort_operation(gateway)
+    if not operation:
+        raise ValueError("No current sort operation is available for FUELER SWAP.")
+    now_utc = now_utc or datetime.utcnow()
+    operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
+    assignment, mission = _locked_current_fuel_assignment(
+        operation,
+        assignment_id,
+        action_label="FUELER SWAP",
+    )
+    _validate_precompletion_assignment(assignment, mission, "FUELER SWAP")
+    replacement_user_id = _int_or_none(replacement_user_id)
+    if replacement_user_id is None:
+        raise ValueError("Select a replacement fueler.")
+    fuel_work_state = _locked_fuel_work_state_for_tail(
+        assignment,
+        _effective_confirmed_tail(assignment, mission),
+    )
+    if fuel_work_state is not None and fuel_work_state.off_at_utc is not None:
+        raise ValueError("REOPEN OFF before swapping the assigned fueler.")
+    if assignment.assigned_fueler_user_id == replacement_user_id:
+        return FuelInterruptionResult(
+            False,
+            int(asset_state.revision if asset_state else 0),
+            assignment,
+            fuel_work_state,
+        )
+    _validate_nightly_fueler_assignment(
+        gateway,
+        operation,
+        replacement_user_id,
+    )
+    old_user_id = assignment.assigned_fueler_user_id
+    assignment.assigned_fueler_user_id = replacement_user_id
+    audit = _new_fuel_audit(
+        operation,
+        assignment,
+        user,
+        "swap_fueler",
+        "assigned_fueler_user_id",
+        old_user_id,
+        replacement_user_id,
+        "Dispatcher changed the assigned fueler.",
+        fuel_work_state=fuel_work_state,
+        now_utc=now_utc,
+    )
+    _clear_hold_after_explicit_resolution(
+        gateway,
+        operation,
+        assignment,
+        mission,
+        fuel_work_state,
+    )
+    asset_state = record_nightly_operational_change(asset_state, operation.id)
+    db.session.flush()
+    return FuelInterruptionResult(
+        True,
+        int(asset_state.revision),
+        assignment,
+        fuel_work_state,
+        audit_entries=(audit,),
+    )
+
+
+def swap_assignment_truck(
+    gateway,
+    user,
+    assignment_id,
+    replacement_truck_id,
+    *,
+    now_utc=None,
+):
+    operation = current_sort_operation(gateway)
+    if not operation:
+        raise ValueError("No current sort operation is available for TRUCK SWAP.")
+    now_utc = now_utc or datetime.utcnow()
+    operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
+    assignment, mission = _locked_current_fuel_assignment(
+        operation,
+        assignment_id,
+        action_label="TRUCK SWAP",
+    )
+    _validate_precompletion_assignment(assignment, mission, "TRUCK SWAP")
+    replacement_truck_id = _int_or_none(replacement_truck_id)
+    if replacement_truck_id is None:
+        raise ValueError("Select a replacement truck.")
+    confirmed_tail = _effective_confirmed_tail(assignment, mission)
+    fuel_work_state = _locked_fuel_work_state_for_tail(
+        assignment,
+        confirmed_tail,
+    )
+    if fuel_work_state is not None and fuel_work_state.off_at_utc is not None:
+        raise ValueError("REOPEN OFF before swapping the assigned truck.")
+    if assignment.assigned_truck_id == replacement_truck_id:
+        return FuelInterruptionResult(
+            False,
+            int(asset_state.revision if asset_state else 0),
+            assignment,
+            fuel_work_state,
+        )
+    _validate_nightly_truck_assignment(
+        gateway,
+        operation,
+        replacement_truck_id,
+    )
+    tank_states = _locked_tank_states(fuel_work_state)
+    existing_events = _locked_fueling_events(fuel_work_state)
+    movement_status = _segment_movement_status(
+        assignment,
+        fuel_work_state,
+        tank_states,
+    )
+    if movement_status == "unknown":
+        raise ValueError(
+            "REVIEW REQUIRED: fuel movement cannot be determined safely for this truck swap."
+        )
+
+    old_truck_id = assignment.assigned_truck_id
+    fueling_event = None
+    if movement_status == "moved":
+        fueling_event = _close_current_truck_segment(
+            gateway,
+            operation,
+            assignment,
+            fuel_work_state,
+            existing_events,
+            now_utc,
+        )
+        assignment.transfer_fuel_gallons = None
+    assignment.assigned_truck_id = replacement_truck_id
+    if fuel_work_state is not None and _fuel_work_has_begun(
+        fuel_work_state,
+        assignment,
+    ):
+        fuel_work_state.truck_segment_started_at_utc = now_utc
+    audit = _new_fuel_audit(
+        operation,
+        assignment,
+        user,
+        "swap_truck",
+        "assigned_truck_id",
+        old_truck_id,
+        replacement_truck_id,
+        "Dispatcher changed the assigned fuel truck.",
+        fuel_work_state=fuel_work_state,
+        now_utc=now_utc,
+    )
+    _clear_hold_after_explicit_resolution(
+        gateway,
+        operation,
+        assignment,
+        mission,
+        fuel_work_state,
+    )
+    asset_state = record_nightly_operational_change(asset_state, operation.id)
+    db.session.flush()
+    return FuelInterruptionResult(
+        True,
+        int(asset_state.revision),
+        assignment,
+        fuel_work_state,
+        fueling_event=fueling_event,
+        audit_entries=(audit,),
+    )
+
+
+def confirm_assignment_tail(gateway, user, assignment_id, *, now_utc=None):
+    operation = current_sort_operation(gateway)
+    if not operation:
+        raise ValueError("No current sort operation is available for tail confirmation.")
+    now_utc = now_utc or datetime.utcnow()
+    operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
+    assignment, mission = _locked_current_fuel_assignment(
+        operation,
+        assignment_id,
+        action_label="CONFIRM NEW TAIL",
+    )
+    _validate_precompletion_assignment(assignment, mission, "CONFIRM NEW TAIL")
+    current_tail = _normalize_tail(mission.assigned_tail_number)
+    if not current_tail:
+        raise ValueError("The mission does not have a tail to confirm.")
+    old_tail = _normalize_tail(assignment.confirmed_tail_number)
+    if old_tail == current_tail:
+        return FuelInterruptionResult(
+            False,
+            int(asset_state.revision if asset_state else 0),
+            assignment,
+            _locked_fuel_work_state_for_tail(assignment, current_tail),
+        )
+    old_work_state = _locked_fuel_work_state_for_tail(assignment, old_tail)
+    if (
+        _fuel_work_has_begun(old_work_state, assignment)
+        and old_work_state is not None
+        and old_work_state.ended_early_at_utc is None
+    ):
+        raise ValueError("END EARLY the prior-tail fuel work before confirming the new tail.")
+
+    assignment.confirmed_tail_number = current_tail
+    current_work_state = _locked_fuel_work_state_for_tail(assignment, current_tail)
+    audit = _new_fuel_audit(
+        operation,
+        assignment,
+        user,
+        "confirm_tail",
+        "confirmed_tail_number",
+        old_tail,
+        current_tail,
+        "Dispatcher confirmed the current mission tail.",
+        fuel_work_state=old_work_state,
+        now_utc=now_utc,
+    )
+    _clear_hold_after_explicit_resolution(
+        gateway,
+        operation,
+        assignment,
+        mission,
+        current_work_state,
+    )
+    asset_state = record_nightly_operational_change(asset_state, operation.id)
+    db.session.flush()
+    return FuelInterruptionResult(
+        True,
+        int(asset_state.revision),
+        assignment,
+        current_work_state,
+        audit_entries=(audit,),
+    )
+
+
+def end_fuel_work_early(
+    gateway,
+    user,
+    assignment_id,
+    reason,
+    *,
+    now_utc=None,
+):
+    operation = current_sort_operation(gateway)
+    if not operation:
+        raise ValueError("No current sort operation is available for END EARLY.")
+    now_utc = now_utc or datetime.utcnow()
+    reason = _required_interruption_reason(reason, "END EARLY")
+    operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
+    assignment, mission = _locked_current_fuel_assignment(
+        operation,
+        assignment_id,
+        action_label="END EARLY",
+    )
+    _validate_precompletion_assignment(assignment, mission, "END EARLY")
+    confirmed_tail = _effective_confirmed_tail(assignment, mission)
+    fuel_work_state = _locked_fuel_work_state_for_tail(
+        assignment,
+        confirmed_tail,
+    )
+    if fuel_work_state is None:
+        raise ValueError("No fuel work exists to END EARLY.")
+    if fuel_work_state.ended_early_at_utc is not None:
+        return FuelInterruptionResult(
+            False,
+            int(asset_state.revision if asset_state else 0),
+            assignment,
+            fuel_work_state,
+        )
+
+    tank_states = _locked_tank_states(fuel_work_state)
+    existing_events = _locked_fueling_events(fuel_work_state)
+    if existing_events and assignment.transfer_fuel_gallons in (None, 0):
+        movement_status = "not_moved"
+    else:
+        movement_status = _segment_movement_status(
+            assignment,
+            fuel_work_state,
+            tank_states,
+        )
+    if movement_status == "unknown":
+        raise ValueError(
+            "REVIEW REQUIRED: fuel movement cannot be determined safely for END EARLY."
+        )
+
+    fueling_event = None
+    if movement_status == "moved":
+        fueling_event = _close_current_truck_segment(
+            gateway,
+            operation,
+            assignment,
+            fuel_work_state,
+            existing_events,
+            now_utc,
+        )
+    assignment.transfer_fuel_gallons = None
+    fuel_work_state.ended_early_at_utc = now_utc
+    fuel_work_state.ended_early_by_user_id = user.id
+    fuel_work_state.ended_early_reason = reason
+    assignment.operational_status = "hold_review"
+    assignment.hold_reason = "Fuel work ended early; dispatcher review is required."
+    assignment.hold_at_utc = now_utc
+    assignment.hold_by_user_id = user.id
+    audit = _new_fuel_audit(
+        operation,
+        assignment,
+        user,
+        "end_early",
+        "ended_early_at_utc",
+        None,
+        now_utc.isoformat(),
+        reason,
+        fuel_work_state=fuel_work_state,
+        now_utc=now_utc,
+    )
+    asset_state = record_nightly_operational_change(asset_state, operation.id)
+    db.session.flush()
+    return FuelInterruptionResult(
+        True,
+        int(asset_state.revision),
+        assignment,
+        fuel_work_state,
+        fueling_event=fueling_event,
+        audit_entries=(audit,),
+    )
+
+
 def _locked_current_fuel_assignment(operation, assignment_id, *, action_label):
     assignment_row = (
         db.session.query(NeoScorpionFuelAssignment, SortDateMission)
@@ -1443,7 +1868,7 @@ def _locked_current_fuel_assignment(operation, assignment_id, *, action_label):
 
 
 def _locked_current_fuel_work_state(assignment, mission):
-    tail_number = _normalize_tail(mission.assigned_tail_number)
+    tail_number = _effective_confirmed_tail(assignment, mission)
     if not tail_number:
         raise ValueError("Fuel assignment does not have a tail number.")
     return (
@@ -1474,7 +1899,258 @@ def _required_correction_reason(value):
     return reason
 
 
-def save_truck(gateway, form):
+def _effective_confirmed_tail(assignment, mission):
+    return _normalize_tail(
+        assignment.confirmed_tail_number or mission.assigned_tail_number
+    )
+
+
+def _locked_fuel_work_state_for_tail(assignment, tail_number):
+    tail_number = _normalize_tail(tail_number)
+    if not tail_number:
+        return None
+    return (
+        NeoScorpionFuelWorkState.query.filter_by(
+            fuel_assignment_id=assignment.id,
+            tail_number=tail_number,
+        )
+        .with_for_update()
+        .first()
+    )
+
+
+def _locked_tank_states(fuel_work_state):
+    if fuel_work_state is None:
+        return []
+    return (
+        NeoScorpionFuelTankState.query.filter_by(
+            fuel_work_state_id=fuel_work_state.id,
+        )
+        .with_for_update()
+        .all()
+    )
+
+
+def _locked_fueling_events(fuel_work_state):
+    if fuel_work_state is None:
+        return []
+    return (
+        NeoScorpionFuelingEvent.query.filter_by(
+            fuel_work_state_id=fuel_work_state.id,
+        )
+        .with_for_update()
+        .order_by(NeoScorpionFuelingEvent.sequence_number)
+        .all()
+    )
+
+
+def _fuel_work_has_begun(fuel_work_state, assignment=None):
+    return bool(
+        fuel_work_state is not None
+        or (
+            assignment is not None
+            and assignment.transfer_fuel_gallons is not None
+            and assignment.transfer_fuel_gallons > 0
+        )
+    )
+
+
+def _validate_fueler_work_access(assignment, mission, fuel_work_state):
+    _validate_precompletion_assignment(assignment, mission, "Fueler entry")
+    if assignment.operational_status == "hold_review":
+        raise ValueError(
+            "HOLD / REVIEW REQUIRED. A dispatcher must resolve the assignment before fuel work continues."
+        )
+    current_tail = _normalize_tail(mission.assigned_tail_number)
+    confirmed_tail = _effective_confirmed_tail(assignment, mission)
+    if current_tail != confirmed_tail:
+        message = (
+            "HOLD / STOP & REVIEW: the mission tail changed after fuel work began."
+            if _fuel_work_has_begun(fuel_work_state, assignment)
+            else "NEEDS RECONFIRMATION: a dispatcher must confirm the new mission tail."
+        )
+        raise ValueError(message)
+    if fuel_work_state is not None and fuel_work_state.ended_early_at_utc is not None:
+        raise ValueError("This tail's fuel work was ENDED EARLY and cannot be edited.")
+
+
+def _assignment_resume_blocker(
+    gateway,
+    operation,
+    assignment,
+    mission,
+    fuel_work_state,
+):
+    if assignment.assigned_fueler_user_id is None:
+        return "Assign an eligible nightly fueler."
+    try:
+        _validate_nightly_fueler_assignment(
+            gateway,
+            operation,
+            assignment.assigned_fueler_user_id,
+        )
+    except ValueError as exc:
+        return str(exc)
+    if assignment.assigned_truck_id is not None:
+        try:
+            _validate_nightly_truck_assignment(
+                gateway,
+                operation,
+                assignment.assigned_truck_id,
+            )
+        except ValueError as exc:
+            return str(exc)
+    if _effective_confirmed_tail(assignment, mission) != _normalize_tail(
+        mission.assigned_tail_number
+    ):
+        return "Confirm the current mission tail."
+    if fuel_work_state is not None and fuel_work_state.ended_early_at_utc is not None:
+        return "The confirmed-tail work was Ended Early. Confirm the new tail."
+    return None
+
+
+def _clear_hold_after_explicit_resolution(
+    gateway,
+    operation,
+    assignment,
+    mission,
+    fuel_work_state,
+):
+    if assignment.operational_status != "hold_review":
+        return False
+    if _assignment_resume_blocker(
+        gateway,
+        operation,
+        assignment,
+        mission,
+        fuel_work_state,
+    ):
+        return False
+    _clear_assignment_hold(assignment)
+    return True
+
+
+def _clear_assignment_hold(assignment):
+    assignment.operational_status = "active"
+    assignment.hold_reason = None
+    assignment.hold_at_utc = None
+    assignment.hold_by_user_id = None
+
+
+def _new_fuel_audit(
+    operation,
+    assignment,
+    user,
+    action,
+    field_name,
+    old_value,
+    new_value,
+    reason,
+    *,
+    fuel_work_state=None,
+    now_utc=None,
+):
+    entry = NeoScorpionFuelAuditEntry(
+        sort_date_operation_id=operation.id,
+        fuel_assignment_id=assignment.id,
+        fuel_work_state_id=(fuel_work_state.id if fuel_work_state else None),
+        action=action,
+        field_name=field_name,
+        old_value=(str(old_value) if old_value is not None else None),
+        new_value=(str(new_value) if new_value is not None else None),
+        reason=reason,
+        changed_by_user_id=user.id,
+        created_at=now_utc or datetime.utcnow(),
+    )
+    db.session.add(entry)
+    return entry
+
+
+def _segment_movement_status(assignment, fuel_work_state, tank_states):
+    if (
+        assignment.transfer_fuel_gallons is not None
+        and assignment.transfer_fuel_gallons > 0
+    ):
+        return "moved"
+    if fuel_work_state is None:
+        return "not_moved"
+    if not any(state.actual_lbs is not None for state in tank_states):
+        return "not_moved"
+    return classify_fuel_movement(
+        assignment,
+        fuel_work_state,
+        tank_states=tank_states,
+    )
+
+
+def _close_current_truck_segment(
+    gateway,
+    operation,
+    assignment,
+    fuel_work_state,
+    existing_events,
+    ended_at_utc,
+):
+    if fuel_work_state is None:
+        raise ValueError("Fuel work is required to close a truck segment.")
+    if assignment.assigned_truck_id is None:
+        raise ValueError("Assign the truck used before closing this fuel segment.")
+    transfer_gallons = assignment.transfer_fuel_gallons
+    if transfer_gallons is None or transfer_gallons <= 0:
+        raise ValueError("Enter a positive T/F for the current truck segment.")
+    truck_row = (
+        db.session.query(NeoScorpionSortTruck, NeoScorpionFuelTruck)
+        .join(
+            NeoScorpionFuelTruck,
+            NeoScorpionFuelTruck.id == NeoScorpionSortTruck.fuel_truck_id,
+        )
+        .filter(
+            NeoScorpionSortTruck.sort_date_operation_id == operation.id,
+            NeoScorpionSortTruck.fuel_truck_id == assignment.assigned_truck_id,
+            NeoScorpionFuelTruck.gateway_id == gateway.id,
+        )
+        .with_for_update()
+        .first()
+    )
+    if truck_row is None:
+        raise ValueError("The assigned truck is missing from tonight's assets.")
+    nightly_truck, fuel_truck = truck_row
+    if nightly_truck.current_gallons is None:
+        raise ValueError("The assigned truck's current gallons are unknown.")
+    if transfer_gallons > nightly_truck.current_gallons:
+        raise ValueError("T/F exceeds the assigned truck's current gallons.")
+
+    sequence_number = max(
+        (event.sequence_number for event in existing_events),
+        default=0,
+    ) + 1
+    fueling_event = NeoScorpionFuelingEvent(
+        sort_date_operation_id=operation.id,
+        fuel_assignment_id=assignment.id,
+        fuel_work_state_id=fuel_work_state.id,
+        tail_number=fuel_work_state.tail_number,
+        fuel_truck_id=fuel_truck.id,
+        sequence_number=sequence_number,
+        started_at_utc=(
+            fuel_work_state.truck_segment_started_at_utc
+            or fuel_work_state.on_at_utc
+        ),
+        ended_at_utc=ended_at_utc,
+        transfer_fuel_gallons=transfer_gallons,
+    )
+    db.session.add(fueling_event)
+    nightly_truck.current_gallons -= transfer_gallons
+    return fueling_event
+
+
+def _required_interruption_reason(value, action_label):
+    reason = (value or "").strip()
+    if not reason:
+        raise ValueError(f"A reason is required for {action_label}.")
+    return reason
+
+
+def save_truck(gateway, form, user=None):
     truck_id = _int_or_none(form.get("truck_id"))
     truck_number = (form.get("truck_number") or "").strip().upper()
     if not truck_number:
@@ -1489,6 +2165,18 @@ def save_truck(gateway, form):
         truck = NeoScorpionFuelTruck(gateway_id=gateway.id, truck_number=truck_number)
         db.session.add(truck)
 
+    became_blocked = bool(
+        truck.id
+        and not truck.is_out_of_service
+        and form.get("is_out_of_service") == "1"
+    )
+    interruption_scope = None
+    if became_blocked:
+        current_operation = current_sort_operation(gateway)
+        if current_operation is not None:
+            interruption_scope = lock_nightly_asset_scope_for_mutation(
+                current_operation
+            )
     truck.truck_number = truck_number
     truck.description = (form.get("description") or "").strip()
     truck.capacity_gallons = _int_or_none(form.get("capacity_gallons"))
@@ -1496,16 +2184,44 @@ def save_truck(gateway, form):
     truck.vendor_driver_name = (form.get("vendor_driver_name") or "").strip()
     truck.is_active = form.get("is_active") == "1"
     truck.is_out_of_service = form.get("is_out_of_service") == "1"
+    if interruption_scope is not None:
+        operation, asset_state = interruption_scope
+        held_count = hold_active_assignments_for_truck(
+            operation,
+            truck,
+            user,
+            "Assigned persistent truck was marked OOS.",
+        )
+        if held_count:
+            record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
     return truck
 
 
-def deactivate_truck(gateway, form):
+def deactivate_truck(gateway, form, user=None):
     truck_id = _int_or_none(form.get("truck_id"))
     truck = NeoScorpionFuelTruck.query.filter_by(id=truck_id, gateway_id=gateway.id).first()
     if not truck:
         raise ValueError("Fuel truck was not found.")
+    became_inactive = truck.is_active
+    interruption_scope = None
+    if became_inactive:
+        current_operation = current_sort_operation(gateway)
+        if current_operation is not None:
+            interruption_scope = lock_nightly_asset_scope_for_mutation(
+                current_operation
+            )
     truck.is_active = False
+    if interruption_scope is not None:
+        operation, asset_state = interruption_scope
+        held_count = hold_active_assignments_for_truck(
+            operation,
+            truck,
+            user,
+            "Assigned persistent truck was deactivated.",
+        )
+        if held_count:
+            record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
     return truck
 
@@ -1624,6 +2340,7 @@ def ensure_fuel_assignment(operation, mission):
         sort_date_mission_id=mission.id,
         calculation_status="not_configured",
         review_status="pending",
+        confirmed_tail_number=_normalize_tail(mission.assigned_tail_number),
     )
     db.session.add(assignment)
     db.session.flush()
@@ -1725,6 +2442,7 @@ def _fuel_rows(
     assignments_by_mission=None,
     fuel_work_states_by_assignment_tail=None,
     nightly_truck_states_by_truck_id=None,
+    fueling_event_work_state_ids=None,
 ):
     tail_states = _tail_states_by_tail(operation)
     tail_fuel_states = _tail_fuel_states_by_tail(operation)
@@ -1739,6 +2457,7 @@ def _fuel_rows(
         fuel_trucks = _fuel_trucks(operation.gateway or _gateway_stub(operation))
     trucks = {truck.id: truck for truck in fuel_trucks}
     fuel_work_states = fuel_work_states_by_assignment_tail or {}
+    event_work_state_ids = fueling_event_work_state_ids or set()
 
     rows = []
     for mission in missions:
@@ -1750,13 +2469,54 @@ def _fuel_rows(
         truck = trucks.get(assignment.assigned_truck_id) if assignment else None
         if truck is None and assignment is not None:
             truck = assignment.assigned_truck
-        aircraft_type = _aircraft_type_for_mission(mission, tail_state)
-        detailed_aircraft_type = detailed_aircraft_type_for_tail(tail_number)
-        tank_layout = tank_layout_for_tail(tail_number)
-        fuel_work_state = fuel_work_states.get(
+        confirmed_tail_number = (
+            _effective_confirmed_tail(assignment, mission)
+            if assignment is not None
+            else tail_number
+        )
+        current_fuel_work_state = fuel_work_states.get(
             (assignment.id, tail_number)
             if assignment is not None and tail_number
             else None
+        )
+        confirmed_fuel_work_state = fuel_work_states.get(
+            (assignment.id, confirmed_tail_number)
+            if assignment is not None and confirmed_tail_number
+            else None
+        )
+        tail_mismatch = bool(
+            assignment
+            and confirmed_tail_number
+            and tail_number != confirmed_tail_number
+        )
+        fuel_work_state = (
+            confirmed_fuel_work_state
+            if tail_mismatch and confirmed_fuel_work_state is not None
+            else current_fuel_work_state
+        )
+        work_tail_number = (
+            fuel_work_state.tail_number if fuel_work_state else tail_number
+        )
+        aircraft_type = _aircraft_type_for_mission(mission, tail_state)
+        detailed_aircraft_type = detailed_aircraft_type_for_tail(work_tail_number)
+        tank_layout = tank_layout_for_tail(work_tail_number)
+        work_has_begun = _fuel_work_has_begun(fuel_work_state, assignment)
+        work_ended_early = bool(
+            fuel_work_state and fuel_work_state.ended_early_at_utc
+        )
+        effective_hold = bool(
+            assignment
+            and (
+                assignment.operational_status == "hold_review"
+                or (tail_mismatch and work_has_begun)
+            )
+        )
+        tail_safety_label = (
+            "HOLD / STOP & REVIEW"
+            if tail_mismatch and work_has_begun and not work_ended_early
+            else "NEEDS RECONFIRMATION"
+            if tail_mismatch
+            else ""
         )
         tank_states_by_code = {
             state.tank_code: state
@@ -1767,6 +2527,11 @@ def _fuel_rows(
             fuel_work_state,
             tank_states=tuple(tank_states_by_code.values()),
         )
+        has_prior_fueling_events = bool(
+            fuel_work_state and fuel_work_state.id in event_work_state_ids
+        )
+        if has_prior_fueling_events:
+            movement_status = "moved"
         tank_rows = []
         for tank_code, tank_label in tank_layout:
             tank_state = tank_states_by_code.get(tank_code)
@@ -1828,6 +2593,9 @@ def _fuel_rows(
         fuel_on_board_ready = bool(
             assignment
             and not fuel_on_board_complete
+            and not effective_hold
+            and not tail_mismatch
+            and not work_ended_early
             and assignment.assigned_fueler_user_id is not None
             and assignment.assigned_truck_id is None
             and assignment.transfer_fuel_gallons in (None, 0)
@@ -1835,6 +2603,12 @@ def _fuel_rows(
         )
         if fuel_on_board_complete:
             fuel_on_board_reason = "COMPLETE"
+        elif effective_hold:
+            fuel_on_board_reason = "HOLD / REVIEW REQUIRED"
+        elif tail_mismatch:
+            fuel_on_board_reason = tail_safety_label
+        elif work_ended_early:
+            fuel_on_board_reason = "ENDED EARLY"
         elif not assignment or assignment.assigned_fueler_user_id is None:
             fuel_on_board_reason = "Assign fueler first."
         elif assignment.assigned_truck_id is not None:
@@ -1848,12 +2622,19 @@ def _fuel_rows(
         normal_completion_ready = bool(
             assignment
             and not administratively_complete
+            and not effective_hold
+            and not tail_mismatch
+            and not work_ended_early
             and fuel_work_state
             and fuel_work_state.off_at_utc
             and neo_fuel_lbs is not None
             and movement_status != "unknown"
             and (
                 movement_status == "not_moved"
+                or (
+                    has_prior_fueling_events
+                    and assignment.transfer_fuel_gallons in (None, 0)
+                )
                 or (
                     assignment.assigned_truck_id is not None
                     and nightly_truck_state is not None
@@ -1871,6 +2652,12 @@ def _fuel_rows(
             normal_completion_reason = "COMPLETE"
         elif administratively_complete:
             normal_completion_reason = "REVIEW REQUIRED"
+        elif effective_hold:
+            normal_completion_reason = "HOLD / REVIEW REQUIRED"
+        elif tail_mismatch:
+            normal_completion_reason = tail_safety_label
+        elif work_ended_early:
+            normal_completion_reason = "ENDED EARLY"
         elif not fuel_work_state or not fuel_work_state.off_at_utc:
             normal_completion_reason = "Fueler OFF required."
         elif neo_fuel_lbs is None:
@@ -1900,6 +2687,39 @@ def _fuel_rows(
                 "assignment": assignment,
                 "arrival_mission": arrival,
                 "tail_number": tail_number or "-",
+                "confirmed_tail_number": confirmed_tail_number or "-",
+                "work_tail_number": work_tail_number or "-",
+                "tail_mismatch": tail_mismatch,
+                "tail_safety_label": tail_safety_label,
+                "work_has_begun": work_has_begun,
+                "work_ended_early": work_ended_early,
+                "effective_hold": effective_hold,
+                "fueler_work_blocked": bool(
+                    effective_hold or tail_mismatch or work_ended_early
+                ),
+                "hold_reason_display": (
+                    assignment.hold_reason
+                    if assignment and assignment.hold_reason
+                    else tail_safety_label
+                ),
+                "resume_available": bool(
+                    assignment
+                    and assignment.operational_status == "hold_review"
+                    and not administratively_complete
+                ),
+                "confirm_tail_available": bool(
+                    assignment and tail_mismatch and not administratively_complete
+                ),
+                "end_early_available": bool(
+                    assignment
+                    and tail_mismatch
+                    and work_has_begun
+                    and not work_ended_early
+                    and not administratively_complete
+                ),
+                "resource_swap_required": bool(
+                    assignment and work_has_begun and not administratively_complete
+                ),
                 "aircraft_type": aircraft_type,
                 "detailed_aircraft_type": detailed_aircraft_type,
                 "fuel_work_state": fuel_work_state,
@@ -1918,6 +2738,9 @@ def _fuel_rows(
                     fuel_work_state
                     and fuel_work_state.off_at_utc is None
                     and neo_fuel_lbs is not None
+                    and not effective_hold
+                    and not tail_mismatch
+                    and not work_ended_early
                 ),
                 "is_off": bool(fuel_work_state and fuel_work_state.off_at_utc),
                 "remaining_total_display": (
@@ -1963,17 +2786,22 @@ def _fuel_rows(
                 "fuel_on_board_ready": fuel_on_board_ready,
                 "fuel_on_board_reason": fuel_on_board_reason,
                 "movement_status": movement_status,
+                "has_prior_fueling_events": has_prior_fueling_events,
                 "normal_completion_complete": normal_completion_complete,
                 "administratively_complete": administratively_complete,
                 "normal_completion_ready": normal_completion_ready,
                 "normal_completion_reason": normal_completion_reason,
                 "correction_allowed": bool(
-                    assignment and fuel_work_state and not administratively_complete
+                    assignment
+                    and fuel_work_state
+                    and not work_ended_early
+                    and not administratively_complete
                 ),
                 "reopen_off_available": bool(
                     assignment
                     and fuel_work_state
                     and fuel_work_state.off_at_utc
+                    and not work_ended_early
                     and not administratively_complete
                 ),
                 "destination": mission.destination or "-",
@@ -2205,7 +3033,10 @@ def _validate_nightly_truck_assignment(gateway, operation, truck_id):
     )
     if selected is None:
         raise ValueError("That truck is no longer selected for tonight.")
-    status = selected[0].status
+    nightly_truck, persistent_truck = selected
+    if not persistent_truck.is_active or persistent_truck.is_out_of_service:
+        raise ValueError("That persistent truck is inactive or OOS.")
+    status = nightly_truck.status
     if status == "topping_off":
         raise ValueError("That truck is currently topping off.")
     if status != "available":

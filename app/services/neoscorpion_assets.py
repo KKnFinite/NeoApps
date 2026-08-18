@@ -5,6 +5,7 @@ single outer commit, matching the application's existing service convention.
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import and_
@@ -14,11 +15,14 @@ from app.models import (
     GatewayMembership,
     GatewayNodeRole,
     NeoNode,
+    NeoScorpionFuelAssignment,
+    NeoScorpionFuelAuditEntry,
     NeoScorpionFuelTruck,
     NeoScorpionSortAssetState,
     NeoScorpionSortFueler,
     NeoScorpionSortTruck,
     PortalAppAccess,
+    SortDateMission,
     SortDateOperation,
     User,
 )
@@ -297,7 +301,7 @@ def select_nightly_fueler(operation, user):
     return _changed(state)
 
 
-def remove_nightly_fueler(operation, user):
+def remove_nightly_fueler(operation, user, *, changed_by_user=None, now_utc=None):
     user_id = _entity_id(user, "fueler")
     locked_operation, state = _lock_operation_and_state(operation)
     existing = NeoScorpionSortFueler.query.filter_by(
@@ -307,6 +311,17 @@ def remove_nightly_fueler(operation, user):
     if existing is None:
         return _unchanged(state)
 
+    assignments = _active_assignments_for_resource(
+        locked_operation.id,
+        NeoScorpionFuelAssignment.assigned_fueler_user_id,
+        user_id,
+    )
+    _hold_assignments(
+        assignments,
+        "Nightly fueler was removed.",
+        changed_by_user,
+        now_utc=now_utc,
+    )
     db.session.delete(existing)
     state = _record_change(state, locked_operation.id)
     db.session.flush()
@@ -320,6 +335,8 @@ def select_nightly_truck(
     status,
     starting_gallons=None,
     current_gallons=None,
+    changed_by_user=None,
+    now_utc=None,
 ):
     status = _validate_truck_status(status)
     starting_gallons = _validate_gallons(starting_gallons, "Starting gallons")
@@ -362,6 +379,15 @@ def select_nightly_truck(
             current_gallons,
         )
 
+    if status != "available":
+        _hold_assignments_for_truck_status(
+            locked_operation.id,
+            truck.id,
+            status,
+            changed_by_user,
+            now_utc=now_utc,
+        )
+
     state = _record_change(state, locked_operation.id)
     db.session.flush()
     return _changed(state)
@@ -374,6 +400,8 @@ def update_nightly_truck(
     status=_UNSET,
     starting_gallons=_UNSET,
     current_gallons=_UNSET,
+    changed_by_user=None,
+    now_utc=None,
 ):
     locked_operation, state = _lock_operation_and_state(operation)
     truck = _truck_for_operation(locked_operation, fuel_truck)
@@ -401,6 +429,14 @@ def update_nightly_truck(
         raise ValueError("Use Top Off Complete to make this truck available.")
 
     _set_truck_values(nightly_truck, *final_values)
+    if final_status != "available":
+        _hold_assignments_for_truck_status(
+            locked_operation.id,
+            truck.id,
+            final_status,
+            changed_by_user,
+            now_utc=now_utc,
+        )
     state = _record_change(state, locked_operation.id)
     db.session.flush()
     return _changed(state)
@@ -416,13 +452,28 @@ def remove_nightly_truck(operation, fuel_truck):
     if nightly_truck is None:
         return _unchanged(state)
 
+    if _active_assignments_for_resource(
+        locked_operation.id,
+        NeoScorpionFuelAssignment.assigned_truck_id,
+        truck_id,
+    ):
+        raise ValueError(
+            "This truck is assigned to active fuel work. Swap or clear the assignment first."
+        )
+
     db.session.delete(nightly_truck)
     state = _record_change(state, locked_operation.id)
     db.session.flush()
     return _changed(state)
 
 
-def mark_nightly_truck_topping_off(operation, fuel_truck):
+def mark_nightly_truck_topping_off(
+    operation,
+    fuel_truck,
+    *,
+    changed_by_user=None,
+    now_utc=None,
+):
     locked_operation, state = _lock_operation_and_state(operation)
     truck = _truck_for_operation(locked_operation, fuel_truck)
     nightly_truck = _selected_truck(locked_operation.id, truck.id)
@@ -430,6 +481,13 @@ def mark_nightly_truck_topping_off(operation, fuel_truck):
         return _unchanged(state)
 
     nightly_truck.status = "topping_off"
+    _hold_assignments_for_truck_status(
+        locked_operation.id,
+        truck.id,
+        "topping_off",
+        changed_by_user,
+        now_utc=now_utc,
+    )
     state = _record_change(state, locked_operation.id)
     db.session.flush()
     return _changed(state)
@@ -456,6 +514,106 @@ def complete_nightly_truck_top_off(operation, fuel_truck, current_gallons):
     state = _record_change(state, locked_operation.id)
     db.session.flush()
     return _changed(state)
+
+
+def hold_active_assignments_for_truck(
+    operation,
+    fuel_truck,
+    changed_by_user,
+    reason,
+    *,
+    now_utc=None,
+):
+    """Place matching active assignments on HOLD inside a caller-owned scope."""
+    truck_id = _entity_id(fuel_truck, "fuel truck")
+    assignments = _active_assignments_for_resource(
+        operation.id,
+        NeoScorpionFuelAssignment.assigned_truck_id,
+        truck_id,
+    )
+    return _hold_assignments(
+        assignments,
+        reason,
+        changed_by_user,
+        now_utc=now_utc,
+    )
+
+
+def _hold_assignments_for_truck_status(
+    operation_id,
+    truck_id,
+    status,
+    changed_by_user,
+    *,
+    now_utc=None,
+):
+    reason = (
+        "Assigned nightly truck is topping off."
+        if status == "topping_off"
+        else "Assigned nightly truck is unavailable / OOS."
+    )
+    assignments = _active_assignments_for_resource(
+        operation_id,
+        NeoScorpionFuelAssignment.assigned_truck_id,
+        truck_id,
+    )
+    return _hold_assignments(
+        assignments,
+        reason,
+        changed_by_user,
+        now_utc=now_utc,
+    )
+
+
+def _active_assignments_for_resource(operation_id, field, resource_id):
+    return (
+        NeoScorpionFuelAssignment.query.join(SortDateMission)
+        .filter(
+            NeoScorpionFuelAssignment.sort_date_operation_id == operation_id,
+            field == resource_id,
+            NeoScorpionFuelAssignment.fuel_on_board_at_utc.is_(None),
+            NeoScorpionFuelAssignment.completed_at_utc.is_(None),
+            NeoScorpionFuelAssignment.review_status != "complete",
+            SortDateMission.sort_date_operation_id == operation_id,
+            db.or_(
+                SortDateMission.fuel_status.is_(None),
+                SortDateMission.fuel_status != "complete",
+            ),
+        )
+        .with_for_update()
+        .all()
+    )
+
+
+def _hold_assignments(assignments, reason, changed_by_user, *, now_utc=None):
+    changed_assignments = [
+        assignment
+        for assignment in assignments
+        if assignment.operational_status != "hold_review"
+    ]
+    if not changed_assignments:
+        return 0
+    changed_by_user_id = _entity_id(changed_by_user, "user")
+    now_utc = now_utc or datetime.utcnow()
+    for assignment in changed_assignments:
+        assignment.operational_status = "hold_review"
+        assignment.hold_reason = reason
+        assignment.hold_at_utc = now_utc
+        assignment.hold_by_user_id = changed_by_user_id
+        db.session.add(
+            NeoScorpionFuelAuditEntry(
+                sort_date_operation_id=assignment.sort_date_operation_id,
+                fuel_assignment_id=assignment.id,
+                action="auto_hold",
+                field_name="operational_status",
+                old_value="active",
+                new_value="hold_review",
+                reason=reason,
+                changed_by_user_id=changed_by_user_id,
+                created_at=now_utc,
+            )
+        )
+    return len(changed_assignments)
 
 
 def _lock_operation_and_state(operation):

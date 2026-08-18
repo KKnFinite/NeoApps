@@ -60,7 +60,12 @@
                 <tbody>
                     {% for row in rows %}
                     <tr>
-                        <td><strong>{{ row.tail_number }}</strong></td>
+                        <td>
+                            <strong>{{ row.tail_number }}</strong>
+                            {% if row.tail_mismatch %}
+                            <small>{{ row.tail_safety_label }} (confirmed {{ row.confirmed_tail_number }})</small>
+                            {% endif %}
+                        </td>
                         <td>{{ row.arrival_eta }}</td>
                         <td>{{ row.arrival_status }}</td>
                         <td class="neoscorpion-dispatch-divider-cell" aria-label="Arrival to departure"><span aria-hidden="true"></span></td>
@@ -89,6 +94,10 @@
                             <td>{{ row.off_time }}</td>
                             <td><span class="neoscorpion-status-pill">{{ row.estimated_fuel_status }}</span></td>
                             <td>
+                                {% if row.resource_swap_required %}
+                                <input type="hidden" name="assigned_fueler_user_id" value="{{ row.assignment.assigned_fueler_user_id if row.assignment and row.assignment.assigned_fueler_user_id else '' }}">
+                                <span>{{ row.assigned_fueler.display_name if row.assigned_fueler else 'Unassigned' }}</span>
+                                {% else %}
                                 <select class="neoscorpion-inline-select" name="assigned_fueler_user_id" aria-label="Assigned fueler for {{ row.mission.flight_number }}">
                                     <option value="">Unassigned</option>
                                     {% if row.assigned_fueler and row.assigned_fueler.id not in nightly_assignment_fueler_ids %}
@@ -98,8 +107,13 @@
                                     <option value="{{ fueler.id }}" {% if row.assigned_fueler and row.assigned_fueler.id == fueler.id %}selected{% endif %}>{{ fueler.display_name }}</option>
                                     {% endfor %}
                                 </select>
+                                {% endif %}
                             </td>
                             <td>
+                                {% if row.resource_swap_required %}
+                                <input type="hidden" name="assigned_truck_id" value="{{ row.assignment.assigned_truck_id if row.assignment and row.assignment.assigned_truck_id else '' }}">
+                                <span>{{ row.assigned_truck.truck_number if row.assigned_truck else 'Unassigned' }}</span>
+                                {% else %}
                                 <select class="neoscorpion-inline-select" name="assigned_truck_id" aria-label="Assigned fuel truck for {{ row.mission.flight_number }}">
                                     <option value="">Unassigned</option>
                                     {% if row.assigned_truck and row.assigned_truck.id not in nightly_assignment_truck_ids %}
@@ -109,19 +123,63 @@
                                     <option value="{{ truck.id }}" {% if row.assigned_truck and row.assigned_truck.id == truck.id %}selected{% endif %}>{{ truck.truck_number }}</option>
                                     {% endfor %}
                                 </select>
+                                {% endif %}
                             </td>
                             <td>{{ row.truck_remaining_fuel if row.truck_remaining_fuel is not none else '-' }} gal</td>
                             <td>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</td>
                             <td>{{ row.movement_status|replace("_", " ")|upper }}</td>
                             <td>
+                                {% if row.effective_hold %}
+                                <input type="hidden" name="review_status" value="{{ row.review_status }}">
+                                <span class="neoscorpion-status-pill">HOLD / REVIEW REQUIRED</span>
+                                <small>{{ row.hold_reason_display }}</small>
+                                {% else %}
                                 <select class="neoscorpion-inline-select" name="review_status" aria-label="Review status for {{ row.mission.flight_number }}">
                                     {% for status in ["pending", "assigned", "review"] %}
                                     <option value="{{ status }}" {% if row.review_status == status %}selected{% endif %}>{{ status|replace("_", " ")|title }}</option>
                                     {% endfor %}
                                 </select>
+                                {% endif %}
                             </td>
                             <td><input class="neoscorpion-load-input" name="load_planning_note" value="{{ row.load_planning_note }}" placeholder="{{ row.load_planning_placeholder }}" aria-label="Copy-ready load planning placeholder"></td>
                             <td>
+                                {% if row.resume_available %}
+                                <button class="action-button" type="submit" formaction="{{ url_for('neoscorpion.fuel_dispatch_resume') }}" formmethod="post">RESUME</button>
+                                {% endif %}
+                                {% if row.resource_swap_required %}
+                                <details>
+                                    <summary>SWAP FUELER</summary>
+                                    <select name="replacement_fueler_user_id" aria-label="Replacement fueler">
+                                        <option value="">Select fueler</option>
+                                        {% for fueler in nightly_assignment_fuelers %}
+                                        <option value="{{ fueler.id }}">{{ fueler.display_name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button class="action-button" type="submit" formaction="{{ url_for('neoscorpion.fuel_dispatch_swap_fueler') }}" formmethod="post">SWAP FUELER</button>
+                                </details>
+                                <details>
+                                    <summary>SWAP TRUCK</summary>
+                                    <select name="replacement_truck_id" aria-label="Replacement truck">
+                                        <option value="">Select truck</option>
+                                        {% for truck in nightly_assignment_trucks %}
+                                        <option value="{{ truck.id }}">{{ truck.truck_number }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button class="action-button" type="submit" formaction="{{ url_for('neoscorpion.fuel_dispatch_swap_truck') }}" formmethod="post">SWAP TRUCK</button>
+                                </details>
+                                {% endif %}
+                                {% if row.confirm_tail_available %}
+                                <button class="action-button" type="submit" formaction="{{ url_for('neoscorpion.fuel_dispatch_confirm_tail') }}" formmethod="post">CONFIRM NEW TAIL</button>
+                                {% endif %}
+                                {% if row.end_early_available %}
+                                <details>
+                                    <summary>END EARLY</summary>
+                                    <label>Reason
+                                        <input class="neoscorpion-load-input" name="end_early_reason" value="">
+                                    </label>
+                                    <button class="action-button" type="submit" formaction="{{ url_for('neoscorpion.fuel_dispatch_end_early') }}" formmethod="post">END EARLY</button>
+                                </details>
+                                {% endif %}
                                 {% if row.correction_allowed %}
                                 <details>
                                     <summary>CORRECT ACTUAL</summary>
@@ -144,7 +202,7 @@
                                     <button class="action-button" type="submit" formaction="{{ url_for('neoscorpion.fuel_dispatch_reopen_off') }}" formmethod="post">REOPEN OFF</button>
                                 </details>
                                 {% endif %}
-                                {% else %}
+                                {% elif not row.resume_available and not row.resource_swap_required and not row.confirm_tail_available and not row.end_early_available %}
                                 <span>-</span>
                                 {% endif %}
                             </td>

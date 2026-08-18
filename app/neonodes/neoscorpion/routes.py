@@ -8,6 +8,7 @@ from app.neonodes.neoscorpion import bp
 from app.services.access_control import get_current_gateway
 from app.services.neoscorpion import (
     CALCULATION_NOT_CONFIGURED_MESSAGE,
+    confirm_assignment_tail,
     complete_fueled_assignment,
     complete_fuel_on_board,
     correct_fuel_actuals,
@@ -18,13 +19,17 @@ from app.services.neoscorpion import (
     fueler_context,
     history_context,
     mark_fueler_off,
+    end_fuel_work_early,
     reopen_fueler_off,
+    resume_held_fuel_assignment,
     save_dispatch_row,
     save_aircraft_fuel_settings,
     save_fueler_entry,
     save_settings,
     save_truck,
     settings_context,
+    swap_assignment_fueler,
+    swap_assignment_truck,
     truck_manager_context,
     visible_neoscorpion_menu_items,
 )
@@ -257,6 +262,79 @@ def fuel_dispatch_correct_actual():
     return redirect(url_for("neoscorpion.fuel_dispatch"))
 
 
+@bp.post("/fuel-dispatch/resume")
+@gateway_node_required("scorpion")
+def fuel_dispatch_resume():
+    return _run_fuel_interruption_action(
+        lambda gateway: resume_held_fuel_assignment(
+            gateway,
+            current_user,
+            request.form.get("assignment_id"),
+        ),
+        "FUEL ASSIGNMENT RESUMED.",
+        "FUEL ASSIGNMENT WAS ALREADY ACTIVE.",
+    )
+
+
+@bp.post("/fuel-dispatch/swap-fueler")
+@gateway_node_required("scorpion")
+def fuel_dispatch_swap_fueler():
+    return _run_fuel_interruption_action(
+        lambda gateway: swap_assignment_fueler(
+            gateway,
+            current_user,
+            request.form.get("assignment_id"),
+            request.form.get("replacement_fueler_user_id"),
+        ),
+        "ASSIGNED FUELER CHANGED.",
+        "FUELER ASSIGNMENT WAS UNCHANGED.",
+    )
+
+
+@bp.post("/fuel-dispatch/swap-truck")
+@gateway_node_required("scorpion")
+def fuel_dispatch_swap_truck():
+    return _run_fuel_interruption_action(
+        lambda gateway: swap_assignment_truck(
+            gateway,
+            current_user,
+            request.form.get("assignment_id"),
+            request.form.get("replacement_truck_id"),
+        ),
+        "ASSIGNED TRUCK CHANGED.",
+        "TRUCK ASSIGNMENT WAS UNCHANGED.",
+    )
+
+
+@bp.post("/fuel-dispatch/confirm-tail")
+@gateway_node_required("scorpion")
+def fuel_dispatch_confirm_tail():
+    return _run_fuel_interruption_action(
+        lambda gateway: confirm_assignment_tail(
+            gateway,
+            current_user,
+            request.form.get("assignment_id"),
+        ),
+        "CURRENT MISSION TAIL CONFIRMED.",
+        "MISSION TAIL WAS ALREADY CONFIRMED.",
+    )
+
+
+@bp.post("/fuel-dispatch/end-early")
+@gateway_node_required("scorpion")
+def fuel_dispatch_end_early():
+    return _run_fuel_interruption_action(
+        lambda gateway: end_fuel_work_early(
+            gateway,
+            current_user,
+            request.form.get("assignment_id"),
+            request.form.get("end_early_reason"),
+        ),
+        "FUEL WORK ENDED EARLY.",
+        "FUEL WORK WAS ALREADY ENDED EARLY.",
+    )
+
+
 @bp.post("/fuel-dispatch/assets")
 @gateway_node_required("scorpion")
 def manage_nightly_assets():
@@ -392,10 +470,10 @@ def truck_manager():
             return _truck_manager_response(gateway, access, status_code=403)
         try:
             if request.form.get("action") == "deactivate_truck":
-                deactivate_truck(gateway, request.form)
+                deactivate_truck(gateway, request.form, current_user)
                 flash("FUEL TRUCK DEACTIVATED.", "success")
             else:
-                save_truck(gateway, request.form)
+                save_truck(gateway, request.form, current_user)
                 flash("FUEL TRUCK SAVED.", "success")
         except ValueError as exc:
             db.session.rollback()
@@ -536,6 +614,35 @@ def _settings_response(gateway, access, status_code=200):
     return response, status_code
 
 
+def _run_fuel_interruption_action(action, success_message, no_change_message):
+    gateway = get_current_gateway()
+    access = permission_access(
+        FUEL_DISPATCH_VIEW_PERMISSION,
+        FUEL_DISPATCH_EDIT_PERMISSION,
+    )
+    if not access["can_edit"]:
+        db.session.rollback()
+        flash("Access denied.", "error")
+        return _dispatch_response(gateway, access, status_code=403)
+    try:
+        result = action(gateway)
+    except (IntegrityError, ValueError) as exc:
+        db.session.rollback()
+        message = (
+            str(exc)
+            if isinstance(exc, ValueError)
+            else "Fuel assignment changed. Reload Fuel Dispatch and review it."
+        )
+        flash(message, "error")
+        return _dispatch_response(gateway, access, status_code=400)
+    if result.changed:
+        db.session.commit()
+        flash(success_message, "success")
+    else:
+        flash(no_change_message, "info")
+    return redirect(url_for("neoscorpion.fuel_dispatch"))
+
+
 def _visible_neoscorpion_internal_menu():
     return visible_neoscorpion_menu_items(user_can, request.endpoint)
 
@@ -554,6 +661,7 @@ def _apply_nightly_asset_action(gateway, operation, form):
         return remove_nightly_fueler(
             operation,
             _positive_form_id(form.get("user_id"), "fueler"),
+            changed_by_user=current_user,
         )
     if action == "add_truck":
         return select_nightly_truck(
@@ -562,6 +670,7 @@ def _apply_nightly_asset_action(gateway, operation, form):
             status=form.get("status"),
             starting_gallons=form.get("starting_gallons"),
             current_gallons=form.get("current_gallons"),
+            changed_by_user=current_user,
         )
     if action == "update_truck":
         return update_nightly_truck(
@@ -570,11 +679,13 @@ def _apply_nightly_asset_action(gateway, operation, form):
             status=form.get("status"),
             starting_gallons=form.get("starting_gallons"),
             current_gallons=form.get("current_gallons"),
+            changed_by_user=current_user,
         )
     if action == "mark_topping_off":
         return mark_nightly_truck_topping_off(
             operation,
             _positive_form_id(form.get("fuel_truck_id"), "fuel truck"),
+            changed_by_user=current_user,
         )
     if action == "complete_top_off":
         return complete_nightly_truck_top_off(

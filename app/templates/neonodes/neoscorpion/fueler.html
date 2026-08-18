@@ -40,6 +40,12 @@
                     <small>{{ row.mission.flight_number }} | {{ row.parking_position }} | {{ row.departure_time or '-' }}</small>
                     <small>{{ row.detailed_aircraft_type }} | ON {{ row.on_time }}</small>
                 </header>
+                {% if row.fueler_work_blocked %}
+                <p class="neoscorpion-calculation-warning"><strong>HOLD / REVIEW REQUIRED</strong> {{ row.hold_reason_display }}</p>
+                {% if row.tail_mismatch %}
+                <p class="neoscorpion-calculation-warning">Confirmed tail {{ row.confirmed_tail_number }}; current mission tail {{ row.tail_number }}.</p>
+                {% endif %}
+                {% endif %}
                 <p class="neoscorpion-calculation-warning">{{ row.estimated_fuel_status }}</p>
                 <dl class="neoscorpion-fuel-totals">
                     <div>
@@ -82,7 +88,7 @@
                         <dd>{{ row.off_time }}</dd>
                     </div>
                 </dl>
-                {% if can_edit and row.assignment and not row.is_off %}
+                {% if can_edit and row.assignment and not row.is_off and not row.fueler_work_blocked %}
                 <form method="post" class="neoscorpion-fueler-form">
                     <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
                     {% if row.tank_rows %}
@@ -146,6 +152,8 @@
                 </dl>
                 {% if can_edit and row.is_off %}
                 <p class="neoscorpion-calculation-warning">Fuel work is OFF. A dispatcher must REOPEN OFF before editing.</p>
+                {% elif can_edit and row.fueler_work_blocked %}
+                <p class="neoscorpion-calculation-warning">Fuel entry and MARK OFF are blocked until dispatcher review is complete.</p>
                 {% endif %}
                 {% endif %}
                 {% if can_edit and row.assignment %}
@@ -154,7 +162,7 @@
                         <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
                         <button class="action-button" type="submit">MARK OFF</button>
                     </form>
-                    {% elif not row.is_off %}
+                    {% elif not row.is_off and not row.fueler_work_blocked %}
                     <p class="neoscorpion-calculation-warning">Complete Actual fuel and confirm APU before OFF.</p>
                     {% endif %}
                 {% endif %}

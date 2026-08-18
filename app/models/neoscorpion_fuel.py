@@ -227,6 +227,14 @@ class NeoScorpionFuelWorkState(db.Model):
         db.ForeignKey("users.id"),
         nullable=True,
     )
+    truck_segment_started_at_utc = db.Column(db.DateTime, nullable=True)
+    ended_early_at_utc = db.Column(db.DateTime, nullable=True)
+    ended_early_by_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=True,
+    )
+    ended_early_reason = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
@@ -237,6 +245,10 @@ class NeoScorpionFuelWorkState(db.Model):
 
     fuel_assignment = db.relationship("NeoScorpionFuelAssignment")
     off_by_user = db.relationship("User", foreign_keys=[off_by_user_id])
+    ended_early_by_user = db.relationship(
+        "User",
+        foreign_keys=[ended_early_by_user_id],
+    )
     tank_states = db.relationship(
         "NeoScorpionFuelTankState",
         back_populates="fuel_work_state",
@@ -299,6 +311,10 @@ class NeoScorpionFuelAssignment(db.Model):
             "sort_date_mission_id",
             name="uq_neoscorpion_fuel_assignment_mission",
         ),
+        db.CheckConstraint(
+            "operational_status IN ('active', 'hold_review')",
+            name="ck_neoscorpion_fuel_assignment_operational_status",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -337,6 +353,20 @@ class NeoScorpionFuelAssignment(db.Model):
         db.ForeignKey("users.id"),
         nullable=True,
     )
+    confirmed_tail_number = db.Column(db.String(32), nullable=True)
+    operational_status = db.Column(
+        db.String(32),
+        nullable=False,
+        default="active",
+        server_default="active",
+    )
+    hold_reason = db.Column(db.Text, nullable=True)
+    hold_at_utc = db.Column(db.DateTime, nullable=True)
+    hold_by_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=True,
+    )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
@@ -359,7 +389,16 @@ class NeoScorpionFuelAssignment(db.Model):
         "User",
         foreign_keys=[completed_by_user_id],
     )
+    hold_by_user = db.relationship(
+        "User",
+        foreign_keys=[hold_by_user_id],
+    )
     assigned_truck = db.relationship("NeoScorpionFuelTruck")
+
+    @validates("confirmed_tail_number")
+    def _normalize_confirmed_tail_number(self, _key, value):
+        normalized = (value or "").strip().upper()
+        return normalized or None
 
 
 class NeoScorpionFuelingEvent(db.Model):
@@ -433,7 +472,9 @@ class NeoScorpionFuelAuditEntry(db.Model):
     __tablename__ = "neoscorpion_fuel_audit_entries"
     __table_args__ = (
         db.CheckConstraint(
-            "action IN ('reopen_off', 'correct_actual')",
+            "action IN ('reopen_off', 'correct_actual', 'auto_hold', "
+            "'resume_hold', 'swap_fueler', 'swap_truck', 'confirm_tail', "
+            "'end_early')",
             name="ck_neoscorpion_fuel_audit_entry_action",
         ),
     )
