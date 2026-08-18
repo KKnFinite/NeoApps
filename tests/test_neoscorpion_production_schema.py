@@ -6,10 +6,12 @@ from app import create_app
 from app.services.neoscorpion_schema import (
     NEOSCORPION_ADDITIVE_COLUMNS,
     NEOSCORPION_CHECK_CONSTRAINTS,
+    NEOSCORPION_EXPRESSION_CHECK_CONSTRAINTS,
     NEOSCORPION_MODEL_TABLES,
     NEOSCORPION_SCHEMA_LOCK_KEY,
     _ensure_additive_columns,
     _ensure_check_constraints,
+    _ensure_expression_check_constraints,
     _verify_model_schema_contract,
     ensure_neoscorpion_production_schema,
     neoscorpion_model_schema_contract,
@@ -51,6 +53,7 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
             "neoscorpion_fuel_tank_states",
             "neoscorpion_aircraft_fuel_settings",
             "neoscorpion_fueling_events",
+            "neoscorpion_fueling_event_tank_snapshots",
             "neoscorpion_fuel_audit_entries",
         )
         self.assertEqual(
@@ -82,6 +85,8 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
                 "hold_reason",
                 "hold_at_utc",
                 "hold_by_user_id",
+                "current_cycle_type",
+                "current_cycle_number",
             },
         )
         self.assertIn(
@@ -89,6 +94,20 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
             NEOSCORPION_ADDITIVE_COLUMNS["neoscorpion_fuel_assignments"][
                 "operational_status"
             ],
+        )
+        self.assertEqual(
+            set(NEOSCORPION_ADDITIVE_COLUMNS["neoscorpion_fueling_events"]),
+            {
+                "event_type",
+                "cycle_number",
+                "fueler_user_id",
+                "required_fuel_lbs",
+                "apu_running",
+                "apu_allowance_lbs",
+                "apu_source_tank_code",
+                "neo_fuel_lbs",
+                "center_fuel_lbs",
+            },
         )
         self.assertEqual(
             set(NEOSCORPION_ADDITIVE_COLUMNS["neoscorpion_fuel_work_states"]),
@@ -113,8 +132,29 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
             )
         }
         self.assertEqual(
+            constraints["ck_neoscorpion_sort_truck_status"],
+            frozenset(
+                ("available", "unavailable_oos", "topping_off", "needs_sump")
+            ),
+        )
+        self.assertEqual(
             constraints["ck_neoscorpion_fuel_assignment_operational_status"],
             frozenset(("active", "hold_review")),
+        )
+        self.assertEqual(
+            constraints["ck_neoscorpion_fuel_assignment_cycle_type"],
+            frozenset(("fuel", "uplift", "defuel")),
+        )
+        self.assertEqual(
+            constraints["ck_neoscorpion_fueling_event_type"],
+            frozenset(("fuel", "uplift", "defuel")),
+        )
+        self.assertEqual(
+            {name: expression for _table, name, expression in NEOSCORPION_EXPRESSION_CHECK_CONSTRAINTS},
+            {
+                "ck_neoscorpion_fuel_assignment_cycle_number_positive": "current_cycle_number >= 1",
+                "ck_neoscorpion_fueling_event_cycle_number_positive": "cycle_number >= 1",
+            },
         )
         self.assertEqual(
             constraints["ck_neoscorpion_fuel_audit_entry_action"],
@@ -145,20 +185,7 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
         self.assertNotIn("CREATE TABLE", additive_statements)
 
         connection.reset_mock()
-        current_operational = Mock()
-        current_operational.scalar.return_value = (
-            "CHECK (operational_status IN ('active', 'hold_review'))"
-        )
-        old_audit = Mock()
-        old_audit.scalar.return_value = (
-            "CHECK (action IN ('reopen_off', 'correct_actual'))"
-        )
-        connection.execute.side_effect = [
-            current_operational,
-            old_audit,
-            Mock(),
-            Mock(),
-        ]
+        connection.execute.return_value.scalar.return_value = None
         _ensure_check_constraints(connection)
         constraint_statements = "\n".join(
             str(call.args[0]) for call in connection.execute.call_args_list
@@ -168,16 +195,23 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
             constraint_statements,
         )
         self.assertNotIn("AS constraint\n", constraint_statements)
-        self.assertNotIn(
-            "DROP CONSTRAINT IF EXISTS "
-            "ck_neoscorpion_fuel_assignment_operational_status",
-            constraint_statements,
-        )
         self.assertIn(
             "DROP CONSTRAINT IF EXISTS ck_neoscorpion_fuel_audit_entry_action",
             constraint_statements,
         )
         self.assertIn("'end_early'", constraint_statements)
+        self.assertIn("'needs_sump'", constraint_statements)
+        self.assertIn("'uplift'", constraint_statements)
+        self.assertIn("'defuel'", constraint_statements)
+
+        connection.reset_mock()
+        connection.execute.return_value.scalar.return_value = None
+        _ensure_expression_check_constraints(connection)
+        expression_statements = "\n".join(
+            str(call.args[0]) for call in connection.execute.call_args_list
+        )
+        self.assertIn("current_cycle_number >= 1", expression_statements)
+        self.assertIn("cycle_number >= 1", expression_statements)
 
     def test_post_ensure_contract_rejects_missing_model_column(self):
         contract = neoscorpion_model_schema_contract()
@@ -222,6 +256,11 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
             )
             stack.enter_context(
                 patch("app.services.neoscorpion_schema._ensure_check_constraints")
+            )
+            stack.enter_context(
+                patch(
+                    "app.services.neoscorpion_schema._ensure_expression_check_constraints"
+                )
             )
             stack.enter_context(
                 patch("app.services.neoscorpion_schema._verify_model_schema_contract")

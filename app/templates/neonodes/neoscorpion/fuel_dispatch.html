@@ -153,6 +153,7 @@
                             <td class="{% if row.projected_truck_short %}neoscorpion-calculation-warning{% endif %}">{{ row.projected_truck_display }}</td>
                             <td>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</td>
                             <td>
+                                <span class="neoscorpion-status-pill">{{ row.cycle_type_label }}</span>
                                 {% if row.effective_hold %}
                                 <input type="hidden" name="review_status" value="{{ row.review_status }}">
                                 <span class="neoscorpion-status-pill">HOLD / REVIEW REQUIRED</span>
@@ -278,7 +279,7 @@
                         <td>{{ row.truck_remaining_fuel if row.truck_remaining_fuel is not none else '-' }} gal</td>
                         <td class="{% if row.projected_truck_short %}neoscorpion-calculation-warning{% endif %}">{{ row.projected_truck_display }}</td>
                         <td>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</td>
-                        <td>{{ row.review_status|replace("_", " ")|title }}</td>
+                        <td><span class="neoscorpion-status-pill">{{ row.cycle_type_label }}</span> {{ row.review_status|replace("_", " ")|title }}</td>
                         <td>
                             {% if row.load_planning_ready %}
                             <strong>{{ row.load_planning_output }}</strong>
@@ -288,7 +289,39 @@
                             {% endif %}
                             {% if row.load_planning_note %}<small>{{ row.load_planning_note }}</small>{% endif %}
                         </td>
-                        <td>-</td>
+                        <td>
+                            {% if can_edit and row.follow_up_available %}
+                            {% for follow_up_type in ("uplift", "defuel") %}
+                            <details>
+                                <summary>START {{ follow_up_type|upper }}</summary>
+                                <form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_start_follow_up') }}">
+                                    <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
+                                    <input type="hidden" name="cycle_type" value="{{ follow_up_type }}">
+                                    <label>New Required, K lbs
+                                        <input class="neoscorpion-inline-input" name="required_fuel" inputmode="decimal" required>
+                                    </label>
+                                    <label>Fueler
+                                        <select name="assigned_fueler_user_id" required>
+                                            <option value="">Select fueler</option>
+                                            {% for fueler in nightly_assignment_fuelers %}
+                                            <option value="{{ fueler.id }}">{{ fueler.display_name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </label>
+                                    <label>Truck
+                                        <select name="assigned_truck_id" required>
+                                            <option value="">Select truck</option>
+                                            {% for truck in nightly_assignment_trucks %}
+                                            <option value="{{ truck.id }}">{{ truck.truck_number }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </label>
+                                    <button class="action-button" type="submit">START {{ follow_up_type|upper }}</button>
+                                </form>
+                            </details>
+                            {% endfor %}
+                            {% else %}-{% endif %}
+                        </td>
                         <td>{{ "COMPLETE" if row.fuel_on_board_complete else row.fuel_on_board_reason }}</td>
                         <td>{{ row.normal_completion_reason }}</td>
                         {% if can_edit %}<td>-</td>{% endif %}

@@ -10,6 +10,7 @@ from app.models import (
     NeoScorpionFuelAssignment,
     NeoScorpionFuelAuditEntry,
     NeoScorpionFuelingEvent,
+    NeoScorpionFuelingEventTankSnapshot,
     NeoScorpionFuelTankState,
     NeoScorpionFuelTruck,
     NeoScorpionFuelWorkState,
@@ -36,6 +37,7 @@ NEOSCORPION_MODEL_TABLES = (
     NeoScorpionFuelTankState,
     NeoScorpionAircraftFuelSetting,
     NeoScorpionFuelingEvent,
+    NeoScorpionFuelingEventTankSnapshot,
     NeoScorpionFuelAuditEntry,
 )
 
@@ -53,6 +55,8 @@ NEOSCORPION_ADDITIVE_COLUMNS = {
         "hold_reason": "TEXT",
         "hold_at_utc": "TIMESTAMP",
         "hold_by_user_id": "INTEGER",
+        "current_cycle_type": "VARCHAR(16) NOT NULL DEFAULT 'fuel'",
+        "current_cycle_number": "INTEGER NOT NULL DEFAULT 1",
     },
     "neoscorpion_fuel_work_states": {
         "apu_running": "BOOLEAN",
@@ -67,14 +71,43 @@ NEOSCORPION_ADDITIVE_COLUMNS = {
         "ended_early_by_user_id": "INTEGER",
         "ended_early_reason": "TEXT",
     },
+    "neoscorpion_fueling_events": {
+        "event_type": "VARCHAR(16) NOT NULL DEFAULT 'fuel'",
+        "cycle_number": "INTEGER NOT NULL DEFAULT 1",
+        "fueler_user_id": "INTEGER",
+        "required_fuel_lbs": "INTEGER",
+        "apu_running": "BOOLEAN",
+        "apu_allowance_lbs": "INTEGER",
+        "apu_source_tank_code": "VARCHAR(32)",
+        "neo_fuel_lbs": "INTEGER",
+        "center_fuel_lbs": "INTEGER",
+    },
 }
 
 NEOSCORPION_CHECK_CONSTRAINTS = (
+    (
+        "neoscorpion_sort_trucks",
+        "ck_neoscorpion_sort_truck_status",
+        "status",
+        ("available", "unavailable_oos", "topping_off", "needs_sump"),
+    ),
     (
         "neoscorpion_fuel_assignments",
         "ck_neoscorpion_fuel_assignment_operational_status",
         "operational_status",
         ("active", "hold_review"),
+    ),
+    (
+        "neoscorpion_fuel_assignments",
+        "ck_neoscorpion_fuel_assignment_cycle_type",
+        "current_cycle_type",
+        ("fuel", "uplift", "defuel"),
+    ),
+    (
+        "neoscorpion_fueling_events",
+        "ck_neoscorpion_fueling_event_type",
+        "event_type",
+        ("fuel", "uplift", "defuel"),
     ),
     (
         "neoscorpion_fuel_audit_entries",
@@ -90,6 +123,19 @@ NEOSCORPION_CHECK_CONSTRAINTS = (
             "confirm_tail",
             "end_early",
         ),
+    ),
+)
+
+NEOSCORPION_EXPRESSION_CHECK_CONSTRAINTS = (
+    (
+        "neoscorpion_fuel_assignments",
+        "ck_neoscorpion_fuel_assignment_cycle_number_positive",
+        "current_cycle_number >= 1",
+    ),
+    (
+        "neoscorpion_fueling_events",
+        "ck_neoscorpion_fueling_event_cycle_number_positive",
+        "cycle_number >= 1",
     ),
 )
 
@@ -116,6 +162,7 @@ def ensure_neoscorpion_production_schema(app):
                 model.__table__.create(bind=connection, checkfirst=True)
             _ensure_additive_columns(connection)
             _ensure_check_constraints(connection)
+            _ensure_expression_check_constraints(connection)
             _verify_model_schema_contract(connection)
             db.session.commit()
         except Exception as error:
@@ -185,6 +232,47 @@ def _ensure_check_constraints(connection):
             text(
                 f"ALTER TABLE {table_name} ADD CONSTRAINT {constraint_name} "
                 f"CHECK ({column_name} IN ({quoted_values}))"
+            )
+        )
+
+
+def _ensure_expression_check_constraints(connection):
+    for table_name, constraint_name, expression in (
+        NEOSCORPION_EXPRESSION_CHECK_CONSTRAINTS
+    ):
+        definition = connection.execute(
+            text(
+                """
+                SELECT pg_get_constraintdef(constraint_row.oid)
+                FROM pg_constraint AS constraint_row
+                JOIN pg_class AS relation
+                  ON relation.oid = constraint_row.conrelid
+                JOIN pg_namespace AS namespace
+                  ON namespace.oid = relation.relnamespace
+                WHERE relation.relname = :table_name
+                  AND namespace.nspname = current_schema()
+                  AND constraint_row.conname = :constraint_name
+                """
+            ),
+            {
+                "table_name": table_name,
+                "constraint_name": constraint_name,
+            },
+        ).scalar()
+        normalized_definition = re.sub(r"\s+", "", str(definition or "")).lower()
+        normalized_expression = re.sub(r"\s+", "", expression).lower()
+        if normalized_expression in normalized_definition:
+            continue
+        connection.execute(
+            text(
+                f"ALTER TABLE {table_name} DROP CONSTRAINT IF EXISTS "
+                f"{constraint_name}"
+            )
+        )
+        connection.execute(
+            text(
+                f"ALTER TABLE {table_name} ADD CONSTRAINT {constraint_name} "
+                f"CHECK ({expression})"
             )
         )
 

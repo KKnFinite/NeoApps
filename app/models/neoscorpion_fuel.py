@@ -152,7 +152,8 @@ class NeoScorpionSortTruck(db.Model):
             name="uq_neoscorpion_sort_truck_operation_truck",
         ),
         db.CheckConstraint(
-            "status IN ('available', 'unavailable_oos', 'topping_off')",
+            "status IN ('available', 'unavailable_oos', 'topping_off', "
+            "'needs_sump')",
             name="ck_neoscorpion_sort_truck_status",
         ),
         db.CheckConstraint(
@@ -316,6 +317,14 @@ class NeoScorpionFuelAssignment(db.Model):
             "operational_status IN ('active', 'hold_review')",
             name="ck_neoscorpion_fuel_assignment_operational_status",
         ),
+        db.CheckConstraint(
+            "current_cycle_type IN ('fuel', 'uplift', 'defuel')",
+            name="ck_neoscorpion_fuel_assignment_cycle_type",
+        ),
+        db.CheckConstraint(
+            "current_cycle_number >= 1",
+            name="ck_neoscorpion_fuel_assignment_cycle_number_positive",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -368,6 +377,18 @@ class NeoScorpionFuelAssignment(db.Model):
         db.ForeignKey("users.id"),
         nullable=True,
     )
+    current_cycle_type = db.Column(
+        db.String(16),
+        nullable=False,
+        default="fuel",
+        server_default="fuel",
+    )
+    current_cycle_number = db.Column(
+        db.Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
@@ -418,6 +439,14 @@ class NeoScorpionFuelingEvent(db.Model):
             "transfer_fuel_gallons IS NULL OR transfer_fuel_gallons >= 0",
             name="ck_neoscorpion_fueling_event_transfer_nonnegative",
         ),
+        db.CheckConstraint(
+            "event_type IN ('fuel', 'uplift', 'defuel')",
+            name="ck_neoscorpion_fueling_event_type",
+        ),
+        db.CheckConstraint(
+            "cycle_number >= 1",
+            name="ck_neoscorpion_fueling_event_cycle_number_positive",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -445,9 +474,32 @@ class NeoScorpionFuelingEvent(db.Model):
         nullable=False,
     )
     sequence_number = db.Column(db.Integer, nullable=False)
+    event_type = db.Column(
+        db.String(16),
+        nullable=False,
+        default="fuel",
+        server_default="fuel",
+    )
+    cycle_number = db.Column(
+        db.Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
     started_at_utc = db.Column(db.DateTime, nullable=True)
     ended_at_utc = db.Column(db.DateTime, nullable=True)
     transfer_fuel_gallons = db.Column(db.Integer, nullable=True)
+    fueler_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=True,
+    )
+    required_fuel_lbs = db.Column(db.Integer, nullable=True)
+    apu_running = db.Column(db.Boolean, nullable=True)
+    apu_allowance_lbs = db.Column(db.Integer, nullable=True)
+    apu_source_tank_code = db.Column(db.String(32), nullable=True)
+    neo_fuel_lbs = db.Column(db.Integer, nullable=True)
+    center_fuel_lbs = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
@@ -460,6 +512,12 @@ class NeoScorpionFuelingEvent(db.Model):
     fuel_assignment = db.relationship("NeoScorpionFuelAssignment")
     fuel_work_state = db.relationship("NeoScorpionFuelWorkState")
     fuel_truck = db.relationship("NeoScorpionFuelTruck")
+    fueler_user = db.relationship("User", foreign_keys=[fueler_user_id])
+    tank_snapshots = db.relationship(
+        "NeoScorpionFuelingEventTankSnapshot",
+        back_populates="fueling_event",
+        cascade="all, delete-orphan",
+    )
 
     @validates("tail_number")
     def _normalize_tail_number(self, _key, value):
@@ -467,6 +525,42 @@ class NeoScorpionFuelingEvent(db.Model):
         if not normalized:
             raise ValueError("Fueling event requires a tail number.")
         return normalized
+
+
+class NeoScorpionFuelingEventTankSnapshot(db.Model):
+    __tablename__ = "neoscorpion_fueling_event_tank_snapshots"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "fueling_event_id",
+            "tank_code",
+            name="uq_neoscorpion_fueling_event_tank_snapshot_event_tank",
+        ),
+        db.CheckConstraint(
+            "remaining_lbs IS NULL OR remaining_lbs >= 0",
+            name="ck_neoscorpion_event_tank_snapshot_remaining_nonnegative",
+        ),
+        db.CheckConstraint(
+            "actual_lbs IS NULL OR actual_lbs >= 0",
+            name="ck_neoscorpion_event_tank_snapshot_actual_nonnegative",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    fueling_event_id = db.Column(
+        db.Integer,
+        db.ForeignKey("neoscorpion_fueling_events.id"),
+        nullable=False,
+    )
+    tank_code = db.Column(db.String(32), nullable=False)
+    remaining_lbs = db.Column(db.Integer, nullable=True)
+    planned_lbs = db.Column(db.Integer, nullable=True)
+    actual_lbs = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    fueling_event = db.relationship(
+        "NeoScorpionFuelingEvent",
+        back_populates="tank_snapshots",
+    )
 
 
 class NeoScorpionFuelAuditEntry(db.Model):

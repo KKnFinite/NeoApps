@@ -29,6 +29,7 @@ from app.services.neoscorpion import (
     save_settings,
     save_truck,
     settings_context,
+    start_follow_up_fuel_cycle,
     swap_assignment_fueler,
     swap_assignment_truck,
     truck_manager_context,
@@ -38,6 +39,7 @@ from app.services.neoscorpion_assets import (
     complete_nightly_truck_top_off,
     eligible_nightly_fueler_users,
     mark_nightly_truck_topping_off,
+    mark_nightly_truck_sumped,
     remove_nightly_fueler,
     remove_nightly_truck,
     select_nightly_fueler,
@@ -191,6 +193,43 @@ def fuel_dispatch_complete():
         flash("FUELING COMPLETE.", "success")
     else:
         flash("FUELING WAS ALREADY COMPLETE.", "info")
+    return redirect(url_for("neoscorpion.fuel_dispatch"))
+
+
+@bp.post("/fuel-dispatch/start-follow-up")
+@gateway_node_required("scorpion")
+def fuel_dispatch_start_follow_up():
+    gateway = get_current_gateway()
+    access = permission_access(
+        FUEL_DISPATCH_VIEW_PERMISSION,
+        FUEL_DISPATCH_EDIT_PERMISSION,
+    )
+    if not access["can_edit"]:
+        db.session.rollback()
+        flash("Access denied.", "error")
+        return _dispatch_response(gateway, access, status_code=403)
+    cycle_type = (request.form.get("cycle_type") or "").strip().lower()
+    try:
+        result = start_follow_up_fuel_cycle(
+            gateway,
+            current_user,
+            request.form.get("assignment_id"),
+            cycle_type,
+            request.form.get("required_fuel"),
+            request.form.get("assigned_fueler_user_id"),
+            request.form.get("assigned_truck_id"),
+        )
+    except (IntegrityError, ValueError) as exc:
+        db.session.rollback()
+        message = (
+            str(exc)
+            if isinstance(exc, ValueError)
+            else "Fuel cycle changed. Reload Fuel Dispatch and try again."
+        )
+        flash(message, "error")
+        return _dispatch_response(gateway, access, status_code=400)
+    db.session.commit()
+    flash(f"{result.assignment.current_cycle_type.upper()} STARTED.", "success")
     return redirect(url_for("neoscorpion.fuel_dispatch"))
 
 
@@ -493,7 +532,21 @@ def truck_manager():
             flash("Access denied.", "error")
             return _truck_manager_response(gateway, access, status_code=403)
         try:
-            if request.form.get("action") == "deactivate_truck":
+            action = request.form.get("action")
+            if action == "mark_sumped":
+                operation = current_sort_operation(gateway)
+                if operation is None:
+                    raise ValueError("No current sort operation is available.")
+                mark_nightly_truck_sumped(
+                    operation,
+                    _positive_form_id(
+                        request.form.get("truck_id"),
+                        "fuel truck",
+                    ),
+                    request.form.get("current_gallons"),
+                )
+                flash("FUEL TRUCK MARKED SUMPED.", "success")
+            elif action == "deactivate_truck":
                 deactivate_truck(gateway, request.form, current_user)
                 flash("FUEL TRUCK DEACTIVATED.", "success")
             else:
@@ -743,6 +796,12 @@ def _apply_nightly_asset_action(gateway, operation, form):
         )
     if action == "complete_top_off":
         return complete_nightly_truck_top_off(
+            operation,
+            _positive_form_id(form.get("fuel_truck_id"), "fuel truck"),
+            form.get("current_gallons"),
+        )
+    if action == "mark_sumped":
+        return mark_nightly_truck_sumped(
             operation,
             _positive_form_id(form.get("fuel_truck_id"), "fuel truck"),
             form.get("current_gallons"),

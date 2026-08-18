@@ -31,7 +31,7 @@ from app.services.permission_rules import default_minimum_role, get_permission_r
 
 
 NIGHTLY_TRUCK_STATUSES = frozenset(
-    {"available", "unavailable_oos", "topping_off"}
+    {"available", "unavailable_oos", "topping_off", "needs_sump"}
 )
 _UNSET = object()
 FUEL_ASSIGNMENTS_PERMISSION = "neoscorpion.fuel_assignments.view"
@@ -339,6 +339,8 @@ def select_nightly_truck(
     now_utc=None,
 ):
     status = _validate_truck_status(status)
+    if status == "needs_sump":
+        raise ValueError("NEEDS SUMP is set only by a completed defuel.")
     starting_gallons = _validate_gallons(starting_gallons, "Starting gallons")
     current_gallons = _validate_gallons(current_gallons, "Current gallons")
     locked_operation, state = _lock_operation_and_state(operation)
@@ -370,6 +372,8 @@ def select_nightly_truck(
             current_gallons,
         ):
             return _unchanged(state)
+        if nightly_truck.status == "needs_sump":
+            raise ValueError("Use MARK SUMPED to return this truck to service.")
         if nightly_truck.status == "topping_off" and status == "available":
             raise ValueError("Use Top Off Complete to make this truck available.")
         _set_truck_values(
@@ -427,6 +431,10 @@ def update_nightly_truck(
         return _unchanged(state)
     if nightly_truck.status == "topping_off" and final_status == "available":
         raise ValueError("Use Top Off Complete to make this truck available.")
+    if nightly_truck.status == "needs_sump":
+        raise ValueError("Use MARK SUMPED to return this truck to service.")
+    if nightly_truck.status != "needs_sump" and final_status == "needs_sump":
+        raise ValueError("NEEDS SUMP is set only by a completed defuel.")
 
     _set_truck_values(nightly_truck, *final_values)
     if final_status != "available":
@@ -477,6 +485,8 @@ def mark_nightly_truck_topping_off(
     locked_operation, state = _lock_operation_and_state(operation)
     truck = _truck_for_operation(locked_operation, fuel_truck)
     nightly_truck = _selected_truck(locked_operation.id, truck.id)
+    if nightly_truck.status == "needs_sump":
+        raise ValueError("MARK SUMPED before changing this truck's status.")
     if nightly_truck.status == "topping_off":
         return _unchanged(state)
 
@@ -516,6 +526,32 @@ def complete_nightly_truck_top_off(operation, fuel_truck, current_gallons):
     return _changed(state)
 
 
+def mark_nightly_truck_sumped(operation, fuel_truck, current_gallons):
+    if current_gallons is None or str(current_gallons).strip() == "":
+        raise ValueError("Enter confirmed current gallons after sumping.")
+    current_gallons = _validate_gallons(current_gallons, "Current gallons")
+    locked_operation, state = _lock_operation_and_state(operation)
+    truck = _truck_for_operation(locked_operation, fuel_truck)
+    nightly_truck = _selected_truck(locked_operation.id, truck.id)
+    if nightly_truck.status != "needs_sump":
+        raise ValueError("The selected truck does not need sumping.")
+    if not truck.is_active or truck.is_out_of_service:
+        raise ValueError(
+            "The persistent truck must be active and not OOS before MARK SUMPED."
+        )
+    _validate_truck_state(
+        truck,
+        "available",
+        nightly_truck.starting_gallons,
+        current_gallons,
+    )
+    nightly_truck.status = "available"
+    nightly_truck.current_gallons = current_gallons
+    state = _record_change(state, locked_operation.id)
+    db.session.flush()
+    return _changed(state)
+
+
 def hold_active_assignments_for_truck(
     operation,
     fuel_truck,
@@ -523,6 +559,7 @@ def hold_active_assignments_for_truck(
     reason,
     *,
     now_utc=None,
+    exclude_assignment_id=None,
 ):
     """Place matching active assignments on HOLD inside a caller-owned scope."""
     truck_id = _entity_id(fuel_truck, "fuel truck")
@@ -530,6 +567,7 @@ def hold_active_assignments_for_truck(
         operation.id,
         NeoScorpionFuelAssignment.assigned_truck_id,
         truck_id,
+        exclude_assignment_id=exclude_assignment_id,
     )
     return _hold_assignments(
         assignments,
@@ -550,6 +588,8 @@ def _hold_assignments_for_truck_status(
     reason = (
         "Assigned nightly truck is topping off."
         if status == "topping_off"
+        else "Assigned nightly truck requires sumping."
+        if status == "needs_sump"
         else "Assigned nightly truck is unavailable / OOS."
     )
     assignments = _active_assignments_for_resource(
@@ -565,8 +605,14 @@ def _hold_assignments_for_truck_status(
     )
 
 
-def _active_assignments_for_resource(operation_id, field, resource_id):
-    return (
+def _active_assignments_for_resource(
+    operation_id,
+    field,
+    resource_id,
+    *,
+    exclude_assignment_id=None,
+):
+    query = (
         NeoScorpionFuelAssignment.query.join(SortDateMission)
         .filter(
             NeoScorpionFuelAssignment.sort_date_operation_id == operation_id,
@@ -580,9 +626,12 @@ def _active_assignments_for_resource(operation_id, field, resource_id):
                 SortDateMission.fuel_status != "complete",
             ),
         )
-        .with_for_update()
-        .all()
     )
+    if exclude_assignment_id is not None:
+        query = query.filter(
+            NeoScorpionFuelAssignment.id != int(exclude_assignment_id)
+        )
+    return query.with_for_update().all()
 
 
 def _hold_assignments(assignments, reason, changed_by_user, *, now_utc=None):

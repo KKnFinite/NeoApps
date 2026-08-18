@@ -36,6 +36,7 @@
             {% for row in rows %}
             <article class="neoscorpion-fueler-card" data-fuel-assignment-id="{{ row.assignment.id }}">
                 <span class="neoscorpion-status-pill" data-new-assignment-marker role="status" hidden>NEW ASSIGNMENT</span>
+                <span class="neoscorpion-status-pill">{{ row.cycle_type_label }}</span>
                 <header class="neoscorpion-fueler-mission-head">
                     <div>
                         <span>{{ row.destination }}</span>
@@ -159,7 +160,7 @@
                     <p class="neoscorpion-fuel-tank-unconfigured">Tank entry is not configured for this aircraft.</p>
                     {% endif %}
                     <label>T/F
-                        <input name="transfer_fuel_gallons" value="{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '' }}" inputmode="numeric" placeholder="Gallons">
+                        <input name="transfer_fuel_gallons" value="{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '' }}" inputmode="numeric" min="0" placeholder="Gallons">
                     </label>
                     <label class="neoscorpion-fueler-notes">Notes
                         <textarea name="notes" rows="3">{{ row.tail_fuel_state.notes if row.tail_fuel_state else '' }}</textarea>

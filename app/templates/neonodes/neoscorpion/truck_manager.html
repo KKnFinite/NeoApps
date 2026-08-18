@@ -42,9 +42,9 @@
         {% endif %}
         <div class="neoscorpion-truck-list">
             {% for truck in trucks %}
+            {% set nightly_truck = nightly_trucks_by_id.get(truck.id) %}
             <form class="neoscorpion-truck-card" method="post">
                 <input type="hidden" name="truck_id" value="{{ truck.id }}">
-                <input type="hidden" name="action" value="save_truck">
                 <label>Truck
                     <input name="truck_number" value="{{ truck.truck_number }}" {% if not can_edit %}readonly{% endif %}>
                 </label>
@@ -62,11 +62,22 @@
                 </label>
                 <label class="neoscorpion-check"><input type="checkbox" name="is_active" value="1" {% if truck.is_active %}checked{% endif %} {% if not can_edit %}disabled{% endif %}> Active</label>
                 <label class="neoscorpion-check"><input type="checkbox" name="is_out_of_service" value="1" {% if truck.is_out_of_service %}checked{% endif %} {% if not can_edit %}disabled{% endif %}> Out of Service</label>
+                {% if nightly_truck %}
+                <span class="neoscorpion-status-pill">
+                    {% if nightly_truck.status == "needs_sump" %}NEEDS SUMP{% else %}{{ nightly_truck.status|replace("_", " ")|title }}{% endif %}
+                </span>
+                {% endif %}
                 {% if can_edit %}
                 <div class="neoscorpion-truck-actions">
-                    <button class="action-button neoscorpion-save-button" type="submit">Save</button>
+                    <button class="action-button neoscorpion-save-button" type="submit" name="action" value="save_truck">Save</button>
                     <button class="action-button action-button-secondary" type="submit" name="action" value="deactivate_truck">Deactivate</button>
                 </div>
+                {% if nightly_truck and nightly_truck.status == "needs_sump" %}
+                <label>Confirmed Current Gallons
+                    <input name="current_gallons" inputmode="numeric" min="0" {% if truck.capacity_gallons is not none %}max="{{ truck.capacity_gallons }}"{% endif %}>
+                </label>
+                <button class="action-button" type="submit" name="action" value="mark_sumped">MARK SUMPED</button>
+                {% endif %}
                 {% endif %}
             </form>
             {% else %}
