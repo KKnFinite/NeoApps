@@ -907,7 +907,13 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None):
         .all()
     )
     tank_states_by_code = {state.tank_code: state for state in tank_states}
-    _actual_complete, _actual_total_lbs, neo_fuel_lbs = _neo_fuel_calculation(
+    (
+        _remaining_complete,
+        _remaining_total_lbs,
+        _actual_complete,
+        _actual_total_lbs,
+        neo_fuel_lbs,
+    ) = _fuel_work_calculation(
         tank_layout_for_tail(tail_number),
         tank_states_by_code,
         fuel_work_state.apu_running,
@@ -994,7 +1000,13 @@ def complete_fuel_on_board(gateway, user, assignment_id, *, now_utc=None):
         .all()
     )
     tank_states_by_code = {state.tank_code: state for state in tank_states}
-    _actual_complete, _actual_total_lbs, neo_fuel_lbs = _neo_fuel_calculation(
+    (
+        _remaining_complete,
+        _remaining_total_lbs,
+        _actual_complete,
+        _actual_total_lbs,
+        neo_fuel_lbs,
+    ) = _fuel_work_calculation(
         tank_layout_for_tail(tail_number),
         tank_states_by_code,
         fuel_work_state.apu_running,
@@ -1177,12 +1189,20 @@ def ensure_fuel_assignment(operation, mission):
     return assignment
 
 
-def _neo_fuel_calculation(
+def _fuel_work_calculation(
     tank_layout,
     tank_states_by_code,
     apu_running,
     apu_allowance_lbs,
 ):
+    remaining_values = [
+        (
+            tank_states_by_code[tank_code].remaining_lbs
+            if tank_code in tank_states_by_code
+            else None
+        )
+        for tank_code, _tank_label in tank_layout
+    ]
     actual_values = [
         (
             tank_states_by_code[tank_code].actual_lbs
@@ -1191,6 +1211,10 @@ def _neo_fuel_calculation(
         )
         for tank_code, _tank_label in tank_layout
     ]
+    remaining_complete = bool(tank_layout) and all(
+        value is not None for value in remaining_values
+    )
+    remaining_total_lbs = sum(remaining_values) if remaining_complete else None
     actual_complete = bool(tank_layout) and all(
         value is not None for value in actual_values
     )
@@ -1202,7 +1226,53 @@ def _neo_fuel_calculation(
         and apu_allowance_lbs is not None
         else None
     )
-    return actual_complete, actual_total_lbs, neo_fuel_lbs
+    return (
+        remaining_complete,
+        remaining_total_lbs,
+        actual_complete,
+        actual_total_lbs,
+        neo_fuel_lbs,
+    )
+
+
+def classify_fuel_movement(assignment, fuel_work_state, *, tank_states=None):
+    if assignment is not None and assignment.fuel_on_board_at_utc is not None:
+        return "not_moved"
+    if (
+        assignment is not None
+        and assignment.transfer_fuel_gallons is not None
+        and assignment.transfer_fuel_gallons > 0
+    ):
+        return "moved"
+    if fuel_work_state is None:
+        return "unknown"
+
+    states = fuel_work_state.tank_states if tank_states is None else tank_states
+    tank_states_by_code = {state.tank_code: state for state in states}
+    (
+        remaining_complete,
+        remaining_total_lbs,
+        actual_complete,
+        actual_total_lbs,
+        _neo_fuel_lbs,
+    ) = _fuel_work_calculation(
+        tank_layout_for_tail(fuel_work_state.tail_number),
+        tank_states_by_code,
+        fuel_work_state.apu_running,
+        fuel_work_state.apu_allowance_lbs,
+    )
+    if (
+        not remaining_complete
+        or not actual_complete
+        or fuel_work_state.apu_running is None
+        or fuel_work_state.apu_allowance_lbs is None
+    ):
+        return "unknown"
+
+    adjusted_actual_lbs = (
+        actual_total_lbs + fuel_work_state.apu_allowance_lbs
+    )
+    return "moved" if adjusted_actual_lbs > remaining_total_lbs else "not_moved"
 
 
 def _fuel_rows(
@@ -1267,16 +1337,19 @@ def _fuel_rows(
                     ),
                 }
             )
-        remaining_complete = bool(tank_rows) and all(
-            row["remaining_lbs"] is not None for row in tank_rows
-        )
         apu_running = fuel_work_state.apu_running if fuel_work_state else None
         apu_allowance_lbs = (
             fuel_work_state.apu_allowance_lbs
             if fuel_work_state and apu_running is not None
             else None
         )
-        actual_complete, actual_total_lbs, neo_fuel_lbs = _neo_fuel_calculation(
+        (
+            remaining_complete,
+            remaining_total_lbs,
+            actual_complete,
+            actual_total_lbs,
+            neo_fuel_lbs,
+        ) = _fuel_work_calculation(
             tank_layout,
             tank_states_by_code,
             apu_running,
@@ -1338,9 +1411,7 @@ def _fuel_rows(
                 ),
                 "is_off": bool(fuel_work_state and fuel_work_state.off_at_utc),
                 "remaining_total_display": (
-                    format_display_thousands(
-                        sum(row["remaining_lbs"] for row in tank_rows)
-                    )
+                    format_display_thousands(remaining_total_lbs)
                     if remaining_complete
                     else "INCOMPLETE"
                 ),

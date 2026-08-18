@@ -352,6 +352,73 @@ class NeoScorpionFuelAssignment(db.Model):
     assigned_truck = db.relationship("NeoScorpionFuelTruck")
 
 
+class NeoScorpionFuelingEvent(db.Model):
+    __tablename__ = "neoscorpion_fueling_events"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "fuel_work_state_id",
+            "sequence_number",
+            name="uq_neoscorpion_fueling_event_work_sequence",
+        ),
+        db.CheckConstraint(
+            "sequence_number >= 1",
+            name="ck_neoscorpion_fueling_event_sequence_positive",
+        ),
+        db.CheckConstraint(
+            "transfer_fuel_gallons IS NULL OR transfer_fuel_gallons >= 0",
+            name="ck_neoscorpion_fueling_event_transfer_nonnegative",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    sort_date_operation_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sort_date_operations.id"),
+        nullable=False,
+        index=True,
+    )
+    fuel_assignment_id = db.Column(
+        db.Integer,
+        db.ForeignKey("neoscorpion_fuel_assignments.id"),
+        nullable=False,
+        index=True,
+    )
+    fuel_work_state_id = db.Column(
+        db.Integer,
+        db.ForeignKey("neoscorpion_fuel_work_states.id"),
+        nullable=False,
+    )
+    tail_number = db.Column(db.String(32), nullable=False)
+    fuel_truck_id = db.Column(
+        db.Integer,
+        db.ForeignKey("neoscorpion_fuel_trucks.id"),
+        nullable=False,
+    )
+    sequence_number = db.Column(db.Integer, nullable=False)
+    started_at_utc = db.Column(db.DateTime, nullable=True)
+    ended_at_utc = db.Column(db.DateTime, nullable=True)
+    transfer_fuel_gallons = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    sort_date_operation = db.relationship("SortDateOperation")
+    fuel_assignment = db.relationship("NeoScorpionFuelAssignment")
+    fuel_work_state = db.relationship("NeoScorpionFuelWorkState")
+    fuel_truck = db.relationship("NeoScorpionFuelTruck")
+
+    @validates("tail_number")
+    def _normalize_tail_number(self, _key, value):
+        normalized = (value or "").strip().upper()
+        if not normalized:
+            raise ValueError("Fueling event requires a tail number.")
+        return normalized
+
+
 class NeoScorpionSettings(db.Model):
     __tablename__ = "neoscorpion_settings"
     __table_args__ = (

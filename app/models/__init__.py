@@ -34,6 +34,7 @@ from app.models.neosektor_wave_state import NeoSektorWaveState
 from app.models.neoscorpion_fuel import (
     NeoScorpionAircraftFuelSetting,
     NeoScorpionFuelAssignment,
+    NeoScorpionFuelingEvent,
     NeoScorpionFuelTankState,
     NeoScorpionFuelTruck,
     NeoScorpionFuelWorkState,
@@ -109,6 +110,7 @@ __all__ = [
     "NeoSektorUldOnTheWayEvent",
     "NeoScorpionAircraftFuelSetting",
     "NeoScorpionFuelAssignment",
+    "NeoScorpionFuelingEvent",
     "NeoScorpionFuelTankState",
     "NeoScorpionFuelTruck",
     "NeoScorpionFuelWorkState",
