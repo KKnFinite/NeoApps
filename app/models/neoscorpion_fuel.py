@@ -221,6 +221,12 @@ class NeoScorpionFuelWorkState(db.Model):
         db.Numeric(8, 4),
         nullable=True,
     )
+    off_at_utc = db.Column(db.DateTime, nullable=True)
+    off_by_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=True,
+    )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
@@ -230,6 +236,7 @@ class NeoScorpionFuelWorkState(db.Model):
     )
 
     fuel_assignment = db.relationship("NeoScorpionFuelAssignment")
+    off_by_user = db.relationship("User", foreign_keys=[off_by_user_id])
     tank_states = db.relationship(
         "NeoScorpionFuelTankState",
         back_populates="fuel_work_state",

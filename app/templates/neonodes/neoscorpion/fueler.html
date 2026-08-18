@@ -77,6 +77,10 @@
                         <dt>ON</dt>
                         <dd>{{ row.on_time }}</dd>
                     </div>
+                    <div>
+                        <dt>OFF</dt>
+                        <dd>{{ row.off_time }}</dd>
+                    </div>
                 </dl>
                 {% if can_edit and row.assignment %}
                 <form method="post" class="neoscorpion-fueler-form">
@@ -113,13 +117,6 @@
                     <label>T/F
                         <input name="transfer_fuel_gallons" value="{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '' }}" inputmode="numeric" placeholder="Gallons">
                     </label>
-                    <label>Status
-                        <select name="tail_fuel_status">
-                            {% for status in ["pending", "in_progress", "review", "complete"] %}
-                            <option value="{{ status }}" {% if row.tail_fuel_state and row.tail_fuel_state.status == status %}selected{% endif %}>{{ status|replace("_", " ")|title }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
                     <label class="neoscorpion-fueler-notes">Notes
                         <textarea name="notes" rows="3">{{ row.tail_fuel_state.notes if row.tail_fuel_state else '' }}</textarea>
                     </label>
@@ -147,6 +144,16 @@
                 <dl class="neoscorpion-fueler-readout">
                     <div><dt>T/F</dt><dd>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</dd></div>
                 </dl>
+                {% endif %}
+                {% if can_edit and row.assignment %}
+                    {% if row.off_ready %}
+                    <form method="post" action="{{ url_for('neoscorpion.fueler_off') }}" class="neoscorpion-fueler-off-form">
+                        <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
+                        <button class="action-button" type="submit">MARK OFF</button>
+                    </form>
+                    {% elif not row.is_off %}
+                    <p class="neoscorpion-calculation-warning">Complete Actual fuel and confirm APU before OFF.</p>
+                    {% endif %}
                 {% endif %}
             </article>
             {% endfor %}

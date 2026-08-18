@@ -158,6 +158,8 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "apu_confirmed_at_utc": "DATETIME",
         "apu_allowance_lbs": "INTEGER",
         "applied_apu_rate_thousand_lbs_per_hour": "NUMERIC(8, 4)",
+        "off_at_utc": "DATETIME",
+        "off_by_user_id": "INTEGER",
     },
 }
 
@@ -289,6 +291,8 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "apu_confirmed_at_utc": "TIMESTAMP",
         "apu_allowance_lbs": "INTEGER",
         "applied_apu_rate_thousand_lbs_per_hour": "NUMERIC(8, 4)",
+        "off_at_utc": "TIMESTAMP",
+        "off_by_user_id": "INTEGER",
     },
 }
 

@@ -14,6 +14,7 @@ from app.services.neoscorpion import (
     fuel_assignments_live_revision,
     fueler_context,
     history_context,
+    mark_fueler_off,
     save_dispatch_row,
     save_aircraft_fuel_settings,
     save_fueler_entry,
@@ -184,6 +185,35 @@ def fueler():
         flash("Access denied.", "error")
         return redirect(url_for("neoscorpion.index"))
     return _fueler_response(gateway, access)
+
+
+@bp.post("/fueler/off")
+@gateway_node_required("scorpion")
+def fueler_off():
+    gateway = get_current_gateway()
+    access = permission_access(FUELER_VIEW_PERMISSION, FUELER_EDIT_PERMISSION)
+    if not access["can_edit"]:
+        db.session.rollback()
+        flash("Access denied.", "error")
+        return _fueler_response(gateway, access, status_code=403)
+
+    try:
+        result = mark_fueler_off(
+            gateway,
+            current_user,
+            request.form.get("assignment_id"),
+        )
+    except ValueError as exc:
+        db.session.rollback()
+        flash(str(exc), "error")
+        return _fueler_response(gateway, access, status_code=400)
+
+    if result.changed:
+        db.session.commit()
+        flash("FUELER MARKED OFF.", "success")
+    else:
+        flash("FUELER WAS ALREADY OFF.", "info")
+    return redirect(url_for("neoscorpion.fueler"))
 
 
 @bp.get("/fuel-assignments/revision")

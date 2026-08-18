@@ -442,6 +442,13 @@ class FuelerSaveResult:
 
 
 @dataclass(frozen=True)
+class FuelerOffResult:
+    changed: bool
+    revision: int
+    fuel_work_state: NeoScorpionFuelWorkState
+
+
+@dataclass(frozen=True)
 class AircraftFuelSettingsSaveResult:
     changed: bool
 
@@ -714,11 +721,6 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
 
     target_apu_lbs = target_apu_allowance_lbs
     target_notes = (form.get("notes") or "").strip()
-    target_status = _clean_choice(
-        form.get("tail_fuel_status"),
-        {"pending", "in_progress", "review", "complete"},
-        "pending",
-    )
     target_transfer_gallons = _int_or_none(form.get("transfer_fuel_gallons"))
 
     remaining_values = [values[0] for values in final_tank_values.values()]
@@ -741,7 +743,6 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
 
     current_apu_lbs = tail_fuel_state.apu_lbs if tail_fuel_state else None
     current_notes = tail_fuel_state.notes if tail_fuel_state else ""
-    current_status = tail_fuel_state.status if tail_fuel_state else "pending"
     current_fob_lbs = tail_fuel_state.fob_lbs if tail_fuel_state else None
     current_actual_lbs = tail_fuel_state.actual_fuel_lbs if tail_fuel_state else None
     current_center_lbs = tail_fuel_state.center_fuel_lbs if tail_fuel_state else None
@@ -749,7 +750,6 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
         (
             current_apu_lbs != target_apu_lbs,
             current_notes != target_notes,
-            current_status != target_status,
             current_fob_lbs != target_fob_lbs,
             current_actual_lbs != target_actual_lbs,
             current_center_lbs != target_center_lbs,
@@ -815,7 +815,6 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
         tail_fuel_state.center_fuel_lbs = target_center_lbs
         tail_fuel_state.apu_lbs = target_apu_lbs
         tail_fuel_state.notes = target_notes
-        tail_fuel_state.status = target_status
 
     assignment.transfer_fuel_gallons = target_transfer_gallons
     asset_state = record_nightly_operational_change(asset_state, operation.id)
@@ -824,6 +823,82 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
         changed=True,
         revision=int(asset_state.revision),
         tail_fuel_state=tail_fuel_state,
+        fuel_work_state=fuel_work_state,
+    )
+
+
+def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None):
+    operation = current_sort_operation(gateway)
+    if not operation:
+        raise ValueError("No current sort operation is available for NeoScorpion OFF.")
+    now_utc = now_utc or datetime.utcnow()
+
+    operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
+    assignment_row = (
+        db.session.query(NeoScorpionFuelAssignment, SortDateMission)
+        .join(
+            SortDateMission,
+            SortDateMission.id == NeoScorpionFuelAssignment.sort_date_mission_id,
+        )
+        .filter(
+            NeoScorpionFuelAssignment.id == _int_or_none(assignment_id),
+            NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
+            NeoScorpionFuelAssignment.assigned_fueler_user_id == user.id,
+            SortDateMission.sort_date_operation_id == operation.id,
+            SortDateMission.mission_type == "departure",
+        )
+        .with_for_update()
+        .first()
+    )
+    if not assignment_row:
+        raise ValueError("Fuel assignment was not found for this fueler.")
+
+    assignment, mission = assignment_row
+    tail_number = _normalize_tail(mission.assigned_tail_number if mission else "")
+    if not tail_number:
+        raise ValueError("Fuel assignment does not have a tail number.")
+
+    fuel_work_state = (
+        NeoScorpionFuelWorkState.query.filter_by(
+            fuel_assignment_id=assignment.id,
+            tail_number=tail_number,
+        )
+        .with_for_update()
+        .first()
+    )
+    if fuel_work_state is None:
+        raise ValueError("Complete Actual fuel and confirm APU before OFF.")
+    if fuel_work_state.off_at_utc is not None:
+        return FuelerOffResult(
+            changed=False,
+            revision=int(asset_state.revision if asset_state else 0),
+            fuel_work_state=fuel_work_state,
+        )
+
+    tank_states = (
+        NeoScorpionFuelTankState.query.filter_by(
+            fuel_work_state_id=fuel_work_state.id,
+        )
+        .with_for_update()
+        .all()
+    )
+    tank_states_by_code = {state.tank_code: state for state in tank_states}
+    _actual_complete, _actual_total_lbs, neo_fuel_lbs = _neo_fuel_calculation(
+        tank_layout_for_tail(tail_number),
+        tank_states_by_code,
+        fuel_work_state.apu_running,
+        fuel_work_state.apu_allowance_lbs,
+    )
+    if neo_fuel_lbs is None:
+        raise ValueError("Complete Actual fuel and confirm APU before OFF.")
+
+    fuel_work_state.off_at_utc = now_utc
+    fuel_work_state.off_by_user_id = user.id
+    asset_state = record_nightly_operational_change(asset_state, operation.id)
+    db.session.flush()
+    return FuelerOffResult(
+        changed=True,
+        revision=int(asset_state.revision),
         fuel_work_state=fuel_work_state,
     )
 
@@ -984,6 +1059,34 @@ def ensure_fuel_assignment(operation, mission):
     return assignment
 
 
+def _neo_fuel_calculation(
+    tank_layout,
+    tank_states_by_code,
+    apu_running,
+    apu_allowance_lbs,
+):
+    actual_values = [
+        (
+            tank_states_by_code[tank_code].actual_lbs
+            if tank_code in tank_states_by_code
+            else None
+        )
+        for tank_code, _tank_label in tank_layout
+    ]
+    actual_complete = bool(tank_layout) and all(
+        value is not None for value in actual_values
+    )
+    actual_total_lbs = sum(actual_values) if actual_complete else None
+    neo_fuel_lbs = (
+        actual_total_lbs - apu_allowance_lbs
+        if actual_total_lbs is not None
+        and apu_running is not None
+        and apu_allowance_lbs is not None
+        else None
+    )
+    return actual_complete, actual_total_lbs, neo_fuel_lbs
+
+
 def _fuel_rows(
     operation,
     missions,
@@ -1049,29 +1152,22 @@ def _fuel_rows(
         remaining_complete = bool(tank_rows) and all(
             row["remaining_lbs"] is not None for row in tank_rows
         )
-        actual_complete = bool(tank_rows) and all(
-            row["actual_lbs"] is not None for row in tank_rows
-        )
-        actual_total_lbs = (
-            sum(row["actual_lbs"] for row in tank_rows)
-            if actual_complete
-            else None
-        )
         apu_running = fuel_work_state.apu_running if fuel_work_state else None
         apu_allowance_lbs = (
             fuel_work_state.apu_allowance_lbs
             if fuel_work_state and apu_running is not None
             else None
         )
+        actual_complete, actual_total_lbs, neo_fuel_lbs = _neo_fuel_calculation(
+            tank_layout,
+            tank_states_by_code,
+            apu_running,
+            apu_allowance_lbs,
+        )
         fueling_target_lbs = (
             mission.planned_fuel_load + apu_allowance_lbs
             if mission.planned_fuel_load is not None
             and apu_allowance_lbs is not None
-            else None
-        )
-        neo_fuel_lbs = (
-            actual_total_lbs - apu_allowance_lbs
-            if actual_total_lbs is not None and apu_allowance_lbs is not None
             else None
         )
         rows.append(
@@ -1089,6 +1185,17 @@ def _fuel_rows(
                     if fuel_work_state and fuel_work_state.on_at_utc
                     else "-"
                 ),
+                "off_time": (
+                    format_local_hhmm(fuel_work_state.off_at_utc, mission.timezone)
+                    if fuel_work_state and fuel_work_state.off_at_utc
+                    else "-"
+                ),
+                "off_ready": bool(
+                    fuel_work_state
+                    and fuel_work_state.off_at_utc is None
+                    and neo_fuel_lbs is not None
+                ),
+                "is_off": bool(fuel_work_state and fuel_work_state.off_at_utc),
                 "remaining_total_display": (
                     format_display_thousands(
                         sum(row["remaining_lbs"] for row in tank_rows)
