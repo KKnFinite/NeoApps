@@ -89,6 +89,7 @@ from app.services.neostaffing_staffing_group_schema import (
 from app.services.neostaffing_notification_schema import (
     ensure_neostaffing_notification_table,
 )
+from app.services.neoscorpion_schema import ensure_neoscorpion_production_schema
 from app.services.shell_metadata import resolve_shell_metadata
 from app.services.time_display import format_local_hhmm
 
@@ -128,6 +129,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     ensure_neostaffing_change_request_tables(app)
     ensure_neostaffing_staffing_group_tables(app)
     ensure_neostaffing_notification_table(app)
+    ensure_neoscorpion_production_schema(app)
 
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)
