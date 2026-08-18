@@ -51,6 +51,7 @@
                         <th>Movement</th>
                         <th>Status</th>
                         <th>Load Planning</th>
+                        <th>Corrections</th>
                         <th>Fuel On Board</th>
                         <th>Complete</th>
                         {% if can_edit %}<th>Save</th>{% endif %}
@@ -121,6 +122,33 @@
                             </td>
                             <td><input class="neoscorpion-load-input" name="load_planning_note" value="{{ row.load_planning_note }}" placeholder="{{ row.load_planning_placeholder }}" aria-label="Copy-ready load planning placeholder"></td>
                             <td>
+                                {% if row.correction_allowed %}
+                                <details>
+                                    <summary>CORRECT ACTUAL</summary>
+                                    {% for tank in row.tank_rows %}
+                                    <label>{{ tank.label }}
+                                        <input class="neoscorpion-inline-input" name="correct_actual_{{ tank.code }}" value="{{ tank.actual_display }}" inputmode="decimal" aria-label="Correct {{ tank.label }} Actual">
+                                    </label>
+                                    {% endfor %}
+                                    <label>Reason
+                                        <input class="neoscorpion-load-input" name="correction_reason" value="">
+                                    </label>
+                                    <button class="action-button" type="submit" formaction="{{ url_for('neoscorpion.fuel_dispatch_correct_actual') }}" formmethod="post">APPLY CORRECTION</button>
+                                </details>
+                                {% if row.reopen_off_available %}
+                                <details>
+                                    <summary>REOPEN OFF</summary>
+                                    <label>Reason
+                                        <input class="neoscorpion-load-input" name="reopen_reason" value="">
+                                    </label>
+                                    <button class="action-button" type="submit" formaction="{{ url_for('neoscorpion.fuel_dispatch_reopen_off') }}" formmethod="post">REOPEN OFF</button>
+                                </details>
+                                {% endif %}
+                                {% else %}
+                                <span>-</span>
+                                {% endif %}
+                            </td>
+                            <td>
                                 {% if row.fuel_on_board_complete %}
                                 <span class="neoscorpion-status-pill">COMPLETE</span>
                                 {% elif row.fuel_on_board_ready %}
@@ -159,6 +187,7 @@
                         <td>{{ row.movement_status|replace("_", " ")|upper }}</td>
                         <td>{{ row.review_status|replace("_", " ")|title }}</td>
                         <td>{{ row.load_planning_note or row.load_planning_placeholder }}</td>
+                        <td>-</td>
                         <td>{{ "COMPLETE" if row.fuel_on_board_complete else row.fuel_on_board_reason }}</td>
                         <td>{{ row.normal_completion_reason }}</td>
                         {% if can_edit %}<td>-</td>{% endif %}

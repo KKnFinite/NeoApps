@@ -10,6 +10,7 @@ from app.services.neoscorpion import (
     CALCULATION_NOT_CONFIGURED_MESSAGE,
     complete_fueled_assignment,
     complete_fuel_on_board,
+    correct_fuel_actuals,
     current_sort_operation,
     deactivate_truck,
     fuel_dispatch_context,
@@ -17,6 +18,7 @@ from app.services.neoscorpion import (
     fueler_context,
     history_context,
     mark_fueler_off,
+    reopen_fueler_off,
     save_dispatch_row,
     save_aircraft_fuel_settings,
     save_fueler_entry,
@@ -181,6 +183,77 @@ def fuel_dispatch_complete():
         flash("FUELING COMPLETE.", "success")
     else:
         flash("FUELING WAS ALREADY COMPLETE.", "info")
+    return redirect(url_for("neoscorpion.fuel_dispatch"))
+
+
+@bp.post("/fuel-dispatch/reopen-off")
+@gateway_node_required("scorpion")
+def fuel_dispatch_reopen_off():
+    gateway = get_current_gateway()
+    access = permission_access(
+        FUEL_DISPATCH_VIEW_PERMISSION,
+        FUEL_DISPATCH_EDIT_PERMISSION,
+    )
+    if not access["can_edit"]:
+        db.session.rollback()
+        flash("Access denied.", "error")
+        return _dispatch_response(gateway, access, status_code=403)
+    try:
+        result = reopen_fueler_off(
+            gateway,
+            current_user,
+            request.form.get("assignment_id"),
+            request.form.get("reopen_reason"),
+        )
+    except (IntegrityError, ValueError) as exc:
+        db.session.rollback()
+        message = (
+            str(exc)
+            if isinstance(exc, ValueError)
+            else "OFF state changed. Reload Fuel Dispatch and try again."
+        )
+        flash(message, "error")
+        return _dispatch_response(gateway, access, status_code=400)
+    if result.changed:
+        db.session.commit()
+        flash("FUELER OFF REOPENED.", "success")
+    else:
+        flash("FUELER WORK WAS ALREADY OPEN.", "info")
+    return redirect(url_for("neoscorpion.fuel_dispatch"))
+
+
+@bp.post("/fuel-dispatch/correct-actual")
+@gateway_node_required("scorpion")
+def fuel_dispatch_correct_actual():
+    gateway = get_current_gateway()
+    access = permission_access(
+        FUEL_DISPATCH_VIEW_PERMISSION,
+        FUEL_DISPATCH_EDIT_PERMISSION,
+    )
+    if not access["can_edit"]:
+        db.session.rollback()
+        flash("Access denied.", "error")
+        return _dispatch_response(gateway, access, status_code=403)
+    try:
+        result = correct_fuel_actuals(
+            gateway,
+            current_user,
+            request.form,
+        )
+    except (IntegrityError, ValueError) as exc:
+        db.session.rollback()
+        message = (
+            str(exc)
+            if isinstance(exc, ValueError)
+            else "Actual fuel changed. Reload Fuel Dispatch and try again."
+        )
+        flash(message, "error")
+        return _dispatch_response(gateway, access, status_code=400)
+    if result.changed:
+        db.session.commit()
+        flash("ACTUAL FUEL CORRECTED.", "success")
+    else:
+        flash("NO ACTUAL FUEL CHANGES.", "info")
     return redirect(url_for("neoscorpion.fuel_dispatch"))
 
 

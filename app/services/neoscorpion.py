@@ -8,6 +8,7 @@ from sqlalchemy.orm import joinedload
 from app.extensions import db
 from app.models import (
     NeoScorpionAircraftFuelSetting,
+    NeoScorpionFuelAuditEntry,
     NeoScorpionFuelAssignment,
     NeoScorpionFuelingEvent,
     NeoScorpionFuelTankState,
@@ -489,6 +490,14 @@ class DispatcherCompleteResult:
 
 
 @dataclass(frozen=True)
+class FuelCorrectionResult:
+    changed: bool
+    revision: int
+    fuel_work_state: NeoScorpionFuelWorkState | None
+    audit_entries: tuple[NeoScorpionFuelAuditEntry, ...]
+
+
+@dataclass(frozen=True)
 class AircraftFuelSettingsSaveResult:
     changed: bool
 
@@ -676,6 +685,10 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
         .with_for_update()
         .first()
     )
+    if fuel_work_state is not None and fuel_work_state.off_at_utc is not None:
+        raise ValueError(
+            "Fuel work is OFF. A dispatcher must REOPEN OFF before editing."
+        )
     tank_states = []
     if fuel_work_state is not None:
         tank_states = (
@@ -1223,6 +1236,244 @@ def complete_fueled_assignment(gateway, user, assignment_id, *, now_utc=None):
     )
 
 
+def reopen_fueler_off(gateway, user, assignment_id, reason, *, now_utc=None):
+    operation = current_sort_operation(gateway)
+    if not operation:
+        raise ValueError("No current sort operation is available for REOPEN OFF.")
+    now_utc = now_utc or datetime.utcnow()
+
+    operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
+    assignment, mission = _locked_current_fuel_assignment(
+        operation,
+        assignment_id,
+        action_label="REOPEN OFF",
+    )
+    _validate_precompletion_assignment(assignment, mission, "REOPEN OFF")
+    fuel_work_state = _locked_current_fuel_work_state(assignment, mission)
+    if fuel_work_state is None or fuel_work_state.off_at_utc is None:
+        return FuelCorrectionResult(
+            changed=False,
+            revision=int(asset_state.revision if asset_state else 0),
+            fuel_work_state=fuel_work_state,
+            audit_entries=(),
+        )
+
+    reason = _required_correction_reason(reason)
+    old_off_value = (
+        f"off_at_utc={fuel_work_state.off_at_utc.isoformat()};"
+        f"off_by_user_id={fuel_work_state.off_by_user_id or ''}"
+    )
+    audit_entry = NeoScorpionFuelAuditEntry(
+        sort_date_operation_id=operation.id,
+        fuel_assignment_id=assignment.id,
+        fuel_work_state_id=fuel_work_state.id,
+        action="reopen_off",
+        field_name="off",
+        old_value=old_off_value,
+        new_value=None,
+        reason=reason,
+        changed_by_user_id=user.id,
+        created_at=now_utc,
+    )
+    db.session.add(audit_entry)
+    fuel_work_state.off_at_utc = None
+    fuel_work_state.off_by_user_id = None
+    asset_state = record_nightly_operational_change(asset_state, operation.id)
+    db.session.flush()
+    return FuelCorrectionResult(
+        changed=True,
+        revision=int(asset_state.revision),
+        fuel_work_state=fuel_work_state,
+        audit_entries=(audit_entry,),
+    )
+
+
+def correct_fuel_actuals(gateway, user, form, *, now_utc=None):
+    operation = current_sort_operation(gateway)
+    if not operation:
+        raise ValueError(
+            "No current sort operation is available for Actual correction."
+        )
+    now_utc = now_utc or datetime.utcnow()
+
+    operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
+    assignment, mission = _locked_current_fuel_assignment(
+        operation,
+        form.get("assignment_id"),
+        action_label="Actual correction",
+    )
+    _validate_precompletion_assignment(assignment, mission, "Actual correction")
+    reason = _required_correction_reason(form.get("correction_reason"))
+    fuel_work_state = _locked_current_fuel_work_state(assignment, mission)
+    if fuel_work_state is None:
+        raise ValueError("No current-tail fuel work exists to correct.")
+    if (
+        NeoScorpionFuelingEvent.query.filter_by(
+            fuel_work_state_id=fuel_work_state.id
+        )
+        .with_for_update()
+        .first()
+        is not None
+    ):
+        raise ValueError("REVIEW REQUIRED: a fueling event already exists.")
+
+    tank_layout = tank_layout_for_tail(fuel_work_state.tail_number)
+    if not tank_layout:
+        raise ValueError(CALCULATION_NOT_CONFIGURED_MESSAGE)
+    expected_tank_codes = {code for code, _label in tank_layout}
+    submitted_values = {
+        key.removeprefix("correct_actual_"): value
+        for key, value in form.items()
+        if key.startswith("correct_actual_")
+    }
+    if not submitted_values:
+        raise ValueError("Submit at least one Actual tank value to correct.")
+    if set(submitted_values) - expected_tank_codes:
+        raise ValueError("The submitted tank layout does not match this aircraft.")
+
+    tank_states = (
+        NeoScorpionFuelTankState.query.filter_by(
+            fuel_work_state_id=fuel_work_state.id,
+        )
+        .with_for_update()
+        .all()
+    )
+    tank_states_by_code = {state.tank_code: state for state in tank_states}
+    changes = []
+    for tank_code, submitted_value in submitted_values.items():
+        tank_state = tank_states_by_code.get(tank_code)
+        new_actual_lbs = display_thousands_to_lbs(submitted_value)
+        old_actual_lbs = tank_state.actual_lbs if tank_state else None
+        remaining_lbs = tank_state.remaining_lbs if tank_state else None
+        if new_actual_lbs is not None and remaining_lbs is None:
+            raise ValueError(
+                f"Enter Remaining before Actual for {dict(tank_layout)[tank_code]}."
+            )
+        if old_actual_lbs != new_actual_lbs:
+            changes.append((tank_code, tank_state, old_actual_lbs, new_actual_lbs))
+
+    if not changes:
+        return FuelCorrectionResult(
+            changed=False,
+            revision=int(asset_state.revision if asset_state else 0),
+            fuel_work_state=fuel_work_state,
+            audit_entries=(),
+        )
+
+    audit_entries = []
+    for tank_code, tank_state, old_actual_lbs, new_actual_lbs in changes:
+        if tank_state is None:
+            raise ValueError("Remaining is required before correcting Actual fuel.")
+        tank_state.actual_lbs = new_actual_lbs
+        audit_entry = NeoScorpionFuelAuditEntry(
+            sort_date_operation_id=operation.id,
+            fuel_assignment_id=assignment.id,
+            fuel_work_state_id=fuel_work_state.id,
+            action="correct_actual",
+            field_name=f"actual_{tank_code}",
+            old_value=(str(old_actual_lbs) if old_actual_lbs is not None else None),
+            new_value=(str(new_actual_lbs) if new_actual_lbs is not None else None),
+            reason=reason,
+            changed_by_user_id=user.id,
+            created_at=now_utc,
+        )
+        db.session.add(audit_entry)
+        audit_entries.append(audit_entry)
+
+    actual_values = [
+        (
+            tank_states_by_code[tank_code].actual_lbs
+            if tank_code in tank_states_by_code
+            else None
+        )
+        for tank_code, _label in tank_layout
+    ]
+    actual_total_lbs = (
+        sum(actual_values)
+        if tank_layout and all(value is not None for value in actual_values)
+        else None
+    )
+    tail_fuel_state = (
+        NeoScorpionTailFuelState.query.filter_by(
+            sort_date_operation_id=operation.id,
+            tail_number=fuel_work_state.tail_number,
+        )
+        .with_for_update()
+        .first()
+    )
+    if tail_fuel_state is None:
+        tail_fuel_state = NeoScorpionTailFuelState(
+            sort_date_operation_id=operation.id,
+            tail_number=fuel_work_state.tail_number,
+        )
+        db.session.add(tail_fuel_state)
+    tail_fuel_state.actual_fuel_lbs = actual_total_lbs
+
+    asset_state = record_nightly_operational_change(asset_state, operation.id)
+    db.session.flush()
+    return FuelCorrectionResult(
+        changed=True,
+        revision=int(asset_state.revision),
+        fuel_work_state=fuel_work_state,
+        audit_entries=tuple(audit_entries),
+    )
+
+
+def _locked_current_fuel_assignment(operation, assignment_id, *, action_label):
+    assignment_row = (
+        db.session.query(NeoScorpionFuelAssignment, SortDateMission)
+        .join(
+            SortDateMission,
+            SortDateMission.id == NeoScorpionFuelAssignment.sort_date_mission_id,
+        )
+        .filter(
+            NeoScorpionFuelAssignment.id == _int_or_none(assignment_id),
+            NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
+            SortDateMission.sort_date_operation_id == operation.id,
+            SortDateMission.mission_type == "departure",
+        )
+        .with_for_update()
+        .first()
+    )
+    if not assignment_row:
+        raise ValueError(
+            f"Fuel assignment was not found for the current sort operation during {action_label}."
+        )
+    return assignment_row
+
+
+def _locked_current_fuel_work_state(assignment, mission):
+    tail_number = _normalize_tail(mission.assigned_tail_number)
+    if not tail_number:
+        raise ValueError("Fuel assignment does not have a tail number.")
+    return (
+        NeoScorpionFuelWorkState.query.filter_by(
+            fuel_assignment_id=assignment.id,
+            tail_number=tail_number,
+        )
+        .with_for_update()
+        .first()
+    )
+
+
+def _validate_precompletion_assignment(assignment, mission, action_label):
+    if assignment.fuel_on_board_at_utc is not None:
+        raise ValueError(f"Fuel On Board completion cannot use {action_label}.")
+    if (
+        assignment.completed_at_utc is not None
+        or assignment.review_status == "complete"
+        or mission.fuel_status == "complete"
+    ):
+        raise ValueError(f"Completed fuel assignments cannot use {action_label}.")
+
+
+def _required_correction_reason(value):
+    reason = (value or "").strip()
+    if not reason:
+        raise ValueError("A correction reason is required.")
+    return reason
+
+
 def save_truck(gateway, form):
     truck_id = _int_or_none(form.get("truck_id"))
     truck_number = (form.get("truck_number") or "").strip().upper()
@@ -1716,6 +1967,15 @@ def _fuel_rows(
                 "administratively_complete": administratively_complete,
                 "normal_completion_ready": normal_completion_ready,
                 "normal_completion_reason": normal_completion_reason,
+                "correction_allowed": bool(
+                    assignment and fuel_work_state and not administratively_complete
+                ),
+                "reopen_off_available": bool(
+                    assignment
+                    and fuel_work_state
+                    and fuel_work_state.off_at_utc
+                    and not administratively_complete
+                ),
                 "destination": mission.destination or "-",
                 "arrival_eta": _arrival_eta_display(arrival),
                 "arrival_status": _arrival_status_display(arrival),

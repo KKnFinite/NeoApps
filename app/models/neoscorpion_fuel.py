@@ -429,6 +429,51 @@ class NeoScorpionFuelingEvent(db.Model):
         return normalized
 
 
+class NeoScorpionFuelAuditEntry(db.Model):
+    __tablename__ = "neoscorpion_fuel_audit_entries"
+    __table_args__ = (
+        db.CheckConstraint(
+            "action IN ('reopen_off', 'correct_actual')",
+            name="ck_neoscorpion_fuel_audit_entry_action",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    sort_date_operation_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sort_date_operations.id"),
+        nullable=False,
+        index=True,
+    )
+    fuel_assignment_id = db.Column(
+        db.Integer,
+        db.ForeignKey("neoscorpion_fuel_assignments.id"),
+        nullable=False,
+        index=True,
+    )
+    fuel_work_state_id = db.Column(
+        db.Integer,
+        db.ForeignKey("neoscorpion_fuel_work_states.id"),
+        nullable=True,
+    )
+    action = db.Column(db.String(32), nullable=False)
+    field_name = db.Column(db.String(80), nullable=True)
+    old_value = db.Column(db.Text, nullable=True)
+    new_value = db.Column(db.Text, nullable=True)
+    reason = db.Column(db.Text, nullable=False)
+    changed_by_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False,
+    )
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    sort_date_operation = db.relationship("SortDateOperation")
+    fuel_assignment = db.relationship("NeoScorpionFuelAssignment")
+    fuel_work_state = db.relationship("NeoScorpionFuelWorkState")
+    changed_by_user = db.relationship("User")
+
+
 class NeoScorpionSettings(db.Model):
     __tablename__ = "neoscorpion_settings"
     __table_args__ = (

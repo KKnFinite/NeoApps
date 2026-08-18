@@ -82,7 +82,7 @@
                         <dd>{{ row.off_time }}</dd>
                     </div>
                 </dl>
-                {% if can_edit and row.assignment %}
+                {% if can_edit and row.assignment and not row.is_off %}
                 <form method="post" class="neoscorpion-fueler-form">
                     <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
                     {% if row.tank_rows %}
@@ -144,6 +144,9 @@
                 <dl class="neoscorpion-fueler-readout">
                     <div><dt>T/F</dt><dd>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</dd></div>
                 </dl>
+                {% if can_edit and row.is_off %}
+                <p class="neoscorpion-calculation-warning">Fuel work is OFF. A dispatcher must REOPEN OFF before editing.</p>
+                {% endif %}
                 {% endif %}
                 {% if can_edit and row.assignment %}
                     {% if row.off_ready %}
