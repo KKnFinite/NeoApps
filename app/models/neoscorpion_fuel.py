@@ -214,6 +214,13 @@ class NeoScorpionFuelWorkState(db.Model):
     )
     tail_number = db.Column(db.String(32), nullable=False)
     on_at_utc = db.Column(db.DateTime, nullable=True)
+    apu_running = db.Column(db.Boolean, nullable=True)
+    apu_confirmed_at_utc = db.Column(db.DateTime, nullable=True)
+    apu_allowance_lbs = db.Column(db.Integer, nullable=True)
+    applied_apu_rate_thousand_lbs_per_hour = db.Column(
+        db.Numeric(8, 4),
+        nullable=True,
+    )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
@@ -337,6 +344,52 @@ class NeoScorpionSettings(db.Model):
     fob_difference_threshold_lbs = db.Column(db.Integer, nullable=True)
     tf_vs_estimated_threshold_lbs = db.Column(db.Integer, nullable=True)
     updated_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    gateway = db.relationship("Gateway")
+    updated_by = db.relationship("User")
+
+
+class NeoScorpionAircraftFuelSetting(db.Model):
+    __tablename__ = "neoscorpion_aircraft_fuel_settings"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "gateway_id",
+            "aircraft_type",
+            name="uq_neoscorpion_aircraft_fuel_setting_gateway_type",
+        ),
+        db.CheckConstraint(
+            "aircraft_type IN ('A300', 'B757', 'B767ER', 'B747-400', 'B747-8')",
+            name="ck_neoscorpion_aircraft_fuel_setting_type",
+        ),
+        db.CheckConstraint(
+            "apu_rate_thousand_lbs_per_hour >= 0",
+            name="ck_neoscorpion_aircraft_fuel_setting_apu_rate_nonnegative",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    gateway_id = db.Column(
+        db.Integer,
+        db.ForeignKey("gateways.id"),
+        nullable=False,
+    )
+    aircraft_type = db.Column(db.String(24), nullable=False)
+    apu_rate_thousand_lbs_per_hour = db.Column(
+        db.Numeric(8, 4),
+        nullable=False,
+    )
+    updated_by_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=True,
+    )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

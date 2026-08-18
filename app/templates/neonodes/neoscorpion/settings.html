@@ -18,6 +18,7 @@
             <strong>{{ gateway.code }}</strong>
         </div>
         <form class="neoscorpion-settings-form" method="post">
+            <input type="hidden" name="action" value="save_settings">
             <label>Fuel Density, lb/gal
                 <input name="fuel_density_lbs_per_gallon" value="{{ settings.fuel_density_lbs_per_gallon if settings.fuel_density_lbs_per_gallon is not none else '' }}" inputmode="decimal" {% if not can_edit %}readonly{% endif %}>
             </label>
@@ -30,6 +31,31 @@
             <p class="neoscorpion-helper">Detailed aircraft-specific fuel calculations are not configured yet.</p>
             {% if can_edit %}
             <button class="action-button neoscorpion-save-button" type="submit">Save Settings</button>
+            {% endif %}
+        </form>
+    </section>
+
+    <section class="neoscorpion-panel">
+        <div class="neoscorpion-panel-head">
+            <span>Aircraft APU Rates</span>
+            <strong>THOUSAND LB / HR</strong>
+        </div>
+        <form class="neoscorpion-settings-form" method="post">
+            <input type="hidden" name="action" value="save_apu_rates">
+            {% for item in apu_rate_settings %}
+            <label>{{ item.aircraft_type }}
+                <input
+                    name="{{ item.field_name }}"
+                    value="{{ item.rate }}"
+                    inputmode="decimal"
+                    min="0"
+                    step="0.01"
+                    {% if not can_edit_apu_rates %}readonly{% endif %}
+                >
+            </label>
+            {% endfor %}
+            {% if can_edit_apu_rates %}
+            <button class="action-button neoscorpion-save-button" type="submit">Save APU Rates</button>
             {% endif %}
         </form>
     </section>

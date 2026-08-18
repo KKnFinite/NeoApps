@@ -153,6 +153,12 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "sort_date_operation_id": "INTEGER",
         "requested_by_user_id": "INTEGER",
     },
+    "neoscorpion_fuel_work_states": {
+        "apu_running": "BOOLEAN",
+        "apu_confirmed_at_utc": "DATETIME",
+        "apu_allowance_lbs": "INTEGER",
+        "applied_apu_rate_thousand_lbs_per_hour": "NUMERIC(8, 4)",
+    },
 }
 
 POSTGRES_OPTIONAL_COLUMNS = {
@@ -277,6 +283,12 @@ POSTGRES_OPTIONAL_COLUMNS = {
     "neosektor_uld_on_the_way_events": {
         "sort_date_operation_id": "INTEGER",
         "requested_by_user_id": "INTEGER",
+    },
+    "neoscorpion_fuel_work_states": {
+        "apu_running": "BOOLEAN",
+        "apu_confirmed_at_utc": "TIMESTAMP",
+        "apu_allowance_lbs": "INTEGER",
+        "applied_apu_rate_thousand_lbs_per_hour": "NUMERIC(8, 4)",
     },
 }
 
@@ -1074,6 +1086,7 @@ def _create_missing_application_tables(existing_table_names):
         MotherBrainParkingRule,
         MotherBrainParkingSettings,
         NeoErmacDoorSupervision,
+        NeoScorpionAircraftFuelSetting,
         NeoScorpionFuelAssignment,
         NeoScorpionFuelTankState,
         NeoScorpionFuelTruck,
@@ -1120,6 +1133,7 @@ def _create_missing_application_tables(existing_table_names):
         NeoScorpionFuelAssignment,
         NeoScorpionFuelWorkState,
         NeoScorpionFuelTankState,
+        NeoScorpionAircraftFuelSetting,
         NeoScorpionSettings,
         NeoScorpionSortAssetState,
         NeoScorpionSortFueler,

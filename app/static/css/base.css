@@ -23935,6 +23935,18 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     overflow-wrap: anywhere;
 }
 
+.neoscorpion-fuel-totals .neoscorpion-fuel-total-primary {
+    border-color: rgba(var(--node-scorpion-primary-rgb), 0.58);
+    background: rgba(var(--node-scorpion-primary-rgb), 0.11);
+}
+
+.neoscorpion-copy-fuel-button {
+    width: 100%;
+    margin-top: 7px;
+    padding: 7px 8px;
+    font-size: 0.68rem;
+}
+
 .neoscorpion-fuel-tank-grid,
 .neoscorpion-fuel-tank-unconfigured {
     grid-column: 1 / -1;

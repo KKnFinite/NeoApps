@@ -15,6 +15,7 @@ from app.services.neoscorpion import (
     fueler_context,
     history_context,
     save_dispatch_row,
+    save_aircraft_fuel_settings,
     save_fueler_entry,
     save_settings,
     save_truck,
@@ -45,6 +46,7 @@ TRUCK_MANAGER_VIEW_PERMISSION = "neoscorpion.truck_manager.view"
 TRUCK_MANAGER_EDIT_PERMISSION = "neoscorpion.truck_manager.edit"
 SETTINGS_VIEW_PERMISSION = "neoscorpion.settings.view"
 SETTINGS_EDIT_PERMISSION = "neoscorpion.settings.edit"
+APU_RATES_EDIT_PERMISSION = "neoscorpion.apu_rates.edit"
 HISTORY_VIEW_PERMISSION = "neoscorpion.history.view"
 
 
@@ -239,7 +241,36 @@ def truck_manager():
 def settings():
     gateway = get_current_gateway()
     access = permission_access(SETTINGS_VIEW_PERMISSION, SETTINGS_EDIT_PERMISSION)
+    can_edit_apu_rates = user_can(APU_RATES_EDIT_PERMISSION)
     if request.method == "POST":
+        action = (request.form.get("action") or "save_settings").strip()
+        if action == "save_apu_rates":
+            if not access["can_view"] or not can_edit_apu_rates:
+                db.session.rollback()
+                flash("Access denied.", "error")
+                return _settings_response(gateway, access, status_code=403)
+            try:
+                result = save_aircraft_fuel_settings(
+                    gateway,
+                    current_user,
+                    request.form,
+                )
+            except (IntegrityError, ValueError) as exc:
+                db.session.rollback()
+                message = (
+                    str(exc)
+                    if isinstance(exc, ValueError)
+                    else "APU rates changed. Reload Settings and try again."
+                )
+                flash(message, "error")
+                return _settings_response(gateway, access, status_code=400)
+            if result.changed:
+                db.session.commit()
+                flash("AIRCRAFT APU RATES SAVED.", "success")
+            else:
+                flash("NO AIRCRAFT APU RATE CHANGES.", "info")
+            return redirect(url_for("neoscorpion.settings"))
+
         if not access["can_edit"]:
             db.session.rollback()
             flash("Access denied.", "error")
@@ -325,6 +356,7 @@ def _settings_response(gateway, access, status_code=200):
         gateway=gateway,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
+        can_edit_apu_rates=user_can(APU_RATES_EDIT_PERMISSION),
         **settings_context(gateway),
     )
     return response, status_code

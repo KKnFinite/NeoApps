@@ -377,6 +377,11 @@ DEFAULT_PERMISSION_RULES = (
         "Save NeoScorpion fuel density and fuel threshold settings.",
     ),
     (
+        "neoscorpion.apu_rates.edit",
+        "simulator",
+        "Edit NeoScorpion aircraft APU allowance rates.",
+    ),
+    (
         "neoscorpion.history.view",
         "operator",
         "View NeoScorpion completed fuel history.",
@@ -585,6 +590,9 @@ LEGACY_PERMISSION_DESCRIPTIONS = {
     },
     "neoscorpion.settings.edit": {
         "Edit NeoScorpion fuel settings.",
+    },
+    "neoscorpion.apu_rates.edit": {
+        "Edit NeoScorpion aircraft APU allowance rates.",
     },
     "neostaffing.hierarchy.edit": {
         "Edit NeoStaffing hierarchy units.",

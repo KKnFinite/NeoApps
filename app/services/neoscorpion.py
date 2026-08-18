@@ -1,12 +1,13 @@
 from dataclasses import dataclass
-from datetime import datetime
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_UP
 
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
 from app.models import (
+    NeoScorpionAircraftFuelSetting,
     NeoScorpionFuelAssignment,
     NeoScorpionFuelTankState,
     NeoScorpionSortAssetState,
@@ -33,6 +34,7 @@ from app.services.time_display import format_local_hhmm
 
 
 DEFAULT_FUEL_DENSITY_LBS_PER_GALLON = 6.7
+DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR = Decimal("0.30")
 CALCULATION_NOT_CONFIGURED_MESSAGE = "Fuel calculation not configured for this aircraft type yet."
 
 NEOSCORPION_TANK_LAYOUTS = {
@@ -74,6 +76,14 @@ NEOSCORPION_TANK_LAYOUTS = {
     ),
 }
 
+NEOSCORPION_APU_AIRCRAFT_TYPES = (
+    "A300",
+    "B757",
+    "B767ER",
+    "B747-400",
+    "B747-8",
+)
+
 _NEOSCORPION_DETAILED_TYPE_BY_FIRST_DIGIT = {
     "1": "A300",
     "4": "B757",
@@ -101,6 +111,32 @@ def tank_layout_for_tail(tail_number):
         detailed_aircraft_type_for_tail(tail_number),
         (),
     )
+
+
+def calculate_apu_allowance_lbs(
+    planned_departure_utc,
+    window_minutes,
+    confirmed_at_utc,
+    rate_thousand_lbs_per_hour,
+):
+    if planned_departure_utc is None:
+        raise ValueError("Planned departure is required to confirm APU Running as Yes.")
+    rate = Decimal(str(rate_thousand_lbs_per_hour))
+    if not rate.is_finite() or rate < 0:
+        raise ValueError("APU rate cannot be negative.")
+    effective_departure = planned_departure_utc + timedelta(
+        minutes=int(window_minutes or 0)
+    )
+    remaining_seconds = max(
+        Decimal("0"),
+        Decimal(str((effective_departure - confirmed_at_utc).total_seconds())),
+    )
+    raw_thousand_lbs = remaining_seconds * rate / Decimal("3600")
+    rounded_thousand_lbs = raw_thousand_lbs.quantize(
+        Decimal("0.1"),
+        rounding=ROUND_CEILING,
+    )
+    return int(rounded_thousand_lbs * Decimal("1000"))
 
 
 def display_thousands_to_lbs(value):
@@ -335,7 +371,38 @@ def truck_manager_context(gateway):
 
 
 def settings_context(gateway):
-    return {"settings": ensure_neoscorpion_settings(gateway)}
+    settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
+    if settings is None:
+        settings = {
+            "fuel_density_lbs_per_gallon": DEFAULT_FUEL_DENSITY_LBS_PER_GALLON,
+            "fob_difference_threshold_lbs": None,
+            "tf_vs_estimated_threshold_lbs": None,
+        }
+    overrides = {
+        row.aircraft_type: row
+        for row in NeoScorpionAircraftFuelSetting.query.filter(
+            NeoScorpionAircraftFuelSetting.gateway_id == gateway.id,
+            NeoScorpionAircraftFuelSetting.aircraft_type.in_(
+                NEOSCORPION_APU_AIRCRAFT_TYPES
+            ),
+        ).all()
+    }
+    return {
+        "settings": settings,
+        "apu_rate_settings": [
+            {
+                "aircraft_type": aircraft_type,
+                "field_name": _apu_rate_field_name(aircraft_type),
+                "rate": (
+                    overrides[aircraft_type].apu_rate_thousand_lbs_per_hour
+                    if aircraft_type in overrides
+                    else DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR
+                ),
+                "is_override": aircraft_type in overrides,
+            }
+            for aircraft_type in NEOSCORPION_APU_AIRCRAFT_TYPES
+        ],
+    }
 
 
 def history_context(gateway):
@@ -372,6 +439,11 @@ class FuelerSaveResult:
     revision: int
     tail_fuel_state: NeoScorpionTailFuelState | None
     fuel_work_state: NeoScorpionFuelWorkState | None
+
+
+@dataclass(frozen=True)
+class AircraftFuelSettingsSaveResult:
+    changed: bool
 
 
 def save_dispatch_row(gateway, form):
@@ -497,10 +569,11 @@ def save_dispatch_row(gateway, form):
     )
 
 
-def save_fueler_entry(gateway, user, form):
+def save_fueler_entry(gateway, user, form, *, now_utc=None):
     operation = current_sort_operation(gateway)
     if not operation:
         raise ValueError("No current sort operation is available for NeoScorpion fueler entry.")
+    now_utc = now_utc or datetime.utcnow()
 
     operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
     assignment_id = _int_or_none(form.get("assignment_id"))
@@ -592,7 +665,54 @@ def save_fueler_entry(gateway, user, form):
         .with_for_update()
         .first()
     )
-    target_apu_lbs = _int_or_none(form.get("apu_lbs"))
+    current_apu_running = fuel_work_state.apu_running if fuel_work_state else None
+    target_apu_running = current_apu_running
+    apu_changed = False
+    if "apu_running" in form:
+        submitted_apu_running = (form.get("apu_running") or "").strip()
+        apu_running_choices = {
+            "not_confirmed": None,
+            "no": False,
+            "yes": True,
+        }
+        if submitted_apu_running not in apu_running_choices:
+            raise ValueError("Select a valid APU Running status.")
+        target_apu_running = apu_running_choices[submitted_apu_running]
+        apu_changed = target_apu_running is not current_apu_running
+
+    target_apu_confirmed_at_utc = (
+        fuel_work_state.apu_confirmed_at_utc if fuel_work_state else None
+    )
+    target_apu_allowance_lbs = (
+        fuel_work_state.apu_allowance_lbs if fuel_work_state else None
+    )
+    target_apu_rate = (
+        fuel_work_state.applied_apu_rate_thousand_lbs_per_hour
+        if fuel_work_state
+        else None
+    )
+    if apu_changed:
+        if target_apu_running is None:
+            target_apu_confirmed_at_utc = None
+            target_apu_allowance_lbs = None
+            target_apu_rate = None
+        elif target_apu_running is False:
+            target_apu_confirmed_at_utc = now_utc
+            target_apu_allowance_lbs = 0
+            target_apu_rate = None
+        else:
+            if aircraft_type not in NEOSCORPION_APU_AIRCRAFT_TYPES:
+                raise ValueError("APU allowance is not configured for this aircraft.")
+            target_apu_rate = _effective_apu_rate(gateway.id, aircraft_type)
+            target_apu_confirmed_at_utc = now_utc
+            target_apu_allowance_lbs = calculate_apu_allowance_lbs(
+                mission.planned_datetime_utc,
+                operation.window_minutes,
+                now_utc,
+                target_apu_rate,
+            )
+
+    target_apu_lbs = target_apu_allowance_lbs
     target_notes = (form.get("notes") or "").strip()
     target_status = _clean_choice(
         form.get("tail_fuel_status"),
@@ -636,7 +756,7 @@ def save_fueler_entry(gateway, user, form):
         )
     )
     transfer_changed = assignment.transfer_fuel_gallons != target_transfer_gallons
-    changed = tank_changed or tail_changed or transfer_changed
+    changed = tank_changed or apu_changed or tail_changed or transfer_changed
     revision = int(asset_state.revision if asset_state else 0)
     if not changed:
         return FuelerSaveResult(
@@ -646,7 +766,7 @@ def save_fueler_entry(gateway, user, form):
             fuel_work_state=fuel_work_state,
         )
 
-    if tank_changed:
+    if tank_changed or apu_changed:
         if fuel_work_state is None:
             fuel_work_state = NeoScorpionFuelWorkState(
                 fuel_assignment_id=assignment.id,
@@ -663,11 +783,16 @@ def save_fueler_entry(gateway, user, form):
                 tank_states_by_code[tank_code] = tank_state
             tank_state.remaining_lbs = remaining_lbs
             tank_state.actual_lbs = actual_lbs
+        if apu_changed:
+            fuel_work_state.apu_running = target_apu_running
+            fuel_work_state.apu_confirmed_at_utc = target_apu_confirmed_at_utc
+            fuel_work_state.apu_allowance_lbs = target_apu_allowance_lbs
+            fuel_work_state.applied_apu_rate_thousand_lbs_per_hour = target_apu_rate
         if (
             fuel_work_state.on_at_utc is None
             and submitted_nonnull_remaining
         ):
-            fuel_work_state.on_at_utc = datetime.utcnow()
+            fuel_work_state.on_at_utc = now_utc
 
     if tail_changed or tank_changed:
         if tail_fuel_state is None:
@@ -756,6 +881,57 @@ def save_settings(gateway, form):
         settings.updated_by_user_id = current_user.id
     db.session.flush()
     return settings
+
+
+def save_aircraft_fuel_settings(gateway, user, form):
+    existing = {
+        row.aircraft_type: row
+        for row in NeoScorpionAircraftFuelSetting.query.filter(
+            NeoScorpionAircraftFuelSetting.gateway_id == gateway.id,
+            NeoScorpionAircraftFuelSetting.aircraft_type.in_(
+                NEOSCORPION_APU_AIRCRAFT_TYPES
+            ),
+        )
+        .with_for_update()
+        .all()
+    }
+    changed = False
+    for aircraft_type in NEOSCORPION_APU_AIRCRAFT_TYPES:
+        field_name = _apu_rate_field_name(aircraft_type)
+        if field_name not in form:
+            continue
+        submitted = (form.get(field_name) or "").strip()
+        target_rate = (
+            DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR
+            if not submitted
+            else _parse_apu_rate(submitted)
+        )
+        setting = existing.get(aircraft_type)
+        if target_rate == DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR:
+            if setting is not None:
+                db.session.delete(setting)
+                changed = True
+            continue
+        row_changed = False
+        if setting is None:
+            setting = NeoScorpionAircraftFuelSetting(
+                gateway_id=gateway.id,
+                aircraft_type=aircraft_type,
+                apu_rate_thousand_lbs_per_hour=target_rate,
+            )
+            db.session.add(setting)
+            existing[aircraft_type] = setting
+            row_changed = True
+        elif Decimal(setting.apu_rate_thousand_lbs_per_hour) != target_rate:
+            setting.apu_rate_thousand_lbs_per_hour = target_rate
+            row_changed = True
+        if row_changed:
+            setting.updated_by_user_id = user.id
+            changed = True
+
+    if changed:
+        db.session.flush()
+    return AircraftFuelSettingsSaveResult(changed=changed)
 
 
 def ensure_neoscorpion_settings(gateway):
@@ -876,6 +1052,28 @@ def _fuel_rows(
         actual_complete = bool(tank_rows) and all(
             row["actual_lbs"] is not None for row in tank_rows
         )
+        actual_total_lbs = (
+            sum(row["actual_lbs"] for row in tank_rows)
+            if actual_complete
+            else None
+        )
+        apu_running = fuel_work_state.apu_running if fuel_work_state else None
+        apu_allowance_lbs = (
+            fuel_work_state.apu_allowance_lbs
+            if fuel_work_state and apu_running is not None
+            else None
+        )
+        fueling_target_lbs = (
+            mission.planned_fuel_load + apu_allowance_lbs
+            if mission.planned_fuel_load is not None
+            and apu_allowance_lbs is not None
+            else None
+        )
+        neo_fuel_lbs = (
+            actual_total_lbs - apu_allowance_lbs
+            if actual_total_lbs is not None and apu_allowance_lbs is not None
+            else None
+        )
         rows.append(
             {
                 "mission": mission,
@@ -899,12 +1097,39 @@ def _fuel_rows(
                     else "INCOMPLETE"
                 ),
                 "actual_total_display": (
-                    format_display_thousands(
-                        sum(row["actual_lbs"] for row in tank_rows)
-                    )
+                    format_display_thousands(actual_total_lbs)
                     if actual_complete
                     else "INCOMPLETE"
                 ),
+                "required_display": (
+                    format_display_thousands(mission.planned_fuel_load)
+                    if mission.planned_fuel_load is not None
+                    else "INCOMPLETE"
+                ),
+                "apu_running": apu_running,
+                "apu_running_label": (
+                    "YES"
+                    if apu_running is True
+                    else "NO"
+                    if apu_running is False
+                    else "NOT CONFIRMED"
+                ),
+                "apu_allowance_display": (
+                    format_display_thousands(apu_allowance_lbs)
+                    if apu_allowance_lbs is not None
+                    else "INCOMPLETE"
+                ),
+                "fueling_target_display": (
+                    format_display_thousands(fueling_target_lbs)
+                    if fueling_target_lbs is not None
+                    else "INCOMPLETE"
+                ),
+                "neo_fuel_display": (
+                    format_display_thousands(neo_fuel_lbs)
+                    if neo_fuel_lbs is not None
+                    else "INCOMPLETE"
+                ),
+                "neo_fuel_available": neo_fuel_lbs is not None,
                 "destination": mission.destination or "-",
                 "arrival_eta": _arrival_eta_display(arrival),
                 "arrival_status": _arrival_status_display(arrival),
@@ -1173,6 +1398,32 @@ def _submitted_tank_codes(form):
         elif field_name.startswith("actual_") and field_name != "actual_fuel":
             tank_codes.add(field_name.removeprefix("actual_"))
     return tank_codes
+
+
+def _effective_apu_rate(gateway_id, aircraft_type):
+    setting = NeoScorpionAircraftFuelSetting.query.filter_by(
+        gateway_id=gateway_id,
+        aircraft_type=aircraft_type,
+    ).first()
+    if setting is None:
+        return DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR
+    return Decimal(setting.apu_rate_thousand_lbs_per_hour)
+
+
+def _apu_rate_field_name(aircraft_type):
+    return f"apu_rate_{aircraft_type.lower().replace('-', '_')}"
+
+
+def _parse_apu_rate(value):
+    try:
+        rate = Decimal(str(value).strip())
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError("APU rate must be numeric.") from exc
+    if not rate.is_finite():
+        raise ValueError("APU rate must be numeric.")
+    if rate < 0:
+        raise ValueError("APU rate cannot be negative.")
+    return rate.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
 
 
 def _decimal_or_none(value):
