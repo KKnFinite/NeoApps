@@ -2,6 +2,8 @@ import unittest
 from datetime import date, datetime
 from decimal import Decimal
 
+from sqlalchemy import event
+
 from app import create_app
 from app.extensions import db
 from app.models import (
@@ -23,6 +25,7 @@ from app.services.neoscorpion import (
     CALCULATION_NOT_CONFIGURED_MESSAGE,
     display_thousands_to_lbs,
     gallons_to_lbs,
+    history_context,
     lbs_to_display_thousands,
     lbs_to_gallons,
 )
@@ -368,6 +371,70 @@ class NeoScorpionRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Completed fuel history is ready", response.data)
+
+    def test_history_context_query_count_is_bounded_for_many_assignments(self):
+        operation, first_mission = self._add_current_departure(
+            flight_number="UPS700",
+            tail_number="N700UP",
+        )
+        first_mission.fuel_status = "complete"
+        assignments = [
+            NeoScorpionFuelAssignment(
+                sort_date_operation_id=operation.id,
+                sort_date_mission_id=first_mission.id,
+                review_status="complete",
+            )
+        ]
+        for index in range(1, 30):
+            mission = SortDateMission(
+                sort_date=operation.sort_date,
+                gateway_code=operation.gateway_code,
+                sort_name=operation.sort_name,
+                sort_date_operation_id=operation.id,
+                mission_type="departure",
+                mission_source="manual",
+                flight_number=f"UPS{700 + index}",
+                origin=operation.gateway_code,
+                destination="SDF",
+                timezone="America/Chicago",
+                planned_datetime_local=datetime(2026, 6, 25, 23, 30),
+                planned_datetime_utc=datetime(2026, 6, 26, 4, 30),
+                planned_source="manual",
+                assigned_tail_number=f"N7{index:02d}UP",
+                tail_source="manual",
+                fuel_status="complete",
+                departure_status="loading",
+            )
+            db.session.add(mission)
+            db.session.flush()
+            assignments.append(
+                NeoScorpionFuelAssignment(
+                    sort_date_operation_id=operation.id,
+                    sort_date_mission_id=mission.id,
+                    review_status="complete",
+                )
+            )
+        db.session.add_all(assignments)
+        db.session.commit()
+
+        gateway_id = self.gateway.id
+        gateway_model = type(self.gateway)
+        db.session.remove()
+        gateway = db.session.get(gateway_model, gateway_id)
+        statements = []
+
+        def capture(_connection, _cursor, statement, _params, _context, _many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        event.listen(db.engine, "before_cursor_execute", capture)
+        try:
+            context = history_context(gateway)
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture)
+
+        self.assertEqual(len(context["completed_rows"]), 30)
+        self.assertLessEqual(len(statements), 10)
 
     def _login_approved_user(self, role="watcher"):
         user = User(

@@ -494,6 +494,11 @@ def history_context(gateway):
     if operation:
         assignments = (
             NeoScorpionFuelAssignment.query.join(SortDateMission)
+            .options(
+                joinedload(NeoScorpionFuelAssignment.sort_date_mission),
+                joinedload(NeoScorpionFuelAssignment.assigned_fueler),
+                joinedload(NeoScorpionFuelAssignment.assigned_truck),
+            )
             .filter(
                 NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
                 db.or_(
@@ -504,7 +509,17 @@ def history_context(gateway):
             .order_by(SortDateMission.planned_datetime_utc, SortDateMission.flight_number)
             .all()
         )
-        completed = _fuel_rows(operation, [assignment.sort_date_mission for assignment in assignments])
+        assignments_by_mission = {
+            assignment.sort_date_mission_id: assignment for assignment in assignments
+        }
+        completed = _fuel_rows(
+            operation,
+            [assignment.sort_date_mission for assignment in assignments],
+            assignments_by_mission=assignments_by_mission,
+            fuel_work_states_by_assignment_tail=(
+                _fuel_work_states_by_assignment_tail(assignments)
+            ),
+        )
     return {"operation": operation, "completed_rows": completed}
 
 
