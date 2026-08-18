@@ -136,7 +136,17 @@
         return Math.ceil((rawAllowance * 10) - 1e-9) / 10;
     };
 
-    const api = {basePlan, calculateApuAllowance, planFuelByTank};
+    const remainingReadingsComplete = (tankCodes, remaining) => (
+        tankCodes.length > 0
+        && tankCodes.every((tankCode) => Number.isFinite(remaining[tankCode]))
+    );
+
+    const api = {
+        basePlan,
+        calculateApuAllowance,
+        planFuelByTank,
+        remainingReadingsComplete,
+    };
     if (typeof module !== "undefined" && module.exports) {
         module.exports = api;
     }
@@ -159,6 +169,7 @@
         const apuRunningInput = form.querySelector("[data-apu-running]");
         const apuSourceInput = form.querySelector("[data-apu-source]");
         const apuSourceWrap = form.querySelector("[data-apu-source-wrap]");
+        const plannedEntryCue = form.querySelector("[data-planned-entry-cue]");
         if (!card || !apuRunningInput || !apuSourceInput) return;
 
         const initialApuRunning = form.dataset.initialApuRunning;
@@ -201,22 +212,34 @@
 
             const remaining = {};
             const actual = {};
+            const tankCodes = [];
             form.querySelectorAll("[data-fuel-reading]").forEach((input) => {
                 const value = numberOrNull(input.value);
                 const target = input.dataset.fuelReading === "remaining"
                     ? remaining
                     : actual;
-                target[input.dataset.tankCode] = value === null ? 0 : value;
+                target[input.dataset.tankCode] = (
+                    input.dataset.fuelReading === "actual" && value === null
+                        ? 0
+                        : value
+                );
+                if (input.dataset.fuelReading === "remaining") {
+                    tankCodes.push(input.dataset.tankCode);
+                }
             });
-            const planned = planFuelByTank({
-                aircraftType: form.dataset.aircraftType,
-                required,
-                remaining,
-                actual,
-                apuRunning,
-                apuAllowance: allowance,
-                apuSource: apuSourceInput.value,
-            });
+            const remainingComplete = remainingReadingsComplete(tankCodes, remaining);
+            const planned = remainingComplete
+                ? planFuelByTank({
+                    aircraftType: form.dataset.aircraftType,
+                    required,
+                    remaining,
+                    actual,
+                    apuRunning,
+                    apuAllowance: allowance,
+                    apuSource: apuSourceInput.value,
+                })
+                : null;
+            if (plannedEntryCue) plannedEntryCue.hidden = remainingComplete;
 
             card.querySelector("[data-apu-allowance-output]").textContent = displayFuel(
                 allowance
@@ -234,7 +257,7 @@
                 const value = planned?.[cell.dataset.plannedTank];
                 cell.textContent = Number.isFinite(value)
                     ? value.toFixed(1)
-                    : "INCOMPLETE";
+                    : "-";
             });
         };
 

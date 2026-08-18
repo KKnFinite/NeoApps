@@ -40,6 +40,9 @@ NEOSCORPION_MODEL_TABLES = (
 )
 
 NEOSCORPION_ADDITIVE_COLUMNS = {
+    "neoscorpion_settings": {
+        "planning_inbound_fuel_fallback_lbs": "INTEGER",
+    },
     "neoscorpion_fuel_assignments": {
         "fuel_on_board_at_utc": "TIMESTAMP",
         "fuel_on_board_by_user_id": "INTEGER",

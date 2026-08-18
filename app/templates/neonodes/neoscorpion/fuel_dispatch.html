@@ -68,6 +68,7 @@
                         <th>Fueler</th>
                         <th>Truck</th>
                         <th>Truck Fuel</th>
+                        <th>Projected Truck</th>
                         <th>T/F</th>
                         <th>Status</th>
                         <th>Load Planning</th>
@@ -112,7 +113,10 @@
                             </td>
                             <td>{{ row.on_time }}</td>
                             <td>{{ row.off_time }}</td>
-                            <td><span class="neoscorpion-status-pill">{{ row.estimated_fuel_status }}</span></td>
+                            <td>
+                                <strong>{{ row.estimated_fuel_display }}</strong>
+                                {% if row.estimated_fuel_source_label != 'INCOMPLETE' %}<small>{{ row.estimated_fuel_source_label }}</small>{% endif %}
+                            </td>
                             <td>
                                 {% if row.resource_swap_required %}
                                 <input type="hidden" name="assigned_fueler_user_id" value="{{ row.assignment.assigned_fueler_user_id if row.assignment and row.assignment.assigned_fueler_user_id else '' }}">
@@ -146,6 +150,7 @@
                                 {% endif %}
                             </td>
                             <td>{{ row.truck_remaining_fuel if row.truck_remaining_fuel is not none else '-' }} gal</td>
+                            <td class="{% if row.projected_truck_short %}neoscorpion-calculation-warning{% endif %}">{{ row.projected_truck_display }}</td>
                             <td>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</td>
                             <td>
                                 {% if row.effective_hold %}
@@ -160,7 +165,15 @@
                                 </select>
                                 {% endif %}
                             </td>
-                            <td><input class="neoscorpion-load-input" name="load_planning_note" value="{{ row.load_planning_note }}" placeholder="{{ row.load_planning_placeholder }}" aria-label="Copy-ready load planning placeholder"></td>
+                            <td>
+                                {% if row.load_planning_ready %}
+                                <strong>{{ row.load_planning_output }}</strong>
+                                <button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-value="{{ row.load_planning_output }}">COPY LOAD PLANNING</button>
+                                {% else %}
+                                <span>{{ row.load_planning_placeholder }}</span>
+                                {% endif %}
+                                <input class="neoscorpion-load-input" name="load_planning_note" value="{{ row.load_planning_note }}" placeholder="Freeform note" aria-label="Load planning note">
+                            </td>
                             <td>
                                 {% if row.resume_available %}
                                 <button class="action-button" type="submit" formaction="{{ url_for('neoscorpion.fuel_dispatch_resume') }}" formmethod="post">RESUME</button>
@@ -256,13 +269,25 @@
                         </td>
                         <td>{{ row.on_time }}</td>
                         <td>{{ row.off_time }}</td>
-                        <td><span class="neoscorpion-status-pill">{{ row.estimated_fuel_status }}</span></td>
+                        <td>
+                            <strong>{{ row.estimated_fuel_display }}</strong>
+                            {% if row.estimated_fuel_source_label != 'INCOMPLETE' %}<small>{{ row.estimated_fuel_source_label }}</small>{% endif %}
+                        </td>
                         <td>{{ row.assigned_fueler.display_name if row.assigned_fueler else 'Unassigned' }}</td>
                         <td>{{ row.assigned_truck.truck_number if row.assigned_truck else 'Unassigned' }}</td>
                         <td>{{ row.truck_remaining_fuel if row.truck_remaining_fuel is not none else '-' }} gal</td>
+                        <td class="{% if row.projected_truck_short %}neoscorpion-calculation-warning{% endif %}">{{ row.projected_truck_display }}</td>
                         <td>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</td>
                         <td>{{ row.review_status|replace("_", " ")|title }}</td>
-                        <td>{{ row.load_planning_note or row.load_planning_placeholder }}</td>
+                        <td>
+                            {% if row.load_planning_ready %}
+                            <strong>{{ row.load_planning_output }}</strong>
+                            <button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-value="{{ row.load_planning_output }}">COPY LOAD PLANNING</button>
+                            {% else %}
+                            {{ row.load_planning_placeholder }}
+                            {% endif %}
+                            {% if row.load_planning_note %}<small>{{ row.load_planning_note }}</small>{% endif %}
+                        </td>
                         <td>-</td>
                         <td>{{ "COMPLETE" if row.fuel_on_board_complete else row.fuel_on_board_reason }}</td>
                         <td>{{ row.normal_completion_reason }}</td>

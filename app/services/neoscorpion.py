@@ -39,6 +39,11 @@ from app.services.neoscorpion_assets import (
     record_nightly_operational_change,
 )
 from app.services.neoscorpion_fuel_planning import plan_fuel_by_tank
+from app.services.neoscorpion_dispatch_planning import (
+    DEFAULT_PLANNING_INBOUND_FALLBACK_LBS,
+    estimate_fuel_demand_gallons,
+    project_truck_remaining,
+)
 from app.services.time_display import format_local_hhmm
 
 
@@ -314,6 +319,17 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
     fuelers = _fueler_users()
     trucks = _fuel_trucks(gateway)
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
+    fuel_density = (
+        settings.fuel_density_lbs_per_gallon
+        if settings is not None
+        else DEFAULT_FUEL_DENSITY_LBS_PER_GALLON
+    )
+    planning_inbound_fallback_lbs = (
+        settings.planning_inbound_fuel_fallback_lbs
+        if settings is not None
+        and settings.planning_inbound_fuel_fallback_lbs is not None
+        else DEFAULT_PLANNING_INBOUND_FALLBACK_LBS
+    )
     asset_context = nightly_asset_context(
         gateway,
         operation,
@@ -363,6 +379,8 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
             fuel_work_states_by_assignment_tail=fuel_work_states,
             nightly_truck_states_by_truck_id=nightly_truck_states_by_truck_id,
             fueling_event_work_state_ids=fueling_event_work_state_ids,
+            fuel_density_lbs_per_gallon=fuel_density,
+            planning_inbound_fallback_lbs=planning_inbound_fallback_lbs,
         ),
         "fuelers": fuelers,
         "trucks": trucks,
@@ -445,9 +463,19 @@ def settings_context(gateway):
     if settings is None:
         settings = {
             "fuel_density_lbs_per_gallon": DEFAULT_FUEL_DENSITY_LBS_PER_GALLON,
+            "planning_inbound_fuel_fallback_lbs": (
+                DEFAULT_PLANNING_INBOUND_FALLBACK_LBS
+            ),
             "fob_difference_threshold_lbs": None,
             "tf_vs_estimated_threshold_lbs": None,
         }
+    planning_inbound_fallback_lbs = (
+        settings["planning_inbound_fuel_fallback_lbs"]
+        if isinstance(settings, dict)
+        else settings.planning_inbound_fuel_fallback_lbs
+    )
+    if planning_inbound_fallback_lbs is None:
+        planning_inbound_fallback_lbs = DEFAULT_PLANNING_INBOUND_FALLBACK_LBS
     overrides = {
         row.aircraft_type: row
         for row in NeoScorpionAircraftFuelSetting.query.filter(
@@ -463,6 +491,9 @@ def settings_context(gateway):
     )
     return {
         "settings": settings,
+        "planning_inbound_fallback_display": format_display_thousands(
+            planning_inbound_fallback_lbs
+        ),
         "apu_rate_settings": [
             {
                 "aircraft_type": aircraft_type,
@@ -927,7 +958,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
         else None
     )
     target_center_lbs = (
-        final_tank_values["ctr"][0]
+        final_tank_values["ctr"][1]
         if aircraft_type == "A300" and "ctr" in final_tank_values
         else None
     )
@@ -1547,6 +1578,11 @@ def correct_fuel_actuals(gateway, user, form, *, now_utc=None):
         )
         db.session.add(tail_fuel_state)
     tail_fuel_state.actual_fuel_lbs = actual_total_lbs
+    if detailed_aircraft_type_for_tail(fuel_work_state.tail_number) == "A300":
+        center_tank_state = tank_states_by_code.get("ctr")
+        tail_fuel_state.center_fuel_lbs = (
+            center_tank_state.actual_lbs if center_tank_state is not None else None
+        )
 
     asset_state = record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
@@ -2335,6 +2371,9 @@ def save_settings(gateway, form):
         settings.fuel_density_lbs_per_gallon = float(
             _positive_decimal(density, "Fuel density must be greater than zero.")
         )
+    settings.planning_inbound_fuel_fallback_lbs = display_thousands_to_lbs(
+        form.get("planning_inbound_fuel_fallback")
+    )
     settings.fob_difference_threshold_lbs = _int_or_none(form.get("fob_difference_threshold_lbs"))
     settings.tf_vs_estimated_threshold_lbs = _int_or_none(
         form.get("tf_vs_estimated_threshold_lbs")
@@ -2544,7 +2583,7 @@ def classify_fuel_movement(assignment, fuel_work_state, *, tank_states=None):
 def _fuel_rows(
     operation,
     missions,
-    estimated_fuel_status="INOP",
+    estimated_fuel_status="INCOMPLETE",
     *,
     fuel_trucks=None,
     assignments_by_mission=None,
@@ -2552,6 +2591,8 @@ def _fuel_rows(
     nightly_truck_states_by_truck_id=None,
     fueling_event_work_state_ids=None,
     apu_rates_by_aircraft_type=None,
+    fuel_density_lbs_per_gallon=None,
+    planning_inbound_fallback_lbs=None,
 ):
     tail_states = _tail_states_by_tail(operation)
     tail_fuel_states = _tail_fuel_states_by_tail(operation)
@@ -2655,20 +2696,29 @@ def _fuel_rows(
             apu_running is not True
             or apu_source_tank_code in {code for code, _label in tank_layout}
         )
-        planned_by_tank = plan_fuel_by_tank(
-            detailed_aircraft_type,
-            mission.planned_fuel_load,
-            remaining_lbs_by_tank={
-                code: state.remaining_lbs
-                for code, state in tank_states_by_code.items()
-            },
-            actual_lbs_by_tank={
-                code: state.actual_lbs
-                for code, state in tank_states_by_code.items()
-            },
-            apu_running=apu_running,
-            apu_allowance_lbs=apu_allowance_lbs,
-            apu_source_tank_code=apu_source_tank_code,
+        remaining_readings_complete = bool(tank_layout) and all(
+            tank_states_by_code.get(code) is not None
+            and tank_states_by_code[code].remaining_lbs is not None
+            for code, _label in tank_layout
+        )
+        planned_by_tank = (
+            plan_fuel_by_tank(
+                detailed_aircraft_type,
+                mission.planned_fuel_load,
+                remaining_lbs_by_tank={
+                    code: state.remaining_lbs
+                    for code, state in tank_states_by_code.items()
+                },
+                actual_lbs_by_tank={
+                    code: state.actual_lbs
+                    for code, state in tank_states_by_code.items()
+                },
+                apu_running=apu_running,
+                apu_allowance_lbs=apu_allowance_lbs,
+                apu_source_tank_code=apu_source_tank_code,
+            )
+            if remaining_readings_complete
+            else None
         )
         tank_rows = []
         for tank_code, tank_label in tank_layout:
@@ -2691,7 +2741,7 @@ def _fuel_rows(
                     "planned_display": (
                         format_display_thousands(planned_lbs)
                         if planned_lbs is not None
-                        else "INCOMPLETE"
+                        else "-"
                     ),
                     "actual_display": format_display_thousands(
                         tank_state.actual_lbs if tank_state else None
@@ -2716,6 +2766,34 @@ def _fuel_rows(
             and apu_allowance_lbs is not None
             else None
         )
+        estimated_fuel = estimate_fuel_demand_gallons(
+            mission.planned_fuel_load,
+            tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None,
+            fuel_density_lbs_per_gallon,
+            fallback_inbound_lbs=planning_inbound_fallback_lbs,
+        )
+        planning_demand_gallons = (
+            assignment.transfer_fuel_gallons
+            if assignment is not None
+            and assignment.transfer_fuel_gallons is not None
+            else estimated_fuel.gallons
+        )
+        center_actual_lbs = (
+            tank_states_by_code["ctr"].actual_lbs
+            if detailed_aircraft_type == "A300"
+            and tank_states_by_code.get("ctr") is not None
+            else None
+        )
+        load_planning_output = None
+        if neo_fuel_lbs is not None and (
+            detailed_aircraft_type != "A300" or center_actual_lbs is not None
+        ):
+            load_planning_output = (
+                f"{mission.flight_number or '-'} {mission.destination or '-'} "
+                f"{tail_number or '-'} NEO > {format_display_thousands(neo_fuel_lbs)}"
+            )
+            if detailed_aircraft_type == "A300":
+                load_planning_output += f" CF > {int(center_actual_lbs)}"
         fuel_on_board_complete = bool(
             assignment and assignment.fuel_on_board_at_utc
         )
@@ -2873,6 +2951,7 @@ def _fuel_rows(
                 "detailed_aircraft_type": detailed_aircraft_type,
                 "fuel_work_state": fuel_work_state,
                 "tank_rows": tank_rows,
+                "planned_ready": remaining_readings_complete,
                 "on_time": (
                     format_local_hhmm(fuel_work_state.on_at_utc, mission.timezone)
                     if fuel_work_state and fuel_work_state.on_at_utc
@@ -3002,28 +3081,73 @@ def _fuel_rows(
                 "transfer_fuel_gallons": (
                     assignment.transfer_fuel_gallons if assignment else None
                 ),
-                "estimated_fuel_display": estimated_fuel_status,
-                "estimated_fuel_status": estimated_fuel_status,
+                "estimated_fuel_display": (
+                    f"{estimated_fuel.gallons:,} gal"
+                    if estimated_fuel.gallons is not None
+                    else estimated_fuel_status
+                ),
+                "estimated_fuel_status": (
+                    f"{estimated_fuel.gallons:,} gal"
+                    if estimated_fuel.gallons is not None
+                    else estimated_fuel_status
+                ),
+                "estimated_fuel_gallons": estimated_fuel.gallons,
+                "estimated_fuel_source": estimated_fuel.source,
+                "estimated_fuel_source_label": estimated_fuel.source_label,
+                "planning_demand_gallons": planning_demand_gallons,
                 "assigned_fueler": assignment.assigned_fueler if assignment else None,
                 "assigned_truck": truck,
                 "truck_remaining_fuel": (
                     nightly_truck_state.current_gallons
                     if nightly_truck_state is not None
-                    else truck.remaining_fuel_gallons
-                    if truck
-                    and truck.remaining_fuel_gallons is not None
                     else None
                 ),
+                "projected_truck_gallons": None,
+                "projected_truck_display": "-",
+                "projected_truck_short": False,
                 "review_status": (
                     assignment.review_status if assignment else (mission.fuel_status or "pending")
                 ),
                 "load_planning_note": (
                     assignment.load_planning_note if assignment and assignment.load_planning_note else ""
                 ),
-                "load_planning_placeholder": "Copy-ready load planning not configured yet.",
+                "load_planning_output": load_planning_output,
+                "load_planning_ready": load_planning_output is not None,
+                "load_planning_placeholder": "INCOMPLETE",
                 "tail_fuel_state": tail_fuel_state,
             }
         )
+    if nightly_truck_states_by_truck_id is not None:
+        projections = project_truck_remaining(
+            {
+                truck_id: truck_state.current_gallons
+                for truck_id, truck_state in nightly_truck_states_by_truck_id.items()
+            },
+            [
+                (
+                    row["mission"].id,
+                    row["assignment"].assigned_truck_id,
+                    row["planning_demand_gallons"],
+                )
+                for row in rows
+                if row["assignment"] is not None
+                and row["assignment"].assigned_truck_id is not None
+                and not row["administratively_complete"]
+            ],
+        )
+        for row in rows:
+            projection = projections.get(row["mission"].id)
+            if projection is None:
+                continue
+            row["projected_truck_gallons"] = projection.gallons
+            row["projected_truck_short"] = projection.short
+            row["projected_truck_display"] = (
+                f"SHORT ({projection.gallons:,} gal)"
+                if projection.short
+                else f"{projection.gallons:,} gal"
+                if projection.gallons is not None
+                else "INCOMPLETE"
+            )
     return rows
 
 

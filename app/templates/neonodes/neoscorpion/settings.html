@@ -22,6 +22,9 @@
             <label>Fuel Density, lb/gal
                 <input name="fuel_density_lbs_per_gallon" value="{{ settings.fuel_density_lbs_per_gallon if settings.fuel_density_lbs_per_gallon is not none else '' }}" inputmode="decimal" {% if not can_edit %}readonly{% endif %}>
             </label>
+            <label>Planning Inbound Fuel Fallback, K lbs
+                <input name="planning_inbound_fuel_fallback" value="{{ planning_inbound_fallback_display }}" inputmode="decimal" min="0" {% if not can_edit %}readonly{% endif %}>
+            </label>
             <label>FOB Difference Threshold, pounds
                 <input name="fob_difference_threshold_lbs" value="{{ settings.fob_difference_threshold_lbs if settings.fob_difference_threshold_lbs is not none else '' }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}>
             </label>

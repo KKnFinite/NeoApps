@@ -166,6 +166,9 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "ended_early_by_user_id": "INTEGER",
         "ended_early_reason": "TEXT",
     },
+    "neoscorpion_settings": {
+        "planning_inbound_fuel_fallback_lbs": "INTEGER",
+    },
     "neoscorpion_fuel_assignments": {
         "fuel_on_board_at_utc": "DATETIME",
         "fuel_on_board_by_user_id": "INTEGER",
@@ -314,6 +317,9 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "ended_early_at_utc": "TIMESTAMP",
         "ended_early_by_user_id": "INTEGER",
         "ended_early_reason": "TEXT",
+    },
+    "neoscorpion_settings": {
+        "planning_inbound_fuel_fallback_lbs": "INTEGER",
     },
     "neoscorpion_fuel_assignments": {
         "fuel_on_board_at_utc": "TIMESTAMP",

@@ -525,6 +525,7 @@ class NeoScorpionSettings(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     gateway_id = db.Column(db.Integer, db.ForeignKey("gateways.id"), nullable=True, index=True)
     fuel_density_lbs_per_gallon = db.Column(db.Float, nullable=True, default=6.7)
+    planning_inbound_fuel_fallback_lbs = db.Column(db.Integer, nullable=True)
     fob_difference_threshold_lbs = db.Column(db.Integer, nullable=True)
     tf_vs_estimated_threshold_lbs = db.Column(db.Integer, nullable=True)
     updated_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)

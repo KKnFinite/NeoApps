@@ -13,6 +13,7 @@ from app.models import (
     NeoScorpionFuelAssignment,
     NeoScorpionFuelTruck,
     NeoScorpionSettings,
+    NeoScorpionSortTruck,
     NeoScorpionTailFuelState,
     SortDateMission,
     SortDateOperation,
@@ -165,6 +166,15 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         db.session.add(truck)
         db.session.flush()
         db.session.add(
+            NeoScorpionSortTruck(
+                sort_date_operation_id=operation.id,
+                fuel_truck_id=truck.id,
+                status="available",
+                starting_gallons=3400,
+                current_gallons=3400,
+            )
+        )
+        db.session.add(
             NeoScorpionFuelAssignment(
                 sort_date_operation_id=operation.id,
                 sort_date_mission_id=mission.id,
@@ -212,7 +222,9 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"14.1", response.data)
         self.assertIn(b"TRUCK 7", response.data)
         self.assertIn(b"3400 gal", response.data)
-        self.assertIn(b"INOP", response.data)
+        self.assertIn(b"5,507 gal", response.data)
+        self.assertIn(b"ACTUAL INBOUND", response.data)
+        self.assertIn(b"INCOMPLETE", response.data)
         self.assertNotIn(CALCULATION_NOT_CONFIGURED_MESSAGE.encode(), response.data)
 
         header = response.data.split(b"<thead>", 1)[1].split(b"</thead>", 1)[0]

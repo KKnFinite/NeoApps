@@ -14,10 +14,10 @@
     };
 
     document.addEventListener("click", async (event) => {
-        const button = event.target.closest("[data-copy-neo-fuel]");
+        const button = event.target.closest("[data-copy-neo-fuel], [data-copy-value]");
         if (!button) return;
 
-        const value = button.dataset.copyNeoFuel || "";
+        const value = button.dataset.copyValue || button.dataset.copyNeoFuel || "";
         if (!value) return;
         try {
             if (navigator.clipboard?.writeText) {

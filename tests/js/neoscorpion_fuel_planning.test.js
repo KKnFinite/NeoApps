@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const {
     calculateApuAllowance,
     planFuelByTank,
+    remainingReadingsComplete,
 } = require("../../app/static/js/neoscorpion_fuel_planning.js");
 
 
@@ -103,4 +104,24 @@ test("747 preview uses current Actual dependencies", () => {
     assert.equal(plan.main_l_out, 20);
     assert.equal(plan.main_l_in, 50);
     assert.equal(plan.center_wing, 19.444);
+});
+
+
+test("planned preview waits for every Remaining reading and accepts explicit zero", () => {
+    const tanks = ["left", "ctr", "right"];
+    const remaining = {left: 0, ctr: null, right: 10};
+    assert.equal(remainingReadingsComplete(tanks, remaining), false);
+    remaining.ctr = 0;
+    assert.equal(remainingReadingsComplete(tanks, remaining), true);
+    const plan = planFuelByTank({
+        aircraftType: "B757",
+        required: 20,
+        remaining,
+        actual: {},
+        apuRunning: false,
+        apuAllowance: 0,
+        apuSource: "",
+    });
+    assert.equal(plan.left, 10);
+    assert.equal(plan.right, 10);
 });

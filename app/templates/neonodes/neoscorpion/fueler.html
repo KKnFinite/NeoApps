@@ -134,6 +134,7 @@
                         </label>
                     </div>
                     {% if row.tank_rows %}
+                    <p class="neoscorpion-helper" data-planned-entry-cue {% if row.planned_ready %}hidden{% endif %}>Enter all Remaining readings to calculate Planned fuel.</p>
                     <div class="neoscorpion-fuel-tank-grid" role="table" aria-label="{{ row.detailed_aircraft_type }} fuel tank readings">
                         <div class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-head" role="row">
                             <span role="columnheader">Tank</span>
@@ -167,6 +168,7 @@
                 </form>
                 {% else %}
                 {% if row.tank_rows %}
+                {% if not row.planned_ready %}<p class="neoscorpion-helper">Enter all Remaining readings to calculate Planned fuel.</p>{% endif %}
                 <div class="neoscorpion-fuel-tank-grid" role="table" aria-label="{{ row.detailed_aircraft_type }} fuel tank readings">
                     <div class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-head" role="row">
                         <span role="columnheader">Tank</span>

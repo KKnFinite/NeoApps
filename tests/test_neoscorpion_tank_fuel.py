@@ -354,18 +354,25 @@ class NeoScorpionTankFuelTest(unittest.TestCase):
         self.assertEqual(tail_state.fob_lbs, 60000)
         self.assertEqual(tail_state.actual_fuel_lbs, 54000)
 
-    def test_a300_center_remaining_mirrors_legacy_center(self):
+    def test_a300_center_actual_mirrors_legacy_center(self):
         _operation, _mission, assignment = self._assignment("N123UP")
 
-        result = save_fueler_entry(
+        remaining = save_fueler_entry(
             self.gateway,
             self.user,
             self._form(assignment, remaining_ctr="5.5"),
         )
+        self.assertIsNone(remaining.tail_fuel_state.center_fuel_lbs)
 
-        self.assertTrue(result.changed)
-        self.assertEqual(result.tail_fuel_state.center_fuel_lbs, 5500)
-        self.assertIsNone(result.tail_fuel_state.fob_lbs)
+        actual = save_fueler_entry(
+            self.gateway,
+            self.user,
+            self._form(assignment, actual_ctr="4.7"),
+        )
+
+        self.assertTrue(actual.changed)
+        self.assertEqual(actual.tail_fuel_state.center_fuel_lbs, 4700)
+        self.assertIsNone(actual.tail_fuel_state.fob_lbs)
 
     def test_tail_change_preserves_old_work_and_creates_new_tail_scope(self):
         _operation, mission, assignment = self._assignment("N412UP")

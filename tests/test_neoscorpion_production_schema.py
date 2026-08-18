@@ -67,6 +67,10 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
 
     def test_required_additive_columns_and_constraints_are_current(self):
         self.assertEqual(
+            NEOSCORPION_ADDITIVE_COLUMNS["neoscorpion_settings"],
+            {"planning_inbound_fuel_fallback_lbs": "INTEGER"},
+        )
+        self.assertEqual(
             set(NEOSCORPION_ADDITIVE_COLUMNS["neoscorpion_fuel_assignments"]),
             {
                 "fuel_on_board_at_utc",

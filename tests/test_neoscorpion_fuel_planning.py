@@ -198,6 +198,9 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
                 assignment,
                 apu_running="yes",
                 apu_source_tank_code="left",
+                remaining_left="10.0",
+                remaining_ctr="5.0",
+                remaining_right="10.0",
             ),
             now_utc=confirmation_time,
         )
@@ -278,6 +281,11 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
         self.assertIn(b'name="remaining_left" value=""', blank.data)
         self.assertIn(b'name="actual_left" value=""', blank.data)
         self.assertNotIn(b'placeholder="0.0"', blank.data)
+        self.assertIn(
+            b"Enter all Remaining readings to calculate Planned fuel.",
+            blank.data,
+        )
+        self.assertIn(b'data-planned-tank="left">-</span>', blank.data)
 
         save_fueler_entry(
             self.gateway,
@@ -300,6 +308,7 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
         row = fueler_context(self.gateway, self.user)["rows"][0]
         self.assertEqual(row["remaining_total_display"], "0.0")
         self.assertEqual(row["actual_total_display"], "0.0")
+        self.assertTrue(row["planned_ready"])
 
     def test_dispatch_cleanup_and_authenticated_local_route_smoke(self):
         self._assignment()
