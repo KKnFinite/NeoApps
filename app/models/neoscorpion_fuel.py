@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from sqlalchemy.orm import validates
+
 from app.extensions import db
 
 
@@ -192,6 +194,88 @@ class NeoScorpionSortTruck(db.Model):
 
     sort_date_operation = db.relationship("SortDateOperation")
     fuel_truck = db.relationship("NeoScorpionFuelTruck")
+
+
+class NeoScorpionFuelWorkState(db.Model):
+    __tablename__ = "neoscorpion_fuel_work_states"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "fuel_assignment_id",
+            "tail_number",
+            name="uq_neoscorpion_fuel_work_state_assignment_tail",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    fuel_assignment_id = db.Column(
+        db.Integer,
+        db.ForeignKey("neoscorpion_fuel_assignments.id"),
+        nullable=False,
+    )
+    tail_number = db.Column(db.String(32), nullable=False)
+    on_at_utc = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    fuel_assignment = db.relationship("NeoScorpionFuelAssignment")
+    tank_states = db.relationship(
+        "NeoScorpionFuelTankState",
+        back_populates="fuel_work_state",
+        cascade="all, delete-orphan",
+    )
+
+    @validates("tail_number")
+    def _normalize_tail_number(self, _key, value):
+        normalized = (value or "").strip().upper()
+        if not normalized:
+            raise ValueError("Fuel work state requires a tail number.")
+        return normalized
+
+
+class NeoScorpionFuelTankState(db.Model):
+    __tablename__ = "neoscorpion_fuel_tank_states"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "fuel_work_state_id",
+            "tank_code",
+            name="uq_neoscorpion_fuel_tank_state_work_tank",
+        ),
+        db.CheckConstraint(
+            "remaining_lbs IS NULL OR remaining_lbs >= 0",
+            name="ck_neoscorpion_fuel_tank_state_remaining_nonnegative",
+        ),
+        db.CheckConstraint(
+            "actual_lbs IS NULL OR actual_lbs >= 0",
+            name="ck_neoscorpion_fuel_tank_state_actual_nonnegative",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    fuel_work_state_id = db.Column(
+        db.Integer,
+        db.ForeignKey("neoscorpion_fuel_work_states.id"),
+        nullable=False,
+    )
+    tank_code = db.Column(db.String(32), nullable=False)
+    remaining_lbs = db.Column(db.Integer, nullable=True)
+    actual_lbs = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    fuel_work_state = db.relationship(
+        "NeoScorpionFuelWorkState",
+        back_populates="tank_states",
+    )
 
 
 class NeoScorpionFuelAssignment(db.Model):

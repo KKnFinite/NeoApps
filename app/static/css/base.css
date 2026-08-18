@@ -23901,6 +23901,90 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     display: grid;
 }
 
+.neoscorpion-fuel-totals {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+}
+
+.neoscorpion-fuel-totals div {
+    min-width: 0;
+    padding: 9px 10px;
+    border: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.18);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.22);
+}
+
+.neoscorpion-fuel-totals dt,
+.neoscorpion-fuel-totals dd {
+    margin: 0;
+}
+
+.neoscorpion-fuel-totals dt {
+    color: var(--muted);
+    font-size: 0.64rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.neoscorpion-fuel-totals dd {
+    color: #ffffff;
+    font-size: 0.9rem;
+    font-weight: 950;
+    overflow-wrap: anywhere;
+}
+
+.neoscorpion-fuel-tank-grid,
+.neoscorpion-fuel-tank-unconfigured {
+    grid-column: 1 / -1;
+}
+
+.neoscorpion-fuel-tank-grid {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+
+.neoscorpion-fuel-tank-row {
+    display: grid;
+    grid-template-columns: minmax(74px, 0.85fr) repeat(2, minmax(0, 1fr));
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+}
+
+.neoscorpion-fuel-tank-row > * {
+    min-width: 0;
+}
+
+.neoscorpion-fuel-tank-row strong,
+.neoscorpion-fuel-tank-head span {
+    color: #ffe79a;
+    font-size: 0.67rem;
+    font-weight: 900;
+    overflow-wrap: anywhere;
+    text-transform: uppercase;
+}
+
+.neoscorpion-fuel-tank-row input {
+    width: 100%;
+    min-width: 0;
+}
+
+.neoscorpion-fuel-tank-row > span[role="cell"] {
+    color: #ffffff;
+    font-size: 0.86rem;
+    font-weight: 900;
+}
+
+.neoscorpion-fuel-tank-unconfigured {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
 .neoscorpion-fueler-form label,
 .neoscorpion-truck-form label,
 .neoscorpion-settings-form label {
@@ -23977,6 +24061,10 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     .neoscorpion-truck-form,
     .neoscorpion-settings-form,
     .neoscorpion-history-row {
+        grid-template-columns: 1fr;
+    }
+
+    .neoscorpion-fuel-totals {
         grid-template-columns: 1fr;
     }
 

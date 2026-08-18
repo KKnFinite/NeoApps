@@ -8,10 +8,12 @@ from sqlalchemy.orm import joinedload
 from app.extensions import db
 from app.models import (
     NeoScorpionFuelAssignment,
+    NeoScorpionFuelTankState,
     NeoScorpionSortAssetState,
     NeoScorpionSortFueler,
     NeoScorpionSortTruck,
     NeoScorpionFuelTruck,
+    NeoScorpionFuelWorkState,
     NeoScorpionSettings,
     NeoScorpionTailFuelState,
     SortDateMission,
@@ -32,6 +34,73 @@ from app.services.time_display import format_local_hhmm
 
 DEFAULT_FUEL_DENSITY_LBS_PER_GALLON = 6.7
 CALCULATION_NOT_CONFIGURED_MESSAGE = "Fuel calculation not configured for this aircraft type yet."
+
+NEOSCORPION_TANK_LAYOUTS = {
+    "B757": (
+        ("left", "LEFT"),
+        ("ctr", "CTR"),
+        ("right", "RIGHT"),
+    ),
+    "A300": (
+        ("l_out", "L-OUT"),
+        ("l_in", "L-IN"),
+        ("ctr", "CTR"),
+        ("r_in", "R-IN"),
+        ("r_out", "R-OUT"),
+        ("tt", "TT"),
+    ),
+    "B767ER": (
+        ("left", "LEFT"),
+        ("ctr", "CTR"),
+        ("right", "RIGHT"),
+    ),
+    "B747-400": (
+        ("main_l_out", "MAIN-L-OUT"),
+        ("main_l_in", "MAIN-L-IN"),
+        ("main_r_in", "MAIN R IN"),
+        ("main_r_out", "MAIN R OUT"),
+        ("reserve_2_l", "RESERVE 2 L"),
+        ("reserve_3_r", "RESERVE 3 R"),
+        ("center_wing", "CENTER WING"),
+    ),
+    "B747-8": (
+        ("main_l_out", "MAIN-L-OUT"),
+        ("main_l_in", "MAIN-L-IN"),
+        ("main_r_in", "MAIN R IN"),
+        ("main_r_out", "MAIN R OUT"),
+        ("reserve_1_l", "RESERVE 1 L"),
+        ("reserve_4_r", "RESERVE 4 R"),
+        ("center_wing", "CENTER WING"),
+    ),
+}
+
+_NEOSCORPION_DETAILED_TYPE_BY_FIRST_DIGIT = {
+    "1": "A300",
+    "4": "B757",
+    "3": "B767ER",
+    "9": "B767ER",
+    "5": "B747-400",
+    "6": "B747-8",
+}
+
+
+def detailed_aircraft_type_for_tail(tail_number):
+    normalized_tail = _normalize_tail(tail_number)
+    first_digit = next(
+        (character for character in normalized_tail if character.isdigit()),
+        "",
+    )
+    return _NEOSCORPION_DETAILED_TYPE_BY_FIRST_DIGIT.get(
+        first_digit,
+        "UNCONFIGURED",
+    )
+
+
+def tank_layout_for_tail(tail_number):
+    return NEOSCORPION_TANK_LAYOUTS.get(
+        detailed_aircraft_type_for_tail(tail_number),
+        (),
+    )
 
 
 def display_thousands_to_lbs(value):
@@ -218,7 +287,9 @@ def fueler_context(gateway, user):
             "operation": None,
             "rows": [],
             "fuel_assignments_revision": 0,
-            "settings": ensure_neoscorpion_settings(gateway),
+            "settings": NeoScorpionSettings.query.filter_by(
+                gateway_id=gateway.id
+            ).first(),
             "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
         }
 
@@ -241,6 +312,7 @@ def fueler_context(gateway, user):
     assignments_by_mission = {
         assignment.sort_date_mission_id: assignment for assignment in assignments
     }
+    fuel_work_states = _fuel_work_states_by_assignment_tail(assignments)
     return {
         "operation": operation,
         "rows": _fuel_rows(
@@ -248,9 +320,12 @@ def fueler_context(gateway, user):
             missions,
             estimated_fuel_status=CALCULATION_NOT_CONFIGURED_MESSAGE,
             assignments_by_mission=assignments_by_mission,
+            fuel_work_states_by_assignment_tail=fuel_work_states,
         ),
         "fuel_assignments_revision": _fuel_assignments_revision_for_operation(operation),
-        "settings": ensure_neoscorpion_settings(gateway),
+        "settings": NeoScorpionSettings.query.filter_by(
+            gateway_id=gateway.id
+        ).first(),
         "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
     }
 
@@ -289,6 +364,14 @@ class DispatchSaveResult:
     changed: bool
     assignment_changed: bool
     revision: int
+
+
+@dataclass(frozen=True)
+class FuelerSaveResult:
+    changed: bool
+    revision: int
+    tail_fuel_state: NeoScorpionTailFuelState | None
+    fuel_work_state: NeoScorpionFuelWorkState | None
 
 
 def save_dispatch_row(gateway, form):
@@ -419,34 +502,205 @@ def save_fueler_entry(gateway, user, form):
     if not operation:
         raise ValueError("No current sort operation is available for NeoScorpion fueler entry.")
 
+    operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
     assignment_id = _int_or_none(form.get("assignment_id"))
-    assignment = NeoScorpionFuelAssignment.query.filter_by(
-        id=assignment_id,
-        sort_date_operation_id=operation.id,
-        assigned_fueler_user_id=user.id,
-    ).first()
-    if not assignment:
+    assignment_row = (
+        db.session.query(NeoScorpionFuelAssignment, SortDateMission)
+        .join(
+            SortDateMission,
+            SortDateMission.id == NeoScorpionFuelAssignment.sort_date_mission_id,
+        )
+        .filter(
+            NeoScorpionFuelAssignment.id == assignment_id,
+            NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
+            NeoScorpionFuelAssignment.assigned_fueler_user_id == user.id,
+            SortDateMission.sort_date_operation_id == operation.id,
+            SortDateMission.mission_type == "departure",
+        )
+        .with_for_update()
+        .first()
+    )
+    if not assignment_row:
         raise ValueError("Fuel assignment was not found for this fueler.")
 
-    mission = assignment.sort_date_mission
+    assignment, mission = assignment_row
     tail_number = _normalize_tail(mission.assigned_tail_number if mission else "")
     if not tail_number:
         raise ValueError("Fuel assignment does not have a tail number.")
 
-    tail_fuel_state = ensure_tail_fuel_state(operation, tail_number)
-    tail_fuel_state.fob_lbs = display_thousands_to_lbs(form.get("fob"))
-    tail_fuel_state.center_fuel_lbs = display_thousands_to_lbs(form.get("center_fuel"))
-    tail_fuel_state.apu_lbs = _int_or_none(form.get("apu_lbs"))
-    tail_fuel_state.actual_fuel_lbs = display_thousands_to_lbs(form.get("actual_fuel"))
-    tail_fuel_state.notes = (form.get("notes") or "").strip()
-    tail_fuel_state.status = _clean_choice(
+    aircraft_type = detailed_aircraft_type_for_tail(tail_number)
+    tank_layout = tank_layout_for_tail(tail_number)
+    expected_tank_codes = {code for code, _label in tank_layout}
+    submitted_tank_codes = _submitted_tank_codes(form)
+    invalid_tank_codes = submitted_tank_codes - expected_tank_codes
+    if invalid_tank_codes:
+        if not tank_layout:
+            raise ValueError("Tank entry is not configured for this aircraft.")
+        raise ValueError("The submitted tank layout does not match this aircraft.")
+
+    fuel_work_state = (
+        NeoScorpionFuelWorkState.query.filter_by(
+            fuel_assignment_id=assignment.id,
+            tail_number=tail_number,
+        )
+        .with_for_update()
+        .first()
+    )
+    tank_states = []
+    if fuel_work_state is not None:
+        tank_states = (
+            NeoScorpionFuelTankState.query.filter_by(
+                fuel_work_state_id=fuel_work_state.id,
+            )
+            .with_for_update()
+            .all()
+        )
+    tank_states_by_code = {state.tank_code: state for state in tank_states}
+
+    final_tank_values = {}
+    tank_changed = False
+    submitted_nonnull_remaining = False
+    for tank_code, _label in tank_layout:
+        tank_state = tank_states_by_code.get(tank_code)
+        remaining_lbs = tank_state.remaining_lbs if tank_state else None
+        actual_lbs = tank_state.actual_lbs if tank_state else None
+        remaining_field = f"remaining_{tank_code}"
+        actual_field = f"actual_{tank_code}"
+        if remaining_field in form:
+            remaining_lbs = display_thousands_to_lbs(form.get(remaining_field))
+            submitted_nonnull_remaining = (
+                submitted_nonnull_remaining or remaining_lbs is not None
+            )
+        if actual_field in form:
+            actual_lbs = display_thousands_to_lbs(form.get(actual_field))
+        if actual_lbs is not None and remaining_lbs is None:
+            raise ValueError(f"Enter Remaining before Actual for {_label}.")
+        final_tank_values[tank_code] = (remaining_lbs, actual_lbs)
+        if tank_state is None:
+            tank_changed = tank_changed or remaining_lbs is not None or actual_lbs is not None
+        elif (
+            tank_state.remaining_lbs != remaining_lbs
+            or tank_state.actual_lbs != actual_lbs
+        ):
+            tank_changed = True
+
+    tail_fuel_state = (
+        NeoScorpionTailFuelState.query.filter_by(
+            sort_date_operation_id=operation.id,
+            tail_number=tail_number,
+        )
+        .with_for_update()
+        .first()
+    )
+    target_apu_lbs = _int_or_none(form.get("apu_lbs"))
+    target_notes = (form.get("notes") or "").strip()
+    target_status = _clean_choice(
         form.get("tail_fuel_status"),
         {"pending", "in_progress", "review", "complete"},
         "pending",
     )
-    assignment.transfer_fuel_gallons = _int_or_none(form.get("transfer_fuel_gallons"))
+    target_transfer_gallons = _int_or_none(form.get("transfer_fuel_gallons"))
+
+    remaining_values = [values[0] for values in final_tank_values.values()]
+    actual_values = [values[1] for values in final_tank_values.values()]
+    target_fob_lbs = (
+        sum(remaining_values)
+        if tank_layout and all(value is not None for value in remaining_values)
+        else None
+    )
+    target_actual_lbs = (
+        sum(actual_values)
+        if tank_layout and all(value is not None for value in actual_values)
+        else None
+    )
+    target_center_lbs = (
+        final_tank_values["ctr"][0]
+        if aircraft_type == "A300" and "ctr" in final_tank_values
+        else None
+    )
+
+    current_apu_lbs = tail_fuel_state.apu_lbs if tail_fuel_state else None
+    current_notes = tail_fuel_state.notes if tail_fuel_state else ""
+    current_status = tail_fuel_state.status if tail_fuel_state else "pending"
+    current_fob_lbs = tail_fuel_state.fob_lbs if tail_fuel_state else None
+    current_actual_lbs = tail_fuel_state.actual_fuel_lbs if tail_fuel_state else None
+    current_center_lbs = tail_fuel_state.center_fuel_lbs if tail_fuel_state else None
+    tail_changed = any(
+        (
+            current_apu_lbs != target_apu_lbs,
+            current_notes != target_notes,
+            current_status != target_status,
+            current_fob_lbs != target_fob_lbs,
+            current_actual_lbs != target_actual_lbs,
+            current_center_lbs != target_center_lbs,
+        )
+    )
+    transfer_changed = assignment.transfer_fuel_gallons != target_transfer_gallons
+    changed = tank_changed or tail_changed or transfer_changed
+    revision = int(asset_state.revision if asset_state else 0)
+    if not changed:
+        return FuelerSaveResult(
+            changed=False,
+            revision=revision,
+            tail_fuel_state=tail_fuel_state,
+            fuel_work_state=fuel_work_state,
+        )
+
+    if tank_changed:
+        if fuel_work_state is None:
+            fuel_work_state = NeoScorpionFuelWorkState(
+                fuel_assignment_id=assignment.id,
+                tail_number=tail_number,
+            )
+            db.session.add(fuel_work_state)
+        for tank_code, (remaining_lbs, actual_lbs) in final_tank_values.items():
+            tank_state = tank_states_by_code.get(tank_code)
+            if tank_state is None:
+                if remaining_lbs is None and actual_lbs is None:
+                    continue
+                tank_state = NeoScorpionFuelTankState(tank_code=tank_code)
+                fuel_work_state.tank_states.append(tank_state)
+                tank_states_by_code[tank_code] = tank_state
+            tank_state.remaining_lbs = remaining_lbs
+            tank_state.actual_lbs = actual_lbs
+        if (
+            fuel_work_state.on_at_utc is None
+            and submitted_nonnull_remaining
+        ):
+            fuel_work_state.on_at_utc = datetime.utcnow()
+
+    if tail_changed or tank_changed:
+        if tail_fuel_state is None:
+            sort_tail_state = SortDateTailState.query.filter_by(
+                sort_date=operation.sort_date,
+                gateway_code=operation.gateway_code,
+                sort_name=operation.sort_name,
+                tail_number=tail_number,
+            ).first()
+            tail_fuel_state = NeoScorpionTailFuelState(
+                sort_date_operation_id=operation.id,
+                sort_date_tail_state_id=(
+                    sort_tail_state.id if sort_tail_state else None
+                ),
+                tail_number=tail_number,
+            )
+            db.session.add(tail_fuel_state)
+        tail_fuel_state.fob_lbs = target_fob_lbs
+        tail_fuel_state.actual_fuel_lbs = target_actual_lbs
+        tail_fuel_state.center_fuel_lbs = target_center_lbs
+        tail_fuel_state.apu_lbs = target_apu_lbs
+        tail_fuel_state.notes = target_notes
+        tail_fuel_state.status = target_status
+
+    assignment.transfer_fuel_gallons = target_transfer_gallons
+    asset_state = record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
-    return tail_fuel_state
+    return FuelerSaveResult(
+        changed=True,
+        revision=int(asset_state.revision),
+        tail_fuel_state=tail_fuel_state,
+        fuel_work_state=fuel_work_state,
+    )
 
 
 def save_truck(gateway, form):
@@ -561,6 +815,7 @@ def _fuel_rows(
     *,
     fuel_trucks=None,
     assignments_by_mission=None,
+    fuel_work_states_by_assignment_tail=None,
 ):
     tail_states = _tail_states_by_tail(operation)
     tail_fuel_states = _tail_fuel_states_by_tail(operation)
@@ -574,6 +829,7 @@ def _fuel_rows(
     if fuel_trucks is None:
         fuel_trucks = _fuel_trucks(operation.gateway or _gateway_stub(operation))
     trucks = {truck.id: truck for truck in fuel_trucks}
+    fuel_work_states = fuel_work_states_by_assignment_tail or {}
 
     rows = []
     for mission in missions:
@@ -586,6 +842,40 @@ def _fuel_rows(
         if truck is None and assignment is not None:
             truck = assignment.assigned_truck
         aircraft_type = _aircraft_type_for_mission(mission, tail_state)
+        detailed_aircraft_type = detailed_aircraft_type_for_tail(tail_number)
+        tank_layout = tank_layout_for_tail(tail_number)
+        fuel_work_state = fuel_work_states.get(
+            (assignment.id, tail_number)
+            if assignment is not None and tail_number
+            else None
+        )
+        tank_states_by_code = {
+            state.tank_code: state
+            for state in (fuel_work_state.tank_states if fuel_work_state else ())
+        }
+        tank_rows = []
+        for tank_code, tank_label in tank_layout:
+            tank_state = tank_states_by_code.get(tank_code)
+            tank_rows.append(
+                {
+                    "code": tank_code,
+                    "label": tank_label,
+                    "remaining_lbs": tank_state.remaining_lbs if tank_state else None,
+                    "actual_lbs": tank_state.actual_lbs if tank_state else None,
+                    "remaining_display": format_display_thousands(
+                        tank_state.remaining_lbs if tank_state else None
+                    ),
+                    "actual_display": format_display_thousands(
+                        tank_state.actual_lbs if tank_state else None
+                    ),
+                }
+            )
+        remaining_complete = bool(tank_rows) and all(
+            row["remaining_lbs"] is not None for row in tank_rows
+        )
+        actual_complete = bool(tank_rows) and all(
+            row["actual_lbs"] is not None for row in tank_rows
+        )
         rows.append(
             {
                 "mission": mission,
@@ -593,6 +883,28 @@ def _fuel_rows(
                 "arrival_mission": arrival,
                 "tail_number": tail_number or "-",
                 "aircraft_type": aircraft_type,
+                "detailed_aircraft_type": detailed_aircraft_type,
+                "fuel_work_state": fuel_work_state,
+                "tank_rows": tank_rows,
+                "on_time": (
+                    format_local_hhmm(fuel_work_state.on_at_utc, mission.timezone)
+                    if fuel_work_state and fuel_work_state.on_at_utc
+                    else "-"
+                ),
+                "remaining_total_display": (
+                    format_display_thousands(
+                        sum(row["remaining_lbs"] for row in tank_rows)
+                    )
+                    if remaining_complete
+                    else "INCOMPLETE"
+                ),
+                "actual_total_display": (
+                    format_display_thousands(
+                        sum(row["actual_lbs"] for row in tank_rows)
+                    )
+                    if actual_complete
+                    else "INCOMPLETE"
+                ),
                 "destination": mission.destination or "-",
                 "arrival_eta": _arrival_eta_display(arrival),
                 "arrival_status": _arrival_status_display(arrival),
@@ -636,6 +948,23 @@ def _fuel_rows(
             }
         )
     return rows
+
+
+def _fuel_work_states_by_assignment_tail(assignments):
+    assignment_ids = [assignment.id for assignment in assignments]
+    if not assignment_ids:
+        return {}
+    work_states = (
+        NeoScorpionFuelWorkState.query.filter(
+            NeoScorpionFuelWorkState.fuel_assignment_id.in_(assignment_ids)
+        )
+        .options(joinedload(NeoScorpionFuelWorkState.tank_states))
+        .all()
+    )
+    return {
+        (state.fuel_assignment_id, _normalize_tail(state.tail_number)): state
+        for state in work_states
+    }
 
 
 def format_display_thousands(value):
@@ -834,6 +1163,16 @@ def _aircraft_type_for_mission(mission, tail_state):
 
 def _normalize_tail(value):
     return (value or "").strip().upper()
+
+
+def _submitted_tank_codes(form):
+    tank_codes = set()
+    for field_name in form.keys():
+        if field_name.startswith("remaining_"):
+            tank_codes.add(field_name.removeprefix("remaining_"))
+        elif field_name.startswith("actual_") and field_name != "actual_fuel":
+            tank_codes.add(field_name.removeprefix("actual_"))
+    return tank_codes
 
 
 def _decimal_or_none(value):

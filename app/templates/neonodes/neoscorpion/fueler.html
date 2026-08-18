@@ -38,27 +38,49 @@
                     <span>{{ row.destination }}</span>
                     <strong>{{ row.tail_number }}</strong>
                     <small>{{ row.mission.flight_number }} | {{ row.parking_position }} | {{ row.departure_time or '-' }}</small>
+                    <small>{{ row.detailed_aircraft_type }} | ON {{ row.on_time }}</small>
                 </header>
                 <p class="neoscorpion-calculation-warning">{{ row.estimated_fuel_status }}</p>
+                <dl class="neoscorpion-fuel-totals">
+                    <div>
+                        <dt>Remaining Total</dt>
+                        <dd>{{ row.remaining_total_display }}{% if row.remaining_total_display != "INCOMPLETE" %} K LBS{% endif %}</dd>
+                    </div>
+                    <div>
+                        <dt>Actual Total</dt>
+                        <dd>{{ row.actual_total_display }}{% if row.actual_total_display != "INCOMPLETE" %} K LBS{% endif %}</dd>
+                    </div>
+                </dl>
                 {% if can_edit and row.assignment %}
                 <form method="post" class="neoscorpion-fueler-form">
                     <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
-                    <label>FOB
-                        <input name="fob" value="{{ row.fob_display }}" inputmode="decimal" placeholder="50.5">
-                    </label>
-                    {% if row.aircraft_type == "A300" %}
-                    <label>Center Fuel
-                        <input name="center_fuel" value="{{ row.center_fuel_display }}" inputmode="decimal" placeholder="0.0">
-                    </label>
+                    {% if row.tank_rows %}
+                    <div class="neoscorpion-fuel-tank-grid" role="table" aria-label="{{ row.detailed_aircraft_type }} fuel tank readings">
+                        <div class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-head" role="row">
+                            <span role="columnheader">Tank</span>
+                            <span role="columnheader">Remaining</span>
+                            <span role="columnheader">Actual</span>
+                        </div>
+                        {% for tank in row.tank_rows %}
+                        <div class="neoscorpion-fuel-tank-row" role="row">
+                            <strong role="rowheader">{{ tank.label }}</strong>
+                            <label role="cell">
+                                <input name="remaining_{{ tank.code }}" value="{{ tank.remaining_display }}" inputmode="decimal" placeholder="0.0" aria-label="{{ tank.label }} Remaining">
+                            </label>
+                            <label role="cell">
+                                <input name="actual_{{ tank.code }}" value="{{ tank.actual_display }}" inputmode="decimal" placeholder="0.0" aria-label="{{ tank.label }} Actual">
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="neoscorpion-fuel-tank-unconfigured">Tank entry is not configured for this aircraft.</p>
                     {% endif %}
                     <label>APU
                         <input name="apu_lbs" value="{{ row.apu_lbs if row.apu_lbs is not none else '' }}" inputmode="numeric" placeholder="300">
                     </label>
                     <label>T/F
                         <input name="transfer_fuel_gallons" value="{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '' }}" inputmode="numeric" placeholder="Gallons">
-                    </label>
-                    <label>Actual Fuel
-                        <input name="actual_fuel" value="{{ row.actual_fuel_display }}" inputmode="decimal" placeholder="50.5">
                     </label>
                     <label>Status
                         <select name="tail_fuel_status">
@@ -73,12 +95,27 @@
                     <button class="action-button neoscorpion-save-button" type="submit">Save Fuel Entry</button>
                 </form>
                 {% else %}
+                {% if row.tank_rows %}
+                <div class="neoscorpion-fuel-tank-grid" role="table" aria-label="{{ row.detailed_aircraft_type }} fuel tank readings">
+                    <div class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-head" role="row">
+                        <span role="columnheader">Tank</span>
+                        <span role="columnheader">Remaining</span>
+                        <span role="columnheader">Actual</span>
+                    </div>
+                    {% for tank in row.tank_rows %}
+                    <div class="neoscorpion-fuel-tank-row" role="row">
+                        <strong role="rowheader">{{ tank.label }}</strong>
+                        <span role="cell">{{ tank.remaining_display or '-' }}</span>
+                        <span role="cell">{{ tank.actual_display or '-' }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="neoscorpion-fuel-tank-unconfigured">Tank entry is not configured for this aircraft.</p>
+                {% endif %}
                 <dl class="neoscorpion-fueler-readout">
-                    <div><dt>FOB</dt><dd>{{ row.fob_display or '-' }}</dd></div>
-                    {% if row.aircraft_type == "A300" %}<div><dt>Center Fuel</dt><dd>{{ row.center_fuel_display or '-' }}</dd></div>{% endif %}
                     <div><dt>APU</dt><dd>{{ row.apu_lbs if row.apu_lbs is not none else '-' }}</dd></div>
                     <div><dt>T/F</dt><dd>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</dd></div>
-                    <div><dt>Actual Fuel</dt><dd>{{ row.actual_fuel_display or '-' }}</dd></div>
                 </dl>
                 {% endif %}
             </article>

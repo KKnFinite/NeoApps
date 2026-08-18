@@ -282,7 +282,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"UPS901", response.data)
         self.assertNotIn(b"N555UP", response.data)
 
-    def test_fueler_sees_only_assigned_missions_and_a300_center_fuel(self):
+    def test_fueler_sees_only_assigned_missions_and_a300_tank_layout(self):
         user = self._login_approved_user(role="operator")
         operation, first = self._add_current_departure("UPS301", "N123UP", "SDF")
         _operation, second = self._add_current_departure("UPS302", "N456UP", "EWR")
@@ -311,7 +311,10 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"UPS301", response.data)
         self.assertNotIn(b"UPS302", response.data)
-        self.assertIn(b"Center Fuel", response.data)
+        for tank_code in ("l_out", "l_in", "ctr", "r_in", "r_out", "tt"):
+            self.assertIn(f'name="remaining_{tank_code}"'.encode(), response.data)
+            self.assertIn(f'name="actual_{tank_code}"'.encode(), response.data)
+        self.assertIn(b"A300", response.data)
         self.assertIn(CALCULATION_NOT_CONFIGURED_MESSAGE.encode(), response.data)
 
     def test_truck_manager_can_add_vendor_driver_truck(self):

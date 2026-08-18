@@ -166,13 +166,16 @@ def fueler():
             flash("Access denied.", "error")
             return _fueler_response(gateway, access, status_code=403)
         try:
-            save_fueler_entry(gateway, current_user, request.form)
+            result = save_fueler_entry(gateway, current_user, request.form)
         except ValueError as exc:
             db.session.rollback()
             flash(str(exc), "error")
             return _fueler_response(gateway, access, status_code=400)
-        db.session.commit()
-        flash("FUEL ENTRY UPDATED.", "success")
+        if result.changed:
+            db.session.commit()
+            flash("FUEL ENTRY UPDATED.", "success")
+        else:
+            flash("NO FUEL ENTRY CHANGES.", "info")
         return redirect(url_for("neoscorpion.fueler"))
 
     if not access["can_view"]:
