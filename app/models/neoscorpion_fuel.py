@@ -325,6 +325,12 @@ class NeoScorpionFuelAssignment(db.Model):
     calculation_status = db.Column(db.String(32), nullable=False, default="not_configured")
     review_status = db.Column(db.String(32), nullable=False, default="pending")
     load_planning_note = db.Column(db.Text, nullable=False, default="")
+    fuel_on_board_at_utc = db.Column(db.DateTime, nullable=True)
+    fuel_on_board_by_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=True,
+    )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
@@ -335,7 +341,14 @@ class NeoScorpionFuelAssignment(db.Model):
 
     sort_date_operation = db.relationship("SortDateOperation")
     sort_date_mission = db.relationship("SortDateMission")
-    assigned_fueler = db.relationship("User")
+    assigned_fueler = db.relationship(
+        "User",
+        foreign_keys=[assigned_fueler_user_id],
+    )
+    fuel_on_board_by_user = db.relationship(
+        "User",
+        foreign_keys=[fuel_on_board_by_user_id],
+    )
     assigned_truck = db.relationship("NeoScorpionFuelTruck")
 
 

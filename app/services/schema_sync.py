@@ -161,6 +161,10 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "off_at_utc": "DATETIME",
         "off_by_user_id": "INTEGER",
     },
+    "neoscorpion_fuel_assignments": {
+        "fuel_on_board_at_utc": "DATETIME",
+        "fuel_on_board_by_user_id": "INTEGER",
+    },
 }
 
 POSTGRES_OPTIONAL_COLUMNS = {
@@ -293,6 +297,10 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "applied_apu_rate_thousand_lbs_per_hour": "NUMERIC(8, 4)",
         "off_at_utc": "TIMESTAMP",
         "off_by_user_id": "INTEGER",
+    },
+    "neoscorpion_fuel_assignments": {
+        "fuel_on_board_at_utc": "TIMESTAMP",
+        "fuel_on_board_by_user_id": "INTEGER",
     },
 }
 

@@ -8,6 +8,7 @@ from app.neonodes.neoscorpion import bp
 from app.services.access_control import get_current_gateway
 from app.services.neoscorpion import (
     CALCULATION_NOT_CONFIGURED_MESSAGE,
+    complete_fuel_on_board,
     current_sort_operation,
     deactivate_truck,
     fuel_dispatch_context,
@@ -111,6 +112,38 @@ def fuel_dispatch():
         flash("Access denied.", "error")
         return redirect(url_for("neoscorpion.index"))
     return _dispatch_response(gateway, access)
+
+
+@bp.post("/fuel-dispatch/fuel-on-board")
+@gateway_node_required("scorpion")
+def fuel_on_board():
+    gateway = get_current_gateway()
+    access = permission_access(
+        FUEL_DISPATCH_VIEW_PERMISSION,
+        FUEL_DISPATCH_EDIT_PERMISSION,
+    )
+    if not access["can_edit"]:
+        db.session.rollback()
+        flash("Access denied.", "error")
+        return _dispatch_response(gateway, access, status_code=403)
+
+    try:
+        result = complete_fuel_on_board(
+            gateway,
+            current_user,
+            request.form.get("assignment_id"),
+        )
+    except ValueError as exc:
+        db.session.rollback()
+        flash(str(exc), "error")
+        return _dispatch_response(gateway, access, status_code=400)
+
+    if result.changed:
+        db.session.commit()
+        flash("FUEL ON BOARD COMPLETED.", "success")
+    else:
+        flash("FUEL ON BOARD WAS ALREADY COMPLETED.", "info")
+    return redirect(url_for("neoscorpion.fuel_dispatch"))
 
 
 @bp.post("/fuel-dispatch/assets")

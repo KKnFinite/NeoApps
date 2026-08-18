@@ -40,12 +40,14 @@
                         <th>Inbound Fuel</th>
                         <th>FOB</th>
                         <th>APU</th>
+                        <th>NEO FUEL</th>
                         <th>Estimated Fuel</th>
                         <th>Fueler</th>
                         <th>Truck</th>
                         <th>Truck Fuel</th>
                         <th>Status</th>
                         <th>Load Planning</th>
+                        <th>Fuel On Board</th>
                         {% if can_edit %}<th>Save</th>{% endif %}
                     </tr>
                 </thead>
@@ -64,12 +66,19 @@
                         {% if can_edit %}
                         <form method="post">
                             <input type="hidden" name="mission_id" value="{{ row.mission.id }}">
+                            <input type="hidden" name="assignment_id" value="{{ row.assignment.id if row.assignment else '' }}">
                             <input type="hidden" name="expected_assigned_fueler_user_id" value="{{ row.assignment.assigned_fueler_user_id if row.assignment and row.assignment.assigned_fueler_user_id else '' }}">
                             <input type="hidden" name="expected_assigned_truck_id" value="{{ row.assignment.assigned_truck_id if row.assignment and row.assignment.assigned_truck_id else '' }}">
                             <td><input class="neoscorpion-inline-input" name="required_fuel" value="{{ row.required_fuel_display }}" inputmode="decimal" aria-label="Required Fuel for {{ row.mission.flight_number }}"></td>
                             <td><input class="neoscorpion-inline-input" name="inbound_fuel" value="{{ row.inbound_fuel_display }}" inputmode="decimal" aria-label="Inbound Fuel for {{ row.tail_number }}"></td>
                             <td>{{ row.fob_display or '-' }}</td>
                             <td><input class="neoscorpion-inline-input" name="apu_lbs" value="{{ row.apu_lbs if row.apu_lbs is not none else '' }}" inputmode="numeric" aria-label="APU pounds for {{ row.tail_number }}"></td>
+                            <td>
+                                <strong>{{ row.neo_fuel_display }}{% if row.neo_fuel_available %} K LBS{% endif %}</strong>
+                                {% if row.neo_fuel_available %}
+                                <button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-neo-fuel="{{ row.neo_fuel_display }}">COPY NEO FUEL</button>
+                                {% endif %}
+                            </td>
                             <td><span class="neoscorpion-status-pill">{{ row.estimated_fuel_status }}</span></td>
                             <td>
                                 <select class="neoscorpion-inline-select" name="assigned_fueler_user_id" aria-label="Assigned fueler for {{ row.mission.flight_number }}">
@@ -102,6 +111,15 @@
                                 </select>
                             </td>
                             <td><input class="neoscorpion-load-input" name="load_planning_note" value="{{ row.load_planning_note }}" placeholder="{{ row.load_planning_placeholder }}" aria-label="Copy-ready load planning placeholder"></td>
+                            <td>
+                                {% if row.fuel_on_board_complete %}
+                                <span class="neoscorpion-status-pill">COMPLETE</span>
+                                {% elif row.fuel_on_board_ready %}
+                                <button class="action-button" type="submit" formaction="{{ url_for('neoscorpion.fuel_on_board') }}" formmethod="post">FUEL ON BOARD</button>
+                                {% else %}
+                                <small>{{ row.fuel_on_board_reason }}</small>
+                                {% endif %}
+                            </td>
                             <td><button class="action-button neoscorpion-save-button" type="submit">Save</button></td>
                         </form>
                         {% else %}
@@ -109,12 +127,19 @@
                         <td>{{ row.inbound_fuel_display or '-' }}</td>
                         <td>{{ row.fob_display or '-' }}</td>
                         <td>{{ row.apu_lbs if row.apu_lbs is not none else '-' }}</td>
+                        <td>
+                            {{ row.neo_fuel_display }}{% if row.neo_fuel_available %} K LBS{% endif %}
+                            {% if row.neo_fuel_available %}
+                            <button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-neo-fuel="{{ row.neo_fuel_display }}">COPY NEO FUEL</button>
+                            {% endif %}
+                        </td>
                         <td><span class="neoscorpion-status-pill">{{ row.estimated_fuel_status }}</span></td>
                         <td>{{ row.assigned_fueler.display_name if row.assigned_fueler else 'Unassigned' }}</td>
                         <td>{{ row.assigned_truck.truck_number if row.assigned_truck else 'Unassigned' }}</td>
                         <td>{{ row.truck_remaining_fuel if row.truck_remaining_fuel is not none else '-' }} gal</td>
                         <td>{{ row.review_status|replace("_", " ")|title }}</td>
                         <td>{{ row.load_planning_note or row.load_planning_placeholder }}</td>
+                        <td>{{ "COMPLETE" if row.fuel_on_board_complete else row.fuel_on_board_reason }}</td>
                         {% endif %}
                     </tr>
                     {% endfor %}
@@ -124,4 +149,5 @@
         {% endif %}
     </section>
 </section>
+<script src="{{ url_for('static', filename='js/neoscorpion_fuel_assignments_copy.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 {% endblock %}
