@@ -8,6 +8,7 @@ from app.neonodes.neoscorpion import bp
 from app.services.access_control import get_current_gateway
 from app.services.neoscorpion import (
     CALCULATION_NOT_CONFIGURED_MESSAGE,
+    complete_fueled_assignment,
     complete_fuel_on_board,
     current_sort_operation,
     deactivate_truck,
@@ -143,6 +144,43 @@ def fuel_on_board():
         flash("FUEL ON BOARD COMPLETED.", "success")
     else:
         flash("FUEL ON BOARD WAS ALREADY COMPLETED.", "info")
+    return redirect(url_for("neoscorpion.fuel_dispatch"))
+
+
+@bp.post("/fuel-dispatch/complete")
+@gateway_node_required("scorpion")
+def fuel_dispatch_complete():
+    gateway = get_current_gateway()
+    access = permission_access(
+        FUEL_DISPATCH_VIEW_PERMISSION,
+        FUEL_DISPATCH_EDIT_PERMISSION,
+    )
+    if not access["can_edit"]:
+        db.session.rollback()
+        flash("Access denied.", "error")
+        return _dispatch_response(gateway, access, status_code=403)
+
+    try:
+        result = complete_fueled_assignment(
+            gateway,
+            current_user,
+            request.form.get("assignment_id"),
+        )
+    except (IntegrityError, ValueError) as exc:
+        db.session.rollback()
+        message = (
+            str(exc)
+            if isinstance(exc, ValueError)
+            else "Fuel completion changed. Reload Fuel Dispatch and try again."
+        )
+        flash(message, "error")
+        return _dispatch_response(gateway, access, status_code=400)
+
+    if result.changed:
+        db.session.commit()
+        flash("FUELING COMPLETE.", "success")
+    else:
+        flash("FUELING WAS ALREADY COMPLETE.", "info")
     return redirect(url_for("neoscorpion.fuel_dispatch"))
 
 

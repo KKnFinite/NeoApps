@@ -164,6 +164,8 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "neoscorpion_fuel_assignments": {
         "fuel_on_board_at_utc": "DATETIME",
         "fuel_on_board_by_user_id": "INTEGER",
+        "completed_at_utc": "DATETIME",
+        "completed_by_user_id": "INTEGER",
     },
 }
 
@@ -301,6 +303,8 @@ POSTGRES_OPTIONAL_COLUMNS = {
     "neoscorpion_fuel_assignments": {
         "fuel_on_board_at_utc": "TIMESTAMP",
         "fuel_on_board_by_user_id": "INTEGER",
+        "completed_at_utc": "TIMESTAMP",
+        "completed_by_user_id": "INTEGER",
     },
 }
 

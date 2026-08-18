@@ -331,6 +331,12 @@ class NeoScorpionFuelAssignment(db.Model):
         db.ForeignKey("users.id"),
         nullable=True,
     )
+    completed_at_utc = db.Column(db.DateTime, nullable=True)
+    completed_by_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=True,
+    )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
@@ -348,6 +354,10 @@ class NeoScorpionFuelAssignment(db.Model):
     fuel_on_board_by_user = db.relationship(
         "User",
         foreign_keys=[fuel_on_board_by_user_id],
+    )
+    completed_by_user = db.relationship(
+        "User",
+        foreign_keys=[completed_by_user_id],
     )
     assigned_truck = db.relationship("NeoScorpionFuelTruck")
 
