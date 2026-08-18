@@ -26,6 +26,11 @@ from app.models import (
     User,
 )
 from app.services.parking_aircraft import resolve_parking_aircraft_type_from_tail
+from app.services.live_screen_refresh import (
+    LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
+    live_screen_refresh_value,
+    live_screen_refresh_values,
+)
 from app.services.neoscorpion_assets import (
     eligible_nightly_fueler_users,
     hold_active_assignments_for_truck,
@@ -39,6 +44,15 @@ from app.services.time_display import format_local_hhmm
 DEFAULT_FUEL_DENSITY_LBS_PER_GALLON = 6.7
 DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR = Decimal("0.30")
 CALCULATION_NOT_CONFIGURED_MESSAGE = "Fuel calculation not configured for this aircraft type yet."
+NEOSCORPION_FUEL_DISPATCH_REFRESH_KEY = "neoscorpion.fuel_dispatch"
+NEOSCORPION_FUEL_ASSIGNMENTS_REFRESH_KEY = "neoscorpion.fuel_assignments"
+NEOSCORPION_LIVE_REFRESH_SCREENS = (
+    (NEOSCORPION_FUEL_DISPATCH_REFRESH_KEY, "Fuel Dispatch"),
+    (NEOSCORPION_FUEL_ASSIGNMENTS_REFRESH_KEY, "Fuel Assignments"),
+)
+NEOSCORPION_LIVE_REFRESH_SCREEN_KEYS = frozenset(
+    screen_key for screen_key, _label in NEOSCORPION_LIVE_REFRESH_SCREENS
+)
 
 NEOSCORPION_TANK_LAYOUTS = {
     "B757": (
@@ -236,7 +250,7 @@ def current_sort_operation(gateway):
     )
 
 
-def fuel_assignments_live_revision(gateway):
+def neoscorpion_live_revision(gateway):
     """Return the current sort/revision fingerprint without building screen state."""
     row = (
         db.session.query(
@@ -274,6 +288,11 @@ def fuel_assignments_live_revision(gateway):
     }
 
 
+def fuel_assignments_live_revision(gateway):
+    """Backward-compatible name for the shared NeoScorpion fingerprint."""
+    return neoscorpion_live_revision(gateway)
+
+
 def _fuel_assignments_revision_for_operation(operation):
     if operation is None:
         return 0
@@ -287,6 +306,10 @@ def _fuel_assignments_revision_for_operation(operation):
 
 def fuel_dispatch_context(gateway, *, include_asset_choices=False):
     operation = current_sort_operation(gateway)
+    refresh_setting = live_screen_refresh_value(
+        gateway,
+        NEOSCORPION_FUEL_DISPATCH_REFRESH_KEY,
+    )
     fuelers = _fueler_users()
     trucks = _fuel_trucks(gateway)
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
@@ -304,6 +327,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
             "fuelers": fuelers,
             "trucks": trucks,
             "settings": settings,
+            "fuel_dispatch_refresh": refresh_setting,
             "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
             **asset_context,
         }
@@ -342,6 +366,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
         "fuelers": fuelers,
         "trucks": trucks,
         "settings": settings,
+        "fuel_dispatch_refresh": refresh_setting,
         "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
         **asset_context,
     }
@@ -349,11 +374,16 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
 
 def fueler_context(gateway, user):
     operation = current_sort_operation(gateway)
+    refresh_setting = live_screen_refresh_value(
+        gateway,
+        NEOSCORPION_FUEL_ASSIGNMENTS_REFRESH_KEY,
+    )
     if not operation:
         return {
             "operation": None,
             "rows": [],
             "fuel_assignments_revision": 0,
+            "fuel_assignments_refresh": refresh_setting,
             "settings": NeoScorpionSettings.query.filter_by(
                 gateway_id=gateway.id
             ).first(),
@@ -395,6 +425,7 @@ def fueler_context(gateway, user):
             fuel_work_states_by_assignment_tail=fuel_work_states,
         ),
         "fuel_assignments_revision": _fuel_assignments_revision_for_operation(operation),
+        "fuel_assignments_refresh": refresh_setting,
         "settings": NeoScorpionSettings.query.filter_by(
             gateway_id=gateway.id
         ).first(),
@@ -423,6 +454,10 @@ def settings_context(gateway):
             ),
         ).all()
     }
+    refresh_values = live_screen_refresh_values(
+        gateway,
+        tuple(screen_key for screen_key, _label in NEOSCORPION_LIVE_REFRESH_SCREENS),
+    )
     return {
         "settings": settings,
         "apu_rate_settings": [
@@ -438,6 +473,15 @@ def settings_context(gateway):
             }
             for aircraft_type in NEOSCORPION_APU_AIRCRAFT_TYPES
         ],
+        "live_refresh_settings": [
+            {
+                "screen_key": screen_key,
+                "label": label,
+                "value": refresh_values[screen_key],
+            }
+            for screen_key, label in NEOSCORPION_LIVE_REFRESH_SCREENS
+        ],
+        "live_refresh_allowed_seconds": LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
     }
 
 

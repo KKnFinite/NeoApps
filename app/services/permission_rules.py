@@ -382,6 +382,11 @@ DEFAULT_PERMISSION_RULES = (
         "Edit NeoScorpion aircraft APU allowance rates.",
     ),
     (
+        "neoscorpion.refresh_settings.edit",
+        "grandmaster",
+        "Edit NeoScorpion live-screen refresh intervals.",
+    ),
+    (
         "neoscorpion.history.view",
         "operator",
         "View NeoScorpion completed fuel history.",
@@ -593,6 +598,9 @@ LEGACY_PERMISSION_DESCRIPTIONS = {
     },
     "neoscorpion.apu_rates.edit": {
         "Edit NeoScorpion aircraft APU allowance rates.",
+    },
+    "neoscorpion.refresh_settings.edit": {
+        "Edit NeoScorpion live-screen refresh intervals.",
     },
     "neostaffing.hierarchy.edit": {
         "Edit NeoStaffing hierarchy units.",

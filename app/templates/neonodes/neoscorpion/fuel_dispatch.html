@@ -3,7 +3,16 @@
 {% block title %}Fuel Dispatch | NeoScorpion{% endblock %}
 
 {% block content %}
-<section class="neoscorpion-shell neoscorpion-screen" aria-label="NeoScorpion Fuel Dispatch">
+<section
+    class="neoscorpion-shell neoscorpion-screen"
+    aria-label="NeoScorpion Fuel Dispatch"
+    data-fuel-dispatch-live
+    data-revision-url="{{ url_for('neoscorpion.fuel_dispatch_revision') }}"
+    data-operation-id="{{ operation.id if operation else '' }}"
+    data-revision="{{ nightly_asset_revision }}"
+    data-refresh-interval-ms="{{ fuel_dispatch_refresh.effective_interval_ms }}"
+    data-refresh-source="{{ fuel_dispatch_refresh.source }}"
+>
     <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
         {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}
         {% include "neonodes/neoscorpion/_brand_title.html" %}
@@ -11,6 +20,18 @@
         <h1>Fuel Dispatch</h1>
     </header>
     {% include "neonodes/neoscorpion/_menu.html" %}
+
+    <div
+        class="neoscorpion-calculation-warning"
+        data-fuel-dispatch-update-banner
+        role="status"
+        aria-live="polite"
+        hidden
+    >
+        <strong>UPDATES AVAILABLE</strong>
+        <span>Fuel Dispatch changed while this page has unsaved work. Refreshing will discard those changes.</span>
+        <button class="action-button" type="button" data-fuel-dispatch-refresh-now>REFRESH NOW</button>
+    </div>
 
     <section class="neoscorpion-panel">
         <div class="neoscorpion-panel-head">
@@ -259,4 +280,5 @@
     </section>
 </section>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_assignments_copy.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+<script src="{{ url_for('static', filename='js/neoscorpion_fuel_dispatch_live.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 {% endblock %}

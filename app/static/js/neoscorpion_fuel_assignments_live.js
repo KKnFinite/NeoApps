@@ -6,7 +6,7 @@
         return;
     }
 
-    const POLL_INTERVAL_MS = 15000;
+    const pollIntervalMs = Number(root.dataset.refreshIntervalMs || 0);
     const operationId = root.dataset.operationId || "none";
     const currentUserId = root.dataset.currentUserId;
     const revisionUrl = root.dataset.revisionUrl;
@@ -159,12 +159,16 @@
 
     presentNewAssignments();
 
+    if (!Number.isFinite(pollIntervalMs) || pollIntervalMs < 5000) {
+        return;
+    }
+
     const controller = window.NeoLiveUpdates.create({
+        continuousWhileVisible: true,
         immediate: false,
-        intervalMs: POLL_INTERVAL_MS,
+        intervalMs: pollIntervalMs,
         poll,
     });
-    controller.setMonitorMode(true);
     controller.setServerStatus({auto_refresh_enabled: true});
     window.addEventListener("pagehide", () => controller.destroy(), {once: true});
 })();

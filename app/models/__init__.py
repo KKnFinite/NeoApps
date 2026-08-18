@@ -5,6 +5,7 @@ from app.models.gateway import Gateway
 from app.models.gateway_membership import GatewayMembership
 from app.models.gateway_node_role import GatewayNodeRole
 from app.models.gateway_sort_matrix import GatewaySortMatrix
+from app.models.live_screen_refresh_setting import LiveScreenRefreshSetting
 from app.models.master_flight_schedule import MasterFlightSchedule
 from app.models.neoermac_building_lineup import NeoErmacBuildingLineup
 from app.models.neoermac_door_pull import NeoErmacDoorPull
@@ -87,6 +88,7 @@ __all__ = [
     "GatewayMembership",
     "GatewayNodeRole",
     "GatewaySortMatrix",
+    "LiveScreenRefreshSetting",
     "NeoNode",
     "PermissionRule",
     "PortalAppAccess",

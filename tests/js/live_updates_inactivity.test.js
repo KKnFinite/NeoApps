@@ -256,6 +256,38 @@ test("monitor mode prevents foreground inactivity without overriding hidden paus
     assert.equal(harness.hasTimer(600000), false);
 });
 
+test("continuous visible mode has no monitor control or inactivity pause", async () => {
+    const harness = createHarness();
+    const statusElement = harness.createStatusElement();
+    let polls = 0;
+    const controller = harness.liveUpdates.create({
+        continuousWhileVisible: true,
+        immediate: false,
+        intervalMs: 5000,
+        poll: async () => {
+            polls += 1;
+        },
+        statusElement,
+    });
+
+    controller.setServerStatus({auto_refresh_enabled: true});
+    assert.equal(statusElement.parentElement.children.length, 1);
+    assert.equal(harness.hasTimer(5000), true);
+    assert.equal(harness.hasTimer(600000), false);
+
+    harness.document.hidden = true;
+    harness.document.dispatch("visibilitychange", {isTrusted: true});
+    assert.equal(harness.hasTimer(5000), false);
+
+    harness.document.hidden = false;
+    harness.document.dispatch("visibilitychange", {isTrusted: true});
+    await settle();
+    await settle();
+    assert.equal(polls, 1);
+    assert.equal(harness.hasTimer(5000), true);
+    assert.equal(harness.hasTimer(600000), false);
+});
+
 test("server-disabled pages stay stopped even when monitor mode is selected", async () => {
     const harness = createHarness();
     let polls = 0;

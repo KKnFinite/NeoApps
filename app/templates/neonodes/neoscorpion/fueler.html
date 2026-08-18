@@ -11,6 +11,8 @@
     data-operation-id="{{ operation.id if operation else '' }}"
     data-revision="{{ fuel_assignments_revision }}"
     data-current-user-id="{{ current_user.id }}"
+    data-refresh-interval-ms="{{ fuel_assignments_refresh.effective_interval_ms }}"
+    data-refresh-source="{{ fuel_assignments_refresh.source }}"
 >
     <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
         {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}

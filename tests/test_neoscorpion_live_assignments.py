@@ -9,6 +9,7 @@ from app.extensions import db
 from app.models import (
     GatewayMembership,
     GatewayNodeRole,
+    LiveScreenRefreshSetting,
     NeoNode,
     NeoScorpionFuelAssignment,
     NeoScorpionSettings,
@@ -135,6 +136,11 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
                     sort_date_operation_id=operation.id,
                     revision=8,
                 ),
+                LiveScreenRefreshSetting(
+                    gateway_id=self.gateway.id,
+                    screen_key="neoscorpion.fuel_assignments",
+                    interval_seconds=15,
+                ),
             ]
         )
         db.session.commit()
@@ -147,10 +153,13 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         self.assertIn(f'data-operation-id="{operation.id}"', body)
         self.assertIn('data-revision="8"', body)
         self.assertIn(f'data-current-user-id="{operator.id}"', body)
+        self.assertIn('data-refresh-interval-ms="15000"', body)
+        self.assertIn('data-refresh-source="override"', body)
         self.assertIn(f'data-fuel-assignment-id="{assignment.id}"', body)
         self.assertIn("NEW ASSIGNMENT", body)
         self.assertIn("neoscorpion_fuel_assignments_live.js", body)
         self.assertIn(mission.flight_number, body)
+        self.assertNotIn("KEEP LIVE / MONITOR MODE", body)
 
         revision = self.client.get(
             "/neoscorpion/fuel-assignments/revision"
@@ -158,15 +167,16 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         self.assertEqual(revision["operation_id"], operation.id)
         self.assertEqual(revision["revision"], 8)
 
-    def test_live_script_uses_visible_monitor_polling_and_session_alert_state(self):
+    def test_live_script_uses_effective_visible_polling_and_session_alert_state(self):
         with open(
             "app/static/js/neoscorpion_fuel_assignments_live.js",
             encoding="utf-8",
         ) as source:
             script = source.read()
 
-        self.assertIn("POLL_INTERVAL_MS = 15000", script)
-        self.assertIn("setMonitorMode(true)", script)
+        self.assertIn("root.dataset.refreshIntervalMs", script)
+        self.assertIn("continuousWhileVisible: true", script)
+        self.assertNotIn("setMonitorMode", script)
         self.assertIn("sessionStorage", script)
         self.assertIn("data-new-assignment-marker", script)
         self.assertIn("AudioContext", script)

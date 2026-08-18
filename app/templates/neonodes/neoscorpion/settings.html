@@ -59,5 +59,32 @@
             {% endif %}
         </form>
     </section>
+
+    <section class="neoscorpion-panel">
+        <div class="neoscorpion-panel-head">
+            <span>Live Refresh</span>
+            <strong>PER SCREEN</strong>
+        </div>
+        {% for item in live_refresh_settings %}
+        <form class="neoscorpion-settings-form" method="post">
+            <input type="hidden" name="action" value="save_live_refresh">
+            <input type="hidden" name="screen_key" value="{{ item.screen_key }}">
+            <label>{{ item.label }}
+                <select name="refresh_interval_seconds" {% if not can_edit_refresh_settings %}disabled{% endif %}>
+                    <option value="default" {% if item.value.override_seconds is none %}selected{% endif %}>Render Default</option>
+                    {% for seconds in live_refresh_allowed_seconds %}
+                    <option value="{{ seconds }}" {% if item.value.override_seconds == seconds %}selected{% endif %}>{{ 'OFF' if seconds == 0 else seconds ~ ' seconds' }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <p class="neoscorpion-helper">
+                Configured: {{ item.value.configured_label }} | Effective: {{ item.value.effective_label }} | Source: {{ item.value.source_label }}
+            </p>
+            {% if can_edit_refresh_settings %}
+            <button class="action-button neoscorpion-save-button" type="submit">Save {{ item.label }}</button>
+            {% endif %}
+        </form>
+        {% endfor %}
+    </section>
 </section>
 {% endblock %}

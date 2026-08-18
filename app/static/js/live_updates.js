@@ -27,6 +27,7 @@
             this.statusElement = options.statusElement || null;
             this.failureThreshold = Number(options.failureThreshold) || DEFAULT_FAILURE_THRESHOLD;
             this.immediate = options.immediate !== false;
+            this.continuousWhileVisible = options.continuousWhileVisible === true;
             this.enabled = false;
             this.running = false;
             this.timer = null;
@@ -43,13 +44,15 @@
             this.onUserActivity = this.onUserActivity.bind(this);
             this.onInactivityTimeout = this.onInactivityTimeout.bind(this);
             document.addEventListener("visibilitychange", this.onVisibilityChange);
-            USER_ACTIVITY_EVENTS.forEach(([eventName, capture]) => {
-                document.addEventListener(eventName, this.onUserActivity, {
-                    capture,
-                    passive: ["pointerdown", "mousedown", "touchstart", "scroll"].includes(eventName),
+            if (!this.continuousWhileVisible) {
+                USER_ACTIVITY_EVENTS.forEach(([eventName, capture]) => {
+                    document.addEventListener(eventName, this.onUserActivity, {
+                        capture,
+                        passive: ["pointerdown", "mousedown", "touchstart", "scroll"].includes(eventName),
+                    });
                 });
-            });
-            this.buildMonitorControl();
+                this.buildMonitorControl();
+            }
         }
 
         setServerStatus(status) {
@@ -164,6 +167,7 @@
                 || document.hidden
                 || this.inactivityPaused
                 || this.monitorMode
+                || this.continuousWhileVisible
             ) {
                 return;
             }
@@ -175,7 +179,13 @@
 
         onInactivityTimeout() {
             this.inactivityTimer = null;
-            if (!this.enabled || this.destroyed || document.hidden || this.monitorMode) {
+            if (
+                !this.enabled
+                || this.destroyed
+                || document.hidden
+                || this.monitorMode
+                || this.continuousWhileVisible
+            ) {
                 return;
             }
             this.inactivityPaused = true;
@@ -184,7 +194,12 @@
         }
 
         onUserActivity(event) {
-            if (event?.isTrusted === false || !this.enabled || document.hidden) {
+            if (
+                this.continuousWhileVisible
+                || event?.isTrusted === false
+                || !this.enabled
+                || document.hidden
+            ) {
                 return;
             }
             if (this.inactivityPaused) {
@@ -198,6 +213,9 @@
         }
 
         setMonitorMode(enabled) {
+            if (this.continuousWhileVisible) {
+                return;
+            }
             this.monitorMode = Boolean(enabled);
             this.updateMonitorControl();
             if (this.monitorMode) {
@@ -308,9 +326,11 @@
             this.clearTimer();
             this.clearInactivityTimer();
             document.removeEventListener("visibilitychange", this.onVisibilityChange);
-            USER_ACTIVITY_EVENTS.forEach(([eventName, capture]) => {
-                document.removeEventListener(eventName, this.onUserActivity, capture);
-            });
+            if (!this.continuousWhileVisible) {
+                USER_ACTIVITY_EVENTS.forEach(([eventName, capture]) => {
+                    document.removeEventListener(eventName, this.onUserActivity, capture);
+                });
+            }
         }
     }
 

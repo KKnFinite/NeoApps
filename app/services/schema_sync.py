@@ -1219,6 +1219,7 @@ def _create_missing_application_tables(existing_table_names):
     from app.models import (
         AuthRateLimitState,
         FlightApiReviewItem,
+        LiveScreenRefreshSetting,
         MotherBrainAlert,
         MotherBrainAlertUserState,
         MotherBrainGoogleIntegrationSetting,
@@ -1263,6 +1264,7 @@ def _create_missing_application_tables(existing_table_names):
     for model in (
         AuthRateLimitState,
         FlightApiReviewItem,
+        LiveScreenRefreshSetting,
         MotherBrainAlert,
         MotherBrainAlertUserState,
         MotherBrainGoogleIntegrationSetting,
