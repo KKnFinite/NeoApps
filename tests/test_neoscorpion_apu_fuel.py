@@ -87,8 +87,13 @@ class NeoScorpionApuFuelTest(unittest.TestCase):
                     "apu_confirmed_at_utc",
                     "apu_allowance_lbs",
                     "applied_apu_rate_thousand_lbs_per_hour",
+                    "apu_source_tank_code",
                     "off_at_utc",
                     "off_by_user_id",
+                    "truck_segment_started_at_utc",
+                    "ended_early_at_utc",
+                    "ended_early_by_user_id",
+                    "ended_early_reason",
                 },
             )
 
@@ -462,6 +467,8 @@ class NeoScorpionApuFuelTest(unittest.TestCase):
 
     @staticmethod
     def _form(assignment, **values):
+        if values.get("apu_running") == "yes":
+            values.setdefault("apu_source_tank_code", "left")
         return {
             "assignment_id": str(assignment.id),
             "transfer_fuel_gallons": "",

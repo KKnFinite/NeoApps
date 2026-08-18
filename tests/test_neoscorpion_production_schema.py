@@ -93,6 +93,7 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
                 "apu_confirmed_at_utc",
                 "apu_allowance_lbs",
                 "applied_apu_rate_thousand_lbs_per_hour",
+                "apu_source_tank_code",
                 "off_at_utc",
                 "off_by_user_id",
                 "truck_segment_started_at_utc",

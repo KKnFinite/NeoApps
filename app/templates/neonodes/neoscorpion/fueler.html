@@ -36,11 +36,15 @@
             {% for row in rows %}
             <article class="neoscorpion-fueler-card" data-fuel-assignment-id="{{ row.assignment.id }}">
                 <span class="neoscorpion-status-pill" data-new-assignment-marker role="status" hidden>NEW ASSIGNMENT</span>
-                <header>
-                    <span>{{ row.destination }}</span>
-                    <strong>{{ row.tail_number }}</strong>
-                    <small>{{ row.mission.flight_number }} | {{ row.parking_position }} | {{ row.departure_time or '-' }}</small>
-                    <small>{{ row.detailed_aircraft_type }} | ON {{ row.on_time }}</small>
+                <header class="neoscorpion-fueler-mission-head">
+                    <div>
+                        <span>{{ row.destination }}</span>
+                        <strong>{{ row.tail_number }}</strong>
+                    </div>
+                    <div>
+                        <small>{{ row.mission.flight_number }} | {{ row.parking_position }} | {{ row.departure_time or '-' }}</small>
+                        <small>{{ row.detailed_aircraft_type }} | ON {{ row.on_time }}</small>
+                    </div>
                 </header>
                 {% if row.fueler_work_blocked %}
                 <p class="neoscorpion-calculation-warning"><strong>HOLD / REVIEW REQUIRED</strong> {{ row.hold_reason_display }}</p>
@@ -60,11 +64,15 @@
                     </div>
                     <div>
                         <dt>APU Allowance</dt>
-                        <dd>{{ row.apu_allowance_display }}{% if row.apu_allowance_display != "INCOMPLETE" %} K LBS{% endif %}</dd>
+                        <dd data-apu-allowance-output>{{ row.apu_allowance_display }}{% if row.apu_allowance_display != "INCOMPLETE" %} K LBS{% endif %}</dd>
+                    </div>
+                    <div>
+                        <dt>APU Source</dt>
+                        <dd data-apu-source-output>{{ row.apu_source_tank_label }}</dd>
                     </div>
                     <div class="neoscorpion-fuel-total-primary">
                         <dt>Fueling Target</dt>
-                        <dd>{{ row.fueling_target_display }}{% if row.fueling_target_display != "INCOMPLETE" %} K LBS{% endif %}</dd>
+                        <dd data-fueling-target-output>{{ row.fueling_target_display }}{% if row.fueling_target_display != "INCOMPLETE" %} K LBS{% endif %}</dd>
                     </div>
                     <div>
                         <dt>Remaining Total</dt>
@@ -91,23 +99,57 @@
                     </div>
                 </dl>
                 {% if can_edit and row.assignment and not row.is_off and not row.fueler_work_blocked %}
-                <form method="post" class="neoscorpion-fueler-form">
+                <form
+                    method="post"
+                    class="neoscorpion-fueler-form"
+                    data-fuel-planning-form
+                    data-aircraft-type="{{ row.detailed_aircraft_type }}"
+                    data-required-lbs="{{ row.mission.planned_fuel_load if row.mission.planned_fuel_load is not none else '' }}"
+                    data-initial-apu-running="{% if row.apu_running is sameas true %}yes{% elif row.apu_running is sameas false %}no{% else %}not_confirmed{% endif %}"
+                    data-persisted-apu-allowance-lbs="{{ row.apu_allowance_lbs if row.apu_allowance_lbs is not none else '' }}"
+                    data-effective-apu-rate="{{ row.effective_apu_rate }}"
+                    data-planned-departure-utc="{{ row.planned_departure_utc }}"
+                    data-window-minutes="{{ row.operation_window_minutes }}"
+                >
                     <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
+                    <div class="neoscorpion-apu-controls">
+                        <label>APU Running
+                            <select name="apu_running" data-apu-running>
+                                <option value="not_confirmed" {% if row.apu_running is none %}selected{% endif %}>Not Confirmed</option>
+                                <option value="no" {% if row.apu_running is sameas false %}selected{% endif %}>No</option>
+                                <option value="yes" {% if row.apu_running is sameas true %}selected{% endif %}>Yes</option>
+                            </select>
+                        </label>
+                        <label data-apu-source-wrap {% if row.apu_running is not sameas true %}hidden{% endif %}>APU Source Tank
+                            <select
+                                name="apu_source_tank_code"
+                                data-apu-source
+                                {% if row.apu_running is not sameas true %}disabled{% else %}required{% endif %}
+                            >
+                                <option value="">Select tank</option>
+                                {% for tank in row.tank_rows %}
+                                <option value="{{ tank.code }}" {% if row.apu_source_tank_code == tank.code %}selected{% endif %}>{{ tank.label }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                    </div>
                     {% if row.tank_rows %}
                     <div class="neoscorpion-fuel-tank-grid" role="table" aria-label="{{ row.detailed_aircraft_type }} fuel tank readings">
                         <div class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-head" role="row">
                             <span role="columnheader">Tank</span>
                             <span role="columnheader">Remaining</span>
+                            <span role="columnheader">Planned</span>
                             <span role="columnheader">Actual</span>
                         </div>
                         {% for tank in row.tank_rows %}
                         <div class="neoscorpion-fuel-tank-row" role="row">
                             <strong role="rowheader">{{ tank.label }}</strong>
                             <label role="cell">
-                                <input name="remaining_{{ tank.code }}" value="{{ tank.remaining_display }}" inputmode="decimal" placeholder="0.0" aria-label="{{ tank.label }} Remaining">
+                                <input name="remaining_{{ tank.code }}" value="{{ tank.remaining_display }}" inputmode="decimal" data-tank-code="{{ tank.code }}" data-fuel-reading="remaining" aria-label="{{ tank.label }} Remaining">
                             </label>
+                            <span class="neoscorpion-planned-value" role="cell" data-planned-tank="{{ tank.code }}">{{ tank.planned_display }}</span>
                             <label role="cell">
-                                <input name="actual_{{ tank.code }}" value="{{ tank.actual_display }}" inputmode="decimal" placeholder="0.0" aria-label="{{ tank.label }} Actual">
+                                <input name="actual_{{ tank.code }}" value="{{ tank.actual_display }}" inputmode="decimal" data-tank-code="{{ tank.code }}" data-fuel-reading="actual" aria-label="{{ tank.label }} Actual">
                             </label>
                         </div>
                         {% endfor %}
@@ -115,13 +157,6 @@
                     {% else %}
                     <p class="neoscorpion-fuel-tank-unconfigured">Tank entry is not configured for this aircraft.</p>
                     {% endif %}
-                    <label>APU Running
-                        <select name="apu_running">
-                            <option value="not_confirmed" {% if row.apu_running is none %}selected{% endif %}>Not Confirmed</option>
-                            <option value="no" {% if row.apu_running is sameas false %}selected{% endif %}>No</option>
-                            <option value="yes" {% if row.apu_running is sameas true %}selected{% endif %}>Yes</option>
-                        </select>
-                    </label>
                     <label>T/F
                         <input name="transfer_fuel_gallons" value="{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '' }}" inputmode="numeric" placeholder="Gallons">
                     </label>
@@ -136,12 +171,14 @@
                     <div class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-head" role="row">
                         <span role="columnheader">Tank</span>
                         <span role="columnheader">Remaining</span>
+                        <span role="columnheader">Planned</span>
                         <span role="columnheader">Actual</span>
                     </div>
                     {% for tank in row.tank_rows %}
                     <div class="neoscorpion-fuel-tank-row" role="row">
                         <strong role="rowheader">{{ tank.label }}</strong>
                         <span role="cell">{{ tank.remaining_display or '-' }}</span>
+                        <span class="neoscorpion-planned-value" role="cell">{{ tank.planned_display }}</span>
                         <span role="cell">{{ tank.actual_display or '-' }}</span>
                     </div>
                     {% endfor %}
@@ -165,7 +202,7 @@
                         <button class="action-button" type="submit">MARK OFF</button>
                     </form>
                     {% elif not row.is_off and not row.fueler_work_blocked %}
-                    <p class="neoscorpion-calculation-warning">Complete Actual fuel and confirm APU before OFF.</p>
+                    <p class="neoscorpion-calculation-warning">{% if row.apu_running is sameas true and not row.apu_source_valid %}Select an APU source tank before OFF.{% else %}Complete Actual fuel and confirm APU before OFF.{% endif %}</p>
                     {% endif %}
                 {% endif %}
             </article>
@@ -175,5 +212,6 @@
     </section>
 </section>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_assignments_copy.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+<script src="{{ url_for('static', filename='js/neoscorpion_fuel_planning.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_assignments_live.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 {% endblock %}

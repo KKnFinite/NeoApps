@@ -221,6 +221,7 @@ class NeoScorpionFuelWorkState(db.Model):
         db.Numeric(8, 4),
         nullable=True,
     )
+    apu_source_tank_code = db.Column(db.String(32), nullable=True)
     off_at_utc = db.Column(db.DateTime, nullable=True)
     off_by_user_id = db.Column(
         db.Integer,

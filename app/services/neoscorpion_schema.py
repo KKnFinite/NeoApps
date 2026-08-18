@@ -56,6 +56,7 @@ NEOSCORPION_ADDITIVE_COLUMNS = {
         "apu_confirmed_at_utc": "TIMESTAMP",
         "apu_allowance_lbs": "INTEGER",
         "applied_apu_rate_thousand_lbs_per_hour": "NUMERIC(8, 4)",
+        "apu_source_tank_code": "VARCHAR(32)",
         "off_at_utc": "TIMESTAMP",
         "off_by_user_id": "INTEGER",
         "truck_segment_started_at_utc": "TIMESTAMP",

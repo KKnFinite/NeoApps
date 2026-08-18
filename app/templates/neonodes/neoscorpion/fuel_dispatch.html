@@ -44,7 +44,7 @@
         {% elif not rows %}
         <p class="neoscorpion-empty">No outbound departure missions are available for this sort.</p>
         {% else %}
-        <div class="neoscorpion-table-wrap">
+        <div class="neoscorpion-table-wrap neoscorpion-table-wrap--sticky">
             <table class="neoscorpion-dispatch-table">
                 <thead>
                     <tr>
@@ -69,7 +69,6 @@
                         <th>Truck</th>
                         <th>Truck Fuel</th>
                         <th>T/F</th>
-                        <th>Movement</th>
                         <th>Status</th>
                         <th>Load Planning</th>
                         <th>Corrections</th>
@@ -148,7 +147,6 @@
                             </td>
                             <td>{{ row.truck_remaining_fuel if row.truck_remaining_fuel is not none else '-' }} gal</td>
                             <td>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</td>
-                            <td>{{ row.movement_status|replace("_", " ")|upper }}</td>
                             <td>
                                 {% if row.effective_hold %}
                                 <input type="hidden" name="review_status" value="{{ row.review_status }}">
@@ -263,7 +261,6 @@
                         <td>{{ row.assigned_truck.truck_number if row.assigned_truck else 'Unassigned' }}</td>
                         <td>{{ row.truck_remaining_fuel if row.truck_remaining_fuel is not none else '-' }} gal</td>
                         <td>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</td>
-                        <td>{{ row.movement_status|replace("_", " ")|upper }}</td>
                         <td>{{ row.review_status|replace("_", " ")|title }}</td>
                         <td>{{ row.load_planning_note or row.load_planning_placeholder }}</td>
                         <td>-</td>

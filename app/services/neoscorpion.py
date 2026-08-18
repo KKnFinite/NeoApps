@@ -38,6 +38,7 @@ from app.services.neoscorpion_assets import (
     nightly_asset_context,
     record_nightly_operational_change,
 )
+from app.services.neoscorpion_fuel_planning import plan_fuel_by_tank
 from app.services.time_display import format_local_hhmm
 
 
@@ -415,6 +416,7 @@ def fueler_context(gateway, user):
         assignment.sort_date_mission_id: assignment for assignment in assignments
     }
     fuel_work_states = _fuel_work_states_by_assignment_tail(assignments)
+    apu_rates_by_aircraft_type = _effective_apu_rates(gateway.id)
     return {
         "operation": operation,
         "rows": _fuel_rows(
@@ -423,6 +425,7 @@ def fueler_context(gateway, user):
             estimated_fuel_status=CALCULATION_NOT_CONFIGURED_MESSAGE,
             assignments_by_mission=assignments_by_mission,
             fuel_work_states_by_assignment_tail=fuel_work_states,
+            apu_rates_by_aircraft_type=apu_rates_by_aircraft_type,
         ),
         "fuel_assignments_revision": _fuel_assignments_revision_for_operation(operation),
         "fuel_assignments_refresh": refresh_setting,
@@ -843,6 +846,23 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
         target_apu_running = apu_running_choices[submitted_apu_running]
         apu_changed = target_apu_running is not current_apu_running
 
+    current_apu_source_tank_code = (
+        fuel_work_state.apu_source_tank_code if fuel_work_state else None
+    )
+    target_apu_source_tank_code = current_apu_source_tank_code
+    if "apu_source_tank_code" in form:
+        target_apu_source_tank_code = (
+            (form.get("apu_source_tank_code") or "").strip() or None
+        )
+    if target_apu_running is True:
+        if target_apu_source_tank_code not in expected_tank_codes:
+            raise ValueError("Select a valid APU source tank for this aircraft.")
+    else:
+        target_apu_source_tank_code = None
+    apu_source_changed = (
+        target_apu_source_tank_code != current_apu_source_tank_code
+    )
+
     target_apu_confirmed_at_utc = (
         fuel_work_state.apu_confirmed_at_utc if fuel_work_state else None
     )
@@ -912,7 +932,13 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
         )
     )
     transfer_changed = assignment.transfer_fuel_gallons != target_transfer_gallons
-    changed = tank_changed or apu_changed or tail_changed or transfer_changed
+    changed = (
+        tank_changed
+        or apu_changed
+        or apu_source_changed
+        or tail_changed
+        or transfer_changed
+    )
     revision = int(asset_state.revision if asset_state else 0)
     if not changed:
         return FuelerSaveResult(
@@ -922,7 +948,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
             fuel_work_state=fuel_work_state,
         )
 
-    if tank_changed or apu_changed:
+    if tank_changed or apu_changed or apu_source_changed:
         if fuel_work_state is None:
             fuel_work_state = NeoScorpionFuelWorkState(
                 fuel_assignment_id=assignment.id,
@@ -944,6 +970,8 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
             fuel_work_state.apu_confirmed_at_utc = target_apu_confirmed_at_utc
             fuel_work_state.apu_allowance_lbs = target_apu_allowance_lbs
             fuel_work_state.applied_apu_rate_thousand_lbs_per_hour = target_apu_rate
+        if apu_changed or apu_source_changed:
+            fuel_work_state.apu_source_tank_code = target_apu_source_tank_code
         if (
             fuel_work_state.on_at_utc is None
             and submitted_nonnull_remaining
@@ -1040,6 +1068,13 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None):
         .all()
     )
     tank_states_by_code = {state.tank_code: state for state in tank_states}
+    tank_layout = tank_layout_for_tail(tail_number)
+    if (
+        fuel_work_state.apu_running is True
+        and fuel_work_state.apu_source_tank_code
+        not in {code for code, _label in tank_layout}
+    ):
+        raise ValueError("Select a valid APU source tank before OFF.")
     (
         _remaining_complete,
         _remaining_total_lbs,
@@ -1047,7 +1082,7 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None):
         _actual_total_lbs,
         neo_fuel_lbs,
     ) = _fuel_work_calculation(
-        tank_layout_for_tail(tail_number),
+        tank_layout,
         tank_states_by_code,
         fuel_work_state.apu_running,
         fuel_work_state.apu_allowance_lbs,
@@ -1141,6 +1176,9 @@ def complete_fuel_on_board(gateway, user, assignment_id, *, now_utc=None):
         .all()
     )
     tank_states_by_code = {state.tank_code: state for state in tank_states}
+    tank_layout = tank_layout_for_tail(tail_number)
+    if not _apu_source_is_valid(fuel_work_state, tank_layout):
+        raise ValueError("Select a valid APU source tank before Fuel On Board.")
     (
         _remaining_complete,
         _remaining_total_lbs,
@@ -1148,7 +1186,7 @@ def complete_fuel_on_board(gateway, user, assignment_id, *, now_utc=None):
         _actual_total_lbs,
         neo_fuel_lbs,
     ) = _fuel_work_calculation(
-        tank_layout_for_tail(tail_number),
+        tank_layout,
         tank_states_by_code,
         fuel_work_state.apu_running,
         fuel_work_state.apu_allowance_lbs,
@@ -1252,6 +1290,9 @@ def complete_fueled_assignment(gateway, user, assignment_id, *, now_utc=None):
         .all()
     )
     tank_states_by_code = {state.tank_code: state for state in tank_states}
+    tank_layout = tank_layout_for_tail(tail_number)
+    if not _apu_source_is_valid(fuel_work_state, tank_layout):
+        raise ValueError("Select a valid APU source tank before COMPLETE.")
     (
         _remaining_complete,
         _remaining_total_lbs,
@@ -1259,7 +1300,7 @@ def complete_fueled_assignment(gateway, user, assignment_id, *, now_utc=None):
         _actual_total_lbs,
         neo_fuel_lbs,
     ) = _fuel_work_calculation(
-        tank_layout_for_tail(tail_number),
+        tank_layout,
         tank_states_by_code,
         fuel_work_state.apu_running,
         fuel_work_state.apu_allowance_lbs,
@@ -2391,6 +2432,14 @@ def ensure_fuel_assignment(operation, mission):
     return assignment
 
 
+def _apu_source_is_valid(fuel_work_state, tank_layout):
+    if fuel_work_state is None or fuel_work_state.apu_running is not True:
+        return True
+    return fuel_work_state.apu_source_tank_code in {
+        tank_code for tank_code, _tank_label in tank_layout
+    }
+
+
 def _fuel_work_calculation(
     tank_layout,
     tank_states_by_code,
@@ -2487,6 +2536,7 @@ def _fuel_rows(
     fuel_work_states_by_assignment_tail=None,
     nightly_truck_states_by_truck_id=None,
     fueling_event_work_state_ids=None,
+    apu_rates_by_aircraft_type=None,
 ):
     tail_states = _tail_states_by_tail(operation)
     tail_fuel_states = _tail_fuel_states_by_tail(operation)
@@ -2502,6 +2552,7 @@ def _fuel_rows(
     trucks = {truck.id: truck for truck in fuel_trucks}
     fuel_work_states = fuel_work_states_by_assignment_tail or {}
     event_work_state_ids = fueling_event_work_state_ids or set()
+    effective_apu_rates = apu_rates_by_aircraft_type or {}
 
     rows = []
     for mission in missions:
@@ -2576,29 +2627,62 @@ def _fuel_rows(
         )
         if has_prior_fueling_events:
             movement_status = "moved"
-        tank_rows = []
-        for tank_code, tank_label in tank_layout:
-            tank_state = tank_states_by_code.get(tank_code)
-            tank_rows.append(
-                {
-                    "code": tank_code,
-                    "label": tank_label,
-                    "remaining_lbs": tank_state.remaining_lbs if tank_state else None,
-                    "actual_lbs": tank_state.actual_lbs if tank_state else None,
-                    "remaining_display": format_display_thousands(
-                        tank_state.remaining_lbs if tank_state else None
-                    ),
-                    "actual_display": format_display_thousands(
-                        tank_state.actual_lbs if tank_state else None
-                    ),
-                }
-            )
         apu_running = fuel_work_state.apu_running if fuel_work_state else None
         apu_allowance_lbs = (
             fuel_work_state.apu_allowance_lbs
             if fuel_work_state and apu_running is not None
             else None
         )
+        apu_source_tank_code = (
+            fuel_work_state.apu_source_tank_code if fuel_work_state else None
+        )
+        apu_source_valid = bool(
+            apu_running is not True
+            or apu_source_tank_code in {code for code, _label in tank_layout}
+        )
+        planned_by_tank = plan_fuel_by_tank(
+            detailed_aircraft_type,
+            mission.planned_fuel_load,
+            remaining_lbs_by_tank={
+                code: state.remaining_lbs
+                for code, state in tank_states_by_code.items()
+            },
+            actual_lbs_by_tank={
+                code: state.actual_lbs
+                for code, state in tank_states_by_code.items()
+            },
+            apu_running=apu_running,
+            apu_allowance_lbs=apu_allowance_lbs,
+            apu_source_tank_code=apu_source_tank_code,
+        )
+        tank_rows = []
+        for tank_code, tank_label in tank_layout:
+            tank_state = tank_states_by_code.get(tank_code)
+            planned_lbs = (
+                planned_by_tank.get(tank_code)
+                if planned_by_tank is not None
+                else None
+            )
+            tank_rows.append(
+                {
+                    "code": tank_code,
+                    "label": tank_label,
+                    "remaining_lbs": tank_state.remaining_lbs if tank_state else None,
+                    "actual_lbs": tank_state.actual_lbs if tank_state else None,
+                    "planned_lbs": planned_lbs,
+                    "remaining_display": format_display_thousands(
+                        tank_state.remaining_lbs if tank_state else None
+                    ),
+                    "planned_display": (
+                        format_display_thousands(planned_lbs)
+                        if planned_lbs is not None
+                        else "INCOMPLETE"
+                    ),
+                    "actual_display": format_display_thousands(
+                        tank_state.actual_lbs if tank_state else None
+                    ),
+                }
+            )
         (
             remaining_complete,
             remaining_total_lbs,
@@ -2643,6 +2727,7 @@ def _fuel_rows(
             and assignment.assigned_fueler_user_id is not None
             and assignment.assigned_truck_id is None
             and assignment.transfer_fuel_gallons in (None, 0)
+            and apu_source_valid
             and neo_fuel_lbs is not None
         )
         if fuel_on_board_complete:
@@ -2659,6 +2744,8 @@ def _fuel_rows(
             fuel_on_board_reason = "Clear unused truck first."
         elif assignment.transfer_fuel_gallons not in (None, 0):
             fuel_on_board_reason = "T/F must be blank or 0."
+        elif not apu_source_valid:
+            fuel_on_board_reason = "APU source tank required."
         elif neo_fuel_lbs is None:
             fuel_on_board_reason = "Actual/APU incomplete."
         else:
@@ -2671,6 +2758,7 @@ def _fuel_rows(
             and not work_ended_early
             and fuel_work_state
             and fuel_work_state.off_at_utc
+            and apu_source_valid
             and neo_fuel_lbs is not None
             and movement_status != "unknown"
             and (
@@ -2704,6 +2792,8 @@ def _fuel_rows(
             normal_completion_reason = "ENDED EARLY"
         elif not fuel_work_state or not fuel_work_state.off_at_utc:
             normal_completion_reason = "Fueler OFF required."
+        elif not apu_source_valid:
+            normal_completion_reason = "APU source tank required."
         elif neo_fuel_lbs is None:
             normal_completion_reason = "NEO FUEL incomplete."
         elif movement_status == "unknown":
@@ -2781,6 +2871,7 @@ def _fuel_rows(
                 "off_ready": bool(
                     fuel_work_state
                     and fuel_work_state.off_at_utc is None
+                    and apu_source_valid
                     and neo_fuel_lbs is not None
                     and not effective_hold
                     and not tail_mismatch
@@ -2803,6 +2894,11 @@ def _fuel_rows(
                     else "INCOMPLETE"
                 ),
                 "apu_running": apu_running,
+                "apu_source_tank_code": apu_source_tank_code,
+                "apu_source_tank_label": (
+                    dict(tank_layout).get(apu_source_tank_code, "-")
+                ),
+                "apu_source_valid": apu_source_valid,
                 "apu_running_label": (
                     "YES"
                     if apu_running is True
@@ -2813,6 +2909,24 @@ def _fuel_rows(
                 "apu_allowance_display": (
                     format_display_thousands(apu_allowance_lbs)
                     if apu_allowance_lbs is not None
+                    else "INCOMPLETE"
+                ),
+                "apu_allowance_lbs": apu_allowance_lbs,
+                "effective_apu_rate": str(
+                    effective_apu_rates.get(
+                        detailed_aircraft_type,
+                        DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR,
+                    )
+                ),
+                "planned_departure_utc": (
+                    mission.planned_datetime_utc.isoformat() + "Z"
+                    if mission.planned_datetime_utc is not None
+                    else ""
+                ),
+                "operation_window_minutes": int(operation.window_minutes or 0),
+                "planned_total_display": (
+                    format_display_thousands(sum(planned_by_tank.values()))
+                    if planned_by_tank is not None
                     else "INCOMPLETE"
                 ),
                 "fueling_target_display": (
@@ -3134,6 +3248,24 @@ def _effective_apu_rate(gateway_id, aircraft_type):
     if setting is None:
         return DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR
     return Decimal(setting.apu_rate_thousand_lbs_per_hour)
+
+
+def _effective_apu_rates(gateway_id):
+    rates = {
+        aircraft_type: DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR
+        for aircraft_type in NEOSCORPION_APU_AIRCRAFT_TYPES
+    }
+    overrides = NeoScorpionAircraftFuelSetting.query.filter(
+        NeoScorpionAircraftFuelSetting.gateway_id == gateway_id,
+        NeoScorpionAircraftFuelSetting.aircraft_type.in_(
+            NEOSCORPION_APU_AIRCRAFT_TYPES
+        ),
+    ).all()
+    for override in overrides:
+        rates[override.aircraft_type] = Decimal(
+            override.apu_rate_thousand_lbs_per_hour
+        )
+    return rates
 
 
 def _apu_rate_field_name(aircraft_type):

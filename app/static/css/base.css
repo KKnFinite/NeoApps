@@ -23544,6 +23544,19 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     text-transform: uppercase;
 }
 
+.neoscorpion-table-wrap--sticky {
+    max-height: calc(100vh - 190px);
+    overflow: auto;
+}
+
+.neoscorpion-dispatch-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: #08090b;
+    box-shadow: 0 1px 0 rgba(var(--node-scorpion-primary-rgb), 0.35);
+}
+
 .neoscorpion-dispatch-divider-head,
 .neoscorpion-dispatch-divider-cell {
     width: 18px;
@@ -23863,6 +23876,11 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     background: linear-gradient(180deg, rgba(12, 12, 12, 0.94), rgba(5, 6, 8, 0.94));
 }
 
+.neoscorpion-fueler-card {
+    gap: 8px;
+    padding: 10px;
+}
+
 .neoscorpion-fueler-card > header {
     display: grid;
     gap: 3px;
@@ -23888,6 +23906,18 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     font-weight: 800;
 }
 
+.neoscorpion-fueler-card > .neoscorpion-fueler-mission-head {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: end;
+    gap: 6px 14px;
+}
+
+.neoscorpion-fueler-mission-head > div {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+}
+
 .neoscorpion-fueler-form,
 .neoscorpion-fueler-readout,
 .neoscorpion-truck-form,
@@ -23903,14 +23933,14 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
 .neoscorpion-fuel-totals {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+    gap: 5px;
     margin: 0;
 }
 
 .neoscorpion-fuel-totals div {
     min-width: 0;
-    padding: 9px 10px;
+    padding: 6px 8px;
     border: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.18);
     border-radius: 6px;
     background: rgba(0, 0, 0, 0.22);
@@ -23930,7 +23960,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
 .neoscorpion-fuel-totals dd {
     color: #ffffff;
-    font-size: 0.9rem;
+    font-size: 0.84rem;
     font-weight: 950;
     overflow-wrap: anywhere;
 }
@@ -23948,8 +23978,15 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 }
 
 .neoscorpion-fuel-tank-grid,
-.neoscorpion-fuel-tank-unconfigured {
+.neoscorpion-fuel-tank-unconfigured,
+.neoscorpion-apu-controls {
     grid-column: 1 / -1;
+}
+
+.neoscorpion-apu-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
 }
 
 .neoscorpion-fuel-tank-grid {
@@ -23960,7 +23997,11 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
 .neoscorpion-fuel-tank-row {
     display: grid;
-    grid-template-columns: minmax(74px, 0.85fr) repeat(2, minmax(0, 1fr));
+    grid-template-columns:
+        minmax(68px, 0.8fr)
+        minmax(80px, 1fr)
+        minmax(64px, 0.85fr)
+        minmax(80px, 1fr);
     align-items: center;
     gap: 7px;
     min-width: 0;
@@ -23982,12 +24023,24 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 .neoscorpion-fuel-tank-row input {
     width: 100%;
     min-width: 0;
+    min-height: 46px;
+    padding: 9px 8px;
+    font-size: 1rem;
+    font-weight: 900;
+    text-align: center;
 }
 
-.neoscorpion-fuel-tank-row > span[role="cell"] {
+.neoscorpion-fuel-tank-row > span[role="cell"],
+.neoscorpion-planned-value {
     color: #ffffff;
     font-size: 0.86rem;
     font-weight: 900;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.neoscorpion-planned-value {
+    color: #ffe79a !important;
 }
 
 .neoscorpion-fuel-tank-unconfigured {
@@ -24076,8 +24129,13 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         grid-template-columns: 1fr;
     }
 
-    .neoscorpion-fuel-totals {
-        grid-template-columns: 1fr;
+    .neoscorpion-fuel-totals,
+    .neoscorpion-apu-controls {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neoscorpion-fueler-card > .neoscorpion-fueler-mission-head {
+        grid-template-columns: auto minmax(0, 1fr);
     }
 
     .neoscorpion-assets-grid,
@@ -24111,6 +24169,18 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     .neoscorpion-panel {
         padding: 14px;
+    }
+}
+
+@media (max-width: 520px) {
+    .neoscorpion-fuel-tank-row {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px;
+    }
+
+    .neoscorpion-fuel-tank-row > strong,
+    .neoscorpion-fuel-tank-head > span:first-child {
+        grid-column: 1 / -1;
     }
 }
 
