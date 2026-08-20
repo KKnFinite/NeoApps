@@ -11389,6 +11389,24 @@ body:has(.neostaffing-people-console) { overflow-x: clip; }
     .neostaffing-people-console { width: 100%; margin: 0; grid-template-columns: 1fr; }
 }
 
+/* PEOPLE roster actions, grouped work areas, and bulk paste preview. */
+.neostaffing-people-roster-actions { display: flex; align-items: center; gap: 8px; min-height: 38px; }
+.neostaffing-people-roster-actions .neostaffing-people-selection-toolbar { flex: 0 1 auto; margin: 0; }
+.neostaffing-people-roster-actions .neostaffing-people-add-control { margin-left: 0; }
+.neostaffing-people-tree-group { margin-top: 3px; }
+.neostaffing-people-tree-group-label { display: flex; align-items: center; min-width: 0; min-height: 31px; color: var(--muted); font-size: .6rem; font-weight: 900; letter-spacing: .08em; }
+.neostaffing-people-tree-group > [data-people-tree-children] { padding-left: 7px; }
+.neostaffing-people-org-node[data-unit-type="work_area"] strong { white-space: normal; line-height: 1.18; }
+.neostaffing-people-bulk-guidance { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.45; }
+.neostaffing-people-bulk-errors { min-height: 1.2em; margin: 0; color: #ff9f9f; font-size: .7rem; line-height: 1.35; }
+.neostaffing-people-bulk-preview-wrap { max-height: 260px; overflow: auto; border: 1px solid rgba(var(--node-rgb), .18); }
+.neostaffing-people-bulk-preview { width: 100%; min-width: 720px; border-collapse: collapse; font-size: .68rem; }
+.neostaffing-people-bulk-preview th,.neostaffing-people-bulk-preview td { padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,.07); text-align: left; white-space: nowrap; }
+.neostaffing-people-bulk-preview thead th { position: sticky; top: 0; background: #111d24; color: var(--muted); text-transform: uppercase; font-size: .58rem; }
+.neostaffing-people-bulk-preview tr.is-invalid { background: rgba(190, 58, 58, .12); }
+.neostaffing-people-bulk-preview td.is-invalid { color: #ffb1b1; outline: 1px solid rgba(255, 105, 105, .48); outline-offset: -1px; }
+@media (max-width: 980px) { .neostaffing-people-roster-actions { flex-wrap: wrap; }.neostaffing-people-roster-actions .neostaffing-people-add-control { order: -1; } }
+
 .neostaffing-people-card > div {
     min-width: 0;
 }
