@@ -389,6 +389,20 @@ class NeoScorpionFuelAssignment(db.Model):
         default=1,
         server_default="1",
     )
+    fueler_update_version = db.Column(
+        db.Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    fueler_update_message = db.Column(db.Text, nullable=True)
+    fueler_update_at_utc = db.Column(db.DateTime, nullable=True)
+    fueler_update_acknowledged_version = db.Column(
+        db.Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

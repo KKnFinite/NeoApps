@@ -8,6 +8,7 @@
     aria-label="NeoScorpion Fueler"
     data-fuel-assignments-live
     data-revision-url="{{ url_for('neoscorpion.fuel_assignments_revision') }}"
+    data-acknowledge-update-url="{{ url_for('neoscorpion.fuel_assignments_acknowledge_update') }}"
     data-operation-id="{{ operation.id if operation else '' }}"
     data-revision="{{ fuel_assignments_revision }}"
     data-current-user-id="{{ current_user.id }}"
@@ -21,6 +22,18 @@
         <h1>Fueler</h1>
     </header>
     {% include "neonodes/neoscorpion/_menu.html" %}
+
+    <div
+        class="neoscorpion-calculation-warning"
+        data-fuel-assignments-update-banner
+        role="status"
+        aria-live="polite"
+        hidden
+    >
+        <strong>ASSIGNMENT CHANGED</strong>
+        <span>Your unsaved fuel entry is preserved. Save it or refresh to load the dispatcher update.</span>
+        <button class="action-button" type="button" data-fuel-assignments-refresh-now>REFRESH ASSIGNMENTS</button>
+    </div>
 
     <section class="neoscorpion-panel">
         <div class="neoscorpion-panel-head">
@@ -37,6 +50,20 @@
             <article class="neoscorpion-fueler-card" data-fuel-assignment-id="{{ row.assignment.id }}">
                 <span class="neoscorpion-status-pill" data-new-assignment-marker role="status" hidden>NEW ASSIGNMENT</span>
                 <span class="neoscorpion-status-pill">{{ row.cycle_type_label }}</span>
+                {% if row.assignment_update_pending %}
+                <div class="neoscorpion-assignment-update" data-assignment-update-notice role="status">
+                    <strong>ASSIGNMENT UPDATED</strong>
+                    <span>{{ row.assignment_update_message or "Dispatcher updated this assignment." }}</span>
+                    <button
+                        class="action-button"
+                        type="button"
+                        data-acknowledge-assignment-update
+                        data-assignment-id="{{ row.assignment.id }}"
+                        data-update-version="{{ row.assignment_update_version }}"
+                    >ACKNOWLEDGE CHANGES</button>
+                    <small data-acknowledge-status aria-live="polite"></small>
+                </div>
+                {% endif %}
                 <header class="neoscorpion-fueler-mission-head">
                     <div>
                         <span>{{ row.destination }}</span>

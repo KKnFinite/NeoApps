@@ -8,6 +8,7 @@
     aria-label="NeoScorpion Fuel Dispatch"
     data-fuel-dispatch-live
     data-revision-url="{{ url_for('neoscorpion.fuel_dispatch_revision') }}"
+    data-autosave-url="{{ url_for('neoscorpion.fuel_dispatch_autosave') }}"
     data-operation-id="{{ operation.id if operation else '' }}"
     data-revision="{{ nightly_asset_revision }}"
     data-refresh-interval-ms="{{ fuel_dispatch_refresh.effective_interval_ms }}"
@@ -75,7 +76,7 @@
                         <th>Corrections</th>
                         <th>Fuel On Board</th>
                         <th>Complete</th>
-                        {% if can_edit %}<th>Save</th>{% endif %}
+                        {% if can_edit %}<th>Assignment</th>{% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -96,15 +97,21 @@
                         <td>{{ row.departure_time or '-' }}</td>
                         <td>{{ row.aircraft_type }}</td>
                         {% if can_edit and not row.administratively_complete %}
-                        <form method="post">
+                        <form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_assignment') }}" data-dispatch-assignment-form>
                             <input type="hidden" name="mission_id" value="{{ row.mission.id }}">
                             <input type="hidden" name="assignment_id" value="{{ row.assignment.id if row.assignment else '' }}">
                             <input type="hidden" name="expected_assigned_fueler_user_id" value="{{ row.assignment.assigned_fueler_user_id if row.assignment and row.assignment.assigned_fueler_user_id else '' }}">
                             <input type="hidden" name="expected_assigned_truck_id" value="{{ row.assignment.assigned_truck_id if row.assignment and row.assignment.assigned_truck_id else '' }}">
-                            <td><input class="neoscorpion-inline-input" name="required_fuel" value="{{ row.required_fuel_display }}" inputmode="decimal" aria-label="Required Fuel for {{ row.mission.flight_number }}"></td>
-                            <td><input class="neoscorpion-inline-input" name="inbound_fuel" value="{{ row.inbound_fuel_display }}" inputmode="decimal" aria-label="Inbound Fuel for {{ row.tail_number }}"></td>
+                            <td>
+                                <input class="neoscorpion-inline-input" name="required_fuel" value="{{ row.required_fuel_display }}" inputmode="decimal" aria-label="Required Fuel for {{ row.mission.flight_number }}" data-dispatch-autosave data-autosave-field="required_fuel" data-saved-value="{{ row.required_fuel_display }}">
+                                <small class="neoscorpion-save-status" data-autosave-status aria-live="polite"></small>
+                            </td>
+                            <td>
+                                <input class="neoscorpion-inline-input" name="inbound_fuel" value="{{ row.inbound_fuel_display }}" inputmode="decimal" aria-label="Inbound Fuel for {{ row.tail_number }}" data-dispatch-autosave data-autosave-field="inbound_fuel" data-saved-value="{{ row.inbound_fuel_display }}">
+                                <small class="neoscorpion-save-status" data-autosave-status aria-live="polite"></small>
+                            </td>
                             <td>{{ row.fob_display or '-' }}</td>
-                            <td><input class="neoscorpion-inline-input" name="apu_lbs" value="{{ row.apu_lbs if row.apu_lbs is not none else '' }}" inputmode="numeric" aria-label="APU pounds for {{ row.tail_number }}"></td>
+                            <td>{{ row.apu_lbs if row.apu_lbs is not none else '-' }}</td>
                             <td>
                                 <strong>{{ row.neo_fuel_display }}{% if row.neo_fuel_available %} K LBS{% endif %}</strong>
                                 {% if row.neo_fuel_available %}
@@ -255,7 +262,10 @@
                                 <small>{{ row.normal_completion_reason }}</small>
                                 {% endif %}
                             </td>
-                            <td><button class="action-button neoscorpion-save-button" type="submit">Save</button></td>
+                            <td>
+                                <button class="action-button neoscorpion-save-button" type="submit" data-dispatch-assignment-submit>{{ "UPDATE ASSIGNMENT" if row.assignment else "ASSIGN" }}</button>
+                                <small class="neoscorpion-save-status" data-assignment-save-status aria-live="polite"></small>
+                            </td>
                         </form>
                         {% else %}
                         <td>{{ row.required_fuel_display or '-' }}</td>

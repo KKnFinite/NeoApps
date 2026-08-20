@@ -7,6 +7,8 @@ from app.extensions import db
 from app.neonodes.neoscorpion import bp
 from app.services.access_control import get_current_gateway
 from app.services.neoscorpion import (
+    acknowledge_fueler_assignment_update,
+    autosave_dispatch_field,
     CALCULATION_NOT_CONFIGURED_MESSAGE,
     confirm_assignment_tail,
     complete_fueled_assignment,
@@ -24,6 +26,7 @@ from app.services.neoscorpion import (
     reopen_fueler_off,
     resume_held_fuel_assignment,
     save_dispatch_row,
+    save_dispatch_assignment,
     save_aircraft_fuel_settings,
     save_fueler_entry,
     save_settings,
@@ -125,6 +128,90 @@ def fuel_dispatch():
         flash("Access denied.", "error")
         return redirect(url_for("neoscorpion.index"))
     return _dispatch_response(gateway, access)
+
+
+@bp.post("/fuel-dispatch/autosave")
+@gateway_node_required("scorpion")
+def fuel_dispatch_autosave():
+    gateway = get_current_gateway()
+    access = permission_access(
+        FUEL_DISPATCH_VIEW_PERMISSION,
+        FUEL_DISPATCH_EDIT_PERMISSION,
+    )
+    if not access["can_edit"]:
+        db.session.rollback()
+        return _json_no_store({"ok": False, "error": "Access denied."}, 403)
+    try:
+        result = autosave_dispatch_field(
+            gateway,
+            request.form.get("mission_id"),
+            (request.form.get("field_name") or "").strip(),
+            request.form.get("value"),
+            expected_value=request.form.get("expected_value"),
+        )
+    except ValueError as exc:
+        db.session.rollback()
+        return _json_no_store({"ok": False, "error": str(exc)}, 400)
+    if result.changed:
+        db.session.commit()
+    return _json_no_store(
+        {
+            "ok": True,
+            "changed": result.changed,
+            "field_name": result.field_name,
+            "display_value": result.display_value,
+            "operation_id": result.operation_id,
+            "revision": result.revision,
+        }
+    )
+
+
+@bp.post("/fuel-dispatch/assignment")
+@gateway_node_required("scorpion")
+def fuel_dispatch_assignment():
+    gateway = get_current_gateway()
+    json_response = bool(
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or request.accept_mimetypes.best == "application/json"
+    )
+    access = permission_access(
+        FUEL_DISPATCH_VIEW_PERMISSION,
+        FUEL_DISPATCH_EDIT_PERMISSION,
+    )
+    if not access["can_edit"]:
+        db.session.rollback()
+        if json_response:
+            return _json_no_store({"ok": False, "error": "Access denied."}, 403)
+        flash("Access denied.", "error")
+        return _dispatch_response(gateway, access, status_code=403)
+    try:
+        result = save_dispatch_assignment(gateway, request.form)
+    except ValueError as exc:
+        db.session.rollback()
+        if json_response:
+            return _json_no_store({"ok": False, "error": str(exc)}, 400)
+        flash(str(exc), "error")
+        return _dispatch_response(gateway, access, status_code=400)
+    if result.changed:
+        db.session.commit()
+    if not json_response:
+        flash(
+            "FUEL ASSIGNMENT UPDATED." if result.changed else "NO ASSIGNMENT CHANGES.",
+            "success" if result.changed else "info",
+        )
+        return redirect(url_for("neoscorpion.fuel_dispatch"))
+    return _json_no_store(
+        {
+            "ok": True,
+            "changed": result.changed,
+            "assignment_id": result.assignment.id,
+            "assigned_fueler_user_id": result.assignment.assigned_fueler_user_id,
+            "assigned_truck_id": result.assignment.assigned_truck_id,
+            "operation_id": result.assignment.sort_date_operation_id,
+            "revision": result.revision,
+            "button_label": "UPDATE ASSIGNMENT",
+        }
+    )
 
 
 @bp.post("/fuel-dispatch/fuel-on-board")
@@ -500,6 +587,35 @@ def fuel_assignments_revision():
     return response
 
 
+@bp.post("/fuel-assignments/acknowledge-update")
+@gateway_node_required("scorpion")
+def fuel_assignments_acknowledge_update():
+    gateway = get_current_gateway()
+    access = permission_access(FUELER_VIEW_PERMISSION)
+    if not access["can_view"]:
+        db.session.rollback()
+        return _json_no_store({"ok": False, "error": "Access denied."}, 403)
+    try:
+        result = acknowledge_fueler_assignment_update(
+            gateway,
+            current_user,
+            request.form.get("assignment_id"),
+            request.form.get("update_version"),
+        )
+    except ValueError as exc:
+        db.session.rollback()
+        return _json_no_store({"ok": False, "error": str(exc)}, 400)
+    if result.changed:
+        db.session.commit()
+    return _json_no_store(
+        {
+            "ok": True,
+            "changed": result.changed,
+            "acknowledged_version": result.acknowledged_version,
+        }
+    )
+
+
 @bp.get("/fuel-dispatch/revision")
 @gateway_node_required("scorpion")
 def fuel_dispatch_revision():
@@ -683,6 +799,12 @@ def _dispatch_response(gateway, access, status_code=200):
             include_asset_choices=access["can_edit"],
         ),
     )
+    return response, status_code
+
+
+def _json_no_store(payload, status_code=200):
+    response = jsonify(payload)
+    response.headers["Cache-Control"] = "no-store"
     return response, status_code
 
 

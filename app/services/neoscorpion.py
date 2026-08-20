@@ -579,6 +579,21 @@ class DispatchSaveResult:
 
 
 @dataclass(frozen=True)
+class DispatchAutosaveResult:
+    changed: bool
+    operation_id: int
+    revision: int
+    field_name: str
+    display_value: str
+
+
+@dataclass(frozen=True)
+class FuelerAssignmentUpdateAckResult:
+    changed: bool
+    acknowledged_version: int
+
+
+@dataclass(frozen=True)
 class FuelerSaveResult:
     changed: bool
     revision: int
@@ -644,6 +659,147 @@ class AircraftFuelSettingsSaveResult:
 
 
 def save_dispatch_row(gateway, form):
+    return _save_dispatch_assignment(gateway, form, include_legacy_fields=True)
+
+
+def save_dispatch_assignment(gateway, form):
+    return _save_dispatch_assignment(gateway, form, include_legacy_fields=False)
+
+
+def autosave_dispatch_field(
+    gateway,
+    mission_id,
+    field_name,
+    value,
+    *,
+    expected_value=None,
+    now_utc=None,
+):
+    if field_name not in {"required_fuel", "inbound_fuel"}:
+        raise ValueError("Select a supported Fuel Dispatch autosave field.")
+    operation = current_sort_operation(gateway)
+    if not operation:
+        raise ValueError("No current sort operation is available for NeoScorpion dispatch.")
+    now_utc = now_utc or datetime.utcnow()
+    operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
+    mission = _departure_mission_for_operation(
+        operation,
+        _int_or_none(mission_id),
+        for_update=True,
+    )
+    if not mission:
+        raise ValueError("Departure mission was not found for the current sort operation.")
+    assignment = (
+        NeoScorpionFuelAssignment.query.filter_by(
+            sort_date_operation_id=operation.id,
+            sort_date_mission_id=mission.id,
+        )
+        .with_for_update()
+        .first()
+    )
+    _validate_dispatch_assignment_editable(assignment, mission)
+
+    requested_lbs = display_thousands_to_lbs(value)
+    expected_lbs = display_thousands_to_lbs(expected_value)
+    tail_fuel_state = None
+    if field_name == "required_fuel":
+        current_lbs = mission.planned_fuel_load
+    else:
+        tail_number = _normalize_tail(mission.assigned_tail_number)
+        if not tail_number:
+            raise ValueError("Inbound Fuel cannot be saved until the mission has a tail.")
+        tail_fuel_state = (
+            NeoScorpionTailFuelState.query.filter_by(
+                sort_date_operation_id=operation.id,
+                tail_number=tail_number,
+            )
+            .with_for_update()
+            .first()
+        )
+        current_lbs = tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None
+
+    if current_lbs != expected_lbs and current_lbs != requested_lbs:
+        raise ValueError(
+            "Live data changed for this field. Refresh Fuel Dispatch and review the current value."
+        )
+    revision = int(asset_state.revision if asset_state else 0)
+    if current_lbs == requested_lbs:
+        return DispatchAutosaveResult(
+            False,
+            operation.id,
+            revision,
+            field_name,
+            format_display_thousands(current_lbs),
+        )
+
+    if field_name == "required_fuel":
+        mission.planned_fuel_load = requested_lbs
+        mission.planned_fuel_updated_at = now_utc
+        change_message = _fuel_change_message(
+            "Required Fuel",
+            current_lbs,
+            requested_lbs,
+        )
+    else:
+        if tail_fuel_state is None:
+            tail_fuel_state = NeoScorpionTailFuelState(
+                sort_date_operation_id=operation.id,
+                tail_number=_normalize_tail(mission.assigned_tail_number),
+            )
+            db.session.add(tail_fuel_state)
+        tail_fuel_state.inbound_fuel_lbs = requested_lbs
+        change_message = _fuel_change_message(
+            "Inbound Fuel",
+            current_lbs,
+            requested_lbs,
+        )
+
+    _record_assigned_fueler_update(assignment, (change_message,), now_utc=now_utc)
+    asset_state = record_nightly_operational_change(asset_state, operation.id)
+    db.session.flush()
+    return DispatchAutosaveResult(
+        True,
+        operation.id,
+        int(asset_state.revision),
+        field_name,
+        format_display_thousands(requested_lbs),
+    )
+
+
+def acknowledge_fueler_assignment_update(
+    gateway,
+    user,
+    assignment_id,
+    update_version,
+):
+    operation = current_sort_operation(gateway)
+    if not operation:
+        raise ValueError("No current sort operation is available for Fuel Assignments.")
+    assignment = (
+        NeoScorpionFuelAssignment.query.filter_by(
+            id=_int_or_none(assignment_id),
+            sort_date_operation_id=operation.id,
+            assigned_fueler_user_id=user.id,
+        )
+        .with_for_update()
+        .first()
+    )
+    if assignment is None:
+        raise ValueError("Fuel assignment was not found for this fueler.")
+    requested_version = _int_or_none(update_version)
+    if requested_version is None or requested_version < 0:
+        raise ValueError("Select a valid assignment update to acknowledge.")
+    current_version = int(assignment.fueler_update_version or 0)
+    target_version = min(requested_version, current_version)
+    acknowledged_version = int(assignment.fueler_update_acknowledged_version or 0)
+    if target_version <= acknowledged_version:
+        return FuelerAssignmentUpdateAckResult(False, acknowledged_version)
+    assignment.fueler_update_acknowledged_version = target_version
+    db.session.flush()
+    return FuelerAssignmentUpdateAckResult(True, target_version)
+
+
+def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
     operation = current_sort_operation(gateway)
     if not operation:
         raise ValueError("No current sort operation is available for NeoScorpion dispatch.")
@@ -666,13 +822,7 @@ def save_dispatch_row(gateway, form):
     assignment_created = assignment is None
     current_fueler_id = assignment.assigned_fueler_user_id if assignment else None
     current_truck_id = assignment.assigned_truck_id if assignment else None
-    if assignment and (
-        assignment.fuel_on_board_at_utc is not None
-        or assignment.completed_at_utc is not None
-        or assignment.review_status == "complete"
-        or mission.fuel_status == "complete"
-    ):
-        raise ValueError("Completed fuel assignments cannot be edited.")
+    _validate_dispatch_assignment_editable(assignment, mission)
     if (
         "expected_assigned_fueler_user_id" not in form
         or "expected_assigned_truck_id" not in form
@@ -719,32 +869,56 @@ def save_dispatch_row(gateway, form):
         )
 
     changed = False
-    planned_fuel_load = display_thousands_to_lbs(form.get("required_fuel"))
-    if mission.planned_fuel_load != planned_fuel_load:
-        mission.planned_fuel_load = planned_fuel_load
-        mission.planned_fuel_updated_at = datetime.utcnow()
-        changed = True
+    now_utc = datetime.utcnow()
+    change_messages = []
+    if include_legacy_fields:
+        planned_fuel_load = display_thousands_to_lbs(form.get("required_fuel"))
+        if mission.planned_fuel_load != planned_fuel_load:
+            change_messages.append(
+                _fuel_change_message(
+                    "Required Fuel",
+                    mission.planned_fuel_load,
+                    planned_fuel_load,
+                )
+            )
+            mission.planned_fuel_load = planned_fuel_load
+            mission.planned_fuel_updated_at = now_utc
+            changed = True
 
-    tail_number = _normalize_tail(mission.assigned_tail_number)
-    if tail_number:
-        existing_tail_fuel_state = NeoScorpionTailFuelState.query.filter_by(
-            sort_date_operation_id=operation.id,
-            tail_number=tail_number,
-        ).first()
-        tail_fuel_state = existing_tail_fuel_state or ensure_tail_fuel_state(
-            operation,
-            tail_number,
-        )
-        if existing_tail_fuel_state is None:
-            changed = True
-        inbound_fuel_lbs = display_thousands_to_lbs(form.get("inbound_fuel"))
-        apu_lbs = _int_or_none(form.get("apu_lbs"))
-        if tail_fuel_state.inbound_fuel_lbs != inbound_fuel_lbs:
-            tail_fuel_state.inbound_fuel_lbs = inbound_fuel_lbs
-            changed = True
-        if tail_fuel_state.apu_lbs != apu_lbs:
-            tail_fuel_state.apu_lbs = apu_lbs
-            changed = True
+        tail_number = _normalize_tail(mission.assigned_tail_number)
+        if tail_number:
+            tail_fuel_state = NeoScorpionTailFuelState.query.filter_by(
+                sort_date_operation_id=operation.id,
+                tail_number=tail_number,
+            ).first()
+            inbound_fuel_lbs = display_thousands_to_lbs(form.get("inbound_fuel"))
+            apu_lbs = _int_or_none(form.get("apu_lbs"))
+            needs_tail_state = bool(
+                tail_fuel_state is not None
+                or inbound_fuel_lbs is not None
+                or apu_lbs is not None
+            )
+            if tail_fuel_state is None and needs_tail_state:
+                tail_fuel_state = NeoScorpionTailFuelState(
+                    sort_date_operation_id=operation.id,
+                    tail_number=tail_number,
+                )
+                db.session.add(tail_fuel_state)
+                changed = True
+            if tail_fuel_state is not None:
+                if tail_fuel_state.inbound_fuel_lbs != inbound_fuel_lbs:
+                    change_messages.append(
+                        _fuel_change_message(
+                            "Inbound Fuel",
+                            tail_fuel_state.inbound_fuel_lbs,
+                            inbound_fuel_lbs,
+                        )
+                    )
+                    tail_fuel_state.inbound_fuel_lbs = inbound_fuel_lbs
+                    changed = True
+                if tail_fuel_state.apu_lbs != apu_lbs:
+                    tail_fuel_state.apu_lbs = apu_lbs
+                    changed = True
 
     if assignment is None:
         assignment = NeoScorpionFuelAssignment(
@@ -782,23 +956,87 @@ def save_dispatch_row(gateway, form):
         ("review_status", review_status),
         ("load_planning_note", load_planning_note),
     ):
-        if getattr(assignment, field_name) != value:
+        old_value = getattr(assignment, field_name)
+        if old_value != value:
             setattr(assignment, field_name, value)
             changed = True
             assignment_changed = True
+            if field_name == "assigned_truck_id":
+                change_messages.append(
+                    f"Truck: {_resource_change_label(old_value)} -> "
+                    f"{_resource_change_label(value)}"
+                )
+            elif field_name == "review_status":
+                change_messages.append(
+                    f"Status: {(old_value or 'pending').replace('_', ' ').title()} -> "
+                    f"{value.replace('_', ' ').title()}"
+                )
+            elif field_name == "load_planning_note":
+                change_messages.append("Load planning note changed")
+
+    fueler_changed = current_fueler_id != requested_fueler_id
+    if fueler_changed:
+        _clear_assignment_update_notice(assignment)
+    elif not assignment_created:
+        _record_assigned_fueler_update(
+            assignment,
+            tuple(change_messages),
+            now_utc=now_utc,
+        )
 
     revision = int(asset_state.revision if asset_state else 0)
-    if assignment_changed:
+    if changed or assignment_created:
         asset_state = record_nightly_operational_change(asset_state, operation.id)
         revision = int(asset_state.revision)
 
-    db.session.flush()
+    if changed or assignment_created:
+        db.session.flush()
     return DispatchSaveResult(
         assignment=assignment,
         changed=changed or assignment_created,
         assignment_changed=assignment_changed,
         revision=revision,
     )
+
+
+def _validate_dispatch_assignment_editable(assignment, mission):
+    if mission.fuel_status == "complete" or (
+        assignment
+        and (
+            assignment.fuel_on_board_at_utc is not None
+            or assignment.completed_at_utc is not None
+            or assignment.review_status == "complete"
+        )
+    ):
+        raise ValueError("Completed fuel assignments cannot be edited.")
+
+
+def _record_assigned_fueler_update(assignment, change_messages, *, now_utc):
+    messages = tuple(message for message in change_messages if message)
+    if assignment is None or assignment.assigned_fueler_user_id is None or not messages:
+        return False
+    assignment.fueler_update_version = int(assignment.fueler_update_version or 0) + 1
+    assignment.fueler_update_message = "; ".join(messages)
+    assignment.fueler_update_at_utc = now_utc
+    return True
+
+
+def _clear_assignment_update_notice(assignment):
+    assignment.fueler_update_acknowledged_version = int(
+        assignment.fueler_update_version or 0
+    )
+    assignment.fueler_update_message = None
+    assignment.fueler_update_at_utc = None
+
+
+def _fuel_change_message(label, old_lbs, new_lbs):
+    old_value = format_display_thousands(old_lbs) or "blank"
+    new_value = format_display_thousands(new_lbs) or "blank"
+    return f"{label}: {old_value} K LBS -> {new_value} K LBS"
+
+
+def _resource_change_label(value):
+    return f"Truck #{value}" if value is not None else "Unassigned"
 
 
 def save_fueler_entry(gateway, user, form, *, now_utc=None):
@@ -3489,6 +3727,20 @@ def _fuel_rows(
                 "planning_demand_gallons": planning_demand_gallons,
                 "assigned_fueler": assignment.assigned_fueler if assignment else None,
                 "assigned_truck": truck,
+                "assignment_update_pending": bool(
+                    assignment
+                    and assignment.assigned_fueler_user_id is not None
+                    and int(assignment.fueler_update_version or 0)
+                    > int(assignment.fueler_update_acknowledged_version or 0)
+                ),
+                "assignment_update_version": (
+                    int(assignment.fueler_update_version or 0)
+                    if assignment
+                    else 0
+                ),
+                "assignment_update_message": (
+                    assignment.fueler_update_message if assignment else None
+                ),
                 "truck_remaining_fuel": (
                     nightly_truck_state.current_gallons
                     if nightly_truck_state is not None

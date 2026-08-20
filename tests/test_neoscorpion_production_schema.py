@@ -87,6 +87,10 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
                 "hold_by_user_id",
                 "current_cycle_type",
                 "current_cycle_number",
+                "fueler_update_version",
+                "fueler_update_message",
+                "fueler_update_at_utc",
+                "fueler_update_acknowledged_version",
             },
         )
         self.assertIn(

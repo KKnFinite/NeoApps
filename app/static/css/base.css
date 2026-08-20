@@ -23636,6 +23636,33 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     font-weight: 750;
 }
 
+.neoscorpion-save-status {
+    display: block;
+    min-height: 1.1em;
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 800;
+}
+
+.neoscorpion-save-status[data-state="error"] {
+    color: #ffb0a8;
+}
+
+.neoscorpion-assignment-update {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.55);
+    border-radius: 6px;
+    background: rgba(var(--node-scorpion-primary-rgb), 0.14);
+    color: #ffe79a;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
 .neoscorpion-assets-workspace {
     border: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.3);
     border-radius: 8px;
@@ -24136,6 +24163,11 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     .neoscorpion-fueler-card > .neoscorpion-fueler-mission-head {
         grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .neoscorpion-assignment-update {
+        grid-template-columns: 1fr;
+        align-items: stretch;
     }
 
     .neoscorpion-assets-grid,

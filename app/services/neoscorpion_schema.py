@@ -57,6 +57,10 @@ NEOSCORPION_ADDITIVE_COLUMNS = {
         "hold_by_user_id": "INTEGER",
         "current_cycle_type": "VARCHAR(16) NOT NULL DEFAULT 'fuel'",
         "current_cycle_number": "INTEGER NOT NULL DEFAULT 1",
+        "fueler_update_version": "INTEGER NOT NULL DEFAULT 0",
+        "fueler_update_message": "TEXT",
+        "fueler_update_at_utc": "TIMESTAMP",
+        "fueler_update_acknowledged_version": "INTEGER NOT NULL DEFAULT 0",
     },
     "neoscorpion_fuel_work_states": {
         "apu_running": "BOOLEAN",

@@ -7,42 +7,81 @@
     }
 
     const pollIntervalMs = Number(root.dataset.refreshIntervalMs || 0);
-    if (!Number.isFinite(pollIntervalMs) || pollIntervalMs < 5000) {
-        return;
-    }
-
     const revisionUrl = root.dataset.revisionUrl;
-    const operationId = root.dataset.operationId || "none";
-    const revision = Number(root.dataset.revision || 0);
+    const autosaveUrl = root.dataset.autosaveUrl;
+    let operationId = root.dataset.operationId || "none";
+    let revision = Number(root.dataset.revision || 0);
     const updateBanner = root.querySelector("[data-fuel-dispatch-update-banner]");
     const refreshButton = root.querySelector("[data-fuel-dispatch-refresh-now]");
-    let dirty = false;
+    const initialControlValues = new WeakMap();
     let reloading = false;
+    let controller = null;
 
     const isEditableControl = (element) => element?.matches(
         "input:not([type='hidden']):not([readonly]):not([disabled]), "
         + "select:not([disabled]), textarea:not([readonly]):not([disabled])"
     );
 
-    const markDirty = (event) => {
-        if (isEditableControl(event.target)) {
-            dirty = true;
+    const controlValue = (control) => {
+        if (control.type === "checkbox" || control.type === "radio") {
+            return control.checked ? "1" : "0";
+        }
+        return control.value;
+    };
+
+    const protectedControls = () => Array.from(root.querySelectorAll(
+        "input:not([type='hidden']):not([readonly]):not([disabled]):not([data-dispatch-autosave]), "
+        + "select:not([disabled]), textarea:not([readonly]):not([disabled])"
+    ));
+
+    protectedControls().forEach((control) => {
+        initialControlValues.set(control, controlValue(control));
+    });
+
+    const hasUnsavedControls = () => (
+        protectedControls().some(
+            (control) => initialControlValues.get(control) !== controlValue(control)
+        )
+        || Boolean(root.querySelector("[data-dispatch-autosave][data-autosave-failed='true']"))
+    );
+
+    const syncDirtyState = () => {
+        if (hasUnsavedControls()) {
             root.dataset.liveDirty = "true";
+        } else {
+            root.dataset.liveDirty = "false";
         }
     };
 
-    const reloadCleanPage = () => {
+    const setStatus = (element, message, state = "") => {
+        if (!element) {
+            return;
+        }
+        element.textContent = message;
+        element.dataset.state = state;
+    };
+
+    const adoptFingerprint = (payload) => {
+        operationId = payload.operation_id === null
+            ? "none"
+            : String(payload.operation_id);
+        revision = Number(payload.revision || 0);
+        root.dataset.operationId = operationId;
+        root.dataset.revision = String(revision);
+    };
+
+    const reloadPage = () => {
         if (reloading) {
             return;
         }
         reloading = true;
-        controller.setEnabled(false);
+        controller?.setEnabled(false);
         window.location.reload();
     };
 
     const handleChangedFingerprint = () => {
-        if (!dirty) {
-            reloadCleanPage();
+        if (!hasUnsavedControls()) {
+            reloadPage();
             return;
         }
         if (updateBanner) {
@@ -69,24 +108,174 @@
         }
     };
 
-    root.addEventListener("input", markDirty);
-    root.addEventListener("change", markDirty);
+    const autosaveField = async (input) => {
+        if (!autosaveUrl || input.dataset.autosaveSaving === "true") {
+            return;
+        }
+        const submittedValue = input.value.trim();
+        const savedValue = input.dataset.savedValue || "";
+        if (submittedValue === savedValue) {
+            input.dataset.autosaveFailed = "false";
+            syncDirtyState();
+            return;
+        }
+        const form = input.closest("form");
+        const status = input.parentElement?.querySelector("[data-autosave-status]");
+        const missionId = form?.querySelector("input[name='mission_id']")?.value || "";
+        input.dataset.autosaveSaving = "true";
+        setStatus(status, "Saving...");
+        const body = new FormData();
+        body.set("mission_id", missionId);
+        body.set("field_name", input.dataset.autosaveField || "");
+        body.set("value", submittedValue);
+        body.set("expected_value", savedValue);
+        try {
+            const response = await fetch(autosaveUrl, {
+                method: "POST",
+                body,
+                cache: "no-store",
+                credentials: "same-origin",
+                headers: {
+                    "Accept": "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.ok !== true) {
+                throw new Error(payload.error || "Save failed.");
+            }
+            input.dataset.savedValue = payload.display_value || "";
+            input.dataset.autosaveFailed = "false";
+            if (input.value.trim() === submittedValue) {
+                input.value = payload.display_value || "";
+            }
+            adoptFingerprint(payload);
+            setStatus(status, payload.changed ? "Saved" : "No change");
+        } catch (error) {
+            input.dataset.autosaveFailed = "true";
+            setStatus(
+                status,
+                `Save Failed: ${error.message || "Unable to save this field."}`,
+                "error"
+            );
+        } finally {
+            input.dataset.autosaveSaving = "false";
+            syncDirtyState();
+        }
+    };
+
+    const updateAssignmentBaseline = (form, payload) => {
+        const assignmentId = form.querySelector("input[name='assignment_id']");
+        const expectedFueler = form.querySelector(
+            "input[name='expected_assigned_fueler_user_id']"
+        );
+        const expectedTruck = form.querySelector(
+            "input[name='expected_assigned_truck_id']"
+        );
+        if (assignmentId) {
+            assignmentId.value = String(payload.assignment_id || "");
+        }
+        if (expectedFueler) {
+            expectedFueler.value = String(payload.assigned_fueler_user_id || "");
+        }
+        if (expectedTruck) {
+            expectedTruck.value = String(payload.assigned_truck_id || "");
+        }
+        form.querySelectorAll(
+            "select[name='assigned_fueler_user_id'], select[name='assigned_truck_id'], "
+            + "select[name='review_status'], input[name='load_planning_note']"
+        ).forEach((control) => {
+            initialControlValues.set(control, controlValue(control));
+        });
+    };
+
+    const submitAssignment = async (form, button) => {
+        if (form.dataset.assignmentSaving === "true") {
+            return;
+        }
+        const status = form.querySelector("[data-assignment-save-status]");
+        form.dataset.assignmentSaving = "true";
+        button.disabled = true;
+        setStatus(status, "Saving...");
+        try {
+            const response = await fetch(form.action, {
+                method: "POST",
+                body: new FormData(form),
+                cache: "no-store",
+                credentials: "same-origin",
+                headers: {
+                    "Accept": "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.ok !== true) {
+                throw new Error(payload.error || "Assignment save failed.");
+            }
+            adoptFingerprint(payload);
+            updateAssignmentBaseline(form, payload);
+            button.textContent = payload.button_label || "UPDATE ASSIGNMENT";
+            setStatus(status, payload.changed ? "Saved" : "No change");
+        } catch (error) {
+            setStatus(
+                status,
+                `Save Failed: ${error.message || "Unable to update this assignment."}`,
+                "error"
+            );
+        } finally {
+            form.dataset.assignmentSaving = "false";
+            button.disabled = false;
+            syncDirtyState();
+        }
+    };
+
+    root.addEventListener("input", (event) => {
+        if (isEditableControl(event.target) && !event.target.matches("[data-dispatch-autosave]")) {
+            syncDirtyState();
+        }
+    });
+    root.addEventListener("change", (event) => {
+        if (event.target.matches("[data-dispatch-autosave]")) {
+            autosaveField(event.target);
+        } else if (isEditableControl(event.target)) {
+            syncDirtyState();
+        }
+    });
+    root.addEventListener("focusout", (event) => {
+        if (event.target.matches("[data-dispatch-autosave]")) {
+            autosaveField(event.target);
+        }
+    });
+    root.addEventListener("submit", (event) => {
+        const button = event.submitter?.matches("[data-dispatch-assignment-submit]")
+            ? event.submitter
+            : null;
+        const form = button?.closest("[data-dispatch-assignment-form]");
+        if (!form) {
+            return;
+        }
+        event.preventDefault();
+        submitAssignment(form, button);
+    });
     refreshButton?.addEventListener("click", () => {
         if (
-            dirty
+            hasUnsavedControls()
             && !window.confirm("Refresh now and discard unsaved Fuel Dispatch changes?")
         ) {
             return;
         }
-        reloadCleanPage();
+        reloadPage();
     });
 
-    const controller = window.NeoLiveUpdates.create({
-        continuousWhileVisible: true,
-        immediate: false,
-        intervalMs: pollIntervalMs,
-        poll,
-    });
-    controller.setServerStatus({auto_refresh_enabled: true});
-    window.addEventListener("pagehide", () => controller.destroy(), {once: true});
+    syncDirtyState();
+    if (Number.isFinite(pollIntervalMs) && pollIntervalMs >= 5000) {
+        controller = window.NeoLiveUpdates.create({
+            continuousWhileVisible: true,
+            immediate: false,
+            intervalMs: pollIntervalMs,
+            poll,
+        });
+        controller.setServerStatus({auto_refresh_enabled: true});
+        window.addEventListener("pagehide", () => controller.destroy(), {once: true});
+    }
 })();
