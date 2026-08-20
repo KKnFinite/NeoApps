@@ -40,6 +40,34 @@
             <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }} {{ operation.sort_date.strftime('%m/%d/%y') if operation.sort_date else '' }}{% else %}No current sort{% endif %}</strong>
         </div>
         {% include "neonodes/neoscorpion/_nightly_assets.html" %}
+        {% if operation and truck_visuals %}
+        <aside class="neoscorpion-truck-visual-panel" aria-label="Tonight's fuel truck capacity">
+            <header>
+                <strong>TRUCK FUEL STATUS</strong>
+                <span>Current-sort projections</span>
+            </header>
+            <div class="neoscorpion-truck-visual-list">
+                {% for truck in truck_visuals %}
+                <article class="neoscorpion-truck-visual-card neoscorpion-truck-visual-card--{{ truck.status }}{% if truck.projected_short %} is-short{% endif %}">
+                    <header>
+                        <strong>TRUCK {{ truck.truck_number }}</strong>
+                        <span class="neoscorpion-truck-status">{{ truck.status_label }}</span>
+                    </header>
+                    <dl>
+                        <div><dt>Capacity</dt><dd>{{ truck.capacity_display }}</dd></div>
+                        <div><dt>Current</dt><dd>{{ truck.current_display }}{% if truck.current_percent is not none %} / {{ truck.current_percent }}%{% endif %}</dd></div>
+                        <div><dt>Assigned usage</dt><dd>{% if truck.projected_usage_gallons is none %}—{% else %}{{ truck.projected_usage_gallons }} gal{% endif %}</dd></div>
+                        <div><dt>Projected</dt><dd>{% if truck.projected_short %}SHORT {% endif %}{% if truck.projected_incomplete or truck.projected_gallons is none %}—{% else %}{{ truck.projected_display }}{% if truck.projected_percent is not none %} / {{ truck.projected_percent }}%{% endif %}{% endif %}</dd></div>
+                    </dl>
+                    <div class="neoscorpion-truck-gauges" aria-label="Truck {{ truck.truck_number }} fuel gauges">
+                        <div><span>Current</span><i class="neoscorpion-truck-gauge"><b{% if truck.current_gauge_percent is not none %} style="--truck-gauge-percent: {{ truck.current_gauge_percent }}%"{% endif %}></b></i></div>
+                        <div><span>Projected</span><i class="neoscorpion-truck-gauge neoscorpion-truck-gauge--projected{% if truck.projected_short %} is-short{% endif %}"><b{% if truck.projected_gauge_percent is not none %} style="--truck-gauge-percent: {{ truck.projected_gauge_percent }}%"{% endif %}></b></i></div>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </aside>
+        {% endif %}
         {% if not operation %}
         <p class="neoscorpion-empty">No current SortDateOperation is available for Fuel Dispatch.</p>
         {% elif not rows %}
@@ -170,7 +198,17 @@
                                 </select>
                                 {% endif %}
                             </td>
-                            <td>{{ row.truck_remaining_fuel if row.truck_remaining_fuel is not none else '-' }} gal</td>
+                            <td>
+                                {% if row.truck_visual %}
+                                <div class="neoscorpion-mission-truck-visual{% if row.truck_visual.projected_short %} is-short{% endif %}">
+                                    <strong>{{ row.truck_visual.truck_number }}</strong>
+                                    <span>NOW {{ row.truck_visual.current_display }}{% if row.truck_visual.current_percent is not none %} / {{ row.truck_visual.current_percent }}%{% endif %}</span>
+                                    <span>{% if row.truck_visual.projected_short %}SHORT {% endif %}PROJECTED {% if row.truck_visual.projected_incomplete or row.truck_visual.projected_display == '-' %}—{% else %}{{ row.truck_visual.projected_display }}{% if row.truck_visual.projected_percent is not none %} / {{ row.truck_visual.projected_percent }}%{% endif %}{% endif %}</span>
+                                    <i class="neoscorpion-truck-gauge neoscorpion-truck-gauge--mini"><b{% if row.truck_visual.current_gauge_percent is not none %} style="--truck-gauge-percent: {{ row.truck_visual.current_gauge_percent }}%"{% endif %}></b></i>
+                                    <i class="neoscorpion-truck-gauge neoscorpion-truck-gauge--mini neoscorpion-truck-gauge--projected{% if row.truck_visual.projected_short %} is-short{% endif %}"><b{% if row.truck_visual.projected_gauge_percent is not none %} style="--truck-gauge-percent: {{ row.truck_visual.projected_gauge_percent }}%"{% endif %}></b></i>
+                                </div>
+                                {% else %}-{% endif %}
+                            </td>
                             <td class="{% if row.projected_truck_short %}neoscorpion-calculation-warning{% endif %}">{{ row.projected_truck_display }}</td>
                             <td>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</td>
                             <td>
@@ -302,7 +340,17 @@
                         </td>
                         <td>{{ row.assigned_fueler.display_name if row.assigned_fueler else 'Unassigned' }}</td>
                         <td>{{ row.assigned_truck.truck_number if row.assigned_truck else 'Unassigned' }}</td>
-                        <td>{{ row.truck_remaining_fuel if row.truck_remaining_fuel is not none else '-' }} gal</td>
+                        <td>
+                            {% if row.truck_visual %}
+                            <div class="neoscorpion-mission-truck-visual{% if row.truck_visual.projected_short %} is-short{% endif %}">
+                                <strong>{{ row.truck_visual.truck_number }}</strong>
+                                <span>NOW {{ row.truck_visual.current_display }}{% if row.truck_visual.current_percent is not none %} / {{ row.truck_visual.current_percent }}%{% endif %}</span>
+                                <span>{% if row.truck_visual.projected_short %}SHORT {% endif %}PROJECTED {% if row.truck_visual.projected_incomplete or row.truck_visual.projected_display == '-' %}—{% else %}{{ row.truck_visual.projected_display }}{% if row.truck_visual.projected_percent is not none %} / {{ row.truck_visual.projected_percent }}%{% endif %}{% endif %}</span>
+                                <i class="neoscorpion-truck-gauge neoscorpion-truck-gauge--mini"><b{% if row.truck_visual.current_gauge_percent is not none %} style="--truck-gauge-percent: {{ row.truck_visual.current_gauge_percent }}%"{% endif %}></b></i>
+                                <i class="neoscorpion-truck-gauge neoscorpion-truck-gauge--mini neoscorpion-truck-gauge--projected{% if row.truck_visual.projected_short %} is-short{% endif %}"><b{% if row.truck_visual.projected_gauge_percent is not none %} style="--truck-gauge-percent: {{ row.truck_visual.projected_gauge_percent }}%"{% endif %}></b></i>
+                            </div>
+                            {% else %}-{% endif %}
+                        </td>
                         <td class="{% if row.projected_truck_short %}neoscorpion-calculation-warning{% endif %}">{{ row.projected_truck_display }}</td>
                         <td>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</td>
                         <td><span class="neoscorpion-status-pill">{{ row.cycle_type_label }}</span> {{ row.review_status|replace("_", " ")|title }}</td>

@@ -220,6 +220,64 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
         self.assertEqual(rows["UPS403"]["projected_truck_gallons"], -1_000)
         self.assertTrue(rows["UPS403"]["projected_truck_short"])
 
+    def test_truck_visuals_reuse_ordered_dispatch_projections(self):
+        truck = self._nightly_truck(current_gallons=10_000)
+        first = self._mission("UPS510", "N411UP", 25_400, 1)
+        second = self._mission("UPS520", "N412UP", 32_100, 2)
+        self._tail_fuel(first, inbound_lbs=12_000)
+        self._assignment(first, truck)
+        self._assignment(second, truck, transfer=2_500)
+        db.session.commit()
+
+        context = fuel_dispatch_context(self.gateway)
+        visual = context["truck_visuals"][0]
+        rows = {row["mission"].flight_number: row for row in context["rows"]}
+
+        self.assertEqual(visual["current_percent"], 50)
+        self.assertEqual(visual["projected_gallons"], 5_500)
+        self.assertEqual(visual["projected_percent"], 28)
+        self.assertEqual(visual["projected_usage_gallons"], 4_500)
+        self.assertEqual(rows["UPS510"]["truck_visual"]["projected_display"], "8,000 gal")
+        self.assertEqual(rows["UPS510"]["truck_visual"]["projected_percent"], 40)
+        self.assertEqual(rows["UPS520"]["truck_visual"]["projected_display"], "5,500 gal")
+        self._login_user("truck_visual_dispatcher", "simulator")
+        rendered = self.client.get("/neoscorpion/fuel-dispatch")
+        self.assertIn(b"TRUCK FUEL STATUS", rendered.data)
+        self.assertIn(b"PROJECTED 8,000 gal / 40%", rendered.data)
+
+    def test_truck_visuals_preserve_status_short_and_incomplete_states(self):
+        short_truck = self._nightly_truck("21", 1_000)
+        incomplete_truck = self._nightly_truck("22", 5_000)
+        unavailable_truck = self._nightly_truck("23", 4_000)
+        topping_truck = self._nightly_truck("24", 4_000)
+        sump_truck = self._nightly_truck("25", 4_000)
+        self._mission("UPS601", "N413UP", 25_400, 1)
+        self._assignment(self._mission("UPS602", "N414UP", None, 2), incomplete_truck)
+        self._assignment(self._mission("UPS603", "N415UP", 25_400, 3), short_truck)
+        db.session.flush()
+        statuses = {
+            "23": "unavailable_oos",
+            "24": "topping_off",
+            "25": "needs_sump",
+        }
+        for truck_number, status in statuses.items():
+            NeoScorpionSortTruck.query.join(NeoScorpionFuelTruck).filter(
+                NeoScorpionFuelTruck.truck_number == truck_number
+            ).one().status = status
+        db.session.commit()
+
+        visuals = {
+            visual["truck_number"]: visual
+            for visual in fuel_dispatch_context(self.gateway)["truck_visuals"]
+        }
+        self.assertTrue(visuals["21"]["projected_short"])
+        self.assertEqual(visuals["21"]["projected_percent"], -5)
+        self.assertIsNone(visuals["22"]["projected_percent"])
+        self.assertTrue(visuals["22"]["projected_incomplete"])
+        self.assertEqual(visuals["23"]["status_label"], "Unavailable / OOS")
+        self.assertEqual(visuals["24"]["status_label"], "Topping Off")
+        self.assertEqual(visuals["25"]["status_label"], "Needs Sump")
+
     def test_load_planning_output_uses_neo_and_final_a300_center_actual(self):
         a300 = self._mission("UPS0952", "N160UP", 70_000, 1, destination="MHR")
         assignment = self._assignment(a300)

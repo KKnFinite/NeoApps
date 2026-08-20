@@ -24066,6 +24066,141 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     margin-bottom: 1rem;
 }
 
+.neoscorpion-truck-visual-panel {
+    position: sticky;
+    top: 0.75rem;
+    z-index: 2;
+    margin: 1rem 0;
+    padding: 0.8rem;
+    border: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.34);
+    border-radius: 0.5rem;
+    background: rgba(8, 16, 28, 0.96);
+}
+
+.neoscorpion-truck-visual-panel > header,
+.neoscorpion-truck-visual-card > header,
+.neoscorpion-truck-gauges > div,
+.neoscorpion-mission-truck-visual {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+}
+
+.neoscorpion-truck-visual-panel > header > span,
+.neoscorpion-truck-visual-card dt,
+.neoscorpion-truck-gauges span,
+.neoscorpion-mission-truck-visual span {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.neoscorpion-truck-visual-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: 0.65rem;
+    margin-top: 0.65rem;
+}
+
+.neoscorpion-truck-visual-card {
+    border: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.24);
+    border-radius: 0.35rem;
+    padding: 0.65rem;
+}
+
+.neoscorpion-truck-visual-card--needs_sump {
+    border-color: #e44747;
+    background: rgba(228, 71, 71, 0.13);
+}
+
+.neoscorpion-truck-visual-card--unavailable_oos,
+.neoscorpion-truck-visual-card--topping_off {
+    border-color: rgba(230, 169, 50, 0.7);
+}
+
+.neoscorpion-truck-status,
+.neoscorpion-mission-truck-visual.is-short span:last-of-type {
+    font-weight: 700;
+}
+
+.neoscorpion-truck-visual-card--needs_sump .neoscorpion-truck-status,
+.neoscorpion-truck-visual-card.is-short .neoscorpion-truck-status,
+.neoscorpion-truck-visual-card.is-short dd,
+.neoscorpion-mission-truck-visual.is-short span:last-of-type {
+    color: #ff7777;
+}
+
+.neoscorpion-truck-visual-card dl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem 0.75rem;
+    margin: 0.65rem 0;
+}
+
+.neoscorpion-truck-visual-card dl div {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.35rem;
+}
+
+.neoscorpion-truck-visual-card dd {
+    margin: 0;
+    text-align: right;
+}
+
+.neoscorpion-truck-gauges {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.neoscorpion-truck-gauge {
+    display: block;
+    overflow: hidden;
+    flex: 1;
+    min-width: 2.5rem;
+    height: 0.45rem;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.neoscorpion-truck-gauge > b {
+    display: block;
+    width: var(--truck-gauge-percent, 0%);
+    height: 100%;
+    background: var(--node-scorpion-primary);
+}
+
+.neoscorpion-truck-gauge--projected > b {
+    background: var(--node-scorpion-highlight);
+}
+
+.neoscorpion-truck-gauge.is-short > b {
+    background: #e44747;
+}
+
+.neoscorpion-mission-truck-visual {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    min-width: 10rem;
+}
+
+.neoscorpion-mission-truck-visual strong {
+    grid-row: span 2;
+}
+
+.neoscorpion-truck-gauge--mini {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: 0.25rem;
+}
+
+@media (max-width: 700px) {
+    .neoscorpion-truck-visual-panel {
+        position: static;
+    }
+}
+
 .neoscorpion-apu-controls {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

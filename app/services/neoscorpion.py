@@ -360,6 +360,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
             "fuelers": fuelers,
             "trucks": trucks,
             "settings": settings,
+            "truck_visuals": [],
             "fuel_dispatch_refresh": refresh_setting,
             "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
             **asset_context,
@@ -387,19 +388,29 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
         row["selection"].fuel_truck_id: row["selection"]
         for row in asset_context["nightly_trucks"]
     }
+    rows = _fuel_rows(
+        operation,
+        missions,
+        fuel_trucks=trucks,
+        assignments_by_mission=assignments_by_mission,
+        fuel_work_states_by_assignment_tail=fuel_work_states,
+        nightly_truck_states_by_truck_id=nightly_truck_states_by_truck_id,
+        fueling_event_cycle_keys=fueling_event_cycle_keys,
+        fuel_density_lbs_per_gallon=fuel_density,
+        planning_inbound_fallback_lbs=planning_inbound_fallback_lbs,
+    )
+    truck_visuals = _dispatch_truck_visuals(
+        asset_context["nightly_trucks"],
+        rows,
+    )
+    _attach_dispatch_mission_truck_visuals(
+        rows,
+        truck_visuals,
+    )
     return {
         "operation": operation,
-        "rows": _fuel_rows(
-            operation,
-            missions,
-            fuel_trucks=trucks,
-            assignments_by_mission=assignments_by_mission,
-            fuel_work_states_by_assignment_tail=fuel_work_states,
-            nightly_truck_states_by_truck_id=nightly_truck_states_by_truck_id,
-            fueling_event_cycle_keys=fueling_event_cycle_keys,
-            fuel_density_lbs_per_gallon=fuel_density,
-            planning_inbound_fallback_lbs=planning_inbound_fallback_lbs,
-        ),
+        "rows": rows,
+        "truck_visuals": truck_visuals,
         "fuelers": fuelers,
         "trucks": trucks,
         "settings": settings,
@@ -4197,6 +4208,125 @@ def _hanzo_planning_status(row):
     if any(tank["planned_lbs"] is None for tank in row["tank_rows"]):
         return "Awaiting fuel readings"
     return ""
+
+
+def _dispatch_truck_visuals(nightly_trucks, rows):
+    """Decorate existing dispatch projections for the read-only truck visual aid."""
+    projections_by_truck_id = {}
+    for row in rows:
+        assignment = row["assignment"]
+        if assignment is None or assignment.assigned_truck_id is None:
+            continue
+        if row["projected_truck_gallons"] is not None:
+            projections_by_truck_id[assignment.assigned_truck_id] = row
+        elif row["projected_truck_display"] == "INCOMPLETE":
+            projections_by_truck_id[assignment.assigned_truck_id] = row
+
+    visuals = []
+    for nightly in nightly_trucks:
+        truck = nightly["truck"]
+        selection = nightly["selection"]
+        projection_row = projections_by_truck_id.get(truck.id)
+        current_gallons = selection.current_gallons
+        projected_gallons = (
+            projection_row["projected_truck_gallons"]
+            if projection_row is not None
+            else None
+        )
+        visuals.append(
+            {
+                "truck_id": truck.id,
+                "truck_number": truck.truck_number,
+                "status": selection.status,
+                "status_label": _dispatch_truck_status_label(selection.status),
+                "capacity_gallons": truck.capacity_gallons,
+                "capacity_display": _gallons_display(truck.capacity_gallons),
+                "current_gallons": current_gallons,
+                "current_display": _gallons_display(current_gallons),
+                "current_percent": _capacity_percent(current_gallons, truck.capacity_gallons),
+                "current_gauge_percent": _gauge_percent(
+                    _capacity_percent(current_gallons, truck.capacity_gallons)
+                ),
+                "projected_gallons": projected_gallons,
+                "projected_display": _gallons_display(projected_gallons),
+                "projected_percent": _capacity_percent(
+                    projected_gallons,
+                    truck.capacity_gallons,
+                ),
+                "projected_gauge_percent": _gauge_percent(
+                    _capacity_percent(projected_gallons, truck.capacity_gallons)
+                ),
+                "projected_short": bool(
+                    projection_row and projection_row["projected_truck_short"]
+                ),
+                "projected_incomplete": bool(
+                    projection_row
+                    and projection_row["projected_truck_display"] == "INCOMPLETE"
+                ),
+                "projected_usage_gallons": (
+                    current_gallons - projected_gallons
+                    if current_gallons is not None and projected_gallons is not None
+                    else None
+                ),
+            }
+        )
+    return visuals
+
+
+def _attach_dispatch_mission_truck_visuals(rows, truck_visuals):
+    visuals_by_truck_id = {visual["truck_id"]: visual for visual in truck_visuals}
+    for row in rows:
+        assignment = row["assignment"]
+        truck_id = assignment.assigned_truck_id if assignment else None
+        visual = visuals_by_truck_id.get(truck_id)
+        if visual is None:
+            row["truck_visual"] = None
+            continue
+        row["truck_visual"] = {
+            "truck_number": visual["truck_number"],
+            "current_display": visual["current_display"],
+            "current_percent": visual["current_percent"],
+            "current_gauge_percent": visual["current_gauge_percent"],
+            "projected_display": row["projected_truck_display"],
+            "projected_percent": _capacity_percent(
+                row["projected_truck_gallons"],
+                visual["capacity_gallons"],
+            ),
+            "projected_gauge_percent": _gauge_percent(
+                _capacity_percent(
+                    row["projected_truck_gallons"],
+                    visual["capacity_gallons"],
+                )
+            ),
+            "projected_short": row["projected_truck_short"],
+            "projected_incomplete": row["projected_truck_display"] == "INCOMPLETE",
+        }
+
+
+def _dispatch_truck_status_label(status):
+    return {
+        "available": "Available",
+        "unavailable_oos": "Unavailable / OOS",
+        "topping_off": "Topping Off",
+        "needs_sump": "Needs Sump",
+    }.get(status, "Unknown")
+
+
+def _gallons_display(value):
+    return f"{value:,} gal" if value is not None else "—"
+
+
+def _capacity_percent(gallons, capacity):
+    if gallons is None or capacity is None or capacity <= 0:
+        return None
+    return int((Decimal(gallons) * Decimal("100") / Decimal(capacity)).quantize(
+        Decimal("1"),
+        rounding=ROUND_HALF_UP,
+    ))
+
+
+def _gauge_percent(percent):
+    return min(100, max(0, percent)) if percent is not None else None
 
 
 def _departure_missions(operation):
