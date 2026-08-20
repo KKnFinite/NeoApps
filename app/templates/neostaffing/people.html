@@ -180,6 +180,18 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
                                 <button type="submit">SAVE EMPLOYEE</button>
                             </form>
                         </details>
+                        <details class="neostaffing-inline-editor neostaffing-people-action-details">
+                            <summary class="table-row-button">BULK ADD EMPLOYEES</summary>
+                            <form class="operation-form neostaffing-people-bulk-create-form" method="post" action="{{ url_for('neostaffing.create_people_bulk') }}">
+                                {{ preserve_people_filters(filters) }}
+                                <input type="hidden" name="initial_work_area_unit_id" value="{{ work_area_selected.id }}">
+                                <label><span>Employees</span>
+                                    <textarea name="employee_rows" rows="8" required spellcheck="false" placeholder="Employee ID&#9;First Name&#9;Last Name&#9;Seniority Date&#9;Phone&#9;Classification&#9;Employee Status&#10;12345&#9;Jane&#9;Doe&#9;2020-01-01&#9;555-0100&#9;part_time&#9;active"></textarea>
+                                </label>
+                                <p class="muted neostaffing-bulk-paste-help">Paste one employee per line from a spreadsheet. Columns: Employee ID, First Name, Last Name, Seniority Date, Phone, Classification, Employee Status.</p>
+                                <button type="submit">ADD EMPLOYEES</button>
+                            </form>
+                        </details>
                         {% endif %}
 
                         {% if can_assign_management %}

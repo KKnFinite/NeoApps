@@ -998,6 +998,61 @@ def create_person():
     return redirect(_people_return_url(person.id if person else None))
 
 
+@bp.route("/app-management/people/bulk-create", methods=["POST"])
+@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
+def create_people_bulk():
+    people = []
+    try:
+        work_area = _get_unit(request.form.get("initial_work_area_unit_id"))
+        people = staffing_service.create_people_batch(
+            _bulk_employee_rows(request.form.get("employee_rows")),
+            work_area,
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash(f"Added {len(people)} employees.", "success")
+    return redirect(_people_return_url(people[0].id if len(people) == 1 else None))
+
+
+def _bulk_employee_rows(raw_rows):
+    columns = (
+        "employee_id",
+        "first_name",
+        "last_name",
+        "seniority_date",
+        "phone_number",
+        "classification",
+        "employee_status",
+    )
+    header = (
+        "employee id",
+        "first name",
+        "last name",
+        "seniority date",
+        "phone",
+        "classification",
+        "employee status",
+    )
+    rows = []
+    for line_number, raw_line in enumerate(str(raw_rows or "").splitlines(), start=1):
+        if not raw_line.strip():
+            continue
+        cells = [cell.strip() for cell in raw_line.split("\t")]
+        if not rows and tuple(cell.lower() for cell in cells) == header:
+            continue
+        if len(cells) != len(columns):
+            raise ValueError(
+                f"Bulk row {line_number} must contain {len(columns)} tab-separated fields."
+            )
+        row = dict(zip(columns, cells))
+        row["active"] = "1"
+        rows.append(row)
+    return rows
+
+
 @bp.route("/app-management/people/<int:person_id>/update", methods=["POST"])
 @neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def update_person(person_id):

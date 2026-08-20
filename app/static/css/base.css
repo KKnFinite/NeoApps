@@ -10449,6 +10449,29 @@ body.blueprint-neostaffing {
     grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
+.neostaffing-people-form label,
+.neostaffing-people-bulk-create-form label {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+
+.neostaffing-people-bulk-create-form {
+    display: grid;
+    gap: 10px;
+    max-width: 960px;
+}
+
+.neostaffing-people-bulk-create-form textarea {
+    min-height: 180px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    resize: vertical;
+}
+
+.neostaffing-bulk-paste-help {
+    margin: 0;
+}
+
 .neostaffing-compact-form button,
 .neostaffing-filter-form button,
 .neostaffing-people-form button {
@@ -11348,6 +11371,7 @@ body.blueprint-neostaffing {
     .neostaffing-compact-form,
     .neostaffing-filter-form,
     .neostaffing-people-form,
+    .neostaffing-people-bulk-create-form,
     .neostaffing-tree-add-form,
     .neostaffing-tree-edit-form {
         grid-template-columns: repeat(2, minmax(0, 1fr));

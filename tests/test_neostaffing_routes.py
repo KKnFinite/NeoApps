@@ -1771,6 +1771,131 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Total Roster", page.data)
         self.assertIn(b"2", page.data)
 
+    def test_people_single_and_bulk_employee_create_assign_to_selected_work_area(self):
+        simulator = self._user("staffing_people_create_simulator")
+        self._grant_app_access(simulator, "neostaffing", "simulator")
+        _sort, _operation, _department, work_area = self._staffing_hierarchy()
+        db.session.commit()
+        client = self._logged_in_client(simulator.username)
+
+        page = client.get(f"/neostaffing/people?work_area_id={work_area.id}")
+        self.assertIn(b"ADD EMPLOYEE", page.data)
+        self.assertIn(b"BULK ADD EMPLOYEES", page.data)
+
+        single = client.post(
+            "/neostaffing/app-management/people",
+            data={
+                "employee_id": "PEOPLE-ONE",
+                "first_name": "Single",
+                "last_name": "Employee",
+                "seniority_date": "2020-01-01",
+                "phone_number": "555-0100",
+                "classification": "part_time",
+                "employee_status": "active",
+                "initial_work_area_unit_id": str(work_area.id),
+            },
+            follow_redirects=True,
+        )
+        bulk = client.post(
+            "/neostaffing/app-management/people/bulk-create",
+            data={
+                "initial_work_area_unit_id": str(work_area.id),
+                "employee_rows": (
+                    "Employee ID\tFirst Name\tLast Name\tSeniority Date\tPhone\tClassification\tEmployee Status\n"
+                    "PEOPLE-TWO\tBulk\tOne\t2020-01-02\t\tpart_time\tactive\n"
+                    "PEOPLE-THREE\tBulk\tTwo\t2020-01-03\t555-0103\tfull_time_combo\tfmla"
+                ),
+            },
+            follow_redirects=True,
+        )
+
+        self.assertEqual(single.status_code, 200)
+        self.assertIn(b"Person added.", single.data)
+        self.assertEqual(bulk.status_code, 200)
+        self.assertIn(b"Added 2 employees.", bulk.data)
+        for employee_id in ("PEOPLE-ONE", "PEOPLE-TWO", "PEOPLE-THREE"):
+            person = StaffingPerson.query.filter_by(employee_id=employee_id).one()
+            self.assertEqual(person.work_assignment.work_area_unit_id, work_area.id)
+
+    def test_people_bulk_create_rejects_duplicate_and_existing_ids_atomically(self):
+        simulator = self._user("staffing_people_bulk_duplicate")
+        self._grant_app_access(simulator, "neostaffing", "simulator")
+        _sort, _operation, _department, work_area = self._staffing_hierarchy()
+        existing = staffing_service.create_person(
+            {
+                "employee_id": "PEOPLE-EXISTS",
+                "first_name": "Existing",
+                "last_name": "Employee",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+            }
+        )
+        db.session.commit()
+        client = self._logged_in_client(simulator.username)
+        base = {"initial_work_area_unit_id": str(work_area.id)}
+
+        duplicate = client.post(
+            "/neostaffing/app-management/people/bulk-create",
+            data={
+                **base,
+                "employee_rows": (
+                    "PEOPLE-DUP\tOne\tEmployee\t2020-01-01\t\tpart_time\tactive\n"
+                    "people-dup\tTwo\tEmployee\t2020-01-02\t\tpart_time\tactive"
+                ),
+            },
+            follow_redirects=True,
+        )
+        existing_id = client.post(
+            "/neostaffing/app-management/people/bulk-create",
+            data={
+                **base,
+                "employee_rows": (
+                    "PEOPLE-NEW\tNew\tEmployee\t2020-01-01\t\tpart_time\tactive\n"
+                    "PEOPLE-EXISTS\tExisting\tEmployee\t2020-01-02\t\tpart_time\tactive"
+                ),
+            },
+            follow_redirects=True,
+        )
+
+        self.assertIn(b"Employee ID is duplicated in this batch.", duplicate.data)
+        self.assertIn(b"Employee ID already exists.", existing_id.data)
+        self.assertEqual(StaffingPerson.query.filter_by(employee_id="PEOPLE-DUP").count(), 0)
+        self.assertEqual(StaffingPerson.query.filter_by(employee_id="PEOPLE-NEW").count(), 0)
+        self.assertEqual(StaffingPerson.query.filter_by(id=existing.id).count(), 1)
+
+    def test_pt_supervisor_cannot_bypass_existing_approval_path_with_bulk_create(self):
+        supervisor_user = self._user("staffing_people_pt_supervisor")
+        self._grant_app_access(supervisor_user, "neostaffing", "operator")
+        _sort, _operation, _department, work_area = self._staffing_hierarchy()
+        supervisor = staffing_service.create_person(
+            {
+                "employee_id": "PEOPLE-PT-SUP",
+                "first_name": "Pat",
+                "last_name": "Supervisor",
+                "seniority_date": "2018-01-01",
+                "classification": "part_time_supervisor",
+            }
+        )
+        supervisor_user.employee_id = supervisor.employee_id
+        db.session.commit()
+        client = self._logged_in_client(supervisor_user.username)
+
+        blocked = client.post(
+            "/neostaffing/app-management/people/bulk-create",
+            data={
+                "initial_work_area_unit_id": str(work_area.id),
+                "employee_rows": "PEOPLE-PT-NEW\tNew\tEmployee\t2020-01-01\t\tpart_time\tactive",
+            },
+            follow_redirects=False,
+        )
+        approval_workspace = client.get("/neostaffing/bulk-change")
+
+        self.assertEqual(blocked.status_code, 302)
+        self.assertEqual(blocked.location, "/neostaffing")
+        self.assertIsNone(StaffingPerson.query.filter_by(employee_id="PEOPLE-PT-NEW").first())
+        self.assertEqual(approval_workspace.status_code, 200)
+        self.assertIn(b"SUBMIT CHANGES MODE", approval_workspace.data)
+
     def test_attendance_all_here_updates_existing_records_and_counts(self):
         user = self._user("staffing_attendance_all_here")
         self._grant_app_access(user, "neostaffing", "operator")

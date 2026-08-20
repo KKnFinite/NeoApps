@@ -163,14 +163,85 @@ def landing_context():
 
 
 def create_person(values):
+    person_values = _person_values(values)
     person = StaffingPerson()
-    update_person(person, values, is_new=True)
+    _apply_person_values(person, person_values)
+    with db.session.no_autoflush:
+        existing = StaffingPerson.query.filter_by(
+            employee_id=person_values["employee_id"]
+        ).first()
+        if existing:
+            raise ValueError("Employee ID already exists.")
     db.session.add(person)
     db.session.flush()
     return person
 
 
 def update_person(person, values, is_new=False):
+    person_values = _person_values(values)
+    with db.session.no_autoflush:
+        existing = StaffingPerson.query.filter_by(
+            employee_id=person_values["employee_id"]
+        ).first()
+        if existing and existing.id != getattr(person, "id", None):
+            raise ValueError("Employee ID already exists.")
+
+    old_classification = None if is_new else person.classification
+    old_active = None if is_new else person.active
+    _apply_person_values(person, person_values)
+
+    if old_classification and old_classification != person_values["classification"]:
+        remove_invalid_assignments_for_person(person)
+    if person.id and (
+        old_classification != person_values["classification"]
+        or old_active != person_values["active"]
+    ):
+        end_invalid_reporting_relationships_for_person(person)
+
+    return person
+
+
+def create_people_batch(rows, work_area):
+    if not work_area or work_area.unit_type != "work_area" or not work_area.active:
+        raise ValueError("Select an active Work Area.")
+    if not rows:
+        raise ValueError("Enter at least one employee row.")
+
+    normalized_rows = [_person_values(row) for row in rows]
+    employee_ids = [row["employee_id"].lower() for row in normalized_rows]
+    if len(set(employee_ids)) != len(employee_ids):
+        raise ValueError("Employee ID is duplicated in this batch.")
+
+    existing_ids = {
+        employee_id.lower()
+        for (employee_id,) in (
+            db.session.query(StaffingPerson.employee_id)
+            .filter(func.lower(StaffingPerson.employee_id).in_(employee_ids))
+            .all()
+        )
+    }
+    if existing_ids:
+        raise ValueError("Employee ID already exists.")
+
+    people = []
+    for person_values in normalized_rows:
+        person = StaffingPerson()
+        _apply_person_values(person, person_values)
+        _validate_work_assignment(person, work_area)
+        people.append(person)
+    db.session.add_all(people)
+    db.session.flush()
+    db.session.add_all(
+        [
+            StaffingWorkAssignment(person=person, work_area=work_area, active=True)
+            for person in people
+        ]
+    )
+    db.session.flush()
+    return people
+
+
+def _person_values(values):
     employee_id = _required_text(values.get("employee_id"), "Employee ID")
     first_name = _required_text(values.get("first_name"), "First name")
     last_name = _required_text(values.get("last_name"), "Last name")
@@ -188,29 +259,27 @@ def update_person(person, values, is_new=False):
     phone_number = _optional_text(values.get("phone_number"))
     active = _parse_bool(values.get("active"), default=True)
 
-    with db.session.no_autoflush:
-        existing = StaffingPerson.query.filter_by(employee_id=employee_id).first()
-        if existing and existing.id != getattr(person, "id", None):
-            raise ValueError("Employee ID already exists.")
+    return {
+        "employee_id": employee_id,
+        "first_name": first_name,
+        "last_name": last_name,
+        "seniority_date": seniority_date,
+        "classification": classification,
+        "employee_status": employee_status,
+        "phone_number": phone_number,
+        "active": active,
+    }
 
-    old_classification = None if is_new else person.classification
-    old_active = None if is_new else person.active
-    person.employee_id = employee_id
-    person.first_name = first_name
-    person.last_name = last_name
-    person.seniority_date = seniority_date
-    person.phone_number = phone_number
-    person.classification = classification
-    person.employee_status = employee_status
-    person.active = active
 
-    if old_classification and old_classification != classification:
-        remove_invalid_assignments_for_person(person)
-    if person.id and (
-        old_classification != classification or old_active != active
-    ):
-        end_invalid_reporting_relationships_for_person(person)
-
+def _apply_person_values(person, person_values):
+    person.employee_id = person_values["employee_id"]
+    person.first_name = person_values["first_name"]
+    person.last_name = person_values["last_name"]
+    person.seniority_date = person_values["seniority_date"]
+    person.phone_number = person_values["phone_number"]
+    person.classification = person_values["classification"]
+    person.employee_status = person_values["employee_status"]
+    person.active = person_values["active"]
     return person
 
 
