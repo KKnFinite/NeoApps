@@ -223,7 +223,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"TRUCK 7", response.data)
         self.assertIn(b"3400 gal", response.data)
         self.assertIn(b"5,507 gal", response.data)
-        self.assertIn(b"ACTUAL INBOUND", response.data)
+        self.assertNotIn(b"ACTUAL INBOUND", response.data)
         self.assertIn(b"INCOMPLETE", response.data)
         self.assertNotIn(CALCULATION_NOT_CONFIGURED_MESSAGE.encode(), response.data)
 
@@ -330,7 +330,6 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             self.assertIn(f'name="remaining_{tank_code}"'.encode(), response.data)
             self.assertIn(f'name="actual_{tank_code}"'.encode(), response.data)
         self.assertIn(b"A300", response.data)
-        self.assertIn(CALCULATION_NOT_CONFIGURED_MESSAGE.encode(), response.data)
 
     def test_truck_manager_can_add_vendor_driver_truck(self):
         self._login_approved_user(role="simulator")

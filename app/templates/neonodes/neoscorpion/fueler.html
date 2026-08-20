@@ -80,7 +80,9 @@
                 <p class="neoscorpion-calculation-warning">Confirmed tail {{ row.confirmed_tail_number }}; current mission tail {{ row.tail_number }}.</p>
                 {% endif %}
                 {% endif %}
-                <p class="neoscorpion-calculation-warning">{{ row.estimated_fuel_status }}</p>
+                {% if row.fuel_configuration_message %}
+                <p class="neoscorpion-calculation-warning">{{ row.fuel_configuration_message }}</p>
+                {% endif %}
                 <dl class="neoscorpion-fuel-totals">
                     <div>
                         <dt>Required</dt>
@@ -91,7 +93,15 @@
                         <dd>{{ row.apu_running_label }}</dd>
                     </div>
                     <div>
-                        <dt>APU Allowance</dt>
+                        <dt>APU Automatic</dt>
+                        <dd data-apu-automatic-output>{{ row.automatic_apu_allowance_display }}{% if row.automatic_apu_allowance_lbs is not none %} K LBS{% endif %}</dd>
+                    </div>
+                    <div>
+                        <dt>APU Override</dt>
+                        <dd data-apu-override-output>{{ row.apu_override_allowance_display }}{% if row.apu_override_enabled %} K LBS{% endif %}</dd>
+                    </div>
+                    <div>
+                        <dt>APU Effective</dt>
                         <dd data-apu-allowance-output>{{ row.apu_allowance_display }}{% if row.apu_allowance_display != "INCOMPLETE" %} K LBS{% endif %}</dd>
                     </div>
                     <div>
@@ -113,9 +123,6 @@
                     <div class="neoscorpion-fuel-total-primary">
                         <dt>Neo Fuel</dt>
                         <dd>{{ row.neo_fuel_display }}{% if row.neo_fuel_available %} K LBS{% endif %}</dd>
-                        {% if row.neo_fuel_available %}
-                        <button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-neo-fuel="{{ row.neo_fuel_display }}">COPY NEO FUEL</button>
-                        {% endif %}
                     </div>
                     <div>
                         <dt>ON</dt>
@@ -135,6 +142,7 @@
                     data-required-lbs="{{ row.mission.planned_fuel_load if row.mission.planned_fuel_load is not none else '' }}"
                     data-initial-apu-running="{% if row.apu_running is sameas true %}yes{% elif row.apu_running is sameas false %}no{% else %}not_confirmed{% endif %}"
                     data-persisted-apu-allowance-lbs="{{ row.apu_allowance_lbs if row.apu_allowance_lbs is not none else '' }}"
+                    data-persisted-automatic-apu-allowance-lbs="{{ row.automatic_apu_allowance_lbs if row.automatic_apu_allowance_lbs is not none else '' }}"
                     data-effective-apu-rate="{{ row.effective_apu_rate }}"
                     data-planned-departure-utc="{{ row.planned_departure_utc }}"
                     data-window-minutes="{{ row.operation_window_minutes }}"
@@ -160,6 +168,14 @@
                                 {% endfor %}
                             </select>
                         </label>
+                        <input type="hidden" name="apu_override_present" value="1">
+                        <label data-apu-override-wrap {% if row.apu_running is not sameas true %}hidden{% endif %}>
+                            <input type="checkbox" name="apu_override_enabled" value="1" data-apu-override-enabled {% if row.apu_override_enabled %}checked{% endif %}>
+                            Override APU
+                        </label>
+                        <label data-apu-override-value-wrap {% if row.apu_running is not sameas true or not row.apu_override_enabled %}hidden{% endif %}>Override Allowance, K lbs
+                            <input name="apu_override_allowance" value="{{ row.apu_override_allowance_display if row.apu_override_enabled else '' }}" inputmode="decimal" data-apu-override-value>
+                        </label>
                     </div>
                     {% if row.tank_rows %}
                     <p class="neoscorpion-helper" data-planned-entry-cue {% if row.planned_ready %}hidden{% endif %}>Enter all Remaining readings to calculate Planned fuel.</p>
@@ -184,7 +200,7 @@
                         {% endfor %}
                     </div>
                     {% else %}
-                    <p class="neoscorpion-fuel-tank-unconfigured">Tank entry is not configured for this aircraft.</p>
+                    <p class="neoscorpion-fuel-tank-unconfigured">{{ row.fuel_configuration_message or "Tank entry is not configured for this aircraft." }}</p>
                     {% endif %}
                     <label>T/F
                         <input name="transfer_fuel_gallons" value="{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '' }}" inputmode="numeric" min="0" placeholder="Gallons">
@@ -214,7 +230,7 @@
                     {% endfor %}
                 </div>
                 {% else %}
-                <p class="neoscorpion-fuel-tank-unconfigured">Tank entry is not configured for this aircraft.</p>
+                <p class="neoscorpion-fuel-tank-unconfigured">{{ row.fuel_configuration_message or "Tank entry is not configured for this aircraft." }}</p>
                 {% endif %}
                 <dl class="neoscorpion-fueler-readout">
                     <div><dt>T/F</dt><dd>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</dd></div>
@@ -232,7 +248,7 @@
                         <button class="action-button" type="submit">MARK OFF</button>
                     </form>
                     {% elif not row.is_off and not row.fueler_work_blocked %}
-                    <p class="neoscorpion-calculation-warning">{% if row.apu_running is sameas true and not row.apu_source_valid %}Select an APU source tank before OFF.{% else %}Complete Actual fuel and confirm APU before OFF.{% endif %}</p>
+                    <p class="neoscorpion-calculation-warning">{{ row.off_reason }}</p>
                     {% endif %}
                 {% endif %}
             </article>
@@ -241,7 +257,6 @@
         {% endif %}
     </section>
 </section>
-<script src="{{ url_for('static', filename='js/neoscorpion_fuel_assignments_copy.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_planning.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_assignments_live.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 {% endblock %}

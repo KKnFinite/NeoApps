@@ -51,8 +51,8 @@ test("preview APU allowance uses the server rounding rule", () => {
     const plannedDepartureUtc = "2026-08-18T05:00:00Z";
     const examples = [
         [Date.parse("2026-08-18T03:45:00Z"), 0.4],
-        [Date.parse("2026-08-18T03:30:00Z"), 0.5],
-        [Date.parse("2026-08-18T02:30:00Z"), 0.8],
+        [Date.parse("2026-08-18T03:30:00Z"), 0.45],
+        [Date.parse("2026-08-18T02:30:00Z"), 0.75],
     ];
     for (const [confirmedAtMs, expected] of examples) {
         assert.equal(
@@ -103,7 +103,7 @@ test("747 preview uses current Actual dependencies", () => {
 
     assert.equal(plan.main_l_out, 20);
     assert.equal(plan.main_l_in, 50);
-    assert.equal(plan.center_wing, 19.444);
+    assert.equal(plan.center_wing, 19.4);
 });
 
 

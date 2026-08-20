@@ -86,6 +86,9 @@ class NeoScorpionApuFuelTest(unittest.TestCase):
                     "apu_running",
                     "apu_confirmed_at_utc",
                     "apu_allowance_lbs",
+                    "automatic_apu_allowance_lbs",
+                    "apu_override_enabled",
+                    "apu_override_allowance_lbs",
                     "applied_apu_rate_thousand_lbs_per_hour",
                     "apu_source_tank_code",
                     "off_at_utc",
@@ -177,8 +180,8 @@ class NeoScorpionApuFuelTest(unittest.TestCase):
         effective_departure = datetime(2026, 8, 18, 5, 0)
         examples = (
             (datetime(2026, 8, 18, 3, 45), 400),
-            (datetime(2026, 8, 18, 3, 30), 500),
-            (datetime(2026, 8, 18, 2, 30), 800),
+            (datetime(2026, 8, 18, 3, 30), 450),
+            (datetime(2026, 8, 18, 2, 30), 750),
         )
         for confirmation_time, expected_lbs in examples:
             with self.subTest(confirmation_time=confirmation_time):
@@ -307,7 +310,7 @@ class NeoScorpionApuFuelTest(unittest.TestCase):
             original_rate,
         )
 
-    def test_target_neo_fuel_and_copy_hook_require_complete_inputs(self):
+    def test_target_neo_fuel_requires_complete_inputs_without_copy_hook(self):
         _operation, _mission, assignment = self._assignment(required_lbs=50000)
         self._login(self.operator)
 
@@ -357,8 +360,40 @@ class NeoScorpionApuFuelTest(unittest.TestCase):
         self.assertEqual(complete_row["actual_total_display"], "54.0")
         self.assertEqual(complete_row["neo_fuel_display"], "54.0")
         rendered = self.client.get("/neoscorpion/fueler")
-        self.assertIn(b'data-copy-neo-fuel="54.0"', rendered.data)
-        self.assertIn(b"COPY NEO FUEL", rendered.data)
+        self.assertNotIn(b"data-copy-neo-fuel", rendered.data)
+        self.assertNotIn(b"COPY NEO FUEL", rendered.data)
+
+    def test_fueler_apu_override_is_effective_and_can_be_cleared(self):
+        _operation, _mission, assignment = self._assignment(required_lbs=50000)
+        first = save_fueler_entry(
+            self.gateway,
+            self.operator,
+            self._form(
+                assignment,
+                apu_running="yes",
+                apu_override_present="1",
+                apu_override_enabled="1",
+                apu_override_allowance="0.55",
+            ),
+            now_utc=datetime(2026, 8, 18, 3, 45),
+        )
+        self.assertEqual(first.fuel_work_state.automatic_apu_allowance_lbs, 400)
+        self.assertTrue(first.fuel_work_state.apu_override_enabled)
+        self.assertEqual(first.fuel_work_state.apu_override_allowance_lbs, 550)
+        self.assertEqual(first.fuel_work_state.apu_allowance_lbs, 550)
+        confirmed_at = first.fuel_work_state.apu_confirmed_at_utc
+        db.session.commit()
+
+        cleared = save_fueler_entry(
+            self.gateway,
+            self.operator,
+            self._form(assignment, apu_running="yes", apu_override_present="1"),
+            now_utc=datetime(2026, 8, 18, 4, 30),
+        )
+        self.assertFalse(cleared.fuel_work_state.apu_override_enabled)
+        self.assertIsNone(cleared.fuel_work_state.apu_override_allowance_lbs)
+        self.assertEqual(cleared.fuel_work_state.apu_allowance_lbs, 400)
+        self.assertEqual(cleared.fuel_work_state.apu_confirmed_at_utc, confirmed_at)
 
     def test_combined_tank_apu_save_increments_revision_once_and_noop_does_not(self):
         operation, _mission, assignment = self._assignment(required_lbs=50000)

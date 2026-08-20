@@ -218,6 +218,14 @@ class NeoScorpionFuelWorkState(db.Model):
     apu_running = db.Column(db.Boolean, nullable=True)
     apu_confirmed_at_utc = db.Column(db.DateTime, nullable=True)
     apu_allowance_lbs = db.Column(db.Integer, nullable=True)
+    automatic_apu_allowance_lbs = db.Column(db.Integer, nullable=True)
+    apu_override_enabled = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False,
+        server_default=db.false(),
+    )
+    apu_override_allowance_lbs = db.Column(db.Integer, nullable=True)
     applied_apu_rate_thousand_lbs_per_hour = db.Column(
         db.Numeric(8, 4),
         nullable=True,

@@ -124,10 +124,7 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
         self.assertEqual(partial.revision, 1)
         db.session.commit()
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "Complete Actual fuel and confirm APU before OFF",
-        ):
+        with self.assertRaisesRegex(ValueError, "Complete Remaining fuel before OFF"):
             mark_fueler_off(self.gateway, self.user, assignment.id)
         db.session.rollback()
 
@@ -148,7 +145,7 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "Complete Actual fuel and confirm APU before OFF",
+            "Confirm APU Running before OFF",
         ):
             mark_fueler_off(self.gateway, self.user, assignment.id)
         db.session.rollback()
@@ -163,12 +160,20 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
             2,
         )
 
-    def test_valid_neo_fuel_allows_off_without_tf_and_repeat_is_noop(self):
+    def test_valid_neo_fuel_requires_positive_tf_before_off_and_repeat_is_noop(self):
         operation, _mission, assignment = self._assignment()
         saved = self._save_complete(assignment)
         self.assertEqual(saved.revision, 1)
         db.session.commit()
-        self.assertIsNone(assignment.transfer_fuel_gallons)
+        self.assertEqual(assignment.transfer_fuel_gallons, 1)
+
+        assignment.transfer_fuel_gallons = None
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "positive T/F"):
+            mark_fueler_off(self.gateway, self.user, assignment.id)
+        db.session.rollback()
+        assignment.transfer_fuel_gallons = 1
+        db.session.commit()
 
         self._login(self.user)
         with patch.object(db.session, "commit", wraps=db.session.commit) as commit:
@@ -263,6 +268,7 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
             actual_ctr="18.0",
             remaining_right="30.0",
             actual_right="27.0",
+            transfer_fuel_gallons="1",
             tail_fuel_status="complete",
         )
         result = save_fueler_entry(self.gateway, self.user, ignored_status)
@@ -293,6 +299,7 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
                 actual_ctr="18.0",
                 remaining_right="30.0",
                 actual_right="27.0",
+                transfer_fuel_gallons="1",
             ),
         )
 

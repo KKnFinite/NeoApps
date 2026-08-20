@@ -135,7 +135,7 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         self.assertEqual(snapshots["left"].planned_lbs, 14_600)
         self.assertEqual(nightly.current_gallons, 325)
 
-    def test_uplift_starts_blank_and_completes_next_event_once(self):
+    def test_uplift_prefills_same_tail_remaining_and_completes_next_event_once(self):
         operation = self._operation()
         _mission, assignment = self._assignment(operation)
         _truck, nightly = self._truck(operation, assignment, "UP-1", 500)
@@ -172,17 +172,16 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         self.assertIsNone(started.fuel_work_state.on_at_utc)
         self.assertIsNone(started.fuel_work_state.off_at_utc)
         self.assertIsNone(started.fuel_work_state.apu_running)
-        self.assertTrue(
-            all(
-                state.remaining_lbs is None and state.actual_lbs is None
-                for state in started.fuel_work_state.tank_states
-            )
+        self.assertEqual(
+            {state.tank_code: state.remaining_lbs for state in started.fuel_work_state.tank_states},
+            {"left": 11000, "ctr": 10000, "right": 10000},
         )
+        self.assertTrue(all(state.actual_lbs is None for state in started.fuel_work_state.tank_states))
         self._login(self.fueler)
         fueler_page = self.client.get("/neoscorpion/fueler")
         self.assertEqual(fueler_page.status_code, 200)
         self.assertIn(b">UPLIFT<", fueler_page.data)
-        self.assertIn(b'name="remaining_left" value=""', fueler_page.data)
+        self.assertIn(b'name="remaining_left" value="11.0"', fueler_page.data)
 
         revision = self._revision(operation)
         self._save_cycle(
@@ -225,6 +224,32 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         self.assertEqual(self._revision(operation), repeated_revision)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(), 2)
         self.assertEqual(nightly.current_gallons, 410)
+
+    def test_tail_swapped_uplift_does_not_copy_old_tail_actuals(self):
+        operation = self._operation()
+        mission, assignment = self._assignment(operation)
+        _truck, nightly = self._truck(operation, assignment, "UP-TAIL", 500)
+        self._complete_cycle(
+            operation,
+            assignment,
+            remaining=(10, 10, 10),
+            actual=(11, 10, 10),
+            transfer=50,
+        )
+        mission.assigned_tail_number = "N422UP"
+        db.session.commit()
+
+        started = start_follow_up_fuel_cycle(
+            self.gateway,
+            self.dispatcher,
+            assignment.id,
+            "uplift",
+            "55.0",
+            self.fueler.id,
+            nightly.fuel_truck_id,
+        )
+        self.assertEqual(started.fuel_work_state.tail_number, "N422UP")
+        self.assertEqual(tuple(started.fuel_work_state.tank_states), ())
 
     def test_defuel_adds_gallons_sets_sump_and_holds_other_assignment(self):
         operation = self._operation()

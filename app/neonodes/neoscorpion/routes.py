@@ -210,6 +210,26 @@ def fuel_dispatch_assignment():
             "operation_id": result.assignment.sort_date_operation_id,
             "revision": result.revision,
             "button_label": "UPDATE ASSIGNMENT",
+            "automatic_apu_allowance_lbs": (
+                result.fuel_work_state.automatic_apu_allowance_lbs
+                if result.fuel_work_state is not None
+                else None
+            ),
+            "apu_override_enabled": (
+                bool(result.fuel_work_state.apu_override_enabled)
+                if result.fuel_work_state is not None
+                else False
+            ),
+            "apu_override_allowance_lbs": (
+                result.fuel_work_state.apu_override_allowance_lbs
+                if result.fuel_work_state is not None
+                else None
+            ),
+            "effective_apu_allowance_lbs": (
+                result.fuel_work_state.apu_allowance_lbs
+                if result.fuel_work_state is not None
+                else None
+            ),
         }
     )
 

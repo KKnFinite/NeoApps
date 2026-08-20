@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 
 def plan_fuel_by_tank(
@@ -35,7 +35,11 @@ def plan_fuel_by_tank(
     if planner is None:
         return None
 
-    planned = planner(required, remaining, actual)
+    planned = _round_base_distribution(
+        aircraft_type,
+        planner(required, remaining, actual),
+        required,
+    )
     if apu_running:
         if (
             apu_allowance_lbs is None
@@ -44,6 +48,56 @@ def plan_fuel_by_tank(
             return None
         planned[apu_source_tank_code] += _decimal(apu_allowance_lbs)
     return planned
+
+
+def _round_base_distribution(aircraft_type, planned, required):
+    """Use operational 0.1K tank increments while preserving Required total."""
+    pairs_and_balance = {
+        "B757": ((("left", "right"),), "ctr"),
+        "B767ER": ((("left", "right"),), "ctr"),
+        "A300": (
+            (("l_out", "r_out"), ("l_in", "r_in")),
+            "tt",
+        ),
+        "B747-400": (
+            (
+                ("main_l_out", "main_r_out"),
+                ("main_l_in", "main_r_in"),
+                ("reserve_2_l", "reserve_3_r"),
+            ),
+            "center_wing",
+        ),
+        "B747-8": (
+            (
+                ("main_l_out", "main_r_out"),
+                ("main_l_in", "main_r_in"),
+                ("reserve_1_l", "reserve_4_r"),
+            ),
+            "center_wing",
+        ),
+    }
+    pair_data = pairs_and_balance.get(aircraft_type)
+    if pair_data is None:
+        return planned
+    pairs, balancing_tank = pair_data
+    rounded = dict(planned)
+    increment = Decimal("100")
+    for left_code, right_code in pairs:
+        total_increments = int(
+            ((planned[left_code] + planned[right_code]) / increment).quantize(
+                Decimal("1"),
+                rounding=ROUND_HALF_UP,
+            )
+        )
+        left_increments = (total_increments + 1) // 2
+        right_increments = total_increments // 2
+        rounded[left_code] = increment * left_increments
+        rounded[right_code] = increment * right_increments
+
+    rounded[balancing_tank] = _decimal(required) - sum(
+        value for tank_code, value in rounded.items() if tank_code != balancing_tank
+    )
+    return rounded
 
 
 def _plan_b757(required, remaining, _actual):

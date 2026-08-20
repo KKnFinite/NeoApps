@@ -1,5 +1,6 @@
 import unittest
 from datetime import date, datetime
+from decimal import Decimal
 from unittest.mock import patch
 
 from sqlalchemy import event
@@ -244,6 +245,64 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
             self.client.get("/neoscorpion/fueler").get_data(as_text=True),
         )
 
+    def test_dispatcher_apu_override_updates_the_assigned_fueler(self):
+        operation, mission = self._operation_and_mission()
+        fueler = self._add_user("override_fueler", "operator")
+        assignment = NeoScorpionFuelAssignment(
+            sort_date_operation_id=operation.id,
+            sort_date_mission_id=mission.id,
+            assigned_fueler_user_id=fueler.id,
+            review_status="assigned",
+        )
+        db.session.add(assignment)
+        db.session.flush()
+        db.session.add_all(
+            [
+                NeoScorpionSortAssetState(
+                    sort_date_operation_id=operation.id,
+                    revision=2,
+                ),
+                NeoScorpionTailFuelState(
+                    sort_date_operation_id=operation.id,
+                    tail_number=mission.assigned_tail_number,
+                    apu_lbs=450,
+                ),
+                NeoScorpionFuelWorkState(
+                    fuel_assignment_id=assignment.id,
+                    tail_number=mission.assigned_tail_number,
+                    apu_running=True,
+                    apu_confirmed_at_utc=datetime(2026, 8, 20, 1, 0),
+                    apu_allowance_lbs=450,
+                    automatic_apu_allowance_lbs=450,
+                    applied_apu_rate_thousand_lbs_per_hour=Decimal("0.30"),
+                ),
+            ]
+        )
+        db.session.commit()
+
+        response = self._save_assignment(
+            mission,
+            assignment=assignment,
+            fueler_id=fueler.id,
+            extra={
+                "apu_override_present": "1",
+                "apu_override_enabled": "1",
+                "apu_override_allowance": "0.60",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["revision"], 3)
+        db.session.refresh(assignment)
+        work = NeoScorpionFuelWorkState.query.filter_by(
+            fuel_assignment_id=assignment.id,
+            tail_number=mission.assigned_tail_number,
+        ).one()
+        self.assertTrue(work.apu_override_enabled)
+        self.assertEqual(work.apu_override_allowance_lbs, 600)
+        self.assertEqual(work.apu_allowance_lbs, 600)
+        self.assertEqual(assignment.fueler_update_version, 1)
+        self.assertIn("APU Override", assignment.fueler_update_message)
+
     def test_fueler_reassignment_routes_job_without_old_update_notice(self):
         operation, mission = self._operation_and_mission()
         old_fueler = self._add_user("old_assignment_fueler", "operator")
@@ -420,27 +479,30 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         assignment=None,
         fueler_id=None,
         truck_id=None,
+        extra=None,
     ):
+        data = {
+            "mission_id": str(mission.id),
+            "assignment_id": str(assignment.id if assignment else ""),
+            "expected_assigned_fueler_user_id": str(
+                assignment.assigned_fueler_user_id
+                if assignment and assignment.assigned_fueler_user_id
+                else ""
+            ),
+            "expected_assigned_truck_id": str(
+                assignment.assigned_truck_id
+                if assignment and assignment.assigned_truck_id
+                else ""
+            ),
+            "assigned_fueler_user_id": str(fueler_id or ""),
+            "assigned_truck_id": str(truck_id or ""),
+            "review_status": "assigned" if fueler_id or truck_id else "pending",
+            "load_planning_note": "",
+        }
+        data.update(extra or {})
         return self.client.post(
             "/neoscorpion/fuel-dispatch/assignment",
-            data={
-                "mission_id": str(mission.id),
-                "assignment_id": str(assignment.id if assignment else ""),
-                "expected_assigned_fueler_user_id": str(
-                    assignment.assigned_fueler_user_id
-                    if assignment and assignment.assigned_fueler_user_id
-                    else ""
-                ),
-                "expected_assigned_truck_id": str(
-                    assignment.assigned_truck_id
-                    if assignment and assignment.assigned_truck_id
-                    else ""
-                ),
-                "assigned_fueler_user_id": str(fueler_id or ""),
-                "assigned_truck_id": str(truck_id or ""),
-                "review_status": "assigned" if fueler_id or truck_id else "pending",
-                "load_planning_note": "",
-            },
+            data=data,
             headers={
                 "Accept": "application/json",
                 "X-Requested-With": "XMLHttpRequest",

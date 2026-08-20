@@ -99,12 +99,12 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
                 {},
                 {"main_l_in": 20000},
                 {
-                    "main_l_out": "29.292",
+                    "main_l_out": "29.300",
                     "main_l_in": "20.000",
                     "main_r_in": "20.000",
-                    "main_r_out": "29.292",
-                    "reserve_2_l": "25.708",
-                    "reserve_3_r": "25.708",
+                    "main_r_out": "29.300",
+                    "reserve_2_l": "25.700",
+                    "reserve_3_r": "25.700",
                     "center_wing": "0.000",
                 },
             ),
@@ -118,9 +118,9 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
                     "main_l_in": "50.000",
                     "main_r_in": "50.000",
                     "main_r_out": "20.000",
-                    "reserve_1_l": "10.278",
-                    "reserve_4_r": "10.278",
-                    "center_wing": "19.444",
+                    "reserve_1_l": "10.300",
+                    "reserve_4_r": "10.300",
+                    "center_wing": "19.400",
                 },
             ),
         )
@@ -167,6 +167,17 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
         self.assertEqual(left_source["ctr"], Decimal("20800"))
         self.assertEqual(sum(center_source.values()), Decimal("50500"))
         self.assertEqual(sum(left_source.values()), Decimal("50500"))
+
+    def test_mirrored_base_rounding_is_left_biased_to_tenths(self):
+        planned = plan_fuel_by_tank(
+            "B757",
+            27_500,
+            apu_running=False,
+            apu_allowance_lbs=0,
+        )
+        self.assertEqual(planned["left"], Decimal("13800"))
+        self.assertEqual(planned["right"], Decimal("13700"))
+        self.assertEqual(sum(planned.values()), Decimal("27500"))
 
     def test_apu_source_validation_persistence_and_revision(self):
         operation, _mission, assignment = self._assignment()
@@ -260,6 +271,7 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
                 actual_left="10.0",
                 actual_ctr="20.0",
                 actual_right="20.0",
+                transfer_fuel_gallons="1",
             ),
         )
         saved.fuel_work_state.apu_running = True
@@ -331,8 +343,8 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
 
-    def test_source_aware_fueler_to_dispatcher_complete_workflow(self):
-        _operation, mission, assignment = self._assignment()
+    def test_source_aware_fueler_workflow_preserves_source_through_off(self):
+        _operation, _mission, assignment = self._assignment()
         saved = save_fueler_entry(
             self.gateway,
             self.user,
@@ -346,6 +358,7 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
                 actual_left="9.6",
                 actual_ctr="20.0",
                 actual_right="20.0",
+                transfer_fuel_gallons="1",
             ),
             now_utc=datetime(2026, 8, 18, 3, 45),
         )
@@ -360,18 +373,7 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
         )
         self.assertEqual(off.revision, 2)
         db.session.commit()
-
-        completed = complete_fueled_assignment(
-            self.gateway,
-            self.user,
-            assignment.id,
-            now_utc=datetime(2026, 8, 18, 4, 5),
-        )
-        self.assertTrue(completed.changed)
-        self.assertEqual(completed.movement_status, "not_moved")
-        self.assertEqual(completed.revision, 3)
-        self.assertEqual(assignment.review_status, "complete")
-        self.assertEqual(mission.fuel_status, "complete")
+        self.assertEqual(off.fuel_work_state.apu_source_tank_code, "ctr")
 
     def test_apu_source_schema_contract_is_additive(self):
         self.assertIn(

@@ -215,20 +215,10 @@ class NeoScorpionFuelOnBoardTest(unittest.TestCase):
             1,
         )
 
-    def test_success_completes_mission_preserves_off_and_repeat_is_noop(self):
+    def test_success_completes_mission_without_requiring_off_and_repeat_is_noop(self):
         operation, mission, assignment = self._assignment()
         self._save_complete(assignment)
         db.session.commit()
-        off_time = datetime(2026, 8, 18, 5, 10)
-        off = mark_fueler_off(
-            self.gateway,
-            self.fueler,
-            assignment.id,
-            now_utc=off_time,
-        )
-        self.assertEqual(off.revision, 2)
-        db.session.commit()
-
         self._login(self.dispatcher)
         with patch.object(db.session, "commit", wraps=db.session.commit) as commit:
             response = self.client.post(
@@ -250,12 +240,12 @@ class NeoScorpionFuelOnBoardTest(unittest.TestCase):
         self.assertEqual(assignment.review_status, "complete")
         self.assertEqual(mission.fuel_status, "complete")
         self.assertIsNotNone(mission.fuel_completed_at_utc)
-        self.assertEqual(work.off_at_utc, off_time)
-        self.assertEqual(work.off_by_user_id, self.fueler.id)
+        self.assertIsNone(work.off_at_utc)
+        self.assertIsNone(work.off_by_user_id)
         state = NeoScorpionSortAssetState.query.filter_by(
             sort_date_operation_id=operation.id
         ).one()
-        self.assertEqual(state.revision, 3)
+        self.assertEqual(state.revision, 2)
 
         original_fob_at = assignment.fuel_on_board_at_utc
         original_completed_at = mission.fuel_completed_at_utc
@@ -266,7 +256,7 @@ class NeoScorpionFuelOnBoardTest(unittest.TestCase):
             now_utc=datetime(2026, 8, 18, 6, 0),
         )
         self.assertFalse(repeated.changed)
-        self.assertEqual(repeated.revision, 3)
+        self.assertEqual(repeated.revision, 2)
         self.assertEqual(assignment.fuel_on_board_at_utc, original_fob_at)
         self.assertEqual(mission.fuel_completed_at_utc, original_completed_at)
 
@@ -275,6 +265,8 @@ class NeoScorpionFuelOnBoardTest(unittest.TestCase):
     def test_off_only_assignment_remains_active_for_fueler(self):
         _operation, _mission, assignment = self._assignment()
         self._save_complete(assignment)
+        db.session.commit()
+        assignment.transfer_fuel_gallons = 1
         db.session.commit()
         mark_fueler_off(self.gateway, self.fueler, assignment.id)
         db.session.commit()
@@ -315,7 +307,7 @@ class NeoScorpionFuelOnBoardTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NEO FUEL", response.data.upper())
-        self.assertIn(b'data-copy-neo-fuel="54.0"', response.data)
+        self.assertNotIn(b"data-copy-neo-fuel", response.data)
         self.assertIn(b">FUEL ON BOARD</button>", response.data)
         self.assertIsNone(assignment.fuel_on_board_at_utc)
 

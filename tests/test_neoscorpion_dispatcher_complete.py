@@ -618,10 +618,15 @@ class NeoScorpionDispatcherCompleteTest(unittest.TestCase):
         )
 
     def _ready_work(self, assignment, *, movement, transfer_gallons):
+        off_transfer_gallons = (
+            transfer_gallons
+            if transfer_gallons is not None and transfer_gallons > 0
+            else 1
+        )
         self._save_tanks(
             assignment,
             movement=movement,
-            transfer_gallons=transfer_gallons,
+            transfer_gallons=off_transfer_gallons,
         )
         db.session.commit()
         result = mark_fueler_off(
@@ -631,6 +636,9 @@ class NeoScorpionDispatcherCompleteTest(unittest.TestCase):
             now_utc=datetime(2026, 8, 18, 5, 0),
         )
         db.session.commit()
+        if transfer_gallons != off_transfer_gallons:
+            assignment.transfer_fuel_gallons = transfer_gallons
+            db.session.commit()
         return result.fuel_work_state
 
     def _assign_truck(

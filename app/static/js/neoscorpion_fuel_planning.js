@@ -96,6 +96,46 @@
         return null;
     };
 
+    const roundBaseDistribution = (aircraftType, planned, required) => {
+        if (!planned || !Number.isFinite(required)) return planned;
+        const layouts = {
+            B757: {pairs: [["left", "right"]], balance: "ctr"},
+            B767ER: {pairs: [["left", "right"]], balance: "ctr"},
+            A300: {
+                pairs: [["l_out", "r_out"], ["l_in", "r_in"]],
+                balance: "tt",
+            },
+            "B747-400": {
+                pairs: [
+                    ["main_l_out", "main_r_out"],
+                    ["main_l_in", "main_r_in"],
+                    ["reserve_2_l", "reserve_3_r"],
+                ],
+                balance: "center_wing",
+            },
+            "B747-8": {
+                pairs: [
+                    ["main_l_out", "main_r_out"],
+                    ["main_l_in", "main_r_in"],
+                    ["reserve_1_l", "reserve_4_r"],
+                ],
+                balance: "center_wing",
+            },
+        };
+        const layout = layouts[aircraftType];
+        if (!layout) return planned;
+        const rounded = {...planned};
+        layout.pairs.forEach(([left, right]) => {
+            const totalTenths = Math.round((planned[left] + planned[right]) * 10);
+            rounded[left] = Math.ceil(totalTenths / 2) / 10;
+            rounded[right] = Math.floor(totalTenths / 2) / 10;
+        });
+        rounded[layout.balance] = Math.round((required - Object.entries(rounded)
+            .filter(([tank]) => tank !== layout.balance)
+            .reduce((sum, [, value]) => sum + value, 0)) * 10) / 10;
+        return rounded;
+    };
+
     const planFuelByTank = ({
         aircraftType,
         required,
@@ -106,7 +146,11 @@
         apuSource,
     }) => {
         if (apuRunning === null) return null;
-        const planned = basePlan(aircraftType, required, remaining, actual);
+        const planned = roundBaseDistribution(
+            aircraftType,
+            basePlan(aircraftType, required, remaining, actual),
+            required
+        );
         if (!planned) return null;
         if (apuRunning) {
             if (!Number.isFinite(apuAllowance) || !(apuSource in planned)) {
@@ -133,7 +177,7 @@
             (effectiveDepartureMs - confirmedAtMs) / 3600000
         );
         const rawAllowance = remainingHours * rate;
-        return Math.ceil((rawAllowance * 10) - 1e-9) / 10;
+        return Math.ceil((rawAllowance * 20) - 1e-9) / 20;
     };
 
     const remainingReadingsComplete = (tankCodes, remaining) => (
@@ -145,6 +189,7 @@
         basePlan,
         calculateApuAllowance,
         planFuelByTank,
+        roundBaseDistribution,
         remainingReadingsComplete,
     };
     if (typeof module !== "undefined" && module.exports) {
@@ -160,21 +205,31 @@
         const parsed = Number(value);
         return Number.isFinite(parsed) ? parsed : null;
     };
-    const displayFuel = (value) => (
-        Number.isFinite(value) ? `${value.toFixed(1)} K LBS` : "INCOMPLETE"
-    );
+    const displayFuel = (value) => {
+        if (!Number.isFinite(value)) return "INCOMPLETE";
+        return `${Math.abs(value * 10 - Math.round(value * 10)) > 1e-9
+            ? value.toFixed(2)
+            : value.toFixed(1)} K LBS`;
+    };
 
     document.querySelectorAll("[data-fuel-planning-form]").forEach((form) => {
         const card = form.closest("[data-fuel-assignment-id]");
         const apuRunningInput = form.querySelector("[data-apu-running]");
         const apuSourceInput = form.querySelector("[data-apu-source]");
         const apuSourceWrap = form.querySelector("[data-apu-source-wrap]");
+        const apuOverrideEnabled = form.querySelector("[data-apu-override-enabled]");
+        const apuOverrideWrap = form.querySelector("[data-apu-override-wrap]");
+        const apuOverrideValueWrap = form.querySelector("[data-apu-override-value-wrap]");
+        const apuOverrideValue = form.querySelector("[data-apu-override-value]");
         const plannedEntryCue = form.querySelector("[data-planned-entry-cue]");
         if (!card || !apuRunningInput || !apuSourceInput) return;
 
         const initialApuRunning = form.dataset.initialApuRunning;
         const persistedAllowanceLbs = numberOrNull(
             form.dataset.persistedApuAllowanceLbs
+        );
+        const persistedAutomaticAllowanceLbs = numberOrNull(
+            form.dataset.persistedAutomaticApuAllowanceLbs
         );
         const requiredLbs = numberOrNull(form.dataset.requiredLbs);
         const required = requiredLbs === null ? null : requiredLbs / 1000;
@@ -193,15 +248,26 @@
             apuSourceInput.disabled = !sourceRequired;
             apuSourceInput.required = sourceRequired;
             if (!sourceRequired) apuSourceInput.value = "";
+            if (apuOverrideWrap) apuOverrideWrap.hidden = !sourceRequired;
+            if (apuOverrideValueWrap) {
+                apuOverrideValueWrap.hidden = !sourceRequired || !apuOverrideEnabled?.checked;
+            }
+            if (!sourceRequired && apuOverrideEnabled) {
+                apuOverrideEnabled.checked = false;
+                apuOverrideValue.value = "";
+            }
 
-            let allowance = null;
+            let automaticAllowance = null;
             if (apuRunning === false) {
-                allowance = 0;
+                automaticAllowance = 0;
             } else if (apuRunning === true) {
-                allowance = (
-                    initialApuRunning === "yes" && persistedAllowanceLbs !== null
+                automaticAllowance = (
+                    initialApuRunning === "yes" && (
+                        persistedAutomaticAllowanceLbs !== null
+                        || persistedAllowanceLbs !== null
+                    )
                 )
-                    ? persistedAllowanceLbs / 1000
+                    ? (persistedAutomaticAllowanceLbs ?? persistedAllowanceLbs) / 1000
                     : calculateApuAllowance({
                         plannedDepartureUtc: form.dataset.plannedDepartureUtc,
                         windowMinutes,
@@ -209,6 +275,12 @@
                         rate,
                     });
             }
+            const overrideAllowance = (
+                apuRunning === true && apuOverrideEnabled?.checked
+                    ? numberOrNull(apuOverrideValue?.value)
+                    : null
+            );
+            const allowance = overrideAllowance ?? automaticAllowance;
 
             const remaining = {};
             const actual = {};
@@ -241,9 +313,13 @@
                 : null;
             if (plannedEntryCue) plannedEntryCue.hidden = remainingComplete;
 
-            card.querySelector("[data-apu-allowance-output]").textContent = displayFuel(
-                allowance
+            card.querySelector("[data-apu-automatic-output]").textContent = displayFuel(
+                automaticAllowance
             );
+            card.querySelector("[data-apu-override-output]").textContent = (
+                overrideAllowance === null ? "-" : displayFuel(overrideAllowance)
+            );
+            card.querySelector("[data-apu-allowance-output]").textContent = displayFuel(allowance);
             card.querySelector("[data-fueling-target-output]").textContent = displayFuel(
                 required !== null && allowance !== null ? required + allowance : null
             );

@@ -62,6 +62,7 @@
                         <th>Inbound Fuel</th>
                         <th>FOB</th>
                         <th>APU</th>
+                        <th>Actual Fuel</th>
                         <th>NEO FUEL</th>
                         <th>ON</th>
                         <th>OFF</th>
@@ -111,18 +112,31 @@
                                 <small class="neoscorpion-save-status" data-autosave-status aria-live="polite"></small>
                             </td>
                             <td>{{ row.fob_display or '-' }}</td>
-                            <td>{{ row.apu_lbs if row.apu_lbs is not none else '-' }}</td>
                             <td>
-                                <strong>{{ row.neo_fuel_display }}{% if row.neo_fuel_available %} K LBS{% endif %}</strong>
-                                {% if row.neo_fuel_available %}
-                                <button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-neo-fuel="{{ row.neo_fuel_display }}">COPY NEO FUEL</button>
+                                <strong data-dispatch-apu-effective>{{ row.apu_allowance_display }}</strong>
+                                {% if row.apu_allowance_lbs is not none %}<small>K LBS effective</small>{% endif %}
+                                <small>Auto: <span data-dispatch-apu-automatic>{{ row.automatic_apu_allowance_display }}</span>{% if row.automatic_apu_allowance_lbs is not none %} K LBS{% endif %}</small>
+                                {% if row.apu_running is sameas true %}
+                                <input type="hidden" name="apu_override_present" value="1">
+                                <label class="neoscorpion-inline-check">
+                                    <input type="checkbox" name="apu_override_enabled" value="1" data-dispatch-apu-override {% if row.apu_override_enabled %}checked{% endif %}>
+                                    Override APU
+                                </label>
+                                <input class="neoscorpion-inline-input" name="apu_override_allowance" value="{{ row.apu_override_allowance_display if row.apu_override_enabled else '' }}" inputmode="decimal" aria-label="APU override for {{ row.mission.flight_number }}" data-dispatch-apu-override-value placeholder="K LBS">
+                                {% if row.apu_override_enabled %}<small data-dispatch-apu-override-output>Override: {{ row.apu_override_allowance_display }} K LBS</small>{% else %}<small data-dispatch-apu-override-output>Override: -</small>{% endif %}
+                                {% else %}
+                                <small>{{ row.apu_running_label }}</small>
                                 {% endif %}
+                            </td>
+                            <td>{{ row.actual_fuel_display or '-' }}{% if row.actual_fuel_display %} K LBS{% endif %}</td>
+                            <td>
+                                <strong>{{ row.neo_fuel_display if row.neo_fuel_available else '-' }}</strong>
                             </td>
                             <td>{{ row.on_time }}</td>
                             <td>{{ row.off_time }}</td>
                             <td>
                                 <strong>{{ row.estimated_fuel_display }}</strong>
-                                {% if row.estimated_fuel_source_label != 'INCOMPLETE' %}<small>{{ row.estimated_fuel_source_label }}</small>{% endif %}
+                                {% if row.estimated_fuel_source == 'fallback' %}<small>{{ row.estimated_fuel_source_label }}</small>{% endif %}
                             </td>
                             <td>
                                 {% if row.resource_swap_required %}
@@ -271,18 +285,20 @@
                         <td>{{ row.required_fuel_display or '-' }}</td>
                         <td>{{ row.inbound_fuel_display or '-' }}</td>
                         <td>{{ row.fob_display or '-' }}</td>
-                        <td>{{ row.apu_lbs if row.apu_lbs is not none else '-' }}</td>
                         <td>
-                            {{ row.neo_fuel_display }}{% if row.neo_fuel_available %} K LBS{% endif %}
-                            {% if row.neo_fuel_available %}
-                            <button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-neo-fuel="{{ row.neo_fuel_display }}">COPY NEO FUEL</button>
-                            {% endif %}
+                            <strong>{{ row.apu_allowance_display }}</strong>{% if row.apu_allowance_lbs is not none %} K LBS{% endif %}
+                            <small>Auto: {{ row.automatic_apu_allowance_display }}{% if row.automatic_apu_allowance_lbs is not none %} K LBS{% endif %}</small>
+                            {% if row.apu_override_enabled %}<small>Override: {{ row.apu_override_allowance_display }} K LBS</small>{% endif %}
+                        </td>
+                        <td>{{ row.actual_fuel_display or '-' }}{% if row.actual_fuel_display %} K LBS{% endif %}</td>
+                        <td>
+                            {{ row.neo_fuel_display if row.neo_fuel_available else '-' }}
                         </td>
                         <td>{{ row.on_time }}</td>
                         <td>{{ row.off_time }}</td>
                         <td>
                             <strong>{{ row.estimated_fuel_display }}</strong>
-                            {% if row.estimated_fuel_source_label != 'INCOMPLETE' %}<small>{{ row.estimated_fuel_source_label }}</small>{% endif %}
+                            {% if row.estimated_fuel_source == 'fallback' %}<small>{{ row.estimated_fuel_source_label }}</small>{% endif %}
                         </td>
                         <td>{{ row.assigned_fueler.display_name if row.assigned_fueler else 'Unassigned' }}</td>
                         <td>{{ row.assigned_truck.truck_number if row.assigned_truck else 'Unassigned' }}</td>

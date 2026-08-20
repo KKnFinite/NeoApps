@@ -73,16 +73,22 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
-    def test_estimated_fuel_uses_actual_or_fallback_and_handles_incomplete(self):
+    def test_estimated_fuel_prefers_measured_fob_then_inbound_then_fallback(self):
         actual = estimate_fuel_demand_gallons(50_000, 13_600, 6.7)
+        measured = estimate_fuel_demand_gallons(
+            50_000, 13_600, 6.7, measured_fob_lbs=20_000
+        )
         fallback = estimate_fuel_demand_gallons(50_000, None, 6.7)
         floored = estimate_fuel_demand_gallons(10_000, 12_000, 6.7)
 
         self.assertEqual(actual.gallons, 5_433)
-        self.assertEqual(actual.source_label, "ACTUAL INBOUND")
+        self.assertEqual(actual.source, "inbound")
+        self.assertEqual(actual.source_label, "")
+        self.assertEqual(measured.gallons, 4_478)
+        self.assertEqual(measured.source, "measured_fob")
         self.assertEqual(fallback.gallons, 5_672)
         self.assertEqual(fallback.effective_inbound_lbs, 12_000)
-        self.assertEqual(fallback.source_label, "12.0K ASSUMPTION")
+        self.assertEqual(fallback.source_label, "12.0K ASSUMED INBOUND")
         self.assertEqual(floored.gallons, 0)
         self.assertIsNone(estimate_fuel_demand_gallons(None, 10_000, 6.7).gallons)
         self.assertIsNone(estimate_fuel_demand_gallons(50_000, 10_000, None).gallons)
@@ -133,7 +139,7 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
         row = fuel_dispatch_context(self.gateway)["rows"][0]
         self.assertEqual(row["mission"].id, mission.id)
         self.assertEqual(row["estimated_fuel_gallons"], 1_000)
-        self.assertEqual(row["estimated_fuel_source_label"], "15.5K ASSUMPTION")
+        self.assertEqual(row["estimated_fuel_source_label"], "15.5K ASSUMED INBOUND")
         for columns in (LOCAL_SQLITE_OPTIONAL_COLUMNS, POSTGRES_OPTIONAL_COLUMNS):
             self.assertEqual(
                 columns["neoscorpion_settings"][
@@ -185,7 +191,7 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
             for row in fuel_dispatch_context(self.gateway)["rows"]
         }
         self.assertEqual(rows["UPS200"]["estimated_fuel_gallons"], 2_000)
-        self.assertEqual(rows["UPS200"]["estimated_fuel_source"], "actual_inbound")
+        self.assertEqual(rows["UPS200"]["estimated_fuel_source"], "inbound")
         self.assertEqual(rows["UPS200"]["projected_truck_gallons"], 8_000)
         self.assertEqual(rows["UPS300"]["estimated_fuel_gallons"], 3_000)
         self.assertEqual(rows["UPS300"]["estimated_fuel_source"], "fallback")
@@ -310,7 +316,8 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"2,000 gal", response.data)
-        self.assertIn(b"ACTUAL INBOUND", response.data)
+        self.assertNotIn(b"ACTUAL INBOUND", response.data)
+        self.assertNotIn(b"ASSUMPTION", response.data)
         self.assertIn(b"Projected Truck", response.data)
         self.assertEqual(self._row_counts(), counts_before)
 

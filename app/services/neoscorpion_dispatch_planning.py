@@ -26,6 +26,7 @@ def estimate_fuel_demand_gallons(
     inbound_fuel_lbs,
     fuel_density_lbs_per_gallon,
     *,
+    measured_fob_lbs=None,
     fallback_inbound_lbs=DEFAULT_PLANNING_INBOUND_FALLBACK_LBS,
 ):
     """Return a whole-gallon estimate without mutating any persisted state."""
@@ -34,24 +35,43 @@ def estimate_fuel_demand_gallons(
     if required is None or density is None or density <= 0:
         return EstimatedFuelDemand(None, None, "incomplete", "INCOMPLETE")
 
-    inbound = _decimal_or_none(inbound_fuel_lbs)
-    if inbound is None:
-        inbound = _decimal_or_none(fallback_inbound_lbs)
-        if inbound is None or inbound < 0:
+    measured_fob = _decimal_or_none(measured_fob_lbs)
+    if measured_fob is not None:
+        if measured_fob < 0:
             return EstimatedFuelDemand(None, None, "incomplete", "INCOMPLETE")
-        source = "fallback"
-        source_label = f"{inbound / Decimal('1000'):.1f}K ASSUMPTION"
+        effective_inbound = measured_fob
+        source = "measured_fob"
+        source_label = ""
     else:
-        if inbound < 0:
-            return EstimatedFuelDemand(None, None, "incomplete", "INCOMPLETE")
-        source = "actual_inbound"
-        source_label = "ACTUAL INBOUND"
+        inbound = _decimal_or_none(inbound_fuel_lbs)
+        if inbound is not None:
+            if inbound < 0:
+                return EstimatedFuelDemand(None, None, "incomplete", "INCOMPLETE")
+            effective_inbound = inbound
+            source = "inbound"
+            source_label = ""
+        else:
+            effective_inbound = _decimal_or_none(fallback_inbound_lbs)
+            if effective_inbound is None or effective_inbound < 0:
+                return EstimatedFuelDemand(None, None, "incomplete", "INCOMPLETE")
+            source = "fallback"
+            source_label = (
+                f"{effective_inbound / Decimal('1000'):.1f}K ASSUMED INBOUND"
+            )
 
-    fuel_needed_lbs = max(Decimal("0"), required - inbound)
+    if effective_inbound is None:
+        return EstimatedFuelDemand(None, None, "incomplete", "INCOMPLETE")
+
+    fuel_needed_lbs = max(Decimal("0"), required - effective_inbound)
     gallons = int(
         (fuel_needed_lbs / density).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     )
-    return EstimatedFuelDemand(gallons, int(inbound), source, source_label)
+    return EstimatedFuelDemand(
+        gallons,
+        int(effective_inbound),
+        source,
+        source_label,
+    )
 
 
 def project_truck_remaining(current_gallons_by_truck_id, ordered_demands):
