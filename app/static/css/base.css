@@ -24066,6 +24066,61 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     margin-bottom: 1rem;
 }
 
+.neoscorpion-apu-collapsed {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+}
+
+.neoscorpion-apu-editor {
+    display: inline-block;
+    position: relative;
+}
+
+.neoscorpion-apu-editor > summary {
+    display: inline-block;
+    cursor: pointer;
+    color: var(--node-scorpion-primary);
+    font-size: 0.72rem;
+    font-weight: 700;
+    list-style: none;
+}
+
+.neoscorpion-apu-editor > summary::-webkit-details-marker {
+    display: none;
+}
+
+.neoscorpion-apu-editor > div {
+    position: absolute;
+    z-index: 4;
+    right: 0;
+    display: grid;
+    gap: 0.35rem;
+    min-width: 12rem;
+    padding: 0.55rem;
+    border: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.45);
+    border-radius: 0.35rem;
+    background: var(--panel-background, #101b2d);
+    box-shadow: 0 0.5rem 1.25rem rgba(0, 0, 0, 0.35);
+}
+
+.neoscorpion-apu-editor > div label {
+    display: grid;
+    gap: 0.2rem;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+.neoscorpion-apu-editor > div small {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+}
+
+.neoscorpion-apu-editor-form {
+    display: inline;
+}
+
 .neoscorpion-truck-visual-panel {
     position: sticky;
     top: 0.75rem;

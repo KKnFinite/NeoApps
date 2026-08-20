@@ -211,6 +211,10 @@
             ? value.toFixed(2)
             : value.toFixed(1)} K LBS`;
     };
+    const displayApuAllowance = (value) => {
+        const text = displayFuel(value);
+        return text === "INCOMPLETE" ? "APU INCOMPLETE" : `APU ${text.replace(" K LBS", "K")}`;
+    };
 
     document.querySelectorAll("[data-fuel-planning-form]").forEach((form) => {
         const card = form.closest("[data-fuel-assignment-id]");
@@ -219,8 +223,8 @@
         const apuSourceWrap = form.querySelector("[data-apu-source-wrap]");
         const apuOverrideEnabled = form.querySelector("[data-apu-override-enabled]");
         const apuOverrideWrap = form.querySelector("[data-apu-override-wrap]");
-        const apuOverrideValueWrap = form.querySelector("[data-apu-override-value-wrap]");
-        const apuOverrideValue = form.querySelector("[data-apu-override-value]");
+        const apuOverrideValueWrap = card.querySelector("[data-apu-override-value-wrap]");
+        const apuOverrideValue = card.querySelector("[data-apu-override-value]");
         const plannedEntryCue = form.querySelector("[data-planned-entry-cue]");
         if (!card || !apuRunningInput || !apuSourceInput) return;
 
@@ -249,12 +253,13 @@
             apuSourceInput.required = sourceRequired;
             if (!sourceRequired) apuSourceInput.value = "";
             if (apuOverrideWrap) apuOverrideWrap.hidden = !sourceRequired;
+            const overrideEnabled = apuOverrideEnabled?.value === "1";
             if (apuOverrideValueWrap) {
-                apuOverrideValueWrap.hidden = !sourceRequired || !apuOverrideEnabled?.checked;
+                apuOverrideValueWrap.hidden = !sourceRequired || !overrideEnabled;
             }
             if (!sourceRequired && apuOverrideEnabled) {
-                apuOverrideEnabled.checked = false;
-                apuOverrideValue.value = "";
+                apuOverrideEnabled.value = "0";
+                if (apuOverrideValue) apuOverrideValue.value = "";
             }
 
             let automaticAllowance = null;
@@ -276,7 +281,7 @@
                     });
             }
             const overrideAllowance = (
-                apuRunning === true && apuOverrideEnabled?.checked
+                apuRunning === true && overrideEnabled
                     ? numberOrNull(apuOverrideValue?.value)
                     : null
             );
@@ -319,7 +324,11 @@
             card.querySelector("[data-apu-override-output]").textContent = (
                 overrideAllowance === null ? "-" : displayFuel(overrideAllowance)
             );
-            card.querySelector("[data-apu-allowance-output]").textContent = displayFuel(allowance);
+            card.querySelector("[data-apu-allowance-output]").textContent = displayApuAllowance(allowance);
+            const calculatedReference = card.querySelector("[data-apu-calculated-reference]");
+            if (calculatedReference) {
+                calculatedReference.textContent = `Calculated: ${displayApuAllowance(automaticAllowance).replace("APU ", "")}`;
+            }
             card.querySelector("[data-fueling-target-output]").textContent = displayFuel(
                 required !== null && allowance !== null ? required + allowance : null
             );

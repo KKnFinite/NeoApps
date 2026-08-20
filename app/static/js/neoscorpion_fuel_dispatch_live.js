@@ -183,10 +183,35 @@
         }
         form.querySelectorAll(
             "select[name='assigned_fueler_user_id'], select[name='assigned_truck_id'], "
-            + "select[name='review_status'], input[name='load_planning_note']"
+            + "select[name='review_status'], input[name='load_planning_note'], "
+            + "input[data-dispatch-apu-override-enabled], input[data-dispatch-apu-override-value]"
         ).forEach((control) => {
             initialControlValues.set(control, controlValue(control));
         });
+    };
+
+    const updateApuAllowanceDisplay = (form, payload, button) => {
+        const effectiveLbs = payload.effective_apu_allowance_lbs;
+        const effective = form.querySelector("[data-dispatch-apu-effective]");
+        const enabled = form.querySelector("[data-dispatch-apu-override-enabled]");
+        const allowance = form.querySelector("[data-dispatch-apu-override-value]");
+        const editor = form.querySelector("[data-dispatch-apu-editor]");
+        if (effective) {
+            if (effectiveLbs === null || effectiveLbs === undefined) {
+                effective.textContent = "APU INCOMPLETE";
+            } else {
+                const thousands = Number(effectiveLbs) / 1000;
+                effective.textContent = `APU ${Number.isInteger(thousands * 10) ? thousands.toFixed(1) : thousands.toFixed(2)}K`;
+            }
+        }
+        if (enabled) enabled.value = payload.apu_override_enabled ? "1" : "0";
+        if (allowance) {
+            allowance.value = payload.apu_override_enabled
+                ? String(Number(payload.apu_override_allowance_lbs) / 1000)
+                : "";
+        }
+        if (editor) editor.open = false;
+        button?.closest("[data-dispatch-apu-editor]")?.querySelector("summary")?.focus();
     };
 
     const submitAssignment = async (form, button) => {
@@ -194,6 +219,15 @@
             return;
         }
         const status = form.querySelector("[data-assignment-save-status]");
+        const resetApu = button.matches("[data-dispatch-apu-reset]");
+        const apuEnabled = form.querySelector("[data-dispatch-apu-override-enabled]");
+        const apuAllowance = form.querySelector("[data-dispatch-apu-override-value]");
+        if (resetApu) {
+            if (apuEnabled) apuEnabled.value = "0";
+            if (apuAllowance) apuAllowance.value = "";
+        } else if (apuEnabled) {
+            apuEnabled.value = "1";
+        }
         form.dataset.assignmentSaving = "true";
         button.disabled = true;
         setStatus(status, "Saving...");
@@ -214,6 +248,7 @@
             }
             adoptFingerprint(payload);
             updateAssignmentBaseline(form, payload);
+            updateApuAllowanceDisplay(form, payload, button);
             button.textContent = payload.button_label || "UPDATE ASSIGNMENT";
             setStatus(status, payload.changed ? "Saved" : "No change");
         } catch (error) {
@@ -256,6 +291,28 @@
         }
         event.preventDefault();
         submitAssignment(form, button);
+    });
+    root.addEventListener("click", (event) => {
+        const cancel = event.target.closest("[data-dispatch-apu-cancel]");
+        if (!cancel) return;
+        const editor = cancel.closest("[data-dispatch-apu-editor]");
+        const form = cancel.closest("[data-dispatch-assignment-form]");
+        if (!editor || !form) return;
+        const allowance = form.querySelector("[data-dispatch-apu-override-value]");
+        const enabled = form.querySelector("[data-dispatch-apu-override-enabled]");
+        if (allowance) allowance.value = allowance.dataset.originalValue || "";
+        if (enabled) enabled.value = enabled.dataset.originalValue || enabled.value;
+        editor.open = false;
+    });
+    root.querySelectorAll("[data-dispatch-apu-editor]").forEach((editor) => {
+        const form = editor.closest("[data-dispatch-assignment-form]");
+        const allowance = form?.querySelector("[data-dispatch-apu-override-value]");
+        const enabled = form?.querySelector("[data-dispatch-apu-override-enabled]");
+        editor.addEventListener("toggle", () => {
+            if (!editor.open) return;
+            if (allowance) allowance.dataset.originalValue = allowance.value;
+            if (enabled) enabled.dataset.originalValue = enabled.value;
+        });
     });
     refreshButton?.addEventListener("click", () => {
         if (

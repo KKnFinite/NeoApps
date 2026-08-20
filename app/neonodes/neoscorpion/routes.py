@@ -563,19 +563,52 @@ def manage_nightly_assets():
 def fueler():
     gateway = get_current_gateway()
     access = permission_access(FUELER_VIEW_PERMISSION, FUELER_EDIT_PERMISSION)
+    json_response = bool(
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or request.accept_mimetypes.best == "application/json"
+    )
     if request.method == "POST":
         if not access["can_edit"]:
             db.session.rollback()
+            if json_response:
+                return _json_no_store({"ok": False, "error": "Access denied."}, 403)
             flash("Access denied.", "error")
             return _fueler_response(gateway, access, status_code=403)
         try:
             result = save_fueler_entry(gateway, current_user, request.form)
         except ValueError as exc:
             db.session.rollback()
+            if json_response:
+                return _json_no_store({"ok": False, "error": str(exc)}, 400)
             flash(str(exc), "error")
             return _fueler_response(gateway, access, status_code=400)
         if result.changed:
             db.session.commit()
+        if json_response:
+            work_state = result.fuel_work_state
+            return _json_no_store(
+                {
+                    "ok": True,
+                    "changed": result.changed,
+                    "revision": result.revision,
+                    "effective_apu_allowance_lbs": (
+                        work_state.apu_allowance_lbs if work_state else None
+                    ),
+                    "automatic_apu_allowance_lbs": (
+                        work_state.automatic_apu_allowance_lbs
+                        if work_state
+                        else None
+                    ),
+                    "apu_override_enabled": bool(
+                        work_state and work_state.apu_override_enabled
+                    ),
+                    "apu_override_allowance_lbs": (
+                        work_state.apu_override_allowance_lbs
+                        if work_state and work_state.apu_override_enabled
+                        else None
+                    ),
+                }
+            )
             flash("FUEL ENTRY UPDATED.", "success")
         else:
             flash("NO FUEL ENTRY CHANGES.", "info")
