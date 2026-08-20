@@ -10472,6 +10472,15 @@ body.blueprint-neostaffing {
     margin: 0;
 }
 
+.neostaffing-bulk-paste-preview {
+    margin: 0;
+    color: var(--node-primary);
+    font-size: 0.74rem;
+    font-weight: 850;
+}
+
+.neostaffing-bulk-paste-preview.is-error { color: var(--neo-red, #f06b6b); }
+
 .neostaffing-compact-form button,
 .neostaffing-filter-form button,
 .neostaffing-people-form button {

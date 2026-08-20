@@ -251,6 +251,7 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
                                     <input type="hidden" name="initial_work_area_unit_id" value="{{ work_area_selected.id }}">
                                     <label><span>Employees</span><textarea name="employee_rows" rows="12" required spellcheck="false" placeholder="Employee ID&#9;First Name&#9;Last Name&#9;Seniority Date&#9;Phone&#9;Classification&#9;Employee Status&#10;12345&#9;Jane&#9;Doe&#9;2020-01-01&#9;555-0100&#9;part_time&#9;active"></textarea></label>
                                     <p class="muted neostaffing-bulk-paste-help">Paste tab-separated spreadsheet rows. The first header row is optional; every row is validated before any employee is created.</p>
+                                    <p class="neostaffing-bulk-paste-preview" data-neostaffing-bulk-preview aria-live="polite">Paste rows to preview the batch.</p>
                                     <button type="submit">VALIDATE AND ADD EMPLOYEES</button>
                                 </form>
                             </details>
@@ -438,6 +439,26 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
             });
         });
         drawer.querySelector("[data-neostaffing-close-drawer]")?.addEventListener("click", () => { drawer.open = false; });
+    });
+    document.querySelectorAll(".neostaffing-people-bulk-create-form").forEach((form) => {
+        const rows = form.querySelector("[name='employee_rows']");
+        const preview = form.querySelector("[data-neostaffing-bulk-preview]");
+        if (!rows || !preview) return;
+        const updatePreview = () => {
+            const lines = rows.value.split(/\r?\n/).filter((line) => line.trim());
+            const first = lines[0]?.split("\t").map((cell) => cell.trim().toLowerCase()).join("|");
+            const header = "employee id|first name|last name|seniority date|phone|classification|employee status";
+            const entries = first === header ? lines.slice(1) : lines;
+            const malformed = entries.some((line) => line.split("\t").length !== 7);
+            preview.textContent = !entries.length
+                ? "Paste rows to preview the batch."
+                : malformed
+                    ? "Preview: each row must contain 7 tab-separated fields."
+                    : `Preview: ${entries.length} employee${entries.length === 1 ? "" : "s"} ready for server validation.`;
+            preview.classList.toggle("is-error", malformed);
+        };
+        rows.addEventListener("input", updatePreview);
+        updatePreview();
     });
 })();
 </script>
