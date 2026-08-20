@@ -24010,6 +24010,62 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     grid-column: 1 / -1;
 }
 
+.neoscorpion-hanzo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.neoscorpion-hanzo-card {
+    border: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.28);
+    border-radius: 0.5rem;
+    padding: 1rem;
+}
+
+.neoscorpion-hanzo-card > header,
+.neoscorpion-hanzo-identity,
+.neoscorpion-hanzo-tanks {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.neoscorpion-hanzo-card > header {
+    grid-template-columns: 1fr auto;
+    color: var(--node-scorpion-primary);
+}
+
+.neoscorpion-hanzo-identity {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 1rem 0;
+}
+
+.neoscorpion-hanzo-identity div,
+.neoscorpion-hanzo-tanks div {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.neoscorpion-hanzo-identity dt,
+.neoscorpion-hanzo-tanks span {
+    color: var(--text-muted);
+}
+
+.neoscorpion-hanzo-identity dd {
+    margin: 0;
+    text-align: right;
+}
+
+.neoscorpion-hanzo-status {
+    margin: 1rem 0 0;
+    color: var(--node-scorpion-primary);
+}
+
+.neoscorpion-hanzo-totals {
+    margin-bottom: 1rem;
+}
+
 .neoscorpion-apu-controls {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

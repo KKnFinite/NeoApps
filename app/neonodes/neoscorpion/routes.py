@@ -18,6 +18,7 @@ from app.services.neoscorpion import (
     deactivate_truck,
     fuel_dispatch_context,
     fuel_assignments_live_revision,
+    hanzo_context,
     fueler_context,
     history_context,
     mark_fueler_off,
@@ -56,6 +57,7 @@ from app.services.live_screen_refresh import save_live_screen_refresh_override
 
 FUEL_DISPATCH_VIEW_PERMISSION = "neoscorpion.fuel_dispatch.view"
 FUEL_DISPATCH_EDIT_PERMISSION = "neoscorpion.fuel_dispatch.edit"
+HANZO_VIEW_PERMISSION = "neoscorpion.hanzo.view"
 NEOSCORPION_DASHBOARD_VIEW_PERMISSION = "neoscorpion.dashboard.view"
 FUELER_VIEW_PERMISSION = "neoscorpion.fuel_assignments.view"
 FUELER_EDIT_PERMISSION = "neoscorpion.fueler.edit"
@@ -128,6 +130,33 @@ def fuel_dispatch():
         flash("Access denied.", "error")
         return redirect(url_for("neoscorpion.index"))
     return _dispatch_response(gateway, access)
+
+
+@bp.get("/hanzo")
+@gateway_node_required("scorpion")
+def hanzo():
+    gateway = get_current_gateway()
+    access = permission_access(HANZO_VIEW_PERMISSION)
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neoscorpion.index"))
+    return _hanzo_response(gateway)
+
+
+@bp.get("/hanzo/revision")
+@gateway_node_required("scorpion")
+def hanzo_revision():
+    gateway = get_current_gateway()
+    access = permission_access(HANZO_VIEW_PERMISSION)
+    if not access["can_view"]:
+        return _json_no_store({"error": "Access denied."}, 403)
+    fingerprint = fuel_assignments_live_revision(gateway)
+    return _json_no_store(
+        {
+            "operation_id": fingerprint["operation_id"],
+            "revision": fingerprint["revision"],
+        }
+    )
 
 
 @bp.post("/fuel-dispatch/autosave")
@@ -820,6 +849,14 @@ def _dispatch_response(gateway, access, status_code=200):
         ),
     )
     return response, status_code
+
+
+def _hanzo_response(gateway):
+    return render_template(
+        "neonodes/neoscorpion/hanzo.html",
+        gateway=gateway,
+        **hanzo_context(gateway),
+    )
 
 
 def _json_no_store(payload, status_code=200):

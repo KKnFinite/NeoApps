@@ -22,6 +22,7 @@ from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.neoscorpion import (
     complete_fueled_assignment,
     fueler_context,
+    hanzo_context,
     mark_fueler_off,
     save_fueler_entry,
 )
@@ -334,6 +335,7 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
         for path in (
             "/neoscorpion",
             "/neoscorpion/fuel-dispatch",
+            "/neoscorpion/hanzo",
             "/neoscorpion/fueler",
             "/neoscorpion/truck-manager",
             "/neoscorpion/settings",
@@ -342,6 +344,49 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
+
+    def test_hanzo_renders_existing_plan_read_only_and_keeps_incomplete_reasons(self):
+        operation, mission, assignment = self._assignment()
+        self._login()
+
+        incomplete = self.client.get("/neoscorpion/hanzo")
+        self.assertEqual(incomplete.status_code, 200)
+        self.assertIn(b"NEO HANZO PLAN", incomplete.data)
+        self.assertIn(b"Awaiting fuel readings", incomplete.data)
+        self.assertNotIn(b"<input", incomplete.data)
+        self.assertNotIn(b"<select", incomplete.data)
+
+        save_fueler_entry(
+            self.gateway,
+            self.user,
+            self._form(
+                assignment,
+                apu_running="no",
+                remaining_left="10.0",
+                remaining_ctr="5.0",
+                remaining_right="10.0",
+            ),
+        )
+        db.session.commit()
+        rendered = self.client.get("/neoscorpion/hanzo")
+        self.assertIn(b"Planned Total", rendered.data)
+        self.assertIn(b"LEFT", rendered.data)
+        self.assertIn(b"14.6 K LB", rendered.data)
+        self.assertIn(b"50.0 K LB", rendered.data)
+        self.assertEqual(hanzo_context(self.gateway)["rows"][0]["planned_total_display"], "50.0")
+        mission.assigned_tail_number = None
+        db.session.commit()
+        self.assertEqual(
+            hanzo_context(self.gateway)["rows"][0]["hanzo_status"],
+            "Awaiting tail / aircraft type",
+        )
+        mission.assigned_tail_number = "N712UP"
+        db.session.commit()
+        self.assertEqual(
+            hanzo_context(self.gateway)["rows"][0]["hanzo_status"],
+            "Fuel calculation not configured for this aircraft type yet.",
+        )
+        self.assertEqual(operation.id, mission.sort_date_operation_id)
 
     def test_source_aware_fueler_workflow_preserves_source_through_off(self):
         _operation, _mission, assignment = self._assignment()

@@ -53,9 +53,11 @@ DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR = Decimal("0.30")
 CALCULATION_NOT_CONFIGURED_MESSAGE = "Fuel calculation not configured for this aircraft type yet."
 NEOSCORPION_FUEL_DISPATCH_REFRESH_KEY = "neoscorpion.fuel_dispatch"
 NEOSCORPION_FUEL_ASSIGNMENTS_REFRESH_KEY = "neoscorpion.fuel_assignments"
+NEOSCORPION_HANZO_REFRESH_KEY = "neoscorpion.hanzo"
 NEOSCORPION_LIVE_REFRESH_SCREENS = (
     (NEOSCORPION_FUEL_DISPATCH_REFRESH_KEY, "Fuel Dispatch"),
     (NEOSCORPION_FUEL_ASSIGNMENTS_REFRESH_KEY, "Fuel Assignments"),
+    (NEOSCORPION_HANZO_REFRESH_KEY, "Hanzo"),
 )
 NEOSCORPION_LIVE_REFRESH_SCREEN_KEYS = frozenset(
     screen_key for screen_key, _label in NEOSCORPION_LIVE_REFRESH_SCREENS
@@ -222,6 +224,7 @@ class NeoScorpionMenuItem:
 
 NEOSCORPION_MENU = (
     NeoScorpionMenuItem("Fuel Dispatch", "neoscorpion.fuel_dispatch", "neoscorpion.fuel_dispatch.view", "dispatch"),
+    NeoScorpionMenuItem("Hanzo", "neoscorpion.hanzo", "neoscorpion.hanzo.view", "hanzo"),
     NeoScorpionMenuItem(
         "Fueler",
         "neoscorpion.fueler",
@@ -379,6 +382,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
         .distinct()
         .all()
     }
+
     nightly_truck_states_by_truck_id = {
         row["selection"].fuel_truck_id: row["selection"]
         for row in asset_context["nightly_trucks"]
@@ -402,6 +406,42 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
         "fuel_dispatch_refresh": refresh_setting,
         "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
         **asset_context,
+    }
+
+
+def hanzo_context(gateway):
+    """Build the read-only Hanzo shadow-validation view from dispatcher state."""
+    operation = current_sort_operation(gateway)
+    refresh_setting = live_screen_refresh_value(
+        gateway,
+        NEOSCORPION_HANZO_REFRESH_KEY,
+    )
+    if operation is None:
+        return {
+            "operation": None,
+            "rows": [],
+            "hanzo_revision": 0,
+            "hanzo_refresh": refresh_setting,
+        }
+
+    missions = _departure_missions(operation)
+    assignments_by_mission = _assignments_by_mission(operation)
+    fuel_work_states = _fuel_work_states_by_assignment_tail(
+        assignments_by_mission.values()
+    )
+    rows = _fuel_rows(
+        operation,
+        missions,
+        assignments_by_mission=assignments_by_mission,
+        fuel_work_states_by_assignment_tail=fuel_work_states,
+    )
+    for row in rows:
+        row["hanzo_status"] = _hanzo_planning_status(row)
+    return {
+        "operation": operation,
+        "rows": rows,
+        "hanzo_revision": _fuel_assignments_revision_for_operation(operation),
+        "hanzo_refresh": refresh_setting,
     }
 
 
@@ -4142,6 +4182,21 @@ def format_display_thousands(value):
     if converted is None:
         return ""
     return f"{converted:.1f}"
+
+
+def _hanzo_planning_status(row):
+    """Return the concise authoritative-state reason for a Hanzo plan gap."""
+    if row["fuel_configuration_message"]:
+        return row["fuel_configuration_message"]
+    if row["mission"].planned_fuel_load is None:
+        return "Required Fuel needed"
+    if not row["planned_ready"]:
+        return "Awaiting fuel readings"
+    if row["apu_running"] is None or not row["apu_source_valid"]:
+        return "Awaiting APU verification"
+    if any(tank["planned_lbs"] is None for tank in row["tank_rows"]):
+        return "Awaiting fuel readings"
+    return ""
 
 
 def _departure_missions(operation):

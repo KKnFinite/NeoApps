@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Hanzo | NeoScorpion{% endblock %}
+
+{% block content %}
+<section
+    class="neoscorpion-shell neoscorpion-screen neoscorpion-hanzo"
+    aria-label="NeoScorpion Hanzo"
+    data-hanzo-live
+    data-revision-url="{{ url_for('neoscorpion.hanzo_revision') }}"
+    data-operation-id="{{ operation.id if operation else '' }}"
+    data-revision="{{ hanzo_revision }}"
+    data-refresh-interval-ms="{{ hanzo_refresh.effective_interval_ms }}"
+>
+    <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
+        {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}
+        {% include "neonodes/neoscorpion/_brand_title.html" %}
+        {% endwith %}
+        <h1>Hanzo</h1>
+    </header>
+    {% include "neonodes/neoscorpion/_menu.html" %}
+
+    <section class="neoscorpion-panel">
+        <div class="neoscorpion-panel-head">
+            <span>NEO HANZO PLAN</span>
+            <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }} {{ operation.sort_date.strftime('%m/%d/%y') if operation.sort_date else '' }}{% else %}No current sort{% endif %}</strong>
+        </div>
+        <p class="neoscorpion-helper">Read-only Neo plan for manual side-by-side validation against the currently authoritative Google Hanzo workflow during prototype testing.</p>
+        {% if not operation %}
+        <p class="neoscorpion-empty">No current SortDateOperation is available for Hanzo.</p>
+        {% elif not rows %}
+        <p class="neoscorpion-empty">No outbound departure missions are available for this sort.</p>
+        {% else %}
+        <div class="neoscorpion-hanzo-grid">
+            {% for row in rows %}
+            <article class="neoscorpion-hanzo-card" data-hanzo-mission="{{ row.mission.id }}">
+                <header>
+                    <strong>{{ row.mission.flight_number }}</strong>
+                    <span>{{ row.destination }}</span>
+                </header>
+                <dl class="neoscorpion-hanzo-identity">
+                    <div><dt>Tail</dt><dd>{{ row.tail_number }}</dd></div>
+                    <div><dt>Aircraft Type</dt><dd>{{ row.aircraft_type }}</dd></div>
+                    <div><dt>Parking Position</dt><dd>{{ row.parking_position }}</dd></div>
+                    <div><dt>ETD</dt><dd>{{ row.departure_time or '-' }}</dd></div>
+                    <div><dt>Required Fuel</dt><dd>{{ row.required_fuel_display or '-' }}{% if row.required_fuel_display %} K LB{% endif %}</dd></div>
+                </dl>
+                {% if row.hanzo_status %}
+                <p class="neoscorpion-hanzo-status">{{ row.hanzo_status }}</p>
+                {% else %}
+                <dl class="neoscorpion-fuel-totals neoscorpion-hanzo-totals">
+                    <div class="neoscorpion-fuel-total-primary"><dt>Planned Total</dt><dd>{{ row.planned_total_display }} K LB</dd></div>
+                    {% if row.apu_running is sameas true %}
+                    <div><dt>Effective APU Allowance</dt><dd>{{ row.apu_allowance_display }} K LB</dd></div>
+                    <div><dt>APU Source Tank</dt><dd>{{ row.apu_source_tank_label }}</dd></div>
+                    {% endif %}
+                </dl>
+                <div class="neoscorpion-hanzo-tanks" aria-label="Planned fuel by tank">
+                    {% for tank in row.tank_rows %}
+                    <div><span>{{ tank.label }}</span><strong>{{ tank.planned_display }} K LB</strong></div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </article>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </section>
+</section>
+<script src="{{ url_for('static', filename='js/neoscorpion_hanzo_live.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+{% endblock %}

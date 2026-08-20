@@ -71,6 +71,7 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertEqual(rules["neosektor.settings.view"], "master")
         self.assertEqual(rules["neosektor.settings.edit"], "master")
         self.assertEqual(rules["neoscorpion.dashboard.view"], "watcher")
+        self.assertEqual(rules["neoscorpion.hanzo.view"], "operator")
 
     def test_role_order_is_watcher_to_grandmaster(self):
         self.assertLess(ROLE_LEVELS["watcher"], ROLE_LEVELS["operator"])
@@ -124,6 +125,7 @@ class PermissionRulesTest(unittest.TestCase):
             "NeoScorpion": {
                 "neoscorpion.dashboard.view",
                 "neoscorpion.fuel_dispatch.view",
+                "neoscorpion.hanzo.view",
                 "neoscorpion.fueler.view",
                 "neoscorpion.truck_manager.view",
                 "neoscorpion.settings.view",

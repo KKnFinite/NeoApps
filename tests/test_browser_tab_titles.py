@@ -48,6 +48,7 @@ class BrowserTabTitleTest(unittest.TestCase):
             "/neosektor/ebm": "EBM | NeoSektor",
             "/neosektor/wbm": "WBM | NeoSektor",
             "/neoscorpion/fuel-dispatch": "Fuel Dispatch | NeoScorpion",
+            "/neoscorpion/hanzo": "Hanzo | NeoScorpion",
             "/neostaffing/people": "People | NeoStaffing",
             "/neostaffing/org-chart": "Org Chart | NeoStaffing",
         }

@@ -134,6 +134,8 @@ def _title_parts(path, ballmat_side):
         return "Dashboard", "NeoScorpion"
     if path.startswith("/neoscorpion/fuel-dispatch"):
         return "Fuel Dispatch", "NeoScorpion"
+    if path.startswith("/neoscorpion/hanzo"):
+        return "Hanzo", "NeoScorpion"
     if path.startswith("/neoscorpion/fueler"):
         return "Fueler", "NeoScorpion"
     if path.startswith("/neoscorpion/truck-manager"):

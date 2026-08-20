@@ -33,3 +33,15 @@ test("fueler live refresh protects unsaved entries and supports persistent ackno
     assert.match(script, /acknowledgeUpdate/);
     assert.match(script, /continuousWhileVisible: true/);
 });
+
+
+test("Hanzo live refresh uses the shared revision endpoint only while visible", () => {
+    const script = readScript("neoscorpion_hanzo_live.js");
+
+    assert.match(script, /data-hanzo-live/);
+    assert.match(script, /cache: "no-store"/);
+    assert.match(script, /continuousWhileVisible: true/);
+    assert.match(script, /immediate: true/);
+    assert.match(script, /window\.location\.reload\(\)/);
+    assert.doesNotMatch(script, /method:\s*"POST"/);
+});

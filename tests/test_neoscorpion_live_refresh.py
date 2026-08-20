@@ -272,6 +272,33 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
             )
         )
 
+    def test_hanzo_revision_and_hooks_reuse_the_shared_read_only_fingerprint(self):
+        dispatcher = self._add_user("hanzo_dispatcher", "simulator")
+        operation = self._add_operation(revision=7)
+        db.session.add(
+            LiveScreenRefreshSetting(
+                gateway_id=self.gateway.id,
+                screen_key="neoscorpion.hanzo",
+                interval_seconds=30,
+            )
+        )
+        db.session.commit()
+        self._login(dispatcher)
+
+        response = self.client.get("/neoscorpion/hanzo/revision")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {"operation_id": operation.id, "revision": 7})
+
+        page = self.client.get("/neoscorpion/hanzo").get_data(as_text=True)
+        self.assertIn('data-hanzo-live', page)
+        self.assertIn('data-refresh-interval-ms="30000"', page)
+        self.assertIn("neoscorpion_hanzo_live.js", page)
+        with open("app/static/js/neoscorpion_hanzo_live.js", encoding="utf-8") as source:
+            script = source.read()
+        self.assertIn("continuousWhileVisible: true", script)
+        self.assertIn("immediate: true", script)
+        self.assertIn("window.location.reload()", script)
+
     def test_dispatch_hooks_dirty_banner_and_effective_interval_render(self):
         dispatcher = self._add_user("dispatch_hooks", "simulator")
         operation = self._add_operation(revision=3)

@@ -342,6 +342,11 @@ DEFAULT_PERMISSION_RULES = (
         "Edit NeoScorpion dispatcher fuel assignments and mission fuel requirements.",
     ),
     (
+        "neoscorpion.hanzo.view",
+        "operator",
+        "View the NeoScorpion Hanzo shadow-validation workspace.",
+    ),
+    (
         "neoscorpion.fuel_assignments.view",
         "operator",
         "Be selected for NeoScorpion fuel assignments.",
@@ -1029,6 +1034,15 @@ PERMISSION_RULE_ITEMS = (
         {
             "view": "neoscorpion.fueler.view",
             "edit": "neoscorpion.fueler.edit",
+        },
+    ),
+    (
+        "scorpion",
+        "neoscorpion.hanzo",
+        "Hanzo",
+        "NeoScorpion read-only Hanzo shadow-validation workspace.",
+        {
+            "view": "neoscorpion.hanzo.view",
         },
     ),
     (
