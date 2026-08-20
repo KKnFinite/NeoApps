@@ -11088,6 +11088,129 @@ body.blueprint-neostaffing {
     opacity: 0.62;
 }
 
+/* PEOPLE is an operational workspace: hierarchy, roster, and drawer share width. */
+.neostaffing-people-page {
+    width: calc(100% - 40px);
+    max-width: none;
+    margin-inline: 20px;
+}
+
+.neostaffing-people-page .neostaffing-dashboard-shell {
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: 14px;
+}
+
+.neostaffing-people-page .neostaffing-rail {
+    width: 190px;
+}
+
+.neostaffing-people-page .neostaffing-people-workspace {
+    grid-template-columns: minmax(205px, 250px) minmax(0, 1fr);
+    gap: 12px;
+}
+
+.neostaffing-people-page .neostaffing-people-drilldown-panel {
+    position: sticky;
+    top: 96px;
+    max-height: calc(100vh - 118px);
+    overflow: auto;
+}
+
+.neostaffing-people-page .neostaffing-people-roster-shell {
+    gap: 10px;
+}
+
+.neostaffing-people-toolbar {
+    display: flex;
+    min-height: 34px;
+    align-items: center;
+    gap: 8px;
+}
+
+.neostaffing-people-table-wrap {
+    overflow: auto;
+    border: 1px solid rgba(var(--node-rgb), 0.24);
+    border-radius: 8px;
+}
+
+.neostaffing-people-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+}
+
+.neostaffing-people-table th,
+.neostaffing-people-table td {
+    height: 38px;
+    padding: 5px 10px;
+    border-bottom: 1px solid rgba(var(--node-rgb), 0.14);
+    text-align: left;
+    vertical-align: middle;
+}
+
+.neostaffing-people-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    color: var(--muted);
+    background: #101a22;
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.neostaffing-people-table tbody tr:hover,
+.neostaffing-people-table tbody tr.is-selected {
+    background: rgba(var(--node-rgb), 0.1);
+}
+
+.neostaffing-people-table tr.is-inactive {
+    opacity: 0.58;
+}
+
+.neostaffing-people-table td a {
+    display: grid;
+    gap: 1px;
+    color: inherit;
+    text-decoration: none;
+}
+
+.neostaffing-people-table td a strong { color: var(--neo-bright-silver); }
+.neostaffing-people-table td a span { color: var(--muted); font-size: 0.66rem; }
+.neostaffing-people-table input { width: 17px; height: 17px; accent-color: var(--node-primary); }
+
+.neostaffing-people-bulk-panel[hidden] { display: none; }
+
+.neostaffing-people-action-details[open] {
+    position: fixed;
+    z-index: 30;
+    top: 76px;
+    right: 20px;
+    width: min(440px, calc(100vw - 40px));
+    max-height: calc(100vh - 96px);
+    overflow: auto;
+    box-shadow: -12px 12px 32px rgba(0, 0, 0, 0.38);
+}
+
+.neostaffing-people-drawer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.neostaffing-people-drawer-detail {
+    position: fixed;
+    z-index: 25;
+    top: 76px;
+    right: 20px;
+    width: min(440px, calc(100vw - 40px));
+    max-height: calc(100vh - 96px);
+    overflow: auto;
+    box-shadow: -12px 12px 32px rgba(0, 0, 0, 0.38);
+}
+
 .neostaffing-people-card > div {
     min-width: 0;
 }
@@ -11249,6 +11372,20 @@ body.blueprint-neostaffing {
     .neostaffing-seniority-workspace,
     .neostaffing-people-workspace {
         grid-template-columns: 1fr;
+    }
+
+    .neostaffing-people-page {
+        width: min(100%, 760px);
+        margin-inline: auto;
+    }
+
+    .neostaffing-people-page .neostaffing-people-drilldown-panel,
+    .neostaffing-people-drawer-detail,
+    .neostaffing-people-action-details[open] {
+        position: static;
+        width: auto;
+        max-height: none;
+        box-shadow: none;
     }
 
     .neostaffing-people-refine-row {

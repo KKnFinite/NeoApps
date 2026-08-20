@@ -900,7 +900,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Select Sort", people_page.data)
         self.assertIn(b"ADD EMPLOYEE", people_page.data)
         self.assertIn(b"ROSTER", people_page.data)
-        self.assertIn(b"neostaffing-people-card", people_page.data)
+        self.assertIn(b"neostaffing-people-table", people_page.data)
+        self.assertIn(b"neostaffing-people-drawer-detail", people_page.data)
         self.assertNotIn(b"PEOPLE CONTROL DECK", people_page.data)
         self.assertNotIn(b"WORK AREA ASSIGNMENT DECK", people_page.data)
 
@@ -1616,11 +1617,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
 
         self.assertEqual(operator_page.status_code, 200)
-        self.assertNotIn(b"APPLY BULK ACTION", operator_page.data)
+        self.assertNotIn(b"Selected Employees", operator_page.data)
         self.assertEqual(operator_blocked.status_code, 302)
         self.assertEqual(operator_blocked.location, "/neostaffing")
         self.assertEqual(simulator_page.status_code, 200)
-        self.assertIn(b"APPLY BULK ACTION", simulator_page.data)
+        self.assertIn(b"Selected Employees", simulator_page.data)
         self.assertIn(b"Select all visible", simulator_page.data)
         self.assertEqual(assigned.status_code, 200)
         self.assertIn(b"Bulk work-area action updated 2 people.", assigned.data)

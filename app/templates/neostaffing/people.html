@@ -27,7 +27,7 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
 {% set selected_scope = people.selected_unit %}
 {% set work_area_selected = people.selected_work_area %}
 {% set can_load_roster = people.selected_operation or people.selected_department or people.selected_work_area %}
-<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="neostaffing-people-title">
+<section class="neostaffing-page neostaffing-dashboard-page neostaffing-people-page theme-staffing" aria-labelledby="neostaffing-people-title">
     <div class="neostaffing-dashboard-shell">
         {% include "neostaffing/_section_nav.html" %}
 
@@ -151,49 +151,6 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
                         <em>{{ unit_path(selected_scope) }}</em>
                     </div>
                     <div class="neostaffing-people-action-row">
-                        {% if can_edit_people and work_area_selected %}
-                        <details class="neostaffing-inline-editor neostaffing-people-action-details">
-                            <summary class="table-row-button">ADD EMPLOYEE</summary>
-                            <form class="operation-form neostaffing-people-form" method="post" action="{{ url_for('neostaffing.create_person') }}">
-                                {{ preserve_people_filters(filters) }}
-                                <input type="hidden" name="active" value="1">
-                                <input type="hidden" name="initial_work_area_unit_id" value="{{ work_area_selected.id }}">
-                                <label><span>Employee ID</span><input name="employee_id" required></label>
-                                <label><span>First Name</span><input name="first_name" required></label>
-                                <label><span>Last Name</span><input name="last_name" required></label>
-                                <label><span>Seniority Date</span><input type="date" name="seniority_date" required></label>
-                                <label><span>Phone</span><input name="phone_number"></label>
-                                <label><span>Classification</span>
-                                    <select name="classification" required>
-                                        {% for value, label in classification_choices %}
-                                        <option value="{{ value }}">{{ label }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </label>
-                                <label><span>Employee Status</span>
-                                    <select name="employee_status" required>
-                                        {% for value, label in employee_status_choices %}
-                                        <option value="{{ value }}">{{ label }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </label>
-                                <button type="submit">SAVE EMPLOYEE</button>
-                            </form>
-                        </details>
-                        <details class="neostaffing-inline-editor neostaffing-people-action-details">
-                            <summary class="table-row-button">BULK ADD EMPLOYEES</summary>
-                            <form class="operation-form neostaffing-people-bulk-create-form" method="post" action="{{ url_for('neostaffing.create_people_bulk') }}">
-                                {{ preserve_people_filters(filters) }}
-                                <input type="hidden" name="initial_work_area_unit_id" value="{{ work_area_selected.id }}">
-                                <label><span>Employees</span>
-                                    <textarea name="employee_rows" rows="8" required spellcheck="false" placeholder="Employee ID&#9;First Name&#9;Last Name&#9;Seniority Date&#9;Phone&#9;Classification&#9;Employee Status&#10;12345&#9;Jane&#9;Doe&#9;2020-01-01&#9;555-0100&#9;part_time&#9;active"></textarea>
-                                </label>
-                                <p class="muted neostaffing-bulk-paste-help">Paste one employee per line from a spreadsheet. Columns: Employee ID, First Name, Last Name, Seniority Date, Phone, Classification, Employee Status.</p>
-                                <button type="submit">ADD EMPLOYEES</button>
-                            </form>
-                        </details>
-                        {% endif %}
-
                         {% if can_assign_management %}
                         <details class="neostaffing-inline-editor neostaffing-people-action-details">
                             <summary class="table-row-button">ASSIGN MANAGEMENT</summary>
@@ -272,6 +229,33 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
                             </label>
                             <button type="submit">FILTER</button>
                         </form>
+                        <div class="neostaffing-people-toolbar" data-neostaffing-normal-toolbar>
+                            {% if can_edit_people and work_area_selected %}
+                            <details class="neostaffing-inline-editor neostaffing-people-action-details" data-neostaffing-drawer>
+                                <summary class="table-row-button">+ ADD</summary>
+                                <div class="neostaffing-people-drawer-head"><strong>ADD EMPLOYEE</strong><button type="button" class="table-row-button" data-neostaffing-close-drawer>CLOSE</button></div>
+                                <form class="operation-form neostaffing-people-form" method="post" action="{{ url_for('neostaffing.create_person') }}">
+                                    {{ preserve_people_filters(filters) }}
+                                    <input type="hidden" name="active" value="1"><input type="hidden" name="initial_work_area_unit_id" value="{{ work_area_selected.id }}">
+                                    <label><span>Employee ID</span><input name="employee_id" required></label><label><span>First Name</span><input name="first_name" required></label><label><span>Last Name</span><input name="last_name" required></label><label><span>Seniority Date</span><input type="date" name="seniority_date" required></label><label><span>Phone</span><input name="phone_number"></label>
+                                    <label><span>Classification</span><select name="classification" required>{% for value, label in classification_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+                                    <label><span>Employee Status</span><select name="employee_status" required>{% for value, label in employee_status_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+                                    <button type="submit">SAVE EMPLOYEE</button>
+                                </form>
+                            </details>
+                            <details class="neostaffing-inline-editor neostaffing-people-action-details" data-neostaffing-drawer>
+                                <summary class="table-row-button">BULK ADD EMPLOYEES</summary>
+                                <div class="neostaffing-people-drawer-head"><strong>BULK ADD EMPLOYEES</strong><button type="button" class="table-row-button" data-neostaffing-close-drawer>CLOSE</button></div>
+                                <form class="operation-form neostaffing-people-bulk-create-form" method="post" action="{{ url_for('neostaffing.create_people_bulk') }}">
+                                    {{ preserve_people_filters(filters) }}
+                                    <input type="hidden" name="initial_work_area_unit_id" value="{{ work_area_selected.id }}">
+                                    <label><span>Employees</span><textarea name="employee_rows" rows="12" required spellcheck="false" placeholder="Employee ID&#9;First Name&#9;Last Name&#9;Seniority Date&#9;Phone&#9;Classification&#9;Employee Status&#10;12345&#9;Jane&#9;Doe&#9;2020-01-01&#9;555-0100&#9;part_time&#9;active"></textarea></label>
+                                    <p class="muted neostaffing-bulk-paste-help">Paste tab-separated spreadsheet rows. The first header row is optional; every row is validated before any employee is created.</p>
+                                    <button type="submit">VALIDATE AND ADD EMPLOYEES</button>
+                                </form>
+                            </details>
+                            {% endif %}
+                        </div>
                     </article>
 
                     <article class="neostaffing-data-card neostaffing-people-list-panel">
@@ -283,11 +267,10 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
                                     <input type="checkbox" data-neostaffing-select-all-visible>
                                     <span>Select all visible</span>
                                 </label>
-                                <label><span>Bulk Action</span>
+                                <label><span>Selected Employees</span>
                                     <select name="bulk_action" required>
-                                        <option value="assign">Assign to Work Area</option>
                                         <option value="move">Move to Work Area</option>
-                                        <option value="clear">Clear Work Area</option>
+                                        <option value="clear">Remove From Work Area</option>
                                     </select>
                                 </label>
                                 <label><span>Work Area</span>
@@ -298,39 +281,27 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
                                         {% endfor %}
                                     </select>
                                 </label>
-                                <button type="submit">APPLY BULK ACTION</button>
+                                <button type="submit">APPLY</button>
                             </div>
                         {% endif %}
 
-                        <div class="neostaffing-people-list" data-people-result-limit="{{ people.pagination.per_page }}">
+                        <div class="neostaffing-people-table-wrap" data-people-result-limit="{{ people.pagination.per_page }}">
+                            <table class="neostaffing-people-table">
+                                <thead><tr>{% if can_bulk_people and work_area_selected %}<th aria-label="Select"></th>{% endif %}<th>Employee</th><th>Classification</th><th>Status</th><th>Work Area</th><th>Seniority</th></tr></thead>
+                                <tbody>
                             {% for row in people.rows %}
                             {% set person = row.person %}
                             {% set is_selected = selected and selected.person.id == person.id %}
-                            {% if can_bulk_people and work_area_selected %}
-                            <div class="neostaffing-people-selection-row">
-                                <label class="neostaffing-people-select-row">
-                                    <input type="checkbox" name="person_ids" value="{{ person.id }}">
-                                    <span>Select</span>
-                                </label>
-                            {% endif %}
-                            <a class="neostaffing-people-card{% if not person.active %} is-inactive{% endif %}{% if is_selected %} is-selected{% endif %}" href="{{ url_for('neostaffing.people') }}?{{ people_query(filters, person.id) }}">
-                                <div class="neostaffing-people-identity">
-                                    <span>{{ person.employee_id }}</span>
-                                    <strong>{{ person.last_name }}, {{ person.first_name }}</strong>
-                                    <em>{{ classification_labels[person.classification] }}</em>
-                                </div>
-                                <div>
-                                    <span>WORK AREA</span>
-                                    <strong>{{ row.work_area.name if row.work_area else "-" }}</strong>
-                                    <em>{{ employee_status_labels[person.employee_status] }}</em>
-                                </div>
-                            </a>
-                            {% if can_bulk_people and work_area_selected %}
-                            </div>
-                            {% endif %}
+                            <tr class="{% if not person.active %}is-inactive {% endif %}{% if is_selected %}is-selected{% endif %}">
+                                {% if can_bulk_people and work_area_selected %}<td><input type="checkbox" name="person_ids" value="{{ person.id }}" aria-label="Select {{ person.full_name }}"></td>{% endif %}
+                                <td><a href="{{ url_for('neostaffing.people') }}?{{ people_query(filters, person.id) }}"><strong>{{ person.last_name }}, {{ person.first_name }}</strong><span>{{ person.employee_id }}</span></a></td>
+                                <td>{{ classification_labels[person.classification] }}</td><td>{{ employee_status_labels[person.employee_status] }}</td><td>{{ row.work_area.name if row.work_area else "-" }}</td><td>{{ person.seniority_date.isoformat() }}</td>
+                            </tr>
                             {% else %}
-                            <p class="muted">No people or management assignments match this unit.</p>
+                            <tr><td colspan="{% if can_bulk_people and work_area_selected %}6{% else %}5{% endif %}" class="muted">No people or management assignments match this unit.</td></tr>
                             {% endfor %}
+                                </tbody>
+                            </table>
                         </div>
 
                         {% if can_bulk_people and work_area_selected %}
@@ -341,18 +312,27 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
                             if (!panel) return;
                             const selectAll = panel.querySelector("[data-neostaffing-select-all-visible]");
                             const form = panel.closest("form");
+                            const normalToolbar = document.querySelector("[data-neostaffing-normal-toolbar]");
                             if (!selectAll || !form) return;
+                            const syncToolbar = () => {
+                                const selected = form.querySelectorAll('input[name="person_ids"]:checked').length;
+                                panel.hidden = selected === 0;
+                                if (normalToolbar) normalToolbar.hidden = selected > 0;
+                            };
                             selectAll.addEventListener("change", () => {
                                 form.querySelectorAll('input[name="person_ids"]').forEach((checkbox) => {
                                     checkbox.checked = selectAll.checked;
                                 });
+                                syncToolbar();
                             });
+                            form.querySelectorAll('input[name="person_ids"]').forEach((checkbox) => checkbox.addEventListener("change", syncToolbar));
+                            syncToolbar();
                         })();
                         </script>
                         {% endif %}
                     </article>
 
-                    <aside class="neostaffing-data-card neostaffing-detail-panel neostaffing-people-detail-panel" aria-label="Employee details">
+                    <aside class="neostaffing-data-card neostaffing-detail-panel neostaffing-people-detail-panel neostaffing-people-drawer-detail" aria-label="Employee details">
                         <h2>DETAIL</h2>
                         {% if selected %}
                         {% set person = selected.person %}
@@ -448,4 +428,17 @@ sort_id={{ filters.sort_id }}&operation_id={{ filters.operation_id }}&department
         </main>
     </div>
 </section>
+<script>
+(() => {
+    document.querySelectorAll("[data-neostaffing-drawer]").forEach((drawer) => {
+        drawer.addEventListener("toggle", () => {
+            if (!drawer.open) return;
+            document.querySelectorAll("[data-neostaffing-drawer]").forEach((other) => {
+                if (other !== drawer) other.open = false;
+            });
+        });
+        drawer.querySelector("[data-neostaffing-close-drawer]")?.addEventListener("click", () => { drawer.open = false; });
+    });
+})();
+</script>
 {% endblock %}
