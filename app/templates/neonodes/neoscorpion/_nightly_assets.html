@@ -121,16 +121,15 @@
                     </dl>
 
                     {% if can_manage_assets %}
-                    {% if row.selection.status != "needs_sump" %}
+                    {% if row.selection.status != "needs_sump" and row.selection.status != "topping_off" %}
                     <form class="neoscorpion-assets-truck-form" method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
                         <input type="hidden" name="action" value="update_truck">
                         <input type="hidden" name="fuel_truck_id" value="{{ row.truck.id }}">
                         <label>
                             Status
                             <select name="status">
-                                <option value="available" {% if row.selection.status == "available" %}selected{% endif %} {% if row.selection.status == "topping_off" %}disabled{% endif %}>Available</option>
+                                <option value="available" {% if row.selection.status == "available" %}selected{% endif %}>Available</option>
                                 <option value="unavailable_oos" {% if row.selection.status == "unavailable_oos" %}selected{% endif %}>Unavailable / OOS</option>
-                                <option value="topping_off" {% if row.selection.status == "topping_off" %}selected{% endif %}>Topping Off</option>
                             </select>
                         </label>
                         <label>
@@ -154,22 +153,6 @@
                                 <input name="current_gallons" inputmode="numeric" min="0" {% if row.truck.capacity_gallons is not none %}max="{{ row.truck.capacity_gallons }}"{% endif %} required>
                             </label>
                             <button class="action-button" type="submit">MARK SUMPED</button>
-                        </form>
-                        {% elif row.selection.status == "topping_off" %}
-                        <form class="neoscorpion-assets-complete-form" method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
-                            <input type="hidden" name="action" value="complete_top_off">
-                            <input type="hidden" name="fuel_truck_id" value="{{ row.truck.id }}">
-                            <label>
-                                New Current Gallons
-                                <input name="current_gallons" inputmode="numeric" min="0" {% if row.truck.capacity_gallons is not none %}max="{{ row.truck.capacity_gallons }}"{% endif %} required>
-                            </label>
-                            <button class="action-button" type="submit">Top Off Complete</button>
-                        </form>
-                        {% else %}
-                        <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
-                            <input type="hidden" name="action" value="mark_topping_off">
-                            <input type="hidden" name="fuel_truck_id" value="{{ row.truck.id }}">
-                            <button class="action-button secondary" type="submit">Topping Off</button>
                         </form>
                         {% endif %}
                         <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
@@ -203,7 +186,6 @@
                     <select name="status">
                         <option value="available">Available</option>
                         <option value="unavailable_oos">Unavailable / OOS</option>
-                        <option value="topping_off">Topping Off</option>
                     </select>
                 </label>
                 <label>

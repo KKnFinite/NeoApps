@@ -16,6 +16,7 @@ from app.models import (
     GatewayNodeRole,
     NeoNode,
     NeoScorpionFuelAssignment,
+    NeoScorpionFuelWorkState,
     NeoScorpionFuelAuditEntry,
     NeoScorpionFuelTruck,
     NeoScorpionSortAssetState,
@@ -489,15 +490,23 @@ def mark_nightly_truck_topping_off(
         raise ValueError("MARK SUMPED before changing this truck's status.")
     if nightly_truck.status == "topping_off":
         return _unchanged(state)
+    active_assignments = _active_assignments_for_resource(
+        locked_operation.id,
+        NeoScorpionFuelAssignment.assigned_truck_id,
+        truck.id,
+    )
+    active_assignment_ids = [assignment.id for assignment in active_assignments]
+    if active_assignment_ids and NeoScorpionFuelWorkState.query.filter(
+        NeoScorpionFuelWorkState.fuel_assignment_id.in_(active_assignment_ids),
+        NeoScorpionFuelWorkState.on_at_utc.is_not(None),
+        NeoScorpionFuelWorkState.off_at_utc.is_(None),
+        NeoScorpionFuelWorkState.ended_early_at_utc.is_(None),
+    ).first() is not None:
+        raise ValueError("Truck is actively fueling.")
+    if active_assignments:
+        raise ValueError("Truck has a future assigned job.")
 
     nightly_truck.status = "topping_off"
-    _hold_assignments_for_truck_status(
-        locked_operation.id,
-        truck.id,
-        "topping_off",
-        changed_by_user,
-        now_utc=now_utc,
-    )
     state = _record_change(state, locked_operation.id)
     db.session.flush()
     return _changed(state)

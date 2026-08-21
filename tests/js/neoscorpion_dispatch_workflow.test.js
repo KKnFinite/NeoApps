@@ -50,6 +50,29 @@ test("dispatch compact rows retain authoritative copy data and exceptional fuel 
 });
 
 
+test("dispatch live refresh is clean except for changed assignment resource selections", () => {
+    const script = readScript("neoscorpion_fuel_dispatch_live.js");
+    const dispatchTemplate = fs.readFileSync(
+        path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "fuel_dispatch.html"),
+        "utf8"
+    );
+    const assetsTemplate = fs.readFileSync(
+        path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "_nightly_assets.html"),
+        "utf8"
+    );
+
+    assert.match(script, /select\[name='assigned_fueler_user_id'\]/);
+    assert.match(script, /select\[name='assigned_truck_id'\]/);
+    assert.match(script, /data-assignment-live-waiting/);
+    assert.doesNotMatch(script, /data-fuel-dispatch-update-banner/);
+    assert.doesNotMatch(dispatchTemplate, /UPDATES AVAILABLE|REFRESH NOW/);
+    assert.match(dispatchTemplate, /TOP OFF/);
+    assert.match(dispatchTemplate, /RETURN/);
+    assert.doesNotMatch(assetsTemplate, /Top Off Complete|value="mark_topping_off"|value="complete_top_off"/);
+    assert.doesNotMatch(assetsTemplate, /value="topping_off">Topping Off/);
+});
+
+
 test("fueler live refresh protects unsaved entries and supports persistent acknowledgment", () => {
     const script = readScript("neoscorpion_fuel_assignments_live.js");
 

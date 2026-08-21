@@ -11,8 +11,6 @@
     const autosaveUrl = root.dataset.autosaveUrl;
     let operationId = root.dataset.operationId || "none";
     let revision = Number(root.dataset.revision || 0);
-    const updateBanner = root.querySelector("[data-fuel-dispatch-update-banner]");
-    const refreshButton = root.querySelector("[data-fuel-dispatch-refresh-now]");
     const initialControlValues = new WeakMap();
     let reloading = false;
     let controller = null;
@@ -30,8 +28,8 @@
     };
 
     const protectedControls = () => Array.from(root.querySelectorAll(
-        "input:not([type='hidden']):not([readonly]):not([disabled]):not([data-dispatch-autosave]), "
-        + "select:not([disabled]), textarea:not([readonly]):not([disabled])"
+        "select[name='assigned_fueler_user_id']:not([disabled]), "
+        + "select[name='assigned_truck_id']:not([disabled])"
     ));
 
     protectedControls().forEach((control) => {
@@ -42,7 +40,6 @@
         protectedControls().some(
             (control) => initialControlValues.get(control) !== controlValue(control)
         )
-        || Boolean(root.querySelector("[data-dispatch-autosave][data-autosave-failed='true']"))
     );
 
     const syncDirtyState = () => {
@@ -84,9 +81,13 @@
             reloadPage();
             return;
         }
-        if (updateBanner) {
-            updateBanner.hidden = false;
-        }
+        root.querySelectorAll("[data-dispatch-assignment-form]").forEach((form) => {
+            const waiting = form.querySelector("[data-assignment-live-waiting]");
+            if (waiting && protectedControls().some(
+                (control) => control.closest("[data-dispatch-assignment-form]") === form
+                    && initialControlValues.get(control) !== controlValue(control)
+            )) waiting.hidden = false;
+        });
     };
 
     const poll = async () => {
@@ -313,16 +314,6 @@
             if (enabled) enabled.dataset.originalValue = enabled.value;
         });
     });
-    refreshButton?.addEventListener("click", () => {
-        if (
-            hasUnsavedControls()
-            && !window.confirm("Refresh now and discard unsaved Fuel Dispatch changes?")
-        ) {
-            return;
-        }
-        reloadPage();
-    });
-
     syncDirtyState();
     if (Number.isFinite(pollIntervalMs) && pollIntervalMs >= 5000) {
         controller = window.NeoLiveUpdates.create({

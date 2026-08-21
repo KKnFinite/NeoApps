@@ -24062,6 +24062,28 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     color: #ffb0a8;
 }
 
+.neoscorpion-dispatch-assignment-action,
+.neoscorpion-truck-card-action {
+    width: auto;
+    padding: 3px 6px;
+    font-size: 0.62rem;
+    line-height: 1.1;
+}
+
+.neoscorpion-dispatch-save-status,
+.neoscorpion-assignment-live-waiting {
+    min-height: 0;
+    margin-top: 1px;
+    font-size: 0.58rem;
+    line-height: 1.05;
+}
+
+.neoscorpion-assignment-live-waiting {
+    display: block;
+    color: var(--node-scorpion-highlight);
+    font-weight: 800;
+}
+
 .neoscorpion-assignment-update {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
@@ -24579,7 +24601,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 .neoscorpion-truck-visual-card {
     border: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.24);
     border-radius: 0.35rem;
-    padding: 0.65rem;
+    padding: 0.45rem 0.55rem;
 }
 
 .neoscorpion-truck-visual-card--needs_sump {
@@ -24602,27 +24624,34 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     color: #ff7777;
 }
 
-.neoscorpion-truck-visual-card dl {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.35rem 0.75rem;
-    margin: 0.65rem 0;
-}
-
-.neoscorpion-truck-visual-card dl div {
+.neoscorpion-truck-visual-values {
     display: flex;
     justify-content: space-between;
-    gap: 0.35rem;
-}
-
-.neoscorpion-truck-visual-card dd {
-    margin: 0;
-    text-align: right;
+    gap: 0.4rem;
+    margin: 0.3rem 0;
+    color: var(--text-muted);
+    font-size: 0.66rem;
 }
 
 .neoscorpion-truck-gauges {
     display: grid;
     gap: 0.35rem;
+}
+
+.neoscorpion-truck-visual-card form {
+    margin-top: 0.35rem;
+}
+
+.neoscorpion-truck-return-form {
+    display: flex;
+    gap: 0.3rem;
+}
+
+.neoscorpion-truck-return-form input {
+    min-width: 0;
+    width: 5.25rem;
+    padding: 2px 4px;
+    font-size: 0.66rem;
 }
 
 .neoscorpion-truck-gauge {

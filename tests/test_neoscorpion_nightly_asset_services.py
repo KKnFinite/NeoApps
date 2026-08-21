@@ -1,15 +1,18 @@
 import unittest
-from datetime import date
+from datetime import date, datetime
 
 from app import create_app
 from app.extensions import db
 from app.models import (
     Gateway,
+    NeoScorpionFuelAssignment,
     NeoScorpionFuelTruck,
+    NeoScorpionFuelWorkState,
     NeoScorpionSortAssetState,
     NeoScorpionSortFueler,
     NeoScorpionSortTruck,
     SortDateOperation,
+    SortDateMission,
     User,
 )
 from app.services.neoscorpion_assets import (
@@ -317,6 +320,59 @@ class NeoScorpionNightlyAssetServicesTest(unittest.TestCase):
                 1800,
             )
         self.assertEqual(self._state(self.operation_a).revision, 3)
+
+    def test_top_off_blocks_active_and_future_truck_assignments(self):
+        self._commit(
+            select_nightly_truck(
+                self.operation_a,
+                self.truck,
+                status="available",
+                starting_gallons=1800,
+                current_gallons=1200,
+            )
+        )
+        mission = SortDateMission(
+            sort_date=self.operation_a.sort_date,
+            gateway_code=self.gateway.code,
+            sort_name="night",
+            sort_date_operation_id=self.operation_a.id,
+            mission_type="departure",
+            mission_source="manual",
+            flight_number="UPS901",
+            origin=self.gateway.code,
+            destination="SDF",
+            timezone="America/Chicago",
+            planned_datetime_local=datetime(2026, 8, 17, 22, 0),
+            planned_datetime_utc=datetime(2026, 8, 18, 3, 0),
+            planned_source="manual",
+            fuel_status="waiting",
+        )
+        db.session.add(mission)
+        db.session.flush()
+        assignment = NeoScorpionFuelAssignment(
+            sort_date_operation_id=self.operation_a.id,
+            sort_date_mission_id=mission.id,
+            assigned_truck_id=self.truck.id,
+            review_status="assigned",
+        )
+        db.session.add(assignment)
+        db.session.commit()
+
+        with self.assertRaisesRegex(ValueError, "future assigned job"):
+            mark_nightly_truck_topping_off(self.operation_a, self.truck)
+        db.session.rollback()
+
+        db.session.add(
+            NeoScorpionFuelWorkState(
+                fuel_assignment_id=assignment.id,
+                tail_number="N901UP",
+                on_at_utc=datetime(2026, 8, 18, 2, 0),
+            )
+        )
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "actively fueling"):
+            mark_nightly_truck_topping_off(self.operation_a, self.truck)
+        db.session.rollback()
 
     def test_operation_isolation_and_one_revision_per_logical_mutation(self):
         fueler_result = self._commit(

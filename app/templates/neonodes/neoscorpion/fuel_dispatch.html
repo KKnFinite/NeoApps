@@ -34,18 +34,6 @@
     </header>
     {% include "neonodes/neoscorpion/_menu.html" %}
 
-    <div
-        class="neoscorpion-calculation-warning"
-        data-fuel-dispatch-update-banner
-        role="status"
-        aria-live="polite"
-        hidden
-    >
-        <strong>UPDATES AVAILABLE</strong>
-        <span>Fuel Dispatch changed while this page has unsaved work. Refreshing will discard those changes.</span>
-        <button class="action-button" type="button" data-fuel-dispatch-refresh-now>REFRESH NOW</button>
-    </div>
-
     <section class="neoscorpion-panel">
         <div class="neoscorpion-panel-head">
             <span>Current Sort Operation</span>
@@ -65,16 +53,28 @@
                         <strong>TRUCK {{ truck.truck_number }}</strong>
                         <span class="neoscorpion-truck-status">{{ truck.status_label }}</span>
                     </header>
-                    <dl>
-                        <div><dt>Capacity</dt><dd>{{ truck.capacity_display }}</dd></div>
-                        <div><dt>Current</dt><dd>{{ truck.current_display }}{% if truck.current_percent is not none %} / {{ truck.current_percent }}%{% endif %}</dd></div>
-                        <div><dt>Assigned usage</dt><dd>{% if truck.projected_usage_gallons is none %}—{% else %}{{ truck.projected_usage_gallons }} gal{% endif %}</dd></div>
-                        <div><dt>Projected</dt><dd>{% if truck.projected_short %}SHORT {% endif %}{% if truck.projected_incomplete or truck.projected_gallons is none %}—{% else %}{{ truck.projected_display }}{% if truck.projected_percent is not none %} / {{ truck.projected_percent }}%{% endif %}{% endif %}</dd></div>
-                    </dl>
+                    <div class="neoscorpion-truck-visual-values">
+                        <span>Current {{ truck.current_display }}{% if truck.current_percent is not none %} / {{ truck.current_percent }}%{% endif %}</span>
+                        <span>{% if truck.projected_short %}SHORT {% endif %}Projected {% if truck.projected_incomplete or truck.projected_gallons is none %}—{% else %}{{ truck.projected_display }}{% if truck.projected_percent is not none %} / {{ truck.projected_percent }}%{% endif %}{% endif %}</span>
+                    </div>
                     <div class="neoscorpion-truck-gauges" aria-label="Truck {{ truck.truck_number }} fuel gauges">
                         <div><span>Current</span><i class="neoscorpion-truck-gauge"><b{% if truck.current_gauge_percent is not none %} style="--truck-gauge-percent: {{ truck.current_gauge_percent }}%"{% endif %}></b></i></div>
                         <div><span>Projected</span><i class="neoscorpion-truck-gauge neoscorpion-truck-gauge--projected{% if truck.projected_short %} is-short{% endif %}"><b{% if truck.projected_gauge_percent is not none %} style="--truck-gauge-percent: {{ truck.projected_gauge_percent }}%"{% endif %}></b></i></div>
                     </div>
+                    {% if can_manage_assets and truck.status == "available" %}
+                    <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
+                        <input type="hidden" name="action" value="mark_topping_off">
+                        <input type="hidden" name="fuel_truck_id" value="{{ truck.truck_id }}">
+                        <button class="action-button neoscorpion-truck-card-action" type="submit">TOP OFF</button>
+                    </form>
+                    {% elif can_manage_assets and truck.status == "topping_off" %}
+                    <form class="neoscorpion-truck-return-form" method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
+                        <input type="hidden" name="action" value="complete_top_off">
+                        <input type="hidden" name="fuel_truck_id" value="{{ truck.truck_id }}">
+                        <input name="current_gallons" inputmode="numeric" min="0" {% if truck.capacity_gallons is not none %}max="{{ truck.capacity_gallons }}"{% endif %} placeholder="Gallons" aria-label="Returned current gallons for truck {{ truck.truck_number }}" required>
+                        <button class="action-button neoscorpion-truck-card-action" type="submit">RETURN</button>
+                    </form>
+                    {% endif %}
                 </article>
                 {% endfor %}
             </div>
@@ -319,8 +319,9 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <button class="action-button neoscorpion-save-button" type="submit" data-dispatch-assignment-submit>{{ "UPDATE ASSIGNMENT" if row.assignment else "ASSIGN" }}</button>
-                                <small class="neoscorpion-save-status" data-assignment-save-status aria-live="polite"></small>
+                                <button class="action-button neoscorpion-save-button neoscorpion-dispatch-assignment-action" type="submit" data-dispatch-assignment-submit>{{ "UPDATE ASSIGNMENT" if row.assignment else "ASSIGN" }}</button>
+                                <small class="neoscorpion-assignment-live-waiting" data-assignment-live-waiting aria-live="polite" hidden>LIVE UPDATE WAITING</small>
+                                <small class="neoscorpion-save-status neoscorpion-dispatch-save-status" data-assignment-save-status aria-live="polite"></small>
                             </td>
                         </form>
                         {% else %}
