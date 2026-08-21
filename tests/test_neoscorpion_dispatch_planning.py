@@ -1,5 +1,6 @@
 import unittest
 from datetime import date, datetime, timedelta
+from unittest.mock import patch
 
 from sqlalchemy import event, inspect, text
 
@@ -14,6 +15,7 @@ from app.models import (
     NeoScorpionFuelTruck,
     NeoScorpionFuelWorkState,
     NeoScorpionSettings,
+    NeoScorpionSortFueler,
     NeoScorpionSortTruck,
     NeoScorpionTailFuelState,
     SortDateMission,
@@ -412,6 +414,84 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
 
         self.assertEqual(len(context["rows"]), 150)
         self.assertLessEqual(len(statements), 20)
+
+    def test_dispatch_recommendations_are_advisory_and_support_partial_assignments(self):
+        fueler = self._login_user("suggested_fueler", "operator")
+        truck = self._nightly_truck("123456", 10_000)
+        unassigned = self._mission("UPS701", "N411UP", 25_400, 1)
+        partial = self._mission("UPS702", "N412UP", 25_400, 2)
+        fully_assigned = self._mission("UPS703", "N413UP", 25_400, 3)
+        deadline_risk = self._mission("UPS704", "N414UP", 25_400, 4)
+        for mission in (unassigned, partial, fully_assigned):
+            mission.eta_datetime_utc = mission.planned_datetime_utc - timedelta(minutes=45)
+            self._tail_fuel(mission, inbound_lbs=12_000)
+        deadline_risk.eta_datetime_utc = deadline_risk.planned_datetime_utc + timedelta(minutes=40)
+        self._tail_fuel(deadline_risk, inbound_lbs=12_000)
+        db.session.add_all(
+            [
+                NeoScorpionSortFueler(
+                    sort_date_operation_id=self.operation.id,
+                    user_id=fueler.id,
+                ),
+                NeoScorpionFuelAssignment(
+                    sort_date_operation_id=self.operation.id,
+                    sort_date_mission_id=partial.id,
+                    assigned_fueler_user_id=fueler.id,
+                ),
+                NeoScorpionFuelAssignment(
+                    sort_date_operation_id=self.operation.id,
+                    sort_date_mission_id=fully_assigned.id,
+                    assigned_fueler_user_id=fueler.id,
+                    assigned_truck_id=truck.id,
+                ),
+            ]
+        )
+        db.session.commit()
+
+        frozen_now = datetime(2026, 8, 19, 1, 0)
+        with patch("app.services.neoscorpion.datetime") as mocked_datetime:
+            mocked_datetime.utcnow.return_value = frozen_now
+            context = fuel_dispatch_context(self.gateway, include_asset_choices=True)
+
+        rows = {row["mission"].flight_number: row for row in context["rows"]}
+        self.assertTrue(rows["UPS701"]["assignment_recommendation"].available)
+        self.assertEqual(
+            rows["UPS701"]["assignment_recommendation_display"],
+            "Dispatch Planner · Truck 123456",
+        )
+        self.assertTrue(rows["UPS702"]["assignment_recommendation"].available)
+        self.assertEqual(
+            rows["UPS702"]["assignment_recommendation_display"],
+            "Truck 123456",
+        )
+        self.assertIsNone(rows["UPS703"]["assignment_recommendation_display"])
+        self.assertEqual(
+            rows["UPS704"]["assignment_recommendation_reason_display"],
+            "DEADLINE AT RISK",
+        )
+
+        self._login_user("render_dispatcher", "simulator")
+        with patch("app.services.neoscorpion.datetime") as mocked_datetime:
+            mocked_datetime.utcnow.return_value = frozen_now
+            response = self.client.get("/neoscorpion/fuel-dispatch")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("SUGGESTED Dispatch Planner · Truck 123456".encode(), response.data)
+        self.assertIn(b"DEADLINE AT RISK", response.data)
+        self.assertIn(b"123456 (Recommended)</option>", response.data)
+        self.assertIn(
+            b"Dispatch Planner (Recommended)</option>", response.data
+        )
+        self.assertNotIn(
+            b'<option value="123456" selected>123456 (Recommended)</option>',
+            response.data,
+        )
+        self.assertNotIn(
+            (
+                f'<option value="{fueler.id}" selected>'
+                "Dispatch Planner (Recommended)</option>"
+            ).encode(),
+            response.data,
+        )
 
     def _mission(
         self,

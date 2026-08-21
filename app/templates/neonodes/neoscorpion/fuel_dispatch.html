@@ -196,7 +196,7 @@
                                     <option value="{{ row.assigned_fueler.id }}" selected>{{ row.assigned_fueler.display_name }} (Current - unavailable)</option>
                                     {% endif %}
                                     {% for fueler in nightly_assignment_fuelers %}
-                                    <option value="{{ fueler.id }}" {% if row.assigned_fueler and row.assigned_fueler.id == fueler.id %}selected{% endif %}>{{ fueler.display_name }}</option>
+                                    <option value="{{ fueler.id }}" {% if row.assigned_fueler and row.assigned_fueler.id == fueler.id %}selected{% endif %}>{{ fueler.display_name }}{% if row.assignment_recommendation and row.assignment_recommendation.available and not row.assigned_fueler and row.assignment_recommendation.fueler_id == fueler.id %} (Recommended){% endif %}</option>
                                     {% endfor %}
                                 </select>
                                 {% endif %}
@@ -212,7 +212,7 @@
                                     <option value="{{ row.assigned_truck.id }}" selected>{{ row.assigned_truck.truck_number }} (Current - unavailable)</option>
                                     {% endif %}
                                     {% for truck in nightly_assignment_trucks %}
-                                    <option value="{{ truck.id }}" {% if row.assigned_truck and row.assigned_truck.id == truck.id %}selected{% endif %}>{{ truck.truck_number }}</option>
+                                    <option value="{{ truck.id }}" {% if row.assigned_truck and row.assigned_truck.id == truck.id %}selected{% endif %}>{{ truck.truck_number }}{% if row.assignment_recommendation and row.assignment_recommendation.available and not row.assigned_truck and row.assignment_recommendation.truck_id == truck.id %} (Recommended){% endif %}</option>
                                     {% endfor %}
                                 </select>
                                 {% endif %}
@@ -323,6 +323,11 @@
                                 {% endif %}
                             </td>
                             <td class="neoscorpion-dispatch-assignment-cell">
+                                {% if row.assignment_recommendation_display %}
+                                <small class="neoscorpion-dispatch-recommendation">SUGGESTED {{ row.assignment_recommendation_display }}{% if row.assignment_recommendation_time_display %} {{ row.assignment_recommendation_time_display }}{% endif %}</small>
+                                {% elif row.assignment_recommendation_reason_display %}
+                                <small class="neoscorpion-dispatch-recommendation">{{ row.assignment_recommendation_reason_display }}</small>
+                                {% endif %}
                                 <button class="action-button neoscorpion-save-button neoscorpion-dispatch-assignment-action" type="submit" data-dispatch-assignment-submit>{{ "UPDATE ASSIGNMENT" if row.assignment else "ASSIGN" }}</button>
                                 <small class="neoscorpion-save-status neoscorpion-dispatch-save-status" data-assignment-save-status aria-live="polite"></small>
                             </td>

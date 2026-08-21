@@ -24076,6 +24076,15 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     white-space: nowrap;
 }
 
+.neoscorpion-dispatch-recommendation {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--muted);
+    font-size: 0.58rem;
+    font-weight: 800;
+    line-height: 1.1;
+}
+
 .neoscorpion-dispatch-save-status {
     display: inline;
     min-height: 0;
