@@ -52,6 +52,9 @@ from app.services.time_display import format_local_hhmm
 DEFAULT_FUEL_DENSITY_LBS_PER_GALLON = 6.7
 DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR = Decimal("0.30")
 DEFAULT_ASSIGNMENT_ETA_SAFETY_BUFFER_MINUTES = Decimal("5")
+DEFAULT_ASSIGNMENT_SETUP_MINUTES = Decimal("10")
+DEFAULT_ASSIGNMENT_FINISHING_MINUTES = Decimal("5")
+DEFAULT_ASSIGNMENT_PUMP_RATE_GALLONS_PER_MINUTE = Decimal("300")
 CALCULATION_NOT_CONFIGURED_MESSAGE = "Fuel calculation not configured for this aircraft type yet."
 NEOSCORPION_FUEL_DISPATCH_REFRESH_KEY = "neoscorpion.fuel_dispatch"
 NEOSCORPION_FUEL_ASSIGNMENTS_REFRESH_KEY = "neoscorpion.fuel_assignments"
@@ -636,12 +639,12 @@ def assignment_planning_settings(gateway):
         setup_minutes=(
             Decimal(settings.assignment_setup_minutes)
             if settings is not None and settings.assignment_setup_minutes is not None
-            else None
+            else DEFAULT_ASSIGNMENT_SETUP_MINUTES
         ),
         finishing_minutes=(
             Decimal(settings.assignment_finishing_minutes)
             if settings is not None and settings.assignment_finishing_minutes is not None
-            else None
+            else DEFAULT_ASSIGNMENT_FINISHING_MINUTES
         ),
         eta_safety_buffer_minutes=(
             Decimal(settings.assignment_eta_safety_buffer_minutes)
@@ -658,7 +661,7 @@ def assignment_planning_settings(gateway):
                 and aircraft_settings[
                     aircraft_type
                 ].assignment_pump_rate_gallons_per_minute is not None
-                else None
+                else DEFAULT_ASSIGNMENT_PUMP_RATE_GALLONS_PER_MINUTE
             )
             for aircraft_type in NEOSCORPION_ASSIGNMENT_PLANNING_AIRCRAFT_TYPES
         },
@@ -3364,9 +3367,6 @@ def save_assignment_planning_settings(gateway, user, form):
         form.get("assignment_eta_safety_buffer_minutes"),
         "Arrival ETA Safety Buffer",
     )
-    if eta_safety_buffer_minutes is None:
-        eta_safety_buffer_minutes = DEFAULT_ASSIGNMENT_ETA_SAFETY_BUFFER_MINUTES
-
     changed = False
     for attribute, value in (
         ("assignment_setup_minutes", setup_minutes),

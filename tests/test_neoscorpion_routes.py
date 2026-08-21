@@ -1,6 +1,7 @@
 import unittest
 from datetime import date, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 
 from sqlalchemy import event
 
@@ -33,6 +34,7 @@ from app.services.neoscorpion import (
     lbs_to_gallons,
     visible_neoscorpion_menu_items,
 )
+from app.services.neoscorpion_dispatch_planning import assignment_mission_timing
 from app.services.parking_plan import set_tail_hot
 from app.services.permission_rules import ensure_default_permission_rules
 from app.services.password_policy import set_user_password
@@ -408,14 +410,27 @@ class NeoScorpionRoutesTest(unittest.TestCase):
 
     def test_assignment_planning_settings_defaults_validation_and_readiness(self):
         initial = assignment_planning_settings(self.gateway)
-        self.assertIsNone(initial.setup_minutes)
-        self.assertIsNone(initial.finishing_minutes)
+        self.assertEqual(initial.setup_minutes, Decimal("10"))
+        self.assertEqual(initial.finishing_minutes, Decimal("5"))
         self.assertEqual(initial.eta_safety_buffer_minutes, Decimal("5"))
         self.assertTrue(all(
-            initial.pump_rate_for(aircraft_type) is None
+            initial.pump_rate_for(aircraft_type) == Decimal("300")
             for aircraft_type in ("B757", "A300", "B767ER", "B747-400", "B747-8")
         ))
-        self.assertFalse(initial.is_complete_for("B757"))
+        self.assertTrue(initial.is_complete_for("B757"))
+        self.assertEqual(NeoScorpionSettings.query.count(), 0)
+        default_timing = assignment_mission_timing(
+            mission=SimpleNamespace(
+                actual_block_in_datetime_utc=datetime(2026, 8, 20, 1, 0),
+                eta_datetime_utc=None,
+                planned_datetime_utc=datetime(2026, 8, 20, 3, 0),
+            ),
+            operation=SimpleNamespace(window_minutes=60),
+            aircraft_type="B757",
+            planning_demand_gallons=1500,
+            planning_settings=initial,
+        )
+        self.assertEqual(default_timing.total_duration_minutes, Decimal("20"))
 
         user = self._login_approved_user(role="master")
         valid_data = {
