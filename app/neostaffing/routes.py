@@ -205,19 +205,22 @@ def people():
             "person_id": request.args.get("person_id", "").strip(),
         },
         current_user if not can_manage else None,
-    )
+      )
+    shift_flow_areas = staffing_service.shift_flow_area_options(context.get("selected_work_area")) if can_edit_people else []
     return render_template(
         "neostaffing/people.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
         can_manage_app=can_manage,
         can_edit_people=can_edit_people,
         can_bulk_people=can_bulk_people,
+        shift_flow_areas=shift_flow_areas,
         can_assign_management=bool(
             user_can(MANAGEMENT_ASSIGN_PERMISSION)
             and _can_directly_change_management_relationships()
         ),
         classification_choices=staffing_service.classification_choices(),
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
+        shift_work_area_type=staffing_service.shift_work_area_type,
         employee_status_choices=staffing_service.employee_status_choices(),
         employee_status_labels=staffing_service.EMPLOYEE_STATUS_LABELS,
         leadership_level_labels=staffing_service.LEADERSHIP_LEVEL_LABELS,
@@ -987,8 +990,10 @@ def create_person():
     try:
         person = staffing_service.create_person(request.form)
         initial_work_area_id = request.form.get("initial_work_area_unit_id", "").strip()
-        if initial_work_area_id:
-            staffing_service.assign_work_area(person, _get_unit(initial_work_area_id))
+        initial_work_area = _get_unit(initial_work_area_id) if initial_work_area_id else None
+        if initial_work_area:
+            staffing_service.assign_work_area(person, initial_work_area)
+        staffing_service.create_shift_flow_plan(person, request.form, initial_work_area)
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()

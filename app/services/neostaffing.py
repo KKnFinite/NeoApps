@@ -14,6 +14,7 @@ from app.models import (
     StaffingGroupMembership,
     StaffingLeadershipAssignment,
     StaffingPerson,
+    StaffingShiftFlowPlan,
     StaffingReportingRelationship,
     SortDateOperation,
     StaffingUnit,
@@ -113,6 +114,102 @@ MANAGEMENT_TREE_CLASSIFICATION_ORDER = {
     "part_time_supervisor": 3,
     "full_time_specialist": 4,
 }
+
+SHIFT_FLOW_DOOR = "Door"
+SHIFT_FLOW_BALLMAT = "Ballmat"
+SHIFT_FLOW_DISCHARGE = "Discharge"
+SHIFT_FLOW_OTHER = "Other"
+
+
+def shift_work_area_type(work_area):
+    name = (getattr(work_area, "name", work_area) or "").casefold()
+    if "door" in name:
+        return SHIFT_FLOW_DOOR
+    if "ballmat" in name:
+        return SHIFT_FLOW_BALLMAT
+    if "discharge" in name:
+        return SHIFT_FLOW_DISCHARGE
+    return SHIFT_FLOW_OTHER
+
+
+def shift_flow_area_options(selected_work_area):
+    """Return the one bounded Shift-area set available from this PEOPLE scope."""
+    units = StaffingUnit.query.filter_by(active=True).all()
+    by_id = {unit.id: unit for unit in units}
+    selected = by_id.get(getattr(selected_work_area, "id", None))
+    if not selected or not _is_shift_work_area(selected, by_id):
+        return []
+    department = by_id.get(selected.parent_id)
+    return [
+        unit for unit in units
+        if unit.unit_type == "work_area" and unit.parent_id == department.id
+        and _is_shift_work_area(unit, by_id)
+    ]
+
+
+def create_shift_flow_plan(person, values, selected_work_area):
+    submitted = any(str(values.get(key, "")).strip() for key in (
+        "shift_flow_setup_work_area_id", "shift_flow_sort_start_work_area_id",
+        "shift_flow_ballmat_transition", "shift_flow_final_door_work_area_id",
+    ))
+    if not submitted:
+        return None
+    options = shift_flow_area_options(selected_work_area)
+    if not options:
+        raise ValueError("Shift Flow is available only for Night / Ramp / Shift Work Areas.")
+    allowed = {unit.id: unit for unit in options}
+    setup = _shift_flow_area(values.get("shift_flow_setup_work_area_id"), allowed, "Setup Assignment", optional=True)
+    start = _shift_flow_area(values.get("shift_flow_sort_start_work_area_id"), allowed, "Sort Start Work Area")
+    final = _shift_flow_area(values.get("shift_flow_final_door_work_area_id"), allowed, "Final Door")
+    if setup and shift_work_area_type(setup) not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT}:
+        raise ValueError("Setup Assignment must be a Shift Door or Ballmat.")
+    if shift_work_area_type(start) not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT, SHIFT_FLOW_DISCHARGE}:
+        raise ValueError("Sort Start Work Area must be a Shift Door, Ballmat, or Discharge.")
+    if shift_work_area_type(final) != SHIFT_FLOW_DOOR:
+        raise ValueError("Final Door must be a Shift Door.")
+    transition_value = str(values.get("shift_flow_ballmat_transition", "")).strip()
+    if shift_work_area_type(start) == SHIFT_FLOW_BALLMAT:
+        if transition_value not in {"1", "2", "3"}:
+            raise ValueError("Ballmat Transition must be 1, 2, or 3.")
+        transition = int(transition_value)
+    else:
+        if transition_value:
+            raise ValueError("Ballmat Transition is only used when Sort Start is Ballmat.")
+        transition = None
+    plan = StaffingShiftFlowPlan(
+        person=person, setup_work_area=setup, sort_start_work_area=start,
+        ballmat_transition=transition, final_door_work_area=final,
+    )
+    db.session.add(plan)
+    return plan
+
+
+def _shift_flow_area(value, allowed, label, optional=False):
+    text = str(value or "").strip()
+    if not text:
+        if optional:
+            return None
+        raise ValueError(f"{label} is required for Shift Flow.")
+    try:
+        area = allowed.get(int(text))
+    except (TypeError, ValueError):
+        area = None
+    if not area:
+        raise ValueError(f"{label} must be a Shift Work Area.")
+    return area
+
+
+def _is_shift_work_area(area, by_id):
+    department = by_id.get(area.parent_id)
+    operation = by_id.get(getattr(department, "parent_id", None))
+    sort = by_id.get(getattr(operation, "parent_id", None))
+    return bool(
+        area.unit_type == "work_area" and department and department.unit_type == "department"
+        and operation and operation.unit_type == "operation" and sort and sort.unit_type == "sort"
+        and department.name.strip().casefold() == "shift"
+        and operation.name.strip().casefold() == "ramp"
+        and sort.name.strip().casefold() == "night"
+    )
 
 
 def classification_choices():

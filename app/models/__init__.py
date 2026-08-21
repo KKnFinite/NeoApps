@@ -66,6 +66,7 @@ from app.models.staffing_group import StaffingGroup
 from app.models.staffing_group_membership import StaffingGroupMembership
 from app.models.staffing_notification import StaffingNotification
 from app.models.staffing_person import StaffingPerson
+from app.models.staffing_shift_flow_plan import StaffingShiftFlowPlan
 from app.models.staffing_reporting_relationship import StaffingReportingRelationship
 from app.models.staffing_unit import StaffingUnit
 from app.models.staffing_work_assignment import StaffingWorkAssignment
@@ -132,6 +133,7 @@ __all__ = [
     "SortDateParkingAssignment",
     "SortDateTailState",
     "StaffingPerson",
+    "StaffingShiftFlowPlan",
     "StaffingReportingRelationship",
     "StaffingUnit",
     "StaffingWorkAssignment",

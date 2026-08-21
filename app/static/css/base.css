@@ -27062,3 +27062,8 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
+.neostaffing-people-console .neostaffing-shift-flow-optional:has(
+    [data-shift-flow-start] option[data-shift-flow-type="Ballmat"]:checked
+) [data-shift-flow-transition] {
+    display: grid !important;
+}

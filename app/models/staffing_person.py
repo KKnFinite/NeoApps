@@ -64,6 +64,10 @@ class StaffingPerson(db.Model):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    shift_flow_plan = db.relationship(
+        "StaffingShiftFlowPlan", back_populates="person", uselist=False,
+        cascade="all, delete-orphan"
+    )
     leadership_assignments = db.relationship(
         "StaffingLeadershipAssignment",
         back_populates="person",
