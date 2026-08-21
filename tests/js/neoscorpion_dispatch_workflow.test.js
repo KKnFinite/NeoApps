@@ -73,6 +73,26 @@ test("dispatch live refresh is clean except for changed assignment resource sele
 });
 
 
+test("dispatch truck card actions stay on Fuel Dispatch and guard rapid submits", () => {
+    const script = readScript("neoscorpion_fuel_dispatch_live.js");
+    const template = fs.readFileSync(
+        path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "fuel_dispatch.html"),
+        "utf8"
+    );
+
+    assert.match(template, /data-dispatch-truck-card-form/);
+    assert.match(template, /name="dispatch_truck_card" value="1"/);
+    assert.match(script, /const submitTruckCardAction/);
+    assert.match(script, /form\.dataset\.truckCardBusy === "true"/);
+    assert.match(script, /form\.dataset\.truckCardBusy = "true"/);
+    assert.match(script, /button\.disabled = true/);
+    assert.match(script, /event\.preventDefault\(\)/);
+    assert.match(script, /X-Requested-With": "XMLHttpRequest"/);
+    assert.match(script, /reloadPage\(\)/);
+    assert.doesNotMatch(template, /assets=open|manage-tonights-assets/);
+});
+
+
 test("dispatch assignment controls remain compact while silent dirty protection remains", () => {
     const script = readScript("neoscorpion_fuel_dispatch_live.js");
     const template = fs.readFileSync(

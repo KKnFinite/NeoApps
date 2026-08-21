@@ -338,6 +338,106 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
         self.assertEqual(truck.remaining_fuel_gallons, 4321)
         self.assertTrue(truck.is_active)
 
+    def test_dispatch_truck_card_actions_stay_on_dispatch_and_are_safe_to_repeat(self):
+        self._login_user("card_truck_dispatcher", "simulator")
+        operation = self._add_operation(date(2026, 8, 17))
+        truck = self._add_truck("TRUCK CARD", capacity=8000)
+        db.session.commit()
+        self.client.post(
+            "/neoscorpion/fuel-dispatch/assets",
+            data={
+                "action": "add_truck",
+                "fuel_truck_id": str(truck.id),
+                "status": "available",
+                "starting_gallons": "6000",
+                "current_gallons": "6000",
+            },
+        )
+        selected = NeoScorpionSortTruck.query.filter_by(
+            sort_date_operation_id=operation.id,
+            fuel_truck_id=truck.id,
+        ).one()
+        card_data = {
+            "dispatch_truck_card": "1",
+            "fuel_truck_id": str(truck.id),
+        }
+        headers = {
+            "Accept": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+
+        topped_off = self.client.post(
+            "/neoscorpion/fuel-dispatch/assets",
+            data={**card_data, "action": "mark_topping_off"},
+            headers=headers,
+        )
+        self.assertEqual(topped_off.status_code, 200)
+        self.assertEqual(topped_off.json, {"ok": True, "changed": True, "revision": 2})
+        db.session.refresh(selected)
+        self.assertEqual(selected.status, "topping_off")
+
+        duplicate_top_off = self.client.post(
+            "/neoscorpion/fuel-dispatch/assets",
+            data={**card_data, "action": "mark_topping_off"},
+            headers=headers,
+        )
+        self.assertEqual(duplicate_top_off.status_code, 200)
+        self.assertEqual(
+            duplicate_top_off.json,
+            {"ok": True, "changed": False, "revision": 2},
+        )
+
+        missing_gallons = self.client.post(
+            "/neoscorpion/fuel-dispatch/assets",
+            data={**card_data, "action": "complete_top_off", "current_gallons": ""},
+            headers=headers,
+        )
+        self.assertEqual(missing_gallons.status_code, 400)
+        self.assertIn("Enter current gallons", missing_gallons.json["error"])
+        over_capacity = self.client.post(
+            "/neoscorpion/fuel-dispatch/assets",
+            data={**card_data, "action": "complete_top_off", "current_gallons": "8001"},
+            headers=headers,
+        )
+        self.assertEqual(over_capacity.status_code, 400)
+        self.assertIn("capacity", over_capacity.json["error"])
+
+        returned = self.client.post(
+            "/neoscorpion/fuel-dispatch/assets",
+            data={**card_data, "action": "complete_top_off", "current_gallons": "7000"},
+            headers=headers,
+        )
+        self.assertEqual(returned.status_code, 200)
+        self.assertEqual(returned.json, {"ok": True, "changed": True, "revision": 3})
+        db.session.refresh(selected)
+        self.assertEqual(selected.status, "available")
+        self.assertEqual(selected.current_gallons, 7000)
+
+        duplicate_return = self.client.post(
+            "/neoscorpion/fuel-dispatch/assets",
+            data={**card_data, "action": "complete_top_off", "current_gallons": "7000"},
+            headers=headers,
+        )
+        self.assertEqual(duplicate_return.status_code, 400)
+        self.assertIn("not currently topping off", duplicate_return.json["error"])
+
+        fallback = self.client.post(
+            "/neoscorpion/fuel-dispatch/assets",
+            data={**card_data, "action": "mark_topping_off"},
+        )
+        self.assertEqual(fallback.status_code, 302)
+        self.assertEqual(fallback.headers["Location"], "/neoscorpion/fuel-dispatch")
+
+        ordinary_assets = self.client.post(
+            "/neoscorpion/fuel-dispatch/assets",
+            data={"action": "set_islands", "fuel_island_count": "1"},
+        )
+        self.assertEqual(ordinary_assets.status_code, 302)
+        self.assertEqual(
+            ordinary_assets.headers["Location"],
+            "/neoscorpion/fuel-dispatch?assets=open#manage-tonights-assets",
+        )
+
     def _add_operation(self, sort_date):
         operation = SortDateOperation(
             gateway_id=self.gateway.id,

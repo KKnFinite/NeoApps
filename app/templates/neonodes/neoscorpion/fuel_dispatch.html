@@ -62,17 +62,21 @@
                         <div><span>Projected</span><i class="neoscorpion-truck-gauge neoscorpion-truck-gauge--projected{% if truck.projected_short %} is-short{% endif %}"><b{% if truck.projected_gauge_percent is not none %} style="--truck-gauge-percent: {{ truck.projected_gauge_percent }}%"{% endif %}></b></i></div>
                     </div>
                     {% if can_manage_assets and truck.status == "available" %}
-                    <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
+                    <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}" data-dispatch-truck-card-form>
                         <input type="hidden" name="action" value="mark_topping_off">
+                        <input type="hidden" name="dispatch_truck_card" value="1">
                         <input type="hidden" name="fuel_truck_id" value="{{ truck.truck_id }}">
                         <button class="action-button neoscorpion-truck-card-action" type="submit">TOP OFF</button>
+                        <span class="neoscorpion-truck-card-save-status" data-dispatch-truck-card-status aria-live="polite"></span>
                     </form>
                     {% elif can_manage_assets and truck.status == "topping_off" %}
-                    <form class="neoscorpion-truck-return-form" method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
+                    <form class="neoscorpion-truck-return-form" method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}" data-dispatch-truck-card-form>
                         <input type="hidden" name="action" value="complete_top_off">
+                        <input type="hidden" name="dispatch_truck_card" value="1">
                         <input type="hidden" name="fuel_truck_id" value="{{ truck.truck_id }}">
                         <input name="current_gallons" inputmode="numeric" min="0" {% if truck.capacity_gallons is not none %}max="{{ truck.capacity_gallons }}"{% endif %} placeholder="Gallons" aria-label="Returned current gallons for truck {{ truck.truck_number }}" required>
                         <button class="action-button neoscorpion-truck-card-action" type="submit">RETURN</button>
+                        <span class="neoscorpion-truck-card-save-status" data-dispatch-truck-card-status aria-live="polite"></span>
                     </form>
                     {% endif %}
                 </article>

@@ -256,6 +256,38 @@
         }
     };
 
+    const submitTruckCardAction = async (form, button) => {
+        if (form.dataset.truckCardBusy === "true") {
+            return;
+        }
+        const status = form.querySelector("[data-dispatch-truck-card-status]");
+        form.dataset.truckCardBusy = "true";
+        if (button) button.disabled = true;
+        setStatus(status, "Saving...");
+        try {
+            const response = await fetch(form.action, {
+                method: "POST",
+                body: new FormData(form),
+                cache: "no-store",
+                credentials: "same-origin",
+                headers: {
+                    "Accept": "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.ok !== true) {
+                throw new Error(payload.error || "Truck update failed.");
+            }
+            adoptFingerprint(payload);
+            reloadPage();
+        } catch (error) {
+            form.dataset.truckCardBusy = "false";
+            if (button) button.disabled = false;
+            setStatus(status, `Save Failed: ${error.message || "Unable to update this truck."}`, "error");
+        }
+    };
+
     root.addEventListener("input", (event) => {
         if (isEditableControl(event.target) && !event.target.matches("[data-dispatch-autosave]")) {
             syncDirtyState();
@@ -274,6 +306,15 @@
         }
     });
     root.addEventListener("submit", (event) => {
+        const truckCardForm = event.target.closest("[data-dispatch-truck-card-form]");
+        if (truckCardForm) {
+            event.preventDefault();
+            submitTruckCardAction(
+                truckCardForm,
+                event.submitter || truckCardForm.querySelector("button[type='submit']")
+            );
+            return;
+        }
         const button = event.submitter?.matches("[data-dispatch-assignment-submit]")
             ? event.submitter
             : null;

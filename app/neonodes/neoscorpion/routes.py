@@ -517,6 +517,15 @@ def fuel_dispatch_end_early():
 @gateway_node_required("scorpion")
 def manage_nightly_assets():
     gateway = get_current_gateway()
+    action = (request.form.get("action") or "").strip()
+    compact_truck_card = (
+        request.form.get("dispatch_truck_card") == "1"
+        and action in {"mark_topping_off", "complete_top_off"}
+    )
+    json_response = compact_truck_card and bool(
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or request.accept_mimetypes.best == "application/json"
+    )
     access = permission_access(
         FUEL_DISPATCH_VIEW_PERMISSION,
         FUEL_DISPATCH_EDIT_PERMISSION,
@@ -527,6 +536,8 @@ def manage_nightly_assets():
         return redirect(url_for("neoscorpion.index"))
     if not access["can_edit"]:
         db.session.rollback()
+        if json_response:
+            return _json_no_store({"ok": False, "error": "Access denied."}, 403)
         flash("Access denied.", "error")
         return _dispatch_response(gateway, access, status_code=403)
 
@@ -548,6 +559,20 @@ def manage_nightly_assets():
             else "Nightly assets changed. Reload and try again."
         )
         flash(message, "error")
+        if json_response:
+            return _json_no_store({"ok": False, "error": message}, 400)
+
+    if json_response:
+        return _json_no_store(
+            {
+                "ok": True,
+                "changed": result.changed,
+                "revision": result.revision,
+            }
+        )
+
+    if compact_truck_card:
+        return redirect(url_for("neoscorpion.fuel_dispatch"))
 
     return redirect(
         url_for(
