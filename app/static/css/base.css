@@ -24065,23 +24065,24 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 .neoscorpion-dispatch-assignment-action,
 .neoscorpion-truck-card-action {
     width: auto;
+    min-height: 0;
     padding: 3px 6px;
     font-size: 0.62rem;
     line-height: 1.1;
+    white-space: nowrap;
 }
 
-.neoscorpion-dispatch-save-status,
-.neoscorpion-assignment-live-waiting {
+.neoscorpion-dispatch-assignment-cell {
+    white-space: nowrap;
+}
+
+.neoscorpion-dispatch-save-status {
+    display: inline;
     min-height: 0;
     margin-top: 1px;
     font-size: 0.58rem;
     line-height: 1.05;
-}
-
-.neoscorpion-assignment-live-waiting {
-    display: block;
-    color: var(--node-scorpion-highlight);
-    font-weight: 800;
+    white-space: normal;
 }
 
 .neoscorpion-assignment-update {

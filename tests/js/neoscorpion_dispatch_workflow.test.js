@@ -63,13 +63,35 @@ test("dispatch live refresh is clean except for changed assignment resource sele
 
     assert.match(script, /select\[name='assigned_fueler_user_id'\]/);
     assert.match(script, /select\[name='assigned_truck_id'\]/);
-    assert.match(script, /data-assignment-live-waiting/);
+    assert.doesNotMatch(script, /LIVE UPDATE WAITING|data-assignment-live-waiting/);
     assert.doesNotMatch(script, /data-fuel-dispatch-update-banner/);
     assert.doesNotMatch(dispatchTemplate, /UPDATES AVAILABLE|REFRESH NOW/);
     assert.match(dispatchTemplate, /TOP OFF/);
     assert.match(dispatchTemplate, /RETURN/);
     assert.doesNotMatch(assetsTemplate, /Top Off Complete|value="mark_topping_off"|value="complete_top_off"/);
     assert.doesNotMatch(assetsTemplate, /value="topping_off">Topping Off/);
+});
+
+
+test("dispatch assignment controls remain compact while silent dirty protection remains", () => {
+    const script = readScript("neoscorpion_fuel_dispatch_live.js");
+    const template = fs.readFileSync(
+        path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "fuel_dispatch.html"),
+        "utf8"
+    );
+    const css = fs.readFileSync(
+        path.join(__dirname, "..", "..", "app", "static", "css", "base.css"),
+        "utf8"
+    );
+
+    assert.match(script, /if \(!hasUnsavedControls\(\)\)/);
+    assert.match(script, /window\.location\.reload\(\)/);
+    assert.match(template, /data-dispatch-assignment-submit/);
+    assert.match(template, /neoscorpion-dispatch-assignment-cell/);
+    assert.match(css, /neoscorpion-dispatch-assignment-action/);
+    assert.match(css, /white-space: nowrap/);
+    assert.match(css, /\.neoscorpion-dispatch-save-status \{/);
+    assert.doesNotMatch(css, /neoscorpion-assignment-live-waiting/);
 });
 
 

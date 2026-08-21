@@ -79,15 +79,7 @@
     const handleChangedFingerprint = () => {
         if (!hasUnsavedControls()) {
             reloadPage();
-            return;
         }
-        root.querySelectorAll("[data-dispatch-assignment-form]").forEach((form) => {
-            const waiting = form.querySelector("[data-assignment-live-waiting]");
-            if (waiting && protectedControls().some(
-                (control) => control.closest("[data-dispatch-assignment-form]") === form
-                    && initialControlValues.get(control) !== controlValue(control)
-            )) waiting.hidden = false;
-        });
     };
 
     const poll = async () => {

@@ -318,9 +318,8 @@
                                 <small>{{ row.normal_completion_reason }}</small>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td class="neoscorpion-dispatch-assignment-cell">
                                 <button class="action-button neoscorpion-save-button neoscorpion-dispatch-assignment-action" type="submit" data-dispatch-assignment-submit>{{ "UPDATE ASSIGNMENT" if row.assignment else "ASSIGN" }}</button>
-                                <small class="neoscorpion-assignment-live-waiting" data-assignment-live-waiting aria-live="polite" hidden>LIVE UPDATE WAITING</small>
                                 <small class="neoscorpion-save-status neoscorpion-dispatch-save-status" data-assignment-save-status aria-live="polite"></small>
                             </td>
                         </form>
