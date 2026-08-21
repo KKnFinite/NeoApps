@@ -558,7 +558,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "last_name": "Report",
                 "seniority_date": "2020-01-01",
                 "classification": "part_time",
-                "phone_number": "555-0100",
+                "phone_number": "555-555-0100",
             }
         )
         staffing_service.assign_work_area(person, work_area)
@@ -749,7 +749,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             b"PEOPLE CONTROL DECK",
         ):
             self.assertNotIn(stale_label, response.data)
-        self.assertIn(b"Organization hierarchy", response.data)
+        self.assertIn(b"data-people-tree-scroll", response.data)
         self.assertIn(b"ADD EMPLOYEE", response.data)
         self.assertIn(b"neostaffing-people-roster-table", response.data)
         self.assertIn(b"All statuses", response.data)
@@ -832,7 +832,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
 
         self.assertEqual(people_page.status_code, 200)
-        self.assertIn(b"Organization hierarchy", people_page.data)
+        self.assertIn(b"data-people-tree-scroll", people_page.data)
         self.assertEqual(created.status_code, 302)
         self.assertEqual(updated.status_code, 302)
         self.assertEqual(db.session.get(StaffingPerson, person.id).last_name, "Updated")
@@ -897,7 +897,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         people_page = self.client.get(f"/neostaffing/people?work_area_id={work_area.id}")
         self.assertEqual(people_page.status_code, 200)
-        self.assertIn(b"Organization hierarchy", people_page.data)
+        self.assertIn(b"data-people-tree-scroll", people_page.data)
         self.assertIn(b"ADD EMPLOYEE", people_page.data)
         self.assertIn(b"neostaffing-people-roster-table", people_page.data)
         self.assertIn(b"neostaffing-people-detail-drawer", people_page.data)
@@ -1260,7 +1260,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"People", response.data)
-        self.assertIn(b"Organization hierarchy", response.data)
+        self.assertIn(b"data-people-tree-scroll", response.data)
         self.assertNotIn(b"Step 1", response.data)
         self.assertNotIn(b"Step 2", response.data)
         self.assertNotIn(b"Select Operation", response.data)
@@ -1331,7 +1331,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
 
         self.assertEqual(initial.status_code, 200)
-        self.assertIn(b"Organization hierarchy", initial.data)
+        self.assertIn(b"data-people-tree-scroll", initial.data)
         self.assertIn(b"neostaffing-people-org-tree", initial.data)
         self.assertIn(b"data-people-tree-toggle", initial.data)
         self.assertIn(b"data-people-tree-scroll", initial.data)
@@ -1790,7 +1790,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "first_name": "Single",
                 "last_name": "Employee",
                 "seniority_date": "2020-01-01",
-                "phone_number": "555-0100",
+                "phone_number": "555-555-0100",
                 "classification": "part_time",
                 "employee_status": "active",
                 "initial_work_area_unit_id": str(work_area.id),
@@ -1804,7 +1804,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "employee_rows": (
                     "Employee ID\tFirst Name\tLast Name\tSeniority Date\tPhone\tClassification\tEmployee Status\n"
                     "PEOPLE-TWO\tBulk\tOne\t2020-01-02\t\tpart_time\tactive\n"
-                    "PEOPLE-THREE\tBulk\tTwo\t2020-01-03\t555-0103\tfull_time_combo\tfmla"
+                    "PEOPLE-THREE\tBulk\tTwo\t2020-01-03\t555-555-0103\tfull_time_combo\tfmla"
                 ),
             },
             follow_redirects=True,
@@ -1817,6 +1817,71 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         for employee_id in ("PEOPLE-ONE", "PEOPLE-TWO", "PEOPLE-THREE"):
             person = StaffingPerson.query.filter_by(employee_id=employee_id).one()
             self.assertEqual(person.work_assignment.work_area_unit_id, work_area.id)
+
+    def test_people_normalizes_names_and_phone_numbers(self):
+        _sort, _operation, _department, work_area = self._staffing_hierarchy()
+        person = staffing_service.create_person(
+            {
+                "employee_id": "PEOPLE-NORMALIZE",
+                "first_name": "KADE",
+                "last_name": "anderson",
+                "seniority_date": "2020-01-01",
+                "phone_number": "(555) 555-0101",
+                "classification": "part_time",
+            }
+        )
+        self.assertEqual((person.first_name, person.last_name), ("Kade", "Anderson"))
+        self.assertEqual(person.phone_number, "555-555-0101")
+        staffing_service.update_person(
+            person,
+            {
+                "employee_id": person.employee_id,
+                "first_name": "JANE",
+                "last_name": "DOE",
+                "seniority_date": "2020-01-01",
+                "phone_number": "5555550102",
+                "classification": "part_time",
+                "employee_status": "active",
+                "active": "1",
+            },
+        )
+        self.assertEqual((person.first_name, person.last_name, person.phone_number), ("Jane", "Doe", "555-555-0102"))
+        with self.assertRaisesRegex(ValueError, "exactly 10 digits"):
+            staffing_service.create_person(
+                {
+                    "employee_id": "PEOPLE-BAD-PHONE",
+                    "first_name": "Bad",
+                    "last_name": "Phone",
+                    "seniority_date": "2020-01-01",
+                    "phone_number": "555-0100",
+                    "classification": "part_time",
+                }
+            )
+        with self.assertRaisesRegex(ValueError, "Unsupported classification"):
+            staffing_service.create_person(
+                {
+                    "employee_id": "PEOPLE-BAD-CLASS",
+                    "first_name": "Bad",
+                    "last_name": "Class",
+                    "seniority_date": "2020-01-01",
+                    "classification": "20c",
+                }
+            )
+        people = staffing_service.create_people_batch(
+            [
+                {
+                    "employee_id": "PEOPLE-BULK-NORMALIZE",
+                    "first_name": "BULK",
+                    "last_name": "person",
+                    "seniority_date": "2020-01-01",
+                    "phone_number": "555.555.0103",
+                    "classification": "part_time",
+                    "employee_status": "active",
+                }
+            ],
+            work_area,
+        )
+        self.assertEqual((people[0].first_name, people[0].last_name, people[0].phone_number), ("Bulk", "Person", "555-555-0103"))
 
     def test_people_bulk_create_rejects_duplicate_and_existing_ids_atomically(self):
         simulator = self._user("staffing_people_bulk_duplicate")

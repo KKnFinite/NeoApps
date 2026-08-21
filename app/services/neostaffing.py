@@ -243,8 +243,8 @@ def create_people_batch(rows, work_area):
 
 def _person_values(values):
     employee_id = _required_text(values.get("employee_id"), "Employee ID")
-    first_name = _required_text(values.get("first_name"), "First name")
-    last_name = _required_text(values.get("last_name"), "Last name")
+    first_name = _normalize_person_name(values.get("first_name"), "First name")
+    last_name = _normalize_person_name(values.get("last_name"), "Last name")
     seniority_date = _parse_date(values.get("seniority_date"), "Seniority date")
     classification = _normalize_choice(
         values.get("classification"),
@@ -256,7 +256,7 @@ def _person_values(values):
         STAFFING_EMPLOYEE_STATUSES,
         "Employee Status",
     )
-    phone_number = _optional_text(values.get("phone_number"))
+    phone_number = _normalize_phone_number(values.get("phone_number"))
     active = _parse_bool(values.get("active"), default=True)
 
     return {
@@ -3319,6 +3319,21 @@ def _required_text(value, label):
 def _optional_text(value):
     text = str(value or "").strip()
     return text or None
+
+
+def _normalize_person_name(value, label):
+    text = _required_text(value, label)
+    return text[:1].upper() + text[1:].lower()
+
+
+def _normalize_phone_number(value):
+    text = _optional_text(value)
+    if not text:
+        return None
+    digits = re.sub(r"\D", "", text)
+    if len(digits) != 10:
+        raise ValueError("Phone number must contain exactly 10 digits.")
+    return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
 
 
 def _normalize_choice(value, allowed, label):
