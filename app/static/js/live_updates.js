@@ -743,10 +743,39 @@
         });
     };
 
+    const bindPeopleDrawerClose = () => {
+        const console = document.querySelector(".neostaffing-people-console");
+        if (!console) {
+            return;
+        }
+        const closePeopleDrawers = () => {
+            document.querySelectorAll("[data-neostaffing-drawer]").forEach((drawer) => {
+                drawer.open = false;
+            });
+            document.querySelectorAll(".neostaffing-people-detail-drawer").forEach((drawer) => {
+                drawer.hidden = true;
+            });
+        };
+        document.addEventListener("click", (event) => {
+            if (event.target.closest("[data-neostaffing-close-drawer]")) {
+                closePeopleDrawers();
+            }
+        });
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+                closePeopleDrawers();
+            }
+        });
+    };
+
     if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", () => bindAlertTrays());
+        document.addEventListener("DOMContentLoaded", () => {
+            bindAlertTrays();
+            bindPeopleDrawerClose();
+        });
     } else {
         bindAlertTrays();
+        bindPeopleDrawerClose();
     }
 
     window.NeoLiveUpdates = Object.freeze({
