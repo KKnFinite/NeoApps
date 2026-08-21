@@ -86,6 +86,18 @@ class ResourceGap:
     unavailable_reason: str | None
 
 
+@dataclass(frozen=True)
+class AssignmentResourceRecommendation:
+    available: bool
+    fueler_id: int | None
+    truck_id: int | None
+    feasible_start_utc: datetime | None
+    predicted_finish_utc: datetime | None
+    fuel_complete_deadline_utc: datetime | None
+    duration_minutes: Decimal | None
+    unavailable_reason: str | None
+
+
 def assignment_mission_timing(
     *,
     mission,
@@ -332,6 +344,108 @@ def _assignment_finished(assignment, work_state):
 
 def _record_value(record, name, default=None):
     return record.get(name, default) if isinstance(record, dict) else getattr(record, name, default)
+
+
+def recommend_assignment_resources(
+    *,
+    assignment,
+    mission_timing,
+    fueler_candidates,
+    truck_candidates,
+    resource_calendars,
+    now_utc,
+):
+    """Choose the earliest feasible advisory pair from preloaded candidates/maps."""
+    deadline = mission_timing.fuel_complete_deadline_utc
+    duration = mission_timing.total_duration_minutes
+    if not mission_timing.available:
+        return _recommendation_unavailable("mission_timing_unavailable", deadline, duration)
+    if mission_timing.deadline_feasible is False:
+        return _recommendation_unavailable("deadline_at_risk", deadline, duration)
+
+    assignment_id = getattr(assignment, "id", None)
+    fixed_fueler_id = getattr(assignment, "assigned_fueler_user_id", None)
+    fixed_truck_id = getattr(assignment, "assigned_truck_id", None)
+    if fixed_fueler_id is not None and fixed_truck_id is not None:
+        return _recommendation_unavailable("already_assigned", deadline, duration)
+
+    fuelers = _recommendation_candidates(fueler_candidates, fixed_fueler_id)
+    trucks = _recommendation_candidates(truck_candidates, fixed_truck_id)
+    if not fuelers:
+        return _recommendation_unavailable("no_eligible_fueler", deadline, duration)
+    if not trucks:
+        return _recommendation_unavailable("no_eligible_truck", deadline, duration)
+
+    candidates = []
+    for fueler in fuelers:
+        fueler_id = _candidate_id(fueler)
+        fueler_calendar = _calendar_without_assignment(
+            resource_calendars.get(("fueler", fueler_id)), assignment_id
+        )
+        for truck in trucks:
+            truck_id = _candidate_id(truck)
+            truck_calendar = _calendar_without_assignment(
+                resource_calendars.get(("truck", truck_id)), assignment_id
+            )
+            gap = find_earliest_resource_gap(
+                candidate_earliest_start_utc=mission_timing.aircraft_ready_utc,
+                candidate_duration_minutes=duration,
+                busy_windows=(fueler_calendar.busy_windows + truck_calendar.busy_windows),
+                unknown_commitments=(
+                    fueler_calendar.unknown_commitments + truck_calendar.unknown_commitments
+                ),
+                now_utc=now_utc,
+                completion_deadline_utc=deadline,
+            )
+            if not gap.available:
+                continue
+            candidates.append((
+                gap.start_utc, gap.finish_utc, _candidate_sort_key(fueler),
+                _candidate_sort_key(truck), fueler_id, truck_id,
+            ))
+    if not candidates:
+        return _recommendation_unavailable("no_feasible_pair", deadline, duration)
+    start_utc, finish_utc, _fueler_key, _truck_key, fueler_id, truck_id = min(candidates)
+    return AssignmentResourceRecommendation(
+        True, fueler_id, truck_id, start_utc, finish_utc, deadline, duration, None
+    )
+
+
+def _recommendation_unavailable(reason, deadline, duration):
+    return AssignmentResourceRecommendation(
+        False, None, None, None, None, deadline, duration, reason
+    )
+
+
+def _recommendation_candidates(candidates, fixed_id):
+    if fixed_id is not None:
+        return (fixed_id,)
+    return tuple(sorted(candidates, key=_candidate_sort_key))
+
+
+def _candidate_id(candidate):
+    if isinstance(candidate, int):
+        return candidate
+    return candidate.get("id") if isinstance(candidate, dict) else candidate.id
+
+
+def _candidate_sort_key(candidate):
+    if isinstance(candidate, int):
+        return ("", candidate)
+    if isinstance(candidate, dict):
+        return (str(candidate.get("sort_key", candidate.get("display_name", ""))), candidate["id"])
+    return (str(getattr(candidate, "sort_key", getattr(candidate, "display_name", ""))), candidate.id)
+
+
+def _calendar_without_assignment(calendar, assignment_id):
+    if calendar is None:
+        return ResourceCalendar("", 0, (), (), False)
+    windows = tuple(item for item in calendar.busy_windows if item.assignment_id != assignment_id)
+    unknown = tuple(item for item in calendar.unknown_commitments if item.assignment_id != assignment_id)
+    return ResourceCalendar(
+        calendar.resource_type, calendar.resource_id, windows, unknown,
+        _has_manual_overlap(windows),
+    )
 
 
 def estimate_fuel_demand_gallons(
