@@ -2,9 +2,17 @@
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from datetime import datetime, timedelta
 
 
 DEFAULT_PLANNING_INBOUND_FALLBACK_LBS = 12_000
+FUEL_COMPLETE_DEADLINE_OFFSETS_MINUTES = {
+    "B757": Decimal("12"),
+    "A300": Decimal("13"),
+    "B767ER": Decimal("13"),
+    "B747-400": Decimal("12"),
+    "B747-8": Decimal("12"),
+}
 
 
 @dataclass(frozen=True)
@@ -19,6 +27,125 @@ class EstimatedFuelDemand:
 class TruckProjection:
     gallons: int | None
     short: bool
+
+
+@dataclass(frozen=True)
+class AssignmentMissionTiming:
+    available: bool
+    aircraft_type: str | None
+    planning_demand_gallons: Decimal | None
+    setup_minutes: Decimal | None
+    pump_rate_gallons_per_minute: Decimal | None
+    pump_minutes: Decimal | None
+    finishing_minutes: Decimal | None
+    total_duration_minutes: Decimal | None
+    aircraft_ready_utc: datetime | None
+    aircraft_ready_source: str | None
+    fuel_complete_deadline_utc: datetime | None
+    earliest_possible_finish_utc: datetime | None
+    deadline_feasible: bool | None
+    unavailable_reason: str | None
+
+
+def assignment_mission_timing(
+    *,
+    mission,
+    operation,
+    aircraft_type,
+    planning_demand_gallons,
+    planning_settings,
+):
+    """Derive mission timing facts from already-loaded operational planning data."""
+    demand = _decimal_or_none(planning_demand_gallons)
+    setup_minutes = _decimal_or_none(getattr(planning_settings, "setup_minutes", None))
+    finishing_minutes = _decimal_or_none(
+        getattr(planning_settings, "finishing_minutes", None)
+    )
+    pump_rate = _decimal_or_none(
+        planning_settings.pump_rate_for(aircraft_type)
+        if aircraft_type in FUEL_COMPLETE_DEADLINE_OFFSETS_MINUTES
+        else None
+    )
+    eta_safety_buffer_minutes = _decimal_or_none(
+        getattr(planning_settings, "eta_safety_buffer_minutes", None)
+    )
+    base = {
+        "aircraft_type": aircraft_type,
+        "planning_demand_gallons": demand,
+        "setup_minutes": setup_minutes,
+        "pump_rate_gallons_per_minute": pump_rate,
+        "finishing_minutes": finishing_minutes,
+    }
+    if aircraft_type not in FUEL_COMPLETE_DEADLINE_OFFSETS_MINUTES:
+        return _timing_unavailable(base, "unsupported_aircraft")
+    if (
+        not planning_settings.is_complete_for(aircraft_type)
+        or eta_safety_buffer_minutes is None
+    ):
+        return _timing_unavailable(base, "planning_settings_incomplete")
+    if demand is None:
+        return _timing_unavailable(base, "fuel_demand_unavailable")
+
+    actual_block_in = getattr(mission, "actual_block_in_datetime_utc", None)
+    eta = getattr(mission, "eta_datetime_utc", None)
+    if actual_block_in is not None:
+        aircraft_ready_utc = actual_block_in
+        aircraft_ready_source = "actual_block_in"
+    elif eta is not None:
+        aircraft_ready_utc = eta + _decimal_timedelta(
+            eta_safety_buffer_minutes
+        )
+        aircraft_ready_source = "eta_plus_buffer"
+    else:
+        return _timing_unavailable(base, "arrival_timing_unavailable")
+
+    departure = getattr(mission, "planned_datetime_utc", None)
+    if departure is None:
+        return _timing_unavailable(base, "departure_timing_unavailable")
+
+    pump_minutes = abs(demand) / pump_rate
+    total_duration_minutes = setup_minutes + pump_minutes + finishing_minutes
+    fuel_complete_deadline_utc = departure + _decimal_timedelta(
+        Decimal(getattr(operation, "window_minutes", 0) or 0)
+        - FUEL_COMPLETE_DEADLINE_OFFSETS_MINUTES[aircraft_type]
+    )
+    earliest_possible_finish_utc = aircraft_ready_utc + _decimal_timedelta(
+        total_duration_minutes
+    )
+    return AssignmentMissionTiming(
+        available=True,
+        **base,
+        pump_minutes=pump_minutes,
+        total_duration_minutes=total_duration_minutes,
+        aircraft_ready_utc=aircraft_ready_utc,
+        aircraft_ready_source=aircraft_ready_source,
+        fuel_complete_deadline_utc=fuel_complete_deadline_utc,
+        earliest_possible_finish_utc=earliest_possible_finish_utc,
+        deadline_feasible=earliest_possible_finish_utc <= fuel_complete_deadline_utc,
+        unavailable_reason=None,
+    )
+
+
+def _timing_unavailable(base, reason):
+    return AssignmentMissionTiming(
+        available=False,
+        **base,
+        pump_minutes=None,
+        total_duration_minutes=None,
+        aircraft_ready_utc=None,
+        aircraft_ready_source=None,
+        fuel_complete_deadline_utc=None,
+        earliest_possible_finish_utc=None,
+        deadline_feasible=None,
+        unavailable_reason=reason,
+    )
+
+
+def _decimal_timedelta(minutes):
+    microseconds = (
+        Decimal(minutes) * Decimal("60") * Decimal("1000000")
+    ).to_integral_value(rounding=ROUND_HALF_UP)
+    return timedelta(microseconds=int(microseconds))
 
 
 def estimate_fuel_demand_gallons(
