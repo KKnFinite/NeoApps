@@ -644,6 +644,13 @@ class NeoScorpionSettings(db.Model):
     planning_inbound_fuel_fallback_lbs = db.Column(db.Integer, nullable=True)
     fob_difference_threshold_lbs = db.Column(db.Integer, nullable=True)
     tf_vs_estimated_threshold_lbs = db.Column(db.Integer, nullable=True)
+    assignment_setup_minutes = db.Column(db.Numeric(8, 2), nullable=True)
+    assignment_finishing_minutes = db.Column(db.Numeric(8, 2), nullable=True)
+    assignment_eta_safety_buffer_minutes = db.Column(
+        db.Numeric(8, 2),
+        nullable=True,
+        default=5,
+    )
     updated_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
@@ -685,6 +692,10 @@ class NeoScorpionAircraftFuelSetting(db.Model):
     apu_rate_thousand_lbs_per_hour = db.Column(
         db.Numeric(8, 4),
         nullable=False,
+    )
+    assignment_pump_rate_gallons_per_minute = db.Column(
+        db.Numeric(10, 2),
+        nullable=True,
     )
     updated_by_user_id = db.Column(
         db.Integer,

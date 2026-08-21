@@ -29,6 +29,7 @@ from app.services.neoscorpion import (
     save_dispatch_row,
     save_dispatch_assignment,
     save_aircraft_fuel_settings,
+    save_assignment_planning_settings,
     save_fueler_entry,
     save_settings,
     save_truck,
@@ -850,6 +851,33 @@ def settings():
                 flash("AIRCRAFT APU RATES SAVED.", "success")
             else:
                 flash("NO AIRCRAFT APU RATE CHANGES.", "info")
+            return redirect(url_for("neoscorpion.settings"))
+
+        if action == "save_assignment_planning_settings":
+            if not access["can_edit"]:
+                db.session.rollback()
+                flash("Access denied.", "error")
+                return _settings_response(gateway, access, status_code=403)
+            try:
+                result = save_assignment_planning_settings(
+                    gateway,
+                    current_user,
+                    request.form,
+                )
+            except (IntegrityError, ValueError) as exc:
+                db.session.rollback()
+                message = (
+                    str(exc)
+                    if isinstance(exc, ValueError)
+                    else "Assignment planning settings changed. Reload Settings and try again."
+                )
+                flash(message, "error")
+                return _settings_response(gateway, access, status_code=400)
+            if result.changed:
+                db.session.commit()
+                flash("ASSIGNMENT PLANNING SETTINGS SAVED.", "success")
+            else:
+                flash("NO ASSIGNMENT PLANNING SETTING CHANGES.", "info")
             return redirect(url_for("neoscorpion.settings"))
 
         if not access["can_edit"]:

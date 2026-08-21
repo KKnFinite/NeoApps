@@ -11,6 +11,7 @@ from app.models import (
     GatewayNodeRole,
     NeoNode,
     NeoScorpionFuelAssignment,
+    NeoScorpionAircraftFuelSetting,
     NeoScorpionFuelTruck,
     NeoScorpionSettings,
     NeoScorpionSortTruck,
@@ -24,6 +25,7 @@ from app.models import (
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.neoscorpion import (
     CALCULATION_NOT_CONFIGURED_MESSAGE,
+    assignment_planning_settings,
     display_thousands_to_lbs,
     gallons_to_lbs,
     history_context,
@@ -403,6 +405,67 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertEqual(settings.fob_difference_threshold_lbs, 500)
         self.assertEqual(settings.tf_vs_estimated_threshold_lbs, 750)
         self.assertIn(b"Detailed aircraft-specific fuel calculations are not configured yet.", response.data)
+
+    def test_assignment_planning_settings_defaults_validation_and_readiness(self):
+        initial = assignment_planning_settings(self.gateway)
+        self.assertIsNone(initial.setup_minutes)
+        self.assertIsNone(initial.finishing_minutes)
+        self.assertEqual(initial.eta_safety_buffer_minutes, Decimal("5"))
+        self.assertTrue(all(
+            initial.pump_rate_for(aircraft_type) is None
+            for aircraft_type in ("B757", "A300", "B767ER", "B747-400", "B747-8")
+        ))
+        self.assertFalse(initial.is_complete_for("B757"))
+
+        user = self._login_approved_user(role="master")
+        valid_data = {
+            "action": "save_assignment_planning_settings",
+            "assignment_setup_minutes": "12.5",
+            "assignment_finishing_minutes": "8",
+            "assignment_eta_safety_buffer_minutes": "0",
+            "assignment_pump_rate_b757": "120.5",
+            "assignment_pump_rate_a300": "121",
+            "assignment_pump_rate_b767er": "122",
+            "assignment_pump_rate_b747_400": "123",
+            "assignment_pump_rate_b747_8": "124",
+        }
+        response = self.client.post("/neoscorpion/settings", data=valid_data)
+        self.assertEqual(response.status_code, 302)
+        settings = NeoScorpionSettings.query.filter_by(gateway_id=self.gateway.id).one()
+        self.assertEqual(settings.assignment_setup_minutes, Decimal("12.50"))
+        self.assertEqual(settings.assignment_finishing_minutes, Decimal("8.00"))
+        self.assertEqual(settings.assignment_eta_safety_buffer_minutes, Decimal("0.00"))
+        self.assertEqual(settings.updated_by_user_id, user.id)
+        self.assertEqual(NeoScorpionAircraftFuelSetting.query.count(), 5)
+        configured = assignment_planning_settings(self.gateway)
+        self.assertEqual(configured.pump_rate_for("B757"), Decimal("120.50"))
+        self.assertTrue(configured.is_complete_for("B757"))
+        self.assertTrue(configured.is_complete_for("B747-8"))
+
+        for field_name, value, expected in (
+            ("assignment_setup_minutes", "-1", "Setup Time cannot be negative"),
+            ("assignment_finishing_minutes", "-1", "Finishing Time cannot be negative"),
+            ("assignment_pump_rate_b757", "0", "B757 pump rate must be greater than zero"),
+            ("assignment_pump_rate_a300", "-1", "A300 pump rate must be greater than zero"),
+        ):
+            invalid = self.client.post(
+                "/neoscorpion/settings",
+                data={"action": "save_assignment_planning_settings", field_name: value},
+            )
+            self.assertEqual(invalid.status_code, 400)
+            self.assertIn(expected.encode(), invalid.data)
+
+    def test_assignment_planning_settings_permission_is_enforced(self):
+        self._login_approved_user(role="operator")
+        response = self.client.post(
+            "/neoscorpion/settings",
+            data={
+                "action": "save_assignment_planning_settings",
+                "assignment_setup_minutes": "10",
+            },
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(NeoScorpionSettings.query.count(), 0)
 
     def test_history_placeholder_is_permission_protected(self):
         self._login_approved_user(role="operator")

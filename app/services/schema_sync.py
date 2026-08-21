@@ -171,6 +171,12 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     },
     "neoscorpion_settings": {
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
+        "assignment_setup_minutes": "NUMERIC(8, 2)",
+        "assignment_finishing_minutes": "NUMERIC(8, 2)",
+        "assignment_eta_safety_buffer_minutes": "NUMERIC(8, 2)",
+    },
+    "neoscorpion_aircraft_fuel_settings": {
+        "assignment_pump_rate_gallons_per_minute": "NUMERIC(10, 2)",
     },
     "neoscorpion_fuel_assignments": {
         "fuel_on_board_at_utc": "DATETIME",
@@ -343,6 +349,12 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "neoscorpion_settings": {
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
+        "assignment_setup_minutes": "NUMERIC(8, 2)",
+        "assignment_finishing_minutes": "NUMERIC(8, 2)",
+        "assignment_eta_safety_buffer_minutes": "NUMERIC(8, 2)",
+    },
+    "neoscorpion_aircraft_fuel_settings": {
+        "assignment_pump_rate_gallons_per_minute": "NUMERIC(10, 2)",
     },
     "neoscorpion_fuel_assignments": {
         "fuel_on_board_at_utc": "TIMESTAMP",

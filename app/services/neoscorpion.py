@@ -51,6 +51,7 @@ from app.services.time_display import format_local_hhmm
 
 DEFAULT_FUEL_DENSITY_LBS_PER_GALLON = 6.7
 DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR = Decimal("0.30")
+DEFAULT_ASSIGNMENT_ETA_SAFETY_BUFFER_MINUTES = Decimal("5")
 CALCULATION_NOT_CONFIGURED_MESSAGE = "Fuel calculation not configured for this aircraft type yet."
 NEOSCORPION_FUEL_DISPATCH_REFRESH_KEY = "neoscorpion.fuel_dispatch"
 NEOSCORPION_FUEL_ASSIGNMENTS_REFRESH_KEY = "neoscorpion.fuel_assignments"
@@ -107,6 +108,13 @@ NEOSCORPION_TANK_LAYOUTS = {
 NEOSCORPION_APU_AIRCRAFT_TYPES = (
     "A300",
     "B757",
+    "B767ER",
+    "B747-400",
+    "B747-8",
+)
+NEOSCORPION_ASSIGNMENT_PLANNING_AIRCRAFT_TYPES = (
+    "B757",
+    "A300",
     "B767ER",
     "B747-400",
     "B747-8",
@@ -573,6 +581,7 @@ def settings_context(gateway):
         gateway,
         tuple(screen_key for screen_key, _label in NEOSCORPION_LIVE_REFRESH_SCREENS),
     )
+    assignment_planning = assignment_planning_settings(gateway)
     return {
         "settings": settings,
         "planning_inbound_fallback_display": format_display_thousands(
@@ -591,6 +600,15 @@ def settings_context(gateway):
             }
             for aircraft_type in NEOSCORPION_APU_AIRCRAFT_TYPES
         ],
+        "assignment_planning": assignment_planning,
+        "assignment_pump_rate_settings": [
+            {
+                "aircraft_type": aircraft_type,
+                "field_name": _assignment_pump_rate_field_name(aircraft_type),
+                "rate": assignment_planning.pump_rate_for(aircraft_type),
+            }
+            for aircraft_type in NEOSCORPION_ASSIGNMENT_PLANNING_AIRCRAFT_TYPES
+        ],
         "live_refresh_settings": [
             {
                 "screen_key": screen_key,
@@ -601,6 +619,50 @@ def settings_context(gateway):
         ],
         "live_refresh_allowed_seconds": LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
     }
+
+
+def assignment_planning_settings(gateway):
+    settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
+    aircraft_settings = {
+        row.aircraft_type: row
+        for row in NeoScorpionAircraftFuelSetting.query.filter(
+            NeoScorpionAircraftFuelSetting.gateway_id == gateway.id,
+            NeoScorpionAircraftFuelSetting.aircraft_type.in_(
+                NEOSCORPION_ASSIGNMENT_PLANNING_AIRCRAFT_TYPES
+            ),
+        ).all()
+    }
+    return AssignmentPlanningSettings(
+        setup_minutes=(
+            Decimal(settings.assignment_setup_minutes)
+            if settings is not None and settings.assignment_setup_minutes is not None
+            else None
+        ),
+        finishing_minutes=(
+            Decimal(settings.assignment_finishing_minutes)
+            if settings is not None and settings.assignment_finishing_minutes is not None
+            else None
+        ),
+        eta_safety_buffer_minutes=(
+            Decimal(settings.assignment_eta_safety_buffer_minutes)
+            if settings is not None
+            and settings.assignment_eta_safety_buffer_minutes is not None
+            else DEFAULT_ASSIGNMENT_ETA_SAFETY_BUFFER_MINUTES
+        ),
+        pump_rates_gallons_per_minute={
+            aircraft_type: (
+                Decimal(
+                    aircraft_settings[aircraft_type].assignment_pump_rate_gallons_per_minute
+                )
+                if aircraft_type in aircraft_settings
+                and aircraft_settings[
+                    aircraft_type
+                ].assignment_pump_rate_gallons_per_minute is not None
+                else None
+            )
+            for aircraft_type in NEOSCORPION_ASSIGNMENT_PLANNING_AIRCRAFT_TYPES
+        },
+    )
 
 
 def history_context(gateway):
@@ -724,6 +786,30 @@ class FuelInterruptionResult:
 
 @dataclass(frozen=True)
 class AircraftFuelSettingsSaveResult:
+    changed: bool
+
+
+@dataclass(frozen=True)
+class AssignmentPlanningSettings:
+    setup_minutes: Decimal | None
+    finishing_minutes: Decimal | None
+    eta_safety_buffer_minutes: Decimal
+    pump_rates_gallons_per_minute: dict[str, Decimal | None]
+
+    def pump_rate_for(self, aircraft_type):
+        return self.pump_rates_gallons_per_minute.get(aircraft_type)
+
+    def is_complete_for(self, aircraft_type):
+        return bool(
+            aircraft_type in NEOSCORPION_ASSIGNMENT_PLANNING_AIRCRAFT_TYPES
+            and self.setup_minutes is not None
+            and self.finishing_minutes is not None
+            and self.pump_rate_for(aircraft_type) is not None
+        )
+
+
+@dataclass(frozen=True)
+class AssignmentPlanningSettingsSaveResult:
     changed: bool
 
 
@@ -3264,6 +3350,74 @@ def save_aircraft_fuel_settings(gateway, user, form):
     return AircraftFuelSettingsSaveResult(changed=changed)
 
 
+def save_assignment_planning_settings(gateway, user, form):
+    settings = ensure_neoscorpion_settings(gateway)
+    setup_minutes = _parse_optional_minutes(
+        form.get("assignment_setup_minutes"),
+        "Setup Time",
+    )
+    finishing_minutes = _parse_optional_minutes(
+        form.get("assignment_finishing_minutes"),
+        "Finishing Time",
+    )
+    eta_safety_buffer_minutes = _parse_optional_minutes(
+        form.get("assignment_eta_safety_buffer_minutes"),
+        "Arrival ETA Safety Buffer",
+    )
+    if eta_safety_buffer_minutes is None:
+        eta_safety_buffer_minutes = DEFAULT_ASSIGNMENT_ETA_SAFETY_BUFFER_MINUTES
+
+    changed = False
+    for attribute, value in (
+        ("assignment_setup_minutes", setup_minutes),
+        ("assignment_finishing_minutes", finishing_minutes),
+        ("assignment_eta_safety_buffer_minutes", eta_safety_buffer_minutes),
+    ):
+        if getattr(settings, attribute) != value:
+            setattr(settings, attribute, value)
+            changed = True
+    if changed:
+        settings.updated_by_user_id = user.id
+
+    existing = {
+        row.aircraft_type: row
+        for row in NeoScorpionAircraftFuelSetting.query.filter(
+            NeoScorpionAircraftFuelSetting.gateway_id == gateway.id,
+            NeoScorpionAircraftFuelSetting.aircraft_type.in_(
+                NEOSCORPION_ASSIGNMENT_PLANNING_AIRCRAFT_TYPES
+            ),
+        )
+        .with_for_update()
+        .all()
+    }
+    for aircraft_type in NEOSCORPION_ASSIGNMENT_PLANNING_AIRCRAFT_TYPES:
+        field_name = _assignment_pump_rate_field_name(aircraft_type)
+        if field_name not in form:
+            continue
+        target_rate = _parse_optional_pump_rate(form.get(field_name), aircraft_type)
+        setting = existing.get(aircraft_type)
+        if setting is None and target_rate is None:
+            continue
+        if setting is None:
+            setting = NeoScorpionAircraftFuelSetting(
+                gateway_id=gateway.id,
+                aircraft_type=aircraft_type,
+                apu_rate_thousand_lbs_per_hour=DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR,
+                assignment_pump_rate_gallons_per_minute=target_rate,
+                updated_by_user_id=user.id,
+            )
+            db.session.add(setting)
+            changed = True
+        elif setting.assignment_pump_rate_gallons_per_minute != target_rate:
+            setting.assignment_pump_rate_gallons_per_minute = target_rate
+            setting.updated_by_user_id = user.id
+            changed = True
+
+    if changed:
+        db.session.flush()
+    return AssignmentPlanningSettingsSaveResult(changed=changed)
+
+
 def ensure_neoscorpion_settings(gateway):
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
     if settings:
@@ -4564,6 +4718,36 @@ def _effective_apu_rates(gateway_id):
 
 def _apu_rate_field_name(aircraft_type):
     return f"apu_rate_{aircraft_type.lower().replace('-', '_')}"
+
+
+def _assignment_pump_rate_field_name(aircraft_type):
+    return f"assignment_pump_rate_{aircraft_type.lower().replace('-', '_')}"
+
+
+def _parse_optional_minutes(value, label):
+    submitted = (value or "").strip()
+    if not submitted:
+        return None
+    amount = _parse_setting_decimal(submitted, label)
+    if amount < 0:
+        raise ValueError(f"{label} cannot be negative.")
+    return amount
+
+
+def _parse_optional_pump_rate(value, aircraft_type):
+    submitted = (value or "").strip()
+    if not submitted:
+        return None
+    amount = _parse_setting_decimal(submitted, f"{aircraft_type} pump rate")
+    if amount <= 0:
+        raise ValueError(f"{aircraft_type} pump rate must be greater than zero.")
+    return amount
+
+
+def _parse_setting_decimal(value, label):
+    if not re.fullmatch(r"-?\d+(?:\.\d{1,2})?", value):
+        raise ValueError(f"{label} must be a nonnegative number with up to two decimals.")
+    return Decimal(value)
 
 
 def _parse_apu_rate(value):

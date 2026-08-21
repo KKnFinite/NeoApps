@@ -40,6 +40,35 @@
 
     <section class="neoscorpion-panel">
         <div class="neoscorpion-panel-head">
+            <span>Assignment Planning</span>
+            <strong>FUTURE RECOMMENDATIONS</strong>
+        </div>
+        <form class="neoscorpion-settings-form" method="post">
+            <input type="hidden" name="action" value="save_assignment_planning_settings">
+            <p class="neoscorpion-helper">Global Timing</p>
+            <label>Setup Time, minutes
+                <input name="assignment_setup_minutes" value="{{ assignment_planning.setup_minutes if assignment_planning.setup_minutes is not none else '' }}" inputmode="decimal" min="0" step="0.01" {% if not can_edit %}readonly{% endif %}>
+            </label>
+            <label>Finishing Time, minutes
+                <input name="assignment_finishing_minutes" value="{{ assignment_planning.finishing_minutes if assignment_planning.finishing_minutes is not none else '' }}" inputmode="decimal" min="0" step="0.01" {% if not can_edit %}readonly{% endif %}>
+            </label>
+            <label>Arrival ETA Safety Buffer, minutes
+                <input name="assignment_eta_safety_buffer_minutes" value="{{ assignment_planning.eta_safety_buffer_minutes }}" inputmode="decimal" min="0" step="0.01" {% if not can_edit %}readonly{% endif %}>
+            </label>
+            <p class="neoscorpion-helper">Pump Rates, gallons/minute</p>
+            {% for item in assignment_pump_rate_settings %}
+            <label>{{ item.aircraft_type }}, gallons/minute
+                <input name="{{ item.field_name }}" value="{{ item.rate if item.rate is not none else '' }}" inputmode="decimal" min="0" step="0.01" {% if not can_edit %}readonly{% endif %}>
+            </label>
+            {% endfor %}
+            {% if can_edit %}
+            <button class="action-button neoscorpion-save-button" type="submit">Save Assignment Planning</button>
+            {% endif %}
+        </form>
+    </section>
+
+    <section class="neoscorpion-panel">
+        <div class="neoscorpion-panel-head">
             <span>Aircraft APU Rates</span>
             <strong>THOUSAND LB / HR</strong>
         </div>
