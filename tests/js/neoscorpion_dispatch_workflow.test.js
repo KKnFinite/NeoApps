@@ -12,14 +12,37 @@ const readScript = (name) => fs.readFileSync(
 
 test("dispatch autosave adopts its own revision and excludes autosave fields from dirty controls", () => {
     const script = readScript("neoscorpion_fuel_dispatch_live.js");
+    const template = fs.readFileSync(
+        path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "fuel_dispatch.html"),
+        "utf8"
+    );
 
     assert.match(script, /const adoptFingerprint/);
     assert.match(script, /revision = Number\(payload\.revision/);
+    assert.match(script, /input\.dataset\.missionId/);
+    assert.doesNotMatch(script, /input\.closest\("form"\)/);
+    assert.match(template, /data-autosave-field="required_fuel" data-mission-id="\{\{ row\.mission\.id \}\}"/);
+    assert.match(template, /data-autosave-field="inbound_fuel" data-mission-id="\{\{ row\.mission\.id \}\}"/);
     assert.match(script, /:not\(\[data-dispatch-autosave\]\)/);
     assert.match(script, /data-autosave-failed/);
     assert.match(script, /event\.preventDefault\(\)/);
     assert.match(script, /data-dispatch-assignment-submit/);
     assert.match(script, /window\.location\.reload\(\)/);
+});
+
+
+test("dispatch compact rows retain authoritative copy data and exceptional fuel badges", () => {
+    const template = fs.readFileSync(
+        path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "fuel_dispatch.html"),
+        "utf8"
+    );
+
+    assert.doesNotMatch(template, /<th>Truck Fuel<\/th>/);
+    assert.match(template, /neoscorpion-mission-truck-bars/);
+    assert.match(template, /row\.cycle_type != 'fuel'/);
+    assert.match(template, /data-copy-value="\{\{ row\.load_planning_output \}\}"/);
+    assert.match(template, />COPY<\/button>/);
+    assert.doesNotMatch(template, /COPY LOAD PLANNING/);
 });
 
 

@@ -119,9 +119,8 @@
             syncDirtyState();
             return;
         }
-        const form = input.closest("form");
         const status = input.parentElement?.querySelector("[data-autosave-status]");
-        const missionId = form?.querySelector("input[name='mission_id']")?.value || "";
+        const missionId = input.dataset.missionId || "";
         input.dataset.autosaveSaving = "true";
         setStatus(status, "Saving...");
         const body = new FormData();

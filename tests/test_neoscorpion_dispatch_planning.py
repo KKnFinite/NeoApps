@@ -243,7 +243,9 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
         self._login_user("truck_visual_dispatcher", "simulator")
         rendered = self.client.get("/neoscorpion/fuel-dispatch")
         self.assertIn(b"TRUCK FUEL STATUS", rendered.data)
-        self.assertIn(b"PROJECTED 8,000 gal / 40%", rendered.data)
+        self.assertIn(b"neoscorpion-mission-truck-bars", rendered.data)
+        self.assertNotIn(b"<th>Truck Fuel</th>", rendered.data)
+        self.assertNotIn(b"NOW 8,000 gal", rendered.data)
 
     def test_truck_visuals_preserve_status_short_and_incomplete_states(self):
         short_truck = self._nightly_truck("21", 1_000)
@@ -345,6 +347,9 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
             b'data-copy-value="UPS0952 MHR N160UP NEO &gt; 60.7 CF &gt; 4700"',
             rendered.data,
         )
+        self.assertIn(b">COPY</button>", rendered.data)
+        self.assertNotIn(b"COPY LOAD PLANNING", rendered.data)
+        self.assertNotIn(b">FUEL</span>", rendered.data)
 
         next(
             state

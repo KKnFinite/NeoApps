@@ -3,6 +3,18 @@
 {% block title %}Fuel Dispatch | NeoScorpion{% endblock %}
 
 {% block content %}
+{% macro mission_truck_bars(truck_visual) -%}
+{% if truck_visual %}
+<div
+    class="neoscorpion-mission-truck-bars{% if truck_visual.projected_short %} is-short{% endif %}"
+    aria-label="Truck {{ truck_visual.truck_number }}: current {{ truck_visual.current_display }}{% if truck_visual.current_percent is not none %}, {{ truck_visual.current_percent }} percent{% endif %}; projected after this mission {% if truck_visual.projected_incomplete or truck_visual.projected_display == '-' %}unknown{% else %}{{ truck_visual.projected_display }}{% if truck_visual.projected_percent is not none %}, {{ truck_visual.projected_percent }} percent{% endif %}{% endif %}{% if truck_visual.projected_short %}; short{% endif %}"
+>
+    <i class="neoscorpion-truck-gauge neoscorpion-truck-gauge--mini"><b{% if truck_visual.current_gauge_percent is not none %} style="--truck-gauge-percent: {{ truck_visual.current_gauge_percent }}%"{% endif %}></b></i>
+    <i class="neoscorpion-truck-gauge neoscorpion-truck-gauge--mini neoscorpion-truck-gauge--projected{% if truck_visual.projected_short %} is-short{% endif %}"><b{% if truck_visual.projected_gauge_percent is not none %} style="--truck-gauge-percent: {{ truck_visual.projected_gauge_percent }}%"{% endif %}></b></i>
+    {% if truck_visual.projected_short %}<span class="neoscorpion-mission-truck-short">SHORT</span>{% endif %}
+</div>
+{% endif %}
+{%- endmacro %}
 <section
     class="neoscorpion-shell neoscorpion-screen"
     aria-label="NeoScorpion Fuel Dispatch"
@@ -97,7 +109,6 @@
                         <th>Estimated Fuel</th>
                         <th>Fueler</th>
                         <th>Truck</th>
-                        <th>Truck Fuel</th>
                         <th>Projected Truck</th>
                         <th>T/F</th>
                         <th>Status</th>
@@ -132,11 +143,11 @@
                             <input type="hidden" name="expected_assigned_fueler_user_id" value="{{ row.assignment.assigned_fueler_user_id if row.assignment and row.assignment.assigned_fueler_user_id else '' }}">
                             <input type="hidden" name="expected_assigned_truck_id" value="{{ row.assignment.assigned_truck_id if row.assignment and row.assignment.assigned_truck_id else '' }}">
                             <td>
-                                <input class="neoscorpion-inline-input" name="required_fuel" value="{{ row.required_fuel_display }}" inputmode="decimal" aria-label="Required Fuel for {{ row.mission.flight_number }}" data-dispatch-autosave data-autosave-field="required_fuel" data-saved-value="{{ row.required_fuel_display }}">
+                                <input class="neoscorpion-inline-input" name="required_fuel" value="{{ row.required_fuel_display }}" inputmode="decimal" aria-label="Required Fuel for {{ row.mission.flight_number }}" data-dispatch-autosave data-autosave-field="required_fuel" data-mission-id="{{ row.mission.id }}" data-saved-value="{{ row.required_fuel_display }}">
                                 <small class="neoscorpion-save-status" data-autosave-status aria-live="polite"></small>
                             </td>
                             <td>
-                                <input class="neoscorpion-inline-input" name="inbound_fuel" value="{{ row.inbound_fuel_display }}" inputmode="decimal" aria-label="Inbound Fuel for {{ row.tail_number }}" data-dispatch-autosave data-autosave-field="inbound_fuel" data-saved-value="{{ row.inbound_fuel_display }}">
+                                <input class="neoscorpion-inline-input" name="inbound_fuel" value="{{ row.inbound_fuel_display }}" inputmode="decimal" aria-label="Inbound Fuel for {{ row.tail_number }}" data-dispatch-autosave data-autosave-field="inbound_fuel" data-mission-id="{{ row.mission.id }}" data-saved-value="{{ row.inbound_fuel_display }}">
                                 <small class="neoscorpion-save-status" data-autosave-status aria-live="polite"></small>
                             </td>
                             <td>{{ row.fob_display or '-' }}</td>
@@ -201,22 +212,12 @@
                                     {% endfor %}
                                 </select>
                                 {% endif %}
-                            </td>
-                            <td>
-                                {% if row.truck_visual %}
-                                <div class="neoscorpion-mission-truck-visual{% if row.truck_visual.projected_short %} is-short{% endif %}">
-                                    <strong>{{ row.truck_visual.truck_number }}</strong>
-                                    <span>NOW {{ row.truck_visual.current_display }}{% if row.truck_visual.current_percent is not none %} / {{ row.truck_visual.current_percent }}%{% endif %}</span>
-                                    <span>{% if row.truck_visual.projected_short %}SHORT {% endif %}PROJECTED {% if row.truck_visual.projected_incomplete or row.truck_visual.projected_display == '-' %}—{% else %}{{ row.truck_visual.projected_display }}{% if row.truck_visual.projected_percent is not none %} / {{ row.truck_visual.projected_percent }}%{% endif %}{% endif %}</span>
-                                    <i class="neoscorpion-truck-gauge neoscorpion-truck-gauge--mini"><b{% if row.truck_visual.current_gauge_percent is not none %} style="--truck-gauge-percent: {{ row.truck_visual.current_gauge_percent }}%"{% endif %}></b></i>
-                                    <i class="neoscorpion-truck-gauge neoscorpion-truck-gauge--mini neoscorpion-truck-gauge--projected{% if row.truck_visual.projected_short %} is-short{% endif %}"><b{% if row.truck_visual.projected_gauge_percent is not none %} style="--truck-gauge-percent: {{ row.truck_visual.projected_gauge_percent }}%"{% endif %}></b></i>
-                                </div>
-                                {% else %}-{% endif %}
+                                {{ mission_truck_bars(row.truck_visual) }}
                             </td>
                             <td class="{% if row.projected_truck_short %}neoscorpion-calculation-warning{% endif %}">{{ row.projected_truck_display }}</td>
                             <td>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</td>
                             <td>
-                                <span class="neoscorpion-status-pill">{{ row.cycle_type_label }}</span>
+                                {% if row.cycle_type != 'fuel' %}<span class="neoscorpion-status-pill">{{ row.cycle_type_label }}</span>{% endif %}
                                 {% if row.effective_hold %}
                                 <input type="hidden" name="review_status" value="{{ row.review_status }}">
                                 <span class="neoscorpion-status-pill">HOLD / REVIEW REQUIRED</span>
@@ -231,8 +232,8 @@
                             </td>
                             <td>
                                 {% if row.load_planning_ready %}
-                                <strong>{{ row.load_planning_output }}</strong>
-                                <button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-value="{{ row.load_planning_output }}">COPY LOAD PLANNING</button>
+                                <span class="neoscorpion-load-planning-output">{{ row.load_planning_output }}</span>
+                                <button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-value="{{ row.load_planning_output }}">COPY</button>
                                 {% else %}
                                 <span>{{ row.load_planning_placeholder }}</span>
                                 {% endif %}
@@ -341,25 +342,17 @@
                             {% if row.estimated_fuel_source == 'fallback' %}<small>{{ row.estimated_fuel_source_label }}</small>{% endif %}
                         </td>
                         <td>{{ row.assigned_fueler.display_name if row.assigned_fueler else 'Unassigned' }}</td>
-                        <td>{{ row.assigned_truck.truck_number if row.assigned_truck else 'Unassigned' }}</td>
                         <td>
-                            {% if row.truck_visual %}
-                            <div class="neoscorpion-mission-truck-visual{% if row.truck_visual.projected_short %} is-short{% endif %}">
-                                <strong>{{ row.truck_visual.truck_number }}</strong>
-                                <span>NOW {{ row.truck_visual.current_display }}{% if row.truck_visual.current_percent is not none %} / {{ row.truck_visual.current_percent }}%{% endif %}</span>
-                                <span>{% if row.truck_visual.projected_short %}SHORT {% endif %}PROJECTED {% if row.truck_visual.projected_incomplete or row.truck_visual.projected_display == '-' %}—{% else %}{{ row.truck_visual.projected_display }}{% if row.truck_visual.projected_percent is not none %} / {{ row.truck_visual.projected_percent }}%{% endif %}{% endif %}</span>
-                                <i class="neoscorpion-truck-gauge neoscorpion-truck-gauge--mini"><b{% if row.truck_visual.current_gauge_percent is not none %} style="--truck-gauge-percent: {{ row.truck_visual.current_gauge_percent }}%"{% endif %}></b></i>
-                                <i class="neoscorpion-truck-gauge neoscorpion-truck-gauge--mini neoscorpion-truck-gauge--projected{% if row.truck_visual.projected_short %} is-short{% endif %}"><b{% if row.truck_visual.projected_gauge_percent is not none %} style="--truck-gauge-percent: {{ row.truck_visual.projected_gauge_percent }}%"{% endif %}></b></i>
-                            </div>
-                            {% else %}-{% endif %}
+                            {{ row.assigned_truck.truck_number if row.assigned_truck else 'Unassigned' }}
+                            {{ mission_truck_bars(row.truck_visual) }}
                         </td>
                         <td class="{% if row.projected_truck_short %}neoscorpion-calculation-warning{% endif %}">{{ row.projected_truck_display }}</td>
                         <td>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</td>
-                        <td><span class="neoscorpion-status-pill">{{ row.cycle_type_label }}</span> {{ row.review_status|replace("_", " ")|title }}</td>
+                        <td>{% if row.cycle_type != 'fuel' %}<span class="neoscorpion-status-pill">{{ row.cycle_type_label }}</span> {% endif %}{{ row.review_status|replace("_", " ")|title }}</td>
                         <td>
                             {% if row.load_planning_ready %}
-                            <strong>{{ row.load_planning_output }}</strong>
-                            <button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-value="{{ row.load_planning_output }}">COPY LOAD PLANNING</button>
+                            <span class="neoscorpion-load-planning-output">{{ row.load_planning_output }}</span>
+                            <button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-value="{{ row.load_planning_output }}">COPY</button>
                             {% else %}
                             {{ row.load_planning_placeholder }}
                             {% endif %}

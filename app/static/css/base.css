@@ -24411,10 +24411,18 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 }
 
 .neoscorpion-copy-fuel-button {
-    width: 100%;
-    margin-top: 7px;
-    padding: 7px 8px;
-    font-size: 0.68rem;
+    display: block;
+    width: auto;
+    margin-top: 2px;
+    padding: 2px 5px;
+    font-size: 0.62rem;
+    line-height: 1.1;
+}
+
+.neoscorpion-load-planning-output {
+    display: block;
+    font-weight: 400;
+    line-height: 1.15;
 }
 
 .neoscorpion-fuel-tank-grid,
@@ -24547,8 +24555,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
 .neoscorpion-truck-visual-panel > header,
 .neoscorpion-truck-visual-card > header,
-.neoscorpion-truck-gauges > div,
-.neoscorpion-mission-truck-visual {
+.neoscorpion-truck-gauges > div {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -24557,8 +24564,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
 .neoscorpion-truck-visual-panel > header > span,
 .neoscorpion-truck-visual-card dt,
-.neoscorpion-truck-gauges span,
-.neoscorpion-mission-truck-visual span {
+.neoscorpion-truck-gauges span {
     color: var(--text-muted);
     font-size: 0.75rem;
 }
@@ -24586,15 +24592,13 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     border-color: rgba(230, 169, 50, 0.7);
 }
 
-.neoscorpion-truck-status,
-.neoscorpion-mission-truck-visual.is-short span:last-of-type {
+.neoscorpion-truck-status {
     font-weight: 700;
 }
 
 .neoscorpion-truck-visual-card--needs_sump .neoscorpion-truck-status,
 .neoscorpion-truck-visual-card.is-short .neoscorpion-truck-status,
-.neoscorpion-truck-visual-card.is-short dd,
-.neoscorpion-mission-truck-visual.is-short span:last-of-type {
+.neoscorpion-truck-visual-card.is-short dd {
     color: #ff7777;
 }
 
@@ -24646,21 +24650,27 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     background: #e44747;
 }
 
-.neoscorpion-mission-truck-visual {
+.neoscorpion-mission-truck-bars {
     display: grid;
-    grid-template-columns: auto 1fr;
-    align-items: center;
-    min-width: 10rem;
-}
-
-.neoscorpion-mission-truck-visual strong {
-    grid-row: span 2;
+    grid-template-columns: minmax(2.75rem, 1fr) auto;
+    gap: 2px 4px;
+    margin-top: 2px;
+    min-width: 3rem;
 }
 
 .neoscorpion-truck-gauge--mini {
-    grid-column: 1 / -1;
     width: 100%;
-    height: 0.25rem;
+    height: 0.18rem;
+}
+
+.neoscorpion-mission-truck-short {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    align-self: center;
+    color: #ff7777;
+    font-size: 0.58rem;
+    font-weight: 950;
+    letter-spacing: 0.04em;
 }
 
 @media (max-width: 700px) {
