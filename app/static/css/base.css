@@ -11411,8 +11411,8 @@ body:has(.neostaffing-people-console) { overflow-x: clip; }
 .neostaffing-people-roster-actions { position: relative; z-index: 60; }
 .neostaffing-people-drawer-panel,
 .neostaffing-people-detail-drawer {
-    top: 132px;
-    height: calc(100vh - 132px);
+    top: 188px;
+    height: calc(100vh - 188px);
     background: #0b151b;
 }
 .neostaffing-people-detail-drawer[hidden] { display: none; }
@@ -11450,8 +11450,18 @@ body:has(.neostaffing-people-console) { overflow-x: clip; }
 }
 .neostaffing-people-drawer-panel button:hover,
 .neostaffing-people-detail-drawer button:hover { background: rgba(var(--node-rgb), .2); }
+.neostaffing-people-drawer-panel label,
+.neostaffing-people-detail-drawer label { position: relative; pointer-events: none; }
+.neostaffing-people-drawer-panel label > input,
+.neostaffing-people-drawer-panel label > select,
+.neostaffing-people-detail-drawer label > input,
+.neostaffing-people-detail-drawer label > select { width: 100%; pointer-events: auto; }
 .neostaffing-people-drawer-panel table,
 .neostaffing-people-detail-drawer table { color: #dfeef1; background: #0d171d; }
+.neostaffing-people-destination-picker { position: relative; min-width: 180px; }
+.neostaffing-people-destination-picker > summary { min-height: 31px; padding: 7px 9px; border: 1px solid rgba(var(--node-rgb), .38); background: #101c23; color: #dffcf6; cursor: pointer; list-style: none; }
+.neostaffing-people-destination-picker > ul { position: absolute; z-index: 70; width: 320px; max-height: 52vh; overflow: auto; margin: 4px 0 0; padding: 8px; background: #0b151b; border: 1px solid rgba(var(--node-rgb), .4); list-style: none; }
+.neostaffing-people-destination-picker ul { padding-left: 12px; list-style: none; }.neostaffing-people-destination-picker summary,.neostaffing-people-destination-picker button { color: #dffcf6; font-size: .7rem; }.neostaffing-people-destination-picker button { width: 100%; padding: 5px; border: 0; background: transparent; text-align: left; }.neostaffing-people-destination-picker button:hover { color: var(--node-primary); background: rgba(var(--node-rgb), .12); }
 
 .neostaffing-people-card > div {
     min-width: 0;
