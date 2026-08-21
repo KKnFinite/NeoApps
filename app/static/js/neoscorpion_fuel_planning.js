@@ -200,6 +200,23 @@
     }
     if (typeof document === "undefined") return;
 
+    const sanitizeKlb = (value) => {
+        const raw = String(value ?? "");
+        if (/[-+eE,\s]/.test(raw)) return "";
+        const match = raw.match(/(?:\d+(?:\.\d{0,2})?|\.\d{0,2})/);
+        return match ? match[0] : "";
+    };
+    document.querySelectorAll([
+        'input[name="required_fuel"]', 'input[name="inbound_fuel"]',
+        'input[name="apu_override_allowance"]',
+        'input[name^="remaining_"]', 'input[name^="actual_"]',
+        'input[name^="correct_actual_"]',
+    ].join(",")).forEach((input) => {
+        input.setAttribute("data-k-lb-input", "");
+        input.inputMode = "decimal";
+        input.addEventListener("input", () => { input.value = sanitizeKlb(input.value); });
+    });
+
     const numberOrNull = (value) => {
         if (String(value ?? "").trim() === "") return null;
         const parsed = Number(value);

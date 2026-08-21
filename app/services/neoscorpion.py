@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_UP
+import re
 
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
@@ -168,29 +169,33 @@ def calculate_apu_allowance_lbs(
 
 
 def display_thousands_to_lbs(value):
-    amount = _decimal_or_none(value)
-    if amount is None:
+    if value in (None, ""):
         return None
-    if amount < 0:
-        raise ValueError("Fuel pounds cannot be negative.")
-    return int((amount * Decimal("1000")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    text = str(value).strip()
+    if not re.fullmatch(r"(?:\d+(?:\.\d{1,2})?|\.\d{1,2})", text):
+        raise ValueError("Fuel value must be a nonnegative K-LB value with up to two decimals.")
+    return int(Decimal(text) * Decimal("1000"))
 
 
 def lbs_to_display_thousands(value):
     amount = _decimal_or_none(value)
     if amount is None:
         return None
-    return (amount / Decimal("1000")).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+    return amount / Decimal("1000")
 
 
 def format_apu_display_thousands(value):
     amount = _decimal_or_none(value)
     if amount is None:
         return ""
-    thousands = amount / Decimal("1000")
-    if thousands % Decimal("0.1"):
-        return f"{thousands:.2f}"
-    return f"{thousands:.1f}"
+    return format_entered_thousands(amount)
+
+
+def format_entered_thousands(value):
+    amount = _decimal_or_none(value)
+    if amount is None:
+        return ""
+    return format((amount / Decimal("1000")).normalize(), "f")
 
 
 def gallons_to_lbs(gallons, density_lbs_per_gallon):
@@ -3650,7 +3655,7 @@ def _fuel_rows(
                     "remaining_lbs": tank_state.remaining_lbs if tank_state else None,
                     "actual_lbs": tank_state.actual_lbs if tank_state else None,
                     "planned_lbs": planned_lbs,
-                    "remaining_display": format_display_thousands(
+                    "remaining_display": format_entered_thousands(
                         tank_state.remaining_lbs if tank_state else None
                     ),
                     "planned_display": (
@@ -3658,7 +3663,7 @@ def _fuel_rows(
                         if planned_lbs is not None
                         else "-"
                     ),
-                    "actual_display": format_display_thousands(
+                    "actual_display": format_entered_thousands(
                         tank_state.actual_lbs if tank_state else None
                     ),
                 }
@@ -4056,8 +4061,8 @@ def _fuel_rows(
                     mission.timezone,
                 ),
                 "parking_position": parking.get(tail_number, "-") if tail_number else "-",
-                "required_fuel_display": format_display_thousands(mission.planned_fuel_load),
-                "inbound_fuel_display": format_display_thousands(
+                "required_fuel_display": format_entered_thousands(mission.planned_fuel_load),
+                "inbound_fuel_display": format_entered_thousands(
                     tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None
                 ),
                 "fob_display": format_display_thousands(
