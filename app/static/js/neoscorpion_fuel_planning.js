@@ -318,22 +318,25 @@
                 : null;
             if (plannedEntryCue) plannedEntryCue.hidden = remainingComplete;
 
-            card.querySelector("[data-apu-automatic-output]").textContent = displayFuel(
-                automaticAllowance
-            );
-            card.querySelector("[data-apu-override-output]").textContent = (
+            const automaticOutput = card.querySelector("[data-apu-automatic-output]");
+            if (automaticOutput) automaticOutput.textContent = displayFuel(automaticAllowance);
+            const overrideOutput = card.querySelector("[data-apu-override-output]");
+            if (overrideOutput) overrideOutput.textContent = (
                 overrideAllowance === null ? "-" : displayFuel(overrideAllowance)
             );
-            card.querySelector("[data-apu-allowance-output]").textContent = displayApuAllowance(allowance);
+            const allowanceOutput = card.querySelector("[data-apu-allowance-output]");
+            if (allowanceOutput) allowanceOutput.textContent = displayApuAllowance(allowance);
             const calculatedReference = card.querySelector("[data-apu-calculated-reference]");
             if (calculatedReference) {
                 calculatedReference.textContent = `Calculated: ${displayApuAllowance(automaticAllowance).replace("APU ", "")}`;
             }
-            card.querySelector("[data-fueling-target-output]").textContent = displayFuel(
+            const targetOutput = card.querySelector("[data-fueling-target-output]");
+            if (targetOutput) targetOutput.textContent = displayFuel(
                 required !== null && allowance !== null ? required + allowance : null
             );
             const selectedSourceOption = apuSourceInput.selectedOptions?.[0];
-            card.querySelector("[data-apu-source-output]").textContent = (
+            const sourceOutput = card.querySelector("[data-apu-source-output]");
+            if (sourceOutput) sourceOutput.textContent = (
                 sourceRequired && apuSourceInput.value
                     ? selectedSourceOption?.textContent || "-"
                     : "-"
