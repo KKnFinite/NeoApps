@@ -11,6 +11,7 @@ from app.models import (
     StaffingLeadershipAssignment,
     StaffingPerson,
     StaffingUnit,
+    StaffingWorkAssignment,
 )
 from app.neostaffing import bp
 from app.services.access_control import get_user_app_role, user_can_access_app, user_has_app_access
@@ -283,6 +284,44 @@ def staffing_groups():
         can_edit_staffing_groups=can_edit,
         staffing_groups=staffing_service.staffing_groups_context(),
     )
+
+
+@bp.route("/shift-flow")
+@neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
+def shift_flow():
+    context = staffing_service.shift_flow_context(request.args.get("phase", "final_door"))
+    selected_person_id = request.args.get("person_id", type=int)
+    selected = next(
+        (row for group in context["groups"] for row in group["rows"]
+         if row["person"].id == selected_person_id),
+        next((row for row in context["unplanned"] if row["person"].id == selected_person_id), None),
+    )
+    selected_area = selected["assignment"].work_area if selected else None
+    return render_template(
+        "neostaffing/shift_flow.html",
+        shift_flow=context,
+        selected=selected,
+        shift_flow_areas=staffing_service.shift_flow_area_options(selected_area),
+        shift_work_area_type=staffing_service.shift_work_area_type,
+        can_edit_shift_flow=user_can(PEOPLE_EDIT_PERMISSION),
+    )
+
+
+@bp.route("/shift-flow/<int:person_id>", methods=["POST"])
+@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
+def save_shift_flow(person_id):
+    phase = request.form.get("phase", "final_door")
+    try:
+        person = _get_person(person_id)
+        assignment = StaffingWorkAssignment.query.filter_by(person_id=person.id, active=True).first()
+        staffing_service.save_shift_flow_plan(person, request.form, assignment.work_area if assignment else None)
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Shift Flow plan saved.", "success")
+    return redirect(url_for("neostaffing.shift_flow", phase=phase, person_id=person_id))
 
 
 @bp.route("/requests")

@@ -69,3 +69,23 @@ class ShiftFlowTest(unittest.TestCase):
         db.session.commit()
         self.assertEqual(StaffingPerson.query.count(), 1)
         self.assertEqual(StaffingShiftFlowPlan.query.count(), 0)
+
+    def test_phase_projection_and_shorthand(self):
+        person = self._person()
+        plan = staffing_service.create_shift_flow_plan(
+            person, self._values(self.ballmat, "2", self.door, self.door), self.door
+        )
+        self.assertEqual(staffing_service._shift_flow_phase_area(plan, "setup").id, self.door.id)
+        self.assertEqual(staffing_service._shift_flow_phase_area(plan, "sort_start").id, self.ballmat.id)
+        self.assertEqual(staffing_service._shift_flow_phase_area(plan, "after_w1").id, self.ballmat.id)
+        self.assertEqual(staffing_service._shift_flow_phase_area(plan, "after_w2").id, self.door.id)
+        self.assertEqual(staffing_service._shift_flow_phase_area(plan, "after_cleanup").id, self.door.id)
+        self.assertEqual(staffing_service.shift_flow_shorthand(plan), "d BM2")
+
+    def test_discharge_remains_through_later_phases_and_plan_can_update(self):
+        person = self._person()
+        plan = staffing_service.create_shift_flow_plan(person, self._values(self.discharge, "", final=self.door), self.door)
+        for phase in ("after_w1", "after_w2", "after_cleanup"):
+            self.assertEqual(staffing_service._shift_flow_phase_area(plan, phase).id, self.discharge.id)
+        updated = staffing_service.save_shift_flow_plan(person, self._values(self.door, "", final=self.door), self.door)
+        self.assertEqual(updated.sort_start_work_area.id, self.door.id)

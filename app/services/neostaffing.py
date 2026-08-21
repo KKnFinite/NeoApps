@@ -167,21 +167,54 @@ def create_shift_flow_plan(person, values, selected_work_area):
         raise ValueError("Sort Start Work Area must be a Shift Door, Ballmat, or Discharge.")
     if shift_work_area_type(final) != SHIFT_FLOW_DOOR:
         raise ValueError("Final Door must be a Shift Door.")
-    transition_value = str(values.get("shift_flow_ballmat_transition", "")).strip()
-    if shift_work_area_type(start) == SHIFT_FLOW_BALLMAT:
-        if transition_value not in {"1", "2", "3"}:
-            raise ValueError("Ballmat Transition must be 1, 2, or 3.")
-        transition = int(transition_value)
-    else:
-        if transition_value:
-            raise ValueError("Ballmat Transition is only used when Sort Start is Ballmat.")
-        transition = None
+    transition = _validated_ballmat_transition(
+        start, values.get("shift_flow_ballmat_transition")
+    )
     plan = StaffingShiftFlowPlan(
         person=person, setup_work_area=setup, sort_start_work_area=start,
         ballmat_transition=transition, final_door_work_area=final,
     )
     db.session.add(plan)
     return plan
+
+
+def save_shift_flow_plan(person, values, selected_work_area):
+    """Create or update the one complete plan for a Shift employee."""
+    existing = person.shift_flow_plan or StaffingShiftFlowPlan.query.filter_by(
+        staffing_person_id=person.id
+    ).first()
+    if existing is None:
+        return create_shift_flow_plan(person, values, selected_work_area)
+    options = shift_flow_area_options(selected_work_area)
+    if not options:
+        raise ValueError("Shift Flow is available only for Night / Ramp / Shift Work Areas.")
+    allowed = {unit.id: unit for unit in options}
+    setup = _shift_flow_area(values.get("shift_flow_setup_work_area_id"), allowed, "Setup Assignment", optional=True)
+    start = _shift_flow_area(values.get("shift_flow_sort_start_work_area_id"), allowed, "Sort Start Work Area")
+    final = _shift_flow_area(values.get("shift_flow_final_door_work_area_id"), allowed, "Final Door")
+    if setup and shift_work_area_type(setup) not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT}:
+        raise ValueError("Setup Assignment must be a Shift Door or Ballmat.")
+    if shift_work_area_type(start) not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT, SHIFT_FLOW_DISCHARGE}:
+        raise ValueError("Sort Start Work Area must be a Shift Door, Ballmat, or Discharge.")
+    if shift_work_area_type(final) != SHIFT_FLOW_DOOR:
+        raise ValueError("Final Door must be a Shift Door.")
+    transition = _validated_ballmat_transition(start, values.get("shift_flow_ballmat_transition"))
+    existing.setup_work_area = setup
+    existing.sort_start_work_area = start
+    existing.ballmat_transition = transition
+    existing.final_door_work_area = final
+    return existing
+
+
+def _validated_ballmat_transition(start, value):
+    transition_value = str(value or "").strip()
+    if shift_work_area_type(start) == SHIFT_FLOW_BALLMAT:
+        if transition_value not in {"1", "2", "3"}:
+            raise ValueError("Ballmat Transition must be 1, 2, or 3.")
+        return int(transition_value)
+    if transition_value:
+        raise ValueError("Ballmat Transition is only used when Sort Start is Ballmat.")
+    return None
 
 
 def _shift_flow_area(value, allowed, label, optional=False):
@@ -210,6 +243,101 @@ def _is_shift_work_area(area, by_id):
         and operation.name.strip().casefold() == "ramp"
         and sort.name.strip().casefold() == "night"
     )
+
+
+SHIFT_FLOW_PHASES = (
+    ("final_door", "FINAL DOOR"),
+    ("setup", "SETUP"),
+    ("sort_start", "SORT START"),
+    ("after_w1", "AFTER W1"),
+    ("after_w2", "AFTER W2"),
+    ("after_cleanup", "AFTER CLEANUP"),
+)
+
+
+def shift_flow_context(phase="final_door"):
+    phase = phase if phase in {item[0] for item in SHIFT_FLOW_PHASES} else "final_door"
+    units = StaffingUnit.query.filter_by(active=True).all()
+    by_id = {unit.id: unit for unit in units}
+    shift_area_ids = {
+        unit.id for unit in units if _is_shift_work_area(unit, by_id)
+    }
+    assignments = (
+        StaffingWorkAssignment.query.options(
+            joinedload(StaffingWorkAssignment.person)
+            .joinedload(StaffingPerson.shift_flow_plan)
+            .joinedload(StaffingShiftFlowPlan.setup_work_area),
+            joinedload(StaffingWorkAssignment.person)
+            .joinedload(StaffingPerson.shift_flow_plan)
+            .joinedload(StaffingShiftFlowPlan.sort_start_work_area),
+            joinedload(StaffingWorkAssignment.person)
+            .joinedload(StaffingPerson.shift_flow_plan)
+            .joinedload(StaffingShiftFlowPlan.final_door_work_area),
+            joinedload(StaffingWorkAssignment.work_area),
+        )
+        .filter(
+            StaffingWorkAssignment.active.is_(True),
+            StaffingWorkAssignment.work_area_id.in_(shift_area_ids or {-1}),
+        )
+        .all()
+    )
+    groups = {}
+    unplanned = []
+    for assignment in assignments:
+        person = assignment.person
+        plan = person.shift_flow_plan
+        if not plan:
+            unplanned.append({"person": person, "plan": None, "assignment": assignment})
+            continue
+        location = _shift_flow_phase_area(plan, phase)
+        groups.setdefault(location.id, {"area": location, "rows": []})["rows"].append(
+            {"person": person, "plan": plan, "assignment": assignment,
+             "shorthand": shift_flow_shorthand(plan)}
+        )
+    ordered = sorted(groups.values(), key=lambda group: (group["area"].display_order, group["area"].name.casefold()))
+    for group in ordered:
+        group["rows"].sort(key=lambda row: (row["person"].last_name.casefold(), row["person"].first_name.casefold()))
+    unplanned.sort(key=lambda row: (row["person"].last_name.casefold(), row["person"].first_name.casefold()))
+    return {
+        "phase": phase,
+        "phases": SHIFT_FLOW_PHASES,
+        "groups": ordered,
+        "planned_count": sum(len(group["rows"]) for group in ordered),
+        "unplanned": unplanned,
+        "shift_area_ids": shift_area_ids,
+    }
+
+
+def _shift_flow_phase_area(plan, phase):
+    if phase == "final_door":
+        return plan.final_door_work_area
+    if phase == "setup":
+        return plan.setup_work_area or _shift_flow_virtual_area("NO SETUP")
+    if phase == "sort_start":
+        return plan.sort_start_work_area
+    start_type = shift_work_area_type(plan.sort_start_work_area)
+    if start_type == SHIFT_FLOW_BALLMAT:
+        if phase == "after_w1" and plan.ballmat_transition == 1:
+            return plan.final_door_work_area
+        if phase == "after_w2" and plan.ballmat_transition in {1, 2}:
+            return plan.final_door_work_area
+        if phase == "after_cleanup":
+            return plan.final_door_work_area
+    return plan.sort_start_work_area
+
+
+def _shift_flow_virtual_area(name):
+    return type("ShiftFlowVirtualArea", (), {"id": name, "name": name, "display_order": -1})()
+
+
+def shift_flow_shorthand(plan):
+    setup = "-" if not plan.setup_work_area else shift_work_area_type(plan.setup_work_area)[0].lower()
+    start_type = shift_work_area_type(plan.sort_start_work_area)
+    if start_type == SHIFT_FLOW_DOOR:
+        return f"{setup} DOR"
+    if start_type == SHIFT_FLOW_BALLMAT:
+        return f"{setup} BM{plan.ballmat_transition}"
+    return f"{setup} DSC"
 
 
 def classification_choices():
