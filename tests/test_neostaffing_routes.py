@@ -118,6 +118,40 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 self.assertNotIn(b"neostaffing-rail-icon", response.data)
                 self.assertNotIn(b"neostaffing-rail-title", response.data)
 
+    def test_shift_flow_page_renders_active_shift_assignment(self):
+        user = self._user("staffing_shift_flow_viewer")
+        self._grant_app_access(user, "neostaffing", "simulator")
+        night = staffing_service.create_unit({"unit_type": "sort", "name": "Night"})
+        ramp = staffing_service.create_unit(
+            {"unit_type": "operation", "name": "Ramp", "parent_id": night.id}
+        )
+        shift = staffing_service.create_unit(
+            {"unit_type": "department", "name": "Shift", "parent_id": ramp.id}
+        )
+        door = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "Door 1", "parent_id": shift.id}
+        )
+        person = staffing_service.create_person(
+            {
+                "employee_id": "SHIFT500",
+                "first_name": "Shift",
+                "last_name": "Employee",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+                "employee_status": "active",
+            }
+        )
+        staffing_service.assign_work_area(person, door)
+        db.session.commit()
+        self._login(user.username)
+
+        response = self.client.get("/neostaffing/shift-flow")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"SHIFT FLOW", response.data)
+        self.assertIn(b"FLOW NOT SET", response.data)
+        self.assertIn(b"Shift Employee", response.data)
+
     def test_legacy_people_attendance_redirects_to_main_attendance(self):
         user = self._user("staffing_attendance_legacy")
         self._grant_app_access(user, "neostaffing", "operator")

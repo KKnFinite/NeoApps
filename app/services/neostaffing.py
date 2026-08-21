@@ -277,7 +277,7 @@ def shift_flow_context(phase="final_door"):
         )
         .filter(
             StaffingWorkAssignment.active.is_(True),
-            StaffingWorkAssignment.work_area_id.in_(shift_area_ids or {-1}),
+            StaffingWorkAssignment.work_area_unit_id.in_(shift_area_ids or {-1}),
         )
         .all()
     )
