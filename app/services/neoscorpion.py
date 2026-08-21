@@ -223,17 +223,18 @@ class NeoScorpionMenuItem:
 
 
 NEOSCORPION_MENU = (
+    NeoScorpionMenuItem("Dashboard", "neoscorpion.index", "neoscorpion.dashboard.view", "dashboard"),
     NeoScorpionMenuItem("Fuel Dispatch", "neoscorpion.fuel_dispatch", "neoscorpion.fuel_dispatch.view", "dispatch"),
-    NeoScorpionMenuItem("Hanzo", "neoscorpion.hanzo", "neoscorpion.hanzo.view", "hanzo"),
     NeoScorpionMenuItem(
-        "Fueler",
-        "neoscorpion.fueler",
-        "neoscorpion.fuel_assignments.view",
-        "fueler",
+        "Truck Manager",
+        "neoscorpion.truck_manager",
+        "neoscorpion.truck_manager.view",
+        "trucks",
     ),
-    NeoScorpionMenuItem("Truck Manager", "neoscorpion.truck_manager", "neoscorpion.truck_manager.view", "trucks"),
-    NeoScorpionMenuItem("Settings", "neoscorpion.settings", "neoscorpion.settings.view", "settings"),
+    NeoScorpionMenuItem("Fueler", "neoscorpion.fueler", "neoscorpion.fuel_assignments.view", "fueler"),
     NeoScorpionMenuItem("Fuel History", "neoscorpion.history", "neoscorpion.history.view", "history"),
+    NeoScorpionMenuItem("Hanzo", "neoscorpion.hanzo", "neoscorpion.hanzo.view", "hanzo"),
+    NeoScorpionMenuItem("Settings", "neoscorpion.settings", "neoscorpion.settings.view", "settings"),
 )
 
 
@@ -997,7 +998,6 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
         {"pending", "assigned", "review"},
         "pending",
     )
-    load_planning_note = (form.get("load_planning_note") or "").strip()
     assignment_changed = assignment_created
     if (
         assignment.confirmed_tail_number is None
@@ -1012,7 +1012,6 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
         ("assigned_fueler_user_id", requested_fueler_id),
         ("assigned_truck_id", requested_truck_id),
         ("review_status", review_status),
-        ("load_planning_note", load_planning_note),
     ):
         old_value = getattr(assignment, field_name)
         if old_value != value:
@@ -1029,8 +1028,6 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
                     f"Status: {(old_value or 'pending').replace('_', ' ').title()} -> "
                     f"{value.replace('_', ' ').title()}"
                 )
-            elif field_name == "load_planning_note":
-                change_messages.append("Load planning note changed")
 
     fuel_work_state = None
     if "apu_override_present" in form:
@@ -4079,7 +4076,7 @@ def _fuel_rows(
                 "estimated_fuel_display": (
                     f"{estimated_fuel.gallons:,} gal"
                     if estimated_fuel.gallons is not None
-                    else estimated_fuel_status
+                    else "-"
                 ),
                 "estimated_fuel_status": (
                     f"{estimated_fuel.gallons:,} gal"
@@ -4117,12 +4114,9 @@ def _fuel_rows(
                 "review_status": (
                     assignment.review_status if assignment else (mission.fuel_status or "pending")
                 ),
-                "load_planning_note": (
-                    assignment.load_planning_note if assignment and assignment.load_planning_note else ""
-                ),
                 "load_planning_output": load_planning_output,
                 "load_planning_ready": load_planning_output is not None,
-                "load_planning_placeholder": "INCOMPLETE",
+                "load_planning_placeholder": "-",
                 "tail_fuel_state": tail_fuel_state,
             }
         )

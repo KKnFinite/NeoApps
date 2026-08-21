@@ -29,6 +29,7 @@ from app.services.neoscorpion import (
     history_context,
     lbs_to_display_thousands,
     lbs_to_gallons,
+    visible_neoscorpion_menu_items,
 )
 from app.services.parking_plan import set_tail_hot
 from app.services.permission_rules import ensure_default_permission_rules
@@ -110,6 +111,31 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"Truck Manager", dashboard.data)
         self.assertIn(b"Settings", dashboard.data)
         self.assertIn(b"Fuel History", dashboard.data)
+
+    def test_neoscorpion_menu_order_is_operational_and_permission_filtered(self):
+        labels = [
+            item.label
+            for item in visible_neoscorpion_menu_items(lambda _permission: True)
+        ]
+        self.assertEqual(
+            labels,
+            [
+                "Dashboard",
+                "Fuel Dispatch",
+                "Truck Manager",
+                "Fueler",
+                "Fuel History",
+                "Hanzo",
+                "Settings",
+            ],
+        )
+        restricted = [
+            item.label
+            for item in visible_neoscorpion_menu_items(
+                lambda permission: permission != "neoscorpion.hanzo.view"
+            )
+        ]
+        self.assertNotIn("Hanzo", restricted)
 
     def test_mobile_topbar_uses_complete_short_labels_without_ellipsis(self):
         self._login_approved_user(role="master")
@@ -224,7 +250,10 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"3400 gal", response.data)
         self.assertIn(b"5,507 gal", response.data)
         self.assertNotIn(b"ACTUAL INBOUND", response.data)
-        self.assertIn(b"INCOMPLETE", response.data)
+        self.assertNotIn(b"APU INCOMPLETE", response.data)
+        self.assertNotIn(b">UNKNOWN<", response.data)
+        self.assertNotIn(b">INCOMPLETE<", response.data)
+        self.assertIn(b">-</span>", response.data)
         self.assertNotIn(CALCULATION_NOT_CONFIGURED_MESSAGE.encode(), response.data)
 
         header = response.data.split(b"<thead>", 1)[1].split(b"</thead>", 1)[0]

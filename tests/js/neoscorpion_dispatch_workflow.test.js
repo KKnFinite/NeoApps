@@ -43,6 +43,10 @@ test("dispatch compact rows retain authoritative copy data and exceptional fuel 
     assert.match(template, /data-copy-value="\{\{ row\.load_planning_output \}\}"/);
     assert.match(template, />COPY<\/button>/);
     assert.doesNotMatch(template, /COPY LOAD PLANNING/);
+    assert.doesNotMatch(template, /load_planning_note/);
+    assert.match(template, /row\.aircraft_type && row\.aircraft_type != "UNKNOWN"/);
+    assert.match(template, /row\.apu_allowance_lbs is none/);
+    assert.match(template, /load_planning_placeholder/);
 });
 
 

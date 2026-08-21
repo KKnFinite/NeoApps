@@ -135,7 +135,7 @@
                         <td>{{ row.destination }}</td>
                         <td>{{ row.parking_position }}</td>
                         <td>{{ row.departure_time or '-' }}</td>
-                        <td>{{ row.aircraft_type }}</td>
+                        <td>{{ row.aircraft_type if row.aircraft_type and row.aircraft_type != "UNKNOWN" else "-" }}</td>
                         {% if can_edit and not row.administratively_complete %}
                         <form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_assignment') }}" data-dispatch-assignment-form>
                             <input type="hidden" name="mission_id" value="{{ row.mission.id }}">
@@ -152,7 +152,7 @@
                             </td>
                             <td>{{ row.fob_display or '-' }}</td>
                             <td>
-                                <span class="neoscorpion-apu-collapsed"><strong data-dispatch-apu-effective>APU {{ row.apu_allowance_display }}K</strong>
+                                <span class="neoscorpion-apu-collapsed"><strong data-dispatch-apu-effective>{% if row.apu_allowance_lbs is none %}-{% else %}APU {{ row.apu_allowance_display }}K{% endif %}</strong>
                                 {% if row.apu_running is sameas true and can_edit and not row.administratively_complete %}
                                 <input type="hidden" name="apu_override_present" value="1">
                                 <input type="hidden" name="apu_override_enabled" value="{{ '1' if row.apu_override_enabled else '0' }}" data-dispatch-apu-override-enabled>
@@ -178,7 +178,7 @@
                             <td>{{ row.on_time }}</td>
                             <td>{{ row.off_time }}</td>
                             <td>
-                                <strong>{{ row.estimated_fuel_display }}</strong>
+                                <span>{{ row.estimated_fuel_display }}</span>
                                 {% if row.estimated_fuel_source == 'fallback' %}<small>{{ row.estimated_fuel_source_label }}</small>{% endif %}
                             </td>
                             <td>
@@ -237,7 +237,6 @@
                                 {% else %}
                                 <span>{{ row.load_planning_placeholder }}</span>
                                 {% endif %}
-                                <input class="neoscorpion-load-input" name="load_planning_note" value="{{ row.load_planning_note }}" placeholder="Freeform note" aria-label="Load planning note">
                             </td>
                             <td>
                                 {% if row.resume_available %}
@@ -329,7 +328,7 @@
                         <td>{{ row.inbound_fuel_display or '-' }}</td>
                         <td>{{ row.fob_display or '-' }}</td>
                         <td>
-                            <strong>APU {{ row.apu_allowance_display }}K</strong>
+                            {% if row.apu_allowance_lbs is none %}-{% else %}<span>APU {{ row.apu_allowance_display }}K</span>{% endif %}
                         </td>
                         <td>{{ row.actual_fuel_display or '-' }}{% if row.actual_fuel_display %} K LBS{% endif %}</td>
                         <td>
@@ -338,7 +337,7 @@
                         <td>{{ row.on_time }}</td>
                         <td>{{ row.off_time }}</td>
                         <td>
-                            <strong>{{ row.estimated_fuel_display }}</strong>
+                            <span>{{ row.estimated_fuel_display }}</span>
                             {% if row.estimated_fuel_source == 'fallback' %}<small>{{ row.estimated_fuel_source_label }}</small>{% endif %}
                         </td>
                         <td>{{ row.assigned_fueler.display_name if row.assigned_fueler else 'Unassigned' }}</td>
@@ -356,7 +355,6 @@
                             {% else %}
                             {{ row.load_planning_placeholder }}
                             {% endif %}
-                            {% if row.load_planning_note %}<small>{{ row.load_planning_note }}</small>{% endif %}
                         </td>
                         <td>
                             {% if can_edit and row.follow_up_available %}

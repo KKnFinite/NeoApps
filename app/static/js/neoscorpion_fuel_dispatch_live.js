@@ -182,7 +182,7 @@
         }
         form.querySelectorAll(
             "select[name='assigned_fueler_user_id'], select[name='assigned_truck_id'], "
-            + "select[name='review_status'], input[name='load_planning_note'], "
+            + "select[name='review_status'], "
             + "input[data-dispatch-apu-override-enabled], input[data-dispatch-apu-override-value]"
         ).forEach((control) => {
             initialControlValues.set(control, controlValue(control));
@@ -197,7 +197,7 @@
         const editor = form.querySelector("[data-dispatch-apu-editor]");
         if (effective) {
             if (effectiveLbs === null || effectiveLbs === undefined) {
-                effective.textContent = "APU INCOMPLETE";
+                effective.textContent = "-";
             } else {
                 const thousands = Number(effectiveLbs) / 1000;
                 effective.textContent = `APU ${Number.isInteger(thousands * 10) ? thousands.toFixed(1) : thousands.toFixed(2)}K`;

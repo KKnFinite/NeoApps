@@ -350,6 +350,8 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
         self.assertIn(b">COPY</button>", rendered.data)
         self.assertNotIn(b"COPY LOAD PLANNING", rendered.data)
         self.assertNotIn(b">FUEL</span>", rendered.data)
+        self.assertNotIn(b"Freeform note", rendered.data)
+        self.assertNotIn(b'name="load_planning_note"', rendered.data)
 
         next(
             state
