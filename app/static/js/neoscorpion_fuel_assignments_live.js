@@ -11,8 +11,6 @@
     const currentUserId = root.dataset.currentUserId;
     const revisionUrl = root.dataset.revisionUrl;
     const acknowledgeUrl = root.dataset.acknowledgeUpdateUrl;
-    const updateBanner = root.querySelector("[data-fuel-assignments-update-banner]");
-    const refreshButton = root.querySelector("[data-fuel-assignments-refresh-now]");
     const initialControlValues = new WeakMap();
     let revision = Number(root.dataset.revision || 0);
     let pendingOperationId = operationId;
@@ -145,16 +143,13 @@
         }
     };
 
-    const reloadForChange = (nextOperationId, nextRevision, {force = false} = {}) => {
+    const reloadForChange = (nextOperationId, nextRevision) => {
         if (reloading) {
             return;
         }
         pendingOperationId = nextOperationId;
         pendingRevision = nextRevision;
-        if (!force && hasUnsavedFuelEntry()) {
-            if (updateBanner) {
-                updateBanner.hidden = false;
-            }
+        if (hasUnsavedFuelEntry()) {
             return;
         }
         reloading = true;
@@ -162,6 +157,18 @@
         prepareReload(nextOperationId, nextRevision);
         window.location.reload();
     };
+
+    const reconcileWhenClean = () => {
+        if (!hasUnsavedFuelEntry() && (
+            pendingOperationId !== operationId || pendingRevision !== revision
+        )) {
+            reloadForChange(pendingOperationId, pendingRevision);
+        }
+    };
+    fuelerControls().forEach((control) => {
+        control.addEventListener("input", reconcileWhenClean);
+        control.addEventListener("change", reconcileWhenClean);
+    });
 
     const poll = async () => {
         const response = await fetch(revisionUrl, {
@@ -232,16 +239,6 @@
             acknowledgeUpdate(button);
         }
     });
-    refreshButton?.addEventListener("click", () => {
-        if (
-            hasUnsavedFuelEntry()
-            && !window.confirm("Refresh assignments and discard your unsaved fuel entry?")
-        ) {
-            return;
-        }
-        reloadForChange(pendingOperationId, pendingRevision, {force: true});
-    });
-
     presentNewAssignments();
 
     if (Number.isFinite(pollIntervalMs) && pollIntervalMs >= 5000) {

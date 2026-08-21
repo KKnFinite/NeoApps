@@ -95,12 +95,13 @@ test("dispatch assignment controls remain compact while silent dirty protection 
 });
 
 
-test("fueler live refresh protects unsaved entries and supports persistent acknowledgment", () => {
+test("fueler live refresh silently protects unsaved entries and reconciles when clean", () => {
     const script = readScript("neoscorpion_fuel_assignments_live.js");
 
     assert.match(script, /const hasUnsavedFuelEntry/);
-    assert.match(script, /if \(!force && hasUnsavedFuelEntry\(\)\)/);
-    assert.match(script, /updateBanner\.hidden = false/);
+    assert.match(script, /if \(hasUnsavedFuelEntry\(\)\)/);
+    assert.match(script, /const reconcileWhenClean/);
+    assert.doesNotMatch(script, /data-fuel-assignments-update-banner|REFRESH ASSIGNMENTS/);
     assert.match(script, /data-acknowledge-assignment-update/);
     assert.match(script, /acknowledgeUpdate/);
     assert.match(script, /continuousWhileVisible: true/);
