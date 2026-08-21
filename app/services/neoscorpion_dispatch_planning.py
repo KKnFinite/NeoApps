@@ -47,6 +47,45 @@ class AssignmentMissionTiming:
     unavailable_reason: str | None
 
 
+@dataclass(frozen=True)
+class ResourceBusyWindow:
+    resource_type: str
+    resource_id: int
+    assignment_id: int
+    mission_id: int | None
+    start_utc: datetime
+    finish_utc: datetime
+    start_source: str
+    deadline_feasible: bool | None
+
+
+@dataclass(frozen=True)
+class UnknownResourceCommitment:
+    resource_type: str
+    resource_id: int
+    assignment_id: int
+    mission_id: int | None
+    reason: str
+
+
+@dataclass(frozen=True)
+class ResourceCalendar:
+    resource_type: str
+    resource_id: int
+    busy_windows: tuple[ResourceBusyWindow, ...]
+    unknown_commitments: tuple[UnknownResourceCommitment, ...]
+    has_manual_overlap: bool
+
+
+@dataclass(frozen=True)
+class ResourceGap:
+    available: bool
+    start_utc: datetime | None
+    finish_utc: datetime | None
+    deadline_feasible: bool | None
+    unavailable_reason: str | None
+
+
 def assignment_mission_timing(
     *,
     mission,
@@ -146,6 +185,153 @@ def _decimal_timedelta(minutes):
         Decimal(minutes) * Decimal("60") * Decimal("1000000")
     ).to_integral_value(rounding=ROUND_HALF_UP)
     return timedelta(microseconds=int(microseconds))
+
+
+def build_resource_calendars(
+    committed_assignments,
+    *,
+    operation,
+    planning_settings,
+    now_utc,
+    exclude_assignment_id=None,
+):
+    """Build current-sort resource calendars from already-loaded committed rows.
+
+    Each input record must provide assignment, mission, work_state, aircraft_type,
+    and planning_demand_gallons attributes (or equivalent mapping keys).
+    """
+    known = {}
+    unknown = {}
+    for record in committed_assignments:
+        assignment = _record_value(record, "assignment")
+        assignment_id = _record_value(record, "assignment_id", getattr(assignment, "id", None))
+        if assignment is None or assignment_id == exclude_assignment_id:
+            continue
+        work_state = _record_value(record, "work_state")
+        if _assignment_finished(assignment, work_state):
+            continue
+        resource_ids = (
+            ("fueler", getattr(assignment, "assigned_fueler_user_id", None)),
+            ("truck", getattr(assignment, "assigned_truck_id", None)),
+        )
+        resource_ids = tuple((kind, identifier) for kind, identifier in resource_ids if identifier is not None)
+        if not resource_ids:
+            continue
+        mission = _record_value(record, "mission")
+        timing = assignment_mission_timing(
+            mission=mission,
+            operation=operation,
+            aircraft_type=_record_value(record, "aircraft_type"),
+            planning_demand_gallons=_record_value(record, "planning_demand_gallons"),
+            planning_settings=planning_settings,
+        )
+        mission_id = getattr(mission, "id", None)
+        if not timing.available:
+            for resource_type, resource_id in resource_ids:
+                item = UnknownResourceCommitment(
+                    resource_type, resource_id, assignment_id, mission_id,
+                    "existing_commitment_timing_unavailable",
+                )
+                unknown.setdefault((resource_type, resource_id), []).append(item)
+            continue
+        actual_start = getattr(work_state, "on_at_utc", None) if work_state else None
+        if actual_start is not None:
+            start_utc = actual_start
+            start_source = "actual_on"
+        else:
+            start_utc = max(now_utc, timing.aircraft_ready_utc)
+            start_source = "projected_aircraft_ready"
+        finish_utc = start_utc + _decimal_timedelta(timing.total_duration_minutes)
+        if actual_start is not None and finish_utc < now_utc:
+            finish_utc = now_utc
+        for resource_type, resource_id in resource_ids:
+            window = ResourceBusyWindow(
+                resource_type, resource_id, assignment_id, mission_id,
+                start_utc, finish_utc, start_source, timing.deadline_feasible,
+            )
+            known.setdefault((resource_type, resource_id), []).append(window)
+
+    calendars = {}
+    for key in set(known) | set(unknown):
+        windows = tuple(sorted(known.get(key, ()), key=lambda item: (item.start_utc, item.finish_utc, item.assignment_id)))
+        calendars[key] = ResourceCalendar(
+            key[0], key[1], windows, tuple(unknown.get(key, ()),),
+            _has_manual_overlap(windows),
+        )
+    return calendars
+
+
+def find_earliest_resource_gap(
+    *,
+    candidate_earliest_start_utc,
+    candidate_duration_minutes,
+    busy_windows=(),
+    unknown_commitments=(),
+    now_utc,
+    completion_deadline_utc=None,
+):
+    """Find the earliest exact-boundary-safe gap without changing commitments."""
+    if unknown_commitments:
+        return ResourceGap(False, None, None, None, "existing_commitment_timing_unavailable")
+    duration = _decimal_or_none(candidate_duration_minutes)
+    if duration is None or duration < 0:
+        return ResourceGap(False, None, None, None, "candidate_duration_unavailable")
+    start_utc = max(now_utc, candidate_earliest_start_utc)
+    merged = _merged_busy_windows(busy_windows)
+    for busy_start, busy_finish in merged:
+        finish_utc = start_utc + _decimal_timedelta(duration)
+        if finish_utc <= busy_start:
+            return _gap_with_deadline(start_utc, finish_utc, completion_deadline_utc)
+        if start_utc < busy_finish:
+            start_utc = busy_finish
+    return _gap_with_deadline(
+        start_utc,
+        start_utc + _decimal_timedelta(duration),
+        completion_deadline_utc,
+    )
+
+
+def _gap_with_deadline(start_utc, finish_utc, deadline_utc):
+    feasible = deadline_utc is None or finish_utc <= deadline_utc
+    return ResourceGap(
+        feasible, start_utc if feasible else None, finish_utc if feasible else None,
+        feasible if deadline_utc is not None else None,
+        None if feasible else "completion_deadline_infeasible",
+    )
+
+
+def _merged_busy_windows(windows):
+    merged = []
+    for item in sorted(windows, key=lambda window: (window.start_utc, window.finish_utc)):
+        if not merged or item.start_utc > merged[-1][1]:
+            merged.append([item.start_utc, item.finish_utc])
+        elif item.finish_utc > merged[-1][1]:
+            merged[-1][1] = item.finish_utc
+    return tuple((start, finish) for start, finish in merged)
+
+
+def _has_manual_overlap(windows):
+    latest_finish = None
+    for window in windows:
+        if latest_finish is not None and window.start_utc < latest_finish:
+            return True
+        latest_finish = max(latest_finish, window.finish_utc) if latest_finish else window.finish_utc
+    return False
+
+
+def _assignment_finished(assignment, work_state):
+    return bool(
+        getattr(assignment, "completed_at_utc", None)
+        or getattr(assignment, "fuel_on_board_at_utc", None)
+        or (work_state and (
+            getattr(work_state, "off_at_utc", None)
+            or getattr(work_state, "ended_early_at_utc", None)
+        ))
+    )
+
+
+def _record_value(record, name, default=None):
+    return record.get(name, default) if isinstance(record, dict) else getattr(record, name, default)
 
 
 def estimate_fuel_demand_gallons(
