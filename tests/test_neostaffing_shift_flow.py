@@ -99,5 +99,8 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertIn('neostaffing-shift-flow-board-scroll', template)
         self.assertIn('--shift-flow-group-count', template)
         self.assertIn('grid-template-columns: clamp(144px, 10vw, 184px) minmax(0, 1fr)', css)
+        self.assertIn('repeat(var(--shift-flow-group-count, 1), clamp(220px, 15vw, 300px))', css)
+        self.assertIn('width: max-content', css)
+        self.assertIn('grid-column: 1 / -1', css)
         self.assertIn('overflow: auto; overscroll-behavior: contain', css)
         self.assertIn('top: 142px', css)

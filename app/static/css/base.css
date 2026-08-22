@@ -27107,23 +27107,23 @@ body:has(.neostaffing-shift-flow) { overflow-x: clip; }
 .neostaffing-shift-flow-head,
 .neostaffing-shift-flow-group header,
 .neostaffing-shift-flow-drawer header { display: flex; align-items: center; gap: 10px; }
-.neostaffing-shift-flow-head { min-width: 0; }
+.neostaffing-shift-flow-head { display: grid; grid-template-columns: auto auto; align-items: center; justify-content: start; min-width: 0; }
 .neostaffing-shift-flow-head > div { flex: 0 0 auto; }
 .neostaffing-shift-flow-head h1 { margin: 0; font-size: 1rem; letter-spacing: .08em; }
 .neostaffing-shift-flow-head p { margin: 3px 0 0; color: var(--muted); font-size: .75rem; }
 .neostaffing-shift-flow-head > strong { flex: 0 0 auto; color: var(--node-primary); font-size: .75rem; white-space: nowrap; }
-.neostaffing-shift-flow-tabs { display: flex; flex: 1 1 auto; justify-content: flex-end; gap: 5px; min-width: 0; }
+.neostaffing-shift-flow-tabs { display: flex; grid-column: 1 / -1; flex-wrap: wrap; justify-content: flex-start; gap: 5px; min-width: 0; }
 .neostaffing-shift-flow-tabs a,
 .neostaffing-shift-flow-drawer a { padding: 5px 8px; background: #152228; color: #d9eeee; font-size: .65rem; font-weight: 850; letter-spacing: .04em; text-decoration: none; white-space: nowrap; }
 .neostaffing-shift-flow-tabs a[aria-current=page] { background: #147c7a; color: #f1ffff; }
 .neostaffing-shift-flow-board-scroll { min-width: 0; overflow: auto; overscroll-behavior: contain; }
 .neostaffing-shift-flow-groups {
     display: grid;
-    grid-template-columns: repeat(var(--shift-flow-group-count, 1), minmax(190px, 1fr));
+    grid-template-columns: repeat(var(--shift-flow-group-count, 1), clamp(220px, 15vw, 300px));
     align-items: start;
     gap: 8px;
+    width: max-content;
     min-width: 100%;
-    min-height: 100%;
 }
 .neostaffing-shift-flow-group { min-width: 0; background: #101c23; border: 1px solid rgba(var(--node-rgb), .22); }
 .neostaffing-shift-flow-group header { justify-content: space-between; padding: 7px 9px; border-bottom: 1px solid rgba(var(--node-rgb), .16); }
@@ -27156,7 +27156,6 @@ body:has(.neostaffing-shift-flow) { overflow-x: clip; }
 @media (max-width: 1280px) and (min-width: 981px) {
     .neostaffing-shift-flow { grid-template-columns: 144px minmax(0, 1fr); }
     .neostaffing-shift-flow-workspace { padding: 12px; }
-    .neostaffing-shift-flow-tabs { flex-wrap: wrap; justify-content: flex-start; }
     .neostaffing-shift-flow-drawer { width: min(380px, calc(100vw - 164px)); }
 }
 @media (max-width: 980px) {
@@ -27164,7 +27163,7 @@ body:has(.neostaffing-shift-flow) { overflow-x: clip; }
     .neostaffing-shift-flow .neostaffing-rail { display: none; }
     .neostaffing-shift-flow-workspace { min-height: auto; padding: 12px; }
     .neostaffing-shift-flow-head { align-items: flex-start; flex-wrap: wrap; }
-    .neostaffing-shift-flow-tabs { order: 3; flex-basis: 100%; justify-content: flex-start; flex-wrap: wrap; }
+    .neostaffing-shift-flow-tabs { order: initial; }
     .neostaffing-shift-flow-drawer { top: 0; width: min(420px, 92vw); }
 }
 .neostaffing-shift-flow-drawer [data-flow-transition]{display:none}.neostaffing-shift-flow-drawer form:has(select[name=shift_flow_sort_start_work_area_id] option[data-flow-start-type="Ballmat"]:checked) [data-flow-transition]{display:grid}
