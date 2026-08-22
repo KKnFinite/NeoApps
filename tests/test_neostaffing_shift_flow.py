@@ -1,4 +1,5 @@
 from datetime import date
+from pathlib import Path
 import unittest
 
 from app import create_app
@@ -89,3 +90,14 @@ class ShiftFlowTest(unittest.TestCase):
             self.assertEqual(staffing_service._shift_flow_phase_area(plan, phase).id, self.discharge.id)
         updated = staffing_service.save_shift_flow_plan(person, self._values(self.door, "", final=self.door), self.door)
         self.assertEqual(updated.sort_start_work_area.id, self.door.id)
+
+    def test_workspace_markup_keeps_navigation_and_board_as_separate_desktop_surfaces(self):
+        root = Path(__file__).resolve().parents[1]
+        template = (root / "app/templates/neostaffing/shift_flow.html").read_text(encoding="utf-8")
+        css = (root / "app/static/css/base.css").read_text(encoding="utf-8")
+        self.assertIn('<main class="neostaffing-shift-flow-workspace">', template)
+        self.assertIn('neostaffing-shift-flow-board-scroll', template)
+        self.assertIn('--shift-flow-group-count', template)
+        self.assertIn('grid-template-columns: clamp(144px, 10vw, 184px) minmax(0, 1fr)', css)
+        self.assertIn('overflow: auto; overscroll-behavior: contain', css)
+        self.assertIn('top: 142px', css)
