@@ -111,6 +111,10 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertIn('grid-column: 1 / -1', css)
         self.assertIn('overflow: auto; overscroll-behavior: contain', css)
         self.assertIn('top: 142px', css)
+        self.assertIn('data-shift-flow-final-board', template)
+        self.assertIn('data-final-door-id', template)
+        self.assertIn('draggable="true"', template)
+        self.assertIn('neostaffing_shift_flow_drag.js', template)
 
     def test_phase_lane_backbone_is_complete_and_stably_ordered(self):
         expected = {
@@ -150,6 +154,48 @@ class ShiftFlowTest(unittest.TestCase):
         flow_lane = next(lane for lane in context["groups"] if lane["area"].name == "FLOW NOT SET")
         self.assertEqual([row["person"].id for row in flow_lane["rows"]], [person.id])
         self.assertEqual([lane["area"].name for lane in context["groups"]], ["Door 1", "Door 2", "FLOW NOT SET"])
+
+    def test_final_door_move_changes_only_final_door_and_regroups_counts(self):
+        person = self._person()
+        plan = staffing_service.create_shift_flow_plan(
+            person, self._values(self.ballmat, "2", self.door, self.door), self.door
+        )
+        db.session.add(StaffingWorkAssignment(person=person, work_area=self.door, active=True))
+        db.session.commit()
+        version = plan.updated_at.isoformat(timespec="microseconds")
+
+        result = staffing_service.move_shift_flow_final_door(
+            person, self.empty_door.id, self.door, version
+        )
+        db.session.commit()
+
+        self.assertTrue(result["changed"])
+        self.assertEqual(plan.final_door_work_area_id, self.empty_door.id)
+        self.assertEqual(plan.setup_work_area_id, self.door.id)
+        self.assertEqual(plan.sort_start_work_area_id, self.ballmat.id)
+        self.assertEqual(plan.ballmat_transition, 2)
+        lanes = {lane["area"].name: lane for lane in staffing_service.shift_flow_context("final_door")["groups"]}
+        self.assertEqual(lanes["Door 1"]["rows"], [])
+        self.assertEqual([row["person"].id for row in lanes["Door 2"]["rows"]], [person.id])
+
+    def test_final_door_move_rejects_unplanned_invalid_same_and_stale_drops(self):
+        unplanned = self._person("100002")
+        with self.assertRaisesRegex(ValueError, "FLOW NOT SET"):
+            staffing_service.move_shift_flow_final_door(unplanned, self.empty_door.id, self.door, "v")
+
+        person = self._person("100003")
+        plan = staffing_service.create_shift_flow_plan(person, self._values(self.door), self.door)
+        db.session.commit()
+        version = plan.updated_at.isoformat(timespec="microseconds")
+        same = staffing_service.move_shift_flow_final_door(person, self.door.id, self.door, version)
+        self.assertFalse(same["changed"])
+        with self.assertRaisesRegex(ValueError, "Final Door"):
+            staffing_service.move_shift_flow_final_door(person, self.ballmat.id, self.door, version)
+
+        plan.final_door_work_area = self.empty_door
+        db.session.commit()
+        stale = staffing_service.move_shift_flow_final_door(person, self.door.id, self.door, version)
+        self.assertEqual(stale["conflict"]["type"], "stale_version")
 
     def test_context_uses_bounded_collection_queries(self):
         statements = []

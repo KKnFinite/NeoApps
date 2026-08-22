@@ -1,6 +1,6 @@
 from functools import wraps
 
-from flask import flash, redirect, render_template, request, url_for
+from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 
@@ -322,6 +322,43 @@ def save_shift_flow(person_id):
     else:
         flash("Shift Flow plan saved.", "success")
     return redirect(url_for("neostaffing.shift_flow", phase=phase, person_id=person_id))
+
+
+@bp.route("/shift-flow/<int:person_id>/final-door", methods=["POST"])
+@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
+def move_shift_flow_final_door(person_id):
+    """Persist one FINAL DOOR drag without touching the rest of the plan."""
+    payload = request.get_json(silent=True) or request.form
+    try:
+        person = _get_person(person_id)
+        assignment = StaffingWorkAssignment.query.filter_by(
+            person_id=person.id, active=True
+        ).first()
+        result = staffing_service.move_shift_flow_final_door(
+            person,
+            payload.get("final_door_work_area_id"),
+            assignment.work_area if assignment else None,
+            payload.get("expected_version"),
+        )
+        if result.get("conflict"):
+            db.session.rollback()
+            return jsonify({"ok": False, "conflict": result["conflict"]}), 409
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(getattr(error, "orig", None) or error)}), 400
+
+    plan = result["plan"]
+    return jsonify(
+        {
+            "ok": True,
+            "changed": result["changed"],
+            "person_id": person.id,
+            "final_door_work_area_id": plan.final_door_work_area_id,
+            "plan_version": result["version"],
+            "shorthand": staffing_service.shift_flow_shorthand(plan),
+        }
+    )
 
 
 @bp.route("/requests")

@@ -6,6 +6,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
+from app.services.live_collaboration import entity_version, version_conflict
 from app.models import (
     StaffingDailyAttendance,
     StaffingChangeRequest,
@@ -223,6 +224,44 @@ def save_shift_flow_plan(person, values, selected_work_area):
     existing.ballmat_transition = transition
     existing.final_door_work_area = final
     return existing
+
+
+def move_shift_flow_final_door(person, final_door_id, selected_work_area, expected_version):
+    """Move one complete Shift Flow plan to an existing Shift Door lane.
+
+    This deliberately changes only the final-door field used by the FINAL DOOR
+    board.  The rendered plan version prevents a drag from overwriting a newer
+    drawer edit.
+    """
+    plan = person.shift_flow_plan or StaffingShiftFlowPlan.query.filter_by(
+        staffing_person_id=person.id
+    ).first()
+    if not plan:
+        raise ValueError("FLOW NOT SET employees cannot be moved to a Final Door.")
+    if not str(expected_version or "").strip():
+        raise ValueError("Shift Flow changed. Reload and try again.")
+    conflict = version_conflict(plan, expected_version)
+    if conflict:
+        return {"conflict": conflict}
+
+    allowed = {area.id: area for area in shift_flow_area_options(selected_work_area)}
+    destination = _shift_flow_area(final_door_id, allowed, "Final Door")
+    if shift_work_area_type(destination) != SHIFT_FLOW_DOOR:
+        raise ValueError("Final Door must be a Shift Door.")
+    if plan.final_door_work_area_id == destination.id:
+        return {
+            "changed": False,
+            "plan": plan,
+            "version": entity_version(plan),
+        }
+
+    plan.final_door_work_area = destination
+    db.session.flush()
+    return {
+        "changed": True,
+        "plan": plan,
+        "version": entity_version(plan),
+    }
 
 
 def _validated_ballmat_transition(start, value):

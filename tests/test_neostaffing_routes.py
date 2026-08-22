@@ -1,4 +1,5 @@
 from datetime import date, datetime
+import re
 import unittest
 
 from flask import g
@@ -13,6 +14,7 @@ from app.models import (
     StaffingDailyAttendance,
     StaffingLeadershipAssignment,
     StaffingPerson,
+    StaffingShiftFlowPlan,
     StaffingReportingRelationship,
     StaffingUnit,
     StaffingWorkAssignment,
@@ -151,6 +153,52 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"SHIFT FLOW", response.data)
         self.assertIn(b"FLOW NOT SET", response.data)
         self.assertIn(b"Shift Employee", response.data)
+
+    def test_shift_flow_final_door_move_requires_simulator_and_csrf(self):
+        simulator = self._user("shift_drag_simulator")
+        watcher = self._user("shift_drag_watcher")
+        self._grant_app_access(simulator, "neostaffing", "simulator")
+        self._grant_app_access(watcher, "neostaffing", "watcher")
+        night = staffing_service.create_unit({"unit_type": "sort", "name": "Night"})
+        ramp = staffing_service.create_unit({"unit_type": "operation", "name": "Ramp", "parent_id": night.id})
+        shift = staffing_service.create_unit({"unit_type": "department", "name": "Shift", "parent_id": ramp.id})
+        door_one = staffing_service.create_unit({"unit_type": "work_area", "name": "Door 1", "parent_id": shift.id})
+        door_two = staffing_service.create_unit({"unit_type": "work_area", "name": "Door 2", "parent_id": shift.id})
+        person = staffing_service.create_person({
+            "employee_id": "DRAG100", "first_name": "Drag", "last_name": "Person",
+            "seniority_date": "2020-01-01", "classification": "part_time", "employee_status": "active",
+        })
+        staffing_service.assign_work_area(person, door_one)
+        plan = StaffingShiftFlowPlan(person=person, sort_start_work_area=door_one, final_door_work_area=door_one)
+        db.session.add(plan)
+        db.session.commit()
+
+        self._login(watcher.username)
+        blocked = self.client.post(
+            f"/neostaffing/shift-flow/{person.id}/final-door",
+            json={"final_door_work_area_id": door_two.id, "expected_version": plan.updated_at.isoformat(timespec="microseconds")},
+        )
+        self.assertEqual(blocked.status_code, 302)
+        self.assertEqual(db.session.get(StaffingShiftFlowPlan, plan.id).final_door_work_area_id, door_one.id)
+
+        client = self._logged_in_client(simulator.username)
+        self.app.config["CSRF_PROTECT_TESTING"] = True
+        page = client.get("/neostaffing/shift-flow")
+        token = re.search(r'<meta name="csrf-token" content="([^"]+)">', page.get_data(as_text=True)).group(1)
+        missing = client.post(
+            f"/neostaffing/shift-flow/{person.id}/final-door",
+            json={"final_door_work_area_id": door_two.id, "expected_version": plan.updated_at.isoformat(timespec="microseconds")},
+            headers={"Accept": "application/json"},
+        )
+        self.assertEqual(missing.status_code, 400)
+        moved = client.post(
+            f"/neostaffing/shift-flow/{person.id}/final-door",
+            json={"final_door_work_area_id": door_two.id, "expected_version": plan.updated_at.isoformat(timespec="microseconds")},
+            headers={"Accept": "application/json", "X-CSRF-Token": token},
+        )
+        self.assertEqual(moved.status_code, 200)
+        self.assertTrue(moved.get_json()["changed"])
+        self.assertEqual(db.session.get(StaffingShiftFlowPlan, plan.id).final_door_work_area_id, door_two.id)
 
     def test_legacy_people_attendance_redirects_to_main_attendance(self):
         user = self._user("staffing_attendance_legacy")
