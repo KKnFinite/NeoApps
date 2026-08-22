@@ -76,6 +76,25 @@ ATTENDANCE_STATUS_LABELS = {
     "cleared": "Cleared",
 }
 
+# Operational count names intentionally map to the existing persisted
+# attendance values.  Personal Leave does not have a canonical attendance
+# value today, so it remains an explicit zero rather than creating one here.
+ATTENDANCE_STAFFING_COUNT_STATUS_BY_KEY = {
+    "working": "here",
+    "called_in": "call_in",
+    "no_call": "no_call",
+    "scheduled_off": "anniversary_day",
+    "vacation": "vacation",
+    "opt_day": "optional_day",
+    "disability": "disability",
+    "work_comp": "comp",
+    "funeral": "funeral",
+    "jury": "jury",
+    "fmla": "int_fmla",
+    "military": "military",
+    "cleared": "cleared",
+}
+
 NON_MANAGEMENT_CLASSIFICATIONS = {"part_time", "full_time_combo"}
 MANAGEMENT_CLASSIFICATIONS = set(STAFFING_CLASSIFICATIONS) - NON_MANAGEMENT_CLASSIFICATIONS
 SUPERVISOR_CLASSIFICATIONS = {
@@ -353,6 +372,108 @@ def attendance_status_choices():
         (value, ATTENDANCE_STATUS_LABELS[value])
         for value in STAFFING_DAILY_ATTENDANCE_STATUSES
     ]
+
+
+def attendance_staffing_counts(scope, operation, *, group_by_person_id=None):
+    """Count active payroll staff and canonical attendance for one sort scope.
+
+    ``group_by_person_id`` is an already-loaded mapping for a future view's
+    staffing grouping (for example, Shift Flow final-door IDs).  It never
+    changes which attendance record is read or its attendance location.
+    """
+    hierarchy = _daily_attendance_hierarchy()
+    staffing_sort = _staffing_sort_for_operation(operation, hierarchy)
+    selected_scope = staffing_sort
+    if scope is not None:
+        selected_scope = hierarchy["by_id"].get(getattr(scope, "id", None))
+        if selected_scope is None:
+            raise ValueError("The supplied staffing scope is unavailable.")
+    if not _unit_belongs_to_staffing_sort(
+        selected_scope,
+        staffing_sort,
+        hierarchy,
+    ):
+        raise ValueError(
+            "The supplied staffing scope does not belong to the operation sort."
+        )
+
+    assignments = _attendance_count_assignments(
+        selected_scope,
+        staffing_sort,
+        hierarchy,
+    )
+    records = _daily_attendance_records(
+        [assignment.person_id for assignment in assignments],
+        operation,
+        staffing_sort,
+    )
+    totals = _attendance_staffing_count_totals(assignments, records)
+    groups = {}
+    if group_by_person_id is not None:
+        assignments_by_group = {}
+        for assignment in assignments:
+            group_key = group_by_person_id.get(assignment.person_id)
+            if group_key is None:
+                continue
+            assignments_by_group.setdefault(group_key, []).append(assignment)
+        groups = {
+            group_key: _attendance_staffing_count_totals(
+                group_assignments,
+                records,
+            )
+            for group_key, group_assignments in assignments_by_group.items()
+        }
+    return {
+        **totals,
+        "scope": selected_scope,
+        "staffing_sort": staffing_sort,
+        "groups": groups,
+    }
+
+
+def _attendance_count_assignments(scope, staffing_sort, hierarchy):
+    """Load the active payroll roster once; attendance location stays separate."""
+    work_area_ids = _daily_attendance_work_area_ids(scope, hierarchy)
+    if not work_area_ids:
+        return []
+    return (
+        StaffingWorkAssignment.query.options(
+            joinedload(StaffingWorkAssignment.person),
+            joinedload(StaffingWorkAssignment.work_area),
+        )
+        .join(StaffingPerson)
+        .filter(
+            StaffingWorkAssignment.active.is_(True),
+            StaffingWorkAssignment.work_area_unit_id.in_(work_area_ids),
+            StaffingPerson.active.is_(True),
+        )
+        .order_by(StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.id)
+        .all()
+    )
+
+
+def _attendance_staffing_count_totals(assignments=(), records=None):
+    status_counts = {status: 0 for status in STAFFING_DAILY_ATTENDANCE_STATUSES}
+    records = records or {}
+    on_payroll = 0
+    unmarked = 0
+    for assignment in assignments:
+        on_payroll += 1
+        record = records.get(assignment.person_id)
+        if record is None:
+            unmarked += 1
+        else:
+            status_counts[record.status] += 1
+    return {
+        "on_payroll": on_payroll,
+        "unmarked": unmarked,
+        "personal_leave": 0,
+        "canonical_status_counts": status_counts,
+        **{
+            key: status_counts[status]
+            for key, status in ATTENDANCE_STAFFING_COUNT_STATUS_BY_KEY.items()
+        },
+    }
 
 
 def unit_type_choices():
