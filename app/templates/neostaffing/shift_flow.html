@@ -5,12 +5,10 @@
   {% include "neostaffing/_section_nav.html" %}
   <main class="neostaffing-shift-flow-workspace">
     <header class="neostaffing-shift-flow-head"><div><h1 id="shift-flow-title">SHIFT FLOW</h1><p>Ramp / Shift</p></div><strong>{{ shift_flow.planned_count }} planned</strong><nav class="neostaffing-shift-flow-tabs" aria-label="Shift Flow phase">{% for value,label in shift_flow.phases %}<a href="{{ url_for('neostaffing.shift_flow', phase=value) }}" {% if shift_flow.phase==value %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}</nav></header>
-    {% set board_group_count = (shift_flow.groups|length) + (1 if shift_flow.unplanned else 0) %}
+    {% set board_group_count = shift_flow.groups|length %}
     <div class="neostaffing-shift-flow-board-scroll" tabindex="0">
     <section class="neostaffing-shift-flow-groups" {% if board_group_count %}style="--shift-flow-group-count: {{ board_group_count }}"{% endif %}>
       {% for group in shift_flow.groups %}<article class="neostaffing-shift-flow-group"><header><strong>{{ group.area.name }}</strong><span>{{ group.rows|count }}</span></header><ul>{% for row in group.rows %}<li><a href="{{ url_for('neostaffing.shift_flow', phase=shift_flow.phase, person_id=row.person.id) }}"><span>{{ row.person.full_name }}</span><small>{{ row.shorthand }}</small></a></li>{% endfor %}</ul></article>{% endfor %}
-      {% if shift_flow.unplanned %}<article class="neostaffing-shift-flow-group is-unplanned"><header><strong>FLOW NOT SET</strong><span>{{ shift_flow.unplanned|count }}</span></header><ul>{% for row in shift_flow.unplanned %}<li><a href="{{ url_for('neostaffing.shift_flow', phase=shift_flow.phase, person_id=row.person.id) }}">{{ row.person.full_name }}</a></li>{% endfor %}</ul></article>{% endif %}
-      {% if not shift_flow.groups and not shift_flow.unplanned %}<p class="neostaffing-people-empty-state">No active Night / Ramp / Shift employees.</p>{% endif %}
     </section>
     </div>
   </main>

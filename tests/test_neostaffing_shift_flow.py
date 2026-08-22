@@ -2,9 +2,11 @@ from datetime import date
 from pathlib import Path
 import unittest
 
+from sqlalchemy import event
+
 from app import create_app
 from app.extensions import db
-from app.models import StaffingPerson, StaffingShiftFlowPlan, StaffingUnit
+from app.models import StaffingPerson, StaffingShiftFlowPlan, StaffingUnit, StaffingWorkAssignment
 from app.services import neostaffing as staffing_service
 
 
@@ -23,8 +25,10 @@ class ShiftFlowTest(unittest.TestCase):
         self.ballmat = StaffingUnit(unit_type="work_area", name="Ballmat A", parent=self.shift)
         self.discharge = StaffingUnit(unit_type="work_area", name="Discharge", parent=self.shift)
         self.other = StaffingUnit(unit_type="work_area", name="Other", parent=self.shift)
+        self.empty_door = StaffingUnit(unit_type="work_area", name="Door 2", parent=self.shift)
+        self.empty_ballmat = StaffingUnit(unit_type="work_area", name="Ballmat B", parent=self.shift)
         self.non_shift = StaffingUnit(unit_type="work_area", name="Door Outside", parent=self.ramp)
-        db.session.add_all([self.night, self.ramp, self.shift, self.door, self.ballmat, self.discharge, self.other, self.non_shift])
+        db.session.add_all([self.night, self.ramp, self.shift, self.door, self.ballmat, self.discharge, self.other, self.empty_door, self.empty_ballmat, self.non_shift])
         db.session.commit()
 
     def tearDown(self):
@@ -41,7 +45,10 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual(staffing_service.shift_work_area_type(self.ballmat), "Ballmat")
         self.assertEqual(staffing_service.shift_work_area_type(self.discharge), "Discharge")
         self.assertEqual(staffing_service.shift_work_area_type(self.other), "Other")
-        self.assertEqual({area.id for area in staffing_service.shift_flow_area_options(self.door)}, {self.door.id, self.ballmat.id, self.discharge.id, self.other.id})
+        self.assertEqual(
+            {area.id for area in staffing_service.shift_flow_area_options(self.door)},
+            {self.door.id, self.empty_door.id, self.ballmat.id, self.empty_ballmat.id, self.discharge.id, self.other.id},
+        )
         self.assertEqual(staffing_service.shift_flow_area_options(self.non_shift), [])
 
     def test_valid_door_ballmat_and_discharge_plans(self):
@@ -104,3 +111,57 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertIn('grid-column: 1 / -1', css)
         self.assertIn('overflow: auto; overscroll-behavior: contain', css)
         self.assertIn('top: 142px', css)
+
+    def test_phase_lane_backbone_is_complete_and_stably_ordered(self):
+        expected = {
+            "final_door": ["Door 1", "Door 2", "FLOW NOT SET"],
+            "setup": ["NO SETUP", "Door 1", "Door 2", "Ballmat A", "Ballmat B", "FLOW NOT SET"],
+            "sort_start": ["Door 1", "Door 2", "Ballmat A", "Ballmat B", "Discharge", "FLOW NOT SET"],
+            "after_w1": ["Door 1", "Door 2", "Ballmat A", "Ballmat B", "Discharge", "FLOW NOT SET"],
+            "after_w2": ["Door 1", "Door 2", "Ballmat A", "Ballmat B", "Discharge", "FLOW NOT SET"],
+            "after_cleanup": ["Door 1", "Door 2", "Discharge", "FLOW NOT SET"],
+        }
+        areas = [self.door, self.empty_door, self.ballmat, self.empty_ballmat, self.discharge, self.other]
+        for phase, names in expected.items():
+            lanes = staffing_service.shift_flow_board_lanes(phase, areas)
+            self.assertEqual([lane["area"].name for lane in lanes], names)
+        self.assertNotIn("Other", expected["sort_start"])
+
+    def test_context_projects_people_into_existing_lanes_without_creating_new_ones(self):
+        person = self._person()
+        plan = staffing_service.create_shift_flow_plan(
+            person, self._values(self.ballmat, "1", final=self.empty_door), self.door
+        )
+        db.session.add(StaffingWorkAssignment(person=person, work_area=self.door, active=True))
+        db.session.commit()
+        context = staffing_service.shift_flow_context("after_w1")
+        lanes = {lane["area"].name: lane for lane in context["groups"]}
+        self.assertEqual([row["person"].id for row in lanes["Door 2"]["rows"]], [person.id])
+        self.assertEqual(lanes["Door 1"]["rows"], [])
+        self.assertEqual(lanes["Ballmat A"]["rows"], [])
+        self.assertEqual(lanes["FLOW NOT SET"]["rows"], [])
+        self.assertNotIn("Other", lanes)
+
+    def test_unplanned_employee_uses_the_preexisting_flow_not_set_lane(self):
+        person = self._person()
+        db.session.add(StaffingWorkAssignment(person=person, work_area=self.door, active=True))
+        db.session.commit()
+        context = staffing_service.shift_flow_context("final_door")
+        flow_lane = next(lane for lane in context["groups"] if lane["area"].name == "FLOW NOT SET")
+        self.assertEqual([row["person"].id for row in flow_lane["rows"]], [person.id])
+        self.assertEqual([lane["area"].name for lane in context["groups"]], ["Door 1", "Door 2", "FLOW NOT SET"])
+
+    def test_context_uses_bounded_collection_queries(self):
+        statements = []
+
+        def capture(_conn, _cursor, statement, _parameters, _context, _executemany):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        db.session.expire_all()
+        event.listen(db.engine, "before_cursor_execute", capture)
+        try:
+            staffing_service.shift_flow_context("setup")
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture)
+        self.assertLessEqual(len(statements), 2)

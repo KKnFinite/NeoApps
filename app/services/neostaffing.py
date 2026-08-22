@@ -274,13 +274,51 @@ SHIFT_FLOW_PHASES = (
 )
 
 
+def shift_flow_board_lanes(phase, shift_areas):
+    """Build the stable Shift Flow lane backbone before projecting people into it."""
+    phase = phase if phase in {item[0] for item in SHIFT_FLOW_PHASES} else "final_door"
+    ordered = sorted(
+        shift_areas,
+        key=lambda area: (area.display_order or 0, area.name.casefold(), area.id),
+    )
+    areas_by_type = {
+        area_type: [area for area in ordered if shift_work_area_type(area) == area_type]
+        for area_type in (SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT, SHIFT_FLOW_DISCHARGE)
+    }
+
+    def lane(area, lane_type):
+        return {
+            "id": area.id,
+            "area": area,
+            "work_area": area if isinstance(area.id, int) else None,
+            "lane_type": lane_type,
+            "rows": [],
+        }
+
+    lanes = []
+    if phase == "setup":
+        lanes.append(lane(_shift_flow_virtual_area("NO SETUP"), "No Setup"))
+        lanes.extend(lane(area, SHIFT_FLOW_DOOR) for area in areas_by_type[SHIFT_FLOW_DOOR])
+        lanes.extend(lane(area, SHIFT_FLOW_BALLMAT) for area in areas_by_type[SHIFT_FLOW_BALLMAT])
+    elif phase in {"sort_start", "after_w1", "after_w2"}:
+        lanes.extend(lane(area, SHIFT_FLOW_DOOR) for area in areas_by_type[SHIFT_FLOW_DOOR])
+        lanes.extend(lane(area, SHIFT_FLOW_BALLMAT) for area in areas_by_type[SHIFT_FLOW_BALLMAT])
+        lanes.extend(lane(area, SHIFT_FLOW_DISCHARGE) for area in areas_by_type[SHIFT_FLOW_DISCHARGE])
+    elif phase == "after_cleanup":
+        lanes.extend(lane(area, SHIFT_FLOW_DOOR) for area in areas_by_type[SHIFT_FLOW_DOOR])
+        lanes.extend(lane(area, SHIFT_FLOW_DISCHARGE) for area in areas_by_type[SHIFT_FLOW_DISCHARGE])
+    else:
+        lanes.extend(lane(area, SHIFT_FLOW_DOOR) for area in areas_by_type[SHIFT_FLOW_DOOR])
+    lanes.append(lane(_shift_flow_virtual_area("FLOW NOT SET"), "Flow Not Set"))
+    return lanes
+
+
 def shift_flow_context(phase="final_door"):
     phase = phase if phase in {item[0] for item in SHIFT_FLOW_PHASES} else "final_door"
     units = StaffingUnit.query.filter_by(active=True).all()
     by_id = {unit.id: unit for unit in units}
-    shift_area_ids = {
-        unit.id for unit in units if _is_shift_work_area(unit, by_id)
-    }
+    shift_areas = [unit for unit in units if _is_shift_work_area(unit, by_id)]
+    shift_area_ids = {unit.id for unit in shift_areas}
     assignments = (
         StaffingWorkAssignment.query.options(
             joinedload(StaffingWorkAssignment.person)
@@ -300,29 +338,33 @@ def shift_flow_context(phase="final_door"):
         )
         .all()
     )
-    groups = {}
-    unplanned = []
+    groups = shift_flow_board_lanes(phase, shift_areas)
+    groups_by_id = {group["id"]: group for group in groups}
+    flow_not_set = groups_by_id["FLOW NOT SET"]
     for assignment in assignments:
         person = assignment.person
         plan = person.shift_flow_plan
         if not plan:
-            unplanned.append({"person": person, "plan": None, "assignment": assignment})
+            flow_not_set["rows"].append(
+                {"person": person, "plan": None, "assignment": assignment, "shorthand": ""}
+            )
             continue
         location = _shift_flow_phase_area(plan, phase)
-        groups.setdefault(location.id, {"area": location, "rows": []})["rows"].append(
+        group = groups_by_id.get(location.id, flow_not_set)
+        group["rows"].append(
             {"person": person, "plan": plan, "assignment": assignment,
              "shorthand": shift_flow_shorthand(plan)}
         )
-    ordered = sorted(groups.values(), key=lambda group: (group["area"].display_order, group["area"].name.casefold()))
-    for group in ordered:
+    for group in groups:
         group["rows"].sort(key=lambda row: (row["person"].last_name.casefold(), row["person"].first_name.casefold()))
-    unplanned.sort(key=lambda row: (row["person"].last_name.casefold(), row["person"].first_name.casefold()))
     return {
         "phase": phase,
         "phases": SHIFT_FLOW_PHASES,
-        "groups": ordered,
-        "planned_count": sum(len(group["rows"]) for group in ordered),
-        "unplanned": unplanned,
+        "groups": groups,
+        "planned_count": sum(
+            1 for group in groups for row in group["rows"] if row["plan"] is not None
+        ),
+        "unplanned": flow_not_set["rows"],
         "shift_area_ids": shift_area_ids,
     }
 
