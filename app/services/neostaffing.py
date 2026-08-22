@@ -2340,7 +2340,7 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False):
     hierarchy = _daily_attendance_hierarchy()
     try:
         staffing_sort = _staffing_sort_for_operation(operation, hierarchy)
-        selected_scope = _daily_attendance_scope(
+        selected_scope, selected_work_area_ids = _daily_attendance_selection(
             filters,
             hierarchy,
             staffing_sort,
@@ -2359,6 +2359,7 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False):
         assignment_scope,
         staffing_sort,
         hierarchy,
+        work_area_ids=selected_work_area_ids,
     )
     existing = _daily_attendance_records(
         [assignment.person_id for assignment in loaded_assignments],
@@ -2366,7 +2367,9 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False):
         staffing_sort,
     )
     loaded_rows = _daily_attendance_rows(loaded_assignments, existing, hierarchy)
-    if include_staffing_groups and selected_scope.id != staffing_sort.id:
+    if selected_work_area_ids is not None:
+        rows = loaded_rows
+    elif include_staffing_groups and selected_scope.id != staffing_sort.id:
         selected_work_area_ids = _daily_attendance_work_area_ids(
             selected_scope,
             hierarchy,
@@ -2392,7 +2395,12 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False):
         )
 
     summary = _daily_attendance_summary(rows)
-    filters = _daily_attendance_filters(filters, staffing_sort, selected_scope)
+    filters = _daily_attendance_filters(
+        filters,
+        staffing_sort,
+        selected_scope,
+        selected_work_area_ids=selected_work_area_ids,
+    )
     return {
         "ready": True,
         "message": "",
@@ -2400,6 +2408,7 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False):
         "attendance_date": operation.sort_date,
         "selected_sort": staffing_sort,
         "selected_scope": selected_scope,
+        "selected_work_area_ids": sorted(selected_work_area_ids or ()),
         "rows": rows,
         "counts": summary["status_counts"],
         "summary": summary,
@@ -2421,7 +2430,7 @@ def save_attendance(values, user):
 
     hierarchy = _daily_attendance_hierarchy()
     staffing_sort = _staffing_sort_for_operation(operation, hierarchy)
-    selected_scope = _daily_attendance_scope(
+    selected_scope, selected_work_area_ids = _daily_attendance_selection(
         values,
         hierarchy,
         staffing_sort,
@@ -2431,6 +2440,7 @@ def save_attendance(values, user):
         selected_scope,
         staffing_sort,
         hierarchy,
+        work_area_ids=selected_work_area_ids,
     )
     assignments_by_person = {assignment.person_id: assignment for assignment in assignments}
     eligible_person_ids = set(assignments_by_person)
@@ -2815,6 +2825,62 @@ def _daily_attendance_scope(
     return selected
 
 
+def _daily_attendance_selection(
+    filters,
+    hierarchy,
+    staffing_sort,
+    *,
+    user=None,
+    strict=False,
+):
+    """Resolve the ordinary scope or an explicit, read-only deep-link area set."""
+    raw_area_ids = _submitted_attendance_work_area_ids(filters)
+    if raw_area_ids is None:
+        return (
+            _daily_attendance_scope(
+                filters,
+                hierarchy,
+                staffing_sort,
+                user=user,
+                strict=strict,
+            ),
+            None,
+        )
+
+    work_area_ids = set()
+    for raw_value in raw_area_ids:
+        try:
+            unit_id = int(raw_value)
+        except (TypeError, ValueError):
+            raise ValueError("The selected attendance area is unavailable.")
+        unit = hierarchy["by_id"].get(unit_id)
+        if (
+            not unit
+            or unit.unit_type != "work_area"
+            or not _unit_belongs_to_staffing_sort(unit, staffing_sort, hierarchy)
+        ):
+            raise ValueError("The selected attendance area is unavailable.")
+        work_area_ids.add(unit.id)
+    if not work_area_ids:
+        raise ValueError("The selected attendance area is unavailable.")
+    selected_scope = hierarchy["by_id"][min(work_area_ids)]
+    return selected_scope, work_area_ids
+
+
+def _submitted_attendance_work_area_ids(filters):
+    """Return an explicit deep-link list, preserving ordinary scope navigation."""
+    if "work_area_ids" not in filters:
+        return None
+    raw_values = filters.get("work_area_ids")
+    if isinstance(raw_values, str):
+        raw_values = [value for value in raw_values.split(",") if value.strip()]
+    elif raw_values is None:
+        raw_values = []
+    else:
+        raw_values = list(raw_values)
+    return raw_values or None
+
+
 def _default_daily_attendance_scope(user, hierarchy, staffing_sort):
     context = management_attendance_context_for_user(user)
     for card in context.get("assignments") or []:
@@ -2850,8 +2916,14 @@ def _daily_attendance_work_area_ids(scope, hierarchy):
     return work_area_ids
 
 
-def _daily_attendance_assignments(selected_scope, staffing_sort, hierarchy):
-    work_area_ids = _daily_attendance_work_area_ids(
+def _daily_attendance_assignments(
+    selected_scope,
+    staffing_sort,
+    hierarchy,
+    *,
+    work_area_ids=None,
+):
+    work_area_ids = work_area_ids or _daily_attendance_work_area_ids(
         selected_scope or staffing_sort,
         hierarchy,
     )
@@ -2996,7 +3068,13 @@ def _daily_attendance_unit_path(unit, hierarchy):
     return " / ".join(reversed(names))
 
 
-def _daily_attendance_filters(filters, staffing_sort, selected_scope):
+def _daily_attendance_filters(
+    filters,
+    staffing_sort,
+    selected_scope,
+    *,
+    selected_work_area_ids=None,
+):
     selected = {
         "sort_id": "",
         "operation_id": "",
@@ -3009,6 +3087,41 @@ def _daily_attendance_filters(filters, staffing_sort, selected_scope):
     return selected
 
 
+def attendance_deep_link_work_area_ids(area_names, operation=None):
+    """Resolve existing current-sort Work Areas for read-only attendance links."""
+    operation = operation or current_night_attendance_operation()
+    if not operation:
+        return []
+    hierarchy = _daily_attendance_hierarchy()
+    try:
+        staffing_sort = _staffing_sort_for_operation(operation, hierarchy)
+    except ValueError:
+        return []
+    areas_by_name = {}
+    for unit in hierarchy["units"]:
+        if (
+            unit.unit_type == "work_area"
+            and _unit_belongs_to_staffing_sort(unit, staffing_sort, hierarchy)
+        ):
+            areas_by_name.setdefault(
+                _attendance_work_area_name_key(unit.name), []
+            ).append(unit.id)
+    resolved_ids = []
+    for name in area_names or ():
+        for unit_id in areas_by_name.get(_attendance_work_area_name_key(name), []):
+            if unit_id not in resolved_ids:
+                resolved_ids.append(unit_id)
+    return resolved_ids
+
+
+def _attendance_work_area_name_key(value):
+    normalized = re.sub(r"\s+", " ", str(value or "").strip()).casefold()
+    door_match = re.fullmatch(r"d(?:oor)?\s*0*(\d+)", normalized)
+    if door_match:
+        return f"door {int(door_match.group(1))}"
+    return normalized
+
+
 def _empty_daily_attendance_context(filters, message, operation=None, hierarchy=None):
     empty_options = {"sorts": [], "operations": [], "departments": [], "work_areas": []}
     return {
@@ -3018,6 +3131,7 @@ def _empty_daily_attendance_context(filters, message, operation=None, hierarchy=
         "attendance_date": operation.sort_date if operation else None,
         "selected_sort": None,
         "selected_scope": None,
+        "selected_work_area_ids": [],
         "rows": [],
         "counts": {},
         "summary": {

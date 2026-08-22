@@ -99,6 +99,9 @@
                 <input type="hidden" name="operation_id" value="{{ filters.operation_id }}">
                 <input type="hidden" name="department_id" value="{{ filters.department_id }}">
                 <input type="hidden" name="work_area_id" value="{{ filters.work_area_id }}">
+                {% for work_area_id in attendance.selected_work_area_ids %}
+                <input type="hidden" name="work_area_ids" value="{{ work_area_id }}">
+                {% endfor %}
                 <div class="neostaffing-panel-heading">
                     <h2>DAILY ATTENDANCE</h2>
                     {% if can_edit_attendance %}

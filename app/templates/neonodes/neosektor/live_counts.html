@@ -89,6 +89,12 @@
             </section>
             {% endfor %}
         </section>
+        <nav class="neosektor-live-attendance-links" aria-label="NeoStaffing attendance">
+            {% for side in ["west", "east"] %}
+            {% set work_area_ids = staffing_attendance_work_area_ids.get(side, []) %}
+            <a class="neosektor-menu-link" href="{{ url_for('neostaffing.attendance', work_area_ids=work_area_ids) if work_area_ids else url_for('neostaffing.attendance') }}">{{ side|upper }} BALLMAT ATTENDANCE</a>
+            {% endfor %}
+        </nav>
     </main>
 </section>
 

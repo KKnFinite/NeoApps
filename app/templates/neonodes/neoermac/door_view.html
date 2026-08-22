@@ -103,6 +103,10 @@
             type="button"
             data-door-supervision-open
         >{{ "EDIT DOORS" if supervised_doors else "+ ADD DOOR" }}</button>
+        <a
+            class="neoermac-menu-link neoermac-door-supervision-edit"
+            href="{{ url_for('neostaffing.attendance', work_area_ids=staffing_attendance_work_area_ids) if staffing_attendance_work_area_ids else url_for('neostaffing.attendance') }}"
+        >TAKE ATTENDANCE</a>
         </nav>
         {% endif %}
     </div>

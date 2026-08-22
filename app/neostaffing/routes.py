@@ -624,15 +624,19 @@ def _handle_attendance():
                 operation_id=request.form.get("operation_id", ""),
                 department_id=request.form.get("department_id", ""),
                 work_area_id=request.form.get("work_area_id", ""),
+                work_area_ids=request.form.getlist("work_area_ids"),
             )
         )
+    filters = {
+        "sort_id": request.args.get("sort_id", "").strip(),
+        "operation_id": request.args.get("operation_id", "").strip(),
+        "department_id": request.args.get("department_id", "").strip(),
+        "work_area_id": request.args.get("work_area_id", "").strip(),
+    }
+    if request.args.getlist("work_area_ids"):
+        filters["work_area_ids"] = request.args.getlist("work_area_ids")
     context = staffing_service.attendance_context(
-        {
-            "sort_id": request.args.get("sort_id", "").strip(),
-            "operation_id": request.args.get("operation_id", "").strip(),
-            "department_id": request.args.get("department_id", "").strip(),
-            "work_area_id": request.args.get("work_area_id", "").strip(),
-        },
+        filters,
         current_user,
         include_staffing_groups=can_view_staffing_groups,
     )

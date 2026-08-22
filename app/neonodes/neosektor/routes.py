@@ -38,6 +38,7 @@ from app.services.neosektor_sheets_compat import (
     neosektor_integration_status,
 )
 from app.services.permission_rules import user_can
+from app.services import neostaffing as staffing_service
 from app.services.uld_requests import (
     discharge_context,
     discharge_state_payload,
@@ -612,6 +613,12 @@ def live_counts():
         gateway,
         COUNT_STATE_SCOPE,
     )
+    context["staffing_attendance_work_area_ids"] = {
+        side: staffing_service.attendance_deep_link_work_area_ids(
+            [f"{side.title()} Ballmat"]
+        )
+        for side in ("west", "east")
+    }
     _commit_neosektor_initialization_if_changed(bundle)
     return render_template(
         "neonodes/neosektor/live_counts.html",

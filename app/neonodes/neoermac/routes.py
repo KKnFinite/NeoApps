@@ -63,6 +63,7 @@ from app.services.neoermac_view_outbound import (
     view_outbound_revision,
 )
 from app.services.permission_rules import permission_access
+from app.services import neostaffing as staffing_service
 
 
 NEOERMAC_DASHBOARD_VIEW_PERMISSION = "neoermac.dashboard.view"
@@ -720,6 +721,12 @@ def _door_view_response(gateway, access, selected_door, status_code=200):
     context["uld_workspace"] = workspace
     context["uld_requests"] = workspace["requests"]
     context["on_the_way_events"] = workspace["on_the_way_events"]
+    context["staffing_attendance_work_area_ids"] = (
+        staffing_service.attendance_deep_link_work_area_ids(
+            supervision["selected_doors"],
+            operation,
+        )
+    )
     context["door_view_revision"] = (
         door_view_poll_revision(
             gateway,
