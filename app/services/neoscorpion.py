@@ -28,6 +28,7 @@ from app.models import (
     User,
 )
 from app.services.parking_aircraft import resolve_parking_aircraft_type_from_tail
+from app.services.operation_lifecycle import current_existing_operational_sort_operations
 from app.services.live_screen_refresh import (
     LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
     live_screen_refresh_value,
@@ -274,59 +275,29 @@ def visible_neoscorpion_menu_items(user_can_func, current_endpoint=None):
     return items
 
 
-def current_sort_operation(gateway):
-    return (
-        SortDateOperation.query.filter(
-            SortDateOperation.archived_at_utc.is_(None),
-            db.or_(
-                SortDateOperation.gateway_id == gateway.id,
-                SortDateOperation.gateway_code == gateway.code,
-            ),
-        )
-        .order_by(
-            SortDateOperation.sort_date.desc(),
-            SortDateOperation.generated_at_utc.desc(),
-            SortDateOperation.id.desc(),
-        )
-        .first()
-    )
+def current_sort_operation(gateway, now=None):
+    operations = current_existing_operational_sort_operations(gateway, now=now)
+    return operations[0] if operations else None
 
 
 def neoscorpion_live_revision(gateway):
     """Return the current sort/revision fingerprint without building screen state."""
-    row = (
-        db.session.query(
-            SortDateOperation.id.label("operation_id"),
-            db.func.coalesce(NeoScorpionSortAssetState.revision, 0).label("revision"),
-        )
-        .outerjoin(
-            NeoScorpionSortAssetState,
-            NeoScorpionSortAssetState.sort_date_operation_id == SortDateOperation.id,
-        )
-        .filter(
-            SortDateOperation.archived_at_utc.is_(None),
-            db.or_(
-                SortDateOperation.gateway_id == gateway.id,
-                SortDateOperation.gateway_code == gateway.code,
-            ),
-        )
-        .order_by(
-            SortDateOperation.sort_date.desc(),
-            SortDateOperation.generated_at_utc.desc(),
-            SortDateOperation.id.desc(),
-        )
-        .first()
-    )
-    if row is None:
+    operation = current_sort_operation(gateway)
+    if operation is None:
         return {
             "current_operation": False,
             "operation_id": None,
             "revision": 0,
         }
+    revision = (
+        db.session.query(NeoScorpionSortAssetState.revision)
+        .filter(NeoScorpionSortAssetState.sort_date_operation_id == operation.id)
+        .scalar()
+    )
     return {
         "current_operation": True,
-        "operation_id": row.operation_id,
-        "revision": int(row.revision or 0),
+        "operation_id": operation.id,
+        "revision": int(revision or 0),
     }
 
 

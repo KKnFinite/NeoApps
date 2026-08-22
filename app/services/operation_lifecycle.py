@@ -9,6 +9,7 @@ from app.services.gateway_matrix import (
     active_sorts_for_gateway_date,
     current_gateway_local_datetime,
 )
+from app.services.request_cache import request_cached
 from app.services.sort_date_operations import generate_sort_date_operation_from_master
 
 
@@ -83,6 +84,64 @@ def _empty_result(local_now):
         "existing": [],
         "errors": [],
     }
+
+
+def current_existing_operational_sort_operations(
+    gateway,
+    now=None,
+    *,
+    local_now=None,
+    sort_settings=None,
+    active_sorts_by_date=None,
+):
+    """Read-only resolution of existing operations in active lifecycle windows."""
+    local_now = local_now or current_gateway_local_datetime(gateway, now=now)
+    if not gateway or not gateway.is_active:
+        return []
+
+    def resolve():
+        windows = _eligible_operation_windows(
+            gateway,
+            local_now,
+            sort_settings=sort_settings,
+            active_sorts_by_date=active_sorts_by_date,
+        )
+        if not windows:
+            return []
+        keys = {
+            (window["sort_date"], str(window["sort_name"]).strip().lower())
+            for window in windows
+        }
+        operations = (
+            SortDateOperation.query.filter(
+                SortDateOperation.archived_at_utc.is_(None),
+                db.or_(
+                    SortDateOperation.gateway_id == gateway.id,
+                    SortDateOperation.gateway_code == gateway.code,
+                ),
+                SortDateOperation.sort_date.in_({sort_date for sort_date, _name in keys}),
+                SortDateOperation.sort_name.in_({name for _sort_date, name in keys}),
+            )
+            .all()
+        )
+        by_key = {
+            (operation.sort_date, str(operation.sort_name).strip().lower()): operation
+            for operation in operations
+        }
+        return [
+            by_key[key]
+            for key in (
+                (window["sort_date"], str(window["sort_name"]).strip().lower())
+                for window in windows
+            )
+            if key in by_key
+        ]
+
+    return request_cached(
+        "operation_lifecycle.current_existing_operations",
+        (gateway.id, gateway.code, local_now),
+        resolve,
+    )
 
 
 def _eligible_operation_windows(

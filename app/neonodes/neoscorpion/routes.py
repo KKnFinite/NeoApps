@@ -152,12 +152,7 @@ def hanzo_revision():
     if not access["can_view"]:
         return _json_no_store({"error": "Access denied."}, 403)
     fingerprint = fuel_assignments_live_revision(gateway)
-    return _json_no_store(
-        {
-            "operation_id": fingerprint["operation_id"],
-            "revision": fingerprint["revision"],
-        }
-    )
+    return _json_no_store(fingerprint)
 
 
 @bp.post("/fuel-dispatch/autosave")
@@ -736,10 +731,7 @@ def fuel_dispatch_revision():
 
     fingerprint = fuel_assignments_live_revision(gateway)
     response = jsonify(
-        {
-            "operation_id": fingerprint["operation_id"],
-            "revision": fingerprint["revision"],
-        }
+        fingerprint
     )
     response.headers["Cache-Control"] = "no-store"
     return response
