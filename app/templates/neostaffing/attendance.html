@@ -119,12 +119,16 @@
                             <strong>{{ row.person.last_name }}, {{ row.person.first_name }}</strong>
                             <em>{{ row.work_area.name if row.work_area else "Unassigned" }}</em>
                         </div>
+                        {% if row.status and not row.status_writable %}
+                        <span>{{ row.status_label }}</span>
+                        {% else %}
                         <select name="status_{{ row.person.id }}" {% if not can_edit_attendance %}disabled{% endif %}>
                             <option value="" {% if not row.status %}selected{% endif %}>Unmarked</option>
                             {% for value, label in attendance.status_choices %}
                             <option value="{{ value }}" {% if row.status == value %}selected{% endif %}>{{ label }}</option>
                             {% endfor %}
                         </select>
+                        {% endif %}
                         <input name="note_{{ row.person.id }}" value="{{ row.note }}" placeholder="Note" {% if not can_edit_attendance %}disabled{% endif %}>
                     </div>
                     {% else %}

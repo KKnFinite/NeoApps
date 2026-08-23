@@ -1,14 +1,21 @@
 import unittest
+from datetime import date
 from unittest.mock import Mock, patch
 
 from sqlalchemy import inspect, text
 
 from app import create_app
 from app.extensions import db
-from app.models import StaffingDailyAttendance
+from app.models import StaffingDailyAttendance, StaffingPerson, StaffingUnit
+from app.models.staffing_daily_attendance import (
+    STAFFING_DAILY_ATTENDANCE_STATUSES,
+    STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES,
+)
 from app.services.neostaffing_attendance_schema import (
     NEOSTAFFING_ATTENDANCE_ADDITIVE_COLUMNS,
     NEOSTAFFING_ATTENDANCE_SCHEMA_LOCK_KEY,
+    NEOSTAFFING_ATTENDANCE_STATUS_CONSTRAINT,
+    NEOSTAFFING_ATTENDANCE_STATUS_TRANSITION_CONSTRAINT,
     ensure_neostaffing_attendance_columns,
 )
 from app.services.schema_sync import (
@@ -58,6 +65,23 @@ class NeoStaffingAttendanceSchemaTest(unittest.TestCase):
         )
 
     def test_sqlite_schema_sync_adds_columns_without_changing_legacy_rows(self):
+        staffing_sort = StaffingUnit(unit_type="sort", name="Night")
+        work_area = StaffingUnit(
+            unit_type="work_area",
+            name="Door 1",
+            parent=staffing_sort,
+        )
+        person = StaffingPerson(
+            employee_id="SCHEMA100",
+            first_name="Schema",
+            last_name="Fixture",
+            seniority_date=date(2020, 1, 1),
+            classification="part_time",
+            employee_status="active",
+            active=True,
+        )
+        db.session.add_all([staffing_sort, work_area, person])
+        db.session.commit()
         db.session.execute(text("DROP TABLE staffing_daily_attendance"))
         db.session.execute(
             text(
@@ -87,11 +111,16 @@ class NeoStaffingAttendanceSchemaTest(unittest.TestCase):
                     id, attendance_date, sort_unit_id, person_id,
                     work_area_unit_id, status, recorded_at, updated_at
                 ) VALUES (
-                    1, '2026-08-14', 10, 20, 30, 'here',
+                    1, '2026-08-14', :sort_id, :person_id, :work_area_id, 'here',
                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 )
                 """
-            )
+            ),
+            {
+                "sort_id": staffing_sort.id,
+                "person_id": person.id,
+                "work_area_id": work_area.id,
+            },
         )
         db.session.commit()
 
@@ -104,7 +133,7 @@ class NeoStaffingAttendanceSchemaTest(unittest.TestCase):
             text("SELECT * FROM staffing_daily_attendance WHERE id = 1")
         ).mappings().one()
         self.assertEqual(row["status"], "here")
-        self.assertEqual(row["work_area_unit_id"], 30)
+        self.assertEqual(row["work_area_unit_id"], work_area.id)
         for column_name in NEOSTAFFING_ATTENDANCE_ADDITIVE_COLUMNS:
             self.assertIsNone(row[column_name])
         columns = {
@@ -113,12 +142,42 @@ class NeoStaffingAttendanceSchemaTest(unittest.TestCase):
         }
         self.assertTrue(set(NEOSTAFFING_ATTENDANCE_ADDITIVE_COLUMNS).issubset(columns))
 
+    def test_model_constraint_accepts_database_valid_status_superset(self):
+        self.assertEqual(
+            set(STAFFING_DAILY_ATTENDANCE_STATUSES)
+            - set(STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES),
+            {"scheduled_off", "personal_leave"},
+        )
+        for index, status in enumerate(STAFFING_DAILY_ATTENDANCE_STATUSES, start=1):
+            db.session.execute(
+                text(
+                    "INSERT INTO staffing_daily_attendance "
+                    "(attendance_date, sort_unit_id, person_id, status, "
+                    "recorded_at, updated_at) "
+                    "VALUES ('2026-08-15', 100, :person_id, :status, "
+                    "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                ),
+                {"person_id": index, "status": status},
+            )
+        db.session.commit()
+        self.assertEqual(
+            StaffingDailyAttendance.query.count(),
+            len(STAFFING_DAILY_ATTENDANCE_STATUSES),
+        )
+
     def test_postgresql_startup_repair_is_targeted_and_idempotent(self):
         self.app.config.update(
             TESTING=False,
             SQLALCHEMY_DATABASE_URI="postgresql://example.test/neoapps",
         )
         connection = Mock()
+        full_constraint = "CHECK (status IN (" + ", ".join(
+            f"'{status}'" for status in STAFFING_DAILY_ATTENDANCE_STATUSES
+        ) + "))"
+        connection.execute.return_value.scalar.side_effect = [
+            "CHECK (status IN ('here'))",
+            full_constraint,
+        ]
         with (
             patch(
                 "app.services.neostaffing_attendance_schema.db.session.connection",
@@ -146,6 +205,30 @@ class NeoStaffingAttendanceSchemaTest(unittest.TestCase):
                 f"{column_name} INTEGER",
                 statements,
             )
+        self.assertEqual(
+            statements.count(
+                f"ADD CONSTRAINT {NEOSTAFFING_ATTENDANCE_STATUS_TRANSITION_CONSTRAINT}"
+            ),
+            1,
+        )
+        self.assertIn("NOT VALID", statements)
+        self.assertIn(
+            f"VALIDATE CONSTRAINT {NEOSTAFFING_ATTENDANCE_STATUS_TRANSITION_CONSTRAINT}",
+            statements,
+        )
+        self.assertIn(
+            f"DROP CONSTRAINT IF EXISTS {NEOSTAFFING_ATTENDANCE_STATUS_CONSTRAINT}",
+            statements,
+        )
+        self.assertIn(
+            f"RENAME CONSTRAINT {NEOSTAFFING_ATTENDANCE_STATUS_TRANSITION_CONSTRAINT} "
+            f"TO {NEOSTAFFING_ATTENDANCE_STATUS_CONSTRAINT}",
+            statements,
+        )
+        self.assertNotIn("DROP TABLE", statements)
+        self.assertNotIn("INSERT INTO", statements)
+        self.assertNotIn("UPDATE staffing_daily_attendance", statements)
+        self.assertNotIn("DELETE FROM staffing_daily_attendance", statements)
         self.assertEqual(commit.call_count, 2)
 
     def test_factory_invokes_targeted_attendance_repair(self):

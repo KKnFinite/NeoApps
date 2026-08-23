@@ -23,7 +23,10 @@ from app.models import (
     User,
 )
 from app.models.staffing_leadership_assignment import STAFFING_LEADERSHIP_LEVELS
-from app.models.staffing_daily_attendance import STAFFING_DAILY_ATTENDANCE_STATUSES
+from app.models.staffing_daily_attendance import (
+    STAFFING_DAILY_ATTENDANCE_STATUSES,
+    STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES,
+)
 from app.models.staffing_person import STAFFING_CLASSIFICATIONS, STAFFING_EMPLOYEE_STATUSES
 from app.models.staffing_unit import STAFFING_UNIT_TYPES
 from app.services.gateway_matrix import current_operations_for_gateway
@@ -75,16 +78,16 @@ ATTENDANCE_STATUS_LABELS = {
     "comp": "Comp",
     "military": "Military",
     "cleared": "Cleared",
+    "scheduled_off": "Scheduled Off",
+    "personal_leave": "Personal Leave",
 }
 
-# Operational count names intentionally map to the existing persisted
-# attendance values.  Personal Leave does not have a canonical attendance
-# value today, so it remains an explicit zero rather than creating one here.
 ATTENDANCE_STAFFING_COUNT_STATUS_BY_KEY = {
     "working": "here",
     "called_in": "call_in",
     "no_call": "no_call",
-    "scheduled_off": "anniversary_day",
+    "scheduled_off": "scheduled_off",
+    "anniversary_day": "anniversary_day",
     "vacation": "vacation",
     "opt_day": "optional_day",
     "disability": "disability",
@@ -94,6 +97,7 @@ ATTENDANCE_STAFFING_COUNT_STATUS_BY_KEY = {
     "fmla": "int_fmla",
     "military": "military",
     "cleared": "cleared",
+    "personal_leave": "personal_leave",
 }
 
 NON_MANAGEMENT_CLASSIFICATIONS = {"part_time", "full_time_combo"}
@@ -825,7 +829,7 @@ def employee_status_choices():
 def attendance_status_choices():
     return [
         (value, ATTENDANCE_STATUS_LABELS[value])
-        for value in STAFFING_DAILY_ATTENDANCE_STATUSES
+        for value in STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES
     ]
 
 
@@ -980,6 +984,10 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
             "attendance": record,
             "status": record.status if record else "",
             "status_label": ATTENDANCE_STATUS_LABELS.get(record.status, "Unmarked") if record else "Unmarked",
+            "status_writable": bool(
+                not record
+                or record.status in STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES
+            ),
             "effective_work_area_id": effective_area_id,
             "flow": operational_flow_shorthand(plan),
         }
@@ -1048,7 +1056,11 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
             if record:
                 db.session.delete(record); saved += 1
             continue
-        status = _normalize_choice(status_value, STAFFING_DAILY_ATTENDANCE_STATUSES, "attendance status")
+        status = _normalize_choice(
+            status_value,
+            STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES,
+            "attendance status",
+        )
         plan = assignments_by_person[person_id].person.shift_flow_plan
         work_area = (
             hierarchy["by_id"].get(record.work_area_unit_id)
@@ -1156,7 +1168,6 @@ def _attendance_staffing_count_totals(assignments=(), records=None):
     return {
         "on_payroll": on_payroll,
         "unmarked": unmarked,
-        "personal_leave": 0,
         "canonical_status_counts": status_counts,
         **{
             key: status_counts[status]
@@ -3172,7 +3183,7 @@ def save_attendance(values, user):
 
         status = _normalize_choice(
             status_value,
-            STAFFING_DAILY_ATTENDANCE_STATUSES,
+            STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES,
             "attendance status",
         )
         note = _optional_text(values.get(f"note_{person_id}"))
@@ -3441,6 +3452,15 @@ def _daily_attendance_rows(assignments, existing, hierarchy):
                 "sort": row_sort,
                 "attendance": record,
                 "status": record.status if record else "",
+                "status_label": (
+                    ATTENDANCE_STATUS_LABELS.get(record.status, record.status)
+                    if record
+                    else "Unmarked"
+                ),
+                "status_writable": bool(
+                    not record
+                    or record.status in STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES
+                ),
                 "note": (record.note or "") if record else "",
             }
         )

@@ -3,7 +3,7 @@ from datetime import datetime
 from app.extensions import db
 
 
-STAFFING_DAILY_ATTENDANCE_STATUSES = (
+STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES = (
     "here",
     "call_in",
     "no_call",
@@ -19,6 +19,15 @@ STAFFING_DAILY_ATTENDANCE_STATUSES = (
     "cleared",
 )
 
+# Phase 1 deployment contract: the database and read/report paths accept this
+# superset, while browser/service mutations remain limited to the writable set
+# above until every old application instance has rolled off.
+STAFFING_DAILY_ATTENDANCE_STATUSES = (
+    *STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES,
+    "scheduled_off",
+    "personal_leave",
+)
+
 
 class StaffingDailyAttendance(db.Model):
     __tablename__ = "staffing_daily_attendance"
@@ -26,7 +35,7 @@ class StaffingDailyAttendance(db.Model):
         db.CheckConstraint(
             "status IN ('here', 'call_in', 'no_call', 'vacation', 'optional_day', "
             "'anniversary_day', 'funeral', 'jury', 'int_fmla', 'disability', "
-            "'comp', 'military', 'cleared')",
+            "'comp', 'military', 'cleared', 'scheduled_off', 'personal_leave')",
             name="ck_staffing_daily_attendance_status",
         ),
         db.UniqueConstraint(
