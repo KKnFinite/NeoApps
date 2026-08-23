@@ -301,6 +301,76 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual([row["person"].id for row in cells[("Door 26", "discharge")]["sections"]["non_setup"]], [people[3].id])
         self.assertEqual([row["person"].id for row in cells[("Door 24", "bm3")]["sections"]["setup"]], [people[4].id])
 
+    def test_final_composite_persistently_accounts_for_attention_and_opposite_side_people(self):
+        areas = self._configure_final_composite()
+        east_person = self._person("100012")
+        west_person = self._person("100013")
+        unplanned = self._person("100014")
+        invalid = self._person("100015")
+        staffing_service.create_shift_flow_plan(
+            east_person, self._values(areas["Door 34"], "", final=areas["Door 34"]), self.door
+        )
+        staffing_service.create_shift_flow_plan(
+            west_person, self._values(areas["Door 17"], "", final=areas["Door 17"]), self.door
+        )
+        # This legacy-shaped plan references a real Shift door outside the fixed East/West map.
+        db.session.add(
+            StaffingShiftFlowPlan(
+                person=invalid,
+                sort_start_work_area=self.other,
+                final_door_work_area=self.empty_door,
+            )
+        )
+        db.session.add_all(
+            [
+                StaffingWorkAssignment(person=person, work_area=self.door, active=True)
+                for person in (east_person, west_person, unplanned, invalid)
+            ]
+        )
+        db.session.commit()
+
+        board = staffing_service.shift_flow_context("final_door", "east")["final_composite"]
+        east_ids = {
+            row["person"].id
+            for column in board["columns"]
+            for band in column["bands"]
+            for section in band["sections"].values()
+            for row in section
+        }
+        attention = {row["person"].id: row["attention_reason"] for row in board["needs_attention"]}
+        self.assertEqual(east_ids, {east_person.id})
+        self.assertNotIn(west_person.id, attention)
+        self.assertEqual(board["opposite_side_count"], 1)
+        self.assertEqual(attention[unplanned.id], "FLOW NOT SET — plan required.")
+        self.assertEqual(attention[invalid.id], "Final Door is not a configured East/West final door.")
+        self.assertEqual(board["active_shift_count"], 4)
+        self.assertEqual(board["placed_count"], 1)
+        self.assertEqual(board["accounted_count"], 4)
+
+    def test_final_composite_attention_handles_invalid_ballmat_transition(self):
+        areas = self._configure_final_composite()
+        person = self._person("100016")
+        plan = StaffingShiftFlowPlan(
+            person=person,
+            sort_start_work_area=areas["East Ballmat"],
+            final_door_work_area=areas["Door 34"],
+            ballmat_transition=None,
+        )
+        db.session.add_all([plan, StaffingWorkAssignment(person=person, work_area=self.door, active=True)])
+        db.session.commit()
+        board = staffing_service.shift_flow_context("final_door", "east")["final_composite"]
+        self.assertEqual(
+            board["needs_attention"][0]["attention_reason"],
+            "Ballmat Transition must be 1, 2, or 3.",
+        )
+
+    def test_final_composite_markup_keeps_persistent_attention_column_and_reasons(self):
+        template = (Path(__file__).resolve().parents[1] / "app/templates/neostaffing/shift_flow.html").read_text(encoding="utf-8")
+        self.assertIn("UNASSIGNED / NEEDS ATTENTION", template)
+        self.assertIn("row.attention_reason", template)
+        self.assertIn("composite.opposite_side_count", template)
+        self.assertNotIn("composite.unplaced", template)
+
     def test_final_composite_drag_updates_derived_fields_and_setup_section_atomically(self):
         areas = self._configure_final_composite()
         person = self._person("100011")
