@@ -2,169 +2,74 @@
 
 {% block title %}NeoStaffing Reports{% endblock %}
 
+{% macro count_chip(label, value, tone="") -%}
+<span class="neostaffing-reports-count{% if tone %} is-{{ tone }}{% endif %}"><span>{{ label }}</span><strong>{{ value }}</strong></span>
+{%- endmacro %}
+
 {% block content %}
 {% set filters = reports.filters %}
-<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="staffing-reports-title">
-    <div class="neostaffing-dashboard-shell">
-        {% include "neostaffing/_section_nav.html" %}
-        <div class="neostaffing-dashboard-main">
-    <div class="neostaffing-hero neostaffing-hero-compact">
-        <div class="neostaffing-hero-copy mobile-shell-duplicate-title">
-            <h1 id="staffing-reports-title">Reports</h1>
-        </div>
-    </div>
+<section class="neostaffing-reports-console theme-staffing" aria-labelledby="staffing-reports-title">
+    {% include "neostaffing/_section_nav.html" %}
+    <main class="neostaffing-reports-workspace">
+        <header class="neostaffing-reports-header">
+            <div><h1 id="staffing-reports-title">REPORTS</h1><span>STAFFING · SENIORITY · ATTENDANCE</span></div>
+            <div class="neostaffing-reports-header-status"><strong>{{ reports.report_type|upper }}</strong><span>READ ONLY</span></div>
+        </header>
 
-    <section class="neostaffing-data-card">
-        <h2>REPORT FILTERS</h2>
-        <form class="operation-form neostaffing-filter-form" method="get">
-            <label><span>Report</span>
+        <form class="neostaffing-reports-toolbar" method="get" aria-label="Report controls">
+            <label class="neostaffing-reports-report-type"><span>REPORT</span>
                 <select name="report_type">
                     <option value="staffing" {% if filters.report_type == "staffing" %}selected{% endif %}>Staffing Report</option>
                     <option value="seniority" {% if filters.report_type == "seniority" %}selected{% endif %}>Seniority Report</option>
                     <option value="attendance" {% if filters.report_type == "attendance" %}selected{% endif %}>Attendance Report</option>
                 </select>
             </label>
-            <label><span>Sort</span>
-                <select name="sort_id">
-                    <option value="">All / Auto</option>
-                    {% for sort in reports.staffing.sorts %}
-                    <option value="{{ sort.id }}" {% if filters.sort_id|string == sort.id|string %}selected{% endif %}>{{ sort.name }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label><span>Operation</span>
-                <select name="operation_id">
-                    <option value="">All / Auto</option>
-                    {% for operation in reports.staffing.operations %}
-                    <option value="{{ operation.id }}" {% if filters.operation_id|string == operation.id|string %}selected{% endif %}>{{ unit_path(operation) }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label><span>Department</span>
-                <select name="department_id">
-                    <option value="">All</option>
-                    {% for department in reports.staffing.departments %}
-                    <option value="{{ department.id }}" {% if filters.department_id|string == department.id|string %}selected{% endif %}>{{ unit_path(department) }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label><span>Work Area</span>
-                <select name="work_area_id">
-                    <option value="">All</option>
-                    {% for work_area in reports.staffing.work_areas %}
-                    <option value="{{ work_area.id }}" {% if filters.work_area_id|string == work_area.id|string %}selected{% endif %}>{{ unit_path(work_area) }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label><span>Classification</span>
-                <select name="classification">
-                    <option value="">All</option>
-                    {% for value, label in reports.classification_choices %}
-                    <option value="{{ value }}" {% if filters.classification == value %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label><span>Employee Status</span>
-                <select name="employee_status">
-                    <option value="">All</option>
-                    {% for value, label in reports.employee_status_choices %}
-                    <option value="{{ value }}" {% if filters.employee_status == value %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label><span>Assignment</span>
-                <select name="assignment_status">
-                    <option value="">All</option>
-                    <option value="assigned" {% if filters.assignment_status == "assigned" %}selected{% endif %}>Assigned</option>
-                    <option value="unassigned" {% if filters.assignment_status == "unassigned" %}selected{% endif %}>Unassigned</option>
-                </select>
-            </label>
-            <label><span>Attendance Date</span><input type="date" name="attendance_date" value="{{ filters.attendance_date }}"></label>
-            <label><span>Attendance Status</span>
-                <select name="attendance_status">
-                    <option value="">All</option>
-                    {% for value, label in reports.attendance_status_choices %}
-                    <option value="{{ value }}" {% if filters.attendance_status == value %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </label>
+            <details class="neostaffing-reports-scope" open>
+                <summary><span>SCOPE / FILTERS</span><span>▾</span></summary>
+                <div class="neostaffing-reports-filter-grid">
+                    <label><span>Sort</span><select name="sort_id"><option value="">All / Auto</option>{% for sort in reports.staffing.sorts %}<option value="{{ sort.id }}" {% if filters.sort_id|string == sort.id|string %}selected{% endif %}>{{ sort.name }}</option>{% endfor %}</select></label>
+                    <label><span>Operation</span><select name="operation_id"><option value="">All / Auto</option>{% for operation in reports.staffing.operations %}<option value="{{ operation.id }}" {% if filters.operation_id|string == operation.id|string %}selected{% endif %}>{{ unit_path(operation) }}</option>{% endfor %}</select></label>
+                    <label><span>Department</span><select name="department_id"><option value="">All</option>{% for department in reports.staffing.departments %}<option value="{{ department.id }}" {% if filters.department_id|string == department.id|string %}selected{% endif %}>{{ unit_path(department) }}</option>{% endfor %}</select></label>
+                    <label><span>Work Area</span><select name="work_area_id"><option value="">All</option>{% for work_area in reports.staffing.work_areas %}<option value="{{ work_area.id }}" {% if filters.work_area_id|string == work_area.id|string %}selected{% endif %}>{{ unit_path(work_area) }}</option>{% endfor %}</select></label>
+                    <label><span>Classification</span><select name="classification"><option value="">All</option>{% for value, label in reports.classification_choices %}<option value="{{ value }}" {% if filters.classification == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                    <label><span>Employee Status</span><select name="employee_status"><option value="">All</option>{% for value, label in reports.employee_status_choices %}<option value="{{ value }}" {% if filters.employee_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                    <label><span>Assignment</span><select name="assignment_status"><option value="">All</option><option value="assigned" {% if filters.assignment_status == "assigned" %}selected{% endif %}>Assigned</option><option value="unassigned" {% if filters.assignment_status == "unassigned" %}selected{% endif %}>Unassigned</option></select></label>
+                    <label><span>Attendance Date</span><input type="date" name="attendance_date" value="{{ filters.attendance_date }}"></label>
+                    <label><span>Attendance Status</span><select name="attendance_status"><option value="">All</option>{% for value, label in reports.attendance_status_choices %}<option value="{{ value }}" {% if filters.attendance_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                </div>
+            </details>
             <button type="submit">RUN REPORT</button>
         </form>
-    </section>
 
-    {% if reports.report_type == "seniority" %}
-    <section class="neostaffing-data-card">
-        <h2>SENIORITY REPORT</h2>
-        <div class="neostaffing-report-list">
-            {% for row in reports.seniority.rows %}
-            <div class="neostaffing-report-row">
-                <strong>{{ row.rank }}</strong>
-                <span>{{ row.person.employee_id }}</span>
-                <span>{{ row.person.last_name }}, {{ row.person.first_name }}</span>
-                <span>{{ classification_labels[row.person.classification] }}</span>
-                <span>{{ row.person.seniority_date.isoformat() }}</span>
-                <span>{{ row.scope_path }}</span>
+        <section class="neostaffing-reports-results" aria-live="polite">
+            {% if reports.report_type == "seniority" %}
+            <header class="neostaffing-reports-results-head"><div><h2>SENIORITY REPORT</h2><span>OPERATIONS ROSTER</span></div>{{ count_chip("ROWS", reports.seniority.rows|length) }}</header>
+            <div class="neostaffing-reports-table-wrap">
+                <table class="neostaffing-reports-table neostaffing-reports-seniority-table"><thead><tr><th>Rank</th><th>Employee</th><th>Classification</th><th>Seniority</th><th>Scope</th></tr></thead>
+                    <tbody>{% for row in reports.seniority.rows %}<tr><td><strong>{{ row.rank }}</strong></td><td><strong>{{ row.person.last_name }}, {{ row.person.first_name }}</strong><span>{{ row.person.employee_id }}</span></td><td>{{ classification_labels[row.person.classification] }}</td><td>{{ row.person.seniority_date.isoformat() }}</td><td>{{ row.scope_path }}</td></tr>{% else %}<tr><td colspan="5" class="neostaffing-reports-empty">Select an Operation to run the seniority report.</td></tr>{% endfor %}</tbody>
+                </table>
+            </div>
+            {% elif reports.report_type == "attendance" %}
+            <header class="neostaffing-reports-results-head"><div><h2>ATTENDANCE REPORT</h2><span>CURRENT RECORDED OUTCOMES</span></div>{{ count_chip("RECORDS", reports.attendance_rows|length) }}</header>
+            {% if reports.attendance_counts %}<div class="neostaffing-reports-count-strip" aria-label="Attendance totals">{% for status, count in reports.attendance_counts.items() %}{{ count_chip(attendance_status_labels[status], count) }}{% endfor %}</div>{% endif %}
+            <div class="neostaffing-reports-table-wrap">
+                <table class="neostaffing-reports-table"><thead><tr><th>Date</th><th>Employee</th><th>Outcome</th><th>Attendance Area</th><th>Note</th></tr></thead>
+                    <tbody>{% for record in reports.attendance_rows %}<tr><td>{{ record.attendance_date.isoformat() }}</td><td><strong>{{ record.person.last_name }}, {{ record.person.first_name }}</strong><span>{{ record.person.employee_id }}</span></td><td><span class="neostaffing-reports-status">{{ attendance_status_labels[record.status] }}</span></td><td>{{ record.work_area.name if record.work_area else "-" }}</td><td>{{ record.note or "-" }}</td></tr>{% else %}<tr><td colspan="5" class="neostaffing-reports-empty">No attendance records match the filters.</td></tr>{% endfor %}</tbody>
+                </table>
             </div>
             {% else %}
-            <p class="muted">Select an Operation to run the seniority report.</p>
-            {% endfor %}
-        </div>
-    </section>
-    {% elif reports.report_type == "attendance" %}
-    <section class="neostaffing-data-card">
-        <h2>ATTENDANCE REPORT</h2>
-        {% if reports.attendance_counts %}
-        <div class="neostaffing-report-counts">
-            {% for status, count in reports.attendance_counts.items() %}
-            <span>{{ attendance_status_labels[status] }} <strong>{{ count }}</strong></span>
-            {% endfor %}
-        </div>
-        {% endif %}
-        <div class="neostaffing-report-list">
-            {% for record in reports.attendance_rows %}
-            <div class="neostaffing-report-row">
-                <strong>{{ record.attendance_date.isoformat() }}</strong>
-                <span>{{ record.person.employee_id }}</span>
-                <span>{{ record.person.last_name }}, {{ record.person.first_name }}</span>
-                <span>{{ attendance_status_labels[record.status] }}</span>
-                <span>{{ record.work_area.name if record.work_area else "-" }}</span>
-                <span>{{ record.note or "" }}</span>
+            <header class="neostaffing-reports-results-head"><div><h2>STAFFING REPORT</h2><span>DEDUPLICATED EMPLOYEE ROSTER</span></div>{{ count_chip("ON PAYROLL", reports.staffing.rows|length, "primary") }}</header>
+            <div class="neostaffing-reports-count-strip" aria-label="Staffing totals">
+                {% for classification, count in reports.staffing_classification_counts.items() %}{{ count_chip(classification_labels[classification], count) }}{% endfor %}
+                {% for status, count in reports.staffing_employee_status_counts.items() %}{{ count_chip(employee_status_labels[status], count) }}{% endfor %}
             </div>
-            {% else %}
-            <p class="muted">No attendance records match the filters.</p>
-            {% endfor %}
-        </div>
-    </section>
-    {% else %}
-    <section class="neostaffing-data-card">
-        <h2>STAFFING REPORT</h2>
-        <div class="neostaffing-report-counts">
-            {% for classification, count in reports.staffing_classification_counts.items() %}
-            <span>{{ classification_labels[classification] }} <strong>{{ count }}</strong></span>
-            {% endfor %}
-            {% for status, count in reports.staffing_employee_status_counts.items() %}
-            <span>{{ employee_status_labels[status] }} <strong>{{ count }}</strong></span>
-            {% endfor %}
-        </div>
-        <div class="neostaffing-report-list">
-            {% for row in reports.staffing.rows %}
-            {% set person = row.person %}
-            <div class="neostaffing-report-row">
-                <strong>{{ person.employee_id }}</strong>
-                <span>{{ person.last_name }}, {{ person.first_name }}</span>
-                <span>{{ classification_labels[person.classification] }}</span>
-                <span>{{ employee_status_labels[person.employee_status] }}</span>
-                <span>{{ person.seniority_date.isoformat() }}</span>
-                <span>{{ person.phone_number or "-" }}</span>
-                <span>{{ row.work_area.name if row.work_area else "Unassigned" }}</span>
+            <div class="neostaffing-reports-table-wrap">
+                <table class="neostaffing-reports-table"><thead><tr><th>Employee</th><th>Classification</th><th>Status</th><th>Seniority</th><th>Phone</th><th>Work Area</th></tr></thead>
+                    <tbody>{% for row in reports.staffing.rows %}{% set person = row.person %}<tr><td><strong>{{ person.last_name }}, {{ person.first_name }}</strong><span>{{ person.employee_id }}</span></td><td>{{ classification_labels[person.classification] }}</td><td>{{ employee_status_labels[person.employee_status] }}</td><td>{{ person.seniority_date.isoformat() }}</td><td>{{ person.phone_number or "-" }}</td><td>{{ row.work_area.name if row.work_area else "Unassigned" }}</td></tr>{% else %}<tr><td colspan="6" class="neostaffing-reports-empty">No people match the filters.</td></tr>{% endfor %}</tbody>
+                </table>
             </div>
-            {% else %}
-            <p class="muted">No people match the filters.</p>
-            {% endfor %}
-        </div>
-    </section>
-    {% endif %}
-        </div>
-    </div>
+            {% endif %}
+        </section>
+    </main>
 </section>
 {% endblock %}

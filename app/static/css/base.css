@@ -28195,3 +28195,42 @@ body:has(.neostaffing-bulk-console) { overflow-x: clip; }
     .neostaffing-bulk-people,.neostaffing-bulk-staged,.neostaffing-bulk-review { min-height: 420px; border-right: 0; border-bottom: 1px solid rgba(95,207,196,.16); }
     .neostaffing-bulk-review { position: static; width: auto; box-shadow: none; }
 }
+
+/* NeoStaffing Reports full-width operations console. */
+.neostaffing-reports-console { display: grid; grid-template-columns: clamp(144px, 10vw, 184px) minmax(0, 1fr); width: calc(100vw - 32px); height: calc(100vh - 122px); min-height: 560px; margin: -18px calc(50% - 50vw + 16px) -54px; overflow: hidden; background: #071317; border: 1px solid #18333a; border-radius: 7px; color: #d3e5e6; }
+body:has(.neostaffing-reports-console) { overflow-x: clip; }
+.neostaffing-reports-console > .neostaffing-rail { box-sizing: border-box; width: auto; min-width: 0; height: 100%; overflow-y: auto; border-right: 1px solid #19353c; background: #0a161c; }
+.neostaffing-reports-workspace { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; }
+.neostaffing-reports-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 55px; padding: 8px 14px; border-bottom: 1px solid #17353b; background: linear-gradient(90deg, #0b1d22, #0a171b); }
+.neostaffing-reports-header h1,.neostaffing-reports-results-head h2 { margin: 0; color: #e0f3f1; font-size: .9rem; letter-spacing: .07em; line-height: 1.2; }
+.neostaffing-reports-header > div:first-child > span,.neostaffing-reports-results-head > div > span,.neostaffing-reports-header-status span { display: block; margin-top: 3px; color: #75a7a7; font-size: .61rem; font-weight: 700; letter-spacing: .08em; }
+.neostaffing-reports-header-status { display: flex; align-items: center; gap: 7px; color: #66d4c5; font-size: .7rem; }
+.neostaffing-reports-header-status span { margin: 0; color: #709da0; }
+.neostaffing-reports-toolbar { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #183239; background: #0a171b; }
+.neostaffing-reports-toolbar label,.neostaffing-reports-filter-grid label { display: grid; gap: 3px; min-width: 0; color: #8cb2b3; font-size: .61rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.neostaffing-reports-toolbar select,.neostaffing-reports-toolbar input { box-sizing: border-box; width: 100%; min-height: 30px; padding: 4px 7px; border: 1px solid #285057; border-radius: 3px; background: #102329; color: #d8eeee; font: inherit; font-size: .76rem; text-transform: none; }
+.neostaffing-reports-toolbar select:focus,.neostaffing-reports-toolbar input:focus { border-color: #45cdbb; box-shadow: 0 0 0 1px #45cdbb; outline: 0; }
+.neostaffing-reports-scope { min-width: 0; border: 1px solid #1c3e46; border-radius: 4px; background: #0b1c21; }
+.neostaffing-reports-scope summary { display: flex; align-items: center; justify-content: space-between; min-height: 29px; padding: 0 8px; cursor: pointer; color: #8ad6cd; font-size: .67rem; font-weight: 800; letter-spacing: .07em; list-style: none; }
+.neostaffing-reports-scope summary::-webkit-details-marker { display: none; }
+.neostaffing-reports-filter-grid { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 6px; padding: 0 8px 8px; border-top: 1px solid #183239; }
+.neostaffing-reports-toolbar > button { align-self: end; min-height: 30px; padding: 4px 10px; border: 1px solid #319c92; border-radius: 3px; background: #137a73; color: #efffff; font-size: .68rem; font-weight: 800; letter-spacing: .05em; white-space: nowrap; }
+.neostaffing-reports-toolbar > button:hover { background: #1c9188; }
+.neostaffing-reports-results { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; overflow: hidden; background: #071317; }
+.neostaffing-reports-results-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 13px 7px; border-bottom: 1px solid #163239; }
+.neostaffing-reports-count-strip { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 12px; border-bottom: 1px solid #163239; background: #0a191e; }
+.neostaffing-reports-count { display: inline-flex; align-items: baseline; gap: 5px; min-width: 0; padding: 3px 6px; border: 1px solid #22454b; border-radius: 3px; background: #0d2227; color: #8bb8b9; font-size: .62rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.neostaffing-reports-count strong { color: #e1f3f1; font-size: .78rem; }
+.neostaffing-reports-count.is-primary { border-color: #2c8881; color: #7ad8ca; }
+.neostaffing-reports-table-wrap { min-height: 0; overflow: auto; }
+.neostaffing-reports-table { width: 100%; min-width: 770px; border-collapse: collapse; color: #c7dddd; font-size: .76rem; }
+.neostaffing-reports-table th { position: sticky; top: 0; z-index: 1; padding: 7px 9px; border-bottom: 1px solid #26515a; background: #10242a; color: #8bcfc8; font-size: .61rem; letter-spacing: .07em; text-align: left; text-transform: uppercase; }
+.neostaffing-reports-table td { padding: 6px 9px; border-bottom: 1px solid #122c32; vertical-align: middle; line-height: 1.22; }
+.neostaffing-reports-table tbody tr:hover { background: #0d2227; }
+.neostaffing-reports-table td > strong { display: block; color: #e2f2f0; font-size: .78rem; }
+.neostaffing-reports-table td > span:not(.neostaffing-reports-status) { display: block; margin-top: 1px; color: #719da0; font-size: .65rem; }
+.neostaffing-reports-status { display: inline-block; padding: 2px 5px; border: 1px solid #2c6668; border-radius: 3px; color: #a3e3dc; font-size: .65rem; white-space: nowrap; }
+.neostaffing-reports-empty { padding: 20px 9px !important; color: #7d9d9e; text-align: center; }
+@media (max-width: 1500px) { .neostaffing-reports-filter-grid { grid-template-columns: repeat(3, minmax(150px, 1fr)); } }
+@media (max-width: 1180px) { .neostaffing-reports-console { grid-template-columns: 144px minmax(0, 1fr); } .neostaffing-reports-filter-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); } }
+@media (max-width: 800px) { .neostaffing-reports-console { display: block; width: 100%; height: auto; min-height: 0; margin: 0; overflow: visible; } .neostaffing-reports-console > .neostaffing-rail { display: none; } .neostaffing-reports-workspace { overflow: visible; } .neostaffing-reports-toolbar { grid-template-columns: 1fr auto; } .neostaffing-reports-scope { grid-column: 1 / -1; grid-row: 2; } .neostaffing-reports-filter-grid { grid-template-columns: 1fr; } .neostaffing-reports-results { min-height: 500px; } }

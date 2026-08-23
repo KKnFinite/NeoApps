@@ -651,6 +651,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         attendance = self.client.get("/neostaffing/reports?report_type=attendance")
 
         self.assertEqual(staffing.status_code, 200)
+        self.assertIn(b"neostaffing-reports-console", staffing.data)
+        self.assertIn(b"SCOPE / FILTERS", staffing.data)
+        self.assertIn(b"DEDUPLICATED EMPLOYEE ROSTER", staffing.data)
+        self.assertIn(b"neostaffing-reports-table-wrap", staffing.data)
         self.assertIn(b"STAFFING REPORT", staffing.data)
         self.assertIn(b"25001", staffing.data)
         self.assertIn(b"Active", staffing.data)
