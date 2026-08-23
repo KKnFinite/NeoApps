@@ -106,6 +106,11 @@ class NeoStaffingBulkChangeTest(unittest.TestCase):
             event.remove(db.engine, "before_cursor_execute", capture)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"SESSION WORKSPACE", response.data)
+        self.assertIn(b"neostaffing-bulk-console", response.data)
+        self.assertIn(b"PEOPLE / SCOPE", response.data)
+        self.assertIn(b"STAGED CHANGES", response.data)
+        self.assertIn(b"REVIEW / ACTIONS", response.data)
+        self.assertIn(b"SESSION ONLY UNTIL APPLIED", response.data)
         self.assertFalse(any(row.startswith(("INSERT", "UPDATE", "DELETE")) for row in statements))
 
         token = re.search(

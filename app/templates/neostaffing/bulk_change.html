@@ -2,275 +2,106 @@
 
 {% block title %}NeoStaffing Bulk Change{% endblock %}
 
-{% macro workspace_field() -%}
-<input type="hidden" name="workspace_token" value="{{ workspace_token }}">
+{% macro workspace_field() -%}<input type="hidden" name="workspace_token" value="{{ workspace_token }}">{%- endmacro %}
+
+{% macro form_panel(title, open=False) -%}
+<details class="neostaffing-bulk-tool"{% if open %} open{% endif %}>
+    <summary>{{ title }}</summary>
+    <div class="neostaffing-bulk-tool-body">{{ caller() }}</div>
+</details>
 {%- endmacro %}
 
 {% block content %}
 {% set context = bulk_change %}
-<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="bulk-change-title">
-    <div class="neostaffing-dashboard-shell">
-        {% include "neostaffing/_section_nav.html" %}
+<section class="neostaffing-bulk-console theme-staffing" aria-labelledby="bulk-change-title">
+    {% include "neostaffing/_section_nav.html" %}
+    <main class="neostaffing-bulk-workspace">
+        <header class="neostaffing-bulk-header">
+            <div><h1 id="bulk-change-title">BULK CHANGE</h1><span>SESSION WORKSPACE · {{ "SUBMIT CHANGES" if context.mode == "submit" else "APPLY CHANGES" }} MODE</span></div>
+            <div class="neostaffing-bulk-header-state"><strong>{{ context.staged_groups|length }}</strong><span>STAGED</span><i class="neostaffing-status-pill{% if context.blocking_errors %} is-red{% elif context.has_changes %} is-yellow{% else %} is-green{% endif %}">{% if context.blocking_errors %}{{ context.blocking_errors|length }} BLOCKED{% elif context.has_changes %}READY TO REVIEW{% else %}EMPTY{% endif %}</i></div>
+        </header>
 
-        <main class="neostaffing-dashboard-main">
-            <header class="neostaffing-dashboard-topbar">
-                <div class="mobile-shell-duplicate-title">
-                    <h1 id="bulk-change-title">Bulk Change</h1>
-                    <p>Stage a coordinated package. Nothing becomes live until the final action.</p>
+        <div class="neostaffing-bulk-body">
+            <aside class="neostaffing-bulk-people" aria-label="People and scope selection">
+                <header><div><h2>PEOPLE / SCOPE</h2><span>{% if context.actor.can_cross_area %}CROSS-AREA AVAILABLE{% else %}OPERATIONAL AREA{% endif %}</span></div><strong>{{ context.people|length }} PEOPLE</strong></header>
+                <div class="neostaffing-bulk-tools">
+                    {% call form_panel("EMPLOYEE CHANGES", True) %}
+                    <form method="post" class="neostaffing-bulk-form">
+                        {{ workspace_field() }}<input type="hidden" name="action" value="stage_person">
+                        <label class="is-wide"><span>Employee</span><select name="person_id" required><option value="">Select employee</option>{% for person in context.people %}<option value="{{ person.id }}">{{ person.employee_id }} · {{ person.full_name }} · {{ context.classification_labels[person.classification] }}</option>{% endfor %}</select></label>
+                        <label><span><input type="checkbox" name="change_employee_id" value="1"> Employee ID</span><input name="employee_id" placeholder="New ID"></label>
+                        <label><span><input type="checkbox" name="change_first_name" value="1"> First Name</span><input name="first_name" placeholder="New first name"></label>
+                        <label><span><input type="checkbox" name="change_last_name" value="1"> Last Name</span><input name="last_name" placeholder="New last name"></label>
+                        <label><span><input type="checkbox" name="change_seniority_date" value="1"> Seniority Date</span><input type="date" name="seniority_date"></label>
+                        <label><span><input type="checkbox" name="change_phone_number" value="1"> Phone</span><input name="phone_number" placeholder="Blank clears"></label>
+                        <label><span><input type="checkbox" name="change_employee_status" value="1"> Status</span><select name="employee_status">{% for value, label in context.employee_status_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+                        <label><span><input type="checkbox" name="change_classification" value="1"> Classification</span><select name="classification">{% for value, label in context.classification_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+                        <label class="is-wide"><span><input type="checkbox" name="change_work_area_unit_id" value="1"> Work Area</span><select name="work_area_unit_id"><option value="__clear__">Unassigned</option>{% for unit in context.work_areas %}<option value="{{ unit.id }}">{{ context.bundle.unit_path(unit.id) }}</option>{% endfor %}</select></label>
+                        <label><span><input type="checkbox" name="change_active" value="1"> Active State</span><select name="active"><option value="1">Active</option><option value="0">Inactive</option></select></label>
+                        <label class="is-wide"><span>Request Note</span><textarea name="request_note" rows="2" placeholder="Optional for PT approval"></textarea></label>
+                        <button type="submit">STAGE EMPLOYEE</button>
+                    </form>
+                    {% endcall %}
+
+                    {% call form_panel("NEW PERSON") %}
+                    <form method="post" class="neostaffing-bulk-form">
+                        {{ workspace_field() }}<input type="hidden" name="action" value="stage_new_person"><input type="hidden" name="active" value="1">
+                        <label><span>Employee ID</span><input name="employee_id" required></label><label><span>First Name</span><input name="first_name" required></label><label><span>Last Name</span><input name="last_name" required></label><label><span>Seniority Date</span><input type="date" name="seniority_date" required></label><label><span>Phone</span><input name="phone_number"></label>
+                        <label><span>Classification</span><select name="classification" required>{% for value, label in context.classification_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+                        <label><span>Employee Status</span><select name="employee_status" required>{% for value, label in context.employee_status_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+                        <label class="is-wide"><span>Work Area</span><select name="work_area_unit_id"><option value="">Unassigned</option>{% for unit in context.work_areas %}<option value="{{ unit.id }}">{{ context.bundle.unit_path(unit.id) }}</option>{% endfor %}</select></label>
+                        <button type="submit">STAGE NEW PERSON</button>
+                    </form>
+                    {% endcall %}
+
+                    {% call form_panel("OPERATIONAL MANAGEMENT") %}
+                    <form method="post" class="neostaffing-bulk-form">
+                        {{ workspace_field() }}<input type="hidden" name="action" value="stage_leadership_add">
+                        <label class="is-wide"><span>Management Person</span><select name="person_ref" required><option value="">Select person</option>{% for state in context.management_states %}<option value="{{ state.ref }}">{{ state.employee_id }} · {{ state.first_name }} {{ state.last_name }} · {{ context.classification_labels[state.classification] }}</option>{% endfor %}</select></label>
+                        <label class="is-wide"><span>Unit</span><select name="unit_id" required><option value="">Select unit</option>{% for unit in context.units %}<option value="{{ unit.id }}">{{ context.bundle.unit_path(unit.id) }} · {{ context.unit_type_labels[unit.unit_type] }}</option>{% endfor %}</select></label>
+                        <label class="is-wide"><span>Leadership Level</span><select name="leadership_level" required>{% for value, label in context.leadership_level_labels.items() %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label><button type="submit">STAGE ASSIGNMENT</button>
+                    </form>
+                    {% if context.active_leadership %}<form method="post" class="neostaffing-bulk-form neostaffing-bulk-subform">{{ workspace_field() }}<input type="hidden" name="action" value="stage_leadership_remove"><label class="is-wide"><span>Remove Existing Assignment</span><select name="assignment_id" required><option value="">Select assignment</option>{% for assignment in context.active_leadership %}<option value="{{ assignment.id }}">{{ context.bundle.people_by_id[assignment.person_id].full_name }} · {{ context.bundle.unit_path(assignment.unit_id) }}</option>{% endfor %}</select></label><button type="submit">STAGE REMOVAL</button></form>{% endif %}
+                    {% endcall %}
+
+                    {% call form_panel("REPORTS TO") %}
+                    <form method="post" class="neostaffing-bulk-form">{{ workspace_field() }}<input type="hidden" name="action" value="stage_reporting"><label class="is-wide"><span>Management Person</span><select name="person_ref" required><option value="">Select person</option>{% for state in context.management_states %}<option value="{{ state.ref }}">{{ state.employee_id }} · {{ state.first_name }} {{ state.last_name }}</option>{% endfor %}</select></label><label><span>Decision</span><select name="relationship_action" required><option value="keep">Keep Current</option><option value="change">Change</option><option value="clear">Clear</option></select></label><label><span>Reports To</span><select name="reports_to_ref"><option value="">Select supervisor</option>{% for state in context.management_states %}<option value="{{ state.ref }}">{{ state.employee_id }} · {{ state.first_name }} {{ state.last_name }} · {{ context.classification_labels[state.classification] }}</option>{% endfor %}</select></label><button type="submit">STAGE REPORTS TO</button></form>
+                    {% endcall %}
+
+                    {% if context.actor.can_stage_structure %}{% call form_panel("STRUCTURAL UNIT MOVE") %}
+                    <form method="post" class="neostaffing-bulk-form">{{ workspace_field() }}<input type="hidden" name="action" value="stage_unit"><label class="is-wide"><span>Unit</span><select name="unit_id" required><option value="">Select unit</option>{% for unit in context.units if unit.unit_type != "sort" %}<option value="{{ unit.id }}">{{ context.bundle.unit_path(unit.id) }}</option>{% endfor %}</select></label><label class="is-wide"><span>New Parent</span><select name="parent_id" required><option value="">Select parent</option>{% for unit in context.units %}<option value="{{ unit.id }}">{{ context.bundle.unit_path(unit.id) }}</option>{% endfor %}</select></label><button type="submit">STAGE UNIT MOVE</button></form>
+                    {% endcall %}{% endif %}
                 </div>
-            </header>
+            </aside>
 
-            <section class="neostaffing-data-card" aria-labelledby="bulk-workspace-status">
-                <div class="neostaffing-panel-heading">
-                    <div>
-                        <h2 id="bulk-workspace-status">SESSION WORKSPACE</h2>
-                        <span>{{ "SUBMIT CHANGES" if context.mode == "submit" else "APPLY CHANGES" }} MODE</span>
-                    </div>
-                    <span class="neostaffing-status-pill{% if context.has_changes %} is-yellow{% endif %}">{{ context.staged_groups|length }} GROUPS STAGED</span>
-                </div>
-                <p class="muted">This workspace is carried only by this page. Leaving or canceling discards it; staging performs no database write.</p>
-                {% if not context.actor.can_cross_area %}
-                <p><strong>Scope:</strong> Your normal operational area. Simulator or higher may deliberately work cross-area.</p>
-                {% else %}
-                <p><strong>Scope:</strong> Cross-area staging is available.</p>
-                {% endif %}
-            </section>
-
-            <section class="neostaffing-data-card" aria-labelledby="stage-employee-title">
-                <div class="neostaffing-panel-heading"><h2 id="stage-employee-title">STAGE EMPLOYEE CHANGES</h2></div>
-                <form class="operation-form" method="post">
-                    {{ workspace_field() }}
-                    <input type="hidden" name="action" value="stage_person">
-                    <label><span>Employee</span>
-                        <select name="person_id" required>
-                            <option value="">Select employee</option>
-                            {% for person in context.people %}
-                            <option value="{{ person.id }}">{{ person.employee_id }} - {{ person.full_name }} - {{ context.classification_labels[person.classification] }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    <label><span><input type="checkbox" name="change_employee_id" value="1"> Employee ID</span><input name="employee_id" placeholder="New employee ID"></label>
-                    <label><span><input type="checkbox" name="change_first_name" value="1"> First Name</span><input name="first_name" placeholder="New first name"></label>
-                    <label><span><input type="checkbox" name="change_last_name" value="1"> Last Name</span><input name="last_name" placeholder="New last name"></label>
-                    <label><span><input type="checkbox" name="change_seniority_date" value="1"> Seniority Date</span><input type="date" name="seniority_date"></label>
-                    <label><span><input type="checkbox" name="change_phone_number" value="1"> Phone</span><input name="phone_number" placeholder="Blank clears phone"></label>
-                    <label><span><input type="checkbox" name="change_employee_status" value="1"> Employee Status</span>
-                        <select name="employee_status">
-                            {% for value, label in context.employee_status_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
-                        </select>
-                    </label>
-                    <label><span><input type="checkbox" name="change_classification" value="1"> Classification</span>
-                        <select name="classification">
-                            {% for value, label in context.classification_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
-                        </select>
-                    </label>
-                    <label><span><input type="checkbox" name="change_work_area_unit_id" value="1"> Work Area</span>
-                        <select name="work_area_unit_id">
-                            <option value="__clear__">Unassigned</option>
-                            {% for unit in context.work_areas %}<option value="{{ unit.id }}">{{ context.bundle.unit_path(unit.id) }}</option>{% endfor %}
-                        </select>
-                    </label>
-                    <label><span><input type="checkbox" name="change_active" value="1"> Active State</span>
-                        <select name="active"><option value="1">Active</option><option value="0">Inactive</option></select>
-                    </label>
-                    <label><span>Request Note</span><textarea name="request_note" rows="2" placeholder="Optional for PT Supervisor submissions"></textarea></label>
-                    <button type="submit">STAGE EMPLOYEE</button>
-                </form>
-            </section>
-
-            <section class="neostaffing-data-card" aria-labelledby="new-person-title">
-                <div class="neostaffing-panel-heading"><h2 id="new-person-title">STAGE NEW PERSON</h2></div>
-                <p class="muted">A NeoApps User account is not required. Operational assignment may remain blank.</p>
-                <form class="operation-form" method="post">
-                    {{ workspace_field() }}
-                    <input type="hidden" name="action" value="stage_new_person">
-                    <label><span>Employee ID</span><input name="employee_id" required></label>
-                    <label><span>First Name</span><input name="first_name" required></label>
-                    <label><span>Last Name</span><input name="last_name" required></label>
-                    <label><span>Seniority Date</span><input type="date" name="seniority_date" required></label>
-                    <label><span>Phone</span><input name="phone_number"></label>
-                    <label><span>Classification</span>
-                        <select name="classification" required>{% for value, label in context.classification_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select>
-                    </label>
-                    <label><span>Employee Status</span>
-                        <select name="employee_status" required>{% for value, label in context.employee_status_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select>
-                    </label>
-                    <label><span>Work Area</span>
-                        <select name="work_area_unit_id">
-                            <option value="">Unassigned</option>
-                            {% for unit in context.work_areas %}<option value="{{ unit.id }}">{{ context.bundle.unit_path(unit.id) }}</option>{% endfor %}
-                        </select>
-                    </label>
-                    <input type="hidden" name="active" value="1">
-                    <button type="submit">STAGE NEW PERSON</button>
-                </form>
-            </section>
-
-            <section class="neostaffing-data-card" aria-labelledby="operational-assignment-title">
-                <div class="neostaffing-panel-heading"><h2 id="operational-assignment-title">MANAGEMENT OPERATIONAL ASSIGNMENTS</h2></div>
-                <form class="operation-form" method="post">
-                    {{ workspace_field() }}
-                    <input type="hidden" name="action" value="stage_leadership_add">
-                    <label><span>Management Person</span>
-                        <select name="person_ref" required>
-                            <option value="">Select person</option>
-                            {% for state in context.management_states %}<option value="{{ state.ref }}">{{ state.employee_id }} - {{ state.first_name }} {{ state.last_name }} - {{ context.classification_labels[state.classification] }}</option>{% endfor %}
-                        </select>
-                    </label>
-                    <label><span>Unit</span>
-                        <select name="unit_id" required>
-                            <option value="">Select unit</option>
-                            {% for unit in context.units %}<option value="{{ unit.id }}">{{ context.bundle.unit_path(unit.id) }} - {{ context.unit_type_labels[unit.unit_type] }}</option>{% endfor %}
-                        </select>
-                    </label>
-                    <label><span>Leadership Level</span>
-                        <select name="leadership_level" required>{% for value, label in context.leadership_level_labels.items() %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select>
-                    </label>
-                    <button type="submit">STAGE ASSIGNMENT</button>
-                </form>
-                {% if context.active_leadership %}
-                <form class="operation-form" method="post">
-                    {{ workspace_field() }}
-                    <input type="hidden" name="action" value="stage_leadership_remove">
-                    <label><span>Remove Existing Assignment</span>
-                        <select name="assignment_id" required>
-                            <option value="">Select assignment</option>
-                            {% for assignment in context.active_leadership %}
-                            <option value="{{ assignment.id }}">{{ context.bundle.people_by_id[assignment.person_id].full_name }} - {{ context.bundle.unit_path(assignment.unit_id) }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    <button type="submit">STAGE REMOVAL</button>
-                </form>
-                {% endif %}
-            </section>
-
-            <section class="neostaffing-data-card" aria-labelledby="reports-to-stage-title">
-                <div class="neostaffing-panel-heading"><h2 id="reports-to-stage-title">REPORTS TO</h2></div>
-                <form class="operation-form" method="post">
-                    {{ workspace_field() }}
-                    <input type="hidden" name="action" value="stage_reporting">
-                    <label><span>Management Person</span>
-                        <select name="person_ref" required>
-                            <option value="">Select person</option>
-                            {% for state in context.management_states %}<option value="{{ state.ref }}">{{ state.employee_id }} - {{ state.first_name }} {{ state.last_name }}</option>{% endfor %}
-                        </select>
-                    </label>
-                    <label><span>Decision</span>
-                        <select name="relationship_action" required><option value="keep">Keep Current</option><option value="change">Change</option><option value="clear">Clear</option></select>
-                    </label>
-                    <label><span>Reports To Person</span>
-                        <select name="reports_to_ref">
-                            <option value="">Select valid supervisor when changing</option>
-                            {% for state in context.management_states %}<option value="{{ state.ref }}">{{ state.employee_id }} - {{ state.first_name }} {{ state.last_name }} - {{ context.classification_labels[state.classification] }}</option>{% endfor %}
-                        </select>
-                    </label>
-                    <button type="submit">STAGE REPORTS TO</button>
-                </form>
-            </section>
-
-            {% if context.actor.can_stage_structure %}
-            <section class="neostaffing-data-card" aria-labelledby="structural-change-title">
-                <div class="neostaffing-panel-heading"><h2 id="structural-change-title">STRUCTURAL UNIT CHANGE</h2></div>
-                <form class="operation-form" method="post">
-                    {{ workspace_field() }}
-                    <input type="hidden" name="action" value="stage_unit">
-                    <label><span>Unit</span>
-                        <select name="unit_id" required><option value="">Select unit</option>{% for unit in context.units if unit.unit_type != "sort" %}<option value="{{ unit.id }}">{{ context.bundle.unit_path(unit.id) }}</option>{% endfor %}</select>
-                    </label>
-                    <label><span>New Parent</span>
-                        <select name="parent_id" required><option value="">Select parent</option>{% for unit in context.units %}<option value="{{ unit.id }}">{{ context.bundle.unit_path(unit.id) }}</option>{% endfor %}</select>
-                    </label>
-                    <button type="submit">STAGE UNIT MOVE</button>
-                </form>
-            </section>
-            {% endif %}
-
-            {% if context.relationship_reviews %}
-            <section class="neostaffing-data-card" aria-labelledby="management-relationships-affected">
-                <div class="neostaffing-panel-heading"><h2 id="management-relationships-affected">MANAGEMENT RELATIONSHIPS AFFECTED</h2></div>
-                <p class="muted">Operational assignments and Reports To remain separate. Keep the current relationship or choose a valid supervisor explicitly.</p>
-                {% for review in context.relationship_reviews %}
-                <article>
-                    <h3>{{ review.person.first_name }} {{ review.person.last_name }} - {{ context.classification_labels[review.person.classification] }}</h3>
-                    <p><strong>Current Reports To:</strong> {% if review.current %}{{ review.current.first_name }} {{ review.current.last_name }}{% else %}Unassigned Management{% endif %}</p>
-                    <p><strong>Suggested Reports To:</strong> {% if review.suggested %}{{ review.suggested|map(attribute="first_name")|join(", ") }}{% else %}No operational owner; choose from the valid tier{% endif %}</p>
-                    <form class="operation-form" method="post">
-                        {{ workspace_field() }}
-                        <input type="hidden" name="action" value="stage_reporting">
-                        <input type="hidden" name="person_ref" value="{{ review.person.ref }}">
-                        <label><span>Relationship Decision</span>
-                            <select name="relationship_action" required>
-                                <option value="keep" {% if review.decision and review.decision.action == "keep" %}selected{% endif %}>Keep Current</option>
-                                <option value="change" {% if review.decision and review.decision.action == "change" %}selected{% endif %}>Change to Selected</option>
-                            </select>
-                        </label>
-                        <label><span>Valid Supervisor</span>
-                            <select name="reports_to_ref">
-                                <option value="">Choose supervisor</option>
-                                {% for candidate in review.valid_candidates %}<option value="{{ candidate.ref }}" {% if review.decision and review.decision.target_ref == candidate.ref %}selected{% endif %}>{{ candidate.employee_id }} - {{ candidate.first_name }} {{ candidate.last_name }}</option>{% endfor %}
-                            </select>
-                        </label>
-                        <button type="submit">SAVE RELATIONSHIP DECISION</button>
-                    </form>
-                </article>
-                {% endfor %}
-            </section>
-            {% endif %}
-
-            <section class="neostaffing-data-card" aria-labelledby="staged-package-title">
-                <div class="neostaffing-panel-heading"><h2 id="staged-package-title">STAGED PACKAGE</h2></div>
-                {% for group in context.staged_groups %}
-                <article>
-                    <h3>{{ group.title }}</h3>
-                    <p><strong>{{ group.subtitle }}</strong></p>
-                    <ul>{% for item in group["items"] %}<li>{{ item.label }}: {{ item.current }} &rarr; {{ item.value }}</li>{% endfor %}</ul>
-                    <form class="inline-button-form" method="post">
-                        {{ workspace_field() }}
-                        <input type="hidden" name="action" value="remove_change">
-                        <input type="hidden" name="change_kind" value="{{ group.kind }}">
-                        <input type="hidden" name="change_key" value="{{ group.key }}">
-                        <button type="submit">REMOVE</button>
-                    </form>
-                </article>
-                {% else %}
-                <p class="muted">No changes staged.</p>
-                {% endfor %}
-            </section>
-
-            {% if context.blocking_errors %}
-            <section class="neostaffing-data-card" aria-label="Bulk Change validation issues">
-                <div class="neostaffing-panel-heading"><h2>REVIEW REQUIRED</h2><span class="neostaffing-status-pill is-red">{{ context.blocking_errors|length }} BLOCKED</span></div>
-                <ul>{% for error in context.blocking_errors %}<li>{{ error }}</li>{% endfor %}</ul>
-                <form class="inline-button-form" method="post">
-                    {{ workspace_field() }}
-                    <button type="submit" name="action" value="review_latest">REVIEW AGAINST LIVE DATA</button>
-                </form>
-            </section>
-            {% endif %}
-
-            {% if context.mode == "submit" and context.unsupported_items %}
-            <section class="neostaffing-data-card" aria-label="Unsupported approval items">
-                <div class="neostaffing-panel-heading"><h2>NOT SUPPORTED BY CURRENT APPROVAL WORKFLOW</h2></div>
-                <ul>{% for item in context.unsupported_items %}<li>{{ item.label }}</li>{% endfor %}</ul>
-                <p class="muted">These items remain staged but will not be applied or submitted. Supported employee fields may still submit as separate requests.</p>
-            </section>
-            {% endif %}
-
-            <section class="neostaffing-data-card" aria-labelledby="bulk-final-action-title">
-                <div class="neostaffing-panel-heading"><h2 id="bulk-final-action-title">FINAL ACTION</h2></div>
-                <div class="action-row">
-                    <form class="inline-button-form" method="post">
-                        {{ workspace_field() }}
-                        <button type="submit" name="action" value="{{ 'submit' if context.mode == 'submit' else 'apply' }}" {% if not context.has_changes or (context.mode == 'apply' and context.blocking_errors) %}disabled{% endif %}>{{ "SUBMIT CHANGES" if context.mode == "submit" else "APPLY CHANGES" }}</button>
-                    </form>
-                    <form class="inline-button-form" method="post">
-                        {{ workspace_field() }}
-                        <button type="submit" name="action" value="cancel">CANCEL / DISCARD</button>
-                    </form>
+            <section class="neostaffing-bulk-staged" aria-labelledby="staged-package-title">
+                <header><div><h2 id="staged-package-title">STAGED CHANGES</h2><span>SESSION ONLY UNTIL {{ "SUBMITTED" if context.mode == "submit" else "APPLIED" }}</span></div><strong>{{ context.staged_groups|length }} GROUPS</strong></header>
+                <div class="neostaffing-bulk-staged-list">
+                    {% for group in context.staged_groups %}
+                    <article class="neostaffing-bulk-staged-row" data-bulk-change-kind="{{ group.kind }}" data-bulk-change-key="{{ group.key }}">
+                        <div class="neostaffing-bulk-staged-person"><strong>{{ group.title }}</strong><span>{{ group.subtitle }}</span></div>
+                        <div class="neostaffing-bulk-staged-items">{% for item in group["items"] %}<div><strong>{{ item.label }}</strong><span>{{ item.current }}</span><i>→</i><em>{{ item.value }}</em></div>{% endfor %}</div>
+                        <form method="post">{{ workspace_field() }}<input type="hidden" name="action" value="remove_change"><input type="hidden" name="change_kind" value="{{ group.kind }}"><input type="hidden" name="change_key" value="{{ group.key }}"><button type="submit">REMOVE</button></form>
+                    </article>
+                    {% else %}<div class="neostaffing-bulk-empty"><strong>NO CHANGES STAGED</strong><span>Select an employee or structural action from People / Scope.</span></div>{% endfor %}
                 </div>
             </section>
-        </main>
-    </div>
+
+            <aside class="neostaffing-bulk-review" aria-label="Bulk Change review and actions">
+                <header><div><h2>REVIEW / ACTIONS</h2><span>{% if context.has_changes %}PACKAGE READY FOR VALIDATION{% else %}WAITING FOR STAGED CHANGES{% endif %}</span></div></header>
+                <div class="neostaffing-bulk-review-scroll">
+                    <section class="neostaffing-bulk-session-state"><strong>SESSION WORKSPACE</strong><span>Draft is carried only by this page token. Staging performs no database write.</span></section>
+                    {% if context.blocking_errors %}<section class="neostaffing-bulk-warning is-blocked" aria-label="Bulk Change validation issues"><header><strong>REVIEW REQUIRED</strong><span>{{ context.blocking_errors|length }} BLOCKED</span></header><ul>{% for error in context.blocking_errors %}<li>{{ error }}</li>{% endfor %}</ul><form method="post">{{ workspace_field() }}<button type="submit" name="action" value="review_latest">REVIEW AGAINST LIVE DATA</button></form></section>{% else %}<section class="neostaffing-bulk-warning is-clear"><strong>VALIDATION</strong><span>{% if context.has_changes %}No current blocking errors.{% else %}Stage a change to begin review.{% endif %}</span></section>{% endif %}
+                    {% if context.mode == "submit" and context.unsupported_items %}<section class="neostaffing-bulk-warning is-unsupported" aria-label="Unsupported approval items"><header><strong>UNSUPPORTED FOR APPROVAL</strong><span>{{ context.unsupported_items|length }}</span></header><ul>{% for item in context.unsupported_items %}<li>{{ item.label }}</li>{% endfor %}</ul><p>These stay staged but are not applied or submitted. Supported employee fields may still submit.</p></section>{% endif %}
+                    {% if context.relationship_reviews %}<section class="neostaffing-bulk-relationships" aria-labelledby="management-relationships-affected"><header><strong id="management-relationships-affected">MANAGEMENT RELATIONSHIPS AFFECTED</strong></header>{% for review in context.relationship_reviews %}<article><strong>{{ review.person.first_name }} {{ review.person.last_name }}</strong><span>Current: {% if review.current %}{{ review.current.first_name }} {{ review.current.last_name }}{% else %}Unassigned Management{% endif %}</span><span>Suggested: {% if review.suggested %}{{ review.suggested|map(attribute="first_name")|join(", ") }}{% else %}No operational owner{% endif %}</span><form method="post" class="neostaffing-bulk-form">{{ workspace_field() }}<input type="hidden" name="action" value="stage_reporting"><input type="hidden" name="person_ref" value="{{ review.person.ref }}"><label><span>Decision</span><select name="relationship_action" required><option value="keep" {% if review.decision and review.decision.action == "keep" %}selected{% endif %}>Keep Current</option><option value="change" {% if review.decision and review.decision.action == "change" %}selected{% endif %}>Change</option></select></label><label><span>Valid Supervisor</span><select name="reports_to_ref"><option value="">Choose supervisor</option>{% for candidate in review.valid_candidates %}<option value="{{ candidate.ref }}" {% if review.decision and review.decision.target_ref == candidate.ref %}selected{% endif %}>{{ candidate.employee_id }} · {{ candidate.first_name }} {{ candidate.last_name }}</option>{% endfor %}</select></label><button type="submit">SAVE DECISION</button></form></article>{% endfor %}</section>{% endif %}
+                </div>
+                <footer class="neostaffing-bulk-final-actions">
+                    <div><strong>FINAL ACTION</strong><span>{% if context.mode == "submit" %}SUPPORTED EMPLOYEE CHANGES ROUTE FOR APPROVAL{% else %}PACKAGE APPLIES IN ONE TRANSACTION{% endif %}</span></div>
+                    <form method="post">{{ workspace_field() }}<button type="submit" name="action" value="{{ 'submit' if context.mode == 'submit' else 'apply' }}" {% if not context.has_changes or (context.mode == 'apply' and context.blocking_errors) %}disabled{% endif %}>{{ "SUBMIT CHANGES" if context.mode == "submit" else "APPLY CHANGES" }}</button></form>
+                    <form method="post">{{ workspace_field() }}<button class="is-secondary" type="submit" name="action" value="cancel">CANCEL / DISCARD</button></form>
+                </footer>
+            </aside>
+        </div>
+    </main>
 </section>
 {% endblock %}
