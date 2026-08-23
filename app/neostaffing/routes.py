@@ -289,12 +289,12 @@ def staffing_groups():
 @bp.route("/shift-flow")
 @neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
 def shift_flow():
-    context = staffing_service.shift_flow_context(request.args.get("phase", "final_door"))
+    context = staffing_service.shift_flow_context(
+        request.args.get("phase", "final_door"), request.args.get("side", "east")
+    )
     selected_person_id = request.args.get("person_id", type=int)
     selected = next(
-        (row for group in context["groups"] for row in group["rows"]
-         if row["person"].id == selected_person_id),
-        next((row for row in context["unplanned"] if row["person"].id == selected_person_id), None),
+        (row for row in context["rows"] if row["person"].id == selected_person_id), None
     )
     selected_area = selected["assignment"].work_area if selected else None
     return render_template(
@@ -396,6 +396,38 @@ def move_shift_flow_lane(person_id):
             "shorthand": staffing_service.shift_flow_shorthand(plan),
         }
     )
+
+
+@bp.route("/shift-flow/<int:person_id>/final-composite", methods=["POST"])
+@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
+def move_shift_flow_final_composite(person_id):
+    payload = request.get_json(silent=True) or request.form
+    try:
+        person = _get_person(person_id)
+        assignment = StaffingWorkAssignment.query.filter_by(
+            person_id=person.id, active=True
+        ).first()
+        result = staffing_service.move_shift_flow_final_composite(
+            person,
+            payload.get("final_door_id"),
+            payload.get("band"),
+            payload.get("setup_section"),
+            assignment.work_area if assignment else None,
+            payload.get("expected_version"),
+        )
+        if result.get("conflict"):
+            db.session.rollback()
+            return jsonify({"ok": False, "conflict": result["conflict"]}), 409
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(getattr(error, "orig", None) or error)}), 400
+    plan = result["plan"]
+    return jsonify({
+        "ok": True, "changed": result["changed"], "person_id": person.id,
+        "plan_version": result["version"],
+        "shorthand": staffing_service.shift_flow_shorthand(plan),
+    })
 
 
 @bp.route("/requests")

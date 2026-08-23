@@ -1,6 +1,98 @@
 (() => {
     "use strict";
 
+    const composite = document.querySelector("[data-shift-flow-composite-board]");
+    if (composite) {
+        const feedback = composite.querySelector("[data-shift-flow-drag-feedback]");
+        const cells = [...composite.querySelectorAll("[data-shift-flow-composite-cell]")];
+        let dragged = null;
+        let saving = false;
+        const message = (text, isError = false) => {
+            if (!feedback) return;
+            feedback.textContent = text || "";
+            feedback.classList.toggle("is-error", Boolean(isError));
+        };
+        const clearCells = () => cells.forEach((cell) => cell.classList.remove("is-drag-over"));
+        const updateCount = (section) => {
+            const count = section.querySelector("[data-shift-flow-count]");
+            const list = section.querySelector("ul");
+            if (count && list) count.textContent = String(list.children.length);
+        };
+        composite.addEventListener("dragstart", (event) => {
+            const row = event.target.closest("[data-shift-flow-person-id]");
+            if (!row || saving) return;
+            dragged = row;
+            row.classList.add("is-dragging");
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", row.dataset.shiftFlowPersonId);
+            message("");
+        });
+        composite.addEventListener("dragend", () => {
+            dragged?.classList.remove("is-dragging");
+            dragged = null;
+            clearCells();
+        });
+        composite.addEventListener("dragover", (event) => {
+            const section = event.target.closest("[data-setup-section]");
+            if (!dragged || !section || saving) return;
+            event.preventDefault();
+            clearCells();
+            section.closest("[data-shift-flow-composite-cell]")?.classList.add("is-drag-over");
+            event.dataTransfer.dropEffect = "move";
+        });
+        composite.addEventListener("drop", async (event) => {
+            const targetSection = event.target.closest("[data-setup-section]");
+            const targetCell = targetSection?.closest("[data-shift-flow-composite-cell]");
+            if (!dragged || !targetSection || !targetCell || saving) return;
+            event.preventDefault();
+            clearCells();
+            const row = dragged;
+            const sourceSection = row.closest("[data-setup-section]");
+            const sourceCell = row.closest("[data-shift-flow-composite-cell]");
+            if (sourceSection === targetSection && sourceCell === targetCell) {
+                message("Already assigned to this Final Door cell.");
+                return;
+            }
+            saving = true;
+            row.classList.add("is-saving");
+            try {
+                const endpoint = composite.dataset.shiftFlowCompositeUrl.replace(
+                    "/0/final-composite", `/${row.dataset.shiftFlowPersonId}/final-composite`,
+                );
+                const response = await window.fetch(endpoint, {
+                    method: "POST", credentials: "same-origin",
+                    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                    body: JSON.stringify({
+                        final_door_id: targetCell.dataset.finalDoorId,
+                        band: targetCell.dataset.band,
+                        setup_section: targetSection.dataset.setupSection,
+                        expected_version: row.dataset.shiftFlowPlanVersion,
+                    }),
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok || !payload.ok) {
+                    throw new Error(payload.error || payload.conflict?.message || "Final Door move was not saved.");
+                }
+                if (payload.changed) {
+                    targetSection.querySelector("ul")?.append(row);
+                    updateCount(sourceSection);
+                    updateCount(targetSection);
+                }
+                row.dataset.shiftFlowPlanVersion = payload.plan_version;
+                const shorthand = row.querySelector("[data-shift-flow-shorthand]");
+                if (shorthand) shorthand.textContent = payload.shorthand || "";
+                message(payload.changed ? "Final Door updated." : "Already assigned to this Final Door cell.");
+            } catch (error) {
+                message(error.message || "Final Door move was not saved.", true);
+            } finally {
+                row.classList.remove("is-saving", "is-dragging");
+                saving = false;
+                dragged = null;
+            }
+        });
+        return;
+    }
+
     const board = document.querySelector("[data-shift-flow-drag-board]");
     if (!board) return;
 

@@ -27116,6 +27116,29 @@ body:has(.neostaffing-shift-flow) { overflow-x: clip; }
 .neostaffing-shift-flow-tabs a,
 .neostaffing-shift-flow-drawer a { padding: 5px 8px; background: #152228; color: #d9eeee; font-size: .65rem; font-weight: 850; letter-spacing: .04em; text-decoration: none; white-space: nowrap; }
 .neostaffing-shift-flow-tabs a[aria-current=page] { background: #147c7a; color: #f1ffff; }
+.neostaffing-shift-flow-sides { display: flex; gap: 5px; }
+.neostaffing-shift-flow-sides a { padding: 5px 10px; border: 1px solid rgba(var(--node-rgb), .3); color: #bedddb; font-size: .68rem; font-weight: 850; letter-spacing: .08em; text-decoration: none; }
+.neostaffing-shift-flow-sides a[aria-current=page] { background: #147c7a; color: #fff; }
+.neostaffing-shift-flow-config { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid #a87349; background: rgba(126, 81, 42, .16); color: #f0c59f; font-size: .7rem; }
+.neostaffing-shift-flow-composite { display: grid; min-width: 0; gap: 8px; }
+.neostaffing-shift-flow-composite-doors { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; padding-left: clamp(62px, 6vw, 92px); }
+.neostaffing-shift-flow-composite-doors strong { padding: 6px 7px; border-bottom: 2px solid rgba(var(--node-rgb), .52); color: #e2f5f3; font-size: clamp(.66rem, .7vw, .8rem); text-align: center; white-space: nowrap; }
+.neostaffing-shift-flow-composite-band { display: grid; grid-template-columns: clamp(62px, 6vw, 92px) minmax(0, 1fr); align-items: stretch; gap: 5px; }
+.neostaffing-shift-flow-composite-band > header { display: flex; align-items: flex-start; padding: 8px 4px; color: #78c9c5; font-size: .67rem; font-weight: 900; letter-spacing: .08em; }
+.neostaffing-shift-flow-composite-band + .neostaffing-shift-flow-composite-band { margin-top: 10px; }
+.neostaffing-shift-flow-composite-cells { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; min-width: 0; }
+.neostaffing-shift-flow-composite-cell { display: grid; min-width: 0; border: 1px solid rgba(var(--node-rgb), .22); background: #101c23; }
+.neostaffing-shift-flow-composite-cell.is-drag-over { border-color: #52d9d2; background: rgba(33, 157, 153, .16); box-shadow: inset 0 0 0 1px rgba(82, 217, 210, .42); }
+.neostaffing-shift-flow-composite-cell > section { min-height: 32px; }
+.neostaffing-shift-flow-composite-cell > section + section { border-top: 1px solid rgba(255,255,255,.1); margin-top: 5px; padding-top: 5px; }
+.neostaffing-shift-flow-composite-cell h2 { display: flex; justify-content: space-between; margin: 0; padding: 4px 6px; color: #8ab8b5; font-size: .57rem; letter-spacing: .06em; }
+.neostaffing-shift-flow-composite-cell h2 span { color: var(--node-primary); }
+.neostaffing-shift-flow-composite-cell ul { margin: 0; padding: 0; list-style: none; }
+.neostaffing-shift-flow-composite-cell li a { display: flex; justify-content: space-between; gap: 4px; min-width: 0; padding: 4px 6px; border-top: 1px solid rgba(255,255,255,.05); color: #e6f5f4; font-size: clamp(.62rem, .66vw, .74rem); line-height: 1.15; text-decoration: none; }
+.neostaffing-shift-flow-composite-cell li a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.neostaffing-shift-flow-composite-cell small { flex: 0 0 auto; color: #84cccc; font-size: .57rem; }
+.neostaffing-shift-flow-composite-unplaced { display: flex; flex-wrap: wrap; gap: 6px; padding: 7px; border-top: 1px solid rgba(167, 130, 69, .5); color: #d5bd8d; font-size: .68rem; }
+.neostaffing-shift-flow-composite-unplaced a { color: #e8e2cc; text-decoration: none; }
 .neostaffing-shift-flow-board-scroll { min-width: 0; overflow: auto; overscroll-behavior: contain; }
 .neostaffing-shift-flow-groups {
     display: grid;
@@ -27173,5 +27196,7 @@ body:has(.neostaffing-shift-flow) { overflow-x: clip; }
     .neostaffing-shift-flow-head { align-items: flex-start; flex-wrap: wrap; }
     .neostaffing-shift-flow-tabs { order: initial; }
     .neostaffing-shift-flow-drawer { top: 0; width: min(420px, 92vw); }
+    .neostaffing-shift-flow-composite { min-width: 760px; }
+    .neostaffing-shift-flow-workspace:has(.neostaffing-shift-flow-composite) { overflow-x: auto; }
 }
 .neostaffing-shift-flow-drawer [data-flow-transition]{display:none}.neostaffing-shift-flow-drawer form:has(select[name=shift_flow_sort_start_work_area_id] option[data-flow-start-type="Ballmat"]:checked) [data-flow-transition]{display:grid}
