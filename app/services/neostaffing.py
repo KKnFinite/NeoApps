@@ -264,6 +264,61 @@ def move_shift_flow_final_door(person, final_door_id, selected_work_area, expect
     }
 
 
+def move_shift_flow_phase_lane(
+    person, phase, destination_id, selected_work_area, expected_version, transition=None
+):
+    """Move a complete plan within one editable Shift Flow board phase."""
+    if phase == "final_door":
+        return move_shift_flow_final_door(
+            person, destination_id, selected_work_area, expected_version
+        )
+    if phase not in {"setup", "sort_start"}:
+        raise ValueError("This Shift Flow phase cannot be changed by drag and drop.")
+
+    plan = person.shift_flow_plan or StaffingShiftFlowPlan.query.filter_by(
+        staffing_person_id=person.id
+    ).first()
+    if not plan:
+        raise ValueError("FLOW NOT SET employees cannot be moved by drag and drop.")
+    if not str(expected_version or "").strip():
+        raise ValueError("Shift Flow changed. Reload and try again.")
+    conflict = version_conflict(plan, expected_version)
+    if conflict:
+        return {"conflict": conflict}
+
+    allowed = {area.id: area for area in shift_flow_area_options(selected_work_area)}
+    if phase == "setup":
+        if str(destination_id) == "NO SETUP":
+            destination = None
+        else:
+            destination = _shift_flow_area(destination_id, allowed, "Setup Assignment")
+            if shift_work_area_type(destination) not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT}:
+                raise ValueError("Setup Assignment must be a Shift Door or Ballmat.")
+        if plan.setup_work_area_id == getattr(destination, "id", None):
+            return {"changed": False, "plan": plan, "version": entity_version(plan)}
+        plan.setup_work_area = destination
+    else:
+        destination = _shift_flow_area(destination_id, allowed, "Sort Start Work Area")
+        destination_type = shift_work_area_type(destination)
+        if destination_type not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT, SHIFT_FLOW_DISCHARGE}:
+            raise ValueError("Sort Start Work Area must be a Shift Door, Ballmat, or Discharge.")
+        if plan.sort_start_work_area_id == destination.id:
+            return {"changed": False, "plan": plan, "version": entity_version(plan)}
+        if destination_type == SHIFT_FLOW_BALLMAT:
+            chosen_transition = str(transition or "").strip()
+            if shift_work_area_type(plan.sort_start_work_area) == SHIFT_FLOW_BALLMAT and not chosen_transition:
+                chosen_transition = str(plan.ballmat_transition or "")
+            if chosen_transition not in {"1", "2", "3"}:
+                raise ValueError("Ballmat Transition must be 1, 2, or 3.")
+            plan.ballmat_transition = int(chosen_transition)
+        else:
+            plan.ballmat_transition = None
+        plan.sort_start_work_area = destination
+
+    db.session.flush()
+    return {"changed": True, "plan": plan, "version": entity_version(plan)}
+
+
 def _validated_ballmat_transition(start, value):
     transition_value = str(value or "").strip()
     if shift_work_area_type(start) == SHIFT_FLOW_BALLMAT:
@@ -304,12 +359,11 @@ def _is_shift_work_area(area, by_id):
 
 
 SHIFT_FLOW_PHASES = (
-    ("final_door", "FINAL DOOR"),
     ("setup", "SETUP"),
     ("sort_start", "SORT START"),
-    ("after_w1", "AFTER W1"),
-    ("after_w2", "AFTER W2"),
-    ("after_cleanup", "AFTER CLEANUP"),
+    ("after_w1", "1ST WAVE"),
+    ("after_w2", "2ND WAVE"),
+    ("final_door", "FINAL DOOR"),
 )
 
 
