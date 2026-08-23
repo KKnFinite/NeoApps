@@ -3109,6 +3109,11 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False):
         "selected_sort": staffing_sort,
         "selected_scope": selected_scope,
         "selected_work_area_ids": sorted(selected_work_area_ids or ()),
+        "selected_work_areas": [
+            hierarchy["by_id"][unit_id]
+            for unit_id in sorted(selected_work_area_ids or ())
+        ],
+        "scope_tree": _daily_attendance_scope_tree(hierarchy, staffing_sort),
         "rows": rows,
         "counts": summary["status_counts"],
         "summary": summary,
@@ -3766,6 +3771,21 @@ def _daily_attendance_scope_options(hierarchy, staffing_sort):
     return options
 
 
+def _daily_attendance_scope_tree(hierarchy, staffing_sort):
+    """Build the current Sort's ordered scope tree from the loaded hierarchy."""
+
+    def build(unit):
+        return {
+            "unit": unit,
+            "children": [
+                build(child)
+                for child in hierarchy["children_by_parent"].get(unit.id, [])
+            ],
+        }
+
+    return [build(staffing_sort)]
+
+
 def _daily_attendance_unit_path(unit, hierarchy):
     names = []
     current = unit
@@ -3841,6 +3861,8 @@ def _empty_daily_attendance_context(filters, message, operation=None, hierarchy=
         "selected_sort": None,
         "selected_scope": None,
         "selected_work_area_ids": [],
+        "selected_work_areas": [],
+        "scope_tree": [],
         "rows": [],
         "counts": {},
         "summary": {

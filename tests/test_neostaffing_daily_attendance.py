@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+from pathlib import Path
 import unittest
 
 from flask import g
@@ -460,6 +461,71 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
                 status="here",
             ).count(),
             1500,
+        )
+
+    def test_attendance_route_renders_full_width_console_and_multi_area_scope(self):
+        staffing_sort, operation_unit, department, nested_area, direct_area = self._hierarchy()
+        self._night_operation()
+        nested = self._person("UI100", nested_area)
+        direct = self._person("UI101", direct_area)
+        operator = self._user("attendance_console_operator", "operator")
+        db.session.commit()
+        self._login(operator.username)
+
+        response = self.client.get(
+            "/neostaffing/attendance",
+            query_string=[
+                ("work_area_ids", str(nested_area.id)),
+                ("work_area_ids", str(direct_area.id)),
+            ],
+        )
+        page = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('class="neostaffing-attendance-console theme-staffing"', page)
+        self.assertIn('data-attendance-tree-scroll', page)
+        self.assertIn('data-attendance-tree', page)
+        self.assertIn('data-attendance-tree-toggle', page)
+        self.assertIn('neostaffing.attendance.hierarchy.v1', page)
+        self.assertIn("2 AREAS", page)
+        self.assertIn(nested_area.name, page)
+        self.assertIn(direct_area.name, page)
+        self.assertIn(f'name="work_area_ids" value="{nested_area.id}"', page)
+        self.assertIn(f'name="work_area_ids" value="{direct_area.id}"', page)
+        self.assertIn(nested.employee_id, page)
+        self.assertIn(direct.employee_id, page)
+        self.assertIn("Attendance Area", page)
+        for label in (
+            "On Payroll", "Working", "Unmarked", "Called In", "No Call",
+            "Scheduled Off", "Vacation", "Opt Day", "Anniversary Day",
+            "Disability", "Work Comp", "Funeral", "Jury", "FMLA",
+            "Military", "Personal Leave", "Cleared",
+        ):
+            self.assertIn(label, page)
+        self.assertNotIn("neostaffing-dashboard-shell", page)
+        self.assertNotIn("neostaffing-data-card", page)
+
+        css = Path("app/static/css/base.css").read_text()
+        attendance_css = css.split(
+            "/* NeoStaffing Attendance full-width operations console. */", 1
+        )[1]
+        self.assertIn("grid-template-columns: clamp(144px, 10vw, 184px)", attendance_css)
+        self.assertIn("width: calc(100vw - 32px);", attendance_css)
+        self.assertIn("overflow-x: clip", attendance_css)
+        self.assertIn("min-height: 27px", attendance_css)
+
+        context = staffing_service.attendance_context(
+            {"work_area_ids": [str(nested_area.id), str(direct_area.id)]}
+        )
+        self.assertEqual(
+            [area.id for area in context["selected_work_areas"]],
+            sorted([nested_area.id, direct_area.id]),
+        )
+        self.assertEqual(context["scope_tree"][0]["unit"].id, staffing_sort.id)
+        self.assertEqual(context["scope_tree"][0]["children"][0]["unit"].id, operation_unit.id)
+        self.assertEqual(
+            context["scope_tree"][0]["children"][0]["children"][0]["unit"].id,
+            department.id,
         )
 
     def _count_selects(self, action):

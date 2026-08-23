@@ -1736,7 +1736,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         page = self.client.get(f"/neostaffing/attendance?work_area_id={work_area.id}")
         self.assertEqual(page.status_code, 200)
-        self.assertIn(f'<option value="{work_area.id}" selected>'.encode(), page.data)
+        self.assertIn(
+            f'class="neostaffing-attendance-scope-node is-selected" href="/neostaffing/attendance?work_area_id={work_area.id}"'.encode(),
+            page.data,
+        )
         self.assertIn(b"AT100", page.data)
 
         first = self.client.post(
@@ -1799,7 +1802,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         page = self.client.get("/neostaffing/attendance")
 
         self.assertEqual(page.status_code, 200)
-        self.assertIn(f'<option value="{work_area.id}" selected>'.encode(), page.data)
+        self.assertIn(
+            f'class="neostaffing-attendance-scope-node is-selected" href="/neostaffing/attendance?work_area_id={work_area.id}"'.encode(),
+            page.data,
+        )
         self.assertIn(b"MS101", page.data)
 
     def test_attendance_operation_scope_includes_direct_and_nested_work_areas(self):
@@ -1851,7 +1857,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"AO100", page.data)
         self.assertIn(b"AO101", page.data)
         self.assertIn(b'option value="call_in" selected', page.data)
-        self.assertIn(b"Total Roster", page.data)
+        self.assertIn(b"On Payroll", page.data)
         self.assertIn(b"2", page.data)
 
     def test_people_single_and_bulk_employee_create_assign_to_selected_work_area(self):
