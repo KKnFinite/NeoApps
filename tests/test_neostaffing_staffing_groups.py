@@ -319,8 +319,38 @@ class NeoStaffingStaffingGroupsTest(unittest.TestCase):
         self.assertEqual(groups_page.status_code, 200)
         self.assertEqual(attendance_page.status_code, 200)
         self.assertIn(b"Read Only Group", groups_page.data)
+        self.assertIn(b"neostaffing-groups-console", groups_page.data)
+        self.assertIn(b"neostaffing-groups-list", groups_page.data)
+        self.assertIn(b"neostaffing-group-workspace", groups_page.data)
+        self.assertIn(b"VIEW ONLY", groups_page.data)
+        self.assertNotIn(b"data-groups-drawer", groups_page.data)
         self.assertIn(b"Read Only Group", attendance_page.data)
         self.assertEqual(dml, [])
+
+    def test_group_console_keeps_deduplicated_detail_and_editor_markup(self):
+        _staffing_sort, operation, department, _nested, _direct = self._hierarchy()
+        self._night_operation()
+        staffing_service.create_staffing_group(
+            {
+                "name": "Console Coverage",
+                "staffing_unit_ids": [operation.id, department.id],
+            }
+        )
+        editor = self._user("group_console_editor", "master")
+        db.session.commit()
+
+        self._login(editor.username)
+        response = self.client.get("/neostaffing/staffing-groups")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"neostaffing-groups-console", response.data)
+        self.assertIn(b"data-groups-select", response.data)
+        self.assertIn(b"data-groups-panel", response.data)
+        self.assertIn(b"INCLUDED SCOPES", response.data)
+        self.assertIn(b"Employees qualifying through multiple included paths are counted once.", response.data)
+        self.assertIn(b"data-groups-drawer", response.data)
+        self.assertIn(b"EDIT GROUP", response.data)
+        self.assertIn(b"CREATE GROUP", response.data)
 
     def test_group_rollups_have_bounded_queries_for_1500_people(self):
         staffing_sort, operation, department, work_area, _direct = self._hierarchy()

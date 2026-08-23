@@ -3,118 +3,123 @@
 {% block title %}NeoStaffing Staffing Groups{% endblock %}
 
 {% block content %}
-<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="staffing-groups-title">
-    <div class="neostaffing-dashboard-shell">
-        {% include "neostaffing/_section_nav.html" %}
-        <div class="neostaffing-dashboard-main">
-            <div class="neostaffing-hero neostaffing-hero-compact">
-                <div class="neostaffing-hero-copy mobile-shell-duplicate-title">
-                    <h1 id="staffing-groups-title">Staffing Groups</h1>
-                </div>
+<section class="neostaffing-groups-console theme-staffing" aria-labelledby="staffing-groups-title">
+    {% include "neostaffing/_section_nav.html" %}
+    <main class="neostaffing-groups-workspace">
+        <header class="neostaffing-groups-header">
+            <div>
+                <h1 id="staffing-groups-title">STAFFING GROUPS</h1>
+                <span>{% if staffing_groups.sort_date_operation %}{{ staffing_groups.sort_date_operation.gateway_code }} {{ staffing_groups.sort_date_operation.sort_name|upper }} · {{ staffing_groups.attendance_date.strftime("%b %d, %Y")|upper }}{% else %}GROUP DEFINITIONS · DEDUPLICATED REPORTING{% endif %}</span>
             </div>
+            <div class="neostaffing-groups-header-actions">
+                <strong>{{ staffing_groups.groups|length }} GROUPS</strong>
+                {% if can_edit_staffing_groups %}<button type="button" class="neostaffing-groups-new" data-groups-open-create>+ NEW GROUP</button>{% else %}<span class="neostaffing-groups-view-only">VIEW ONLY</span>{% endif %}
+            </div>
+        </header>
 
-            <section class="neostaffing-data-card">
-                <div class="neostaffing-panel-heading">
-                    <h2>DAILY STAFFING TOTALS</h2>
-                    {% if staffing_groups.sort_date_operation %}
-                    <span>
-                        {{ staffing_groups.sort_date_operation.gateway_code }}
-                        {{ staffing_groups.sort_date_operation.sort_name|upper }}
-                        &middot; {{ staffing_groups.attendance_date.strftime("%B %d, %Y")|upper }}
-                    </span>
-                    {% endif %}
-                </div>
-                {% if not staffing_groups.ready %}
-                <p class="muted" role="status">{{ staffing_groups.message }}</p>
-                {% else %}
-                <p class="muted">Totals are calculated from the current Night roster and attendance. Group membership never changes the Org Chart.</p>
-                {% endif %}
-            </section>
+        {% if not staffing_groups.ready %}
+        <p class="neostaffing-groups-notice" role="status">{{ staffing_groups.message }}</p>
+        {% endif %}
 
-            {% if can_edit_staffing_groups %}
-            <section class="neostaffing-data-card" aria-labelledby="create-staffing-group-title">
-                <h2 id="create-staffing-group-title">CREATE STAFFING GROUP</h2>
-                <form method="post" class="neostaffing-group-form">
-                    <input type="hidden" name="action" value="create">
-                    <div class="neostaffing-group-form-header">
-                        <label><span>Name</span><input name="name" maxlength="140" required></label>
-                        <label><span>Status</span>
-                            <select name="active">
-                                <option value="1" selected>Active</option>
-                                <option value="0">Inactive</option>
-                            </select>
-                        </label>
-                    </div>
-                    <fieldset class="neostaffing-group-memberships">
-                        <legend>Departments and Operations</legend>
-                        {% for option in staffing_groups.membership_options %}
-                        <label>
-                            <input type="checkbox" name="staffing_unit_ids" value="{{ option.unit.id }}">
-                            <span>{{ option.label }}{% if not option.unit.active %} (Inactive){% endif %}</span>
-                        </label>
-                        {% else %}
-                        <p class="muted">No Departments or Operations are configured.</p>
-                        {% endfor %}
-                    </fieldset>
-                    <button class="action-button" type="submit">CREATE GROUP</button>
-                </form>
-            </section>
-            {% endif %}
-
-            <div class="neostaffing-group-list">
-                {% for row in staffing_groups.groups %}
-                <section class="neostaffing-data-card{% if not row.group.active %} is-inactive{% endif %}" aria-labelledby="staffing-group-{{ row.group.id }}-title">
-                    <div class="neostaffing-panel-heading">
-                        <h2 id="staffing-group-{{ row.group.id }}-title">{{ row.group.name }}</h2>
-                        <span>{{ "ACTIVE" if row.group.active else "INACTIVE" }}</span>
-                    </div>
-                    <dl class="neostaffing-group-totals" aria-label="{{ row.group.name }} totals">
-                        <div><dt>Total Roster</dt><dd>{{ row.total_roster }}</dd></div>
-                        <div><dt>Here</dt><dd>{{ row.here }}</dd></div>
-                        <div><dt>Absent</dt><dd>{{ row.absent }}</dd></div>
-                        <div><dt>Unmarked</dt><dd>{{ row.unmarked }}</dd></div>
-                    </dl>
-                    {% if can_edit_staffing_groups %}
-                    <form method="post" class="neostaffing-group-form">
-                        <input type="hidden" name="action" value="update">
-                        <input type="hidden" name="group_id" value="{{ row.group.id }}">
-                        <div class="neostaffing-group-form-header">
-                            <label><span>Name</span><input name="name" value="{{ row.group.name }}" maxlength="140" required></label>
-                            <label><span>Status</span>
-                                <select name="active">
-                                    <option value="1" {% if row.group.active %}selected{% endif %}>Active</option>
-                                    <option value="0" {% if not row.group.active %}selected{% endif %}>Inactive</option>
-                                </select>
-                            </label>
-                        </div>
-                        <fieldset class="neostaffing-group-memberships">
-                            <legend>Departments and Operations</legend>
-                            {% for option in staffing_groups.membership_options %}
-                            <label>
-                                <input type="checkbox" name="staffing_unit_ids" value="{{ option.unit.id }}" {% if option.unit.id in row.member_unit_ids %}checked{% endif %}>
-                                <span>{{ option.label }}{% if not option.unit.active %} (Inactive){% endif %}</span>
-                            </label>
-                            {% endfor %}
-                        </fieldset>
-                        <button class="action-button" type="submit">SAVE GROUP</button>
-                    </form>
+        <div class="neostaffing-groups-body">
+            <aside class="neostaffing-groups-list" aria-label="Staffing Group selector">
+                <header><strong>GROUPS</strong><span>DEDUPLICATED ROSTERS</span></header>
+                <div class="neostaffing-groups-list-scroll">
+                    {% for row in staffing_groups.groups %}
+                    <button type="button" class="neostaffing-groups-list-item{% if loop.first %} is-selected{% endif %}{% if not row.group.active %} is-inactive{% endif %}" data-groups-select="{{ row.group.id }}" aria-controls="staffing-group-panel-{{ row.group.id }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">
+                        <strong>{{ row.group.name }}</strong>
+                        <span>{{ row.memberships|length }} SCOPE{{ '' if row.memberships|length == 1 else 'S' }} · {{ row.total_roster }} PAYROLL</span>
+                        <em>{{ "ACTIVE" if row.group.active else "INACTIVE" }}</em>
+                    </button>
                     {% else %}
-                    <p class="muted">
-                        {% for membership in row.memberships %}
-                        {{ membership.label }}{% if not loop.last %} &middot; {% endif %}
-                        {% else %}
-                        No Departments or Operations selected.
-                        {% endfor %}
-                    </p>
-                    {% endif %}
-                </section>
-                {% else %}
-                <section class="neostaffing-data-card">
-                    <p class="muted">No Staffing Groups have been created.</p>
-                </section>
+                    <div class="neostaffing-groups-empty"><strong>NO GROUPS</strong><span>{% if can_edit_staffing_groups %}Create a reporting group to begin.{% else %}No Staffing Groups are configured.{% endif %}</span></div>
+                    {% endfor %}
+                </div>
+            </aside>
+
+            <section class="neostaffing-groups-detail" aria-live="polite">
+                {% for row in staffing_groups.groups %}
+                <article class="neostaffing-group-workspace{% if loop.first %} is-selected{% endif %}" id="staffing-group-panel-{{ row.group.id }}" data-groups-panel="{{ row.group.id }}" {% if not loop.first %}hidden{% endif %}>
+                    <header class="neostaffing-group-workspace-header">
+                        <div><h2>{{ row.group.name }}</h2><span>{{ "ACTIVE" if row.group.active else "INACTIVE" }} · {{ row.memberships|length }} INCLUDED SCOPE{{ '' if row.memberships|length == 1 else 'S' }}</span></div>
+                        {% if can_edit_staffing_groups %}<button type="button" class="neostaffing-groups-edit" data-groups-open-edit="{{ row.group.id }}">EDIT GROUP</button>{% endif %}
+                    </header>
+
+                    <dl class="neostaffing-group-workspace-totals" aria-label="{{ row.group.name }} deduplicated staffing totals">
+                        <div><dt>ON PAYROLL</dt><dd>{{ row.total_roster }}</dd></div>
+                        <div><dt>WORKING</dt><dd>{{ row.here }}</dd></div>
+                        <div><dt>ABSENT</dt><dd>{{ row.absent }}</dd></div>
+                        <div><dt>UNMARKED</dt><dd>{{ row.unmarked }}</dd></div>
+                    </dl>
+
+                    <section class="neostaffing-group-scopes" aria-labelledby="staffing-group-scopes-{{ row.group.id }}">
+                        <header><div><h3 id="staffing-group-scopes-{{ row.group.id }}">INCLUDED SCOPES</h3><span>OPERATIONS AND DEPARTMENTS</span></div><strong>{{ row.memberships|length }}</strong></header>
+                        <div class="neostaffing-group-scopes-table-wrap">
+                            <table class="neostaffing-group-scopes-table"><thead><tr><th>TYPE</th><th>INCLUDED SCOPE</th><th>STATE</th></tr></thead>
+                                <tbody>{% for membership in row.memberships %}<tr><td>{{ membership.unit.unit_type|replace('_', ' ')|upper }}</td><td>{{ membership.label }}</td><td>{{ "ACTIVE" if membership.unit.active else "INACTIVE" }}</td></tr>{% else %}<tr><td colspan="3" class="neostaffing-group-no-scopes">No Operations or Departments selected.</td></tr>{% endfor %}</tbody>
+                            </table>
+                        </div>
+                    </section>
+                    <p class="neostaffing-groups-dedup-note">Employees qualifying through multiple included paths are counted once.</p>
+                </article>
+                {% endfor %}
+            </section>
+        </div>
+
+        {% if can_edit_staffing_groups %}
+        <aside class="neostaffing-groups-drawer" data-groups-drawer hidden aria-label="Staffing Group editor">
+            <header><div><strong data-groups-drawer-title>CREATE GROUP</strong><span data-groups-drawer-subtitle>REPORTING SCOPE</span></div><button type="button" data-groups-close-drawer aria-label="Close Staffing Group editor">CLOSE</button></header>
+            <div class="neostaffing-groups-drawer-scroll">
+                <form method="post" class="neostaffing-groups-editor" data-groups-create-form>
+                    <input type="hidden" name="action" value="create">
+                    <label><span>GROUP NAME</span><input name="name" maxlength="140" required></label>
+                    <label><span>STATUS</span><select name="active"><option value="1" selected>Active</option><option value="0">Inactive</option></select></label>
+                    <fieldset><legend>INCLUDED OPERATIONS / DEPARTMENTS</legend>{% for option in staffing_groups.membership_options %}<label class="neostaffing-groups-membership-choice"><input type="checkbox" name="staffing_unit_ids" value="{{ option.unit.id }}"><span>{{ option.label }}{% if not option.unit.active %} <em>INACTIVE</em>{% endif %}</span></label>{% else %}<p>No Departments or Operations are configured.</p>{% endfor %}</fieldset>
+                    <button type="submit">CREATE GROUP</button>
+                </form>
+
+                {% for row in staffing_groups.groups %}
+                <form method="post" class="neostaffing-groups-editor" data-groups-edit-form="{{ row.group.id }}" hidden>
+                    <input type="hidden" name="action" value="update"><input type="hidden" name="group_id" value="{{ row.group.id }}">
+                    <label><span>GROUP NAME</span><input name="name" value="{{ row.group.name }}" maxlength="140" required></label>
+                    <label><span>STATUS</span><select name="active"><option value="1" {% if row.group.active %}selected{% endif %}>Active</option><option value="0" {% if not row.group.active %}selected{% endif %}>Inactive</option></select></label>
+                    <fieldset><legend>INCLUDED OPERATIONS / DEPARTMENTS</legend>{% for option in staffing_groups.membership_options %}<label class="neostaffing-groups-membership-choice"><input type="checkbox" name="staffing_unit_ids" value="{{ option.unit.id }}" {% if option.unit.id in row.member_unit_ids %}checked{% endif %}><span>{{ option.label }}{% if not option.unit.active %} <em>INACTIVE</em>{% endif %}</span></label>{% endfor %}</fieldset>
+                    <button type="submit">SAVE GROUP</button>
+                </form>
                 {% endfor %}
             </div>
-        </div>
-    </div>
+        </aside>
+        {% endif %}
+    </main>
 </section>
+
+{% if can_edit_staffing_groups %}
+<script>
+(() => {
+    const consoleRoot = document.querySelector('.neostaffing-groups-console');
+    if (!consoleRoot) return;
+    const drawer = consoleRoot.querySelector('[data-groups-drawer]');
+    const createForm = consoleRoot.querySelector('[data-groups-create-form]');
+    const editForms = consoleRoot.querySelectorAll('[data-groups-edit-form]');
+    const setDrawer = (groupId) => {
+        if (!drawer) return;
+        drawer.hidden = false;
+        createForm.hidden = Boolean(groupId);
+        editForms.forEach((form) => { form.hidden = form.dataset.groupsEditForm !== String(groupId); });
+        drawer.querySelector('[data-groups-drawer-title]').textContent = groupId ? 'EDIT GROUP' : 'CREATE GROUP';
+        drawer.querySelector('[data-groups-drawer-subtitle]').textContent = groupId ? 'GROUP DETAILS / MEMBERSHIP' : 'REPORTING SCOPE';
+        drawer.querySelector(groupId ? `[data-groups-edit-form="${groupId}"] input[name="name"]` : 'input[name="name"]').focus();
+    };
+    consoleRoot.querySelectorAll('[data-groups-select]').forEach((button) => button.addEventListener('click', () => {
+        const groupId = button.dataset.groupsSelect;
+        consoleRoot.querySelectorAll('[data-groups-select]').forEach((item) => { item.classList.toggle('is-selected', item === button); item.setAttribute('aria-pressed', item === button ? 'true' : 'false'); });
+        consoleRoot.querySelectorAll('[data-groups-panel]').forEach((panel) => { const selected = panel.dataset.groupsPanel === groupId; panel.hidden = !selected; panel.classList.toggle('is-selected', selected); });
+    }));
+    consoleRoot.querySelector('[data-groups-open-create]')?.addEventListener('click', () => setDrawer(null));
+    consoleRoot.querySelectorAll('[data-groups-open-edit]').forEach((button) => button.addEventListener('click', () => setDrawer(button.dataset.groupsOpenEdit)));
+    consoleRoot.querySelector('[data-groups-close-drawer]')?.addEventListener('click', () => { drawer.hidden = true; });
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && drawer && !drawer.hidden) drawer.hidden = true; });
+})();
+</script>
+{% endif %}
 {% endblock %}
