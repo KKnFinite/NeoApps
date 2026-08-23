@@ -118,8 +118,9 @@ class NeoStaffingAttendanceCountsTest(unittest.TestCase):
             counts["unmarked"] + sum(counts["canonical_status_counts"].values()),
         )
 
-    def test_phase_one_reads_new_statuses_but_keeps_them_non_writable(self):
-        person = self._person("PHASE100", self.door)
+    def test_phase_two_writes_new_statuses_through_shared_attendance_paths(self):
+        person = self._person("PHASE200", self.door)
+        second_person = self._person("PHASE201", self.door)
         staffing_service.create_shift_flow_plan(
             person,
             {
@@ -130,64 +131,73 @@ class NeoStaffingAttendanceCountsTest(unittest.TestCase):
             },
             self.door,
         )
+        staffing_service.create_shift_flow_plan(
+            second_person,
+            {
+                "shift_flow_setup_work_area_id": "",
+                "shift_flow_sort_start_work_area_id": str(self.door.id),
+                "shift_flow_ballmat_transition": "",
+                "shift_flow_final_door_work_area_id": str(self.door.id),
+            },
+            self.door,
+        )
         db.session.commit()
-        writable_values = {
+        writable_values = [
             value for value, _label in staffing_service.attendance_status_choices()
-        }
-        self.assertNotIn("scheduled_off", writable_values)
-        self.assertNotIn("personal_leave", writable_values)
+        ]
+        self.assertIn("scheduled_off", writable_values)
+        self.assertIn("personal_leave", writable_values)
+        self.assertLess(writable_values.index("no_call"), writable_values.index("scheduled_off"))
+        self.assertLess(writable_values.index("vacation"), writable_values.index("personal_leave"))
 
         with patch.object(
             staffing_service,
             "current_night_attendance_operation",
             return_value=self.operation,
         ):
-            for status in ("scheduled_off", "personal_leave"):
-                with self.subTest(status=status):
-                    with self.assertRaisesRegex(ValueError, "attendance status"):
-                        staffing_service.save_operational_manage_attendance(
-                            {
-                                "sort_date_operation_id": str(self.operation.id),
-                                f"status_{person.id}": status,
-                            },
-                            None,
-                            [self.door.id],
-                        )
-                    with self.assertRaisesRegex(ValueError, "attendance status"):
-                        staffing_service.save_attendance(
-                            {
-                                "sort_date_operation_id": str(self.operation.id),
-                                "work_area_ids": [str(self.door.id)],
-                                f"status_{person.id}": status,
-                            },
-                            None,
-                        )
-
             saved = staffing_service.save_attendance(
                 {
                     "sort_date_operation_id": str(self.operation.id),
                     "work_area_ids": [str(self.door.id)],
-                    f"status_{person.id}": "here",
+                    f"status_{person.id}": "scheduled_off",
                 },
                 None,
             )
             self.assertEqual(saved, 1)
             db.session.commit()
             record = StaffingDailyAttendance.query.filter_by(person_id=person.id).one()
-            self.assertEqual(record.status, "here")
+            self.assertEqual(record.status, "scheduled_off")
 
-            for status, label in (
-                ("scheduled_off", "Scheduled Off"),
-                ("personal_leave", "Personal Leave"),
-            ):
-                record.status = status
-                db.session.commit()
-                context = staffing_service.operational_manage_employees_context(
-                    [self.door.id]
-                )
-                row = context["here"][0]
-                self.assertEqual(row["status_label"], label)
-                self.assertFalse(row["status_writable"])
+            saved = staffing_service.save_operational_manage_attendance(
+                {
+                    "sort_date_operation_id": str(self.operation.id),
+                    f"status_{person.id}": "personal_leave",
+                    f"status_{second_person.id}": "scheduled_off",
+                },
+                None,
+                [self.door.id],
+            )
+            self.assertEqual(saved, 2)
+            db.session.commit()
+            self.assertEqual(
+                StaffingDailyAttendance.query.filter_by(person_id=person.id).count(),
+                1,
+            )
+            self.assertEqual(record.status, "personal_leave")
+            self.assertEqual(
+                StaffingDailyAttendance.query.filter_by(person_id=second_person.id).one().status,
+                "scheduled_off",
+            )
+
+            context = staffing_service.operational_manage_employees_context([self.door.id])
+            rows = {row["person"].id: row for row in context["here"]}
+            self.assertEqual(rows[person.id]["status_label"], "Personal Leave")
+            self.assertTrue(rows[person.id]["status_writable"])
+            self.assertEqual(rows[second_person.id]["status_label"], "Scheduled Off")
+            self.assertTrue(rows[second_person.id]["status_writable"])
+            counts = staffing_service.attendance_staffing_counts(self.shift, self.operation)
+            self.assertEqual(counts["personal_leave"], 1)
+            self.assertEqual(counts["scheduled_off"], 1)
 
     def test_final_door_grouping_uses_existing_sort_attendance_not_attendance_location(self):
         person = self._person("FLOW100", self.ballmat)

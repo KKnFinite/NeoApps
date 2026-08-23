@@ -3,13 +3,15 @@ from datetime import datetime
 from app.extensions import db
 
 
-STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES = (
+STAFFING_DAILY_ATTENDANCE_STATUSES = (
     "here",
     "call_in",
     "no_call",
+    "scheduled_off",
     "vacation",
     "optional_day",
     "anniversary_day",
+    "personal_leave",
     "funeral",
     "jury",
     "int_fmla",
@@ -19,14 +21,9 @@ STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES = (
     "cleared",
 )
 
-# Phase 1 deployment contract: the database and read/report paths accept this
-# superset, while browser/service mutations remain limited to the writable set
-# above until every old application instance has rolled off.
-STAFFING_DAILY_ATTENDANCE_STATUSES = (
-    *STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES,
-    "scheduled_off",
-    "personal_leave",
-)
+# Phase 2 deployment contract: every database-valid attendance outcome is now
+# available through the shared NeoStaffing, Ermac, and NeoSektor mutation path.
+STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES = STAFFING_DAILY_ATTENDANCE_STATUSES
 
 
 class StaffingDailyAttendance(db.Model):

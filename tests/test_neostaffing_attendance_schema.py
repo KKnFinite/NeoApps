@@ -142,11 +142,10 @@ class NeoStaffingAttendanceSchemaTest(unittest.TestCase):
         }
         self.assertTrue(set(NEOSTAFFING_ATTENDANCE_ADDITIVE_COLUMNS).issubset(columns))
 
-    def test_model_constraint_accepts_database_valid_status_superset(self):
+    def test_model_constraint_accepts_the_shared_writable_status_set(self):
         self.assertEqual(
-            set(STAFFING_DAILY_ATTENDANCE_STATUSES)
-            - set(STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES),
-            {"scheduled_off", "personal_leave"},
+            STAFFING_DAILY_ATTENDANCE_STATUSES,
+            STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES,
         )
         for index, status in enumerate(STAFFING_DAILY_ATTENDANCE_STATUSES, start=1):
             db.session.execute(
