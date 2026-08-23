@@ -1,54 +1,40 @@
 {% extends "base.html" %}
 
+{% block title %}NeoStaffing Permissions{% endblock %}
+
 {% block content %}
-<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="neostaffing-permissions-title">
-    <div class="neostaffing-dashboard-shell">
-        {% include "neostaffing/_section_nav.html" %}
-        <main class="neostaffing-dashboard-main">
-            <header class="neostaffing-dashboard-topbar">
-                <div>
-                    <h1 id="neostaffing-permissions-title">Permissions</h1>
-                    <p>Set the minimum NeoStaffing app role for each system capability.</p>
-                </div>
-            </header>
+<section class="neostaffing-permissions-console theme-staffing" aria-labelledby="neostaffing-permissions-title">
+    {% include "neostaffing/_section_nav.html" %}
+    <main class="neostaffing-permissions-workspace">
+        <header class="neostaffing-permissions-header">
+            <div><h1 id="neostaffing-permissions-title">PERMISSIONS</h1><span>ROLE-LEVEL CONFIGURATION · NO INDIVIDUAL OVERRIDES</span></div>
+            {% if can_edit_permissions %}<strong class="neostaffing-permissions-edit-state">GRANDMASTER CONFIGURATION</strong>{% else %}<strong class="neostaffing-permissions-view-state" data-permissions-view-only>VIEW ONLY</strong>{% endif %}
+        </header>
 
-            <section class="neostaffing-data-card" aria-label="NeoStaffing permission settings">
-                {% if not can_edit_permissions %}
-                <p class="muted" data-permissions-view-only>VIEW ONLY. A NeoStaffing GRANDMASTER IS REQUIRED TO SAVE CHANGES.</p>
-                {% endif %}
+        <div class="neostaffing-permissions-toolbar">
+            <details class="neostaffing-permissions-role-ladder" open>
+                <summary><span>ROLE LADDER</span><span>▾</span></summary>
+                <ol>{% for role in role_choices %}<li{% if role == app_role %} class="is-current"{% endif %}><strong>{{ loop.index }}</strong><span>{{ role|role_label }}</span>{% if role == "watcher" %}<em>Read only</em>{% elif role == "grandmaster" %}<em>Unrestricted</em>{% endif %}</li>{% endfor %}</ol>
+            </details>
+            <p>{% if can_edit_permissions %}Choose a minimum role, then save all submitted settings together.{% else %}A NeoStaffing Grandmaster is required to save role thresholds.{% endif %}</p>
+        </div>
 
-                <form class="operation-form permission-rules-form" method="post">
-                    <div class="permission-rule-items">
-                        {% for capability in capabilities %}
-                        {% set rule = capability.rule %}
-                        <article class="permission-rule-item" data-permission-key="{{ rule.permission_key }}">
-                            <div class="permission-rule-copy">
-                                <strong>{{ capability.label }}</strong>
-                                <p>{{ rule.description }}</p>
-                            </div>
-                            <label class="permission-rule-action">
-                                <input type="hidden" name="rule_ids" value="{{ rule.id }}">
-                                <span>Minimum Role</span>
-                                <span class="role-select-wrap">
-                                    <select name="minimum_role_{{ rule.id }}" aria-label="{{ capability.label }} minimum role" {% if not can_edit_permissions %}disabled{% endif %}>
-                                        {% for role in role_choices %}
-                                        <option value="{{ role }}" {% if rule.minimum_role == role %}selected{% endif %}>{{ role|role_label }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </span>
-                            </label>
-                        </article>
-                        {% endfor %}
-                    </div>
-
-                    {% if can_edit_permissions %}
-                    <div class="action-row">
-                        <button class="action-button" type="submit">SAVE PERMISSIONS</button>
-                    </div>
-                    {% endif %}
-                </form>
-            </section>
-        </main>
-    </div>
+        <form class="neostaffing-permissions-form" method="post" aria-label="NeoStaffing permission settings">
+            <div class="neostaffing-permissions-table-wrap">
+                <table class="neostaffing-permissions-table">
+                    <thead><tr><th>Capability</th><th>Purpose</th><th>Configured Minimum Role</th><th>Configuration</th></tr></thead>
+                    <tbody>{% for capability in capabilities %}{% set rule = capability.rule %}
+                        <tr data-permission-key="{{ rule.permission_key }}">
+                            <td><strong>{{ capability.label }}</strong><span>{{ rule.permission_key }}</span></td>
+                            <td>{{ rule.description }}</td>
+                            <td><span class="neostaffing-permissions-threshold">{{ rule.minimum_role|role_label }}</span></td>
+                            <td><input type="hidden" name="rule_ids" value="{{ rule.id }}"><label><span>Minimum Role</span><select name="minimum_role_{{ rule.id }}" aria-label="{{ capability.label }} minimum role" {% if not can_edit_permissions %}disabled{% endif %}>{% for role in role_choices %}<option value="{{ role }}" {% if rule.minimum_role == role %}selected{% endif %}>{{ role|role_label }}</option>{% endfor %}</select></label></td>
+                        </tr>
+                    {% endfor %}</tbody>
+                </table>
+            </div>
+            {% if can_edit_permissions %}<footer class="neostaffing-permissions-actions"><span>Changes are saved only when submitted.</span><button class="action-button" type="submit">SAVE PERMISSIONS</button></footer>{% endif %}
+        </form>
+    </main>
 </section>
 {% endblock %}

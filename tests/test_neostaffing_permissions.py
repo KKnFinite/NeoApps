@@ -43,6 +43,9 @@ class NeoStaffingPermissionsTest(unittest.TestCase):
         response = self.client.get("/neostaffing/permissions")
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b"neostaffing-permissions-console", response.data)
+        self.assertIn(b"ROLE LADDER", response.data)
+        self.assertIn(b"Configured Minimum Role", response.data)
         self.assertIn(b"NeoStaffing permission settings", response.data)
         self.assertIn(b"VIEW ONLY", response.data)
         self.assertNotIn(b"SAVE PERMISSIONS", response.data)
@@ -98,6 +101,8 @@ class NeoStaffingPermissionsTest(unittest.TestCase):
         )
 
         self.assertEqual(page.status_code, 200)
+        self.assertIn(b"neostaffing-permissions-table", page.data)
+        self.assertIn(b"Changes are saved only when submitted.", page.data)
         self.assertIn(b"SAVE PERMISSIONS", page.data)
         self.assertEqual(saved.status_code, 302)
         db.session.expire_all()
