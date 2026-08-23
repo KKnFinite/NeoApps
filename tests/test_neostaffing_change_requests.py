@@ -682,9 +682,13 @@ class NeoStaffingChangeRequestsTest(unittest.TestCase):
             event.remove(db.engine, "before_cursor_execute", capture_sql)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"ACTIVE", response.data)
+        self.assertIn(b"REQUESTS / APPROVALS", response.data)
+        self.assertIn(b"PENDING", response.data)
         self.assertIn(b"HISTORY", response.data)
         self.assertIn(b"ALL REQUESTS", response.data)
+        self.assertIn(b"neostaffing-requests-table", response.data)
+        self.assertIn(b"neostaffing-requests-drawer", response.data)
+        self.assertIn(b"OPEN", response.data)
         self.assertIn(b"APPROVE FIELD", response.data)
         self.assertIn(str(request_row.id).encode(), response.data)
         self.assertEqual(dml, [])
@@ -703,6 +707,8 @@ class NeoStaffingChangeRequestsTest(unittest.TestCase):
         submit_page = self.client.get(
             f"/neostaffing/requests?queue=all&person_id={self.target.id}"
         )
+        self.assertIn(b"+ NEW REQUEST", submit_page.data)
+        self.assertIn(b"new-change-request", submit_page.data)
         self.assertIn(b"SUBMIT REQUEST", submit_page.data)
         submitted = self.client.post(
             "/neostaffing/requests/submit",
