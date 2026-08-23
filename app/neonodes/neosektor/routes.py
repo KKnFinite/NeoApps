@@ -1,8 +1,11 @@
 from flask import flash, jsonify, redirect, render_template, request, session, url_for
+from flask_login import current_user
+from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
 from app.models import SortDateOperation
+from app.models.user import MANAGEMENT_LEVELS
 from app.neonodes.neosektor import bp
 from app.services.access_control import (
     access_initialization_changed_this_request,
@@ -226,6 +229,7 @@ def tunnel_conductor():
         gateway=gateway,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
+        can_manage_employees=_can_manage_employees(),
         **context,
     )
 
@@ -613,12 +617,10 @@ def live_counts():
         gateway,
         COUNT_STATE_SCOPE,
     )
-    context["staffing_attendance_work_area_ids"] = {
-        side: staffing_service.attendance_deep_link_work_area_ids(
-            [f"{side.title()} Ballmat"]
-        )
-        for side in ("west", "east")
-    }
+    context["can_manage_employees"] = _can_manage_employees()
+    context["manage_employees_default_area"] = (
+        staffing_service.neosektor_manage_default_area(current_user)
+    )
     _commit_neosektor_initialization_if_changed(bundle)
     return render_template(
         "neonodes/neosektor/live_counts.html",
@@ -697,6 +699,57 @@ def driver_routing():
         can_view=access["can_view"],
         can_edit=access["can_edit"],
         **context,
+    )
+
+
+@bp.route("/manage-employees", methods=["GET", "POST"])
+@gateway_node_required("sektor")
+def manage_employees():
+    if not _can_manage_employees():
+        flash("Access denied.", "error")
+        return redirect(url_for("neosektor.index"))
+    names = {"dis": "Discharge", "ebm": "East Ballmat", "wbm": "West Ballmat"}
+    requested = request.values.get("area", "").casefold()
+    if not requested:
+        requested = (
+            "dis"
+            if request.args.get("source") == "tunnel"
+            else staffing_service.neosektor_manage_default_area(current_user)
+        )
+    area = requested if requested in names else "ebm"
+    area_ids = staffing_service.attendance_deep_link_work_area_ids([names[area]])
+    if request.method == "POST":
+        try:
+            saved = staffing_service.save_operational_manage_attendance(
+                request.form, current_user, area_ids
+            )
+            db.session.commit()
+            flash(f"Attendance saved for {saved} people.", "success")
+        except (ValueError, IntegrityError) as exc:
+            db.session.rollback()
+            flash(str(getattr(exc, "orig", None) or exc), "error")
+        return redirect(url_for("neosektor.manage_employees", area=area))
+    context = staffing_service.operational_manage_employees_context(area_ids)
+    tabs = tuple(
+        {"key": key, "label": label.upper(), "selected": key == area}
+        for key, label in names.items()
+    )
+    return render_template(
+        "neostaffing/operational_manage_employees.html",
+        title="MANAGE EMPLOYEES",
+        attendance=context,
+        can_edit_attendance=True,
+        show_coming=False,
+        area_tabs=tabs,
+        back_url=url_for("neosektor.index"),
+    )
+
+
+def _can_manage_employees():
+    return bool(
+        current_user.is_authenticated
+        and current_user.management_level in MANAGEMENT_LEVELS
+        and user_can("neostaffing.attendance.take")
     )
 
 

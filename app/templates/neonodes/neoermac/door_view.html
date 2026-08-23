@@ -105,8 +105,8 @@
         >{{ "EDIT DOORS" if supervised_doors else "+ ADD DOOR" }}</button>
         <a
             class="neoermac-menu-link neoermac-door-supervision-edit"
-            href="{{ url_for('neostaffing.attendance', work_area_ids=staffing_attendance_work_area_ids) if staffing_attendance_work_area_ids else url_for('neostaffing.attendance') }}"
-        >TAKE ATTENDANCE</a>
+            href="{{ url_for('neoermac.manage_employees') }}"
+        >MANAGE EMPLOYEES</a>
         </nav>
         {% endif %}
     </div>

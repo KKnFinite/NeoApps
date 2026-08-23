@@ -886,6 +886,240 @@ def attendance_staffing_counts(scope, operation, *, group_by_person_id=None):
     }
 
 
+def operational_flow_shorthand(plan):
+    """Compact read-only Shift Flow notation for operational staffing screens."""
+    if not plan:
+        return "FLOW NOT SET"
+
+    def label(area):
+        name = (getattr(area, "name", "") or "").strip()
+        lowered = name.casefold()
+        if "west ballmat" in lowered:
+            return "WBM"
+        if "east ballmat" in lowered:
+            return "EBM"
+        if "discharge" in lowered:
+            return "DIS"
+        match = re.search(r"door\s*(\d+)", name, re.I)
+        return f"D{match.group(1)}" if match else name
+
+    parts = []
+    if plan.setup_work_area:
+        parts.append(f"SET {label(plan.setup_work_area)}")
+    parts.append(label(plan.sort_start_work_area))
+    if plan.ballmat_transition:
+        parts.append(f"W{plan.ballmat_transition}")
+    if (
+        plan.final_door_work_area
+        and (
+            plan.final_door_work_area_id != plan.sort_start_work_area_id
+            or plan.ballmat_transition
+        )
+    ):
+        parts.append(label(plan.final_door_work_area))
+    return " → ".join(parts)
+
+
+def operational_manage_employees_context(sort_start_area_ids, *, later_final_area_ids=()):
+    """Read the effective current-sort attendance roster from shared Staffing data."""
+    operation = current_night_attendance_operation()
+    if not operation:
+        return {
+            "operation": None,
+            "here": [],
+            "coming": [],
+            "counts": _attendance_staffing_count_totals(),
+            "status_choices": attendance_status_choices(),
+        }
+    hierarchy = _daily_attendance_hierarchy()
+    staffing_sort = _staffing_sort_for_operation(operation, hierarchy)
+    start_ids = _operational_area_id_set(sort_start_area_ids)
+    later_ids = _operational_area_id_set(later_final_area_ids)
+    shift_area_ids = {
+        unit.id for unit in hierarchy["units"] if _is_shift_work_area(unit, hierarchy["by_id"])
+    }
+    assignments = (
+        StaffingWorkAssignment.query.options(
+            joinedload(StaffingWorkAssignment.person)
+            .joinedload(StaffingPerson.shift_flow_plan)
+            .joinedload(StaffingShiftFlowPlan.setup_work_area),
+            joinedload(StaffingWorkAssignment.person)
+            .joinedload(StaffingPerson.shift_flow_plan)
+            .joinedload(StaffingShiftFlowPlan.sort_start_work_area),
+            joinedload(StaffingWorkAssignment.person)
+            .joinedload(StaffingPerson.shift_flow_plan)
+            .joinedload(StaffingShiftFlowPlan.final_door_work_area),
+            joinedload(StaffingWorkAssignment.work_area),
+        )
+        .join(StaffingPerson)
+        .filter(
+            StaffingWorkAssignment.active.is_(True),
+            StaffingWorkAssignment.work_area_unit_id.in_(shift_area_ids or {-1}),
+            StaffingPerson.active.is_(True),
+        )
+        .order_by(StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.id)
+        .all()
+    )
+    person_ids = [assignment.person_id for assignment in assignments]
+    records = _daily_attendance_records(person_ids, operation, staffing_sort)
+    here = []
+    coming = []
+    here_assignments = []
+    for assignment in assignments:
+        person = assignment.person
+        plan = person.shift_flow_plan
+        record = records.get(person.id)
+        effective_area_id = (
+            record.work_area_unit_id
+            if record and record.work_area_unit_id is not None
+            else getattr(plan, "sort_start_work_area_id", None)
+        )
+        row = {
+            "person": person,
+            "plan": plan,
+            "attendance": record,
+            "status": record.status if record else "",
+            "status_label": ATTENDANCE_STATUS_LABELS.get(record.status, "Unmarked") if record else "Unmarked",
+            "effective_work_area_id": effective_area_id,
+            "flow": operational_flow_shorthand(plan),
+        }
+        if effective_area_id in start_ids:
+            here.append(row)
+            here_assignments.append(assignment)
+        elif plan and plan.final_door_work_area_id in later_ids:
+            coming.append(row)
+    counts = _attendance_staffing_count_totals(here_assignments, records)
+    return {
+        "operation": operation,
+        "staffing_sort": staffing_sort,
+        "here": here,
+        "coming": coming,
+        "counts": counts,
+        "status_choices": attendance_status_choices(),
+    }
+
+
+def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids):
+    """Mutate only people whose effective attendance snapshot is in allowed areas."""
+    operation = current_night_attendance_operation()
+    if not operation or str(values.get("sort_date_operation_id")) != str(operation.id):
+        raise ValueError("The selected Night Sort is no longer current. Reload Manage Employees.")
+    allowed = _operational_area_id_set(allowed_sort_start_area_ids)
+    person_ids = _submitted_attendance_person_ids(values)
+    hierarchy = _daily_attendance_hierarchy()
+    staffing_sort = _staffing_sort_for_operation(operation, hierarchy)
+    shift_area_ids = {
+        unit.id for unit in hierarchy["units"] if _is_shift_work_area(unit, hierarchy["by_id"])
+    }
+    assignments = (
+        StaffingWorkAssignment.query.options(
+            joinedload(StaffingWorkAssignment.person)
+            .joinedload(StaffingPerson.shift_flow_plan)
+            .joinedload(StaffingShiftFlowPlan.sort_start_work_area)
+        )
+        .join(StaffingPerson)
+        .filter(
+            StaffingWorkAssignment.person_id.in_(person_ids or {-1}),
+            StaffingWorkAssignment.active.is_(True),
+            StaffingWorkAssignment.work_area_unit_id.in_(shift_area_ids or {-1}),
+            StaffingPerson.active.is_(True),
+        )
+        .all()
+    )
+    assignments_by_person = {assignment.person_id: assignment for assignment in assignments}
+    existing = _daily_attendance_records(person_ids, operation, staffing_sort)
+    for person_id in person_ids:
+        assignment = assignments_by_person.get(person_id)
+        plan = getattr(getattr(assignment, "person", None), "shift_flow_plan", None)
+        record = existing.get(person_id)
+        effective_area_id = (
+            record.work_area_unit_id
+            if record and record.work_area_unit_id is not None
+            else getattr(plan, "sort_start_work_area_id", None)
+        )
+        if effective_area_id not in allowed:
+            raise ValueError("Attendance includes an employee outside the selected attendance areas.")
+    saved = 0
+    user_id = getattr(user, "id", None)
+    for person_id in sorted(person_ids):
+        status_value = str(values.get(f"status_{person_id}") or "").strip()
+        record = existing.get(person_id)
+        if not status_value:
+            if record:
+                db.session.delete(record); saved += 1
+            continue
+        status = _normalize_choice(status_value, STAFFING_DAILY_ATTENDANCE_STATUSES, "attendance status")
+        plan = assignments_by_person[person_id].person.shift_flow_plan
+        work_area = (
+            hierarchy["by_id"].get(record.work_area_unit_id)
+            if record and record.work_area_unit_id is not None
+            else getattr(plan, "sort_start_work_area", None)
+        )
+        if not work_area:
+            raise ValueError("The employee's current attendance area is unavailable.")
+        department, operation_unit, _ = _daily_attendance_placement(work_area, hierarchy)
+        if not record:
+            record = StaffingDailyAttendance(
+                person_id=person_id,
+                attendance_date=operation.sort_date,
+                sort_unit_id=staffing_sort.id,
+                sort_date_operation_id=operation.id,
+                work_area_unit_id=work_area.id,
+                department_unit_id=department.id if department else None,
+                operation_unit_id=operation_unit.id if operation_unit else None,
+                recorded_by_user_id=user_id,
+            )
+            db.session.add(record)
+        else:
+            if record.sort_date_operation_id is None:
+                record.sort_date_operation_id = operation.id
+            if record.work_area_unit_id is None:
+                record.work_area_unit_id = work_area.id
+            if record.department_unit_id is None and department:
+                record.department_unit_id = department.id
+            if record.operation_unit_id is None and operation_unit:
+                record.operation_unit_id = operation_unit.id
+        record.status = status
+        if f"note_{person_id}" in values:
+            record.note = _optional_text(values.get(f"note_{person_id}"))
+        record.updated_by_user_id = user_id
+        saved += 1
+    db.session.flush()
+    return saved
+
+
+def _operational_area_id_set(values):
+    area_ids = set()
+    for value in values or ():
+        try:
+            area_ids.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    return area_ids
+
+
+def neosektor_manage_default_area(user):
+    """Use the supervisor's active Staffing assignment, with the EBM fallback."""
+    employee_id = str(getattr(user, "employee_id", "") or "").strip()
+    if not employee_id:
+        return "ebm"
+    assignment = (
+        StaffingWorkAssignment.query.join(StaffingPerson)
+        .options(joinedload(StaffingWorkAssignment.work_area))
+        .filter(
+            StaffingPerson.employee_id == employee_id,
+            StaffingWorkAssignment.active.is_(True),
+        )
+        .first()
+    )
+    name = str(getattr(getattr(assignment, "work_area", None), "name", "") or "").casefold()
+    if "east ballmat" in name:
+        return "ebm"
+    if "west ballmat" in name:
+        return "wbm"
+    return "ebm"
+
+
 def _attendance_count_assignments(scope, staffing_sort, hierarchy):
     """Load the active payroll roster once; attendance location stays separate."""
     work_area_ids = _daily_attendance_work_area_ids(scope, hierarchy)

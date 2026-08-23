@@ -112,14 +112,26 @@ class NeoStaffingAttendanceDeepLinkTest(unittest.TestCase):
     def test_cross_app_links_and_target_authorization_contracts_are_present(self):
         ermac_template = Path("app/templates/neonodes/neoermac/door_view.html").read_text()
         sektor_template = Path("app/templates/neonodes/neosektor/live_counts.html").read_text()
+        tunnel_template = Path("app/templates/neonodes/neosektor/tunnel_conductor.html").read_text()
+        manage_template = Path("app/templates/neostaffing/operational_manage_employees.html").read_text()
         ermac_route = Path("app/neonodes/neoermac/routes.py").read_text()
         sektor_route = Path("app/neonodes/neosektor/routes.py").read_text()
 
-        self.assertIn("TAKE ATTENDANCE", ermac_template)
-        self.assertIn("selected_doors", ermac_route)
-        self.assertIn("BALLMAT ATTENDANCE", sektor_template)
-        self.assertIn('["west", "east"]', sektor_template)
+        self.assertIn("MANAGE EMPLOYEES", ermac_template)
+        self.assertIn("_current_user_supervised_doors", ermac_route)
+        self.assertIn("MANAGE EMPLOYEES", sektor_template)
+        self.assertNotIn("BALLMAT ATTENDANCE", sektor_template)
+        self.assertIn('names = {"dis": "Discharge", "ebm": "East Ballmat", "wbm": "West Ballmat"}', sektor_route)
         self.assertIn("attendance_deep_link_work_area_ids", sektor_route)
+        self.assertIn("can_manage_employees", sektor_template)
+        self.assertIn("area='dis'", tunnel_template)
+        self.assertIn("_can_manage_employees", sektor_route)
+        self.assertIn("current_user.management_level in MANAGEMENT_LEVELS", sektor_route)
+        self.assertLess(sektor_route.index('"dis": "Discharge"'), sektor_route.index('"ebm": "East Ballmat"'))
+        self.assertLess(sektor_route.index('"ebm": "East Ballmat"'), sektor_route.index('"wbm": "West Ballmat"'))
+        self.assertIn("ATTENDANCE HERE", manage_template)
+        self.assertIn("COMING TO THESE DOORS", manage_template)
+        self.assertIn("attendance.status_choices", manage_template)
         response = self.client.get(
             f"/neostaffing/attendance?work_area_ids={self.door_one.id}",
             follow_redirects=False,

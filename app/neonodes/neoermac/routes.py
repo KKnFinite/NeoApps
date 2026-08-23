@@ -9,6 +9,7 @@ from flask import (
     url_for,
 )
 from flask_login import current_user
+from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
@@ -63,6 +64,7 @@ from app.services.neoermac_view_outbound import (
     view_outbound_revision,
 )
 from app.services.permission_rules import permission_access
+from app.services.permission_rules import user_can
 from app.services import neostaffing as staffing_service
 
 
@@ -443,6 +445,43 @@ def door_view():
     ):
         db.session.commit()
     return response
+
+
+@bp.route("/door-view/manage-employees", methods=["GET", "POST"])
+@gateway_node_required("ermac")
+def manage_employees():
+    gateway = get_current_gateway()
+    doors = _current_user_supervised_doors(gateway)
+    area_ids = staffing_service.attendance_deep_link_work_area_ids(doors)
+    if not area_ids and request.method == "GET":
+        return redirect(url_for("neostaffing.attendance"))
+    can_edit = user_can("neostaffing.attendance.take")
+    if request.method == "POST":
+        if not can_edit:
+            flash("Access denied.", "error")
+        else:
+            try:
+                saved = staffing_service.save_operational_manage_attendance(
+                    request.form, current_user, area_ids
+                )
+                db.session.commit()
+                flash(f"Attendance saved for {saved} people.", "success")
+            except (ValueError, IntegrityError) as exc:
+                db.session.rollback()
+                flash(str(getattr(exc, "orig", None) or exc), "error")
+        return redirect(url_for("neoermac.manage_employees"))
+    context = staffing_service.operational_manage_employees_context(
+        area_ids, later_final_area_ids=area_ids
+    )
+    return render_template(
+        "neostaffing/operational_manage_employees.html",
+        title="MANAGE EMPLOYEES",
+        attendance=context,
+        can_edit_attendance=can_edit,
+        show_coming=True,
+        area_tabs=(),
+        back_url=url_for("neoermac.door_view"),
+    )
 
 
 @bp.route("/door-view/supervision", methods=["POST"])

@@ -1,5 +1,7 @@
 from datetime import date
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from sqlalchemy import event
 
@@ -37,9 +39,13 @@ class NeoStaffingAttendanceCountsTest(unittest.TestCase):
         self.shift = StaffingUnit(unit_type="department", name="Shift", parent=self.ramp)
         self.door = StaffingUnit(unit_type="work_area", name="Door 1", parent=self.shift)
         self.ballmat = StaffingUnit(unit_type="work_area", name="Ballmat 1", parent=self.shift)
+        self.west_ballmat = StaffingUnit(unit_type="work_area", name="West Ballmat", parent=self.shift)
+        self.east_ballmat = StaffingUnit(unit_type="work_area", name="East Ballmat", parent=self.shift)
+        self.discharge = StaffingUnit(unit_type="work_area", name="Discharge", parent=self.shift)
         self.outside = StaffingUnit(unit_type="work_area", name="Door Outside", parent=self.ramp)
         db.session.add_all(
-            [self.night, self.ramp, self.shift, self.door, self.ballmat, self.outside]
+            [self.night, self.ramp, self.shift, self.door, self.ballmat,
+             self.west_ballmat, self.east_ballmat, self.discharge, self.outside]
         )
         db.session.flush()
         self.operation = SortDateOperation(
@@ -166,6 +172,154 @@ class NeoStaffingAttendanceCountsTest(unittest.TestCase):
             event.remove(db.engine, "before_cursor_execute", capture)
 
         self.assertEqual(counts["on_payroll"], 60)
+        self.assertLessEqual(len(statements), 4)
+
+    def test_operational_context_uses_snapshot_then_shift_flow_and_never_relocates_history(self):
+        person = self._person("OPS100", self.door)
+        plan = staffing_service.create_shift_flow_plan(
+            person,
+            {
+                "shift_flow_setup_work_area_id": "",
+                "shift_flow_sort_start_work_area_id": str(self.west_ballmat.id),
+                "shift_flow_ballmat_transition": "1",
+                "shift_flow_final_door_work_area_id": str(self.door.id),
+            },
+            self.door,
+        )
+        db.session.commit()
+        with patch.object(staffing_service, "current_night_attendance_operation", return_value=self.operation):
+            unmarked = staffing_service.operational_manage_employees_context([self.west_ballmat.id])
+            self.assertEqual([row["person"].id for row in unmarked["here"]], [person.id])
+            self.assertEqual(unmarked["counts"]["unmarked"], 1)
+
+            db.session.add(
+                StaffingDailyAttendance(
+                    attendance_date=self.operation.sort_date,
+                    sort_unit_id=self.night.id,
+                    sort_date_operation_id=self.operation.id,
+                    person_id=person.id,
+                    work_area_unit_id=self.door.id,
+                    status="here",
+                )
+            )
+            db.session.commit()
+            plan.sort_start_work_area = self.discharge
+            plan.ballmat_transition = None
+            db.session.commit()
+
+            door_context = staffing_service.operational_manage_employees_context([self.door.id])
+            discharge_context = staffing_service.operational_manage_employees_context([self.discharge.id])
+            self.assertEqual([row["person"].id for row in door_context["here"]], [person.id])
+            self.assertEqual(discharge_context["here"], [])
+            staffing_service.save_operational_manage_attendance(
+                {
+                    "sort_date_operation_id": str(self.operation.id),
+                    f"status_{person.id}": "vacation",
+                },
+                None,
+                [self.door.id],
+            )
+            db.session.commit()
+            record = StaffingDailyAttendance.query.filter_by(person_id=person.id).one()
+            self.assertEqual(record.work_area_unit_id, self.door.id)
+            self.assertEqual(record.status, "vacation")
+            self.assertEqual(StaffingDailyAttendance.query.filter_by(person_id=person.id).count(), 1)
+            with self.assertRaisesRegex(ValueError, "outside the selected attendance areas"):
+                staffing_service.save_operational_manage_attendance(
+                    {
+                        "sort_date_operation_id": str(self.operation.id),
+                        f"status_{person.id}": "here",
+                    },
+                    None,
+                    [self.discharge.id],
+                )
+
+    def test_operational_context_separates_here_and_coming_and_formats_flow(self):
+        here = self._person("OPS200", self.door)
+        coming = self._person("OPS201", self.west_ballmat)
+        staffing_service.create_shift_flow_plan(
+            here,
+            {
+                "shift_flow_setup_work_area_id": "",
+                "shift_flow_sort_start_work_area_id": str(self.door.id),
+                "shift_flow_ballmat_transition": "",
+                "shift_flow_final_door_work_area_id": str(self.door.id),
+            },
+            self.door,
+        )
+        coming_plan = staffing_service.create_shift_flow_plan(
+            coming,
+            {
+                "shift_flow_setup_work_area_id": str(self.door.id),
+                "shift_flow_sort_start_work_area_id": str(self.west_ballmat.id),
+                "shift_flow_ballmat_transition": "1",
+                "shift_flow_final_door_work_area_id": str(self.door.id),
+            },
+            self.door,
+        )
+        discharge_person = self._person("OPS202", self.discharge)
+        discharge_plan = staffing_service.create_shift_flow_plan(
+            discharge_person,
+            {
+                "shift_flow_setup_work_area_id": "",
+                "shift_flow_sort_start_work_area_id": str(self.discharge.id),
+                "shift_flow_ballmat_transition": "",
+                "shift_flow_final_door_work_area_id": str(self.door.id),
+            },
+            self.discharge,
+        )
+        db.session.commit()
+        with patch.object(staffing_service, "current_night_attendance_operation", return_value=self.operation):
+            context = staffing_service.operational_manage_employees_context(
+                [self.door.id], later_final_area_ids=[self.door.id]
+            )
+        self.assertEqual([row["person"].id for row in context["here"]], [here.id])
+        self.assertEqual({row["person"].id for row in context["coming"]}, {coming.id, discharge_person.id})
+        self.assertEqual(staffing_service.operational_flow_shorthand(coming_plan), "SET D1 → WBM → W1 → D1")
+        self.assertEqual(staffing_service.operational_flow_shorthand(discharge_plan), "DIS → D1")
+
+    def test_neosektor_default_uses_supervisor_assignment_and_context_queries_are_bounded(self):
+        east_person = self._person("SUP-E", self.east_ballmat)
+        west_person = self._person("SUP-W", self.west_ballmat)
+        staffing_service.create_shift_flow_plan(
+            east_person,
+            {
+                "shift_flow_setup_work_area_id": "",
+                "shift_flow_sort_start_work_area_id": str(self.east_ballmat.id),
+                "shift_flow_ballmat_transition": "2",
+                "shift_flow_final_door_work_area_id": str(self.door.id),
+            },
+            self.east_ballmat,
+        )
+        db.session.commit()
+        self.assertEqual(
+            staffing_service.neosektor_manage_default_area(
+                SimpleNamespace(employee_id=east_person.employee_id)
+            ),
+            "ebm",
+        )
+        self.assertEqual(
+            staffing_service.neosektor_manage_default_area(
+                SimpleNamespace(employee_id=west_person.employee_id)
+            ),
+            "wbm",
+        )
+        self.assertEqual(
+            staffing_service.neosektor_manage_default_area(
+                SimpleNamespace(employee_id="missing")
+            ),
+            "ebm",
+        )
+        statements = []
+        def capture(_connection, _cursor, statement, _parameters, _context, _many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+        event.listen(db.engine, "before_cursor_execute", capture)
+        try:
+            with patch.object(staffing_service, "current_night_attendance_operation", return_value=self.operation):
+                staffing_service.operational_manage_employees_context([self.east_ballmat.id])
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture)
         self.assertLessEqual(len(statements), 4)
 
     def _person(self, employee_id, work_area):

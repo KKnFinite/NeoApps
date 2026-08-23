@@ -38,6 +38,7 @@
     </header>
 
     <main class="tunnel-wrap">
+        {% if can_manage_employees %}<a class="neosektor-menu-link" href="{{ url_for('neosektor.manage_employees', area='dis', source='tunnel') }}">MANAGE EMPLOYEES</a>{% endif %}
         {% set operation_refresh_status = state.refresh %}
         {% set operation_refresh_class = "neosektor-refresh-paused" %}
         {% set operation_refresh_hook = "neosektor-refresh-paused" %}
