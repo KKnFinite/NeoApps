@@ -428,14 +428,17 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertEqual(sort_response.status_code, 200)
         self.assertIn(b"FULL TREE", sort_response.data)
-        self.assertIn(b"neostaffing-tree-editor", sort_response.data)
-        self.assertIn(b"neostaffing-tree-branch", sort_response.data)
-        self.assertIn(b"neostaffing-tree-toggle", sort_response.data)
+        self.assertIn(b"neostaffing-org-console", sort_response.data)
+        self.assertIn(b"neostaffing-org-tree-surface", sort_response.data)
+        self.assertIn(b"neostaffing-org-drawer", sort_response.data)
+        self.assertNotIn(b"neostaffing-dashboard-shell", sort_response.data)
+        self.assertIn(b"neostaffing-org-tree-branch", sort_response.data)
+        self.assertIn(b"neostaffing-org-tree-toggle", sort_response.data)
         self.assertIn(b"data-org-chart-tree", sort_response.data)
         self.assertIn(b"data-org-chart-branch", sort_response.data)
         self.assertIn(b"data-org-chart-state-form", sort_response.data)
-        self.assertIn(b"neostaffing-org-chart-tree-state", sort_response.data)
-        self.assertIn(b"sessionStorage", sort_response.data)
+        self.assertIn(b"neostaffing.org-chart.operational.v2", sort_response.data)
+        self.assertIn(b"localStorage", sort_response.data)
         self.assertIn(b"scrollTop", sort_response.data)
         self.assertIn(b"+ Operation", sort_response.data)
         self.assertIn(b"Add Operation", sort_response.data)
@@ -452,10 +455,6 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"0 Assigned", response.data)
         self.assertIn(b"+ Department", response.data)
         self.assertIn(b"+ Work Area", response.data)
-        self.assertIn(
-            f'href="/neostaffing/org-chart?unit_id={operation.id}#structure-add"'.encode(),
-            response.data,
-        )
         self.assertIn(b"Add Department", response.data)
         self.assertIn(b"Add Work Area", response.data)
         self.assertIn(b"Assign Manager", response.data)
@@ -468,7 +467,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b'data-org-chart-workspace', work_area_response.data)
         self.assertNotIn(b'data-org-chart-workspace-empty', work_area_response.data)
         self.assertIn(
-            f'id="neostaffing-org-unit-{work_area.id}" class="neostaffing-tree-branch is-selected'.encode(),
+            f'id="neostaffing-org-unit-{work_area.id}" class="neostaffing-org-tree-branch neostaffing-tree-branch is-selected'.encode(),
             work_area_response.data,
         )
         self.assertIn(b'aria-current="page"', work_area_response.data)
@@ -487,7 +486,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             work_area_response.data.index(b"Selected unit contextual actions"),
         )
         self.assertNotIn(b"+ People", work_area_response.data)
-        self.assertIn(b"+ PT Sup", work_area_response.data)
+        self.assertNotIn(b"+ PT Sup", work_area_response.data)
         self.assertNotIn(b"Add/Assign People", work_area_response.data)
         self.assertIn(b"ASSIGN PT SUPERVISOR", work_area_response.data)
         self.assertIn(b"Set Headcount", work_area_response.data)
@@ -561,7 +560,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         after_add = self.client.get(added.location)
         self.assertIn(b"State Child Area", after_add.data)
         self.assertIn(
-            f'id="neostaffing-org-unit-{operation.id}" class="neostaffing-tree-branch is-selected'.encode(),
+            f'id="neostaffing-org-unit-{operation.id}" class="neostaffing-org-tree-branch neostaffing-tree-branch is-selected'.encode(),
             after_add.data,
         )
 
@@ -624,7 +623,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b'data-org-chart-workspace', restored.data)
         self.assertNotIn(b'data-org-chart-workspace-empty', restored.data)
         self.assertIn(
-            f'id="neostaffing-org-unit-{work_area.id}" class="neostaffing-tree-branch is-selected'.encode(),
+            f'id="neostaffing-org-unit-{work_area.id}" class="neostaffing-org-tree-branch neostaffing-tree-branch is-selected'.encode(),
             restored.data,
         )
         self.assertIn(f'name="return_unit_id" value="{work_area.id}"'.encode(), restored.data)
@@ -967,11 +966,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         hierarchy = self.client.get("/neostaffing/org-chart")
         self.assertEqual(hierarchy.status_code, 200)
         self.assertIn(b"FULL TREE", hierarchy.data)
-        self.assertIn(b"neostaffing-tree-editor", hierarchy.data)
+        self.assertIn(b"neostaffing-org-console", hierarchy.data)
         self.assertIn(b"+ Sort", hierarchy.data)
         self.assertIn(b'data-org-chart-workspace', hierarchy.data)
         self.assertIn(b'data-org-chart-workspace-empty', hierarchy.data)
-        self.assertIn(b'neostaffing-tree-detail is-empty', hierarchy.data)
+        self.assertIn(b'neostaffing-org-drawer neostaffing-tree-detail is-empty', hierarchy.data)
         self.assertNotIn(b"is-tree-only", hierarchy.data)
         self.assertNotIn(b"<h2>DETAIL</h2>", hierarchy.data)
         self.assertNotIn(b"ADD UNDER", hierarchy.data)
@@ -1212,7 +1211,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"ASSIGN PT SUPERVISOR", simulator_page.data)
         self.assertIn(b"ASSIGN MANAGEMENT", simulator_page.data)
         self.assertNotIn(b"+ People", simulator_page.data)
-        self.assertIn(b"+ PT Sup", simulator_page.data)
+        self.assertNotIn(b"+ PT Sup", simulator_page.data)
         self.assertNotIn(b"Add/Assign People", simulator_page.data)
         self.assertIn(b"Linked User", simulator_page.data)
         self.assertNotIn(b"STRUCTURE ACTIONS", simulator_page.data)

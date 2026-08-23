@@ -1,344 +1,93 @@
 {% extends "base.html" %}
-
 {% block title %}NeoStaffing Org Chart{% endblock %}
 
 {% macro parent_select(unit_type, selected_id=none) %}
-    {% if unit_type == "operation" %}
-        {% set options = sorts %}
-    {% elif unit_type == "department" %}
-        {% set options = operations %}
-    {% elif unit_type == "work_area" %}
-        {% set options = work_area_parents %}
-    {% else %}
-        {% set options = [] %}
-    {% endif %}
-    {% if options %}
-    <select name="parent_id" {% if unit_type != "sort" %}required{% endif %}>
-        {% for option in options %}
-        <option value="{{ option.id }}" {% if selected_id == option.id %}selected{% endif %}>{{ unit_type_labels[option.unit_type] }} / {{ unit_path(option) }}</option>
-        {% endfor %}
-    </select>
-    {% else %}
-    <input type="hidden" name="parent_id" value="">
-    {% endif %}
+    {% if unit_type == "operation" %}{% set options = sorts %}
+    {% elif unit_type == "department" %}{% set options = operations %}
+    {% elif unit_type == "work_area" %}{% set options = work_area_parents %}
+    {% else %}{% set options = [] %}{% endif %}
+    {% if options %}<select name="parent_id" {% if unit_type != "sort" %}required{% endif %}>{% for option in options %}<option value="{{ option.id }}" {% if selected_id == option.id %}selected{% endif %}>{{ unit_type_labels[option.unit_type] }} / {{ unit_path(option) }}</option>{% endfor %}</select>{% else %}<input type="hidden" name="parent_id" value="">{% endif %}
 {% endmacro %}
 
 {% macro render_tree(nodes, selected_unit) %}
-    <ul class="neostaffing-tree-list neostaffing-tree-editor-list">
-        {% for row in nodes %}
-        {% set unit = row.unit %}
-        <li>
-            <details id="neostaffing-org-unit-{{ unit.id }}" class="neostaffing-tree-branch{% if selected_unit and selected_unit.id == unit.id %} is-selected{% endif %}{% if not unit.active %} is-inactive{% endif %}" data-org-chart-branch data-org-chart-unit-id="{{ unit.id }}" open>
-                <summary class="neostaffing-tree-summary">
-                    <span class="neostaffing-tree-toggle" aria-hidden="true"></span>
-                    <a class="neostaffing-tree-node" href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}" {% if selected_unit and selected_unit.id == unit.id %}aria-current="page"{% endif %}>
-                        <span>{{ unit_type_labels[unit.unit_type] }}</span>
-                        <strong>{{ unit.name }}</strong>
-                    </a>
-                    <span class="neostaffing-tree-row-actions">
-                        {% if can_edit_structure %}
-                            {% if unit.unit_type == "sort" %}
-                            <a href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}#structure-add">+ Operation</a>
-                            {% elif unit.unit_type == "operation" %}
-                            <a href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}#structure-add">+ Department</a>
-                            <a href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}#structure-add">+ Work Area</a>
-                            {% elif unit.unit_type == "department" %}
-                            <a href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}#structure-add">+ Work Area</a>
-                            {% endif %}
-                        {% endif %}
-                        {% if unit.unit_type == "work_area" and can_assign_management %}
-                        <a href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}#management-editor">+ PT Sup</a>
-                        {% endif %}
-                    </span>
-                </summary>
-                {% if row.children %}
-                {{ render_tree(row.children, selected_unit) }}
-                {% endif %}
-            </details>
-        </li>
-        {% endfor %}
-    </ul>
+<ul class="neostaffing-org-tree-list">
+    {% for row in nodes %}{% set unit = row.unit %}
+    <li data-org-chart-branch data-org-chart-unit-id="{{ unit.id }}">
+        <details id="neostaffing-org-unit-{{ unit.id }}" class="neostaffing-org-tree-branch neostaffing-tree-branch{% if selected_unit and selected_unit.id == unit.id %} is-selected{% endif %}{% if not unit.active %} is-inactive{% endif %}" open>
+            <summary class="neostaffing-org-tree-summary">
+                <span class="neostaffing-org-tree-toggle neostaffing-tree-toggle" aria-hidden="true"></span>
+                <a class="neostaffing-tree-node" href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}" {% if selected_unit and selected_unit.id == unit.id %}aria-current="page"{% endif %}>
+                    <span>{{ unit_type_labels[unit.unit_type] }}</span><strong>{{ unit.name }}</strong>{% if not unit.active %}<em>Inactive</em>{% endif %}
+                </a>
+            </summary>
+            {% if row.children %}{{ render_tree(row.children, selected_unit) }}{% endif %}
+        </details>
+    </li>
+    {% endfor %}
+</ul>
 {% endmacro %}
 
 {% macro add_unit_form(unit_type, parent_id, button_label, return_unit_id=none) %}
-    <form class="operation-form neostaffing-tree-add-form" method="post" action="{{ url_for('neostaffing.create_unit') }}" data-org-chart-state-form>
-        <input type="hidden" name="unit_type" value="{{ unit_type }}">
-        <input type="hidden" name="parent_id" value="{{ parent_id or '' }}">
-        <input type="hidden" name="return_unit_id" value="{{ return_unit_id or parent_id or '' }}">
-        <label><span>Name</span><input name="name" required></label>
-        {% if unit_type == "work_area" %}
-        <label><span>Required HC</span><input type="number" min="0" name="required_headcount"></label>
-        {% endif %}
-        <input type="hidden" name="display_order" value="0">
-        <button type="submit">{{ button_label }}</button>
-    </form>
+<form class="neostaffing-org-form" method="post" action="{{ url_for('neostaffing.create_unit') }}" data-org-chart-state-form>
+    <input type="hidden" name="unit_type" value="{{ unit_type }}"><input type="hidden" name="parent_id" value="{{ parent_id or '' }}"><input type="hidden" name="return_unit_id" value="{{ return_unit_id or parent_id or '' }}">
+    <label>Name<input name="name" required></label>
+    {% if unit_type == "work_area" %}<label>Required HC<input type="number" min="0" name="required_headcount"></label>{% endif %}
+    <input type="hidden" name="display_order" value="0"><button type="submit">{{ button_label }}</button>
+</form>
 {% endmacro %}
 
 {% block content %}
 {% set selected = org_chart.selected_unit %}
-<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="staffing-org-title">
-    <div class="neostaffing-dashboard-shell">
-        {% include "neostaffing/_section_nav.html" %}
-        <div class="neostaffing-dashboard-main">
-            <div class="neostaffing-hero neostaffing-hero-compact">
-                <div class="neostaffing-hero-copy mobile-shell-duplicate-title">
-                    <h1 id="staffing-org-title">Org Chart</h1>
-                </div>
-            </div>
-
-            <nav class="neostaffing-tree-context-actions" aria-label="Org Chart view">
-                <a href="{{ url_for('neostaffing.org_chart', unit_id=selected.id if selected else none) }}" aria-current="page">Operational</a>
-                <a href="{{ url_for('neostaffing.org_chart', view='management') }}">Management</a>
-            </nav>
-
-            <nav class="neostaffing-breadcrumb" aria-label="Org chart breadcrumb">
-                <a href="{{ url_for('neostaffing.org_chart') }}">All Sorts</a>
-                {% for unit in org_chart.breadcrumb %}
-                <a href="{{ url_for('neostaffing.org_chart', unit_id=unit.id) }}">{{ unit.name }}</a>
-                {% endfor %}
-            </nav>
-
-            <section class="neostaffing-tree-editor" aria-label="NeoStaffing visual org chart editor">
-                <article id="neostaffing-org-chart-tree" class="neostaffing-data-card neostaffing-tree-panel" data-org-chart-tree data-org-chart-selected-unit="{{ selected.id if selected else '' }}">
-                    <div class="neostaffing-panel-heading">
-                        <h2>FULL TREE</h2>
-                        {% if can_edit_structure %}
-                        <details class="neostaffing-tree-add-sort">
-                            <summary class="neostaffing-tree-action-chip">+ Sort</summary>
-                            <form class="operation-form neostaffing-tree-add-sort-form" method="post" action="{{ url_for('neostaffing.create_unit') }}" data-org-chart-state-form>
-                                <input type="hidden" name="unit_type" value="sort">
-                                <input type="hidden" name="parent_id" value="">
-                                <input type="hidden" name="return_unit_id" value="{{ selected.id if selected else '' }}">
-                                <label><span>Name</span><input name="name" required></label>
-                                <input type="hidden" name="display_order" value="0">
-                                <button type="submit">SAVE</button>
-                            </form>
-                        </details>
-                        {% endif %}
-                    </div>
-                    {% if hierarchy %}
-                    {{ render_tree(hierarchy, selected) }}
-                    {% else %}
-                    <p class="muted">No staffing units have been created yet.</p>
-                    {% endif %}
-                </article>
-
-                <aside class="neostaffing-data-card neostaffing-tree-detail{% if not selected %} is-empty{% endif %}" aria-label="Org Chart workspace" data-org-chart-workspace{% if not selected %} data-org-chart-workspace-empty{% endif %}>
-                    {% if selected %}
-                    <div class="neostaffing-panel-heading">
-                        <h2>DETAIL</h2>
-                        <span class="neostaffing-tree-action-chip">{{ "ACTIVE" if selected.active else "INACTIVE" }}</span>
-                    </div>
-
-                    {% set selected_detail = org_chart.selected_detail %}
-                    <div class="neostaffing-tree-detail-title">
-                        <span>{{ unit_type_labels[selected.unit_type] }}</span>
-                        <strong>{{ selected.name }}</strong>
-                        <em>{{ unit_path(selected) }}</em>
-                        {% if selected.unit_type == "work_area" %}
-                        <small>Required HC: {{ selected.required_headcount if selected.required_headcount is not none else "-" }}</small>
-                        {% endif %}
-                    </div>
-
-                    <section class="neostaffing-tree-management-summary" aria-label="Assigned management">
-                        <h3>MANAGEMENT</h3>
-                        {% if selected_detail and selected_detail.leadership %}
-                        <ul class="neostaffing-detail-list">
-                            {% for assignment in selected_detail.leadership %}
-                            {% set linked_user = linked_user_for_person(assignment.person) %}
-                            <li>
-                                <strong>{{ assignment.person.full_name }}</strong>
-                                <span>{{ classification_labels[assignment.person.classification] }} / {{ "Linked User" if linked_user else "No User Link" }}</span>
-                            </li>
-                            {% endfor %}
-                        </ul>
-                        {% else %}
-                        <p class="neostaffing-tree-management-empty">No active management assigned.</p>
-                        {% endif %}
-                    </section>
-
-                    <div class="neostaffing-tree-context-actions" aria-label="Selected unit contextual actions">
-                        {% if selected.unit_type == "sort" %}
-                            {% if can_edit_structure %}<a href="#structure-add">Add Operation</a><a href="#structure-editor">Edit</a>{% endif %}
-                            {% if can_assign_management %}<a href="#management-editor">Assign Division Manager</a>{% endif %}
-                        {% elif selected.unit_type == "operation" %}
-                            {% if can_edit_structure %}<a href="#structure-add">Add Department</a><a href="#structure-add">Add Work Area</a><a href="#structure-editor">Edit</a><a href="#structure-editor">Move</a>{% endif %}
-                            {% if can_assign_management %}<a href="#management-editor">Assign Manager</a>{% endif %}
-                        {% elif selected.unit_type == "department" %}
-                            {% if can_edit_structure %}<a href="#structure-add">Add Work Area</a><a href="#structure-editor">Edit</a><a href="#structure-editor">Move</a>{% endif %}
-                            {% if can_assign_management %}<a href="#management-editor">Assign FT Supervisor</a>{% endif %}
-                        {% elif selected.unit_type == "work_area" %}
-                            {% if can_assign_management %}<a href="#management-editor">Assign PT Supervisor</a>{% endif %}
-                            {% if can_edit_structure %}<a href="#structure-editor">Edit</a><a href="#structure-editor">Move</a><a href="#structure-editor">Set Headcount</a>{% endif %}
-                        {% endif %}
-                    </div>
-
-                    {% if can_edit_structure %}
-                    <section id="structure-editor" class="neostaffing-tree-control-section">
-                        <h2>STRUCTURE ACTIONS</h2>
-                        <form class="operation-form neostaffing-tree-edit-form" method="post" action="{{ url_for('neostaffing.update_unit', unit_id=selected.id) }}" data-org-chart-state-form>
-                            <input type="hidden" name="unit_type" value="{{ selected.unit_type }}">
-                            <input type="hidden" name="return_unit_id" value="{{ selected.id }}">
-                            <label><span>Name</span><input name="name" value="{{ selected.name }}" required></label>
-                            <label><span>Move / Parent</span>{{ parent_select(selected.unit_type, selected.parent_id) }}</label>
-                            {% if selected.unit_type == "work_area" %}
-                            <label><span>Required HC</span><input type="number" min="0" name="required_headcount" value="{{ selected.required_headcount if selected.required_headcount is not none else '' }}"></label>
-                            {% else %}
-                            <input type="hidden" name="required_headcount" value="">
-                            {% endif %}
-                            <label><span>Order</span><input type="number" name="display_order" value="{{ selected.display_order }}"></label>
-                            <input type="hidden" name="active" value="{{ 1 if selected.active else 0 }}">
-                            <button type="submit">SAVE UNIT</button>
-                        </form>
-                        <div class="neostaffing-card-actions">
-                            <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.toggle_unit_active', unit_id=selected.id) }}" data-org-chart-state-form>
-                                <input type="hidden" name="return_unit_id" value="{{ selected.id }}">
-                                <button class="table-row-button" type="submit">{{ "DEACTIVATE" if selected.active else "ACTIVATE" }}</button>
-                            </form>
-                            <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.delete_unit', unit_id=selected.id) }}" data-org-chart-state-form>
-                                <input type="hidden" name="return_unit_id" value="{{ selected.parent_id or '' }}">
-                                <button class="table-row-button" type="submit">DELETE</button>
-                            </form>
-                        </div>
-                    </section>
-
-                    <section id="structure-add" class="neostaffing-tree-control-section">
-                        <h2>ADD UNDER {{ selected.name }}</h2>
-                        {% if selected.unit_type == "sort" %}
-                        {{ add_unit_form("operation", selected.id, "+ Operation", selected.id) }}
-                        {% elif selected.unit_type == "operation" %}
-                        {{ add_unit_form("department", selected.id, "+ Department", selected.id) }}
-                        {{ add_unit_form("work_area", selected.id, "+ Work Area", selected.id) }}
-                        {% elif selected.unit_type == "department" %}
-                        {{ add_unit_form("work_area", selected.id, "+ Work Area", selected.id) }}
-                        {% else %}
-                        <p class="muted">Work Areas cannot contain child units.</p>
-                        {% endif %}
-                    </section>
-                    {% endif %}
-
-                    {% if can_assign_management %}
-                    <section id="management-editor" class="neostaffing-tree-control-section">
-                        {% if selected.unit_type == "sort" %}
-                        <h2>ASSIGN DIVISION MANAGER</h2>
-                        {% elif selected.unit_type == "operation" %}
-                        <h2>ASSIGN MANAGER</h2>
-                        {% elif selected.unit_type == "department" %}
-                        <h2>ASSIGN FT SUPERVISOR</h2>
-                        {% else %}
-                        <h2>ASSIGN PT SUPERVISOR</h2>
-                        {% endif %}
-                        <form class="operation-form neostaffing-tree-add-form" method="post" action="{{ url_for('neostaffing.create_management_assignment') }}" data-org-chart-state-form>
-                            <input type="hidden" name="unit_id" value="{{ selected.id }}">
-                            <input type="hidden" name="return_unit_id" value="{{ selected.id }}">
-                            <input type="hidden" name="leadership_level" value="{{ selected.unit_type }}">
-                            <label><span>Person</span>
-                                <select name="person_id" required {% if not management_candidates %}disabled{% endif %}>
-                                    <option value="">Select linked management person</option>
-                                    {% for candidate in management_candidates %}
-                                    <option value="{{ candidate.person.id }}">{{ candidate.person.employee_id }} - {{ candidate.person.full_name }} / {{ classification_labels[candidate.person.classification] }} / Linked User</option>
-                                    {% endfor %}
-                                </select>
-                            </label>
-                            <button type="submit" {% if not management_candidates %}disabled{% endif %}>ASSIGN MANAGEMENT</button>
-                        </form>
-                        {% if not management_candidates %}
-                        <p class="muted">No linked NeoApps management accounts are eligible for this unit.</p>
-                        {% endif %}
-                        <div class="neostaffing-record-grid neostaffing-tree-assignment-grid">
-                            {% for assignment in selected.leadership_assignments if assignment.active %}
-                            {% set linked_user = linked_user_for_person(assignment.person) %}
-                            <article class="neostaffing-record-card">
-                                <header class="neostaffing-record-header">
-                                    <div>
-                                        <span>{{ assignment.person.employee_id }}</span>
-                                        <strong>{{ assignment.person.full_name }}</strong>
-                                    </div>
-                                    <em>{{ "LINKED USER" if linked_user else "NO USER LINK" }}</em>
-                                </header>
-                                <p class="neostaffing-record-path">{{ classification_labels[assignment.person.classification] }} / {{ unit_path(assignment.unit) }}</p>
-                                <form class="inline-button-form" method="post" action="{{ url_for('neostaffing.delete_management_assignment', assignment_id=assignment.id) }}" data-org-chart-state-form>
-                                    <input type="hidden" name="return_unit_id" value="{{ selected.id }}">
-                                    <button class="table-row-button" type="submit">REMOVE ASSIGNMENT</button>
-                                </form>
-                            </article>
-                            {% else %}
-                            <p class="muted">No active leadership assignments on this unit.</p>
-                            {% endfor %}
-                        </div>
-                    </section>
-                    {% endif %}
-
-                    {% endif %}
-                </aside>
-            </section>
-        </div>
-    </div>
+<section class="neostaffing-org-console theme-staffing" aria-labelledby="staffing-org-title" data-org-chart-console>
+    {% include "neostaffing/_section_nav.html" %}
+    <main class="neostaffing-org-workspace">
+        <header class="neostaffing-org-header">
+            <div><h1 id="staffing-org-title">ORG CHART</h1><span>Operational hierarchy</span></div>
+            <nav class="neostaffing-org-view-tabs" aria-label="Org Chart view"><a href="{{ url_for('neostaffing.org_chart', unit_id=selected.id if selected else none) }}" aria-current="page">Operational</a><a href="{{ url_for('neostaffing.org_chart', view='management') }}">Management / Reports To</a></nav>
+            {% if selected %}<p class="neostaffing-org-breadcrumb">{% for unit in org_chart.breadcrumb %}<span>{{ unit.name }}</span>{% endfor %}</p>{% endif %}
+        </header>
+        <section class="neostaffing-org-tree-surface" aria-label="Operational organization hierarchy">
+            <div class="neostaffing-org-tree-heading neostaffing-tree-editor"><strong>FULL TREE</strong>{% if can_edit_structure %}<details><summary>+ Sort</summary><form class="neostaffing-org-form" method="post" action="{{ url_for('neostaffing.create_unit') }}" data-org-chart-state-form><input type="hidden" name="unit_type" value="sort"><input type="hidden" name="parent_id" value=""><input type="hidden" name="return_unit_id" value="{{ selected.id if selected else '' }}"><label>Name<input name="name" required></label><input type="hidden" name="display_order" value="0"><button type="submit">SAVE</button></form></details>{% endif %}</div>
+            <div class="neostaffing-org-tree-scroll" data-org-chart-tree data-org-chart-selected-unit="{{ selected.id if selected else '' }}">{% if hierarchy %}{{ render_tree(hierarchy, selected) }}{% else %}<p class="muted">No staffing units have been created yet.</p>{% endif %}</div>
+        </section>
+    </main>
+    <aside class="neostaffing-org-drawer neostaffing-tree-detail{% if not selected %} is-empty{% endif %}" aria-label="Selected organization unit" data-org-chart-workspace{% if not selected %} data-org-chart-workspace-empty{% endif %}>
+        {% if selected %}
+        <header class="neostaffing-tree-detail-title"><div><span>{{ unit_type_labels[selected.unit_type] }}</span><h2>{{ selected.name }}</h2><p>{{ unit_path(selected) }}</p>{% if selected.unit_type == "work_area" %}<p>Required HC: {{ selected.required_headcount if selected.required_headcount is not none else "-" }}</p>{% endif %}</div><em>{{ "ACTIVE" if selected.active else "INACTIVE" }}</em></header>
+        {% set selected_detail = org_chart.selected_detail %}
+        <section class="neostaffing-org-drawer-section neostaffing-tree-management-summary"><h3>MANAGEMENT</h3>{% if selected_detail and selected_detail.leadership %}<ul>{% for assignment in selected_detail.leadership %}{% set linked_user = linked_user_for_person(assignment.person) %}<li><strong>{{ assignment.person.full_name }}</strong><span>{{ classification_labels[assignment.person.classification] }} · {{ "Linked User" if linked_user else "No User Link" }}</span></li>{% endfor %}</ul>{% else %}<p>No active management assigned.</p>{% endif %}</section>
+        <nav class="neostaffing-org-drawer-actions" aria-label="Selected unit contextual actions">
+            {% if selected.unit_type == "sort" %}{% if can_edit_structure %}<a href="#structure-add">Add Operation</a><a href="#structure-editor">Edit</a>{% endif %}{% if can_assign_management %}<a href="#management-editor">Assign Division Manager</a>{% endif %}
+            {% elif selected.unit_type == "operation" %}{% if can_edit_structure %}<a href="#structure-add">Add Department</a><a href="#structure-add">Add Work Area</a><a href="#structure-editor">Edit / Move</a>{% endif %}{% if can_assign_management %}<a href="#management-editor">Assign Manager</a>{% endif %}
+            {% elif selected.unit_type == "department" %}{% if can_edit_structure %}<a href="#structure-add">Add Work Area</a><a href="#structure-editor">Edit / Move</a>{% endif %}{% if can_assign_management %}<a href="#management-editor">Assign FT Supervisor</a>{% endif %}
+            {% elif selected.unit_type == "work_area" %}{% if can_assign_management %}<a href="#management-editor">Assign PT Supervisor</a>{% endif %}{% if can_edit_structure %}<a href="#structure-editor">Edit / Move</a><a href="#structure-editor">Set Headcount</a>{% endif %}{% endif %}
+        </nav>
+        {% if can_edit_structure %}
+        <section id="structure-editor" class="neostaffing-org-drawer-section"><h3>STRUCTURE ACTIONS</h3><form class="neostaffing-org-form" method="post" action="{{ url_for('neostaffing.update_unit', unit_id=selected.id) }}" data-org-chart-state-form><input type="hidden" name="unit_type" value="{{ selected.unit_type }}"><input type="hidden" name="return_unit_id" value="{{ selected.id }}"><label>Name<input name="name" value="{{ selected.name }}" required></label><label>Move / Parent{{ parent_select(selected.unit_type, selected.parent_id) }}</label>{% if selected.unit_type == "work_area" %}<label>Required HC<input type="number" min="0" name="required_headcount" value="{{ selected.required_headcount if selected.required_headcount is not none else '' }}"></label>{% else %}<input type="hidden" name="required_headcount" value="">{% endif %}<label>Order<input type="number" name="display_order" value="{{ selected.display_order }}"></label><input type="hidden" name="active" value="{{ 1 if selected.active else 0 }}"><button type="submit">SAVE UNIT</button></form><div class="neostaffing-org-inline-actions"><form method="post" action="{{ url_for('neostaffing.toggle_unit_active', unit_id=selected.id) }}" data-org-chart-state-form><input type="hidden" name="return_unit_id" value="{{ selected.id }}"><button type="submit">{{ "DEACTIVATE" if selected.active else "ACTIVATE" }}</button></form><form method="post" action="{{ url_for('neostaffing.delete_unit', unit_id=selected.id) }}" data-org-chart-state-form><input type="hidden" name="return_unit_id" value="{{ selected.parent_id or '' }}"><button type="submit">DELETE</button></form></div></section>
+        <section id="structure-add" class="neostaffing-org-drawer-section"><h3>ADD UNDER {{ selected.name }}</h3>{% if selected.unit_type == "sort" %}{{ add_unit_form("operation", selected.id, "+ Operation", selected.id) }}{% elif selected.unit_type == "operation" %}{{ add_unit_form("department", selected.id, "+ Department", selected.id) }}{{ add_unit_form("work_area", selected.id, "+ Work Area", selected.id) }}{% elif selected.unit_type == "department" %}{{ add_unit_form("work_area", selected.id, "+ Work Area", selected.id) }}{% else %}<p>Work Areas cannot contain child units.</p>{% endif %}</section>
+        {% endif %}
+        {% if can_assign_management %}<section id="management-editor" class="neostaffing-org-drawer-section"><h3>{% if selected.unit_type == "sort" %}ASSIGN DIVISION MANAGER{% elif selected.unit_type == "operation" %}ASSIGN MANAGER{% elif selected.unit_type == "department" %}ASSIGN FT SUPERVISOR{% else %}ASSIGN PT SUPERVISOR{% endif %}</h3><form class="neostaffing-org-form" method="post" action="{{ url_for('neostaffing.create_management_assignment') }}" data-org-chart-state-form><input type="hidden" name="unit_id" value="{{ selected.id }}"><input type="hidden" name="return_unit_id" value="{{ selected.id }}"><input type="hidden" name="leadership_level" value="{{ selected.unit_type }}"><label>Person<select name="person_id" required {% if not management_candidates %}disabled{% endif %}><option value="">Select linked management person</option>{% for candidate in management_candidates %}<option value="{{ candidate.person.id }}">{{ candidate.person.employee_id }} — {{ candidate.person.full_name }} / {{ classification_labels[candidate.person.classification] }} / Linked User</option>{% endfor %}</select></label><button type="submit" {% if not management_candidates %}disabled{% endif %}>ASSIGN MANAGEMENT</button></form>{% if not management_candidates %}<p>No linked NeoApps management accounts are eligible for this unit.</p>{% endif %}{% for assignment in selected.leadership_assignments if assignment.active %}<div class="neostaffing-org-assignment"><strong>{{ assignment.person.full_name }}</strong><span>{{ classification_labels[assignment.person.classification] }}</span><form method="post" action="{{ url_for('neostaffing.delete_management_assignment', assignment_id=assignment.id) }}" data-org-chart-state-form><input type="hidden" name="return_unit_id" value="{{ selected.id }}"><button type="submit">REMOVE</button></form></div>{% endfor %}</section>{% endif %}
+        {% else %}<div class="neostaffing-org-drawer-empty">Select a unit to view its details and available actions.</div>{% endif %}
+    </aside>
 </section>
 <script>
 (() => {
-    const stateKey = "neostaffing-org-chart-tree-state";
+    const stateKey = "neostaffing.org-chart.operational.v2";
     const tree = document.querySelector("[data-org-chart-tree]");
-    if (!tree) {
-        return;
-    }
-
+    if (!tree) return;
     const branches = [...tree.querySelectorAll("[data-org-chart-branch]")];
     const selectedId = tree.dataset.orgChartSelectedUnit;
-    let savedState = {};
-    try {
-        savedState = JSON.parse(window.sessionStorage.getItem(stateKey) || "{}") || {};
-    } catch (_error) {
-        savedState = {};
-    }
-
-    const saveState = () => {
-        const expanded = Object.fromEntries(branches.map((branch) => [
-            branch.dataset.orgChartUnitId,
-            branch.open,
-        ]));
-        try {
-            window.sessionStorage.setItem(stateKey, JSON.stringify({
-                expanded,
-                scrollTop: tree.scrollTop,
-            }));
-        } catch (_error) {
-            // State restoration is an enhancement; tree editing remains server-rendered.
-        }
-    };
-
-    if (savedState.expanded) {
-        branches.forEach((branch) => {
-            const unitId = branch.dataset.orgChartUnitId;
-            if (Object.prototype.hasOwnProperty.call(savedState.expanded, unitId)) {
-                branch.open = Boolean(savedState.expanded[unitId]);
-            }
-        });
-    }
-
-    const selectedBranch = selectedId
-        ? tree.querySelector(`[data-org-chart-unit-id="${selectedId}"]`)
-        : null;
-    if (selectedBranch) {
-        let current = selectedBranch.parentElement?.closest("[data-org-chart-branch]");
-        while (current) {
-            current.open = true;
-            current = current.parentElement?.closest("[data-org-chart-branch]");
-        }
-    }
-
-    window.requestAnimationFrame(() => {
-        if (Number.isFinite(savedState.scrollTop)) {
-            tree.scrollTop = savedState.scrollTop;
-        }
-    });
-
-    branches.forEach((branch) => branch.addEventListener("toggle", saveState));
-    tree.addEventListener("scroll", saveState, { passive: true });
-    document.querySelectorAll("[data-org-chart-state-form]").forEach((form) => {
-        form.addEventListener("submit", saveState);
-    });
-    window.addEventListener("pagehide", saveState);
+    let state = {}; try { state = JSON.parse(localStorage.getItem(stateKey) || "{}") || {}; } catch (_error) {}
+    branches.forEach(branch => { const details = branch.querySelector(":scope > details"); if (Object.hasOwn(state.expanded || {}, branch.dataset.orgChartUnitId)) details.open = Boolean(state.expanded[branch.dataset.orgChartUnitId]); });
+    const selected = selectedId ? tree.querySelector(`[data-org-chart-unit-id="${selectedId}"]`) : null;
+    for (let branch = selected; branch; branch = branch.parentElement?.closest("[data-org-chart-branch]")) branch.querySelector(":scope > details").open = true;
+    const save = () => { const expanded = Object.fromEntries(branches.map(branch => [branch.dataset.orgChartUnitId, branch.querySelector(":scope > details").open])); localStorage.setItem(stateKey, JSON.stringify({ expanded, scrollTop: tree.scrollTop })); };
+    const savedScrollTop = Number(state.scrollTop);
+    if (Number.isFinite(savedScrollTop)) tree.scrollTop = savedScrollTop;
+    branches.forEach(branch => branch.querySelector(":scope > details").addEventListener("toggle", save));
+    tree.addEventListener("scroll", save, { passive: true });
+    document.querySelectorAll("[data-org-chart-state-form]").forEach(form => form.addEventListener("submit", save));
+    if (!Number.isFinite(savedScrollTop)) requestAnimationFrame(() => selected?.scrollIntoView({ block: "nearest" }));
 })();
 </script>
 {% endblock %}
