@@ -27209,3 +27209,112 @@ body:has(.neostaffing-shift-flow) { overflow-x: clip; }
     .neostaffing-shift-flow-workspace:has(.neostaffing-shift-flow-composite) { overflow-x: auto; }
 }
 .neostaffing-shift-flow-drawer [data-flow-transition]{display:none}.neostaffing-shift-flow-drawer form:has(select[name=shift_flow_sort_start_work_area_id] option[data-flow-start-type="Ballmat"]:checked) [data-flow-transition]{display:grid}
+
+/* Shared Ermac/Sektor Manage Employees operations console. */
+.neostaffing-operational-attendance {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 9px;
+    width: 100%;
+    max-width: none;
+    min-height: calc(100vh - 140px);
+    margin: 0;
+    padding: 12px clamp(14px, 1.4vw, 24px) 18px;
+    background: #091116;
+    color: var(--neo-silver);
+}
+body:has(.neostaffing-operational-attendance) { overflow-x: clip; }
+.neostaffing-operational-head {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    min-height: 42px;
+}
+.neostaffing-operational-back,
+.neostaffing-operational-tabs a,
+.neostaffing-operational-roster button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 29px;
+    padding: 4px 9px;
+    border: 1px solid rgba(var(--node-rgb), .34);
+    border-radius: 3px;
+    background: #111e25;
+    color: #d8edeb;
+    font-size: .65rem;
+    font-weight: 900;
+    letter-spacing: .04em;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.neostaffing-operational-back:hover,
+.neostaffing-operational-tabs a:hover,
+.neostaffing-operational-roster button:hover { border-color: #4ebeb8; color: #f2ffff; }
+.neostaffing-operational-heading { min-width: 0; padding-right: 6px; border-right: 1px solid rgba(var(--node-rgb), .2); }
+.neostaffing-operational-heading h1 { margin: 0; color: #edf8f7; font-size: .86rem; letter-spacing: .08em; line-height: 1.1; }
+.neostaffing-operational-heading p { margin: 3px 0 0; overflow: hidden; color: #79c8c4; font-size: .7rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.neostaffing-operational-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; }
+.neostaffing-operational-summary > strong,
+.neostaffing-operational-summary > span { color: #9eb2b2; font-size: .65rem; font-weight: 750; white-space: nowrap; }
+.neostaffing-operational-summary > strong span,
+.neostaffing-operational-summary > span strong { color: #75d3cd; font-size: .72rem; }
+.neostaffing-operational-tabs { display: flex; align-items: center; gap: 4px; }
+.neostaffing-operational-tabs a { min-width: 92px; }
+.neostaffing-operational-tabs a[aria-current="page"] { border-color: #43b5af; background: #147c7a; color: #fff; }
+.neostaffing-operational-rosters { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 10px; min-width: 0; }
+.neostaffing-operational-rosters.has-coming { grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr); }
+.neostaffing-operational-roster { min-width: 0; border-top: 2px solid #287f7a; background: #0d171d; }
+.neostaffing-operational-roster.is-coming { border-top-color: #69777a; background: #0b1318; }
+.neostaffing-operational-roster > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 34px; padding: 5px 9px; border-bottom: 1px solid rgba(var(--node-rgb), .16); }
+.neostaffing-operational-roster > header > div { display: flex; align-items: center; gap: 7px; }
+.neostaffing-operational-roster h2 { margin: 0; color: #e2f3f2; font-size: .7rem; letter-spacing: .07em; }
+.neostaffing-operational-roster header span,
+.neostaffing-operational-roster header small { color: #879a9b; font-size: .61rem; font-weight: 850; text-transform: uppercase; }
+.neostaffing-operational-roster header small { padding: 2px 5px; border: 1px solid #536164; border-radius: 999px; }
+.neostaffing-operational-table-wrap { min-width: 0; overflow-x: auto; }
+.neostaffing-operational-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: .72rem; }
+.neostaffing-operational-table th:nth-child(1) { width: clamp(180px, 14vw, 240px); }
+.neostaffing-operational-table th:nth-child(2) { width: 154px; }
+.neostaffing-operational-table th,
+.neostaffing-operational-table td { height: 36px; padding: 4px 9px; border-bottom: 1px solid rgba(255, 255, 255, .055); text-align: left; vertical-align: middle; }
+.neostaffing-operational-table th { height: 27px; background: #111e25; color: #819596; font-size: .58rem; letter-spacing: .07em; text-transform: uppercase; }
+.neostaffing-operational-table tbody tr:hover { background: rgba(var(--node-rgb), .07); }
+.neostaffing-operational-table td strong { display: block; overflow: hidden; color: #e7f3f2; font-size: .74rem; text-overflow: ellipsis; white-space: nowrap; }
+.neostaffing-operational-table td a { color: inherit; text-decoration: none; }
+.neostaffing-operational-table td a:hover strong { color: #79d9d3; }
+.neostaffing-operational-table select {
+    width: min(100%, 174px);
+    min-height: 27px;
+    padding: 3px 25px 3px 7px;
+    border: 1px solid rgba(var(--node-rgb), .4);
+    border-radius: 3px;
+    outline: 0;
+    background: #111e25;
+    color: #e8f4f3;
+    font: inherit;
+    color-scheme: dark;
+}
+.neostaffing-operational-table select:hover { border-color: #4ebeb8; }
+.neostaffing-operational-table select:focus { border-color: #67d8d1; box-shadow: 0 0 0 2px rgba(76, 202, 194, .16); }
+.neostaffing-operational-flow { display: block; color: #8fc8c5; font-size: .69rem; font-weight: 750; line-height: 1.2; }
+.neostaffing-operational-status.is-readonly { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 7px; border: 1px solid #4b595c; border-radius: 999px; background: #121b20; color: #aab7b8; font-size: .65rem; font-weight: 800; }
+.neostaffing-operational-roster footer { display: flex; justify-content: flex-end; padding: 7px 9px; }
+.neostaffing-operational-roster button { border-color: #3eaaa4; background: #126b68; color: #f5ffff; cursor: pointer; }
+.neostaffing-operational-table .is-empty td,
+.neostaffing-operational-empty { color: #7f9293; font-size: .7rem; text-align: center; }
+.neostaffing-operational-empty { display: grid; place-items: center; min-height: 240px; }
+
+@media (max-width: 1100px) {
+    .neostaffing-operational-head { grid-template-columns: auto minmax(0, 1fr); }
+    .neostaffing-operational-summary { grid-column: 1 / -1; }
+    .neostaffing-operational-rosters.has-coming { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+    .neostaffing-operational-attendance { width: 100%; margin: 0; padding: 10px; }
+    .neostaffing-operational-tabs { overflow-x: auto; }
+    .neostaffing-operational-table { min-width: 620px; }
+}

@@ -480,6 +480,8 @@ def manage_employees():
         can_edit_attendance=can_edit,
         show_coming=True,
         area_tabs=(),
+        attendance_scope_label=f"Selected Doors: {' · '.join(doors)}",
+        attendance_workspace="ermac",
         back_url=url_for("neoermac.door_view"),
     )
 

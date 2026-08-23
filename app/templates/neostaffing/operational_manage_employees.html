@@ -1,9 +1,105 @@
 {% extends "base.html" %}
 {% block title %}{{ title }}{% endblock %}
 {% block content %}
-<section class="theme-staffing neostaffing-attendance"><header><a href="{{ back_url }}">BACK</a><h1>{{ title }}</h1>{% if attendance.operation %}<p>{{ attendance.counts.on_payroll }} On Payroll · {{ attendance.counts.working }} Working · {{ attendance.counts.unmarked }} Unmarked</p><p>{% for key,label in [('called_in','Called In'),('no_call','No Call'),('scheduled_off','Scheduled Off'),('anniversary_day','Anniversary Day'),('vacation','Vacation'),('opt_day','Opt Day'),('disability','Disability'),('work_comp','Work Comp'),('funeral','Funeral'),('jury','Jury'),('fmla','FMLA'),('military','Military'),('personal_leave','Personal Leave'),('cleared','Cleared')] %}{% if attendance.counts[key] %}<span>{{ label }} {{ attendance.counts[key] }}</span>{% endif %}{% endfor %}</p>{% endif %}</header>
-{% if area_tabs %}<nav aria-label="Attendance area">{% for tab in area_tabs %}<a href="?area={{ tab.key }}" {% if tab.selected %}aria-current="page"{% endif %}>{{ tab.label }}</a>{% endfor %}</nav>{% endif %}
-{% if attendance.operation %}<form method="post"><input type="hidden" name="sort_date_operation_id" value="{{ attendance.operation.id }}"><h2>ATTENDANCE HERE</h2><table><tbody>{% for row in attendance.here %}<tr><td>{{ row.person.full_name }}</td><td>{{ row.flow }}</td><td>{% if can_edit_attendance and row.status_writable %}<select name="status_{{ row.person.id }}"><option value="">Unmarked</option>{% for value,label in attendance.status_choices %}<option value="{{ value }}" {% if row.status==value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>{% else %}{{ row.status_label }}{% endif %}</td></tr>{% endfor %}</tbody></table>{% if can_edit_attendance %}<button>SAVE ATTENDANCE</button>{% endif %}</form>{% else %}<p>No current Night Sort.</p>{% endif %}
-{% if show_coming %}<section><h2>COMING TO THESE DOORS</h2><table><tbody>{% for row in attendance.coming %}<tr><td><a href="{{ url_for('neostaffing.shift_flow', person_id=row.person.id) }}">{{ row.person.full_name }}</a></td><td>{{ row.flow }}</td><td>{{ row.status_label }}</td></tr>{% endfor %}</tbody></table></section>{% endif %}
+<section
+    class="theme-staffing neostaffing-operational-attendance neostaffing-operational-attendance--{{ attendance_workspace }}"
+    data-operational-manage-employees
+>
+    <header class="neostaffing-operational-head">
+        <a class="neostaffing-operational-back" href="{{ back_url }}">BACK</a>
+        <div class="neostaffing-operational-heading">
+            <h1>{{ title }}</h1>
+            <p>{{ attendance_scope_label }}</p>
+        </div>
+        {% if attendance.operation %}
+        <div class="neostaffing-operational-summary" aria-label="Attendance summary">
+            <strong><span>{{ attendance.counts.on_payroll }}</span> On Payroll</strong>
+            <strong><span>{{ attendance.counts.working }}</span> Working</strong>
+            <strong><span>{{ attendance.counts.unmarked }}</span> Unmarked</strong>
+            {% for key, label in [('called_in', 'Called In'), ('no_call', 'No Call'), ('scheduled_off', 'Scheduled Off'), ('anniversary_day', 'Anniversary Day'), ('vacation', 'Vacation'), ('opt_day', 'Opt Day'), ('disability', 'Disability'), ('work_comp', 'Work Comp'), ('funeral', 'Funeral'), ('jury', 'Jury'), ('fmla', 'FMLA'), ('military', 'Military'), ('personal_leave', 'Personal Leave'), ('cleared', 'Cleared')] %}
+                {% if attendance.counts[key] %}<span>{{ label }} <strong>{{ attendance.counts[key] }}</strong></span>{% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+    </header>
+
+    {% if area_tabs %}
+    <nav class="neostaffing-operational-tabs" aria-label="Attendance area">
+        {% for tab in area_tabs %}
+        <a href="?area={{ tab.key }}" {% if tab.selected %}aria-current="page"{% endif %}>{{ tab.label }}</a>
+        {% endfor %}
+    </nav>
+    {% endif %}
+
+    {% if attendance.operation %}
+    <main class="neostaffing-operational-rosters{% if show_coming %} has-coming{% endif %}">
+        <section class="neostaffing-operational-roster is-here" aria-labelledby="attendance-here-title">
+            <header>
+                <h2 id="attendance-here-title">ATTENDANCE HERE</h2>
+                <span>{{ attendance.here|length }} employees</span>
+            </header>
+            <form method="post">
+                <input type="hidden" name="sort_date_operation_id" value="{{ attendance.operation.id }}">
+                <div class="neostaffing-operational-table-wrap">
+                    <table class="neostaffing-operational-table">
+                        <thead><tr><th>Employee</th><th>Attendance</th><th>Flow</th></tr></thead>
+                        <tbody>
+                        {% for row in attendance.here %}
+                            <tr>
+                                <td><strong>{{ row.person.full_name }}</strong></td>
+                                <td>
+                                    {% if can_edit_attendance and row.status_writable %}
+                                    <select name="status_{{ row.person.id }}" aria-label="Attendance for {{ row.person.full_name }}">
+                                        <option value="">Unmarked</option>
+                                        {% for value, label in attendance.status_choices %}
+                                        <option value="{{ value }}" {% if row.status == value %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    {% else %}
+                                    <span class="neostaffing-operational-status is-readonly">{{ row.status_label }}</span>
+                                    {% endif %}
+                                </td>
+                                <td><span class="neostaffing-operational-flow">{{ row.flow }}</span></td>
+                            </tr>
+                        {% else %}
+                            <tr class="is-empty"><td colspan="3">No employees attend in this area.</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if can_edit_attendance %}
+                <footer><button type="submit">SAVE ATTENDANCE</button></footer>
+                {% endif %}
+            </form>
+        </section>
+
+        {% if show_coming %}
+        <section class="neostaffing-operational-roster is-coming" aria-labelledby="coming-later-title">
+            <header>
+                <div><h2 id="coming-later-title">COMING TO THESE DOORS</h2><small>READ ONLY</small></div>
+                <span>{{ attendance.coming|length }} employees</span>
+            </header>
+            <div class="neostaffing-operational-table-wrap">
+                <table class="neostaffing-operational-table">
+                    <thead><tr><th>Employee</th><th>Attendance</th><th>Flow</th></tr></thead>
+                    <tbody>
+                    {% for row in attendance.coming %}
+                        <tr>
+                            <td><a href="{{ url_for('neostaffing.shift_flow', person_id=row.person.id) }}"><strong>{{ row.person.full_name }}</strong></a></td>
+                            <td><span class="neostaffing-operational-status is-readonly">{{ row.status_label }}</span></td>
+                            <td><span class="neostaffing-operational-flow">{{ row.flow }}</span></td>
+                        </tr>
+                    {% else %}
+                        <tr class="is-empty"><td colspan="3">No employees are coming to these Doors.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        {% endif %}
+    </main>
+    {% else %}
+    <div class="neostaffing-operational-empty">No current Night Sort.</div>
+    {% endif %}
 </section>
 {% endblock %}

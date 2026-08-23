@@ -730,9 +730,10 @@ def manage_employees():
             flash(str(getattr(exc, "orig", None) or exc), "error")
         return redirect(url_for("neosektor.manage_employees", area=area))
     context = staffing_service.operational_manage_employees_context(area_ids)
+    tab_labels = {"dis": "DISCHARGE", "ebm": "EBM", "wbm": "WBM"}
     tabs = tuple(
-        {"key": key, "label": label.upper(), "selected": key == area}
-        for key, label in names.items()
+        {"key": key, "label": tab_labels[key], "selected": key == area}
+        for key in names
     )
     return render_template(
         "neostaffing/operational_manage_employees.html",
@@ -741,6 +742,8 @@ def manage_employees():
         can_edit_attendance=True,
         show_coming=False,
         area_tabs=tabs,
+        attendance_scope_label=names[area].upper(),
+        attendance_workspace="sektor",
         back_url=url_for("neosektor.index"),
     )
 
