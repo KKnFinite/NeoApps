@@ -371,6 +371,62 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertIn("composite.opposite_side_count", template)
         self.assertNotIn("composite.unplaced", template)
 
+    def test_wave_drag_moves_use_side_ballmat_and_preserve_setup(self):
+        areas = self._configure_final_composite()
+        cases = (
+            ("100017", "after_w1", areas["East Ballmat"], "2", areas["Door 32"], areas["Door 34"], 1, areas["East Ballmat"]),
+            ("100018", "after_w1", areas["Door 34"], "", areas["Door 34"], areas["West Ballmat"], 2, areas["West Ballmat"]),
+            ("100019", "after_w2", areas["West Ballmat"], "3", areas["Door 9"], areas["Door 13"], 2, areas["West Ballmat"]),
+            ("100020", "after_w2", areas["Door 34"], "", areas["Door 34"], areas["East Ballmat"], 3, areas["East Ballmat"]),
+        )
+        for employee_id, phase, start, transition, final, destination, expected_transition, expected_start in cases:
+            person = self._person(employee_id)
+            plan = staffing_service.create_shift_flow_plan(
+                person, self._values(start, transition, self.ballmat, final), self.door
+            )
+            db.session.commit()
+            version = plan.updated_at.isoformat(timespec="microseconds")
+            result = staffing_service.move_shift_flow_phase_lane(
+                person, phase, destination.id, self.door, version
+            )
+            db.session.commit()
+            self.assertTrue(result["changed"])
+            self.assertEqual(plan.sort_start_work_area_id, expected_start.id)
+            self.assertEqual(plan.ballmat_transition, expected_transition)
+            self.assertEqual(plan.setup_work_area_id, self.ballmat.id)
+            if staffing_service.shift_work_area_type(destination) == "Door":
+                self.assertEqual(plan.final_door_work_area_id, destination.id)
+            else:
+                self.assertEqual(plan.final_door_work_area_id, final.id)
+
+    def test_wave_drag_rejects_door_to_door_discharge_and_stale_moves(self):
+        areas = self._configure_final_composite()
+        door_person = self._person("100021")
+        door_plan = staffing_service.create_shift_flow_plan(
+            door_person, self._values(areas["Door 34"], "", final=areas["Door 34"]), self.door
+        )
+        discharge_person = self._person("100022")
+        discharge_plan = staffing_service.create_shift_flow_plan(
+            discharge_person, self._values(self.discharge, "", final=areas["Door 34"]), self.door
+        )
+        db.session.commit()
+        version = door_plan.updated_at.isoformat(timespec="microseconds")
+        with self.assertRaisesRegex(ValueError, "Door-to-Door"):
+            staffing_service.move_shift_flow_phase_lane(
+                door_person, "after_w1", areas["Door 32"].id, self.door, version
+            )
+        with self.assertRaisesRegex(ValueError, "Discharge"):
+            staffing_service.move_shift_flow_phase_lane(
+                discharge_person, "after_w2", areas["Door 34"].id, self.door,
+                discharge_plan.updated_at.isoformat(timespec="microseconds"),
+            )
+        door_plan.setup_work_area = self.ballmat
+        db.session.commit()
+        stale = staffing_service.move_shift_flow_phase_lane(
+            door_person, "after_w1", areas["East Ballmat"].id, self.door, version
+        )
+        self.assertEqual(stale["conflict"]["type"], "stale_version")
+
     def test_final_composite_drag_updates_derived_fields_and_setup_section_atomically(self):
         areas = self._configure_final_composite()
         person = self._person("100011")

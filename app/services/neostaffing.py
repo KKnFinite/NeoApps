@@ -272,7 +272,7 @@ def move_shift_flow_phase_lane(
         return move_shift_flow_final_door(
             person, destination_id, selected_work_area, expected_version
         )
-    if phase not in {"setup", "sort_start"}:
+    if phase not in {"setup", "sort_start", "after_w1", "after_w2"}:
         raise ValueError("This Shift Flow phase cannot be changed by drag and drop.")
 
     plan = person.shift_flow_plan or StaffingShiftFlowPlan.query.filter_by(
@@ -287,6 +287,10 @@ def move_shift_flow_phase_lane(
         return {"conflict": conflict}
 
     allowed = {area.id: area for area in shift_flow_area_options(selected_work_area)}
+    if phase in {"after_w1", "after_w2"}:
+        return _move_shift_flow_wave_lane(
+            plan, phase, destination_id, allowed, expected_version
+        )
     if phase == "setup":
         if str(destination_id) == "NO SETUP":
             destination = None
@@ -314,6 +318,70 @@ def move_shift_flow_phase_lane(
         else:
             plan.ballmat_transition = None
         plan.sort_start_work_area = destination
+
+    db.session.flush()
+    return {"changed": True, "plan": plan, "version": entity_version(plan)}
+
+
+def _move_shift_flow_wave_lane(plan, phase, destination_id, allowed, expected_version):
+    """Apply one deterministic first/second-wave board move to a complete plan."""
+    destination = _shift_flow_area(destination_id, allowed, "Wave destination")
+    configurations = {
+        key: _shift_flow_composite_configuration(list(allowed.values()), key)
+        for key, _label, _doors in SHIFT_FLOW_COMPOSITE_SIDES
+    }
+    door_sides = {
+        door.id: side
+        for side, configuration in configurations.items()
+        for door in configuration["doors"]
+    }
+    ballmat_sides = {
+        configuration["ballmat"].id: side
+        for side, configuration in configurations.items()
+        if configuration["ballmat"]
+    }
+    source = _shift_flow_phase_area(plan, phase)
+    source_type = shift_work_area_type(source)
+    destination_type = shift_work_area_type(destination)
+    if source_type == SHIFT_FLOW_DISCHARGE:
+        raise ValueError("Discharge cannot be changed through wave views.")
+
+    if destination_type == SHIFT_FLOW_DOOR:
+        side = door_sides.get(destination.id)
+        if not side:
+            raise ValueError("Wave Door destination must be a configured East or West Final Door.")
+        if source_type != SHIFT_FLOW_BALLMAT:
+            raise ValueError("Door-to-Door moves are managed in FINAL DOOR.")
+        ballmat = configurations[side]["ballmat"]
+        if not ballmat:
+            raise ValueError(f"Configured {configurations[side]['side_label']} Ballmat was not found.")
+        transition = 1 if phase == "after_w1" else 2
+        changed = any((
+            plan.final_door_work_area_id != destination.id,
+            plan.sort_start_work_area_id != ballmat.id,
+            plan.ballmat_transition != transition,
+        ))
+        if not changed:
+            return {"changed": False, "plan": plan, "version": entity_version(plan)}
+        plan.final_door_work_area = destination
+        plan.sort_start_work_area = ballmat
+        plan.ballmat_transition = transition
+    elif destination_type == SHIFT_FLOW_BALLMAT:
+        if destination.id not in ballmat_sides:
+            raise ValueError("Wave Ballmat destination must be the configured East or West Ballmat.")
+        if source_type != SHIFT_FLOW_DOOR:
+            raise ValueError("Only Door employees can remain on Ballmat through a wave view.")
+        transition = 2 if phase == "after_w1" else 3
+        changed = any((
+            plan.sort_start_work_area_id != destination.id,
+            plan.ballmat_transition != transition,
+        ))
+        if not changed:
+            return {"changed": False, "plan": plan, "version": entity_version(plan)}
+        plan.sort_start_work_area = destination
+        plan.ballmat_transition = transition
+    else:
+        raise ValueError("Wave destination must be a configured Door or Ballmat.")
 
     db.session.flush()
     return {"changed": True, "plan": plan, "version": entity_version(plan)}
