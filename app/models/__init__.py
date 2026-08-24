@@ -65,6 +65,7 @@ from app.models.staffing_daily_attendance import StaffingDailyAttendance
 from app.models.staffing_group import StaffingGroup
 from app.models.staffing_group_membership import StaffingGroupMembership
 from app.models.staffing_notification import StaffingNotification
+from app.models.staffing_operation_schedule import StaffingOperationSchedule
 from app.models.staffing_person import StaffingPerson
 from app.models.staffing_shift_flow_plan import StaffingShiftFlowPlan
 from app.models.staffing_reporting_relationship import StaffingReportingRelationship
@@ -145,6 +146,7 @@ __all__ = [
     "StaffingGroup",
     "StaffingGroupMembership",
     "StaffingNotification",
+    "StaffingOperationSchedule",
     "SortTimelineSettings",
     "SortTimelineApiParticipation",
     "SortTimelineMonthVariance",

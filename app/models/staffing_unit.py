@@ -50,6 +50,12 @@ class StaffingUnit(db.Model):
         back_populates="unit",
         cascade="all, delete-orphan",
     )
+    operation_schedules = db.relationship(
+        "StaffingOperationSchedule",
+        back_populates="operation",
+        cascade="all, delete-orphan",
+        order_by="StaffingOperationSchedule.effective_from",
+    )
 
     @property
     def type_label(self):
