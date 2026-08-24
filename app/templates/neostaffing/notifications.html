@@ -2,53 +2,41 @@
 
 {% block title %}NeoStaffing Notifications{% endblock %}
 
+{% macro notification_state(notification) -%}
+    {% if notification.notification_type == "request_overdue" %}is-red{% elif not notification.read_at %}is-yellow{% else %}is-muted{% endif %}
+{%- endmacro %}
+
 {% block content %}
 {% set context = notifications_context %}
-<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="neostaffing-notifications-title">
-    <div class="neostaffing-dashboard-shell">
-        {% include "neostaffing/_section_nav.html" %}
-
-        <main class="neostaffing-dashboard-main">
-            <header class="neostaffing-dashboard-topbar">
-                <div class="mobile-shell-duplicate-title">
-                    <h1 id="neostaffing-notifications-title">Notifications</h1>
-                </div>
-                {% if context.unread_count %}<span class="neostaffing-status-pill is-yellow">{{ context.unread_count }} UNREAD</span>{% endif %}
-            </header>
-
-            <section class="neostaffing-group-list" aria-label="NeoStaffing notification history">
-                {% for notification in context.notifications %}
-                <article class="neostaffing-data-card">
-                    <div class="neostaffing-panel-heading">
-                        <div>
-                            <h2>{{ context.type_labels.get(notification.notification_type, notification.notification_type|replace('_', ' ')|title) }}</h2>
-                            <span>{{ notification.created_at.strftime("%b %d, %Y %H:%M") }}</span>
-                        </div>
-                        {% if not notification.read_at %}<span class="neostaffing-status-pill is-yellow">UNREAD</span>{% endif %}
-                    </div>
-                    <p>{{ notification.message }}</p>
-                    {% if notification.change_request and notification.change_request.person %}
-                    <p><strong>{{ notification.change_request.person.full_name }}</strong> &middot; {{ notification.change_request.person.employee_id }} &middot; REQUEST #{{ notification.change_request_id }}</p>
-                    {% endif %}
-                    <div class="action-row">
-                        <form method="post" action="{{ url_for('neostaffing.open_staffing_notification', notification_id=notification.id) }}">
-                            <button type="submit">OPEN REQUEST</button>
-                        </form>
-                        {% if not notification.read_at %}
-                        <form method="post" action="{{ url_for('neostaffing.read_staffing_notification', notification_id=notification.id) }}">
-                            <button class="action-button-secondary" type="submit">MARK READ</button>
-                        </form>
-                        {% endif %}
-                    </div>
-                </article>
-                {% else %}
-                <section class="neostaffing-data-card neostaffing-empty-state" role="status">
-                    <h2>NO NOTIFICATIONS</h2>
-                    <p>NeoStaffing request activity from the last 14 days will appear here.</p>
-                </section>
-                {% endfor %}
-            </section>
-        </main>
-    </div>
+<section class="neostaffing-notifications-console theme-staffing" aria-labelledby="neostaffing-notifications-title" id="notifications-roster">
+    {% include "neostaffing/_section_nav.html" %}
+    <main class="neostaffing-notifications-workspace">
+        <header class="neostaffing-notifications-header">
+            <div><h1 id="neostaffing-notifications-title">NOTIFICATIONS</h1><span>{{ context.notifications|length }} IN LAST 14 DAYS</span></div>
+            <div class="neostaffing-notifications-summary" aria-label="Notification summary">
+                <strong class="neostaffing-status-pill {% if context.unread_count %}is-yellow{% else %}is-muted{% endif %}">{{ context.unread_count }} UNREAD</strong>
+                {% if neostaffing_nav.actionable_requests %}<a class="neostaffing-status-pill is-red" href="{{ url_for('neostaffing.change_requests', view='active', queue='routed') }}">{{ neostaffing_nav.actionable_requests }} ACTIONABLE</a>{% endif %}
+            </div>
+        </header>
+        <section class="neostaffing-notifications-toolbar" aria-label="Notification actions">
+            <span>UNREAD ITEMS STAY FIRST. OPENING A REQUEST MARKS ITS NOTIFICATION READ.</span>
+            <a href="{{ url_for('neostaffing.change_requests') }}">REQUESTS / APPROVALS</a>
+        </section>
+        <section class="neostaffing-notifications-roster" aria-label="NeoStaffing notification history">
+            <div class="neostaffing-notifications-table-wrap"><table class="neostaffing-notifications-table">
+                <thead><tr><th>State</th><th>Notification</th><th>Employee / Request</th><th>Received</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+                <tbody>{% for notification in context.notifications %}
+                    {% set is_overdue = notification.notification_type == "request_overdue" %}
+                    <tr class="{% if not notification.read_at %}is-unread{% endif %}{% if is_overdue %} is-overdue{% endif %}">
+                        <td><span class="neostaffing-status-pill {{ notification_state(notification) }}">{{ "OVERDUE" if is_overdue else ("UNREAD" if not notification.read_at else "READ") }}</span></td>
+                        <td><strong>{{ context.type_labels.get(notification.notification_type, notification.notification_type|replace('_', ' ')|title) }}</strong><details><summary>DETAIL</summary><p>{{ notification.message }}</p></details></td>
+                        <td>{% if notification.change_request and notification.change_request.person %}<strong>{{ notification.change_request.person.full_name }}</strong><span>{{ notification.change_request.person.employee_id }} · REQUEST #{{ notification.change_request_id }}</span>{% else %}<span>REQUEST #{{ notification.change_request_id or "—" }}</span>{% endif %}</td>
+                        <td><time datetime="{{ notification.created_at.isoformat() }}">{{ notification.created_at.strftime("%b %d · %H:%M") }}</time><span>{{ notification.created_at.strftime("%Y") }}</span></td>
+                        <td><div class="neostaffing-notifications-actions">{% if notification.change_request_id %}<form method="post" action="{{ url_for('neostaffing.open_staffing_notification', notification_id=notification.id) }}"><button type="submit">OPEN REQUEST</button></form>{% endif %}{% if not notification.read_at %}<form method="post" action="{{ url_for('neostaffing.read_staffing_notification', notification_id=notification.id) }}"><button class="is-secondary" type="submit">MARK READ</button></form>{% endif %}</div></td>
+                    </tr>
+                {% else %}<tr class="neostaffing-notifications-empty"><td colspan="5">NO NOTIFICATIONS IN THE LAST 14 DAYS.</td></tr>{% endfor %}</tbody>
+            </table></div>
+        </section>
+    </main>
 </section>
 {% endblock %}

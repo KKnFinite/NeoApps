@@ -350,6 +350,9 @@ class NeoStaffingNotificationsTest(unittest.TestCase):
         finally:
             event.remove(db.engine, "before_cursor_execute", capture_sql)
         self.assertEqual(page.status_code, 200)
+        self.assertIn(b"neostaffing-notifications-console", page.data)
+        self.assertIn(b"neostaffing-notifications-table", page.data)
+        self.assertNotIn(b"neostaffing-dashboard-shell", page.data)
         self.assertIn(b"UNREAD", page.data)
         self.assertIn(b"OPEN REQUEST", page.data)
         self.assertEqual(dml, [])
