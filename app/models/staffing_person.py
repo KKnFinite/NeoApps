@@ -3,7 +3,7 @@ from datetime import datetime
 from app.extensions import db
 
 
-STAFFING_CLASSIFICATIONS = (
+STAFFING_WRITABLE_CLASSIFICATIONS = (
     "part_time",
     "full_time_combo",
     "part_time_supervisor",
@@ -12,6 +12,22 @@ STAFFING_CLASSIFICATIONS = (
     "manager",
     "division_manager",
 )
+
+STAFFING_PHASE1_CLASSIFICATIONS = (
+    "seasonal",
+    "domiciled_full_time_combo",
+    "non_domiciled_full_time_combo",
+)
+
+STAFFING_DATABASE_CLASSIFICATIONS = (
+    *STAFFING_WRITABLE_CLASSIFICATIONS,
+    *STAFFING_PHASE1_CLASSIFICATIONS,
+)
+
+# Backward-compatible Phase 1 contract: existing callers use this name for
+# normal mutation choices, which must not expose the newly database-valid
+# classifications until the later write-enablement deployment.
+STAFFING_CLASSIFICATIONS = STAFFING_WRITABLE_CLASSIFICATIONS
 
 STAFFING_EMPLOYEE_STATUSES = (
     "active",
@@ -27,7 +43,9 @@ class StaffingPerson(db.Model):
     __table_args__ = (
         db.CheckConstraint(
             "classification IN ('part_time', 'full_time_combo', 'part_time_supervisor', "
-            "'full_time_supervisor', 'full_time_specialist', 'manager', 'division_manager')",
+            "'full_time_supervisor', 'full_time_specialist', 'manager', 'division_manager', "
+            "'seasonal', 'domiciled_full_time_combo', "
+            "'non_domiciled_full_time_combo')",
             name="ck_staffing_people_classification",
         ),
         db.CheckConstraint(

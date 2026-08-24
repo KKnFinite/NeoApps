@@ -17,6 +17,7 @@ from app.models import (
 )
 from app.models.staffing_person import (
     STAFFING_CLASSIFICATIONS,
+    STAFFING_DATABASE_CLASSIFICATIONS,
     STAFFING_EMPLOYEE_STATUSES,
 )
 from app.models.user import ROLE_LEVELS
@@ -995,7 +996,10 @@ def _submission_unsupported_items(workspace, simulation, bundle):
                 unsupported.append(
                     {"person_ref": ref, "field": field, "label": f"{title}: {_field_label(field)}"}
                 )
-            elif field == "classification" and value not in staffing_service.NON_MANAGEMENT_CLASSIFICATIONS:
+            elif (
+                field == "classification"
+                and value not in staffing_service.WRITABLE_NON_MANAGEMENT_CLASSIFICATIONS
+            ):
                 unsupported.append(
                     {"person_ref": ref, "field": field, "label": f"{title}: management classification"}
                 )
@@ -1268,7 +1272,7 @@ def _validate_person_states(states, bundle):
     employee_ids = defaultdict(list)
     for state in states.values():
         employee_ids[state["employee_id"].strip().lower()].append(state)
-        if state["classification"] not in STAFFING_CLASSIFICATIONS:
+        if state["classification"] not in STAFFING_DATABASE_CLASSIFICATIONS:
             errors.append("A staged employee has an unsupported classification.")
         if state["employee_status"] not in STAFFING_EMPLOYEE_STATUSES:
             errors.append("A staged employee has an unsupported employee status.")

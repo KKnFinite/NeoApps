@@ -25,6 +25,7 @@ from app.services.neostaffing import (
     CLASSIFICATION_LABELS,
     EMPLOYEE_STATUS_LABELS,
     NON_MANAGEMENT_CLASSIFICATIONS,
+    WRITABLE_NON_MANAGEMENT_CLASSIFICATIONS,
 )
 from app.services.permission_rules import user_can
 from app.services import neostaffing_notifications as notification_service
@@ -331,7 +332,7 @@ def change_request_context(filters, user):
         "classification_choices": [
             (value, CLASSIFICATION_LABELS[value])
             for value in sorted(
-                NON_MANAGEMENT_CLASSIFICATIONS,
+                WRITABLE_NON_MANAGEMENT_CLASSIFICATIONS,
                 key=lambda value: CLASSIFICATION_LABELS[value],
             )
         ],
@@ -1128,7 +1129,7 @@ def _apply_field_value(person, assignment, field_name, value):
     elif field_name == "employee_status":
         person.employee_status = value
     elif field_name == "classification":
-        if value not in NON_MANAGEMENT_CLASSIFICATIONS:
+        if value not in WRITABLE_NON_MANAGEMENT_CLASSIFICATIONS:
             raise ValueError("Only non-management classification changes are supported.")
         person.classification = value
     elif field_name == "work_area_unit_id":
@@ -1185,7 +1186,7 @@ def _parse_requested_values(values):
         parsed["employee_status"] = employee_status
     classification = str(values.get("requested_classification") or "").strip().lower()
     if classification:
-        if classification not in NON_MANAGEMENT_CLASSIFICATIONS:
+        if classification not in WRITABLE_NON_MANAGEMENT_CLASSIFICATIONS:
             raise ValueError("Only non-management classification changes are supported.")
         parsed["classification"] = classification
     work_area = str(values.get("requested_work_area_unit_id") or "").strip()
@@ -1306,7 +1307,7 @@ def _normalize_bulk_requested_value(field_name, value, units_by_id):
         return normalized
     if field_name == "classification":
         normalized = str(value or "").strip().lower()
-        if normalized not in NON_MANAGEMENT_CLASSIFICATIONS:
+        if normalized not in WRITABLE_NON_MANAGEMENT_CLASSIFICATIONS:
             raise ValueError("Only non-management classification changes are supported.")
         return normalized
     if field_name == "work_area_unit_id":

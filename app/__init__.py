@@ -77,6 +77,9 @@ from app.services.neoermac_uld_workspace_schema import (
 from app.services.neostaffing_attendance_schema import (
     ensure_neostaffing_attendance_columns,
 )
+from app.services.neostaffing_classification_schema import (
+    ensure_neostaffing_classification_constraint,
+)
 from app.services.neostaffing_reporting_schema import (
     ensure_neostaffing_reporting_relationship_table,
 )
@@ -131,6 +134,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     ensure_neoermac_door_supervision_table(app)
     ensure_neoermac_uld_workspace_columns(app)
     ensure_neostaffing_attendance_columns(app)
+    ensure_neostaffing_classification_constraint(app)
     ensure_neostaffing_reporting_relationship_table(app)
     ensure_neostaffing_change_request_tables(app)
     ensure_neostaffing_staffing_group_tables(app)

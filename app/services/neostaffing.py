@@ -27,7 +27,11 @@ from app.models.staffing_daily_attendance import (
     STAFFING_DAILY_ATTENDANCE_STATUSES,
     STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES,
 )
-from app.models.staffing_person import STAFFING_CLASSIFICATIONS, STAFFING_EMPLOYEE_STATUSES
+from app.models.staffing_person import (
+    STAFFING_CLASSIFICATIONS,
+    STAFFING_DATABASE_CLASSIFICATIONS,
+    STAFFING_EMPLOYEE_STATUSES,
+)
 from app.models.staffing_unit import STAFFING_UNIT_TYPES
 from app.services.gateway_matrix import current_operations_for_gateway
 
@@ -40,6 +44,9 @@ CLASSIFICATION_LABELS = {
     "full_time_specialist": "Full Time Specialist",
     "manager": "Manager",
     "division_manager": "Division Manager",
+    "seasonal": "Seasonal",
+    "domiciled_full_time_combo": "Domiciled FT Combo",
+    "non_domiciled_full_time_combo": "Non-Domiciled FT Combo",
 }
 
 UNIT_TYPE_LABELS = {
@@ -100,8 +107,28 @@ ATTENDANCE_STAFFING_COUNT_STATUS_BY_KEY = {
     "personal_leave": "personal_leave",
 }
 
-NON_MANAGEMENT_CLASSIFICATIONS = {"part_time", "full_time_combo"}
-MANAGEMENT_CLASSIFICATIONS = set(STAFFING_CLASSIFICATIONS) - NON_MANAGEMENT_CLASSIFICATIONS
+SEASONAL_CLASSIFICATION = "seasonal"
+PT_UNION_CLASSIFICATIONS = frozenset({"part_time"})
+LEGACY_FT_UNION_CLASSIFICATIONS = frozenset({"full_time_combo"})
+DOMICILED_FT_UNION_CLASSIFICATIONS = frozenset({"domiciled_full_time_combo"})
+NON_DOMICILED_FT_UNION_CLASSIFICATIONS = frozenset(
+    {"non_domiciled_full_time_combo"}
+)
+FT_UNION_CLASSIFICATIONS = frozenset(
+    LEGACY_FT_UNION_CLASSIFICATIONS
+    | DOMICILED_FT_UNION_CLASSIFICATIONS
+    | NON_DOMICILED_FT_UNION_CLASSIFICATIONS
+)
+UNION_CLASSIFICATIONS = frozenset(PT_UNION_CLASSIFICATIONS | FT_UNION_CLASSIFICATIONS)
+NON_MANAGEMENT_CLASSIFICATIONS = frozenset(
+    UNION_CLASSIFICATIONS | {SEASONAL_CLASSIFICATION}
+)
+WRITABLE_NON_MANAGEMENT_CLASSIFICATIONS = frozenset(
+    set(STAFFING_CLASSIFICATIONS) & NON_MANAGEMENT_CLASSIFICATIONS
+)
+MANAGEMENT_CLASSIFICATIONS = frozenset(
+    set(STAFFING_DATABASE_CLASSIFICATIONS) - NON_MANAGEMENT_CLASSIFICATIONS
+)
 SUPERVISOR_CLASSIFICATIONS = {
     "part_time_supervisor",
     "full_time_supervisor",
@@ -820,6 +847,48 @@ def shift_flow_shorthand(plan):
 
 def classification_choices():
     return [(value, CLASSIFICATION_LABELS[value]) for value in STAFFING_CLASSIFICATIONS]
+
+
+def is_seasonal_classification(classification):
+    return str(classification or "").strip().casefold() == SEASONAL_CLASSIFICATION
+
+
+def union_classification_group(classification):
+    normalized = str(classification or "").strip().casefold()
+    if normalized in PT_UNION_CLASSIFICATIONS:
+        return "part_time"
+    if normalized in FT_UNION_CLASSIFICATIONS:
+        return "full_time"
+    return None
+
+
+def is_domiciled_ft_union_classification(classification):
+    return (
+        str(classification or "").strip().casefold()
+        in DOMICILED_FT_UNION_CLASSIFICATIONS
+    )
+
+
+def is_non_domiciled_ft_union_classification(classification):
+    return (
+        str(classification or "").strip().casefold()
+        in NON_DOMICILED_FT_UNION_CLASSIFICATIONS
+    )
+
+
+def is_management_classification(classification):
+    return (
+        str(classification or "").strip().casefold()
+        in MANAGEMENT_CLASSIFICATIONS
+    )
+
+
+def classification_is_account_eligible(classification):
+    normalized = str(classification or "").strip().casefold()
+    return bool(
+        normalized in STAFFING_DATABASE_CLASSIFICATIONS
+        and normalized != SEASONAL_CLASSIFICATION
+    )
 
 
 def employee_status_choices():
