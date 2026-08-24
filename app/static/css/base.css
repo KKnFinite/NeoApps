@@ -28423,3 +28423,51 @@ body:has(.neostaffing-notifications-console) { overflow-x:clip; }
 .neostaffing-launch-setup strong { color: #deb96e; font-size: .61rem; letter-spacing: .06em; }
 .neostaffing-launch-setup span { color: #b99e6d; font-size: .63rem; }
 @media (max-width: 800px) { .neostaffing-launch-console { width: 100%; min-height: 0; margin: 0; overflow: visible; } .neostaffing-launch-header { align-items: flex-start; } .neostaffing-launch-header-actions { flex-wrap: wrap; } .neostaffing-launch-workspace { overflow: visible; } .neostaffing-launch-console .neostaffing-primary-menu.neostaffing-launch-grid { grid-template-columns: 1fr; } }
+
+/* NeoStaffing Management Relationships Review operations console. */
+.neostaffing-relationship-review-console { display:grid; grid-template-columns:clamp(144px,10vw,184px) minmax(0,1fr); width:calc(100vw - 32px); height:calc(100vh - 122px); min-height:520px; margin:-18px calc(50% - 50vw + 16px) -54px; overflow:hidden; border:1px solid rgba(95,207,196,.18); background:#071014; color:#dce9e8; }
+body:has(.neostaffing-relationship-review-console) { overflow-x:clip; }
+.neostaffing-relationship-review-console > .neostaffing-rail { position:static; width:auto; height:100%; max-height:none; padding:10px 8px; border:0; border-right:1px solid rgba(95,207,196,.18); border-radius:0; box-shadow:none; }
+.neostaffing-relationship-review-workspace { display:grid; grid-template-rows:auto auto minmax(0,1fr); min-width:0; min-height:0; overflow:hidden; }
+.neostaffing-relationship-review-header { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:54px; padding:8px 13px; border-bottom:1px solid rgba(95,207,196,.16); background:linear-gradient(90deg,rgba(11,29,33,.96),rgba(6,15,19,.96)); }
+.neostaffing-relationship-review-header h1 { margin:0; color:#e2f7f3; font-size:.96rem; letter-spacing:.095em; text-transform:uppercase; }
+.neostaffing-relationship-review-header div > span { display:block; margin-top:2px; color:#819b9a; font-size:.61rem; font-weight:850; letter-spacing:.08em; }
+.neostaffing-relationship-review-header > strong { padding:4px 7px; border:1px solid #2b6868; border-radius:3px; background:#0e292c; color:#8ad7cf; font-size:.61rem; letter-spacing:.07em; white-space:nowrap; }
+.neostaffing-relationship-review-summary { display:grid; grid-template-columns:minmax(260px,1fr) minmax(280px,.75fr); align-items:center; gap:18px; min-height:51px; padding:7px 13px; border-bottom:1px solid rgba(95,207,196,.16); background:#0a171b; }
+.neostaffing-relationship-review-summary div > span { display:block; color:#84c4be; font-size:.57rem; font-weight:900; letter-spacing:.08em; }
+.neostaffing-relationship-review-summary div > strong { display:block; margin-top:2px; color:#d8e8e5; font-size:.7rem; line-height:1.3; }
+.neostaffing-relationship-review-summary p { margin:0; color:#819392; font-size:.62rem; line-height:1.35; }
+.neostaffing-relationship-review-form { display:grid; grid-template-rows:minmax(0,1fr) auto; min-width:0; min-height:0; overflow:hidden; }
+.neostaffing-relationship-review-table-scroll { min-width:0; min-height:0; overflow:auto; background:#081216; }
+.neostaffing-relationship-review-table { width:100%; min-width:1080px; border-collapse:collapse; table-layout:fixed; font-size:.68rem; }
+.neostaffing-relationship-review-table th { position:sticky; top:0; z-index:2; padding:7px 9px; border-bottom:1px solid rgba(95,207,196,.25); background:#0e2025; color:#89b9b5; font-size:.58rem; letter-spacing:.075em; text-align:left; text-transform:uppercase; }
+.neostaffing-relationship-review-table th:nth-child(1) { width:16%; }
+.neostaffing-relationship-review-table th:nth-child(2),.neostaffing-relationship-review-table th:nth-child(3) { width:18%; }
+.neostaffing-relationship-review-table th:nth-child(4) { width:13%; }
+.neostaffing-relationship-review-table th:nth-child(5) { width:35%; }
+.neostaffing-relationship-review-table td { min-height:48px; padding:7px 9px; border-bottom:1px solid rgba(95,207,196,.1); color:#c8d9d7; vertical-align:middle; }
+.neostaffing-relationship-review-table tbody tr:hover { background:rgba(64,157,153,.08); }
+.neostaffing-relationship-review-table tbody tr.is-mismatch { box-shadow:inset 3px 0 #d06565; }
+.neostaffing-relationship-review-table tbody tr.is-review { box-shadow:inset 3px 0 #d3a74f; }
+.neostaffing-relationship-review-table td > strong,.neostaffing-relationship-review-table td > span { display:block; }
+.neostaffing-relationship-review-table td > strong { color:#e3f2ef; font-size:.7rem; line-height:1.25; }
+.neostaffing-relationship-review-table td > span { margin-top:2px; color:#829795; font-size:.59rem; line-height:1.25; }
+.neostaffing-relationship-review-person strong { font-size:.73rem; }
+.neostaffing-relationship-review-state { display:inline-flex!important; width:max-content; max-width:100%; align-items:center; min-height:21px; padding:3px 6px; border:1px solid #40615f; border-radius:3px; background:#132124; color:#a5bab8!important; font-size:.55rem!important; font-weight:900; letter-spacing:.055em; white-space:nowrap; }
+.neostaffing-relationship-review-state.is-valid { border-color:#2e756b; background:#102a25; color:#75d7c8!important; }
+.neostaffing-relationship-review-state.is-review { border-color:#8c7134; background:#2a2413; color:#e2bd68!important; }
+.neostaffing-relationship-review-state.is-mismatch { border-color:#88494a; background:#2a181b; color:#ee9290!important; }
+.neostaffing-relationship-review-state.is-unassigned { border-color:#596063; background:#1a2023; color:#bdc5c6!important; }
+.neostaffing-relationship-review-decisions { display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px; min-width:0; margin:0; padding:0; border:0; }
+.neostaffing-relationship-review-decisions label { display:inline-flex; align-items:center; gap:4px; min-height:24px; margin:0; padding:2px 5px; border:1px solid #29494b; border-radius:3px; background:#0c1c20; color:#b8cecb; font-size:.59rem; line-height:1.2; cursor:pointer; }
+.neostaffing-relationship-review-decisions label:has(input:checked) { border-color:#419b91; background:#13302f; color:#d8efeb; }
+.neostaffing-relationship-review-decisions input[type="radio"] { width:13px; height:13px; margin:0; accent-color:#5fcfc4; cursor:pointer; }
+.neostaffing-relationship-review-decisions select { flex:1 1 190px; min-width:150px; min-height:26px; padding:3px 7px; border:1px solid #315b5b; border-radius:3px; background:#0c1a1e; color:#d5e6e3; font:inherit; font-size:.61rem; }
+.neostaffing-relationship-review-decisions select:focus-visible { border-color:#62c7bc; outline:1px solid #62c7bc; outline-offset:1px; }
+.neostaffing-relationship-review-actions { display:flex; align-items:center; justify-content:flex-end; gap:7px; min-height:46px; padding:7px 11px; border-top:1px solid rgba(95,207,196,.2); background:#0d1c20; }
+.neostaffing-relationship-review-actions > span { margin-right:auto; color:#718b89; font-size:.59rem; }
+.neostaffing-relationship-review-actions a,.neostaffing-relationship-review-actions button { display:inline-flex; align-items:center; justify-content:center; min-height:28px; margin:0; padding:4px 9px; border:1px solid #3b6564; border-radius:3px; background:#11272a; color:#9dd6d0; font:inherit; font-size:.62rem; font-weight:900; letter-spacing:.05em; text-decoration:none; white-space:nowrap; cursor:pointer; }
+.neostaffing-relationship-review-actions button { border-color:#3f9b91; background:#17403d; color:#dcf6f1; }
+.neostaffing-relationship-review-console .sr-only { position:absolute!important; width:1px!important; height:1px!important; padding:0!important; margin:-1px!important; overflow:hidden!important; clip:rect(0,0,0,0)!important; white-space:nowrap!important; border:0!important; }
+@media (max-width:1180px) { .neostaffing-relationship-review-console { grid-template-columns:144px minmax(0,1fr); } .neostaffing-relationship-review-summary { grid-template-columns:1fr; gap:3px; } }
+@media (max-width:980px) { .neostaffing-relationship-review-console { display:block; width:100%; height:auto; min-height:0; margin:0; overflow:visible; } .neostaffing-relationship-review-console > .neostaffing-rail { display:none; } .neostaffing-relationship-review-workspace,.neostaffing-relationship-review-form { overflow:visible; } .neostaffing-relationship-review-table-scroll { max-height:70vh; } .neostaffing-relationship-review-actions { position:sticky; bottom:0; } }

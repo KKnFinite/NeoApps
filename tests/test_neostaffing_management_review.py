@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from pathlib import Path
 import re
 import unittest
 
@@ -42,6 +43,21 @@ class NeoStaffingManagementReviewTest(unittest.TestCase):
         db.session.remove()
         db.drop_all()
         self.context.pop()
+
+    def test_relationship_review_console_css_is_full_width_and_locally_scrollable(self):
+        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+
+        self.assertIn(".neostaffing-relationship-review-console { display:grid", css)
+        self.assertIn("width:calc(100vw - 32px)", css)
+        self.assertIn(
+            "body:has(.neostaffing-relationship-review-console) { overflow-x:clip; }",
+            css,
+        )
+        self.assertIn(
+            ".neostaffing-relationship-review-table-scroll { min-width:0; min-height:0; overflow:auto;",
+            css,
+        )
+        self.assertIn("@media (max-width:980px)", css)
 
     def test_pt_supervisor_work_area_suggestions_cover_one_many_and_fallback(self):
         _sort, _operation, department, work_area = self._hierarchy("Primary")
@@ -440,8 +456,12 @@ class NeoStaffingManagementReviewTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Management Relationships Affected", response.data)
+        self.assertIn(b"neostaffing-relationship-review-console", response.data)
+        self.assertIn(b"neostaffing-relationship-review-table", response.data)
+        self.assertNotIn(b"neostaffing-dashboard-shell", response.data)
         self.assertIn(b"Current Reports To", response.data)
         self.assertIn(b"Suggested Reports To", response.data)
+        self.assertIn(b"UNASSIGNED", response.data)
         self.assertIn(b"Keep Current", response.data)
         self.assertIn(b"Change to Suggested", response.data)
         self.assertIn(b"Choose Different Valid Supervisor", response.data)
@@ -502,6 +522,7 @@ class NeoStaffingManagementReviewTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Management Relationships Affected", response.data)
         self.assertIn(b"CONSOLIDATED REVIEW", response.data)
+        self.assertIn(b"STRUCTURE MISMATCH", response.data)
         self.assertIn(first_subject.full_name.encode(), response.data)
         self.assertIn(second_subject.full_name.encode(), response.data)
         self.assertIn(destination_owner.full_name.encode(), response.data)
