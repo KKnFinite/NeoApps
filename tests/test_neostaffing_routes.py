@@ -1287,20 +1287,21 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Approved Operator", response.data)
         self.assertIn(b'href="/neostaffing"', response.data)
 
-    def test_seniority_view_loads_for_approved_user_but_is_not_primary_landing_tile(self):
+    def test_seniority_url_redirects_approved_user_to_reports_without_a_navigation_tile(self):
         user = self._user("staffing_seniority_operator")
         self._grant_app_access(user, "neostaffing", "operator")
         db.session.commit()
         self._login(user.username)
 
         dashboard = self.client.get("/neostaffing")
-        response = self.client.get("/neostaffing/seniority")
+        response = self.client.get("/neostaffing/seniority", follow_redirects=False)
+        reports = self.client.get(response.location)
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"SENIORITY", response.data)
-        self.assertIn(b"FILTERS", response.data)
-        self.assertIn(b"TOTAL EMPLOYEES", response.data)
-        self.assertIn(b"Include Management", response.data)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/neostaffing/reports?report_type=seniority")
+        self.assertEqual(reports.status_code, 200)
+        self.assertIn(b"SENIORITY REPORT", reports.data)
+        self.assertNotIn(b"neostaffing-seniority-workspace", reports.data)
         self.assertIn(b'href="/neostaffing/people"', dashboard.data)
         self.assertIn(b'href="/neostaffing/org-chart"', dashboard.data)
         self.assertIn(b'href="/neostaffing/reports"', dashboard.data)
@@ -1316,7 +1317,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.location, "/portal")
 
-    def test_seniority_view_renders_ranked_filterable_data(self):
+    def test_seniority_url_preserves_mappable_filters_and_uses_reports_data(self):
         user = self._user("staffing_seniority_data")
         self._grant_app_access(user, "neostaffing", "operator")
         sort, operation, department, work_area = self._staffing_hierarchy()
@@ -1346,26 +1347,40 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login(user.username)
 
-        response = self.client.get(f"/neostaffing/seniority?operation_id={operation.id}")
-        searched = self.client.get(
-            f"/neostaffing/seniority?operation_id={operation.id}&search=avery"
+        redirect = self.client.get(
+            "/neostaffing/seniority?"
+            f"sort_id={sort.id}&operation_id={operation.id}&department_id={department.id}"
+            f"&work_area_id={work_area.id}&classification=part_time&active=all"
+            "&search=avery&include_management=1",
+            follow_redirects=False,
         )
+        response = self.client.get(redirect.location)
 
+        self.assertEqual(redirect.status_code, 302)
+        self.assertIn("/neostaffing/reports?", redirect.location)
+        for expected in (
+            "report_type=seniority",
+            f"sort_id={sort.id}",
+            f"operation_id={operation.id}",
+            f"department_id={department.id}",
+            f"work_area_id={work_area.id}",
+            "classification=part_time",
+            "active=all",
+            "search=avery",
+            "include_management=1",
+        ):
+            self.assertIn(expected, redirect.location)
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b"SENIORITY REPORT", response.data)
         self.assertIn(b"Night Sort", response.data)
         self.assertIn(b"Shift Operation", response.data)
         self.assertIn(b"E710", response.data)
         self.assertIn(b"Spotter, Avery", response.data)
-        self.assertIn(b"E711", response.data)
-        self.assertIn(b"Loader, Morgan", response.data)
-        self.assertIn(b"RANK", response.data)
-        self.assertIn(b"PART TIME", response.data)
-        self.assertIn(b"COMBO", response.data)
+        self.assertNotIn(b"E711", response.data)
+        self.assertNotIn(b"Loader, Morgan", response.data)
+        self.assertIn(b"Rank", response.data)
         self.assertIn(b"EBM", response.data)
-        self.assertIn(b"WBM", response.data)
-        self.assertEqual(searched.status_code, 200)
-        self.assertIn(b"E710", searched.data)
-        self.assertNotIn(b"E711", searched.data)
+        self.assertNotIn(b"neostaffing-seniority-list", response.data)
 
     def test_people_view_loads_for_approved_user_and_links_from_dashboard(self):
         user = self._user("staffing_people_operator")

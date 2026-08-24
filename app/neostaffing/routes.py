@@ -145,33 +145,25 @@ def index_slash():
 @bp.route("/seniority")
 @neostaffing_app_required(permission_key=SENIORITY_VIEW_PERMISSION)
 def seniority():
+    report_filters = {"report_type": "seniority"}
+    for key in (
+        "sort_id",
+        "operation_id",
+        "department_id",
+        "work_area_id",
+        "search",
+        "include_management",
+    ):
+        value = request.args.get(key, "").strip()
+        if value:
+            report_filters[key] = value
     classification = request.args.get("classification", "").strip()
-    if classification not in {choice[0] for choice in staffing_service.classification_choices()}:
-        classification = ""
+    if classification in {choice[0] for choice in staffing_service.classification_choices()}:
+        report_filters["classification"] = classification
     active = request.args.get("active", "active").strip() or "active"
-    if active not in {"active", "inactive", "all"}:
-        active = "active"
-    context = staffing_service.seniority_context(
-        {
-            "sort_id": request.args.get("sort_id", "").strip(),
-            "operation_id": request.args.get("operation_id", "").strip(),
-            "classification": classification,
-            "department_id": request.args.get("department_id", "").strip(),
-            "work_area_id": request.args.get("work_area_id", "").strip(),
-            "search": request.args.get("search", "").strip(),
-            "active": active,
-            "include_management": request.args.get("include_management", "").strip(),
-        }
-    )
-    return render_template(
-        "neostaffing/seniority.html",
-        app_role=get_user_app_role(current_user, "neostaffing"),
-        can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
-        classification_choices=staffing_service.classification_choices(),
-        classification_labels=staffing_service.CLASSIFICATION_LABELS,
-        unit_path=staffing_service.unit_path,
-        seniority=context,
-    )
+    if active in {"inactive", "all"}:
+        report_filters["active"] = active
+    return redirect(url_for("neostaffing.reports", **report_filters))
 
 
 @bp.route("/people")
@@ -784,6 +776,9 @@ def reports():
             "assignment_status": request.args.get("assignment_status", "").strip(),
             "attendance_date": request.args.get("attendance_date", "").strip(),
             "attendance_status": request.args.get("attendance_status", "").strip(),
+            "active": request.args.get("active", "").strip(),
+            "search": request.args.get("search", "").strip(),
+            "include_management": request.args.get("include_management", "").strip(),
         },
         current_user if not can_manage else None,
     )

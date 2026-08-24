@@ -3956,6 +3956,8 @@ def reports_context(filters=None, user=None):
             "employee_status": filters.get("employee_status", ""),
             "active": filters.get("active", "active"),
             "search": filters.get("search", ""),
+            "include_management": filters.get("include_management", ""),
+            "search": filters.get("search", ""),
             "assignment_status": filters.get("assignment_status", ""),
             "per_page": "all",
         }
@@ -4018,6 +4020,9 @@ def reports_context(filters=None, user=None):
             "assignment_status": filters.get("assignment_status", ""),
             "attendance_date": filters.get("attendance_date", ""),
             "attendance_status": filters.get("attendance_status", ""),
+            "active": filters.get("active", ""),
+            "search": filters.get("search", ""),
+            "include_management": filters.get("include_management", ""),
         },
     }
 
