@@ -76,7 +76,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"/static/images/icons/neostaffing/inapp/neostaffing-inapp-128.png", response.data)
         self.assertIn(b"neostaffing-header-title", response.data)
         self.assertIn(b"neo-brand-title__node--staffing", response.data)
-        self.assertEqual(response.data.count(b"neostaffing-menu-tile"), 9)
+        self.assertIn(b"neostaffing-launch-console", response.data)
+        self.assertIn(b"neostaffing-launch-grid", response.data)
+        self.assertIn(b"SHIFT FLOW", response.data)
+        self.assertEqual(response.data.count(b"neostaffing-menu-tile"), 10)
         self.assertNotIn(b'href="/neostaffing/people/attendance" class="neostaffing-menu-tile"', response.data)
         self.assertNotIn(b"APP ROLE", response.data)
         self.assertNotIn(b"neostaffing-home-header", response.data)
@@ -91,6 +94,36 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"STAFFING BOARD", response.data)
         self.assertNotIn(b"NeoMotherBrain", response.data)
         self.assertNotIn(b"Change Characters", response.data)
+
+    def test_landing_hides_destinations_when_existing_thresholds_deny_them(self):
+        user = self._user("staffing_landing_viewer")
+        self._grant_app_access(user, "neostaffing", "watcher")
+        ensure_default_permission_rules()
+        for permission_key in (
+            "neostaffing.reports.view",
+            "neostaffing.change_requests.view",
+            "neostaffing.bulk_change.use",
+            "neostaffing.vacation_selection.view",
+            "neostaffing.permissions.view",
+        ):
+            PermissionRule.query.filter_by(permission_key=permission_key).one().minimum_role = "grandmaster"
+        db.session.commit()
+        self._login(user.username)
+
+        response = self.client.get("/neostaffing")
+        landing_menu = response.data.split(
+            b'<nav class="neostaffing-primary-menu', 1
+        )[1].split(b"</nav>", 1)[0]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'href="/neostaffing/people"', landing_menu)
+        self.assertIn(b'href="/neostaffing/shift-flow"', landing_menu)
+        self.assertNotIn(b'href="/neostaffing/reports"', landing_menu)
+        self.assertNotIn(b'href="/neostaffing/requests"', landing_menu)
+        self.assertNotIn(b'href="/neostaffing/notifications"', landing_menu)
+        self.assertNotIn(b'href="/neostaffing/bulk-change"', landing_menu)
+        self.assertNotIn(b'href="/neostaffing/vacation-selection"', landing_menu)
+        self.assertNotIn(b'href="/neostaffing/permissions"', landing_menu)
 
     def test_neostaffing_section_pages_render_clean_sidebar_navigation(self):
         user = self._user("staffing_sidebar_operator")

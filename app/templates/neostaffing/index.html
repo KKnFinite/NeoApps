@@ -4,86 +4,46 @@
 {% block title %}NeoStaffing{% endblock %}
 
 {% block content %}
-<section class="neostaffing-page neostaffing-home-page theme-staffing" aria-label="NeoStaffing">
-    <div class="neostaffing-home-shell">
-        <nav class="neostaffing-primary-menu" aria-label="NeoStaffing main menu">
-            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.people') }}">
-                <span>PEOPLE</span>
-            </a>
-            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.org_chart') }}">
-                <span>ORG CHART</span>
-            </a>
-            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.reports') }}">
-                <span>REPORTS</span>
-            </a>
-            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.attendance') }}">
-                <span>ATTENDANCE</span>
-            </a>
-            {% if user_can("neostaffing.staffing_groups.view") %}
-            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.staffing_groups') }}">
-                <span>STAFFING GROUPS</span>
-            </a>
+<section class="neostaffing-launch-console theme-staffing" aria-labelledby="neostaffing-launch-title">
+    <header class="neostaffing-launch-header">
+        <div><h1 id="neostaffing-launch-title">NEOSTAFFING</h1><span>OPERATIONS WORKSPACE</span></div>
+        <div class="neostaffing-launch-header-actions">
+            {% if neostaffing_nav.actionable_requests %}<a href="{{ url_for('neostaffing.change_requests') }}" class="neostaffing-launch-alert"><strong>{{ neostaffing_nav.actionable_requests }}</strong><span>ACTIONABLE REQUEST{{ '' if neostaffing_nav.actionable_requests == 1 else 'S' }}</span></a>{% endif %}
+            {% if neostaffing_nav.unread_notifications %}<a href="{{ url_for('neostaffing.staffing_notifications') }}" class="neostaffing-launch-alert"><strong>{{ neostaffing_nav.unread_notifications }}</strong><span>UNREAD ALERT{{ '' if neostaffing_nav.unread_notifications == 1 else 'S' }}</span></a>{% endif %}
+            <a class="neostaffing-launch-portal" href="{{ url_for('auth.portal_dashboard') }}">{{ neo_brand("Apps", "apps") }} PORTAL</a>
+        </div>
+    </header>
+
+    <main class="neostaffing-launch-workspace">
+        <header class="neostaffing-launch-workspace-heading"><div><h2>WORKSPACES</h2><span>SELECT AN AUTHORIZED OPERATIONAL AREA</span></div><strong>ROLE · {{ app_role|upper }}</strong></header>
+        <nav class="neostaffing-primary-menu neostaffing-launch-grid" aria-label="NeoStaffing main menu">
+            {% if user_can("neostaffing.people.view") %}
+            <a class="neostaffing-menu-tile is-priority" href="{{ url_for('neostaffing.attendance') }}"><span>ATTENDANCE</span><em>Current-sort attendance</em></a>
+            <a class="neostaffing-menu-tile is-priority" href="{{ url_for('neostaffing.people') }}"><span>PEOPLE</span><em>Roster and assignments</em></a>
+            <a class="neostaffing-menu-tile is-priority" href="{{ url_for('neostaffing.shift_flow') }}"><span>SHIFT FLOW</span><em>Flow planning board</em></a>
             {% endif %}
             {% if user_can("neostaffing.change_requests.view") %}
-            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.change_requests') }}">
-                <span>REQUESTS</span>
-                {% if neostaffing_nav.actionable_requests %}<strong class="neostaffing-status-pill is-yellow" aria-label="{{ neostaffing_nav.actionable_requests }} actionable requests">{{ neostaffing_nav.actionable_requests }}</strong>{% endif %}
-            </a>
-            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.staffing_notifications') }}">
-                <span>NOTIFICATIONS</span>
-                {% if neostaffing_nav.unread_notifications %}<strong class="neostaffing-status-pill is-yellow" aria-label="{{ neostaffing_nav.unread_notifications }} unread notifications">{{ neostaffing_nav.unread_notifications }}</strong>{% endif %}
-            </a>
+            <a class="neostaffing-menu-tile{% if neostaffing_nav.actionable_requests %} is-actionable{% endif %}" href="{{ url_for('neostaffing.change_requests') }}"><span>REQUESTS / APPROVALS</span><em>Change queue</em>{% if neostaffing_nav.actionable_requests %}<strong class="neostaffing-status-pill is-yellow" aria-label="{{ neostaffing_nav.actionable_requests }} actionable requests">{{ neostaffing_nav.actionable_requests }}</strong>{% endif %}</a>
+            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.staffing_notifications') }}"><span>NOTIFICATIONS</span><em>Operational alerts</em>{% if neostaffing_nav.unread_notifications %}<strong class="neostaffing-status-pill is-yellow" aria-label="{{ neostaffing_nav.unread_notifications }} unread notifications">{{ neostaffing_nav.unread_notifications }}</strong>{% endif %}</a>
             {% endif %}
-            {% if user_can("neostaffing.bulk_change.use") %}
-            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.bulk_change') }}">
-                <span>BULK CHANGE</span>
-            </a>
-            {% endif %}
-            {% if user_can("neostaffing.vacation_selection.view") %}
-            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.vacation_selection') }}">
-                <span>VACATION SELECTION</span>
-            </a>
-            {% endif %}
-            {% if user_can("neostaffing.permissions.view") %}
-            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.permissions') }}">
-                <span>PERMISSIONS</span>
-            </a>
-            {% endif %}
+            {% if user_can("neostaffing.org_chart.view") %}<a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.org_chart') }}"><span>ORG CHART</span><em>Operational and management</em></a>{% endif %}
+            {% if user_can("neostaffing.staffing_groups.view") %}<a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.staffing_groups') }}"><span>STAFFING GROUPS</span><em>Deduplicated reporting scope</em></a>{% endif %}
+            {% if user_can("neostaffing.bulk_change.use") %}<a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.bulk_change') }}"><span>BULK CHANGE</span><em>Session change workspace</em></a>{% endif %}
+            {% if user_can("neostaffing.reports.view") %}<a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.reports') }}"><span>REPORTS</span><em>Staffing and attendance</em></a>{% endif %}
+            {% if user_can("neostaffing.permissions.view") %}<a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.permissions') }}"><span>PERMISSIONS</span><em>Role-level configuration</em></a>{% endif %}
+            {% if user_can("neostaffing.vacation_selection.view") %}<a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.vacation_selection') }}"><span>VACATION SELECTION</span><em>Selection workspace</em></a>{% endif %}
         </nav>
 
-        {% if attendance_shortcut.is_management %}
-        <section class="neostaffing-attendance-shortcut" aria-label="Management attendance shortcut">
-            {% if attendance_shortcut.assignments|length == 1 %}
-            {% set card = attendance_shortcut.assignments[0] %}
-            <a class="neostaffing-attendance-card" href="{{ url_for('neostaffing.attendance') }}?{{ card.scope_key }}={{ card.unit.id }}">
-                <span>TAKE ATTENDANCE</span>
-                <strong>{{ card.unit.name }}</strong>
-                <em>{{ card.label }}</em>
-            </a>
-            {% elif attendance_shortcut.assignments %}
-            <h2>MY AREAS</h2>
+        {% if attendance_shortcut.is_management and attendance_shortcut.assignments %}
+        <section class="neostaffing-attendance-shortcut neostaffing-launch-shortcuts" aria-label="Management attendance shortcuts">
+            <header><strong>{% if attendance_shortcut.assignments|length == 1 %}TAKE ATTENDANCE{% else %}MY AREAS{% endif %}</strong><span>AUTHORIZED SCOPE SHORTCUTS</span></header>
             <div class="neostaffing-my-area-grid">
-                {% for card in attendance_shortcut.assignments %}
-                <a class="neostaffing-attendance-card" href="{{ url_for('neostaffing.attendance') }}?{{ card.scope_key }}={{ card.unit.id }}">
-                    <span>{{ card.label }}</span>
-                    <strong>{{ card.unit.name }}</strong>
-                    <em>{{ card.path }}</em>
-                </a>
-                {% endfor %}
+                {% for card in attendance_shortcut.assignments %}<a class="neostaffing-attendance-card" href="{{ url_for('neostaffing.attendance') }}?{{ card.scope_key }}={{ card.unit.id }}"><span>{{ card.label }}</span><strong>{{ card.unit.name }}</strong><em>{{ card.path }}</em></a>{% endfor %}
             </div>
-            {% elif attendance_shortcut.message and can_manage_app %}
-            <div class="neostaffing-attendance-card is-setup">
-                <span>TAKE ATTENDANCE</span>
-                <strong>SETUP NEEDED</strong>
-                <em>{{ attendance_shortcut.message }}</em>
-            </div>
-            {% endif %}
         </section>
+        {% elif attendance_shortcut.is_management and attendance_shortcut.message and can_manage_app %}
+        <section class="neostaffing-launch-setup" aria-label="Management attendance setup"><strong>ATTENDANCE SETUP NEEDED</strong><span>{{ attendance_shortcut.message }}</span></section>
         {% endif %}
-
-        <div class="action-row neostaffing-home-actions">
-            <a class="action-button action-button-secondary" href="{{ url_for('auth.portal_dashboard') }}">BACK TO {{ neo_brand("Apps", "apps") }} PORTAL</a>
-        </div>
-    </div>
+    </main>
 </section>
 {% endblock %}
