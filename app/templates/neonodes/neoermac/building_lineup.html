@@ -43,7 +43,9 @@
 {% block title %}BUILDING LINEUP | NeoErmac{% endblock %}
 
 {% block content %}
-<section class="neoermac-shell neoermac-lineup-shell" aria-labelledby="neoermac-lineup-title">
+<section class="neoermac-shell neoermac-lineup-shell" aria-labelledby="neoermac-lineup-title"
+    data-neoermac-lineup-live data-state-url="{{ url_for('neoermac.building_lineup_state') }}"
+    data-lineup-revision="{{ building_lineup_revision }}">
     <div class="neoermac-hero mobile-shell-duplicate-title">
         <h1 id="neoermac-lineup-title" class="neo-page-title neoermac-operation-title">BUILDING LINEUP</h1>
     </div>
@@ -141,6 +143,7 @@
             const card = select.closest("[data-lineup-assignment-slot]");
             const previousValue = select.dataset.lastSavedValue || "";
             const destination = (select.value || "").trim().toUpperCase();
+            select.dataset.lineupSaving = "true";
             updatePullTimes(card, timesFor(destination));
             setMessage(error, "");
             setMessage(status, "SAVING", "saving");
@@ -169,15 +172,41 @@
                 }
                 updatePullTimes(card, payload.pull_times || timesFor(payload.destination));
                 setMessage(status, "SAVED", "saved");
+                delete select.dataset.lineupSaving;
             } catch (saveError) {
                 select.value = previousValue;
                 updatePullTimes(card, timesFor(previousValue));
                 setMessage(status, "");
                 setMessage(error, saveError.message || "Destination save failed.", "error");
+                delete select.dataset.lineupSaving;
             }
         });
     });
 })();
 </script>
 {% endif %}
+<script>
+(() => {
+    const root = document.querySelector("[data-neoermac-lineup-live]");
+    if (!root) return;
+    let revision = root.dataset.lineupRevision || "";
+    const hasLocalEdits = () => Array.from(root.querySelectorAll("[data-lineup-destination-select]"))
+        .some((select) => select.dataset.lineupSaving === "true");
+    const poll = async () => {
+        const url = new URL(root.dataset.stateUrl, window.location.origin);
+        url.searchParams.set("revision", revision);
+        const response = await fetch(url, {cache: "no-store", credentials: "same-origin"});
+        const payload = await response.json();
+        if (!response.ok || !payload.ok) throw new Error("Building Lineup refresh failed.");
+        revision = payload.revision || revision;
+        if (payload.changed && !hasLocalEdits()) window.location.reload();
+    };
+    const controller = window.NeoLiveUpdates.create({
+        intervalMs: {{ refresh_status.live_screen_refresh_interval_ms or live_screen_refresh_interval_ms }},
+        poll,
+        continuousWhileVisible: true,
+    });
+    controller.setServerStatus({{ refresh_status|tojson }});
+})();
+</script>
 {% endblock %}

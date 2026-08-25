@@ -35,6 +35,9 @@
         <a class="motherbrain-desktop-side-link{% if is_neoermac_view_outbound_page %} is-active{% endif %}" href="{{ url_for('neoermac.view_outbound') }}" {% if is_neoermac_view_outbound_page %}aria-current="page"{% endif %}>View Outbound</a>
         <a class="motherbrain-desktop-side-link{% if request.path.startswith('/neoermac/upcoming-pulls') %} is-active{% endif %}" href="{{ url_for('neoermac.upcoming_pulls') }}" {% if request.path.startswith('/neoermac/upcoming-pulls') %}aria-current="page"{% endif %}>Upcoming Pulls</a>
         <a class="motherbrain-desktop-side-link{% if request.path.startswith('/neoermac/tug-assignments') %} is-active{% endif %}" href="{{ url_for('neoermac.tug_assignments') }}" {% if request.path.startswith('/neoermac/tug-assignments') %}aria-current="page"{% endif %}>Tug Assignments</a>
+        {% if user_can('neoermac.settings.view') %}
+        <a class="motherbrain-desktop-side-link{% if request.path.startswith('/neoermac/settings') %} is-active{% endif %}" href="{{ url_for('neoermac.settings') }}" {% if request.path.startswith('/neoermac/settings') %}aria-current="page"{% endif %}>Settings</a>
+        {% endif %}
         {% elif is_neosektor_page %}
         <a class="motherbrain-desktop-side-link{% if request.endpoint == 'neosektor.index' %} is-active{% endif %}" href="{{ url_for('neosektor.index') }}" {% if request.endpoint == 'neosektor.index' %}aria-current="page"{% endif %}>Dashboard</a>
         {% for item in neosektor_internal_menu_items() %}

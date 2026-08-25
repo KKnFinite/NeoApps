@@ -23,7 +23,7 @@ from app.services.neoermac_building_lineup import (
     get_building_lineup_assignments,
     normalize_destination,
 )
-from app.services.node_refresh import sort_window_auto_refresh_status
+from app.services.neoermac_live_refresh import neoermac_live_refresh_status
 from app.services.operation_scope import current_unarchived_operation
 from app.services.neoermac_tail_presence import (
     arrival_presence_by_tail,
@@ -103,7 +103,7 @@ def view_outbound_context(
         "operation": operation,
         "operation_window_minutes": getattr(operation, "window_minutes", None),
         "refresh_status": refresh_status
-        or sort_window_auto_refresh_status(gateway),
+        or neoermac_live_refresh_status(gateway),
         "rows": rows,
         "pull_labels": PULL_KEYS,
     }
@@ -115,7 +115,7 @@ def current_view_outbound_operation(gateway):
 
 
 def view_outbound_refresh_status(gateway, operation=None):
-    return sort_window_auto_refresh_status(gateway, operation=operation)
+    return neoermac_live_refresh_status(gateway)
 
 
 def view_outbound_revision(gateway, *, operation=_OPERATION_UNSET, now=None):

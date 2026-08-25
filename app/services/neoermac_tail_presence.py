@@ -40,7 +40,7 @@ def arrival_presence_by_tail(
             sort_date_operation_id=operation.id,
             mission_type="arrival",
         ).all()
-    links_by_mission_id = _google_arrival_links_by_mission_id(
+    links_by_tail = _google_arrival_links_by_tail(
         operation,
         google_links=google_links,
     )
@@ -52,7 +52,7 @@ def arrival_presence_by_tail(
         arrival_evidence = _arrival_presence_evidence(
             arrival,
             tail,
-            links_by_mission_id.get(arrival.id, ()),
+            links_by_tail.get(tail, ()),
             now_utc,
         )
         evidence = arrival_evidence["presence_evidence"]
@@ -152,24 +152,28 @@ def _arrival_presence_evidence(arrival, tail, google_links, now_utc):
     }
 
 
-def _google_arrival_links_by_mission_id(operation, *, google_links=None):
+def _google_arrival_links_by_tail(operation, *, google_links=None):
     links = google_links
     if links is None:
         links = SortDateGoogleMissionLink.query.filter_by(
             sort_date_operation_id=operation.id,
             mission_type="arrival",
         ).all()
-    by_mission_id = {}
+    by_tail = {}
     for link in links:
-        if link.sort_date_mission_id is not None:
-            by_mission_id.setdefault(link.sort_date_mission_id, []).append(link)
-    return by_mission_id
+        # Current-operation tail identity is the Motherbrain authority. Import
+        # reconciliation can replace an arrival row while retaining its HERE
+        # evidence on the prior link row, so an exact mission-id match is too
+        # strict. This remains bounded and only considers the same tail.
+        tail = normalize_tail_number(link.last_tail_number)
+        if tail:
+            by_tail.setdefault(tail, []).append(link)
+    return by_tail
 
 
 def _link_confirms_google_here(link, arrival, tail):
     return (
-        link.sort_date_mission_id == arrival.id
-        and str(link.last_status_raw or "").strip().upper() == "HERE"
+        str(link.last_status_raw or "").strip().upper() == "HERE"
         and normalize_tail_number(link.last_tail_number) == tail
         and normalize_tail_number(arrival.assigned_tail_number) == tail
     )

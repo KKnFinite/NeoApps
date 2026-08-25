@@ -29,11 +29,10 @@
         {% include "neonodes/neoermac/_upcoming_pulls_board.html" %}
     </section>
 </section>
-{% if dashboard_context.refresh_status.auto_refresh_enabled %}
 <script data-upcoming-pulls-live-updates>
 (() => {
     const root = document.querySelector("[data-neoermac-upcoming-live]");
-    if (!root || root.dataset.refreshActive !== "true") {
+    if (!root) {
         return;
     }
     const boardHost = root.querySelector("[data-upcoming-pulls-board-host]");
@@ -95,12 +94,12 @@
     };
 
     controller = window.NeoLiveUpdates.create({
-        intervalMs: {{ live_screen_refresh_interval_ms }},
+        intervalMs: {{ dashboard_context.refresh_status.live_screen_refresh_interval_ms or live_screen_refresh_interval_ms }},
         statusElement: root.querySelector("[data-live-update-status]"),
         poll,
+        continuousWhileVisible: true,
     });
     controller.setServerStatus(initialStatus);
 })();
 </script>
-{% endif %}
 {% endblock %}

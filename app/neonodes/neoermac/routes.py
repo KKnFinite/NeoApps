@@ -66,6 +66,12 @@ from app.services.neoermac_view_outbound import (
 from app.services.permission_rules import permission_access
 from app.services.permission_rules import user_can
 from app.services import neostaffing as staffing_service
+from app.services.live_screen_refresh import (
+    LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
+    live_screen_refresh_value,
+    save_live_screen_refresh_override,
+)
+from app.services.neoermac_live_refresh import NEOERMAC_LIVE_REFRESH_KEY
 
 
 NEOERMAC_DASHBOARD_VIEW_PERMISSION = "neoermac.dashboard.view"
@@ -76,6 +82,8 @@ DOOR_VIEW_VIEW_PERMISSION = "neoermac.door_view.view"
 DOOR_VIEW_EDIT_PERMISSION = "neoermac.door_view.edit"
 VIEW_OUTBOUND_VIEW_PERMISSION = "neoermac.view_outbound.view"
 TUG_ASSIGNMENTS_VIEW_PERMISSION = "neoermac.tug_assignments.view"
+SETTINGS_VIEW_PERMISSION = "neoermac.settings.view"
+REFRESH_SETTINGS_EDIT_PERMISSION = "neoermac.refresh_settings.edit"
 
 
 NEOERMAC_PAGES = (
@@ -84,6 +92,7 @@ NEOERMAC_PAGES = (
     ("VIEW OUTBOUND", "neoermac.view_outbound"),
     ("DOOR VIEW", "neoermac.door_view"),
     ("TUG ASSIGNMENTS", "neoermac.tug_assignments"),
+    ("SETTINGS", "neoermac.settings"),
 )
 
 
@@ -109,6 +118,49 @@ def index():
 @gateway_node_required("ermac")
 def index_slash():
     return redirect(url_for("neoermac.index"))
+
+
+@bp.route("/settings", methods=["GET", "POST"])
+@gateway_node_required("ermac")
+def settings():
+    gateway = get_current_gateway()
+    access = permission_access(SETTINGS_VIEW_PERMISSION)
+    can_edit = user_can(REFRESH_SETTINGS_EDIT_PERMISSION)
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neoermac.index"))
+    if request.method == "POST":
+        if not can_edit:
+            db.session.rollback()
+            flash("Access denied.", "error")
+            return redirect(url_for("neoermac.settings"))
+        try:
+            result = save_live_screen_refresh_override(
+                gateway,
+                NEOERMAC_LIVE_REFRESH_KEY,
+                request.form.get("refresh_interval_seconds"),
+                allowed_screen_keys=(NEOERMAC_LIVE_REFRESH_KEY,),
+            )
+        except (IntegrityError, ValueError) as exc:
+            db.session.rollback()
+            flash(
+                str(exc) if isinstance(exc, ValueError) else "Live refresh setting changed. Reload Settings and try again.",
+                "error",
+            )
+            return redirect(url_for("neoermac.settings"))
+        if result.changed:
+            db.session.commit()
+            flash("LIVE REFRESH SETTING SAVED.", "success")
+        else:
+            flash("NO LIVE REFRESH SETTING CHANGES.", "info")
+        return redirect(url_for("neoermac.settings"))
+    return render_template(
+        "neonodes/neoermac/settings.html",
+        gateway=gateway,
+        can_edit_refresh_settings=can_edit,
+        refresh_setting=live_screen_refresh_value(gateway, NEOERMAC_LIVE_REFRESH_KEY),
+        live_refresh_allowed_seconds=LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
+    )
 
 
 @bp.route("/upcoming-pulls")
@@ -266,6 +318,25 @@ def building_lineup_destination_autosave():
 
     db.session.commit()
     return jsonify({"ok": True, **result})
+
+
+@bp.route("/building-lineup/state")
+@gateway_node_required("ermac")
+def building_lineup_state():
+    gateway = get_current_gateway()
+    access = permission_access(BUILDING_LINEUP_VIEW_PERMISSION)
+    if not access["can_view"]:
+        return jsonify({"ok": False, "error": "Access denied."}), 403
+    operation = current_upcoming_pulls_operation(gateway)
+    revision = upcoming_pulls_revision(gateway, operation=operation)
+    return jsonify(
+        {
+            "ok": True,
+            "changed": str(request.args.get("revision") or "") != revision,
+            "revision": revision,
+            "refresh": upcoming_pulls_refresh_status(gateway, operation=operation),
+        }
+    )
 
 
 @bp.route("/outbound")
@@ -714,6 +785,11 @@ def _building_lineup_response(gateway, access, rows=None, status_code=200):
         field_name=lineup_field_name,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
+        refresh_status=upcoming_pulls_refresh_status(
+            gateway,
+            operation=current_upcoming_pulls_operation(gateway),
+        ),
+        building_lineup_revision=upcoming_pulls_revision(gateway),
     )
     return response, status_code
 

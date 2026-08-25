@@ -150,7 +150,7 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
 
         card = self._door_card()
 
-        self.assertEqual(card["status"], "Scheduled")
+        self.assertEqual(card["status"], "ARRIVED")
         self.assertEqual(card["parking"], "A01")
         self.assertEqual(card["tail_presence"]["state"], TAIL_PRESENCE_ARRIVED)
         self.assertTrue(card["tail_presence"]["has_actual_block_in"])
@@ -164,7 +164,7 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
 
         card = self._door_card()
 
-        self.assertEqual(card["status"], "Scheduled")
+        self.assertEqual(card["status"], "ARRIVED")
         self.assertEqual(card["parking"], "A01")
         self.assertEqual(card["tail_presence"]["state"], TAIL_PRESENCE_ARRIVED)
         evidence = arrival_presence_by_tail(self.operation)["N123UP"]
@@ -183,7 +183,7 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
 
         card = self._door_card()
 
-        self.assertEqual(card["status"], "Scheduled")
+        self.assertEqual(card["status"], "ARRIVED")
         self.assertEqual(card["parking"], "A01")
         self.assertEqual(card["tail_presence"]["state"], TAIL_PRESENCE_ARRIVED)
         evidence = arrival_presence_by_tail(self.operation)["N123UP"]
@@ -192,6 +192,20 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
             PRESENCE_EVIDENCE_GOOGLE_HERE,
         )
         self.assertIsNone(arrival.actual_block_in_datetime_utc)
+
+    def test_current_operation_here_link_survives_arrival_row_reconciliation(self):
+        self._departure(tail="N123UP")
+        prior_arrival = self._arrival(tail="N123UP", flight_number="UPS099")
+        self._google_link(prior_arrival, tail="N123UP", status="HERE")
+        self._arrival(tail="N123UP", flight_number="UPS100")
+        self._parking("N123UP", "A01")
+        db.session.commit()
+
+        card = self._door_card()
+
+        self.assertEqual(card["status"], "ARRIVED")
+        self.assertEqual(card["parking"], "A01")
+        self.assertEqual(card["tail_presence"]["state"], TAIL_PRESENCE_ARRIVED)
 
     def test_actual_block_in_wins_over_api_and_google_presence(self):
         self._departure(tail="N123UP")
@@ -242,7 +256,7 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
 
         card = self._door_card()
 
-        self.assertEqual(card["status"], "Scheduled")
+        self.assertEqual(card["status"], "ARRIVED")
         self.assertEqual(card["parking"], "A01")
         self.assertIsNone(arrival.actual_block_in_datetime_utc)
 
@@ -303,7 +317,7 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
             TAIL_PRESENCE_NOT_ARRIVED,
         )
         self.assertEqual(after_arrival["tail"], "NNEWUP")
-        self.assertEqual(after_arrival["status"], "Scheduled")
+        self.assertEqual(after_arrival["status"], "ARRIVED")
         self.assertEqual(after_arrival["parking"], "B02")
         self.assertEqual(after_arrival["tail_presence"]["state"], TAIL_PRESENCE_ARRIVED)
         self.assertEqual(old_assignment.position_code, "A01")
@@ -368,7 +382,7 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
             "/neoermac/door-view/state?door=D34"
         ).get_json()["state"]["destinations"][0]
 
-        self.assertEqual(reconciled["status"], "Scheduled")
+        self.assertEqual(reconciled["status"], "ARRIVED")
         self.assertEqual(reconciled["parking"], "A01")
         self.assertEqual(
             reconciled["tail_presence"]["state"],

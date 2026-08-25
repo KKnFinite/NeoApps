@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Settings | NeoErmac{% endblock %}
+
+{% block content %}
+<section class="neoermac-shell neoermac-placeholder" aria-labelledby="neoermac-settings-title">
+    <div class="neoermac-hero mobile-shell-duplicate-title">
+        <h1 id="neoermac-settings-title">SETTINGS</h1>
+    </div>
+    <section class="neoermac-placeholder-panel">
+        <h2>LIVE REFRESH</h2>
+        <p>One shared setting applies to all NeoErmac operational screens.</p>
+        <form method="post">
+            <label>Refresh interval
+                <select name="refresh_interval_seconds" {% if not can_edit_refresh_settings %}disabled{% endif %}>
+                    <option value="default" {% if refresh_setting.override_seconds is none %}selected{% endif %}>Render Default</option>
+                    {% for seconds in live_refresh_allowed_seconds %}
+                    <option value="{{ seconds }}" {% if refresh_setting.override_seconds == seconds %}selected{% endif %}>{{ 'OFF' if seconds == 0 else seconds ~ ' seconds' }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <p>Configured: {{ refresh_setting.configured_label }} | Effective: {{ refresh_setting.effective_label }} | Source: {{ refresh_setting.source_label }}</p>
+            {% if can_edit_refresh_settings %}<button class="neoermac-menu-link" type="submit">SAVE LIVE REFRESH</button>{% endif %}
+        </form>
+    </section>
+</section>
+{% endblock %}

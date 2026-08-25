@@ -207,6 +207,7 @@
                     <a class="motherbrain-nav-link{% if is_neoermac_view_outbound_page %} is-active{% endif %}" href="{{ url_for('neoermac.view_outbound') }}" {% if is_neoermac_view_outbound_page %}aria-current="page"{% endif %}>VIEW OUTBOUND</a>
                     <a class="motherbrain-nav-link{% if request.path.startswith('/neoermac/upcoming-pulls') %} is-active{% endif %}" href="{{ url_for('neoermac.upcoming_pulls') }}" {% if request.path.startswith('/neoermac/upcoming-pulls') %}aria-current="page"{% endif %}>UPCOMING PULLS</a>
                     <a class="motherbrain-nav-link{% if request.path.startswith('/neoermac/tug-assignments') %} is-active{% endif %}" href="{{ url_for('neoermac.tug_assignments') }}" {% if request.path.startswith('/neoermac/tug-assignments') %}aria-current="page"{% endif %}>TUG ASSIGNMENTS</a>
+                    {% if user_can('neoermac.settings.view') %}<a class="motherbrain-nav-link{% if request.path.startswith('/neoermac/settings') %} is-active{% endif %}" href="{{ url_for('neoermac.settings') }}" {% if request.path.startswith('/neoermac/settings') %}aria-current="page"{% endif %}>SETTINGS</a>{% endif %}
                     {% elif is_neoscorpion_page %}
                     {% for item in neoscorpion_internal_menu_items() %}
                     <a class="motherbrain-nav-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" {% if item.active %}aria-current="page"{% endif %}>{{ item.label|upper }}</a>
@@ -434,6 +435,7 @@
                         <a class="mobile-shell-menu-link{% if is_neoermac_view_outbound_page %} is-active{% endif %}" href="{{ url_for('neoermac.view_outbound') }}" role="menuitem" {% if is_neoermac_view_outbound_page %}aria-current="page"{% endif %}>View Outbound</a>
                         <a class="mobile-shell-menu-link{% if request.path.startswith('/neoermac/upcoming-pulls') %} is-active{% endif %}" href="{{ url_for('neoermac.upcoming_pulls') }}" role="menuitem" {% if request.path.startswith('/neoermac/upcoming-pulls') %}aria-current="page"{% endif %}>Upcoming Pulls</a>
                         <a class="mobile-shell-menu-link{% if request.path.startswith('/neoermac/tug-assignments') %} is-active{% endif %}" href="{{ url_for('neoermac.tug_assignments') }}" role="menuitem" {% if request.path.startswith('/neoermac/tug-assignments') %}aria-current="page"{% endif %}>Tug Assignments</a>
+                        {% if user_can('neoermac.settings.view') %}<a class="mobile-shell-menu-link{% if request.path.startswith('/neoermac/settings') %} is-active{% endif %}" href="{{ url_for('neoermac.settings') }}" role="menuitem" {% if request.path.startswith('/neoermac/settings') %}aria-current="page"{% endif %}>Settings</a>{% endif %}
                     {% elif is_neoscorpion_page %}
                         {% for item in neoscorpion_internal_menu_items() %}
                         <a class="mobile-shell-menu-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" role="menuitem" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>

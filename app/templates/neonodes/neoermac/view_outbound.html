@@ -45,11 +45,10 @@
         {% include "neonodes/neoermac/_view_outbound_content.html" %}
     </div>
 </section>
-{% if refresh_status.auto_refresh_enabled %}
 <script>
 (() => {
     const root = document.querySelector("[data-neoermac-outbound-refresh]");
-    if (!root || root.dataset.refreshActive !== "true") {
+    if (!root) {
         return;
     }
 
@@ -117,16 +116,12 @@
     };
 
     const controller = window.NeoLiveUpdates.create({
-        intervalMs: {{ live_screen_refresh_interval_ms }},
+        intervalMs: {{ refresh_status.live_screen_refresh_interval_ms or live_screen_refresh_interval_ms }},
         statusElement: document.querySelector("[data-live-update-status]"),
         poll: refreshOutboundView,
+        continuousWhileVisible: true,
     });
-    controller.setServerStatus({
-        auto_refresh_enabled: true,
-        reason: "active",
-        live_status_label: "Live updates on",
-    });
+    controller.setServerStatus({{ refresh_status|tojson }});
 })();
 </script>
-{% endif %}
 {% endblock %}

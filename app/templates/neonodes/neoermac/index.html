@@ -67,6 +67,11 @@
                     <strong>TUG ASSIGNMENTS</strong>
                 </span>
             </a>
+            {% if user_can('neoermac.settings.view') %}
+            <a class="neoermac-dashboard-tile" href="{{ url_for('neoermac.settings') }}">
+                <span class="neoermac-dashboard-tile-copy"><strong>SETTINGS</strong></span>
+            </a>
+            {% endif %}
         </nav>
     </section>
 </section>

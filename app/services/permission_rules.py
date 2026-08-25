@@ -262,6 +262,16 @@ DEFAULT_PERMISSION_RULES = (
         "Save future NeoErmac Tug Assignments updates when the screen is activated.",
     ),
     (
+        "neoermac.settings.view",
+        "simulator",
+        "View NeoErmac live refresh settings.",
+    ),
+    (
+        "neoermac.refresh_settings.edit",
+        "grandmaster",
+        "Edit NeoErmac shared live-screen refresh interval.",
+    ),
+    (
         "neosektor.dashboard.view",
         "watcher",
         "View the NeoSektor dashboard.",
@@ -1005,6 +1015,16 @@ PERMISSION_RULE_ITEMS = (
         {
             "view": "neoermac.tug_assignments.view",
             "edit": "neoermac.tug_assignments.edit",
+        },
+    ),
+    (
+        "ermac",
+        "neoermac.settings",
+        "Settings",
+        "NeoErmac shared live refresh setting.",
+        {
+            "view": "neoermac.settings.view",
+            "edit": "neoermac.refresh_settings.edit",
         },
     ),
     (

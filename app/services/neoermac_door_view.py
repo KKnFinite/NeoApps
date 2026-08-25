@@ -33,7 +33,7 @@ from app.services.gateway_matrix import (
     operation_is_active_at,
     sort_lookup_window_for_operation,
 )
-from app.services.node_refresh import sort_window_auto_refresh_status
+from app.services.neoermac_live_refresh import neoermac_live_refresh_status
 from app.services.operation_scope import current_unarchived_operation
 from app.services.neoermac_tail_presence import (
     arrival_presence_by_tail,
@@ -771,11 +771,7 @@ def door_tab_pull_alerts(
 
 
 def neoermac_refresh_status(gateway, operation=None, now=None):
-    return sort_window_auto_refresh_status(
-        gateway,
-        operation=operation,
-        now=now,
-    )
+    return neoermac_live_refresh_status(gateway)
 
 
 def current_door_view_operation(gateway):
@@ -1228,6 +1224,12 @@ def _status_for_card(mission, master, tail_presence=None):
         if override:
             return override
         status = str(getattr(mission, "departure_status", "") or "").strip()
+        if (
+            tail_presence
+            and tail_presence["state"] == "arrived"
+            and status.lower() in {"", "scheduled"}
+        ):
+            return "ARRIVED"
         return _labelize(status) if status else "Scheduled"
     if master:
         return "MASTER SCHEDULE"
