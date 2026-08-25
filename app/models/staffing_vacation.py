@@ -233,7 +233,8 @@ class StaffingVacationDaySelection(db.Model):
         ),
         db.CheckConstraint(
             "item_type IN ('split_vacation', 'd_day', 'optional_day', "
-            "'anniversary_day', 'floating_holiday')",
+            "'anniversary_day', 'floating_holiday', 'special_assignment', "
+            "'corporate_class')",
             name="ck_staffing_vacation_day_selections_item_type",
         ),
         db.CheckConstraint(

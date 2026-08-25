@@ -70,6 +70,12 @@ VACATION_SPLIT_ADMIN_CLASSIFICATIONS = frozenset(
 VACATION_DAY_ITEM_TYPES = frozenset(
     {"d_day", "optional_day", "anniversary_day", "floating_holiday"}
 )
+VACATION_AVAILABILITY_ITEM_TYPES = frozenset(
+    {"special_assignment", "corporate_class"}
+)
+VACATION_PINNED_RECIPIENT_CLASSIFICATIONS = frozenset(
+    {"full_time_supervisor", "manager"}
+)
 D_DAY_ENTITLEMENT = 5
 OPTIONAL_DAY_ENTITLEMENT = 4
 
@@ -497,16 +503,34 @@ def management_vacation_context(vacation_year, user, today=None):
             today=today,
         )
         capacity = capacity_by_area.get(area.id)
+        pinned_people = _management_pinned_people_for_area(
+            area, primary_by_person, hierarchy
+        )
+        pinned_week_status = _pinned_week_statuses(
+            pinned_people,
+            weeks,
+            selections_by_person,
+            day_rows_by_person,
+        )
         week_rows = []
         for week in weeks:
             used = used_by_area_week.get((area.id, week.week_ending), 0)
-            limit = capacity.normal_limit if capacity else None
+            pinned_statuses = pinned_week_status.get(week.week_ending, {})
+            unavailable_count = len(pinned_statuses)
+            reduced_on = week.week_ending not in off_weeks_by_area.get(area.id, set())
+            limit = management_capacity_limit(
+                capacity,
+                unavailable_count,
+                reduced_capacity_on=reduced_on,
+            )
             week_rows.append(
                 {
                     "week": week,
                     "used": used,
                     "limit": limit,
                     "full": limit is None or used >= limit,
+                    "over": limit is not None and used > limit,
+                    "pinned_unavailable_count": unavailable_count,
                 }
             )
         person_rows = []
@@ -596,6 +620,27 @@ def management_vacation_context(vacation_year, user, today=None):
                 "people": primary_people,
                 "person_rows": person_rows,
                 "secondary_people": secondary_people,
+                "pinned_rows": [
+                    {
+                        "person": person,
+                        "availability": _pinned_person_availability(
+                            person,
+                            selections_by_person,
+                            day_rows_by_person,
+                        ),
+                        "can_manage": _can_manage_management_days_for_area(
+                            actor,
+                            management_area_for_assignment(
+                                person,
+                                hierarchy["by_id"].get(
+                                    primary_by_person[person.id].unit_id
+                                ),
+                                hierarchy,
+                            ).id,
+                        ),
+                    }
+                    for person in pinned_people
+                ],
                 "capacity": capacity,
                 "week_rows": week_rows,
                 "turn": turn,
@@ -605,6 +650,7 @@ def management_vacation_context(vacation_year, user, today=None):
                 ),
                 "off_week_endings": off_weeks_by_area.get(area.id, set()),
                 "can_edit": can_edit_management_capacity(actor, area.id),
+                "over": any(row["over"] for row in week_rows),
             }
         )
     area_rows.sort(key=lambda row: _unit_sort_key(row["area"], hierarchy))
@@ -752,7 +798,13 @@ def add_management_weeks(
     )
     if not capacity:
         raise ValueError("Management capacity is not configured for this area and year.")
-    people = _management_people_for_area(area.id, hierarchy)
+    leadership_rows = _management_leadership_rows()
+    primary_assignments, _secondary = _primary_and_secondary_assignments(
+        leadership_rows
+    )
+    people = _management_people_for_area(
+        area.id, hierarchy, leadership_rows=leadership_rows
+    )
     all_person_selections = _management_active_selections_by_person(year)
     state = _locked_management_turn_state(
         year,
@@ -794,8 +846,42 @@ def add_management_weeks(
         raise ValueError("The selected weeks exceed the remaining vacation bank.")
 
     usage = _management_week_usage(year, normalized_weeks, hierarchy)
+    pinned_people = _management_pinned_people_for_area(
+        area, primary_assignments, hierarchy
+    )
+    pinned_ids = [person.id for person in pinned_people]
+    pinned_day_rows = {}
+    if pinned_ids:
+        for row in StaffingVacationDaySelection.query.filter(
+            StaffingVacationDaySelection.staffing_person_id.in_(pinned_ids),
+            StaffingVacationDaySelection.vacation_year == year,
+            StaffingVacationDaySelection.status == "scheduled",
+        ).all():
+            pinned_day_rows.setdefault(row.staffing_person_id, []).append(row)
+    pinned_statuses = _pinned_week_statuses(
+        pinned_people,
+        [
+            VacationWeek(year, week - timedelta(days=6), week)
+            for week in normalized_weeks
+        ],
+        all_person_selections,
+        pinned_day_rows,
+    )
+    reduced_off = {
+        row.week_ending
+        for row in StaffingVacationManagementWeekOverride.query.filter(
+            StaffingVacationManagementWeekOverride.vacation_year == year,
+            StaffingVacationManagementWeekOverride.area_unit_id == area.id,
+            StaffingVacationManagementWeekOverride.week_ending.in_(normalized_weeks),
+        ).all()
+    }
     for week in normalized_weeks:
-        if usage.get((area.id, week), 0) >= capacity.normal_limit:
+        effective_limit = management_capacity_limit(
+            capacity,
+            len(pinned_statuses.get(week, {})),
+            reduced_capacity_on=week not in reduced_off,
+        )
+        if usage.get((area.id, week), 0) >= effective_limit:
             raise ValueError(
                 f"Management capacity is full for WE {week.strftime('%b %d, %Y')}."
             )
@@ -1089,6 +1175,25 @@ def set_reduced_capacity_enabled(vacation_year, area_id, week_ending, enabled, u
         db.session.add(row)
     db.session.flush()
     return row
+
+
+def management_capacity_limit(
+    capacity,
+    pinned_unavailable_count,
+    *,
+    reduced_capacity_on=True,
+):
+    """Resolve one week's limit from yearly settings and derived availability."""
+    if not capacity:
+        return None
+    unavailable = _nonnegative_int(
+        pinned_unavailable_count, "Pinned unavailable count"
+    )
+    if not reduced_capacity_on or unavailable == 0:
+        return capacity.normal_limit
+    if unavailable == 1:
+        return capacity.one_pinned_limit
+    return capacity.two_plus_pinned_limit
 
 
 def create_union_calendar(values, user):
@@ -1683,6 +1788,63 @@ def cancel_vacation_entitlement_day(day_selection, user, *, today=None):
     return row
 
 
+def schedule_management_availability_day(
+    person,
+    availability_date,
+    item_type,
+    user,
+):
+    """Persist one exclusive Special Assignment or Corporate Class day."""
+    day = (
+        availability_date
+        if isinstance(availability_date, date)
+        else date.fromisoformat(str(availability_date))
+    )
+    item_type = str(item_type or "").strip().casefold()
+    if item_type not in VACATION_AVAILABILITY_ITEM_TYPES:
+        raise ValueError("Choose Special Assignment or Corporate Class.")
+    person = _locked_person(person)
+    actor = _authorize_management_availability_write(person, user)
+    _ensure_time_off_day_available(person.id, day)
+    now = datetime.utcnow()
+    row = StaffingVacationDaySelection(
+        staffing_person_id=person.id,
+        vacation_year=day.year,
+        vacation_date=day,
+        item_type=item_type,
+        status="scheduled",
+        entered_by_user_id=getattr(user, "id", None),
+        created_at=now,
+        updated_at=now,
+    )
+    db.session.add(row)
+    db.session.flush()
+    return row
+
+
+def cancel_management_availability_day(day_selection, user):
+    """Remove an availability entry, including a past correction."""
+    row = StaffingVacationDaySelection.query.filter(
+        StaffingVacationDaySelection.id
+        == _positive_int(getattr(day_selection, "id", day_selection), "availability day"),
+        StaffingVacationDaySelection.item_type.in_(
+            VACATION_AVAILABILITY_ITEM_TYPES
+        ),
+        StaffingVacationDaySelection.status == "scheduled",
+    ).with_for_update().first()
+    if not row:
+        raise ValueError("The availability entry is no longer active.")
+    person = _locked_person(row.staffing_person_id)
+    _authorize_management_availability_write(person, user)
+    now = datetime.utcnow()
+    row.status = "cancelled"
+    row.cancelled_by_user_id = getattr(user, "id", None)
+    row.cancelled_at = now
+    row.updated_at = now
+    db.session.flush()
+    return row
+
+
 def recombine_split_vacation_week(conversion, user):
     """Return an untouched five-day conversion to a generic unused week bank."""
     conversion = _locked_active_conversion(conversion)
@@ -1948,6 +2110,28 @@ def _authorize_vacation_day_write(person, program, user, *, vacation_year):
     if not calendar or not _union_actor_entry_status(actor, calendar):
         raise ValueError("You do not have authority to manage these Union vacation days.")
     return actor, calendar
+
+
+def _authorize_management_availability_write(person, user):
+    if person.classification not in VACATION_PINNED_RECIPIENT_CLASSIFICATIONS:
+        raise ValueError(
+            "Only an FT Supervisor or Manager may receive this availability status."
+        )
+    hierarchy = vacation_hierarchy()
+    actor = vacation_actor(user, hierarchy)
+    area = management_primary_area(person, hierarchy)
+    if not area:
+        raise ValueError("The selected person has no active primary Management area.")
+    if actor.is_grandmaster:
+        return actor
+    if not (
+        actor.person
+        and actor.person.classification
+        in {"full_time_supervisor", "manager"}
+        and can_edit_management_capacity(actor, area.id)
+    ):
+        raise ValueError("You do not have authority to manage this person's availability.")
+    return actor
 
 
 def _enforce_union_day_capacity(
@@ -2613,9 +2797,118 @@ def _primary_and_secondary_assignments(leadership_rows):
     return primary, secondary
 
 
-def _management_people_for_area(area_id, hierarchy):
+def _management_pinned_people_for_area(area, primary_assignments, hierarchy):
+    """Return the established one-level-up people whose absence reduces a pool."""
+    target_classification = {
+        "department": "full_time_supervisor",
+        "operation": "manager",
+        "sort": "division_manager",
+    }.get(area.unit_type)
+    if not target_classification:
+        return []
+    people = []
+    for assignment in primary_assignments.values():
+        if assignment.person.classification != target_classification:
+            continue
+        assigned_unit = hierarchy["by_id"].get(assignment.unit_id)
+        if not assigned_unit:
+            continue
+        if area.unit_type == "department":
+            oversees = _is_descendant_or_self(
+                area.id, assigned_unit.id, hierarchy
+            )
+        elif area.unit_type == "operation":
+            oversees = bool(
+                _ancestor_of_type(assigned_unit, "operation", hierarchy)
+                and _ancestor_of_type(assigned_unit, "operation", hierarchy).id
+                == area.id
+            )
+        else:
+            assigned_sort = _ancestor_of_type(assigned_unit, "sort", hierarchy)
+            oversees = bool(assigned_sort and assigned_sort.id == area.id)
+        if oversees:
+            people.append(assignment.person)
+    return _seniority_order(people)
+
+
+def _pinned_week_statuses(
+    pinned_people,
+    weeks,
+    selections_by_person,
+    day_rows_by_person,
+):
+    statuses = {week.week_ending: {} for week in weeks}
+    week_by_date = {
+        week.start_date + timedelta(days=offset): week.week_ending
+        for week in weeks
+        for offset in range(7)
+    }
+    pinned_ids = {person.id for person in pinned_people}
+    for person in pinned_people:
+        for selection in selections_by_person.get(person.id, ()):
+            week_ending = getattr(selection, "week_ending", None)
+            if week_ending in statuses:
+                statuses[week_ending].setdefault(person.id, set()).add("vacation")
+    for person_id in pinned_ids:
+        for row in day_rows_by_person.get(person_id, ()):
+            week_ending = week_by_date.get(row.vacation_date)
+            if not week_ending:
+                continue
+            label = (
+                row.item_type
+                if row.item_type in VACATION_AVAILABILITY_ITEM_TYPES
+                else "vacation"
+            )
+            statuses[week_ending].setdefault(person_id, set()).add(label)
+    return statuses
+
+
+def _pinned_person_availability(
+    person,
+    selections_by_person,
+    day_rows_by_person,
+):
+    rows = []
+    for selection in selections_by_person.get(person.id, ()):
+        week_ending = getattr(selection, "week_ending", None)
+        if week_ending:
+            rows.append(
+                {
+                    "kind": "vacation",
+                    "label": "VACATION",
+                    "date": week_ending,
+                    "selection": selection,
+                }
+            )
+    labels = {
+        "special_assignment": "SPECIAL ASSIGNMENT",
+        "corporate_class": "CORPORATE CLASS",
+    }
+    for row in day_rows_by_person.get(person.id, ()):
+        if row.item_type in VACATION_AVAILABILITY_ITEM_TYPES:
+            rows.append(
+                {
+                    "kind": row.item_type,
+                    "label": labels[row.item_type],
+                    "date": row.vacation_date,
+                    "day": row,
+                }
+            )
+        elif row.item_type in VACATION_DAY_ITEM_TYPES or row.item_type == "split_vacation":
+            rows.append(
+                {
+                    "kind": "vacation",
+                    "label": "VACATION",
+                    "date": row.vacation_date,
+                    "day": row,
+                }
+            )
+    return sorted(rows, key=lambda item: (item["date"], item["label"]))
+
+
+def _management_people_for_area(area_id, hierarchy, *, leadership_rows=None):
     primary, _secondary = _primary_and_secondary_assignments(
-        _management_leadership_rows()
+        leadership_rows or _management_leadership_rows()
     )
     people = []
     for assignment in primary.values():

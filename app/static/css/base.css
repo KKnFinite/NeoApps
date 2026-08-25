@@ -28654,6 +28654,15 @@ body:has(.neostaffing-vacation-console) { overflow-x:clip; }
 .neostaffing-vacation-turn-status form { margin:0; }
 .neostaffing-vacation-turn-status button,.neostaffing-vacation-pick-action button { min-height:25px; padding:4px 7px; border:1px solid #2d7878; border-radius:3px; background:#123f43; color:#dffcf9; font:800 .58rem/1 inherit; letter-spacing:.04em; cursor:pointer; }
 .neostaffing-vacation-roster { min-width:0; }
+.neostaffing-vacation-pinned { display:grid; gap:3px; padding:5px 9px; border-bottom:1px solid #28515a; background:#0b2026; }
+.neostaffing-vacation-pinned > header,.neostaffing-vacation-pinned-row { display:flex; align-items:center; gap:8px; min-width:0; }
+.neostaffing-vacation-pinned > header { justify-content:space-between; color:#83bdbc; font-size:.56rem; letter-spacing:.08em; }
+.neostaffing-vacation-pinned-row { min-height:27px; color:#cce4e3; font-size:.62rem; }
+.neostaffing-vacation-pinned-row > span:first-child { display:grid; min-width:180px; }
+.neostaffing-vacation-pinned-row small { color:#6e9297; font-size:.52rem; }
+.neostaffing-vacation-pinned-row > span:nth-child(2) { display:flex; flex:1; flex-wrap:wrap; gap:4px; }
+.neostaffing-vacation-pinned-row em { padding:2px 5px; border:1px solid #2b5e63; color:#b8d9d7; font-size:.55rem; font-style:normal; }
+.neostaffing-vacation-pinned-row form { display:flex; align-items:center; gap:4px; margin-left:auto; }
 .neostaffing-vacation-roster-head,.neostaffing-vacation-roster-row { display:grid; grid-template-columns:minmax(190px,1.1fr) 84px minmax(260px,1.7fr) minmax(180px,1fr); align-items:center; gap:7px; min-height:34px; padding:4px 9px; border-bottom:1px solid rgba(34,72,80,.62); }
 .neostaffing-vacation-roster-head { min-height:24px; background:#08171c; color:#6f969a; font-size:.54rem; font-weight:900; letter-spacing:.07em; }
 .neostaffing-vacation-roster-row.is-active-turn { background:linear-gradient(90deg,rgba(31,99,97,.2),transparent 46%); }

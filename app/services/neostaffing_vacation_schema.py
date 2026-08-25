@@ -80,7 +80,8 @@ def ensure_neostaffing_vacation_tables(app):
                     "ALTER TABLE staffing_vacation_day_selections ADD CONSTRAINT "
                     "ck_staffing_vacation_day_selections_item_type CHECK "
                     "(item_type IN ('split_vacation', 'd_day', 'optional_day', "
-                    "'anniversary_day', 'floating_holiday'))"
+                    "'anniversary_day', 'floating_holiday', 'special_assignment', "
+                    "'corporate_class'))"
                 )
             )
             connection.execute(

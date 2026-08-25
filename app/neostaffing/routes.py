@@ -1138,6 +1138,41 @@ def vacation_day_cancel(day_id):
     return redirect(_vacation_program_url(program, vacation_year))
 
 
+@bp.post("/vacation-selection/management/availability")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_management_availability():
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.schedule_management_availability_day(
+            request.form.get("staffing_person_id"),
+            request.form.get("availability_date"),
+            request.form.get("item_type"),
+            current_user,
+        )
+        db.session.commit()
+    except (TypeError, ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Management availability updated.", "success")
+    return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
+
+
+@bp.post("/vacation-selection/management/availability/<int:day_id>/remove")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_management_availability_remove(day_id):
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.cancel_management_availability_day(day_id, current_user)
+        db.session.commit()
+    except (TypeError, ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Management availability entry removed.", "success")
+    return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
+
+
 @bp.post("/vacation-selection/split-week/<int:conversion_id>/recombine")
 @neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
 def vacation_split_week_recombine(conversion_id):

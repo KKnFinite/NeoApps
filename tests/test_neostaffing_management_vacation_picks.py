@@ -637,6 +637,158 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         )
         self.assertEqual(row.item_type, "anniversary_day")
 
+    def test_special_assignment_and_corporate_class_eligibility_and_exclusivity(self):
+        ft, ft_user = self._management_user(
+            "MVP1", "Pinned", "FT", "1990-01-01", "full_time_supervisor"
+        )
+        manager, manager_user = self._management_user(
+            "MVP2", "Pinned", "Manager", "1990-01-01", "manager"
+        )
+        pt, pt_user = self._management_user(
+            "MVP3", "Pinned", "PT", "1990-01-01", "part_time_supervisor"
+        )
+        special = vacation_service.schedule_management_availability_day(
+            ft, date(self.YEAR, 4, 5), "special_assignment", ft_user
+        )
+        corporate = vacation_service.schedule_management_availability_day(
+            manager, date(self.YEAR, 4, 6), "corporate_class", manager_user
+        )
+        self.assertEqual(
+            (special.item_type, corporate.item_type),
+            ("special_assignment", "corporate_class"),
+        )
+        with self.assertRaisesRegex(ValueError, "Only an FT Supervisor or Manager"):
+            vacation_service.schedule_management_availability_day(
+                pt, date(self.YEAR, 4, 7), "special_assignment", ft_user
+            )
+        with self.assertRaisesRegex(ValueError, "do not have authority"):
+            vacation_service.schedule_management_availability_day(
+                ft, date(self.YEAR, 4, 8), "corporate_class", pt_user
+            )
+        with self.assertRaisesRegex(ValueError, "already has a time-off item"):
+            vacation_service.schedule_vacation_entitlement_day(
+                ft,
+                special.vacation_date,
+                "d_day",
+                ft_user,
+                program="management",
+            )
+        db.session.rollback()
+
+    def test_pinned_unavailability_selects_limits_grandfathers_and_recalculates(self):
+        pt_one, _ = self._management_user(
+            "MVC1", "One", "PT", "1990-01-01", "part_time_supervisor"
+        )
+        pt_two, _ = self._management_user(
+            "MVC2", "Two", "PT", "1991-01-01", "part_time_supervisor"
+        )
+        ft_one, ft_user = self._management_user(
+            "MVC3", "One", "FT", "1980-01-01", "full_time_supervisor"
+        )
+        ft_two, _ = self._management_user(
+            "MVC4", "Two", "FT", "1981-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["blue_department"], 3)
+        capacity = StaffingVacationManagementCapacity.query.filter_by(
+            area_unit_id=self.units["blue_department"].id
+        ).one()
+        capacity.one_pinned_limit = 2
+        capacity.two_plus_pinned_limit = 1
+        week_ending = date(self.YEAR, 5, 8)
+        db.session.add_all(
+            [
+                StaffingVacationManagementSelection(
+                    staffing_person_id=person.id,
+                    vacation_year=self.YEAR,
+                    week_ending=week_ending,
+                )
+                for person in (pt_one, pt_two)
+            ]
+        )
+        first = vacation_service.schedule_management_availability_day(
+            ft_one, date(self.YEAR, 5, 3), "special_assignment", ft_user
+        )
+        second = vacation_service.schedule_management_availability_day(
+            ft_two, date(self.YEAR, 5, 4), "corporate_class", ft_user
+        )
+        db.session.commit()
+
+        context = vacation_service.management_vacation_context(
+            self.YEAR, ft_user, today=self.OPEN_DAY
+        )
+        area = self._area_row(context, self.units["blue_department"])
+        week = next(
+            row for row in area["week_rows"] if row["week"].week_ending == week_ending
+        )
+        self.assertEqual(
+            (week["pinned_unavailable_count"], week["limit"], week["over"]),
+            (2, 1, True),
+        )
+        self.assertEqual(len(area["pinned_rows"]), 2)
+
+        vacation_service.cancel_management_availability_day(second, ft_user)
+        db.session.commit()
+        context = vacation_service.management_vacation_context(
+            self.YEAR, ft_user, today=self.OPEN_DAY
+        )
+        area = self._area_row(context, self.units["blue_department"])
+        week = next(
+            row for row in area["week_rows"] if row["week"].week_ending == week_ending
+        )
+        self.assertEqual(
+            (week["pinned_unavailable_count"], week["limit"], week["over"]),
+            (1, 2, False),
+        )
+
+        vacation_service.set_reduced_capacity_enabled(
+            self.YEAR,
+            self.units["blue_department"].id,
+            week_ending,
+            False,
+            ft_user,
+        )
+        db.session.commit()
+        context = vacation_service.management_vacation_context(
+            self.YEAR, ft_user, today=self.OPEN_DAY
+        )
+        area = self._area_row(context, self.units["blue_department"])
+        week = next(
+            row for row in area["week_rows"] if row["week"].week_ending == week_ending
+        )
+        self.assertEqual((week["limit"], week["over"]), (3, False))
+        self.assertEqual(
+            vacation_service.management_capacity_limit(capacity, 0), 3
+        )
+        self.assertEqual(
+            vacation_service.management_capacity_limit(capacity, 1), 2
+        )
+        self.assertEqual(
+            vacation_service.management_capacity_limit(capacity, 2), 1
+        )
+        self.assertEqual(
+            vacation_service.management_capacity_limit(
+                capacity, 2, reduced_capacity_on=False
+            ),
+            3,
+        )
+
+    def test_availability_route_requires_csrf(self):
+        ft, ft_user = self._management_user(
+            "MVR1", "Route", "FT", "1990-01-01", "full_time_supervisor"
+        )
+        self._login(ft_user)
+        self.app.config["CSRF_PROTECT_TESTING"] = True
+        response = self.client.post(
+            "/neostaffing/vacation-selection/management/availability",
+            data={
+                "vacation_year": self.YEAR,
+                "staffing_person_id": ft.id,
+                "availability_date": f"{self.YEAR}-06-01",
+                "item_type": "special_assignment",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+
     def _management_user(
         self,
         employee_id,
