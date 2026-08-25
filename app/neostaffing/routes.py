@@ -412,7 +412,6 @@ def move_shift_flow_final_composite(person_id):
             person,
             payload.get("final_door_id"),
             payload.get("band"),
-            payload.get("setup_section"),
             assignment.work_area if assignment else None,
             payload.get("expected_version"),
         )
@@ -426,7 +425,12 @@ def move_shift_flow_final_composite(person_id):
     plan = result["plan"]
     return jsonify({
         "ok": True, "changed": result["changed"], "person_id": person.id,
+        "created": result.get("created", False),
         "plan_version": result["version"],
+        "final_door_work_area_id": plan.final_door_work_area_id,
+        "sort_start_work_area_id": plan.sort_start_work_area_id,
+        "ballmat_transition": plan.ballmat_transition,
+        "setup_assignment": staffing_service.shift_flow_setup_assignment_label(plan),
         "shorthand": staffing_service.shift_flow_shorthand(plan),
     })
 

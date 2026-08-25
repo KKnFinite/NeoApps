@@ -233,6 +233,80 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertTrue(moved.get_json()["changed"])
         self.assertEqual(db.session.get(StaffingShiftFlowPlan, plan.id).final_door_work_area_id, door_two.id)
 
+    def test_final_composite_attention_drop_authorization_creation_and_conflict(self):
+        simulator = self._user("composite_drag_simulator")
+        watcher = self._user("composite_drag_watcher")
+        self._grant_app_access(simulator, "neostaffing", "simulator")
+        self._grant_app_access(watcher, "neostaffing", "watcher")
+        night = staffing_service.create_unit({"unit_type": "sort", "name": "Night"})
+        ramp = staffing_service.create_unit({"unit_type": "operation", "name": "Ramp", "parent_id": night.id})
+        shift = staffing_service.create_unit({"unit_type": "department", "name": "Shift", "parent_id": ramp.id})
+        areas = {}
+        for name in (
+            "Door 34", "Door 32", "Door 29", "Door 26", "Door 24", "Door 21",
+            "Door 17", "Door 13", "Door 9", "Door 6", "Door 4", "Door 1",
+            "East Ballmat", "West Ballmat", "Discharge",
+        ):
+            areas[name] = staffing_service.create_unit(
+                {"unit_type": "work_area", "name": name, "parent_id": shift.id}
+            )
+        person = staffing_service.create_person({
+            "employee_id": "COMP100", "first_name": "Flow", "last_name": "Attention",
+            "seniority_date": "2020-01-01", "classification": "part_time", "employee_status": "active",
+        })
+        staffing_service.assign_work_area(person, areas["Door 34"])
+        db.session.commit()
+
+        self._login(watcher.username)
+        read_only_page = self.client.get("/neostaffing/shift-flow?phase=final_door&side=east")
+        self.assertNotIn(b'data-shift-flow-composite-board', read_only_page.data)
+        blocked = self.client.post(
+            f"/neostaffing/shift-flow/{person.id}/final-composite",
+            json={"final_door_id": areas["Door 24"].id, "band": "bm1", "expected_version": ""},
+        )
+        self.assertEqual(blocked.status_code, 302)
+        self.assertIsNone(StaffingShiftFlowPlan.query.filter_by(staffing_person_id=person.id).first())
+
+        client = self._logged_in_client(simulator.username)
+        self.app.config["CSRF_PROTECT_TESTING"] = True
+        page = client.get("/neostaffing/shift-flow?phase=final_door&side=east")
+        self.assertIn(b'data-shift-flow-composite-board', page.data)
+        self.assertIn(b'is-needs-attention-source', page.data)
+        token = re.search(r'<meta name="csrf-token" content="([^"]+)">', page.get_data(as_text=True)).group(1)
+        missing_csrf = client.post(
+            f"/neostaffing/shift-flow/{person.id}/final-composite",
+            json={"final_door_id": areas["Door 24"].id, "band": "bm1", "expected_version": ""},
+            headers={"Accept": "application/json"},
+        )
+        self.assertEqual(missing_csrf.status_code, 400)
+        created = client.post(
+            f"/neostaffing/shift-flow/{person.id}/final-composite",
+            json={"final_door_id": areas["Door 24"].id, "band": "bm1", "expected_version": ""},
+            headers={"Accept": "application/json", "X-CSRF-Token": token},
+        )
+        self.assertEqual(created.status_code, 200)
+        self.assertTrue(created.get_json()["created"])
+        plan = StaffingShiftFlowPlan.query.filter_by(staffing_person_id=person.id).one()
+        self.assertEqual(plan.final_door_work_area_id, areas["Door 24"].id)
+        self.assertEqual(plan.sort_start_work_area_id, areas["East Ballmat"].id)
+        self.assertEqual(plan.ballmat_transition, 1)
+        self.assertIsNone(plan.setup_work_area_id)
+
+        stale_version = created.get_json()["plan_version"]
+        plan.setup_work_area = areas["Door 34"]
+        db.session.commit()
+        stale = client.post(
+            f"/neostaffing/shift-flow/{person.id}/final-composite",
+            json={"final_door_id": areas["Door 21"].id, "band": "bm3", "expected_version": stale_version},
+            headers={"Accept": "application/json", "X-CSRF-Token": token},
+        )
+        self.assertEqual(stale.status_code, 409)
+        db.session.refresh(plan)
+        self.assertEqual(plan.final_door_work_area_id, areas["Door 24"].id)
+        self.assertEqual(plan.sort_start_work_area_id, areas["East Ballmat"].id)
+        self.assertEqual(plan.ballmat_transition, 1)
+        self.assertEqual(plan.setup_work_area_id, areas["Door 34"].id)
+
     def test_legacy_people_attendance_redirects_to_main_attendance(self):
         user = self._user("staffing_attendance_legacy")
         self._grant_app_access(user, "neostaffing", "operator")

@@ -517,15 +517,17 @@ def _shift_flow_composite_configuration(shift_areas, side):
     }
 
 
-def _shift_flow_composite_placement(plan, configurations, door_side_by_id):
+def _shift_flow_composite_placement(
+    plan, configurations, door_side_by_id, valid_setup_area_ids
+):
     """Return a valid composite placement or a concise attention reason."""
     if not plan:
         return None, "FLOW NOT SET — plan required."
-    if plan.setup_work_area_id and shift_work_area_type(plan.setup_work_area) not in {
-        SHIFT_FLOW_DOOR,
-        SHIFT_FLOW_BALLMAT,
-    }:
-        return None, "Setup Assignment is not a Shift Door or Ballmat."
+    if (
+        plan.setup_work_area_id
+        and plan.setup_work_area_id not in valid_setup_area_ids
+    ):
+        return None, "Setup Assignment is not a valid Shift Door or Ballmat."
     final_side = door_side_by_id.get(plan.final_door_work_area_id)
     if not final_side:
         return None, "Final Door is not a configured East/West final door."
@@ -534,8 +536,12 @@ def _shift_flow_composite_placement(plan, configurations, door_side_by_id):
     start = plan.sort_start_work_area
     if not start:
         return None, "Sort Start Work Area required."
-    if start.id == final_door.id and plan.ballmat_transition is None:
-        return (final_side, final_door, "at_door"), None
+    if plan.ballmat_transition not in {None, 1, 2, 3}:
+        return None, "Ballmat Transition must be 1, 2, or 3."
+    if start.id == final_door.id:
+        if plan.ballmat_transition is None:
+            return (final_side, final_door, "at_door"), None
+        return None, "Ballmat Transition is only used when Sort Start is Ballmat."
     if configuration["ballmat"] and start.id == configuration["ballmat"].id:
         if plan.ballmat_transition in {1, 2, 3}:
             return (final_side, final_door, f"bm{plan.ballmat_transition}"), None
@@ -544,7 +550,12 @@ def _shift_flow_composite_placement(plan, configurations, door_side_by_id):
         if plan.ballmat_transition is None:
             return (final_side, final_door, "discharge"), None
         return None, "Ballmat Transition is only used when Sort Start is Ballmat."
-    return None, "Sort Start does not match this Final Door flow."
+    start_type = shift_work_area_type(start)
+    if start_type == SHIFT_FLOW_BALLMAT:
+        return None, "Sort Start Ballmat does not match the Final Door side."
+    if start_type == SHIFT_FLOW_DOOR:
+        return None, "Sort Start Door must match Final Door."
+    return None, "Sort Start is not a valid Final Door flow location."
 
 
 def shift_flow_final_door_composite(shift_areas, side="east", rows=()):
@@ -561,17 +572,16 @@ def shift_flow_final_door_composite(shift_areas, side="east", rows=()):
     ballmat = configuration["ballmat"]
     discharge = configuration["discharge"]
 
+    valid_setup_area_ids = {
+        area.id
+        for area in shift_areas
+        if shift_work_area_type(area) in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT}
+    }
     columns = []
     for door in doors:
         bands = []
         for key, band_label in SHIFT_FLOW_COMPOSITE_BANDS:
-            bands.append(
-                {
-                    "key": key,
-                    "label": band_label,
-                    "sections": {"setup": [], "non_setup": []},
-                }
-            )
+            bands.append({"key": key, "label": band_label, "rows": []})
         columns.append({"door": door, "bands": bands})
     cells = {
         (column["door"].id, band["key"]): band
@@ -585,26 +595,35 @@ def shift_flow_final_door_composite(shift_areas, side="east", rows=()):
     needs_attention = []
     opposite_side = []
     for row in rows:
+        projected_row = {
+            **row,
+            "setup_assignment": shift_flow_setup_assignment_label(row["plan"]),
+        }
         placement, reason = _shift_flow_composite_placement(
-            row["plan"], configurations, door_side_by_id
+            row["plan"], configurations, door_side_by_id, valid_setup_area_ids
         )
         if reason:
-            needs_attention.append({**row, "attention_reason": reason})
+            needs_attention.append({**projected_row, "attention_reason": reason})
             continue
         placement_side, door, band = placement
         if placement_side != side:
-            opposite_side.append(row)
+            opposite_side.append(projected_row)
             continue
-        cell = cells[(door.id, band)]
-        cell["sections"]["setup" if row["plan"].setup_work_area_id else "non_setup"].append(row)
+        cells[(door.id, band)]["rows"].append(projected_row)
     for cell in cells.values():
-        for section_rows in cell["sections"].values():
-            section_rows.sort(key=lambda row: (row["person"].last_name.casefold(), row["person"].first_name.casefold()))
-    placed_count = sum(
-        len(section_rows)
-        for cell in cells.values()
-        for section_rows in cell["sections"].values()
+        cell["rows"].sort(
+            key=lambda row: (
+                row["person"].last_name.casefold(),
+                row["person"].first_name.casefold(),
+            )
+        )
+    needs_attention.sort(
+        key=lambda row: (
+            row["person"].last_name.casefold(),
+            row["person"].first_name.casefold(),
+        )
     )
+    placed_count = sum(len(cell["rows"]) for cell in cells.values())
     return {
         "side": side,
         "side_label": label,
@@ -623,60 +642,83 @@ def shift_flow_final_door_composite(shift_areas, side="east", rows=()):
     }
 
 
-def move_shift_flow_final_composite(person, final_door_id, band, setup_section, selected_work_area, expected_version):
-    """Apply a Final Door composite-cell move as one validated plan mutation."""
+def move_shift_flow_final_composite(
+    person, final_door_id, band, selected_work_area, expected_version
+):
+    """Create, repair, or move a plan through one atomic composite-cell drop."""
     plan = person.shift_flow_plan or StaffingShiftFlowPlan.query.filter_by(staffing_person_id=person.id).first()
-    if not plan:
-        raise ValueError("FLOW NOT SET employees cannot be moved by drag and drop.")
-    if not str(expected_version or "").strip():
-        raise ValueError("Shift Flow changed. Reload and try again.")
-    conflict = version_conflict(plan, expected_version)
-    if conflict:
-        return {"conflict": conflict}
+    created = plan is None
+    if plan:
+        if not str(expected_version or "").strip():
+            raise ValueError("Shift Flow changed. Reload and try again.")
+        conflict = version_conflict(plan, expected_version)
+        if conflict:
+            return {"conflict": conflict}
     if band not in {key for key, _label in SHIFT_FLOW_COMPOSITE_BANDS}:
         raise ValueError("Choose a valid Final Door flow band.")
-    if setup_section not in {"setup", "non_setup"}:
-        raise ValueError("Choose a valid Final Door setup section.")
 
     areas = shift_flow_area_options(selected_work_area)
-    composite = shift_flow_final_door_composite(areas, "east")
-    all_doors = {door.id: ("east", door) for door in composite["doors"]}
-    west = shift_flow_final_door_composite(areas, "west")
-    all_doors.update({door.id: ("west", door) for door in west["doors"]})
+    configurations = {
+        side: _shift_flow_composite_configuration(areas, side)
+        for side, _label, _doors in SHIFT_FLOW_COMPOSITE_SIDES
+    }
+    all_doors = {
+        door.id: (side, door)
+        for side, configuration in configurations.items()
+        for door in configuration["doors"]
+    }
     target = all_doors.get(_shift_flow_int(final_door_id))
     if not target:
         raise ValueError("Final Door must be one of the configured East or West doors.")
     side, final_door = target
-    side_board = composite if side == "east" else west
-    if side_board["issues"]:
+    configuration = configurations[side]
+    if configuration["issues"]:
         raise ValueError("Shift Flow composite configuration is incomplete.")
     if band in {"bm1", "bm2", "bm3"}:
-        sort_start = side_board["ballmat"]
+        sort_start = configuration["ballmat"]
         transition = int(band[-1])
     elif band == "discharge":
-        sort_start = side_board["discharge"]
+        sort_start = configuration["discharge"]
         transition = None
     else:
         sort_start = final_door
         transition = None
-    if setup_section == "setup" and not plan.setup_work_area_id:
-        raise ValueError("Assign an exact Setup Assignment in SETUP before moving to a SETUP section.")
+    valid_setup_area_ids = {
+        area.id
+        for area in areas
+        if shift_work_area_type(area) in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT}
+    }
+    setup_repaired = False
+    if created:
+        plan = StaffingShiftFlowPlan(person=person)
+        db.session.add(plan)
+    elif (
+        plan.setup_work_area_id
+        and plan.setup_work_area_id not in valid_setup_area_ids
+    ):
+        # Repair invalid legacy setup data without inventing a location.
+        plan.setup_work_area = None
+        setup_repaired = True
 
     changed = any((
+        created,
+        setup_repaired,
         plan.final_door_work_area_id != final_door.id,
         plan.sort_start_work_area_id != sort_start.id,
         plan.ballmat_transition != transition,
-        setup_section == "non_setup" and plan.setup_work_area_id is not None,
     ))
     if not changed:
         return {"changed": False, "plan": plan, "version": entity_version(plan)}
     plan.final_door_work_area = final_door
     plan.sort_start_work_area = sort_start
     plan.ballmat_transition = transition
-    if setup_section == "non_setup":
-        plan.setup_work_area = None
     db.session.flush()
-    return {"changed": True, "plan": plan, "version": entity_version(plan)}
+    return {
+        "changed": True,
+        "created": created,
+        "plan": plan,
+        "version": entity_version(plan),
+    }
 
 
 def _shift_flow_composite_area(areas, side, area_type, issues):
@@ -787,7 +829,7 @@ def shift_flow_context(phase="final_door", side="east"):
             )
             continue
         location = _shift_flow_phase_area(plan, phase)
-        group = groups_by_id.get(location.id, flow_not_set)
+        group = groups_by_id.get(getattr(location, "id", None), flow_not_set)
         group["rows"].append(
             {"person": person, "plan": plan, "assignment": assignment,
              "shorthand": shift_flow_shorthand(plan)}
@@ -833,6 +875,28 @@ def _shift_flow_phase_area(plan, phase):
 
 def _shift_flow_virtual_area(name):
     return type("ShiftFlowVirtualArea", (), {"id": name, "name": name, "display_order": -1})()
+
+
+def _shift_flow_area_short_label(area):
+    name = (getattr(area, "name", "") or "").strip()
+    lowered = name.casefold()
+    if "west ballmat" in lowered or lowered == "wbm":
+        return "WBM"
+    if "east ballmat" in lowered or lowered == "ebm":
+        return "EBM"
+    if "discharge" in lowered:
+        return "DIS"
+    match = re.search(r"door\s*(\d+)", name, re.I)
+    return f"D{match.group(1)}" if match else name
+
+
+def shift_flow_setup_assignment_label(plan):
+    """Show the exact independent Setup Assignment used by one plan."""
+    if not plan or not plan.setup_work_area_id:
+        return "NO SETUP"
+    if not plan.setup_work_area:
+        return f"SET UNKNOWN #{plan.setup_work_area_id}"
+    return f"SET {_shift_flow_area_short_label(plan.setup_work_area)}"
 
 
 def shift_flow_shorthand(plan):
@@ -1019,22 +1083,10 @@ def operational_flow_shorthand(plan):
     if not plan:
         return "FLOW NOT SET"
 
-    def label(area):
-        name = (getattr(area, "name", "") or "").strip()
-        lowered = name.casefold()
-        if "west ballmat" in lowered:
-            return "WBM"
-        if "east ballmat" in lowered:
-            return "EBM"
-        if "discharge" in lowered:
-            return "DIS"
-        match = re.search(r"door\s*(\d+)", name, re.I)
-        return f"D{match.group(1)}" if match else name
-
     parts = []
     if plan.setup_work_area:
-        parts.append(f"SET {label(plan.setup_work_area)}")
-    parts.append(label(plan.sort_start_work_area))
+        parts.append(f"SET {_shift_flow_area_short_label(plan.setup_work_area)}")
+    parts.append(_shift_flow_area_short_label(plan.sort_start_work_area))
     if plan.ballmat_transition:
         parts.append(f"W{plan.ballmat_transition}")
     if (
@@ -1044,7 +1096,7 @@ def operational_flow_shorthand(plan):
             or plan.ballmat_transition
         )
     ):
-        parts.append(label(plan.final_door_work_area))
+        parts.append(_shift_flow_area_short_label(plan.final_door_work_area))
     return " → ".join(parts)
 
 
