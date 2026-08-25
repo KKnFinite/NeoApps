@@ -265,7 +265,11 @@
         if (button) button.disabled = true;
         setStatus(status, "Saving...");
         try {
-            const response = await fetch(form.action, {
+            // The hidden operational field is named "action". HTML form named
+            // properties can therefore shadow HTMLFormElement.action and turn
+            // form.action into the input element instead of the endpoint URL.
+            const actionUrl = form.getAttribute("action");
+            const response = await fetch(actionUrl, {
                 method: "POST",
                 body: new FormData(form),
                 cache: "no-store",

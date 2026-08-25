@@ -1,5 +1,6 @@
 import unittest
 from datetime import date, datetime, time
+from pathlib import Path
 from unittest.mock import patch
 
 from sqlalchemy import event
@@ -375,7 +376,7 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
             2026, 8, 17, 22, 0
         )
-        truck = self._add_truck("TRUCK CARD", capacity=8000)
+        truck = self._add_truck("TRUCK CARD", capacity=9500)
         db.session.commit()
         self.client.post(
             "/neoscorpion/fuel-dispatch/assets",
@@ -383,8 +384,8 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
                 "action": "add_truck",
                 "fuel_truck_id": str(truck.id),
                 "status": "available",
-                "starting_gallons": "6000",
-                "current_gallons": "6000",
+                "starting_gallons": "9500",
+                "current_gallons": "9500",
             },
         )
         selected = NeoScorpionSortTruck.query.filter_by(
@@ -403,9 +404,10 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
         topped_off = self.client.post(
             "/neoscorpion/fuel-dispatch/assets",
             data={**card_data, "action": "mark_topping_off"},
-            headers=headers,
         )
         self.assertEqual(topped_off.status_code, 200)
+        self.assertEqual(topped_off.content_type, "application/json")
+        self.assertNotIn("Location", topped_off.headers)
         self.assertEqual(topped_off.json, {"ok": True, "changed": True, "revision": 2})
         db.session.refresh(selected)
         self.assertEqual(selected.status, "topping_off")
@@ -430,7 +432,7 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
         self.assertIn("Enter current gallons", missing_gallons.json["error"])
         over_capacity = self.client.post(
             "/neoscorpion/fuel-dispatch/assets",
-            data={**card_data, "action": "complete_top_off", "current_gallons": "8001"},
+            data={**card_data, "action": "complete_top_off", "current_gallons": "9501"},
             headers=headers,
         )
         self.assertEqual(over_capacity.status_code, 400)
@@ -561,6 +563,79 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
             ordinary_assets.headers["Location"],
             "/neoscorpion/fuel-dispatch?assets=open#manage-tonights-assets",
         )
+
+    def test_dispatch_truck_card_failures_keep_the_json_contract(self):
+        self._login_user("card_truck_failures", "simulator")
+        operation = self._add_operation(date(2026, 8, 17))
+        card_data = {
+            "action": "mark_topping_off",
+            "dispatch_truck_card": "1",
+            "fuel_truck_id": "41",
+        }
+
+        with patch(
+            "app.neonodes.neoscorpion.routes.permission_access",
+            return_value={"can_view": False, "can_edit": False},
+        ):
+            denied = self.client.post(
+                "/neoscorpion/fuel-dispatch/assets",
+                data=card_data,
+            )
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(denied.content_type, "application/json")
+        self.assertEqual(denied.json, {"ok": False, "error": "Access denied."})
+        self.assertNotIn("Location", denied.headers)
+
+        with patch(
+            "app.neonodes.neoscorpion.routes.permission_access",
+            return_value={"can_view": True, "can_edit": False},
+        ):
+            read_only = self.client.post(
+                "/neoscorpion/fuel-dispatch/assets",
+                data=card_data,
+            )
+        self.assertEqual(read_only.status_code, 403)
+        self.assertEqual(read_only.content_type, "application/json")
+        self.assertEqual(read_only.json, {"ok": False, "error": "Access denied."})
+        self.assertNotIn("Location", read_only.headers)
+
+        with (
+            patch(
+                "app.neonodes.neoscorpion.routes.current_sort_operation",
+                return_value=operation,
+            ),
+            patch(
+                "app.neonodes.neoscorpion.routes._apply_nightly_asset_action",
+                side_effect=RuntimeError("production-like database failure"),
+            ),
+            self.assertLogs(self.app.logger.name, level="ERROR") as logs,
+        ):
+            unexpected = self.client.post(
+                "/neoscorpion/fuel-dispatch/assets",
+                data=card_data,
+            )
+        self.assertEqual(unexpected.status_code, 500)
+        self.assertEqual(unexpected.content_type, "application/json")
+        self.assertEqual(
+            unexpected.json,
+            {"ok": False, "error": "Truck update failed on the server."},
+        )
+        self.assertNotIn("Location", unexpected.headers)
+        self.assertIn("operation_id=", logs.output[0])
+        self.assertIn("truck_id=41", logs.output[0])
+        self.assertIn("action=mark_topping_off", logs.output[0])
+
+    def test_dispatch_truck_card_js_uses_unclobbered_form_action_attribute(self):
+        script = Path(
+            "app/static/js/neoscorpion_fuel_dispatch_live.js"
+        ).read_text(encoding="utf-8")
+        truck_card_block = script.split(
+            "const submitTruckCardAction", 1
+        )[1].split("root.addEventListener", 1)[0]
+
+        self.assertIn('form.getAttribute("action")', truck_card_block)
+        self.assertIn("fetch(actionUrl,", truck_card_block)
+        self.assertNotIn("fetch(form.action,", truck_card_block)
 
     def _add_operation(self, sort_date):
         operation = SortDateOperation(

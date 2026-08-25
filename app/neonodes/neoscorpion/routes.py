@@ -1,4 +1,4 @@
-from flask import flash, jsonify, redirect, render_template, request, url_for
+from flask import current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
 
@@ -529,6 +529,8 @@ def manage_nightly_assets():
     )
     if not access["can_view"]:
         db.session.rollback()
+        if json_response:
+            return _json_no_store({"ok": False, "error": "Access denied."}, 403)
         flash("Access denied.", "error")
         return redirect(url_for("neoscorpion.index"))
     if not access["can_edit"]:
@@ -538,6 +540,7 @@ def manage_nightly_assets():
         flash("Access denied.", "error")
         return _dispatch_response(gateway, access, status_code=403)
 
+    operation = None
     try:
         operation = current_sort_operation(gateway)
         if operation is None:
@@ -558,6 +561,22 @@ def manage_nightly_assets():
         flash(message, "error")
         if json_response:
             return _json_no_store({"ok": False, "error": message}, 400)
+    except Exception:
+        db.session.rollback()
+        if not json_response:
+            raise
+        current_app.logger.exception(
+            "NeoScorpion compact truck-card update failed: "
+            "gateway_id=%s operation_id=%s truck_id=%s action=%s",
+            getattr(gateway, "id", None),
+            getattr(operation, "id", None),
+            request.form.get("fuel_truck_id"),
+            action,
+        )
+        return _json_no_store(
+            {"ok": False, "error": "Truck update failed on the server."},
+            500,
+        )
 
     if json_response:
         return _json_no_store(

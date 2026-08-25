@@ -87,6 +87,9 @@ test("dispatch truck card actions stay on Fuel Dispatch and guard rapid submits"
     assert.match(script, /form\.dataset\.truckCardBusy = "true"/);
     assert.match(script, /button\.disabled = true/);
     assert.match(script, /event\.preventDefault\(\)/);
+    assert.match(script, /form\.getAttribute\("action"\)/);
+    assert.match(script, /const actionUrl = form\.getAttribute\("action"\);/);
+    assert.match(script, /const response = await fetch\(actionUrl, \{/);
     assert.match(script, /X-Requested-With": "XMLHttpRequest"/);
     assert.match(script, /reloadPage\(\)/);
     assert.doesNotMatch(template, /assets=open|manage-tonights-assets/);
