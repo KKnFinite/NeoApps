@@ -20,6 +20,7 @@ from app.models import (
     StaffingPerson,
     StaffingUnit,
     StaffingWorkAssignment,
+    StaffingVacationUnionCalendar,
 )
 from app.neostaffing import bp
 from app.services.access_control import get_user_app_role, user_can_access_app, user_has_app_access
@@ -29,6 +30,7 @@ from app.services import neostaffing_change_requests as change_request_service
 from app.services import neostaffing_bulk_change as bulk_change_service
 from app.services import neostaffing_management_review as management_review_service
 from app.services import neostaffing_notifications as notification_service
+from app.services import neostaffing_vacation as vacation_service
 from app.services.permission_rules import ensure_default_permission_rules, user_can
 
 
@@ -822,10 +824,179 @@ def reports():
 @bp.route("/vacation-selection")
 @neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
 def vacation_selection():
+    vacation_year = _vacation_year_arg()
     return render_template(
         "neostaffing/vacation_selection.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
+        vacation_year=vacation_year,
+        vacation_years=_vacation_year_options(vacation_year),
+        selection_opens_on=vacation_service.vacation_selection_opens_on(
+            vacation_year
+        ),
+        week_count=len(vacation_service.vacation_year_weeks(vacation_year)),
     )
+
+
+@bp.route("/vacation-selection/management")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_management():
+    vacation_year = _vacation_year_arg()
+    return render_template(
+        "neostaffing/vacation_management.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
+        vacation=vacation_service.management_vacation_context(
+            vacation_year,
+            current_user,
+        ),
+        vacation_years=_vacation_year_options(vacation_year),
+    )
+
+
+@bp.route("/vacation-selection/management/capacity", methods=["POST"])
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_management_capacity():
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.save_management_capacity(
+            vacation_year,
+            request.form.get("area_unit_id"),
+            request.form,
+            current_user,
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Management vacation capacity updated.", "success")
+    return redirect(
+        url_for("neostaffing.vacation_management", year=vacation_year)
+    )
+
+
+@bp.route("/vacation-selection/management/initialize", methods=["POST"])
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_management_initialize():
+    vacation_year = request.form.get("vacation_year")
+    context = vacation_service.management_vacation_context(
+        vacation_year,
+        current_user,
+    )
+    area_ids = [row["area"].id for row in context["areas"] if row["can_edit"]]
+    try:
+        created = vacation_service.initialize_management_capacity_year(
+            vacation_year,
+            area_ids,
+            current_user,
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash(
+            f"Carried forward {len(created)} Management capacity setting(s).",
+            "success",
+        )
+    return redirect(
+        url_for("neostaffing.vacation_management", year=vacation_year)
+    )
+
+
+@bp.route("/vacation-selection/management/reduced-capacity", methods=["POST"])
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_management_reduced_capacity():
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.set_reduced_capacity_enabled(
+            vacation_year,
+            request.form.get("area_unit_id"),
+            request.form.get("week_ending"),
+            request.form.get("enabled"),
+            current_user,
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Weekly reduced-capacity setting updated.", "success")
+    return redirect(
+        url_for("neostaffing.vacation_management", year=vacation_year)
+    )
+
+
+@bp.route("/vacation-selection/union")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_union_calendars():
+    vacation_year = _vacation_year_arg()
+    return render_template(
+        "neostaffing/vacation_union.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
+        vacation=vacation_service.union_calendars_context(
+            vacation_year,
+            current_user,
+        ),
+        vacation_years=_vacation_year_options(vacation_year),
+    )
+
+
+@bp.route("/vacation-selection/union/new", methods=["GET", "POST"])
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_union_calendar_new():
+    vacation_year = _vacation_year_arg()
+    if request.method == "POST":
+        vacation_year = request.form.get("vacation_year")
+        try:
+            calendar = vacation_service.create_union_calendar(
+                request.form,
+                current_user,
+            )
+            db.session.commit()
+        except (ValueError, IntegrityError) as error:
+            db.session.rollback()
+            flash(str(getattr(error, "orig", None) or error), "error")
+        else:
+            flash("Union vacation calendar created.", "success")
+            return redirect(
+                url_for(
+                    "neostaffing.vacation_union_calendar_edit",
+                    calendar_id=calendar.id,
+                )
+            )
+    return _render_vacation_union_editor(None, vacation_year)
+
+
+@bp.route(
+    "/vacation-selection/union/<int:calendar_id>/edit",
+    methods=["GET", "POST"],
+)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_union_calendar_edit(calendar_id):
+    calendar = db.session.get(StaffingVacationUnionCalendar, calendar_id)
+    if not calendar:
+        flash("The selected Union vacation calendar was not found.", "error")
+        return redirect(url_for("neostaffing.vacation_union_calendars"))
+    if request.method == "POST":
+        try:
+            vacation_service.update_union_calendar(
+                calendar,
+                request.form,
+                current_user,
+            )
+            db.session.commit()
+        except (ValueError, IntegrityError) as error:
+            db.session.rollback()
+            flash(str(getattr(error, "orig", None) or error), "error")
+        else:
+            flash("Union vacation calendar updated.", "success")
+            return redirect(
+                url_for(
+                    "neostaffing.vacation_union_calendar_edit",
+                    calendar_id=calendar.id,
+                )
+            )
+    return _render_vacation_union_editor(calendar, calendar.vacation_year)
 
 
 @bp.route("/permissions", methods=["GET", "POST"])
@@ -1709,3 +1880,109 @@ def _change_requests_return_url():
         if request.form.get(key, "").strip()
     }
     return url_for("neostaffing.change_requests", **query)
+
+
+def _vacation_year_arg():
+    raw_year = request.args.get("year", "").strip()
+    if not raw_year:
+        return vacation_service.default_vacation_year()
+    try:
+        return vacation_service.normalize_vacation_year(raw_year)
+    except ValueError:
+        return vacation_service.default_vacation_year()
+
+
+def _vacation_year_options(selected_year):
+    default_year = vacation_service.default_vacation_year()
+    return sorted(
+        {
+            selected_year - 1,
+            selected_year,
+            selected_year + 1,
+            default_year,
+            default_year + 1,
+        }
+    )
+
+
+def _render_vacation_union_editor(calendar, vacation_year):
+    year = vacation_service.normalize_vacation_year(vacation_year)
+    hierarchy = vacation_service.vacation_hierarchy()
+    actor = vacation_service.vacation_actor(current_user, hierarchy)
+    operations = [
+        unit for unit in hierarchy["units"] if unit.unit_type == "operation"
+    ]
+    submitted_operation_id = request.form.get("operation_unit_id") if request.method == "POST" else None
+    try:
+        selected_operation_id = int(
+            submitted_operation_id
+            or (calendar.operation_unit_id if calendar else 0)
+            or request.args.get("operation_id", 0)
+        )
+    except (TypeError, ValueError):
+        selected_operation_id = 0
+    if not selected_operation_id and operations:
+        selected_operation_id = next(
+            (
+                operation.id
+                for operation in operations
+                if vacation_service.operation_has_editable_union_scope(
+                    actor,
+                    operation.id,
+                    hierarchy,
+                )
+            ),
+            operations[0].id,
+        )
+    if request.method == "POST":
+        selected_scope_ids = {
+            int(value)
+            for value in request.form.getlist("staffing_unit_ids")
+            if str(value).isdigit()
+        }
+    elif calendar:
+        selected_scope_ids = {
+            scope.staffing_unit_id for scope in calendar.scopes
+        }
+    else:
+        selected_scope_ids = set()
+
+    if calendar and not vacation_service.can_edit_union_scope(
+        actor,
+        selected_scope_ids,
+    ):
+        flash("You do not have authority to edit this Union vacation calendar.", "error")
+        return redirect(
+            url_for(
+                "neostaffing.vacation_union_calendars",
+                year=calendar.vacation_year,
+            )
+        )
+    if not calendar and not (actor.is_grandmaster or actor.sideways_scope_ids):
+        flash("You do not have authority to create a Union vacation calendar.", "error")
+        return redirect(
+            url_for("neostaffing.vacation_union_calendars", year=year)
+        )
+
+    operation_trees = [
+        {
+            "operation": operation,
+            "tree": vacation_service.union_scope_tree(
+                operation.id,
+                selected_scope_ids if operation.id == selected_operation_id else (),
+                hierarchy,
+            ),
+        }
+        for operation in operations
+    ]
+    return render_template(
+        "neostaffing/vacation_union_editor.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
+        calendar=calendar,
+        vacation_year=year,
+        vacation_years=_vacation_year_options(year),
+        operations=operations,
+        operation_trees=operation_trees,
+        selected_operation_id=selected_operation_id,
+        selected_scope_ids=selected_scope_ids,
+    )

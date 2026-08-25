@@ -72,6 +72,12 @@ from app.models.staffing_shift_flow_plan import StaffingShiftFlowPlan
 from app.models.staffing_reporting_relationship import StaffingReportingRelationship
 from app.models.staffing_unit import StaffingUnit
 from app.models.staffing_work_assignment import StaffingWorkAssignment
+from app.models.staffing_vacation import (
+    StaffingVacationManagementCapacity,
+    StaffingVacationManagementWeekOverride,
+    StaffingVacationUnionCalendar,
+    StaffingVacationUnionCalendarScope,
+)
 from app.models.sort_timeline_settings import (
     SortTimelineApiParticipation,
     SortTimelineMonthVariance,
@@ -139,6 +145,10 @@ __all__ = [
     "StaffingReportingRelationship",
     "StaffingUnit",
     "StaffingWorkAssignment",
+    "StaffingVacationManagementCapacity",
+    "StaffingVacationManagementWeekOverride",
+    "StaffingVacationUnionCalendar",
+    "StaffingVacationUnionCalendarScope",
     "StaffingLeadershipAssignment",
     "StaffingChangeRequest",
     "StaffingChangeRequestItem",

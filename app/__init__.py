@@ -101,6 +101,9 @@ from app.services.neostaffing_notification_schema import (
 from app.services.neostaffing_shift_flow_schema import (
     ensure_neostaffing_shift_flow_plan_table,
 )
+from app.services.neostaffing_vacation_schema import (
+    ensure_neostaffing_vacation_tables,
+)
 from app.services.neoscorpion_schema import ensure_neoscorpion_production_schema
 from app.services.live_screen_refresh_schema import (
     ensure_live_screen_refresh_setting_table,
@@ -148,6 +151,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     ensure_neostaffing_staffing_group_tables(app)
     ensure_neostaffing_notification_table(app)
     ensure_neostaffing_shift_flow_plan_table(app)
+    ensure_neostaffing_vacation_tables(app)
     ensure_live_screen_refresh_setting_table(app)
     ensure_neoscorpion_production_schema(app)
 

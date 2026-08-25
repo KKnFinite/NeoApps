@@ -3,21 +3,23 @@
 {% block title %}NeoStaffing Vacation Selection{% endblock %}
 
 {% block content %}
-<section class="neostaffing-page neostaffing-dashboard-page theme-staffing" aria-labelledby="vacation-selection-title">
-    <div class="neostaffing-dashboard-shell">
-        {% include "neostaffing/_section_nav.html" %}
-        <main class="neostaffing-dashboard-main">
-            <header class="neostaffing-dashboard-topbar">
-                <div>
-                    <h1 id="vacation-selection-title">VACATION SELECTION</h1>
-                    <p>Management vacation selection and seniority-based scheduling will be available here.</p>
-                </div>
-            </header>
-
-            <section class="neostaffing-data-card" aria-label="Vacation Selection status">
-                <h2>COMING LATER</h2>
-            </section>
-        </main>
-    </div>
+<section class="neostaffing-vacation-console theme-staffing" aria-labelledby="vacation-selection-title">
+    {% include "neostaffing/_section_nav.html" %}
+    <main class="neostaffing-vacation-workspace">
+        <header class="neostaffing-vacation-header">
+            <div><h1 id="vacation-selection-title">VACATION SELECTION</h1><span>{{ vacation_year }} VACATION YEAR · {{ week_count }} SATURDAY WE WEEKS</span></div>
+            <form method="get" class="neostaffing-vacation-year"><label for="vacation-year">YEAR</label><select id="vacation-year" name="year" onchange="this.form.submit()">{% for year in vacation_years %}<option value="{{ year }}"{% if year == vacation_year %} selected{% endif %}>{{ year }}</option>{% endfor %}</select></form>
+        </header>
+        <section class="neostaffing-vacation-entry-grid" aria-label="Vacation Selection workspaces">
+            <a href="{{ url_for('neostaffing.vacation_management', year=vacation_year) }}" class="neostaffing-vacation-entry is-management"><span>MANAGEMENT</span><strong>MANAGEMENT VACATION</strong><p>Dynamic Org Chart ownership, seniority rosters, and yearly whole-week limits.</p><em>OPEN WORKSPACE →</em></a>
+            <a href="{{ url_for('neostaffing.vacation_union_calendars', year=vacation_year) }}" class="neostaffing-vacation-entry is-union"><span>UNION</span><strong>UNION VACATION CALENDARS</strong><p>Configured Operation / Department / Work Area pools with dynamic payroll capacity.</p><em>OPEN CALENDARS →</em></a>
+        </section>
+        <section class="neostaffing-vacation-foundation" aria-label="Vacation year foundation">
+            <div><span>SELECTION OPENS</span><strong>{{ selection_opens_on.strftime("%b %d, %Y")|upper }}</strong></div>
+            <div><span>WEEK FORMAT</span><strong>SUNDAY–SATURDAY · SATURDAY WE</strong></div>
+            <div><span>FOUNDATION STATUS</span><strong>CAPACITY / CALENDAR CONFIGURATION</strong></div>
+        </section>
+        <p class="neostaffing-vacation-scope-note">Vacation selection entry and destructive year reset workflows are intentionally not implemented in this foundation slice.</p>
+    </main>
 </section>
 {% endblock %}

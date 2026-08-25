@@ -28530,3 +28530,97 @@ body:has(.neostaffing-relationship-review-console) { overflow-x:clip; }
 .neostaffing-relationship-review-console .sr-only { position:absolute!important; width:1px!important; height:1px!important; padding:0!important; margin:-1px!important; overflow:hidden!important; clip:rect(0,0,0,0)!important; white-space:nowrap!important; border:0!important; }
 @media (max-width:1180px) { .neostaffing-relationship-review-console { grid-template-columns:144px minmax(0,1fr); } .neostaffing-relationship-review-summary { grid-template-columns:1fr; gap:3px; } }
 @media (max-width:980px) { .neostaffing-relationship-review-console { display:block; width:100%; height:auto; min-height:0; margin:0; overflow:visible; } .neostaffing-relationship-review-console > .neostaffing-rail { display:none; } .neostaffing-relationship-review-workspace,.neostaffing-relationship-review-form { overflow:visible; } .neostaffing-relationship-review-table-scroll { max-height:70vh; } .neostaffing-relationship-review-actions { position:sticky; bottom:0; } }
+
+/* NeoStaffing Vacation Selection foundation */
+.neostaffing-vacation-console { display:grid; grid-template-columns:clamp(144px,10vw,184px) minmax(0,1fr); width:calc(100vw - 32px); height:calc(100vh - 122px); min-height:560px; margin:-18px calc(50% - 50vw + 16px) -54px; overflow:hidden; border:1px solid #18333a; border-radius:7px; background:#071317; color:#d3e5e6; }
+body:has(.neostaffing-vacation-console) { overflow-x:clip; }
+.neostaffing-vacation-console > .neostaffing-rail { box-sizing:border-box; width:auto; min-width:0; height:100%; overflow-y:auto; border-right:1px solid #19353c; background:#0a161c; }
+.neostaffing-vacation-workspace { min-width:0; overflow:auto; padding:10px 12px 18px; }
+.neostaffing-vacation-header { display:flex; align-items:center; justify-content:space-between; gap:14px; min-height:54px; padding:0 2px 9px; border-bottom:1px solid #183940; }
+.neostaffing-vacation-header h1 { margin:1px 0 0; color:#eefafa; font-size:clamp(1rem,1.25vw,1.35rem); line-height:1; letter-spacing:.045em; }
+.neostaffing-vacation-header span,.neostaffing-vacation-header > div > a { color:#71969b; font-size:.64rem; font-weight:800; letter-spacing:.06em; text-decoration:none; }
+.neostaffing-vacation-header > div > a:hover { color:#72d7d0; }
+.neostaffing-vacation-header-actions { display:flex; align-items:center; gap:7px; }
+.neostaffing-vacation-header-actions > a,.neostaffing-vacation-header-actions button,.neostaffing-vacation-capacity-form button,.neostaffing-vacation-week-form button,.neostaffing-vacation-editor-fields > button { min-height:29px; padding:5px 9px; border:1px solid #2d7878; border-radius:4px; background:#123f43; color:#dffcf9; font:800 .65rem/1.1 inherit; letter-spacing:.045em; text-decoration:none; cursor:pointer; }
+.neostaffing-vacation-year { display:flex; align-items:center; gap:5px; }
+.neostaffing-vacation-year label,.neostaffing-vacation-editor-fields label > span,.neostaffing-vacation-capacity-form label > span,.neostaffing-vacation-week-form label > span { color:#71969b; font-size:.6rem; font-weight:900; letter-spacing:.06em; }
+.neostaffing-vacation-year select,.neostaffing-vacation-editor-fields input,.neostaffing-vacation-editor-fields select,.neostaffing-vacation-capacity-form input,.neostaffing-vacation-week-form select { box-sizing:border-box; min-height:29px; border:1px solid #28505a; border-radius:4px; background:#0c2027; color:#e0f2f2; }
+.neostaffing-vacation-entry-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px; }
+.neostaffing-vacation-entry { display:grid; gap:8px; min-height:132px; padding:16px; border:1px solid #20505a; border-radius:6px; background:linear-gradient(135deg,rgba(17,51,59,.92),rgba(8,25,31,.96)); color:#dceff0; text-decoration:none; }
+.neostaffing-vacation-entry:hover { border-color:#49aaa8; background:linear-gradient(135deg,rgba(19,66,70,.96),rgba(8,28,34,.98)); }
+.neostaffing-vacation-entry > span { color:#67c8c2; font-size:.63rem; font-weight:900; letter-spacing:.12em; }
+.neostaffing-vacation-entry strong { font-size:clamp(1rem,1.35vw,1.4rem); }
+.neostaffing-vacation-entry p { max-width:660px; margin:0; color:#9db7ba; font-size:.78rem; }
+.neostaffing-vacation-entry em { align-self:end; color:#77d7d0; font-size:.68rem; font-style:normal; font-weight:900; }
+.neostaffing-vacation-foundation { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; margin-top:10px; overflow:hidden; border:1px solid #1c3c44; border-radius:5px; background:#1c3c44; }
+.neostaffing-vacation-foundation div { display:grid; gap:3px; padding:10px 12px; background:#0b1b21; }
+.neostaffing-vacation-foundation span,.neostaffing-vacation-read-only span { color:#71959a; font-size:.58rem; font-weight:900; letter-spacing:.08em; }
+.neostaffing-vacation-foundation strong { color:#d9eeee; font-size:.75rem; }
+.neostaffing-vacation-scope-note { margin:10px 2px; color:#708b90; font-size:.7rem; }
+.neostaffing-vacation-tabs { display:flex; gap:3px; padding:7px 0; }
+.neostaffing-vacation-tabs a { padding:6px 10px; border:1px solid #224a52; border-radius:4px; color:#89aaad; font-size:.66rem; font-weight:900; text-decoration:none; }
+.neostaffing-vacation-tabs a[aria-current="page"] { border-color:#45a8a6; background:#123b40; color:#e4faf8; }
+.neostaffing-vacation-management-list { display:grid; gap:7px; }
+.neostaffing-vacation-management-row { display:grid; grid-template-columns:minmax(180px,.75fr) minmax(270px,1.3fr) minmax(420px,2fr); gap:8px; padding:8px; border:1px solid #17383f; border-radius:5px; background:#0a1a20; }
+.neostaffing-vacation-management-row > header { display:flex; justify-content:space-between; gap:6px; }
+.neostaffing-vacation-management-row > header div { display:grid; align-content:start; gap:3px; }
+.neostaffing-vacation-management-row > header strong { color:#dff4f3; font-size:.82rem; }
+.neostaffing-vacation-management-row > header span,.neostaffing-vacation-management-row > header em { color:#6e9297; font-size:.58rem; font-style:normal; }
+.neostaffing-vacation-management-people { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+.neostaffing-vacation-management-people section { min-width:0; padding:5px 7px; border-left:2px solid #2a7776; background:#0d2228; }
+.neostaffing-vacation-management-people section.is-secondary { border-color:#4b5a61; opacity:.78; }
+.neostaffing-vacation-management-people h2 { margin:0 0 4px; color:#72c8c4; font-size:.59rem; letter-spacing:.07em; }
+.neostaffing-vacation-management-people span { display:flex; justify-content:space-between; gap:4px; padding:2px 0; color:#d1e4e5; font-size:.67rem; }
+.neostaffing-vacation-management-people span em,.neostaffing-vacation-management-people p { margin:0; color:#758f94; font-size:.59rem; font-style:normal; }
+.neostaffing-vacation-management-config { display:grid; align-content:start; gap:5px; }
+.neostaffing-vacation-capacity-form,.neostaffing-vacation-week-form { display:flex; align-items:end; gap:5px; }
+.neostaffing-vacation-capacity-form label,.neostaffing-vacation-week-form label { display:grid; gap:2px; min-width:0; }
+.neostaffing-vacation-capacity-form input { width:70px; padding:4px 6px; }
+.neostaffing-vacation-week-form select { width:130px; }
+.neostaffing-vacation-read-only { display:grid; gap:3px; padding:8px; border:1px solid #263d43; border-radius:4px; }
+.neostaffing-vacation-empty { display:grid; gap:4px; padding:18px; border:1px dashed #28505a; border-radius:5px; color:#87a3a7; text-align:center; }
+.neostaffing-vacation-empty strong { color:#b7d3d4; font-size:.77rem; }
+.neostaffing-vacation-empty span { font-size:.68rem; }
+.neostaffing-vacation-empty.is-selection { margin-top:9px; padding:10px; }
+.neostaffing-vacation-union-browser { display:grid; gap:8px; }
+.neostaffing-vacation-operation-group { border:1px solid #1d4048; border-radius:5px; background:#09191f; }
+.neostaffing-vacation-operation-group > header { display:flex; justify-content:space-between; padding:7px 9px; border-bottom:1px solid #1d4048; background:#0e252c; }
+.neostaffing-vacation-operation-group > header strong { color:#76d0ca; font-size:.78rem; }
+.neostaffing-vacation-operation-group > header span { color:#6b8d92; font-size:.58rem; }
+.neostaffing-vacation-department-group { padding:7px; }
+.neostaffing-vacation-department-group h2 { margin:0 0 5px; color:#91afb2; font-size:.62rem; letter-spacing:.06em; }
+.neostaffing-vacation-calendar-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:6px; }
+.neostaffing-vacation-calendar-card { display:grid; gap:6px; padding:8px; border:1px solid #21464e; border-radius:4px; background:#0d2228; }
+.neostaffing-vacation-calendar-card.is-inactive { opacity:.58; }
+.neostaffing-vacation-calendar-card header { display:flex; justify-content:space-between; }
+.neostaffing-vacation-calendar-card header strong { font-size:.76rem; }
+.neostaffing-vacation-calendar-card header span { color:#6fc8c3; font-size:.61rem; font-weight:900; }
+.neostaffing-vacation-calendar-card dl { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; margin:0; background:#183840; }
+.neostaffing-vacation-calendar-card dl div { padding:5px; background:#0b1b21; }
+.neostaffing-vacation-calendar-card dt { color:#708e93; font-size:.52rem; font-weight:900; }
+.neostaffing-vacation-calendar-card dd { margin:1px 0 0; color:#e1f2f2; font-size:.82rem; font-weight:900; }
+.neostaffing-vacation-calendar-card p { margin:0; color:#78969a; font-size:.62rem; }
+.neostaffing-vacation-calendar-card > a,.neostaffing-vacation-view-only { color:#6fd2cc; font-size:.61rem; font-weight:900; text-decoration:none; }
+.neostaffing-vacation-capacity-note { display:flex; gap:10px; margin-top:8px; padding:8px; border-left:3px solid #3b8f8c; background:#0c2026; }
+.neostaffing-vacation-capacity-note strong { color:#76d0ca; font-size:.63rem; }
+.neostaffing-vacation-capacity-note span { color:#8ca7aa; font-size:.66rem; }
+.neostaffing-vacation-union-editor { display:grid; grid-template-columns:minmax(240px,.7fr) minmax(360px,1.5fr) minmax(190px,.55fr); gap:9px; margin-top:10px; }
+.neostaffing-vacation-editor-fields,.neostaffing-vacation-scope-builder,.neostaffing-vacation-editor-help { min-width:0; padding:10px; border:1px solid #1b4048; border-radius:5px; background:#0a1b21; }
+.neostaffing-vacation-editor-fields { display:grid; align-content:start; gap:8px; }
+.neostaffing-vacation-editor-fields > label { display:grid; gap:3px; }
+.neostaffing-vacation-editor-fields input,.neostaffing-vacation-editor-fields select { width:100%; padding:5px 7px; }
+.neostaffing-vacation-editor-fields fieldset { display:flex; gap:12px; margin:0; padding:8px; border:1px solid #244a52; }
+.neostaffing-vacation-editor-fields legend { color:#71969b; font-size:.6rem; font-weight:900; }
+.neostaffing-vacation-editor-fields fieldset label,.neostaffing-vacation-active { display:flex!important; align-items:center; gap:5px; color:#cce1e2; font-size:.66rem; }
+.neostaffing-vacation-editor-fields input[type="checkbox"] { width:auto; accent-color:#45aaa6; }
+.neostaffing-vacation-scope-builder > header { display:flex; justify-content:space-between; padding-bottom:7px; border-bottom:1px solid #1d4149; }
+.neostaffing-vacation-scope-builder > header strong,.neostaffing-vacation-editor-help strong { color:#78cec9; font-size:.66rem; }
+.neostaffing-vacation-scope-builder > header span { color:#6d8c90; font-size:.56rem; }
+.neostaffing-vacation-scope-tree,.neostaffing-vacation-scope-tree ul { margin:0; padding:0; list-style:none; }
+.neostaffing-vacation-scope-tree ul { margin-left:15px; border-left:1px solid #21464e; }
+.neostaffing-vacation-scope-tree li > label { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:6px; min-height:28px; padding:3px 6px; border-bottom:1px solid rgba(42,78,85,.45); color:#d0e3e4; font-size:.67rem; }
+.neostaffing-vacation-scope-tree input { accent-color:#4db9b4; }
+.neostaffing-vacation-scope-tree em { color:#68898d; font-size:.52rem; font-style:normal; }
+.neostaffing-vacation-editor-help p { color:#859fa3; font-size:.66rem; line-height:1.45; }
+@media (max-width:1100px) { .neostaffing-vacation-management-row { grid-template-columns:minmax(170px,.7fr) minmax(240px,1fr); } .neostaffing-vacation-management-config { grid-column:1/-1; } .neostaffing-vacation-union-editor { grid-template-columns:minmax(220px,.7fr) minmax(340px,1.3fr); } .neostaffing-vacation-editor-help { grid-column:1/-1; } }
+@media (max-width:800px) { .neostaffing-vacation-console { display:block; width:100%; height:auto; min-height:0; margin:0; overflow:visible; } .neostaffing-vacation-console > .neostaffing-rail { display:none; } .neostaffing-vacation-workspace { overflow:visible; } .neostaffing-vacation-entry-grid,.neostaffing-vacation-foundation,.neostaffing-vacation-management-row,.neostaffing-vacation-union-editor { grid-template-columns:1fr; } .neostaffing-vacation-management-config,.neostaffing-vacation-editor-help { grid-column:auto; } .neostaffing-vacation-capacity-form,.neostaffing-vacation-week-form,.neostaffing-vacation-header { flex-wrap:wrap; } }
