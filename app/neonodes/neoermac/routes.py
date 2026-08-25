@@ -40,6 +40,7 @@ from app.services.neoermac_door_view import (
     door_view_uld_state,
     door_view_uld_workspace,
     edit_door_uld_request,
+    linked_supervised_pull_doors,
     normalize_door,
     save_door_pulls,
     save_single_door_pull,
@@ -464,6 +465,7 @@ def door_view():
                     selected_door,
                     request.form,
                     supervised_doors=_current_user_supervised_doors(gateway),
+                    apply_to_both=_apply_pulls_to_both(request.form.get("apply_to_both")),
                 )
                 flash("DOOR PULLS SAVED.", "success")
             elif action == "save_uld_request":
@@ -684,6 +686,7 @@ def door_view_pull_autosave():
             request.form.get("actual_pull", ""),
             request.form.get("no_pull") == "1",
             supervised_doors=supervised_doors,
+            apply_to_both=_apply_pulls_to_both(request.form.get("apply_to_both")),
             operation=operation,
             bundle=bundle,
         )
@@ -736,6 +739,11 @@ def _current_user_supervised_doors(gateway, operation=None):
         operation,
         get_outbound_door_options(),
     )
+
+
+def _apply_pulls_to_both(value):
+    """Only the explicit compact Door View request value enables propagation."""
+    return str(value or "").strip() == "1"
 
 
 def _pull_autosave_validation_details(error):
@@ -817,6 +825,20 @@ def _door_view_response(gateway, access, selected_door, status_code=200):
         bundle and bundle.initialization_changed
     )
     context = door_view_context(gateway, active_door, bundle=bundle)
+    context["linked_supervised_pull_doors"] = tuple(
+        door
+        for destination in context["destinations"]
+        for door in linked_supervised_pull_doors(
+            gateway,
+            active_door,
+            destination["destination"],
+            supervision["selected_doors"],
+            bundle=bundle,
+        )
+    )
+    context["linked_supervised_pull_doors"] = tuple(
+        dict.fromkeys(context["linked_supervised_pull_doors"])
+    )
     context["door_tab_alerts"] = door_tab_pull_alerts(
         gateway,
         active_door,

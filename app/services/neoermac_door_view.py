@@ -335,7 +335,14 @@ def door_view_context(gateway, selected_door=None, *, bundle=None):
     }
 
 
-def save_door_pulls(gateway, selected_door, form_data, supervised_doors=()):
+def save_door_pulls(
+    gateway,
+    selected_door,
+    form_data,
+    supervised_doors=(),
+    *,
+    apply_to_both=False,
+):
     selected_door = normalize_door(selected_door)
     if not selected_door:
         raise ValueError("Select a door.")
@@ -375,6 +382,7 @@ def save_door_pulls(gateway, selected_door, form_data, supervised_doors=()):
                 actual_value,
                 no_pull,
                 supervised_doors,
+                apply_to_both=apply_to_both,
                 bundle=bundle,
             )
         changed_destinations.add(destination)
@@ -399,6 +407,7 @@ def save_single_door_pull(
     actual_value,
     no_pull,
     supervised_doors=(),
+    apply_to_both=False,
     *,
     operation=_OPERATION_UNSET,
     bundle=None,
@@ -442,6 +451,7 @@ def save_single_door_pull(
         parsed_actual,
         no_pull,
         supervised_doors,
+        apply_to_both=apply_to_both,
         bundle=bundle,
     )
     db.session.flush()
@@ -473,6 +483,7 @@ def _apply_pull_value(
     no_pull,
     supervised_doors,
     *,
+    apply_to_both=False,
     bundle=None,
 ):
     for target_door in _pull_write_doors(
@@ -480,6 +491,7 @@ def _apply_pull_value(
         selected_door,
         destination,
         supervised_doors,
+        apply_to_both=apply_to_both,
         bundle=bundle,
     ):
         record = _door_pull_record(
@@ -500,15 +512,38 @@ def _pull_write_doors(
     destination,
     supervised_doors,
     *,
+    apply_to_both=False,
     bundle=None,
 ):
+    if not apply_to_both:
+        return (selected_door,)
+
+    return (selected_door,) + linked_supervised_pull_doors(
+        gateway,
+        selected_door,
+        destination,
+        supervised_doors,
+        bundle=bundle,
+    )
+
+
+def linked_supervised_pull_doors(
+    gateway,
+    selected_door,
+    destination,
+    supervised_doors=(),
+    *,
+    bundle=None,
+):
+    """Return valid opposite supervised doors for one displayed destination."""
+    selected_door = normalize_door(selected_door)
     supervised = {
         normalize_door(door)
         for door in (supervised_doors or ())
         if normalize_door(door)
     }
     if selected_door not in supervised:
-        return (selected_door,)
+        return ()
 
     linked = set(
         get_linked_building_lineup_doors(
@@ -520,7 +555,7 @@ def _pull_write_doors(
             ),
         )
     )
-    return (selected_door,) + tuple(
+    return tuple(
         door
         for door in get_outbound_door_options()
         if door in linked and door in supervised

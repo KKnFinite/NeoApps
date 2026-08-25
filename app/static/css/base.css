@@ -3756,6 +3756,62 @@ a {
     width: 100%;
 }
 
+.neoermac-pull-scope {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px 8px;
+    padding: 6px 8px;
+    border: 1px solid color-mix(in srgb, var(--node-ermac-accent) 28%, transparent);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--node-ermac-panel) 82%, #000);
+    color: var(--node-ermac-secondary);
+    font-size: 0.62rem;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    line-height: 1.1;
+    text-transform: uppercase;
+}
+
+.neoermac-pull-scope-options {
+    display: inline-flex;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--node-ermac-accent) 42%, transparent);
+    border-radius: 5px;
+}
+
+.neoermac-pull-scope-options button {
+    min-height: 25px;
+    padding: 3px 8px;
+    border: 0;
+    border-right: 1px solid color-mix(in srgb, var(--node-ermac-accent) 35%, transparent);
+    border-radius: 0;
+    background: rgba(0, 0, 0, 0.32);
+    color: var(--node-ermac-secondary);
+    font: inherit;
+    font-size: 0.58rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.neoermac-pull-scope-options button:last-child {
+    border-right: 0;
+}
+
+.neoermac-pull-scope-options button[aria-pressed="true"] {
+    background: var(--node-ermac-accent);
+    color: #061012;
+}
+
+.neoermac-pull-scope small {
+    flex-basis: 100%;
+    color: color-mix(in srgb, var(--node-ermac-secondary) 82%, transparent);
+    font-size: 0.56rem;
+    font-weight: 650;
+    letter-spacing: 0.03em;
+    text-transform: none;
+}
+
 .neoermac-door-selector > label,
 .neoermac-door-panel h2 {
     margin: 0;

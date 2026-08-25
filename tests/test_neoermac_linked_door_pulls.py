@@ -82,63 +82,71 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
-    def test_linked_pure_writes_both_selected_opposite_doors(self):
+    def test_linked_pure_defaults_to_this_door_only(self):
         self._supervise("D1", "D4")
 
         response = self._save("D1", "pure", "01:45")
 
         self.assertEqual(response.status_code, 200)
         pulls = self._pulls_by_door()
-        self.assertEqual(set(pulls), {"D1", "D4"})
+        self.assertEqual(set(pulls), {"D1"})
         self.assertEqual(pulls["D1"].actual_pure_pull_time_local, time(1, 45))
-        self.assertEqual(pulls["D4"].actual_pure_pull_time_local, time(1, 45))
 
-    def test_linked_mix_writes_both_selected_opposite_doors(self):
+    def test_explicit_both_sides_mix_writes_linked_supervised_doors(self):
         self._supervise("D1", "D4")
 
-        response = self._save("D4", "mix", "02:12")
+        response = self._save("D4", "mix", "02:12", apply_to_both=True)
 
         self.assertEqual(response.status_code, 200)
         pulls = self._pulls_by_door()
         self.assertEqual(pulls["D1"].actual_mix_pull_time_local, time(2, 12))
         self.assertEqual(pulls["D4"].actual_mix_pull_time_local, time(2, 12))
 
-    def test_editing_a_linked_time_updates_both_records(self):
+    def test_editing_respects_the_current_scope_without_retroactive_sync(self):
         self._supervise("D1", "D4")
-        self._save("D1", "pure", "01:40")
+        self._save("D1", "pure", "01:40", apply_to_both=True)
 
         self._save("D4", "pure", "01:52")
 
         pulls = self._pulls_by_door()
-        self.assertEqual(pulls["D1"].actual_pure_pull_time_local, time(1, 52))
+        self.assertEqual(pulls["D1"].actual_pure_pull_time_local, time(1, 40))
         self.assertEqual(pulls["D4"].actual_pure_pull_time_local, time(1, 52))
 
-    def test_clearing_a_linked_time_clears_both_records(self):
+    def test_clearing_respects_the_current_scope(self):
         self._supervise("D1", "D4")
-        self._save("D1", "pure", "01:45")
+        self._save("D1", "pure", "01:45", apply_to_both=True)
 
         self._save("D1", "pure", "")
+
+        pulls = self._pulls_by_door()
+        self.assertIsNone(pulls["D1"].actual_pure_pull_time_local)
+        self.assertEqual(pulls["D4"].actual_pure_pull_time_local, time(1, 45))
+
+    def test_no_pure_and_no_mix_respect_explicit_scope(self):
+        self._supervise("D1", "D4")
+        self._save("D1", "pure", no_pull=True)
+        self._save("D1", "mix", no_pull=True, apply_to_both=True)
+
+        pulls = self._pulls_by_door()
+        self.assertTrue(pulls["D1"].no_pure_pull)
+        self.assertTrue(pulls["D1"].no_mix_pull)
+        self.assertFalse(pulls["D4"].no_pure_pull)
+        self.assertTrue(pulls["D4"].no_mix_pull)
+
+    def test_explicit_both_sides_clear_clears_both_records(self):
+        self._supervise("D1", "D4")
+        self._save("D1", "pure", "01:45", apply_to_both=True)
+
+        self._save("D1", "pure", "", apply_to_both=True)
 
         for pull in self._pulls_by_door().values():
             self.assertIsNone(pull.actual_pure_pull_time_local)
             self.assertFalse(pull.no_pure_pull)
 
-    def test_no_pure_and_no_mix_propagate_to_both_records(self):
-        self._supervise("D1", "D4")
-        for pull_key in ("pure", "mix"):
-            with self.subTest(pull_key=pull_key):
-                self._save("D1", pull_key, no_pull=True)
-
-        for pull in self._pulls_by_door().values():
-            self.assertTrue(pull.no_pure_pull)
-            self.assertTrue(pull.no_mix_pull)
-            self.assertIsNone(pull.actual_pure_pull_time_local)
-            self.assertIsNone(pull.actual_mix_pull_time_local)
-
     def test_unselected_counterpart_remains_independent(self):
         self._supervise("D1")
 
-        self._save("D1", "pure", "01:45")
+        self._save("D1", "pure", "01:45", apply_to_both=True)
 
         pulls = self._pulls_by_door()
         self.assertEqual(set(pulls), {"D1"})
@@ -150,7 +158,7 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
         db.session.commit()
         self._supervise("D1", "D4", "D13", "D17")
 
-        self._save("D1", "pure", "01:45")
+        self._save("D1", "pure", "01:45", apply_to_both=True)
 
         pulls = self._pulls_by_door()
         self.assertEqual(set(pulls), {"D1", "D4"})
@@ -178,6 +186,59 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
         pulls = self._pulls_by_door()
         self.assertEqual(set(pulls), {"D1"})
         self.assertEqual(pulls["D1"].actual_mix_pull_time_local, time(2, 10))
+
+    def test_malformed_scope_safely_defaults_to_this_door(self):
+        self._supervise("D1", "D4")
+
+        response = self._save("D1", "pure", "01:45", apply_to_both="yes")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(set(self._pulls_by_door()), {"D1"})
+
+    def test_normal_bulk_save_respects_explicit_both_sides_scope(self):
+        self._supervise("D1", "D4")
+
+        response = self.client.post(
+            "/neoermac/door-view",
+            data={
+                "door": "D1",
+                "action": "save_pulls",
+                "destination_count": "1",
+                "destination_0": "SDF",
+                "actual_pure_0": "01:45",
+                "actual_mix_0": "",
+                "apply_to_both": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        pulls = self._pulls_by_door()
+        self.assertEqual(set(pulls), {"D1", "D4"})
+        self.assertEqual(pulls["D1"].actual_pure_pull_time_local, time(1, 45))
+        self.assertEqual(pulls["D4"].actual_pure_pull_time_local, time(1, 45))
+
+    def test_scope_control_only_renders_for_a_linked_supervised_door(self):
+        self._supervise("D1", "D4")
+
+        linked_page = self.client.get("/neoermac/door-view?door=D1")
+
+        self.assertIn(b"data-pull-scope aria", linked_page.data)
+        self.assertIn(b"THIS DOOR", linked_page.data)
+        self.assertIn(b"BOTH SIDES", linked_page.data)
+        self.assertIn(b'data-operation-id="%d"' % self.operation.id, linked_page.data)
+        self.assertIn(b'data-pull-scope-option="0" aria-pressed="true"', linked_page.data)
+
+        self._supervise("D1", "D13")
+        unrelated_page = self.client.get("/neoermac/door-view?door=D1")
+        self.assertNotIn(b"data-pull-scope aria", unrelated_page.data)
+
+    def test_scope_client_contract_is_operation_scoped_and_safe(self):
+        template = Path("app/templates/neonodes/neoermac/door_view.html").read_text()
+
+        self.assertIn("neoermac.pull-scope.${userId}.${operationId}", template)
+        self.assertIn('body.set("apply_to_both"', template)
+        self.assertIn("window.localStorage.getItem(scopeStorageKey)", template)
+        self.assertIn("Browser storage is optional; THIS DOOR remains the safe fallback.", template)
 
     def test_inactive_tab_is_green_during_pull_now_period(self):
         self._supervise("D1", "D4")
@@ -281,7 +342,7 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
             "late",
         )
 
-        response = self._save("D1", "pure", "22:58")
+        response = self._save("D1", "pure", "22:58", apply_to_both=True)
         payload = response.get_json()
 
         self.assertEqual(response.status_code, 200)
@@ -324,16 +385,19 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 302)
 
-    def _save(self, door, pull_key, value="", no_pull=False):
+    def _save(self, door, pull_key, value="", no_pull=False, apply_to_both=None):
+        data = {
+            "door": door,
+            "destination": "SDF",
+            "pull_key": pull_key,
+            "actual_pull": value,
+            "no_pull": "1" if no_pull else "0",
+        }
+        if apply_to_both is not None:
+            data["apply_to_both"] = "1" if apply_to_both is True else str(apply_to_both)
         return self.client.post(
             "/neoermac/door-view/pull-autosave",
-            data={
-                "door": door,
-                "destination": "SDF",
-                "pull_key": pull_key,
-                "actual_pull": value,
-                "no_pull": "1" if no_pull else "0",
-            },
+            data=data,
         )
 
     def _state(self, door):

@@ -57,6 +57,8 @@
     data-state-url="{{ url_for('neoermac.door_view_state', door=selected_door) }}"
     data-door-view-revision="{{ door_view_revision|default('') }}"
     data-pull-save-url="{{ url_for('neoermac.door_view_pull_autosave') }}"
+    data-operation-id="{{ operation.id if operation else '' }}"
+    data-user-id="{{ current_user.id }}"
     data-refresh-active="{{ 'true' if refresh_status.auto_refresh_enabled else 'false' }}"
     {% endif %}
 >
@@ -179,6 +181,18 @@
             <input type="hidden" name="door" value="{{ selected_door }}">
             <input type="hidden" name="action" value="save_pulls">
             <input type="hidden" name="destination_count" value="{{ destinations|length }}">
+            <input type="hidden" name="apply_to_both" value="0" data-pull-scope-value>
+
+            {% if can_edit and linked_supervised_pull_doors %}
+            <section class="neoermac-pull-scope" data-pull-scope aria-label="Pull application scope">
+                <span>APPLY PULLS TO</span>
+                <div class="neoermac-pull-scope-options" role="group" aria-label="Apply pulls to">
+                    <button type="button" data-pull-scope-option="0" aria-pressed="true">THIS DOOR</button>
+                    <button type="button" data-pull-scope-option="1" aria-pressed="false">BOTH SIDES</button>
+                </div>
+                <small>Linked supervised doors receive the same pull entry.</small>
+            </section>
+            {% endif %}
 
             <div class="neoermac-door-destination-list" data-door-destination-list>
                 {% for card in destinations %}
@@ -978,6 +992,48 @@
     };
     const pendingSaves = new WeakMap();
     const hhmmPattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+    const scopeControl = document.querySelector("[data-pull-scope]");
+    const scopeInput = pullForm?.querySelector("[data-pull-scope-value]");
+    const operationId = root?.dataset.operationId || "";
+    const userId = root?.dataset.userId || "";
+    const scopeStorageKey = operationId && userId
+        ? `neoermac.pull-scope.${userId}.${operationId}`
+        : "";
+
+    const setPullScope = (applyToBoth, { persist = true } = {}) => {
+        const enabled = applyToBoth === true;
+        if (scopeInput) {
+            scopeInput.value = enabled ? "1" : "0";
+        }
+        scopeControl?.querySelectorAll("[data-pull-scope-option]").forEach((option) => {
+            const active = (option.dataset.pullScopeOption === "1") === enabled;
+            option.setAttribute("aria-pressed", active ? "true" : "false");
+        });
+        if (!persist || !scopeStorageKey) {
+            return;
+        }
+        try {
+            window.localStorage.setItem(scopeStorageKey, enabled ? "1" : "0");
+        } catch (_storageError) {
+            // Browser storage is optional; THIS DOOR remains the safe fallback.
+        }
+    };
+
+    if (scopeControl) {
+        let storedScope = "0";
+        try {
+            storedScope = window.localStorage.getItem(scopeStorageKey) || "0";
+        } catch (_storageError) {
+            storedScope = "0";
+        }
+        setPullScope(storedScope === "1", { persist: false });
+        scopeControl.addEventListener("click", (event) => {
+            const option = event.target.closest("[data-pull-scope-option]");
+            if (option) {
+                setPullScope(option.dataset.pullScopeOption === "1");
+            }
+        });
+    }
 
     const findActualInput = (card, pullKey) => Array.from(
         card.querySelectorAll("[data-hhmm-input]")
@@ -1079,6 +1135,7 @@
         body.set("pull_key", pullKey);
         body.set("actual_pull", toggle.checked ? "" : value);
         body.set("no_pull", toggle.checked ? "1" : "0");
+        body.set("apply_to_both", scopeInput?.value === "1" ? "1" : "0");
 
         card.classList.add("is-pull-saving");
         setCardError(card, "");
