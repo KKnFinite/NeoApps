@@ -20,6 +20,7 @@ from app.models import (
     StaffingVacationManagementWeekOverride,
     StaffingVacationUnionCalendar,
     StaffingVacationUnionCalendarScope,
+    StaffingVacationUnionSelection,
     StaffingWorkAssignment,
     User,
 )
@@ -277,6 +278,113 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         self.assertEqual(vacation_service.union_single_day_capacity(40).capacity, 2)
         self.assertEqual(vacation_service.union_single_day_capacity(0).capacity, 1)
 
+    def test_union_entitlement_includes_exactly_one_optional_week(self):
+        expected = ((0, 0), (1, 1), (3, 2), (8, 3), (15, 4), (20, 5), (25, 6), (30, 7))
+        for years, regular in expected:
+            with self.subTest(years=years):
+                seniority = date(self.YEAR - years, 12, 31)
+                entitlement = vacation_service.union_vacation_entitlement(seniority, self.YEAR)
+                self.assertEqual(entitlement.regular_weeks, regular)
+                self.assertEqual(entitlement.optional_weeks, 1)
+
+    def test_union_direct_and_pt_entries_reserve_capacity_and_release_on_deny(self):
+        grandmaster = self._user("union_pick_gm", "grandmaster")
+        calendar = self._calendar(grandmaster, [self.units["blue_area"].id])
+        first = self._union_person("UP1", "Able", "Union", self.units["blue_area"])
+        second = self._union_person("UP2", "Baker", "Union", self.units["blue_area"])
+        pt_actor = self._union_actor("union_pt", "simulator", "part_time_supervisor")
+        ft_actor = self._union_actor("union_ft", "simulator", "full_time_supervisor")
+        db.session.commit()
+        week = vacation_service.vacation_year_weeks(self.YEAR)[4].week_ending
+
+        pending = vacation_service.add_union_week(calendar, first, self.YEAR, week, "regular", pt_actor)
+        db.session.commit()
+        self.assertEqual(pending.status, "pending")
+        with self.assertRaisesRegex(ValueError, "capacity is full"):
+            vacation_service.add_union_week(calendar, second, self.YEAR, week, "regular", pt_actor)
+        db.session.rollback()
+
+        vacation_service.review_union_selection(pending, True, ft_actor)
+        db.session.commit()
+        self.assertEqual(pending.status, "approved")
+        vacation_service.cancel_union_selection(pending, ft_actor)
+        db.session.commit()
+        approved = vacation_service.add_union_week(calendar, second, self.YEAR, week, "regular", ft_actor)
+        db.session.commit()
+        self.assertEqual(approved.status, "approved")
+
+        later_week = vacation_service.vacation_year_weeks(self.YEAR)[5].week_ending
+        pending = vacation_service.add_union_week(calendar, first, self.YEAR, later_week, "optional", pt_actor)
+        db.session.commit()
+        vacation_service.review_union_selection(pending, False, ft_actor)
+        db.session.commit()
+        self.assertEqual(pending.status, "denied")
+
+    def test_union_override_over_indicator_and_pt_override_rejection(self):
+        grandmaster = self._user("union_over_gm", "grandmaster")
+        calendar = self._calendar(grandmaster, [self.units["blue_area"].id])
+        first = self._union_person("UO1", "Able", "Union", self.units["blue_area"])
+        second = self._union_person("UO2", "Baker", "Union", self.units["blue_area"])
+        pt_actor = self._union_actor("union_over_pt", "simulator", "part_time_supervisor")
+        ft_actor = self._union_actor("union_over_ft", "simulator", "full_time_supervisor")
+        db.session.commit()
+        week = vacation_service.vacation_year_weeks(self.YEAR)[6].week_ending
+
+        vacation_service.add_union_week(calendar, first, self.YEAR, week, "regular", ft_actor)
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "PT Supervisors cannot override"):
+            vacation_service.add_union_week(calendar, second, self.YEAR, week, "regular", pt_actor, capacity_override=True)
+        db.session.rollback()
+        vacation_service.add_union_week(calendar, second, self.YEAR, week, "regular", ft_actor, capacity_override=True)
+        db.session.commit()
+        context = vacation_service.union_calendars_context(self.YEAR, grandmaster)
+        row = next(item for item in context["calendars"] if item["calendar"].id == calendar.id)
+        self.assertTrue(row["over"])
+        self.assertEqual(next(item for item in row["week_rows"] if item["week"].week_ending == week)["used"], 2)
+
+    def test_union_selection_survives_transfer_scope_loss_and_reattachment(self):
+        grandmaster = self._user("union_transfer_gm", "grandmaster")
+        blue = self._calendar(grandmaster, [self.units["blue_area"].id], name="Blue")
+        brown = self._calendar(grandmaster, [self.units["brown_area"].id], name="Brown")
+        person = self._union_person("UT1", "Transfer", "Union", self.units["blue_area"])
+        db.session.commit()
+        week = vacation_service.vacation_year_weeks(self.YEAR)[8].week_ending
+        selection = vacation_service.add_union_week(blue, person, self.YEAR, week, "optional", grandmaster)
+        db.session.commit()
+
+        person.work_assignment.work_area_unit_id = self.units["other_area"].id
+        db.session.commit()
+        context = vacation_service.union_calendars_context(self.YEAR, grandmaster)
+        self.assertEqual(sum(row["week_rows"][8]["used"] for row in context["calendars"]), 0)
+        self.assertEqual(db.session.get(StaffingVacationUnionSelection, selection.id).status, "approved")
+
+        person.work_assignment.work_area_unit_id = self.units["brown_area"].id
+        db.session.commit()
+        context = vacation_service.union_calendars_context(self.YEAR, grandmaster)
+        brown_row = next(row for row in context["calendars"] if row["calendar"].id == brown.id)
+        self.assertEqual(brown_row["week_rows"][8]["used"], 1)
+        self.assertEqual(brown_row["person_rows"][0]["selections"][0]["selection"].id, selection.id)
+
+    def test_union_selection_route_requires_csrf_and_preserves_atomic_capacity(self):
+        grandmaster = self._user("union_route_gm", "grandmaster")
+        calendar = self._calendar(grandmaster, [self.units["blue_area"].id])
+        first = self._union_person("UR1", "Route", "One", self.units["blue_area"])
+        second = self._union_person("UR2", "Route", "Two", self.units["blue_area"])
+        db.session.commit()
+        self._login(grandmaster)
+        self.app.config["CSRF_PROTECT_TESTING"] = True
+        page = self.client.get(f"/neostaffing/vacation-selection/union?year={self.YEAR}")
+        token = re.search(r'<meta name="csrf-token" content="([^"]+)">', page.get_data(as_text=True)).group(1)
+        week = vacation_service.vacation_year_weeks(self.YEAR)[10].week_ending.isoformat()
+        values = {"vacation_year": self.YEAR, "staffing_person_id": first.id, "week_ending": week, "bank_type": "regular"}
+        self.assertEqual(self.client.post(f"/neostaffing/vacation-selection/union/{calendar.id}/select", data=values).status_code, 400)
+        self.assertEqual(StaffingVacationUnionSelection.query.count(), 0)
+        values["csrf_token"] = token
+        self.assertEqual(self.client.post(f"/neostaffing/vacation-selection/union/{calendar.id}/select", data=values).status_code, 302)
+        values["staffing_person_id"] = second.id
+        self.client.post(f"/neostaffing/vacation-selection/union/{calendar.id}/select", data=values)
+        self.assertEqual(StaffingVacationUnionSelection.query.filter(StaffingVacationUnionSelection.status.in_(("pending", "approved"))).count(), 1)
+
     def test_union_context_uses_bounded_queries_as_calendar_count_grows(self):
         user = self._user("query_gm", "grandmaster")
         for index, area in enumerate((self.units["blue_area"], self.units["brown_area"], self.units["other_area"]), start=1):
@@ -469,6 +577,34 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         employee_id = f"EMP-{username}"
         person = self._person(employee_id, username, "Supervisor", "2000-01-01", "full_time_supervisor")
         db.session.add(StaffingLeadershipAssignment(person=person, unit=unit, leadership_level="department", active=True))
+        db.session.commit()
+        return self._user(username, role, employee_id=employee_id)
+
+    def _union_person(self, employee_id, first, last, work_area, seniority="2000-01-01"):
+        person = self._person(employee_id, first, last, seniority, "part_time")
+        db.session.add(
+            StaffingWorkAssignment(person=person, work_area=work_area, active=True)
+        )
+        db.session.flush()
+        return person
+
+    def _union_actor(self, username, role, classification):
+        employee_id = f"EMP-{username}"
+        person = self._person(
+            employee_id,
+            username,
+            "Supervisor",
+            "1995-01-01",
+            classification,
+        )
+        db.session.add(
+            StaffingLeadershipAssignment(
+                person=person,
+                unit=self.units["blue_department"],
+                leadership_level="department",
+                active=True,
+            )
+        )
         db.session.commit()
         return self._user(username, role, employee_id=employee_id)
 

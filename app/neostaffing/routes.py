@@ -997,6 +997,67 @@ def vacation_union_calendars():
     )
 
 
+@bp.post("/vacation-selection/union/<int:calendar_id>/select")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_union_select(calendar_id):
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.add_union_week(
+            calendar_id,
+            request.form.get("staffing_person_id"),
+            vacation_year,
+            request.form.get("week_ending"),
+            request.form.get("bank_type"),
+            current_user,
+            capacity_override=request.form.get("capacity_override"),
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Union vacation week reserved.", "success")
+    return redirect(url_for("neostaffing.vacation_union_calendars", year=vacation_year))
+
+
+@bp.post("/vacation-selection/union/selection/<int:selection_id>/review")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_union_selection_review(selection_id):
+    vacation_year = request.form.get("vacation_year")
+    try:
+        decision = str(request.form.get("decision") or "").strip().casefold()
+        if decision not in {"approve", "deny"}:
+            raise ValueError("Choose Approve or Deny.")
+        vacation_service.review_union_selection(
+            selection_id,
+            decision == "approve",
+            current_user,
+            capacity_override=request.form.get("capacity_override"),
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Union vacation selection reviewed.", "success")
+    return redirect(url_for("neostaffing.vacation_union_calendars", year=vacation_year))
+
+
+@bp.post("/vacation-selection/union/selection/<int:selection_id>/cancel")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_union_selection_cancel(selection_id):
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.cancel_union_selection(selection_id, current_user)
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Union vacation selection cancelled.", "success")
+    return redirect(url_for("neostaffing.vacation_union_calendars", year=vacation_year))
+
+
 @bp.route("/vacation-selection/union/new", methods=["GET", "POST"])
 @neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
 def vacation_union_calendar_new():

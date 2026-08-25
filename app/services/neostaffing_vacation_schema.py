@@ -11,6 +11,7 @@ from app.models import (
     StaffingVacationManagementWeekOverride,
     StaffingVacationUnionCalendar,
     StaffingVacationUnionCalendarScope,
+    StaffingVacationUnionSelection,
 )
 
 
@@ -19,6 +20,7 @@ NEOSTAFFING_VACATION_SCHEMA_LOCK_TIMEOUT = "5s"
 NEOSTAFFING_VACATION_MODELS = (
     StaffingVacationUnionCalendar,
     StaffingVacationUnionCalendarScope,
+    StaffingVacationUnionSelection,
     StaffingVacationManagementCapacity,
     StaffingVacationManagementWeekOverride,
     StaffingVacationManagementSelection,

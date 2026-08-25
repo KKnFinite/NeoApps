@@ -96,6 +96,67 @@ class StaffingVacationUnionCalendarScope(db.Model):
     staffing_unit = db.relationship("StaffingUnit")
 
 
+class StaffingVacationUnionSelection(db.Model):
+    """Durable whole-week Union selection independent of calendar definitions."""
+
+    __tablename__ = "staffing_vacation_union_selections"
+    __table_args__ = (
+        db.CheckConstraint(
+            "vacation_year >= 2000 AND vacation_year <= 2200",
+            name="ck_staffing_vacation_union_selections_year",
+        ),
+        db.CheckConstraint(
+            "bank_type IN ('regular', 'optional')",
+            name="ck_staffing_vacation_union_selections_bank_type",
+        ),
+        db.CheckConstraint(
+            "status IN ('pending', 'approved', 'denied', 'cancelled')",
+            name="ck_staffing_vacation_union_selections_status",
+        ),
+        db.UniqueConstraint(
+            "staffing_person_id",
+            "vacation_year",
+            "week_ending",
+            name="uq_staffing_vacation_union_selections_person_year_week",
+        ),
+        db.Index(
+            "ix_staffing_vacation_union_selections_year_week_status",
+            "vacation_year",
+            "week_ending",
+            "status",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    staffing_person_id = db.Column(
+        db.Integer,
+        db.ForeignKey("staffing_people.id"),
+        nullable=False,
+        index=True,
+    )
+    vacation_year = db.Column(db.Integer, nullable=False, index=True)
+    week_ending = db.Column(db.Date, nullable=False, index=True)
+    bank_type = db.Column(db.String(16), nullable=False)
+    status = db.Column(db.String(16), nullable=False, index=True)
+    entered_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    reviewed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    cancelled_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    person = db.relationship("StaffingPerson")
+    entered_by_user = db.relationship("User", foreign_keys=[entered_by_user_id])
+    reviewed_by_user = db.relationship("User", foreign_keys=[reviewed_by_user_id])
+    cancelled_by_user = db.relationship("User", foreign_keys=[cancelled_by_user_id])
+
+
 class StaffingVacationManagementCapacity(db.Model):
     """Whole-week Management limits for one hierarchy area and vacation year."""
 

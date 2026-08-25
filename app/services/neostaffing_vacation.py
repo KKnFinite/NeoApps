@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 import calendar as calendar_module
 import math
 
-from sqlalchemy import func
+from sqlalchemy import and_, func
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.extensions import db
@@ -20,6 +20,7 @@ from app.models import (
     StaffingVacationManagementWeekOverride,
     StaffingVacationUnionCalendar,
     StaffingVacationUnionCalendarScope,
+    StaffingVacationUnionSelection,
     StaffingWorkAssignment,
 )
 from app.models.user import ROLE_LEVELS
@@ -37,6 +38,11 @@ VACATION_FT_CLASSIFICATIONS = frozenset(
 )
 VACATION_UNION_CLASSIFICATIONS = frozenset(
     VACATION_PT_CLASSIFICATIONS | VACATION_FT_CLASSIFICATIONS
+)
+VACATION_UNION_ACTIVE_SELECTION_STATUSES = frozenset({"pending", "approved"})
+VACATION_UNION_PENDING_ENTRY_CLASSIFICATIONS = frozenset({"part_time_supervisor"})
+VACATION_UNION_DIRECT_ENTRY_CLASSIFICATIONS = frozenset(
+    {"full_time_supervisor", "manager", "division_manager"}
 )
 VACATION_MANAGEMENT_CLASSIFICATIONS = frozenset(
     {
@@ -73,6 +79,12 @@ class UnionVacationCapacity:
     percentage: int
     capacity: int
     seasonal: bool
+
+
+@dataclass(frozen=True)
+class UnionVacationEntitlement:
+    regular_weeks: int
+    optional_weeks: int = 1
 
 
 @dataclass(frozen=True)
@@ -175,16 +187,27 @@ def union_single_day_capacity(payroll_count):
     )
 
 
+def union_vacation_entitlement(seniority_date, vacation_year):
+    """Return regular plus unsplit Optional Week entitlement for a Union person."""
+    year = normalize_vacation_year(vacation_year)
+    if not isinstance(seniority_date, date):
+        raise ValueError("A valid seniority date is required.")
+    completed_years = _completed_service_years(seniority_date, date(year, 12, 31))
+    thresholds = ((30, 7), (25, 6), (20, 5), (15, 4), (8, 3), (3, 2), (1, 1))
+    regular = next(
+        (weeks for service_years, weeks in thresholds if completed_years >= service_years),
+        0,
+    )
+    return UnionVacationEntitlement(regular_weeks=regular)
+
+
 def management_vacation_entitlement(seniority_date, vacation_year):
     """Return whole-week entitlement earned by the end of the vacation year."""
     year = normalize_vacation_year(vacation_year)
     if not isinstance(seniority_date, date):
         raise ValueError("A valid seniority date is required.")
     service_date = date(year, 12, 31)
-    completed_years = service_date.year - seniority_date.year - (
-        (service_date.month, service_date.day)
-        < (seniority_date.month, seniority_date.day)
-    )
+    completed_years = _completed_service_years(seniority_date, service_date)
     if completed_years >= 25:
         return 6
     if completed_years >= 20:
@@ -1063,6 +1086,363 @@ def union_calendar_members(calendar):
     return people
 
 
+def add_union_week(
+    calendar,
+    person,
+    vacation_year,
+    week_ending,
+    bank_type,
+    user,
+    *,
+    capacity_override=False,
+):
+    """Atomically reserve one Official-pool whole week from a Union bank."""
+    year = normalize_vacation_year(vacation_year)
+    week = normalize_week_ending(year, week_ending)
+    bank_type = str(bank_type or "").strip().casefold()
+    if bank_type not in {"regular", "optional"}:
+        raise ValueError("Choose Regular or Optional Week bank.")
+    calendar_id = getattr(calendar, "id", calendar)
+    locked_calendar = (
+        StaffingVacationUnionCalendar.query.options(
+            selectinload(StaffingVacationUnionCalendar.scopes)
+        )
+        .filter_by(id=_positive_int(calendar_id, "Union calendar"), active=True)
+        .with_for_update()
+        .first()
+    )
+    if not locked_calendar or locked_calendar.vacation_year != year:
+        raise ValueError("The selected Official Union calendar is not available.")
+    person = _locked_union_person(person)
+    hierarchy = vacation_hierarchy()
+    actor = vacation_actor(user, hierarchy)
+    entry_status = _union_actor_entry_status(actor, locked_calendar)
+    if not entry_status:
+        raise ValueError("You do not have authority to enter this Union vacation pick.")
+    if _boolean(capacity_override) and entry_status != "approved":
+        raise ValueError("PT Supervisors cannot override Union vacation capacity.")
+
+    pool = _union_pool_data(year, hierarchy=hierarchy)
+    if pool["official_calendar_by_person"].get(person.id) != locked_calendar.id:
+        raise ValueError("This is not the employee's Official Union vacation calendar.")
+    active_selections = pool["active_selections_by_person"].get(person.id, ())
+    entitlement = union_vacation_entitlement(person.seniority_date, year)
+    used_bank = sum(1 for row in active_selections if row.bank_type == bank_type)
+    available_bank = (
+        entitlement.regular_weeks
+        if bank_type == "regular"
+        else entitlement.optional_weeks
+    )
+    if used_bank >= available_bank:
+        label = "regular-week" if bank_type == "regular" else "Optional Week"
+        raise ValueError(f"The employee has no remaining {label} bank.")
+
+    existing = (
+        StaffingVacationUnionSelection.query.filter_by(
+            staffing_person_id=person.id,
+            vacation_year=year,
+            week_ending=week,
+        )
+        .with_for_update()
+        .first()
+    )
+    if existing and existing.status in VACATION_UNION_ACTIVE_SELECTION_STATUSES:
+        raise ValueError("The employee already has a selection for this week.")
+
+    capacity = union_whole_week_capacity(
+        len(pool["official_members_by_calendar"].get(locked_calendar.id, ())),
+        year,
+        week,
+    )
+    used = pool["usage_by_calendar_week"].get((locked_calendar.id, week), 0)
+    if used >= capacity.capacity and not _boolean(capacity_override):
+        raise ValueError("Union vacation capacity is full; an authorized one-time override is required.")
+
+    now = datetime.utcnow()
+    if existing:
+        selection = existing
+        selection.bank_type = bank_type
+        selection.status = entry_status
+        selection.entered_by_user_id = getattr(user, "id", None)
+        selection.reviewed_by_user_id = (
+            getattr(user, "id", None) if entry_status == "approved" else None
+        )
+        selection.reviewed_at = now if entry_status == "approved" else None
+        selection.cancelled_by_user_id = None
+        selection.cancelled_at = None
+        selection.updated_at = now
+    else:
+        selection = StaffingVacationUnionSelection(
+            staffing_person_id=person.id,
+            vacation_year=year,
+            week_ending=week,
+            bank_type=bank_type,
+            status=entry_status,
+            entered_by_user_id=getattr(user, "id", None),
+            reviewed_by_user_id=(
+                getattr(user, "id", None) if entry_status == "approved" else None
+            ),
+            reviewed_at=now if entry_status == "approved" else None,
+            created_at=now,
+            updated_at=now,
+        )
+        db.session.add(selection)
+    db.session.flush()
+    return selection
+
+
+def review_union_selection(selection, approve, user, *, capacity_override=False):
+    """Approve or deny one PT-entered pending selection in its current Official pool."""
+    selection_id = getattr(selection, "id", selection)
+    row = (
+        StaffingVacationUnionSelection.query.filter_by(
+            id=_positive_int(selection_id, "Union vacation selection")
+        )
+        .with_for_update()
+        .first()
+    )
+    if not row or row.status != "pending":
+        raise ValueError("The Union vacation selection is no longer pending.")
+    person = _locked_union_person(row.staffing_person_id)
+    hierarchy = vacation_hierarchy()
+    pool = _union_pool_data(row.vacation_year, hierarchy=hierarchy)
+    calendar_id = pool["official_calendar_by_person"].get(person.id)
+    if not calendar_id:
+        raise ValueError("The employee does not currently have one Official Union calendar.")
+    calendar = (
+        StaffingVacationUnionCalendar.query.options(
+            selectinload(StaffingVacationUnionCalendar.scopes)
+        )
+        .filter_by(id=calendar_id, active=True)
+        .with_for_update()
+        .first()
+    )
+    pool = _union_pool_data(row.vacation_year, hierarchy=hierarchy)
+    if pool["official_calendar_by_person"].get(person.id) != calendar.id:
+        raise ValueError("The employee's Official Union calendar changed; reload and retry.")
+    actor = vacation_actor(user, hierarchy)
+    if _union_actor_entry_status(actor, calendar) != "approved":
+        raise ValueError("Only an authorized FT Supervisor or Manager may review this pick.")
+
+    approve = _boolean(approve)
+    if approve:
+        capacity = union_whole_week_capacity(
+            len(pool["official_members_by_calendar"].get(calendar.id, ())),
+            row.vacation_year,
+            row.week_ending,
+        )
+        used = pool["usage_by_calendar_week"].get(
+            (calendar.id, row.week_ending),
+            0,
+        )
+        if used > capacity.capacity and not _boolean(capacity_override):
+            raise ValueError("Approval exceeds Union capacity; confirm a one-time override.")
+        row.status = "approved"
+    else:
+        row.status = "denied"
+    now = datetime.utcnow()
+    row.reviewed_by_user_id = getattr(user, "id", None)
+    row.reviewed_at = now
+    row.updated_at = now
+    db.session.flush()
+    return row
+
+
+def cancel_union_selection(selection, user):
+    """Cancel an active Union selection without deleting its durable history."""
+    selection_id = getattr(selection, "id", selection)
+    row = (
+        StaffingVacationUnionSelection.query.filter_by(
+            id=_positive_int(selection_id, "Union vacation selection")
+        )
+        .with_for_update()
+        .first()
+    )
+    if not row or row.status not in VACATION_UNION_ACTIVE_SELECTION_STATUSES:
+        raise ValueError("The Union vacation selection is no longer active.")
+    person = _locked_union_person(row.staffing_person_id)
+    hierarchy = vacation_hierarchy()
+    pool = _union_pool_data(row.vacation_year, hierarchy=hierarchy)
+    calendar_id = pool["official_calendar_by_person"].get(person.id)
+    actor = vacation_actor(user, hierarchy)
+    entry_status = None
+    if calendar_id:
+        calendar = pool["calendar_by_id"].get(calendar_id)
+        entry_status = _union_actor_entry_status(actor, calendar)
+    allowed = bool(
+        actor.is_grandmaster
+        or entry_status == "approved"
+        or (
+            entry_status == "pending"
+            and row.status == "pending"
+            and row.entered_by_user_id == getattr(user, "id", None)
+        )
+    )
+    if not allowed:
+        raise ValueError("You do not have authority to cancel this Union vacation pick.")
+    now = datetime.utcnow()
+    row.status = "cancelled"
+    row.cancelled_by_user_id = getattr(user, "id", None)
+    row.cancelled_at = now
+    row.updated_at = now
+    db.session.flush()
+    return row
+
+
+def _union_pool_data(vacation_year, *, hierarchy=None, calendars=None):
+    """Resolve each Union employee into exactly one Official calendar in memory."""
+    year = normalize_vacation_year(vacation_year)
+    hierarchy = hierarchy or vacation_hierarchy()
+    if calendars is None:
+        calendars = (
+            StaffingVacationUnionCalendar.query.options(
+                selectinload(StaffingVacationUnionCalendar.scopes)
+            )
+            .filter_by(vacation_year=year)
+            .order_by(StaffingVacationUnionCalendar.id.asc())
+            .all()
+        )
+    calendar_by_id = {calendar.id: calendar for calendar in calendars}
+    scope_ids_by_calendar = {
+        calendar.id: {scope.staffing_unit_id for scope in calendar.scopes}
+        for calendar in calendars
+    }
+    calendar_ids_by_membership = {}
+    for calendar in calendars:
+        if not calendar.active:
+            continue
+        classifications = set()
+        if calendar.include_part_time:
+            classifications.update(VACATION_PT_CLASSIFICATIONS)
+        if calendar.include_full_time:
+            classifications.update(VACATION_FT_CLASSIFICATIONS)
+        work_area_ids = _scope_work_area_ids(
+            scope_ids_by_calendar[calendar.id], hierarchy
+        )
+        for work_area_id in work_area_ids:
+            for classification in classifications:
+                calendar_ids_by_membership.setdefault(
+                    (work_area_id, classification), set()
+                ).add(calendar.id)
+
+    union_rows = (
+        db.session.query(
+            StaffingPerson,
+            StaffingWorkAssignment,
+            StaffingVacationUnionSelection,
+        )
+        .join(
+            StaffingWorkAssignment,
+            StaffingWorkAssignment.person_id == StaffingPerson.id,
+        )
+        .outerjoin(
+            StaffingVacationUnionSelection,
+            and_(
+                StaffingVacationUnionSelection.staffing_person_id
+                == StaffingPerson.id,
+                StaffingVacationUnionSelection.vacation_year == year,
+                StaffingVacationUnionSelection.status.in_(
+                    VACATION_UNION_ACTIVE_SELECTION_STATUSES
+                ),
+            ),
+        )
+        .filter(
+            StaffingPerson.active.is_(True),
+            StaffingPerson.employee_status == "active",
+            StaffingPerson.classification.in_(VACATION_UNION_CLASSIFICATIONS),
+            StaffingWorkAssignment.active.is_(True),
+        )
+        .all()
+    )
+    official_calendar_by_person = {}
+    official_members_by_calendar = {calendar.id: [] for calendar in calendars}
+    people_by_id = {}
+    active_selections_by_person = {}
+    for person, assignment, selection in union_rows:
+        people_by_id[person.id] = (person, assignment)
+        if selection:
+            active_selections_by_person.setdefault(person.id, []).append(selection)
+    for person, assignment in people_by_id.values():
+        matching = calendar_ids_by_membership.get(
+            (assignment.work_area_unit_id, person.classification), set()
+        )
+        if len(matching) != 1:
+            continue
+        calendar_id = next(iter(matching))
+        official_calendar_by_person[person.id] = calendar_id
+        official_members_by_calendar[calendar_id].append(person)
+    for calendar_id, members in official_members_by_calendar.items():
+        official_members_by_calendar[calendar_id] = _seniority_order(members)
+
+    usage_by_calendar_week = {}
+    for person_id, selections in active_selections_by_person.items():
+        selections.sort(key=lambda selection: (selection.week_ending, selection.id))
+        calendar_id = official_calendar_by_person.get(person_id)
+        if calendar_id:
+            for selection in selections:
+                key = (calendar_id, selection.week_ending)
+                usage_by_calendar_week[key] = usage_by_calendar_week.get(key, 0) + 1
+    return {
+        "calendar_by_id": calendar_by_id,
+        "scope_ids_by_calendar": scope_ids_by_calendar,
+        "official_calendar_by_person": official_calendar_by_person,
+        "official_members_by_calendar": official_members_by_calendar,
+        "active_selections_by_person": active_selections_by_person,
+        "usage_by_calendar_week": usage_by_calendar_week,
+    }
+
+
+def _union_actor_entry_status(actor, calendar):
+    if not calendar or not calendar.active:
+        return None
+    scope_ids = {scope.staffing_unit_id for scope in calendar.scopes}
+    if not can_edit_union_scope(actor, scope_ids):
+        return None
+    if actor.is_grandmaster:
+        return "approved"
+    classification = getattr(actor.person, "classification", None)
+    if classification in VACATION_UNION_PENDING_ENTRY_CLASSIFICATIONS:
+        return "pending"
+    if classification in VACATION_UNION_DIRECT_ENTRY_CLASSIFICATIONS:
+        return "approved"
+    return None
+
+
+def _union_can_cancel_selection(actor, entry_status, selection, user):
+    return bool(
+        actor.is_grandmaster
+        or entry_status == "approved"
+        or (
+            entry_status == "pending"
+            and selection.status == "pending"
+            and selection.entered_by_user_id == getattr(user, "id", None)
+        )
+    )
+
+
+def _locked_union_person(person):
+    person_id = getattr(person, "id", person)
+    row = (
+        StaffingPerson.query.filter(
+            StaffingPerson.id == _positive_int(person_id, "employee"),
+            StaffingPerson.active.is_(True),
+            StaffingPerson.employee_status == "active",
+            StaffingPerson.classification.in_(VACATION_UNION_CLASSIFICATIONS),
+        )
+        .with_for_update()
+        .first()
+    )
+    if not row:
+        raise ValueError("The selected employee is not an active eligible Union employee.")
+    return row
+
+
+def _completed_service_years(start_date, through_date):
+    return through_date.year - start_date.year - (
+        (through_date.month, through_date.day) < (start_date.month, start_date.day)
+    )
+
+
 def union_calendars_context(vacation_year, user):
     year = normalize_vacation_year(vacation_year)
     hierarchy = vacation_hierarchy()
@@ -1079,37 +1459,13 @@ def union_calendars_context(vacation_year, user):
         )
         .all()
     )
-    union_rows = (
-        db.session.query(StaffingPerson, StaffingWorkAssignment)
-        .join(StaffingWorkAssignment, StaffingWorkAssignment.person_id == StaffingPerson.id)
-        .filter(
-            StaffingPerson.active.is_(True),
-            StaffingPerson.employee_status == "active",
-            StaffingPerson.classification.in_(VACATION_UNION_CLASSIFICATIONS),
-            StaffingWorkAssignment.active.is_(True),
-        )
-        .all()
-    )
-    people_by_work_area = {}
-    for person, assignment in union_rows:
-        people_by_work_area.setdefault(assignment.work_area_unit_id, []).append(person)
+    pool = _union_pool_data(year, hierarchy=hierarchy, calendars=calendars)
+    weeks = vacation_year_weeks(year)
 
     calendar_rows = []
     for calendar in calendars:
-        scope_ids = {scope.staffing_unit_id for scope in calendar.scopes}
-        work_area_ids = _scope_work_area_ids(scope_ids, hierarchy)
-        classifications = set()
-        if calendar.include_part_time:
-            classifications.update(VACATION_PT_CLASSIFICATIONS)
-        if calendar.include_full_time:
-            classifications.update(VACATION_FT_CLASSIFICATIONS)
-        members_by_id = {
-            person.id: person
-            for work_area_id in work_area_ids
-            for person in people_by_work_area.get(work_area_id, ())
-            if person.classification in classifications
-        }
-        members = _seniority_order(members_by_id.values())
+        scope_ids = pool["scope_ids_by_calendar"].get(calendar.id, set())
+        members = pool["official_members_by_calendar"].get(calendar.id, [])
         scope_units = [
             hierarchy["by_id"][unit_id]
             for unit_id in sorted(scope_ids)
@@ -1126,6 +1482,80 @@ def union_calendars_context(vacation_year, user):
             if len(department_ids) == 1
             else "ALL / MULTIPLE DEPARTMENTS"
         )
+        entry_status = _union_actor_entry_status(actor, calendar)
+        week_rows = []
+        week_by_ending = {}
+        for week in weeks:
+            capacity = union_whole_week_capacity(
+                len(members),
+                year,
+                week.week_ending,
+            )
+            used = pool["usage_by_calendar_week"].get(
+                (calendar.id, week.week_ending),
+                0,
+            )
+            week_row = {
+                "week": week,
+                "capacity": capacity,
+                "used": used,
+                "full": used >= capacity.capacity,
+                "over": used > capacity.capacity,
+            }
+            week_rows.append(week_row)
+            week_by_ending[week.week_ending] = week_row
+        person_rows = []
+        for person in members:
+            selections = pool["active_selections_by_person"].get(person.id, [])
+            entitlement = union_vacation_entitlement(person.seniority_date, year)
+            regular_used = sum(
+                1 for selection in selections if selection.bank_type == "regular"
+            )
+            optional_used = sum(
+                1 for selection in selections if selection.bank_type == "optional"
+            )
+            selection_rows = []
+            for selection in selections:
+                week_row = week_by_ending.get(selection.week_ending)
+                selection_rows.append(
+                    {
+                        "selection": selection,
+                        "over": bool(week_row and week_row["over"]),
+                        "can_review": bool(
+                            selection.status == "pending"
+                            and entry_status == "approved"
+                        ),
+                        "can_cancel": _union_can_cancel_selection(
+                            actor,
+                            entry_status,
+                            selection,
+                            user,
+                        ),
+                    }
+                )
+            person_rows.append(
+                {
+                    "person": person,
+                    "entitlement": entitlement,
+                    "regular_remaining": max(
+                        0,
+                        entitlement.regular_weeks - regular_used,
+                    ),
+                    "optional_remaining": max(
+                        0,
+                        entitlement.optional_weeks - optional_used,
+                    ),
+                    "selections": selection_rows,
+                    "can_add": bool(
+                        calendar.active
+                        and entry_status
+                        and (
+                            regular_used < entitlement.regular_weeks
+                            or optional_used < entitlement.optional_weeks
+                        )
+                    ),
+                }
+            )
         calendar_rows.append(
             {
                 "calendar": calendar,
@@ -1134,9 +1564,15 @@ def union_calendars_context(vacation_year, user):
                 "scope_ids": scope_ids,
                 "scope_units": scope_units,
                 "members": members,
+                "person_rows": person_rows,
                 "payroll_count": len(members),
                 "single_day_capacity": union_single_day_capacity(len(members)),
                 "can_edit": can_edit_union_scope(actor, scope_ids),
+                "entry_status": entry_status,
+                "can_override": entry_status == "approved",
+                "can_review": entry_status == "approved",
+                "week_rows": week_rows,
+                "over": any(row["over"] for row in week_rows),
             }
         )
 
@@ -1162,7 +1598,7 @@ def union_calendars_context(vacation_year, user):
         browser.append({"operation": operation, "departments": department_groups})
     return {
         "vacation_year": year,
-        "weeks": vacation_year_weeks(year),
+        "weeks": weeks,
         "calendars": calendar_rows,
         "browser": browser,
         "operations": [
